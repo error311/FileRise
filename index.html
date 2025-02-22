@@ -3,156 +3,236 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Upload</title>
+    <title>Multi File Upload & Edit</title>
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .container {
-            margin-top: 10px;
-        }
-        .btn-upload {
-            background-color: #007bff;
-            color: white;
-            border-radius: 5px;
-        }
-        .btn-upload:disabled {
-            background-color: gray;
-        }
-        .btn-choose-file {
-            background-color: #6c757d;
-            color: white;
-            border-radius: 5px;
-        }
-        .file-list {
-            margin-top: 10px;
-        }
-        .progress {
-            margin-top: 10px;
-            height: 20px; /* Narrow progress bar */
-            width: 100%;
-        }
-        .progress-bar {
-            height: 100%; /* Fill the entire height */
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        table, th, td {
-            border: 1px solid black;
-        }
-        th, td {
-            padding: 10px;
-            text-align: left;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        h2 {
-            font-size: 1.5em; /* Smaller font size */
-        }
-        .form-group {
-            margin-bottom: 5px; /* Reduce vertical space between form groups */
-        }
-        label {
-            font-size: 0.9em; /* Smaller font size */
-        }
-        .btn {
-            font-size: 0.9em; /* Smaller font size for buttons */
-        }
-        .align-items-center {
-            display: flex;
-            align-items: center;
-        }
-        .table th button {
-            background: none;
-            border: none;
-            color: inherit;
-            cursor: pointer;
-            padding: 0;
-        }
-        #loginForm, #uploadForm {
-            display: none;
-        }
-        .form-row {
-            align-items: flex-start; /* Align items by top */
-        }
-        .full-width {
-            width: 100%;
-        }
-        .btn-delete {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        .btn-delete:hover {
-            background-color: #c82333;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="row" id="loginForm">
-            <div class="col-md-6">
-                <form id="authForm" method="post">
-                    <div class="form-row align-items-center">
-                        <div class="form-group col-4 col-md-4">
-                            <label for="loginUsername">User:</label>
-                            <input type="text" class="form-control" id="loginUsername" name="username" required>
-                        </div>
-                        <div class="form-group col-4 col-md-4">
-                            <label for="loginPassword">Password:</label>
-                            <input type="password" class="form-control" id="loginPassword" name="password" required>
-                        </div>
-                        <div class="form-group col-4 col-md-4 align-items-center" style="padding-top: 26px;">
-                            <button type="submit" class="btn btn-upload btn-block" style="transform: translateY(2px);">Login</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="row" id="uploadForm">
-            <div class="col-md-12">
-                <form id="uploadFileForm" method="post" enctype="multipart/form-data">
-                    <div class="form-row align-items-center">
-                        <div class="form-group col-4 col-md-4" style="transform: translateY(4px);">
-                            <label class="btn btn-choose-file btn-block">
-                                Choose File <input type="file" id="file" name="file" required hidden>
-                            </label>
-                        </div>
-                        <div class="form-group col-4 col-md-4">
-                            <input type="submit" value="Upload" id="uploadBtn" class="btn btn-upload btn-block" disabled>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-12 full-width">
-                            <span id="fileName"></span>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-12 full-width">
-                            <div id="statusMessage" class="ml-0"></div>
-                        </div>
-                    </div>
-                    <div class="form-row" id="progressRow" style="display: none;">
-                        <div class="form-group col-12">
-                            <div class="progress">
-                                <div class="progress-bar" role="progressbar" style="width: 0%;" id="progressBar"></div>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="file-list">
-            <div id="fileList" class="full-width"></div>
-        </div>
-    </div>
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="auth.js"></script>
     <script src="upload.js"></script>
     <script src="displayFileList.js"></script>
+    <style>
+        .container { margin-top: 10px; }
+        #fileListContainer, #uploadForm, #addUserModal { display: none; }
+
+        .logout-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .logout-container {
+                position: static;
+                align-items: flex-end;
+                text-align: right;
+                margin-top: 10px;
+            }
+
+            .logout-container button {
+                width: auto;
+                min-width: 120px;
+            }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 1px solid black;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+            z-index: 1000;
+            width: 350px;
+            height: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header class="text-center" style="position: relative;">
+        <h1>Multi File Upload & Edit</h1>
+        <div class="logout-container">
+            <button id="logoutBtn" class="btn btn-danger" style="display: none;">Logout</button>
+            <button id="addUserBtn" class="btn btn-success" style="display: none;">Add User</button>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="row" id="loginForm">
+            <div class="col-md-6">
+                <form id="authForm" method="post">
+                    <div class="form-group">
+                        <label for="loginUsername">User:</label>
+                        <input type="text" class="form-control" id="loginUsername" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password:</label>
+                        <input type="password" class="form-control" id="loginPassword" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="row" id="uploadForm">
+            <div class="col-md-12">
+                <form id="uploadFileForm" method="post" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="file"></label>
+                        <input type="file" id="file" name="file[]" class="form-control-file" multiple required style="width: 768px;">
+                    </div>
+                    <button type="submit" id="uploadBtn" class="btn btn-primary" disabled>Upload</button>
+                    <div id="statusMessage"></div>
+                </form>
+            </div>
+        </div>
+
+        <div id="fileListContainer">
+            <h2>Uploaded Files</h2>
+            <button id="deleteSelectedBtn" class="btn btn-danger" style="margin-bottom: 10px; display: none;">Delete Selected</button>
+            <div id="fileList"></div>
+        </div>
+
+        <!-- Add User Modal -->
+        <div id="addUserModal" class="modal">
+            <h3>Create New User</h3>
+            <label for="newUsername">Username:</label>
+            <input type="text" id="newUsername" class="form-control">
+            
+            <label for="newPassword">Password:</label>
+            <input type="password" id="newPassword" class="form-control">
+
+            <div>
+                <input type="checkbox" id="isAdmin">
+                <label for="isAdmin">Grant Admin Access</label>
+            </div>
+
+            <button id="saveUserBtn" class="btn btn-primary">Save User</button>
+            <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+    
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        checkAuthentication();
+
+        function updateUI(data) {
+            if (data.authenticated) {
+                document.getElementById("loginForm").style.display = "none";
+                document.getElementById("uploadForm").style.display = "block";
+                document.getElementById("fileListContainer").style.display = "block";
+                document.getElementById("logoutBtn").style.display = "block";
+
+                if (data.isAdmin) {
+                    document.getElementById("addUserBtn").style.display = "block";
+                } else {
+                    document.getElementById("addUserBtn").style.display = "none";
+                }
+
+                loadFileList();
+            } else {
+                document.getElementById("loginForm").style.display = "block";
+                document.getElementById("uploadForm").style.display = "none";
+                document.getElementById("fileListContainer").style.display = "none";
+                document.getElementById("logoutBtn").style.display = "none";
+                document.getElementById("addUserBtn").style.display = "none";
+            }
+        }
+
+        function checkAuthentication() {
+            fetch("checkAuth.php")
+                .then(response => response.json())
+                .then(updateUI)
+                .catch(error => console.error("Error checking authentication:", error));
+        }
+
+        document.getElementById("authForm").addEventListener("submit", function (event) {
+            event.preventDefault();
+            
+            const formData = {
+                username: document.getElementById("loginUsername").value.trim(),
+                password: document.getElementById("loginPassword").value.trim()
+            };
+
+            fetch("auth.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateUI({ authenticated: true, isAdmin: data.isAdmin }); // Update UI immediately
+                } else {
+                    alert("Login failed: " + (data.error || "Unknown error"));
+                }
+            })
+            .catch(error => console.error("Error logging in:", error));
+        });
+
+        document.getElementById("logoutBtn").addEventListener("click", function () {
+            fetch("logout.php", { method: "POST" })
+                .then(() => window.location.reload(true))
+                .catch(error => console.error("Logout error:", error));
+        });
+
+        document.getElementById("addUserBtn").addEventListener("click", function () {
+            resetUserForm();
+            document.getElementById("addUserModal").style.display = "block";
+        });
+
+        document.getElementById("saveUserBtn").addEventListener("click", function () {
+            const newUsername = document.getElementById("newUsername").value.trim();
+            const newPassword = document.getElementById("newPassword").value.trim();
+            const isAdmin = document.getElementById("isAdmin").checked;
+
+            if (!newUsername || !newPassword) {
+                alert("Username and password are required!");
+                return;
+            }
+
+            fetch("addUser.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("User added successfully!");
+                    closeAddUserModal();
+                    checkAuthentication(); // Refresh UI after adding user
+                } else {
+                    alert("Error: " + (data.error || "Could not add user"));
+                }
+            })
+            .catch(error => console.error("Error adding user:", error));
+        });
+
+        document.getElementById("cancelUserBtn").addEventListener("click", function () {
+            closeAddUserModal();
+        });
+
+        function closeAddUserModal() {
+            document.getElementById("addUserModal").style.display = "none";
+            resetUserForm();
+        }
+
+        function resetUserForm() {
+            document.getElementById("newUsername").value = "";
+            document.getElementById("newPassword").value = "";
+            document.getElementById("isAdmin").checked = false;
+        }
+    });
+</script>
+
 </body>
 </html>
