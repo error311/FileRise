@@ -11,8 +11,7 @@
   <script src="displayFileList.js"></script>
   <style>
     .container { margin-top: 10px; }
-    #fileListContainer, #uploadForm, #addUserModal { display: none; }
-
+    #fileListContainer, #uploadForm, #addUserModal, #removeUserModal { display: none; }
     .logout-container {
       position: absolute;
       top: 10px;
@@ -22,7 +21,6 @@
       align-items: flex-end;
       gap: 5px;
     }
-
     @media (max-width: 768px) {
       .logout-container {
         position: static;
@@ -35,7 +33,6 @@
         min-width: 120px;
       }
     }
-
     .modal {
       display: none;
       position: fixed;
@@ -61,6 +58,7 @@
     <div class="logout-container">
       <button id="logoutBtn" class="btn btn-danger" style="display: none;">Logout</button>
       <button id="addUserBtn" class="btn btn-success" style="display: none;">Add User</button>
+      <button id="removeUserBtn" class="btn btn-warning" style="display: none;">Remove User</button>
     </div>
   </header>
   
@@ -117,6 +115,15 @@
       <button id="saveUserBtn" class="btn btn-primary">Save User</button>
       <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
     </div>
+
+    <!-- Remove User Modal -->
+    <div id="removeUserModal" class="modal">
+      <h3>Remove User</h3>
+      <label for="removeUsernameSelect">Select a user to remove:</label>
+      <select id="removeUsernameSelect" class="form-control"></select>
+      <button id="deleteUserBtn" class="btn btn-danger">Delete User</button>
+      <button id="cancelRemoveUserBtn" class="btn btn-secondary">Cancel</button>
+    </div>
   </div>
   
   <script>
@@ -134,10 +141,11 @@
           document.getElementById("fileListContainer").style.display = "none";
           document.getElementById("logoutBtn").style.display = "none";
           document.getElementById("addUserBtn").style.display = "none";
+          document.getElementById("removeUserBtn").style.display = "none";
           // Pre-check and disable the admin checkbox.
           document.getElementById("isAdmin").checked = true;
           document.getElementById("isAdmin").disabled = true;
-          // Optionally hide the container (since it's always admin in setup mode).
+          // Optionally hide the container.
           document.getElementById("adminCheckboxContainer").style.display = "none";
           document.getElementById("addUserModal").style.display = "block";
           window.setupMode = true;
@@ -152,8 +160,10 @@
           document.getElementById("logoutBtn").style.display = "block";
           if (data.isAdmin) {
             document.getElementById("addUserBtn").style.display = "block";
+            document.getElementById("removeUserBtn").style.display = "block";
           } else {
             document.getElementById("addUserBtn").style.display = "none";
+            document.getElementById("removeUserBtn").style.display = "none";
           }
           loadFileList();
         } else {
@@ -162,6 +172,7 @@
           document.getElementById("fileListContainer").style.display = "none";
           document.getElementById("logoutBtn").style.display = "none";
           document.getElementById("addUserBtn").style.display = "none";
+          document.getElementById("removeUserBtn").style.display = "none";
         }
       }
 
@@ -174,12 +185,10 @@
 
       document.getElementById("authForm").addEventListener("submit", function (event) {
         event.preventDefault();
-        
         const formData = {
           username: document.getElementById("loginUsername").value.trim(),
           password: document.getElementById("loginPassword").value.trim()
         };
-
         fetch("auth.php", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -210,19 +219,15 @@
       document.getElementById("saveUserBtn").addEventListener("click", function () {
         const newUsername = document.getElementById("newUsername").value.trim();
         const newPassword = document.getElementById("newPassword").value.trim();
-        // In setup mode, ignore the checkbox value (always admin)
         const isAdmin = window.setupMode ? true : document.getElementById("isAdmin").checked;
-
         if (!newUsername || !newPassword) {
           alert("Username and password are required!");
           return;
         }
-
         let url = "addUser.php";
         if (window.setupMode) {
           url += "?setup=1";
         }
-
         fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -233,8 +238,11 @@
           if (data.success) {
             alert("User added successfully!");
             closeAddUserModal();
-            // If this was the setup, reload the page to show the login form.
-            window.location.reload(true);
+            if (window.setupMode) {
+              window.location.reload(true);
+            } else {
+              checkAuthentication(); // Refresh UI after adding user
+            }
           } else {
             alert("Error: " + (data.error || "Could not add user"));
           }
@@ -244,6 +252,45 @@
 
       document.getElementById("cancelUserBtn").addEventListener("click", function () {
         closeAddUserModal();
+      });
+
+      // Remove User Button event
+      document.getElementById("removeUserBtn").addEventListener("click", function () {
+        loadUserList();
+        document.getElementById("removeUserModal").style.display = "block";
+      });
+
+      document.getElementById("deleteUserBtn").addEventListener("click", function () {
+        const selectElem = document.getElementById("removeUsernameSelect");
+        const usernameToRemove = selectElem.value;
+        if (!usernameToRemove) {
+          alert("Please select a user to remove.");
+          return;
+        }
+        if (!confirm("Are you sure you want to delete user " + usernameToRemove + "?")) {
+          return;
+        }
+        fetch("removeUser.php", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: usernameToRemove })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            alert("User removed successfully!");
+            closeRemoveUserModal();
+            // Optionally refresh the user list
+            loadUserList();
+          } else {
+            alert("Error: " + (data.error || "Could not remove user"));
+          }
+        })
+        .catch(error => console.error("Error removing user:", error));
+      });
+
+      document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
+        closeRemoveUserModal();
       });
 
       function closeAddUserModal() {
@@ -257,6 +304,39 @@
         document.getElementById("isAdmin").checked = false;
         document.getElementById("isAdmin").disabled = false;
         document.getElementById("adminCheckboxContainer").style.display = "block";
+      }
+
+      function closeRemoveUserModal() {
+        document.getElementById("removeUserModal").style.display = "none";
+        // Optionally clear the select options
+        document.getElementById("removeUsernameSelect").innerHTML = "";
+      }
+
+      // Load list of users into the Remove User modal.
+      function loadUserList() {
+        fetch("getUsers.php")
+          .then(response => response.json())
+          .then(users => {
+            const selectElem = document.getElementById("removeUsernameSelect");
+            selectElem.innerHTML = "";
+            // Optionally, filter out the currently logged-in admin so they can't delete themselves.
+            users.forEach(user => {
+              // Assuming user is an object with property "username"
+              // Skip current user (if desired)
+              if (user.username === "<?php echo isset($_SESSION['username']) ? $_SESSION['username'] : ''; ?>") {
+                return;
+              }
+              const option = document.createElement("option");
+              option.value = user.username;
+              option.textContent = user.username;
+              selectElem.appendChild(option);
+            });
+            if (selectElem.options.length === 0) {
+              alert("No other users found to remove.");
+              closeRemoveUserModal();
+            }
+          })
+          .catch(error => console.error("Error loading user list:", error));
       }
     });
   </script>
