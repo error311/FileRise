@@ -75,3 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressRow.style.display = 'none';
                 statusMessage.textContent = response;
                 uploadBtn.disabled = true;
+            }
+        })
+    }
+})
