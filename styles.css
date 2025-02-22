@@ -1,6 +1,49 @@
 .container {
     margin-top: 10px;
 }
+/* Logout & Add User button container */
+.logout-container {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* keep buttons right-aligned */
+    gap: 5px;
+}
+
+/* Move buttons below title, but still right-aligned, on small screens */
+@media (max-width: 768px) {
+    .logout-container {
+        position: static;
+        align-items: flex-end; /* Right-align buttons instead of centering */
+        text-align: right;
+        margin-top: 10px;
+    }
+
+    .logout-container button {
+        width: auto;
+        min-width: 120px; /* Ensures buttons don't become huge */
+    }
+}
+.modal {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 15px;
+    border: 1px solid black;
+    box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+    z-index: 1000;
+    width: 280px; /* slightly narrower */
+    height: 220px; /* reduce height */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Distribute space properly */
+}
+
 .btn-upload {
     background-color: #007bff;
     color: white;
