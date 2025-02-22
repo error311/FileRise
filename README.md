@@ -1,5 +1,5 @@
 Here are list of changes made to original code base:
-
+<img src="https://raw.githubusercontent.com/sensboston/uploader/ba3162b4061587055748f2a2392181b122402cd2/resources./main_screen.png" alt="main screen" width="300">
 # Functionality & Features
 
 - **Multi-file Upload:**  
@@ -7,6 +7,7 @@ Here are list of changes made to original code base:
 
 - **File Editing:**  
   Built-in editing functionality for text-based files enables quick modifications without leaving the interface.
+  <img src="https://raw.githubusercontent.com/sensboston/uploader/ba3162b4061587055748f2a2392181b122402cd2/resources./edit_window.png" alt="edit window" width="300">
 
 - **Batch Deleting:**  
   The ability to select multiple files and delete them in one action streamlines file management.
@@ -16,6 +17,7 @@ Here are list of changes made to original code base:
 
 - **User Management:**  
   Incorporates secure authentication (with hashed passwords) and admin-only controls for adding new users.
+  <img src="https://raw.githubusercontent.com/sensboston/uploader/ba3162b4061587055748f2a2392181b122402cd2/resources./new_user_window.png" alt="new user" width="300">
 
 # Security
 
@@ -62,8 +64,8 @@ Here are list of changes made to original code base:
   A multi-file uploader with editing and user management is useful in many environments—whether for managing firmware, documents, images, or any files—making this a practical solution.
 
 
+<img src="https://raw.githubusercontent.com/sensboston/uploader/ba3162b4061587055748f2a2392181b122402cd2/resources./login_screen.png" alt="login screen" width="300">
 
-![](https://raw.githubusercontent.com/sensboston/uploader/ba3162b4061587055748f2a2392181b122402cd2/resources./main_screen.png =250x250)
       
 
 
