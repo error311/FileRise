@@ -1,75 +1,48 @@
 <?php
 require_once 'config.php';
-require_once 'auth.php';
+session_start();
+header('Content-Type: application/json');
 
-// Function to convert size to bytes
-function convertToBytes($size) {
-    $number = substr($size, 0, -1);
-    switch (strtoupper(substr($size, -1))) {
-        case 'G':
-            return $number * 1024 * 1024 * 1024;
-        case 'M':
-            return $number * 1024 * 1024;
-        case 'K':
-            return $number * 1024;
-        default:
-            return $size;
-    }
+if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+    echo json_encode(["error" => "Unauthorized"]);
+    exit;
 }
 
-// Function to get the total size of files in the directory
-function getDirectorySize($dir) {
-    $size = 0;
-    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir)) as $file) {
-        if ($file->isFile()) {
-            $size += $file->getSize();
-        }
-    }
-    return $size;
+$uploadDir = UPLOAD_DIR;
+$metadataFile = "file_metadata.json";
+
+if (!file_exists($uploadDir)) {
+    mkdir($uploadDir, 0775, true);
 }
 
-// Check if the form was submitted
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Get the username and password
-    $username = $_POST['username'];
-    $password = $_POST['password'];
-    $fileDateTime = isset($_POST['fileDateTime']) ? (int)$_POST['fileDateTime'] / 1000 : time();
+// Load existing metadata
+$metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
+$metadataChanged = false;
 
-    // Validate the credentials using the Flask backend
-    if (authenticate($username, $password)) {
-        // Check if a file was uploaded
-        if (isset($_FILES['file']) && $_FILES['file']['error'] == 0) {
-            $uploadFile = UPLOAD_DIR . basename($_FILES['file']['name']);
-            $tmpFile = $_FILES['file']['tmp_name'];
+foreach ($_FILES["file"]["name"] as $index => $fileName) {
+    $filePath = $uploadDir . basename($fileName);
 
-	    // Get the total upload limit from config and convert to bytes
-            $totalUploadLimit = convertToBytes(TOTAL_UPLOAD_SIZE);
-            // Get the current size of the upload directory
-            $currentDirSize = getDirectorySize(UPLOAD_DIR);
-            // Get the size of the new file
-            $fileSize = $_FILES['file']['size'];
-
-	    // Check if adding the new file exceeds the total upload limit
-            if (($currentDirSize + $fileSize) > $totalUploadLimit) {
-                echo "Upload denied. Total upload limit exceeded.";
-            } else {
-                // Move the uploaded file to the specified directory
-                if (move_uploaded_file($tmpFile, $uploadFile)) {
-                    // Preserve the original file modification time
-                    touch($uploadFile, $fileDateTime);
-                    echo "File is valid, and was successfully uploaded.";
-                } else {
-                    echo "File upload failed! ";
-                    print_r(error_get_last());
-                }
-           }
-        } else {
-            echo "No file uploaded or file upload error!";
-            echo "Error code: " . $_FILES['file']['error'];
+    if (move_uploaded_file($_FILES["file"]["tmp_name"][$index], $filePath)) {
+        // Store "Uploaded Date" and "Uploader" only if not already stored
+        if (!isset($metadata[$fileName])) {
+            $uploadedDate = date(DATE_TIME_FORMAT); // Store only the first upload time
+            $uploader = $_SESSION['username'] ?? "Unknown";
+            $metadata[$fileName] = [
+                "uploaded" => $uploadedDate,
+                "uploader" => $uploader
+            ];
+            $metadataChanged = true;
         }
     } else {
-        echo "Invalid username or password!";
+        echo json_encode(["error" => "Error uploading file"]);
+        exit;
     }
-} else {
-    echo "Invalid request method!";
 }
+
+// Save metadata only if modified
+if ($metadataChanged) {
+    file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
+}
+
+echo json_encode(["success" => "Files uploaded successfully"]);
+?>
