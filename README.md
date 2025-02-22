@@ -77,6 +77,9 @@ Here are list of changes made to original code base:
 
 
 Original readme:
+https://github.com/sensboston/uploader
+
+
 # File Uploader
 
 A simple file uploader web app that allows authenticated users to upload, list, and delete files. 
@@ -88,12 +91,7 @@ The application uses PHP, running on Apache2, Ubuntu (but definitely should work
 - PHP 8.1 or higher
 - Required PHP extensions: `php-json`, `php-curl`
 
-Hint:
-```
-sudo apt update
-sudo apt install apache2
-sudo apt install php libapache2-mod-php
-```
+...........
 
 
 ![screenshot](https://github.com/sensboston/uploader/assets/1036158/5428672d-7dcc-4d7a-a96f-dfe578618c75)
