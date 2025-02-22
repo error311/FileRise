@@ -4,35 +4,83 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Multi File Upload & Edit</title>
+  <!-- Google Fonts and Material Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <!-- Bootstrap CSS -->
   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Scripts (order is important) -->
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="auth.js"></script>
   <script src="upload.js"></script>
+  <!-- Include your original displayFileList.js here -->
   <script src="displayFileList.js"></script>
+  
   <style>
-    .container { margin-top: 10px; }
-    #fileListContainer, #uploadForm, #addUserModal, #removeUserModal { display: none; }
-    .logout-container {
-      position: absolute;
-      top: 10px;
-      right: 10px;
+    /* General styles */
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: #f5f5f5;
+    }
+    .container { 
+      margin-top: 30px; 
+    }
+    /* Header: three fixed-width sections so the title stays centered */
+    header {
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 5px;
+      align-items: center;
+      justify-content: space-between;
+      background-color: #2196F3;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      min-height: 80px;
     }
-    @media (max-width: 768px) {
-      .logout-container {
-        position: static;
-        align-items: flex-end;
-        text-align: right;
-        margin-top: 10px;
-      }
-      .logout-container button {
-        width: auto;
-        min-width: 120px;
-      }
+    .header-left, .header-buttons {
+      width: 150px;
     }
+    .header-title {
+      flex: 1;
+      text-align: center;
+    }
+    .header-title h1 {
+      margin: 0;
+      font-weight: 500;
+      color: white;
+    }
+    .header-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .header-buttons button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 10px;
+      border-radius: 50%;
+      transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .header-buttons button:hover {
+      background-color: rgba(255,255,255,0.2);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .material-icons {
+      font-size: 24px;
+      vertical-align: middle;
+      color: white;
+    }
+    /* Login form styling */
+    #loginForm {
+      margin: 0 auto;
+      max-width: 400px;
+      background: white;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      border-radius: 4px;
+    }
+    /* Common modal styling */
     .modal {
       display: none;
       position: fixed;
@@ -41,30 +89,56 @@
       transform: translate(-50%, -50%);
       background: white;
       padding: 20px;
-      border: 1px solid black;
-      box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
       z-index: 1000;
       width: 350px;
+      max-width: 90%;
       height: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+    }
+    /* Editor modal styling for the edit popup */
+    .editor-modal {
+      width: 80vw;
+      max-width: 90vw;
+      min-width: 400px;
+      height: 400px;
+      max-height: 80vh;
+      overflow: auto;
+      resize: both;
+    }
+    /* Table header styling */
+    table.table th {
+      cursor: pointer;
+      text-decoration: underline;
+      white-space: nowrap;
     }
   </style>
 </head>
 <body>
-  <header class="text-center" style="position: relative;">
-    <h1>Multi File Upload & Edit</h1>
-    <div class="logout-container">
-      <button id="logoutBtn" class="btn btn-danger" style="display: none;">Logout</button>
-      <button id="addUserBtn" class="btn btn-success" style="display: none;">Add User</button>
-      <button id="removeUserBtn" class="btn btn-warning" style="display: none;">Remove User</button>
+  <!-- Header -->
+  <header>
+    <div class="header-left"></div>
+    <div class="header-title">
+      <h1>Multi File Upload & Edit</h1>
+    </div>
+    <div class="header-buttons">
+      <button id="logoutBtn" title="Logout" style="display: none;">
+        <i class="material-icons">exit_to_app</i>
+      </button>
+      <button id="addUserBtn" title="Add User" style="display: none;">
+        <i class="material-icons">person_add</i>
+      </button>
+      <button id="removeUserBtn" title="Remove User" style="display: none;">
+        <i class="material-icons">person_remove</i>
+      </button>
     </div>
   </header>
   
   <div class="container">
+    <!-- Login Form -->
     <div class="row" id="loginForm">
-      <div class="col-md-6">
+      <div class="col-12">
         <form id="authForm" method="post">
           <div class="form-group">
             <label for="loginUsername">User:</label>
@@ -74,48 +148,47 @@
             <label for="loginPassword">Password:</label>
             <input type="password" class="form-control" id="loginPassword" name="password" required>
           </div>
-          <button type="submit" class="btn btn-primary">Login</button>
+          <button type="submit" class="btn btn-primary btn-block">Login</button>
         </form>
       </div>
     </div>
-
+    
+    <!-- Upload Form -->
     <div class="row" id="uploadForm">
-      <div class="col-md-12">
+      <div class="col-12">
         <form id="uploadFileForm" method="post" enctype="multipart/form-data">
           <div class="form-group">
             <label for="file"></label>
-            <input type="file" id="file" name="file[]" class="form-control-file" multiple required style="width: 768px;">
+            <input type="file" id="file" name="file[]" class="form-control-file" multiple required style="max-width: 768px;">
           </div>
           <button type="submit" id="uploadBtn" class="btn btn-primary" disabled>Upload</button>
           <div id="statusMessage"></div>
         </form>
       </div>
     </div>
-
+    
+    <!-- File List -->
     <div id="fileListContainer">
       <h2>Uploaded Files</h2>
       <button id="deleteSelectedBtn" class="btn btn-danger" style="margin-bottom: 10px; display: none;">Delete Selected</button>
       <div id="fileList"></div>
     </div>
-
+    
     <!-- Add User Modal -->
     <div id="addUserModal" class="modal">
       <h3>Create New User</h3>
       <label for="newUsername">Username:</label>
       <input type="text" id="newUsername" class="form-control">
-      
       <label for="newPassword">Password:</label>
       <input type="password" id="newPassword" class="form-control">
-
       <div id="adminCheckboxContainer">
         <input type="checkbox" id="isAdmin">
         <label for="isAdmin">Grant Admin Access</label>
       </div>
-
       <button id="saveUserBtn" class="btn btn-primary">Save User</button>
       <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
     </div>
-
+    
     <!-- Remove User Modal -->
     <div id="removeUserModal" class="modal">
       <h3>Remove User</h3>
@@ -127,41 +200,35 @@
   </div>
   
   <script>
-    // Global flag to determine if we are in setup mode.
+    // Global flag for setup mode.
     window.setupMode = false;
-
+    
     document.addEventListener("DOMContentLoaded", function () {
       checkAuthentication();
-
+      
       function updateUI(data) {
+        console.log("Auth data:", data);
         if (data.setup) {
-          // In setup mode, show the Add User Modal and hide other UI elements.
+          // Setup mode: hide login, upload, file list; hide header buttons (reserve space)
           document.getElementById("loginForm").style.display = "none";
           document.getElementById("uploadForm").style.display = "none";
           document.getElementById("fileListContainer").style.display = "none";
-          document.getElementById("logoutBtn").style.display = "none";
-          document.getElementById("addUserBtn").style.display = "none";
-          document.getElementById("removeUserBtn").style.display = "none";
-          // Pre-check and disable the admin checkbox.
-          document.getElementById("isAdmin").checked = true;
-          document.getElementById("isAdmin").disabled = true;
-          // Optionally hide the container.
-          document.getElementById("adminCheckboxContainer").style.display = "none";
+          document.querySelector(".header-buttons").style.visibility = "hidden";
           document.getElementById("addUserModal").style.display = "block";
           window.setupMode = true;
           return;
         }
-        
-        // Normal authenticated user flow.
         if (data.authenticated) {
           document.getElementById("loginForm").style.display = "none";
           document.getElementById("uploadForm").style.display = "block";
           document.getElementById("fileListContainer").style.display = "block";
-          document.getElementById("logoutBtn").style.display = "block";
+          document.querySelector(".header-buttons").style.visibility = "visible";
           if (data.isAdmin) {
+            document.getElementById("logoutBtn").style.display = "block";
             document.getElementById("addUserBtn").style.display = "block";
             document.getElementById("removeUserBtn").style.display = "block";
           } else {
+            document.getElementById("logoutBtn").style.display = "block";
             document.getElementById("addUserBtn").style.display = "none";
             document.getElementById("removeUserBtn").style.display = "none";
           }
@@ -170,19 +237,17 @@
           document.getElementById("loginForm").style.display = "block";
           document.getElementById("uploadForm").style.display = "none";
           document.getElementById("fileListContainer").style.display = "none";
-          document.getElementById("logoutBtn").style.display = "none";
-          document.getElementById("addUserBtn").style.display = "none";
-          document.getElementById("removeUserBtn").style.display = "none";
+          document.querySelector(".header-buttons").style.visibility = "hidden";
         }
       }
-
+      
       function checkAuthentication() {
         fetch("checkAuth.php")
           .then(response => response.json())
           .then(updateUI)
           .catch(error => console.error("Error checking authentication:", error));
       }
-
+      
       document.getElementById("authForm").addEventListener("submit", function (event) {
         event.preventDefault();
         const formData = {
@@ -204,18 +269,18 @@
         })
         .catch(error => console.error("Error logging in:", error));
       });
-
+      
       document.getElementById("logoutBtn").addEventListener("click", function () {
         fetch("logout.php", { method: "POST" })
           .then(() => window.location.reload(true))
           .catch(error => console.error("Logout error:", error));
       });
-
+      
       document.getElementById("addUserBtn").addEventListener("click", function () {
         resetUserForm();
         document.getElementById("addUserModal").style.display = "block";
       });
-
+      
       document.getElementById("saveUserBtn").addEventListener("click", function () {
         const newUsername = document.getElementById("newUsername").value.trim();
         const newPassword = document.getElementById("newPassword").value.trim();
@@ -225,9 +290,7 @@
           return;
         }
         let url = "addUser.php";
-        if (window.setupMode) {
-          url += "?setup=1";
-        }
+        if (window.setupMode) { url += "?setup=1"; }
         fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -249,17 +312,16 @@
         })
         .catch(error => console.error("Error adding user:", error));
       });
-
+      
       document.getElementById("cancelUserBtn").addEventListener("click", function () {
         closeAddUserModal();
       });
-
-      // Remove User Button event
+      
       document.getElementById("removeUserBtn").addEventListener("click", function () {
         loadUserList();
         document.getElementById("removeUserModal").style.display = "block";
       });
-
+      
       document.getElementById("deleteUserBtn").addEventListener("click", function () {
         const selectElem = document.getElementById("removeUsernameSelect");
         const usernameToRemove = selectElem.value;
@@ -287,16 +349,16 @@
         })
         .catch(error => console.error("Error removing user:", error));
       });
-
+      
       document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
         closeRemoveUserModal();
       });
-
+      
       function closeAddUserModal() {
         document.getElementById("addUserModal").style.display = "none";
         resetUserForm();
       }
-
+      
       function resetUserForm() {
         document.getElementById("newUsername").value = "";
         document.getElementById("newPassword").value = "";
@@ -304,36 +366,91 @@
         document.getElementById("isAdmin").disabled = false;
         document.getElementById("adminCheckboxContainer").style.display = "block";
       }
-
+      
       function closeRemoveUserModal() {
         document.getElementById("removeUserModal").style.display = "none";
         document.getElementById("removeUsernameSelect").innerHTML = "";
       }
-
-      // Load list of users into the Remove User modal.
+      
       function loadUserList() {
         fetch("getUsers.php")
-          .then(response => response.json())
-          .then(users => {
-            const selectElem = document.getElementById("removeUsernameSelect");
-            selectElem.innerHTML = "";
-            // Filter out the current logged-in user to prevent self-deletion.
-            const currentUser = "<?php echo isset($_SESSION['username']) ? $_SESSION['username'] : ''; ?>";
-            users.forEach(user => {
-              if (user.username === currentUser) return;
-              const option = document.createElement("option");
-              option.value = user.username;
-              option.textContent = user.username;
-              selectElem.appendChild(option);
-            });
-            if (selectElem.options.length === 0) {
-              alert("No other users found to remove.");
-              closeRemoveUserModal();
-            }
-          })
-          .catch(error => console.error("Error loading user list:", error));
+        .then(response => response.json())
+        .then(users => {
+          const selectElem = document.getElementById("removeUsernameSelect");
+          selectElem.innerHTML = "";
+          const currentUser = "<?php echo isset($_SESSION['username']) ? $_SESSION['username'] : ''; ?>";
+          users.forEach(user => {
+            if (user.username === currentUser) return;
+            const option = document.createElement("option");
+            option.value = user.username;
+            option.textContent = user.username;
+            selectElem.appendChild(option);
+          });
+          if (selectElem.options.length === 0) {
+            alert("No other users found to remove.");
+            closeRemoveUserModal();
+          }
+        })
+        .catch(error => console.error("Error loading user list:", error));
       }
     });
+    
+    // Global file list functions (from your original displayFileList.js) are loaded externally.
+    // We override only the editFile and saveFile functions here for modal styling.
+    
+    window.editFile = function(fileName) {
+      console.log("Edit button clicked for:", fileName);
+      let existingEditor = document.getElementById("editorContainer");
+      if (existingEditor) { existingEditor.remove(); }
+      fetch("uploads/" + encodeURIComponent(fileName) + "?t=" + new Date().getTime())
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("HTTP error! Status: " + response.status);
+        }
+        return response.text();
+      })
+      .then(content => {
+        const modal = document.createElement("div");
+        modal.id = "editorContainer";
+        // Apply modal and editor-modal classes for rounded corners and consistent styling.
+        modal.classList.add("modal", "editor-modal");
+        modal.innerHTML = `
+          <h3>Editing: ${fileName}</h3>
+          <textarea id="fileEditor" style="width:100%; height:60%; resize:none;">${content}</textarea>
+          <div style="margin-top:10px; text-align:right;">
+            <button onclick="saveFile('${fileName}')" class="btn btn-primary">Save</button>
+            <button onclick="document.getElementById('editorContainer').remove()" class="btn btn-secondary">Close</button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        modal.style.display = "block";
+      })
+      .catch(error => console.error("Error loading file:", error));
+    };
+    
+    window.saveFile = function(fileName) {
+      const editor = document.getElementById("fileEditor");
+      if (!editor) {
+        console.error("Editor not found!");
+        return;
+      }
+      const fileDataObj = {
+        fileName: fileName,
+        content: editor.value
+      };
+      fetch("saveFile.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fileDataObj)
+      })
+      .then(response => response.json())
+      .then(result => {
+        alert(result.success || result.error);
+        document.getElementById("editorContainer")?.remove();
+        loadFileList();
+      })
+      .catch(error => console.error("Error saving file:", error));
+    };
   </script>
 </body>
 </html>
