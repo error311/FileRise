@@ -241,7 +241,7 @@
             if (window.setupMode) {
               window.location.reload(true);
             } else {
-              checkAuthentication(); // Refresh UI after adding user
+              checkAuthentication();
             }
           } else {
             alert("Error: " + (data.error || "Could not add user"));
@@ -280,7 +280,6 @@
           if (data.success) {
             alert("User removed successfully!");
             closeRemoveUserModal();
-            // Optionally refresh the user list
             loadUserList();
           } else {
             alert("Error: " + (data.error || "Could not remove user"));
@@ -308,7 +307,6 @@
 
       function closeRemoveUserModal() {
         document.getElementById("removeUserModal").style.display = "none";
-        // Optionally clear the select options
         document.getElementById("removeUsernameSelect").innerHTML = "";
       }
 
@@ -319,13 +317,10 @@
           .then(users => {
             const selectElem = document.getElementById("removeUsernameSelect");
             selectElem.innerHTML = "";
-            // Optionally, filter out the currently logged-in admin so they can't delete themselves.
+            // Filter out the current logged-in user to prevent self-deletion.
+            const currentUser = "<?php echo isset($_SESSION['username']) ? $_SESSION['username'] : ''; ?>";
             users.forEach(user => {
-              // Assuming user is an object with property "username"
-              // Skip current user (if desired)
-              if (user.username === "<?php echo isset($_SESSION['username']) ? $_SESSION['username'] : ''; ?>") {
-                return;
-              }
+              if (user.username === currentUser) return;
               const option = document.createElement("option");
               option.value = user.username;
               option.textContent = user.username;
@@ -340,6 +335,5 @@
       }
     });
   </script>
-
 </body>
 </html>
