@@ -1,4 +1,3 @@
 <Files "users.txt">
-    Order Allow,Deny
-    Deny from all
+    Require all denied
 </Files>
