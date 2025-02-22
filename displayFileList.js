@@ -144,7 +144,7 @@ window.deleteSelectedFiles = function () {
     if (!confirm(`Are you sure you want to delete the selected files?`)) {
         return;
     }
-    fetch("deleteFile.php", {
+    fetch("deleteFiles.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ files: selectedFiles })
