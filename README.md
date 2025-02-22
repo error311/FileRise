@@ -61,9 +61,9 @@ Here are list of changes made to original code base:
 - **Real-world Scenario:**  
   A multi-file uploader with editing and user management is useful in many environments—whether for managing firmware, documents, images, or any files—making this a practical solution.
 
-![](https://github.com/error311/uploader/blob/master/resources./main_screen.png?raw=true![image](https://github.com/user-attachments/assets/e231a04f-7cc4-40f6-9996-0abb2483840c)
 
-![](https://gyazo.com/eb5c5741b6a9a16c692170a41a49c858.png =250x250)
+
+![](https://raw.githubusercontent.com/sensboston/uploader/ba3162b4061587055748f2a2392181b122402cd2/resources./main_screen.png =250x250)
       
 
 
