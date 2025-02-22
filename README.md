@@ -1,19 +1,19 @@
 Here are list of changes made to original code base:
 
 
-<img src="https://raw.githubusercontent.com/error311/uploader/refs/heads/master/resources./main_screen.png" alt="main screen">
+<img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./main_screen.png" alt="main screen">
 
 
 # Functionality & Features
 
 - **Multi-file Upload:**  
   Allows users to upload multiple files at once, which improves efficiency and user experience.
-  <img src="https://raw.githubusercontent.com/error311/uploader-and-editor/refs/heads/master/resources./multifile_upload.png" alt="edit window" width="600">
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./multifile_upload.png" alt="edit window" width="600">
  
 
 - **File Editing:**  
   Built-in editing functionality for text-based files enables quick modifications without leaving the interface.
-  <img src="https://raw.githubusercontent.com/error311/uploader-and-editor/refs/heads/master/resources./edit_window.png" alt="edit window" width="600">
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./edit_window.png" alt="edit window" width="600">
 
 - **Batch Deleting:**  
   The ability to select multiple files and delete them in one action streamlines file management.
@@ -23,7 +23,7 @@ Here are list of changes made to original code base:
 
 - **User Management:**  
   Incorporates secure authentication (with hashed passwords) and admin-only controls for adding new users.
-  <img src="https://raw.githubusercontent.com/error311/uploader-and-editor/refs/heads/master/resources./new_user_window.png" alt="new user" width="600">
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./new_user_window.png" alt="new user" width="600">
 
 # Security
 
@@ -70,7 +70,7 @@ Here are list of changes made to original code base:
   A multi-file uploader with editing and user management is useful in many environments—whether for managing firmware, documents, images, or any files—making this a practical solution.
 
 
-<img src="https://raw.githubusercontent.com/error311/uploader/refs/heads/master/resources./login_screen.png" alt="login screen" width="600">
+<img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./login_screen.png" alt="login screen" width="600">
 
       
 
