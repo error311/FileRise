@@ -1,98 +1,102 @@
-document.getElementById('file').addEventListener('change', function() {
-    const fileInput = document.getElementById('file');
-    const uploadBtn = document.getElementById('uploadBtn');
-    if (fileInput.files.length > 0) {
-        document.getElementById('fileName').innerHTML = `<b>${fileInput.files[0].name}</b>`;
-        uploadBtn.disabled = false;
-    } else {
-        document.getElementById('fileName').innerHTML = '';
-        uploadBtn.disabled = true;
+document.addEventListener("DOMContentLoaded", function () {
+    const fileInput = document.getElementById("file");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const uploadForm = document.getElementById("uploadFileForm");
+
+    if (!fileInput || !uploadBtn || !uploadForm) {
+        console.error("Upload elements not found.");
+        return;
     }
-});
 
-document.getElementById('uploadFileForm').addEventListener('submit', async function(event) {
-    event.preventDefault();
+    // Create a div for displaying selected file names
+    let fileListDisplay = document.getElementById("selectedFiles");
+    if (!fileListDisplay) {
+        fileListDisplay = document.createElement("div");
+        fileListDisplay.id = "selectedFiles";
+        fileListDisplay.style.marginTop = "10px"; // Space below file input
+        fileListDisplay.style.padding = "10px";
+        fileListDisplay.style.border = "1px solid #ddd";
+        fileListDisplay.style.borderRadius = "5px";
+        fileListDisplay.style.background = "#f8f9fa"; // Light gray background
+        fileListDisplay.style.display = "none"; // Hide initially
 
-    const { username, password } = authCredentials;
-    const fileInput = document.getElementById('file');
-    const statusMessage = document.getElementById('statusMessage');
-    const progressBar = document.getElementById('progressBar');
-    const progressRow = document.getElementById('progressRow');
-
-    if (fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('username', username);
-        formData.append('password', password);
-	const fileDateTime = file.lastModified;
-        formData.append('fileDateTime', fileDateTime);
-
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', 'upload.php', true);
-
-        const uploadBtn = document.getElementById('uploadBtn');
-        const fileBtn = document.getElementById('file');
-        uploadBtn.disabled = true;
-        fileBtn.disabled = true;
-
-        const startTime = Date.now();
-
-        xhr.upload.onprogress = function(e) {
-            if (e.lengthComputable) {
-                const percentComplete = (e.loaded / e.total) * 100;
-                progressBar.style.width = percentComplete + '%';
-                progressBar.innerText = Math.round(percentComplete) + '%';
-                progressRow.style.display = 'block'; // Show the progress bar
-            }
-        };
-
-        xhr.onload = function() {
-            const endTime = Date.now();
-            const uploadTime = (endTime - startTime) / 1000;
-            const fileSize = fileInput.files[0].size;
-            const uploadRate = (fileSize / 1024 / uploadTime).toFixed(0);
-
-            if (xhr.status === 200) {
-                statusMessage.innerHTML = `File <b>${fileInput.files[0].name}</b> successfully uploaded. Upload time: <b>${uploadTime.toFixed(2)}</b> seconds. Upload rate: <b>${uploadRate}</b> KBps.`;
-                loadFileList();
-            } else {
-                statusMessage.innerHTML = 'Upload failed!';
-            }
-            progressBar.style.width = '0%';
-            progressBar.innerText = '';
-            progressRow.style.display = 'none'; // Hide the progress bar
-            document.getElementById('fileName').innerHTML = '';
-            uploadBtn.disabled = true;
-            fileBtn.disabled = false;
-            fileBtn.value = '';
-        };
-
-        statusMessage.innerHTML = `Uploading file ${fileInput.files[0].name}...`;
-        xhr.send(formData);
-    }
-});
-
-async function deleteFile(fileName) {
-    const { username, password } = authCredentials;
-    try {
-        const response = await fetch('getFileList.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ username, password, delete: fileName }),
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const result = await response.json();
-        if (result.success) {
-            loadFileList();
+        // Ensure the upload button exists before inserting
+        if (uploadBtn.parentNode) {
+            uploadBtn.parentNode.insertBefore(fileListDisplay, uploadBtn); // Place above upload button
         } else {
-            console.error('Error deleting file:', result.error);
+            console.error("Upload button parent node not found.");
         }
-    } catch (error) {
-        console.error('Error deleting file:', error);
     }
-}
+
+    // Display selected file names and move the upload button down
+    fileInput.addEventListener("change", function () {
+        uploadBtn.disabled = fileInput.files.length === 0;
+        fileListDisplay.innerHTML = ""; // Clear previous list
+
+        if (fileInput.files.length > 0) {
+            fileListDisplay.style.display = "block"; // Show file list
+            const list = document.createElement("ul");
+            list.style.padding = "0";
+            list.style.margin = "0";
+            list.style.listStyle = "none"; // Remove bullet points
+            list.style.maxHeight = "150px"; // Prevent list from getting too tall
+            list.style.overflowY = "auto"; // Scroll if too many files
+
+            for (let i = 0; i < fileInput.files.length; i++) {
+                const listItem = document.createElement("li");
+                listItem.textContent = fileInput.files[i].name;
+                listItem.style.borderBottom = "1px solid #ddd";
+                listItem.style.padding = "5px 10px";
+                list.appendChild(listItem);
+            }
+            fileListDisplay.appendChild(list);
+        } else {
+            fileListDisplay.style.display = "none"; // Hide if no files selected
+        }
+
+        // Move upload button down when files are selected
+        uploadBtn.style.marginTop = "10px";
+    });
+
+    // Handle multiple file uploads
+    uploadForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        
+        if (fileInput.files.length === 0) {
+            alert("Please select at least one file.");
+            return;
+        }
+
+        const formData = new FormData();
+        for (let i = 0; i < fileInput.files.length; i++) {
+            formData.append("file[]", fileInput.files[i]);
+        }
+
+        uploadBtn.disabled = true; // Disable button while uploading
+
+        fetch("upload.php", {
+            method: "POST",
+            body: formData
+        })
+        .then(response => response.json())
+        .then(result => {
+            console.log("Upload result:", result);
+
+            if (Array.isArray(result)) {
+                alert(result.map(r => r.success || r.error).join("\n"));
+            } else {
+                alert(result.success || result.error || "Upload completed.");
+            }
+
+            loadFileList(); // Refresh file list after upload
+            fileListDisplay.innerHTML = ""; // Clear displayed file list
+            fileListDisplay.style.display = "none"; // Hide after upload
+            fileInput.value = ""; // Reset file input
+            uploadBtn.disabled = false; // Re-enable button after upload
+        })
+        .catch(error => {
+            console.error("Upload error:", error);
+            uploadBtn.disabled = false;
+        });
+    });
+});
