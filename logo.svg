@@ -12,17 +12,29 @@
     </filter>
   </defs>
   <style type="text/css">
-    .cabinet { fill: url(#cabinetGradient); }
-    .divider { stroke: #1565C0; stroke-width: 1.5; }
-    .drawer { fill: #FFFFFF; }
-    .handle { fill: #1565C0; }
+    /* Cabinet with gradient, white outline, and drop shadow */
+    .cabinet { 
+      fill: url(#cabinetGradient); 
+      stroke: white; 
+      stroke-width: 2; 
+    }
+    .divider { 
+      stroke: #1565C0; 
+      stroke-width: 1.5; 
+    }
+    .drawer { 
+      fill: #FFFFFF; 
+    }
+    .handle { 
+      fill: #1565C0; 
+    }
   </style>
-  <!-- Cabinet Body with rounded corners and drop shadow -->
+  <!-- Cabinet Body with rounded corners, white outline, and drop shadow -->
   <rect x="4" y="4" width="56" height="56" rx="6" ry="6" class="cabinet" filter="url(#shadowFilter)"/>
   <!-- Divider lines for drawers -->
-  <line x1="4" y1="22" x2="60" y2="22" class="divider"/>
-  <line x1="4" y1="34" x2="60" y2="34" class="divider"/>
-  <!-- Drawers with handles -->
+  <line x1="5" y1="22" x2="59" y2="22" class="divider"/>
+  <line x1="5" y1="34" x2="59" y2="34" class="divider"/>
+  <!-- Drawers with Handles -->
   <rect x="8" y="24" width="48" height="6" rx="1" ry="1" class="drawer"/>
   <circle cx="54" cy="27" r="1.5" class="handle"/>
   
@@ -32,6 +44,6 @@
   <rect x="8" y="48" width="48" height="6" rx="1" ry="1" class="drawer"/>
   <circle cx="54" cy="51" r="1.5" class="handle"/>
   
-  <!-- Additional detail: a small handle on the top cabinet door -->
+  <!-- Additional detail: a small top handle on the cabinet door -->
   <rect x="28" y="10" width="8" height="4" rx="1" ry="1" fill="#1565C0"/>
 </svg>
