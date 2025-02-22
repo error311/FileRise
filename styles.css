@@ -1,6 +1,8 @@
+/* Container */
 .container {
-    margin-top: 10px;
+    margin-top: 20px; /* Increased for better spacing */
 }
+
 /* Logout & Add User button container */
 .logout-container {
     position: absolute;
@@ -12,20 +14,21 @@
     gap: 5px;
 }
 
-/* Move buttons below title, but still right-aligned, on small screens */
+/* On small screens, move buttons below title */
 @media (max-width: 768px) {
     .logout-container {
         position: static;
-        align-items: flex-end; /* Right-align buttons instead of centering */
+        align-items: flex-end; /* Right-align buttons */
         text-align: right;
         margin-top: 10px;
     }
-
     .logout-container button {
         width: auto;
         min-width: 120px; /* Ensures buttons don't become huge */
     }
 }
+
+/* Modal styling */
 .modal {
     display: none;
     position: fixed;
@@ -34,16 +37,56 @@
     transform: translate(-50%, -50%);
     background: white;
     padding: 15px;
-    border: 1px solid black;
-    box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+    border: 1px solid #ccc;  /* Lighter border for a modern look */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     z-index: 1000;
     width: 280px; /* slightly narrower */
-    height: 220px; /* reduce height */
+    height: auto; /* Let height adjust to content */
+    /* Flex styling if needed for vertical alignment */
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Distribute space properly */
+    justify-content: space-between;
 }
 
+/* Editor modal: for edit popup with rounded corners */
+.editor-modal {
+  width: 80vw;
+  max-width: 90vw;
+  min-width: 400px;
+  height: 400px;
+  max-height: 80vh;
+  overflow: auto;
+  resize: both;
+}
+
+/* Header styling */
+header {
+  background-color: #2196F3;
+  color: white;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  /* Ensure header has sufficient height if text wraps */
+  min-height: 80px;
+}
+
+/* Material icons */
+.material-icons {
+  font-size: 24px;
+  vertical-align: middle;
+  color: white;
+}
+
+/* Header buttons container */
+.header-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Upload and Choose File button styles */
 .btn-upload {
     background-color: #007bff;
     color: white;
@@ -57,6 +100,8 @@
     color: white;
     border-radius: 5px;
 }
+
+/* File list and progress bar */
 .file-list {
     margin-top: 10px;
 }
@@ -68,12 +113,14 @@
 .progress-bar {
     height: 100%; /* Fill the entire height */
 }
+
+/* Table styling */
 table {
     width: 100%;
     border-collapse: collapse;
 }
 table, th, td {
-    border: 1px solid black;
+    border: 1px solid #ccc;  /* Lighter border color */
 }
 th, td {
     padding: 10px;
@@ -82,22 +129,30 @@ th, td {
 tr:nth-child(even) {
     background-color: #f2f2f2;
 }
+
+/* Headings and form labels */
 h2 {
-    font-size: 1.5em; /* Smaller font size */
+    font-size: 2em; /* Larger heading for better emphasis */
 }
 .form-group {
-    margin-bottom: 5px; /* Reduce vertical space between form groups */
+    margin-bottom: 10px; /* Increased spacing */
 }
 label {
-    font-size: 0.9em; /* Smaller font size */
+    font-size: 0.9rem; /* Rem unit for scalability */
 }
+
+/* Button font size */
 .btn {
-    font-size: 0.9em; /* Smaller font size for buttons */
+    font-size: 0.9rem;
 }
+
+/* Utility class for aligning items */
 .align-items-center {
     display: flex;
     align-items: center;
 }
+
+/* Table header button style (if using buttons inside headers) */
 .table th button {
     background: none;
     border: none;
@@ -105,23 +160,8 @@ label {
     cursor: pointer;
     padding: 0;
 }
+
+/* Initially hide login and upload forms */
 #loginForm, #uploadForm {
     display: none;
-}
-.form-row {
-    align-items: flex-start; /* Align items by top */
-}
-.full-width {
-    width: 100%;
-}
-.btn-delete {
-    background-color: #dc3545;
-    color: white;
-    border: none;
-    padding: 5px 10px;
-    cursor: pointer;
-    border-radius: 5px;
-}
-.btn-delete:hover {
-    background-color: #c82333;
 }
