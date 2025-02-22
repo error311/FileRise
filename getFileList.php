@@ -1,83 +1,64 @@
 <?php
 require_once 'config.php';
+session_start();
+header('Content-Type: application/json');
 
-function authenticate($username, $password) {
-    $filename = 'users.txt';
-    $response = array('authenticated' => false);
+$response = ["files" => []];
 
-    if (!file_exists($filename)) {
-        return $response;
-    }
-
-    $lines = file($filename, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    foreach ($lines as $line) {
-        list($fileUser, $filePass) = explode(':', $line, 2);
-        if ($username === $fileUser && $password === $filePass) {
-            $response['authenticated'] = true;
-            break;
-        }
-    }
-
-    return $response['authenticated'];
-}
-
-$data = json_decode(file_get_contents('php://input'), true);
-$username = $data['username'];
-$password = $data['password'];
-$deleteFile = isset($data['delete']) ? basename($data['delete']) : null;
-
-if (!authenticate($username, $password)) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized']);
+if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+    echo json_encode(["error" => "Unauthorized"]);
     exit;
 }
 
-if ($deleteFile) {
-    $filePath = UPLOAD_DIR . $deleteFile;
-    if (file_exists($filePath)) {
-        unlink($filePath);
-        echo json_encode(['success' => 'File deleted']);
-    } else {
-        http_response_code(404);
-        echo json_encode(['error' => 'File not found']);
-    }
+$directory = UPLOAD_DIR;
+$metadataFile = "file_metadata.json";
+
+// Load stored metadata
+$metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
+
+if (!is_dir($directory)) {
+    echo json_encode(["error" => "Uploads directory not found."]);
     exit;
 }
 
-$files = array_diff(scandir(UPLOAD_DIR), array('.', '..'));
-
+$files = array_values(array_diff(scandir($directory), array('.', '..')));
 $fileList = [];
-foreach ($files as $file) {
-    $filePath = UPLOAD_DIR . $file;
-    $fileSizeBytes = filesize($filePath);
-    $fileDate = date(DATE_TIME_FORMAT, filemtime($filePath));
-    $uploadDate = date(DATE_TIME_FORMAT, filectime($filePath));
 
+foreach ($files as $file) {
+    $filePath = $directory . DIRECTORY_SEPARATOR . $file;
+    if (!file_exists($filePath)) {
+        continue;
+    }
+
+    // Get "Date Modified" using filemtime()
+    $fileDateModified = filemtime($filePath) ? date(DATE_TIME_FORMAT, filemtime($filePath)) : "Unknown";
+
+    // Get "Uploaded Date" from metadata (set during upload)
+    $fileUploadedDate = isset($metadata[$file]["uploaded"]) ? $metadata[$file]["uploaded"] : "Unknown";
+
+    // Get the uploader from metadata
+    $fileUploader = isset($metadata[$file]["uploader"]) ? $metadata[$file]["uploader"] : "Unknown";
+
+    // Calculate File Size
+    $fileSizeBytes = filesize($filePath);
     if ($fileSizeBytes >= 1073741824) {
-        $fileSizeFormatted = sprintf("%.1f GB (%s bytes)", $fileSizeBytes / 1073741824, number_format($fileSizeBytes));
+        $fileSizeFormatted = sprintf("%.1f GB", $fileSizeBytes / 1073741824);
     } elseif ($fileSizeBytes >= 1048576) {
-        $fileSizeFormatted = sprintf("%.1f MB (%s bytes)", $fileSizeBytes / 1048576, number_format($fileSizeBytes));
+        $fileSizeFormatted = sprintf("%.1f MB", $fileSizeBytes / 1048576);
     } elseif ($fileSizeBytes >= 1024) {
-        $fileSizeFormatted = sprintf("%.1f KB (%s bytes)", $fileSizeBytes / 1024, number_format($fileSizeBytes));
+        $fileSizeFormatted = sprintf("%.1f KB", $fileSizeBytes / 1024);
     } else {
         $fileSizeFormatted = sprintf("%s bytes", number_format($fileSizeBytes));
     }
 
-    $fileUrl = BASE_URL . rawurlencode($file);
     $fileList[] = [
-        'name' => htmlspecialchars($file, ENT_QUOTES, 'UTF-8'),
+        'name' => $file,
+        'modified' => $fileDateModified,
+        'uploaded' => $fileUploadedDate,
         'size' => $fileSizeFormatted,
-        'sizeBytes' => $fileSizeBytes,
-        'modified' => $fileDate,
-        'uploaded' => $uploadDate,
-        'url' => htmlspecialchars($fileUrl, ENT_QUOTES, 'UTF-8')
+        'uploader' => $fileUploader
     ];
 }
 
-usort($fileList, function($a, $b) {
-    return strtotime($b['uploaded']) - strtotime($a['uploaded']);
-});
-
-header('Content-Type: application/json');
-echo json_encode($fileList);
+echo json_encode(["files" => $fileList]);
 ?>
