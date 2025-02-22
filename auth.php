@@ -1,37 +1,42 @@
 <?php
 session_start();
+header('Content-Type: application/json');
 
-$data = json_decode(file_get_contents('php://input'), true);
-$username = $data['username'];
-$password = $data['password'];
+$usersFile = 'users.txt';
 
+// Function to authenticate user
 function authenticate($username, $password) {
-    $filename = 'users.txt';
-    $response = array('authenticated' => false);
+    global $usersFile;
 
-    if (!file_exists($filename)) {
-        return $response;
+    if (!file_exists($usersFile)) {
+        return false;
     }
 
-    $lines = file($filename, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        list($fileUser, $filePass) = explode(':', $line, 2);
-        if ($username === $fileUser && $password === $filePass) {
-            $response['authenticated'] = true;
-            break;
+        list($storedUser, $storedPass, $storedRole) = explode(':', trim($line), 3);
+        if ($username === $storedUser && password_verify($password, $storedPass)) {
+            return $storedRole; // 
         }
     }
 
-    return $response['authenticated'];
+    return false;
 }
 
-$isAuthenticated = authenticate($username, $password);
+// Get JSON input
+$data = json_decode(file_get_contents("php://input"), true);
+$username = $data["username"] ?? "";
+$password = $data["password"] ?? "";
 
-if ($isAuthenticated) {
-    $_SESSION['authenticated'] = true;
-    echo json_encode(['authenticated' => true]);
+// Authenticate user
+$userRole = authenticate($username, $password);
+if ($userRole !== false) {
+    $_SESSION["authenticated"] = true;
+    $_SESSION["username"] = $username;
+    $_SESSION["isAdmin"] = ($userRole === "1"); // correctly recognize admin status
+
+    echo json_encode(["success" => "Login successful", "isAdmin" => $_SESSION["isAdmin"]]);
 } else {
-    $_SESSION['authenticated'] = false;
-    echo json_encode(['authenticated' => false]);
+    echo json_encode(["error" => "Invalid credentials"]);
 }
 ?>
