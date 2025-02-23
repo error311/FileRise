@@ -1,4 +1,4 @@
-Here are list of changes made to original code base:
+
 
 
 <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/main-screen.png" alt="main screen">
