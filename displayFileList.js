@@ -166,47 +166,41 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 window.editFile = function(fileName) {
-    console.log("Edit button clicked for:", fileName);
-    let existingEditor = document.getElementById("editorContainer");
-    if (existingEditor) {
-        existingEditor.remove();
-    }
-    fetch(`uploads/${fileName}?t=${new Date().getTime()}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.text();
-        })
-        .then(content => {
-            const editorContainer = document.createElement("div");
-            editorContainer.id = "editorContainer";
-            editorContainer.style.position = "fixed";
-            editorContainer.style.top = "50%";
-            editorContainer.style.left = "50%";
-            editorContainer.style.transform = "translate(-50%, -50%)";
-            editorContainer.style.background = "white";
-            editorContainer.style.padding = "15px";
-            editorContainer.style.border = "1px solid black";
-            editorContainer.style.boxShadow = "0px 4px 6px rgba(0,0,0,0.1)";
-            editorContainer.style.zIndex = "1000";
-            editorContainer.style.width = "80vw";
-            editorContainer.style.maxWidth = "90vw";
-            editorContainer.style.minWidth = "400px";
-            editorContainer.style.height = "400px";
-            editorContainer.style.maxHeight = "80vh";
-            editorContainer.style.overflow = "auto";
-            editorContainer.style.resize = "both";
-            editorContainer.innerHTML = `
-                <h3>Editing: ${fileName}</h3>
-                <textarea id="fileEditor" style="width: 100%; height: 80%; resize: none;">${content}</textarea>
-                <br>
-                <button onclick="saveFile('${fileName}')">Save</button>
-                <button onclick="document.getElementById('editorContainer').remove()">Close</button>
-            `;
-            document.body.appendChild(editorContainer);
-        })
-        .catch(error => console.error("Error loading file:", error));
+  const threshold = 10 * 1024 * 1024; // 10 MB threshold
+
+  // Check file size via HEAD request.
+  fetch(`uploads/${encodeURIComponent(fileName)}`, { method: 'HEAD' })
+    .then(response => {
+      const fileSize = parseInt(response.headers.get('Content-Length') || "0", 10);
+      if (fileSize > threshold) {
+        alert("This file is too large to edit in the browser.");
+        return;
+      }
+      return fetch(`uploads/${encodeURIComponent(fileName)}?t=${new Date().getTime()}`);
+    })
+    .then(response => {
+      if (!response) return;
+      if (!response.ok) throw new Error("HTTP error! Status: " + response.status);
+      return response.text();
+    })
+    .then(content => {
+      if (!content) return;
+      const modal = document.createElement("div");
+      modal.id = "editorContainer";
+      // Use your existing classes for styling.
+      modal.classList.add("modal", "editor-modal");
+      modal.innerHTML = `
+          <h3>Editing: ${fileName}</h3>
+          <textarea id="fileEditor" style="width:100%; height:60%; resize:none;">${content}</textarea>
+          <div style="margin-top:10px; text-align:right;">
+            <button onclick="saveFile('${fileName}')" class="btn btn-primary">Save</button>
+            <button onclick="document.getElementById('editorContainer').remove()" class="btn btn-secondary">Close</button>
+          </div>
+      `;
+      document.body.appendChild(modal);
+      modal.style.display = "block";
+    })
+    .catch(error => console.error("Error in editFile:", error));
 };
 
 window.saveFile = function(fileName) {
