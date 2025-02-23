@@ -12,11 +12,13 @@ This project is a lightweight, secure web application for uploading, editing, an
 ## Functionality & Features
 
 - **Multi-file Upload:**  
-  Users can select and upload multiple files at once. Each file’s upload is tracked individually with a progress bar showing percentage complete and upload speed (B/s, KB/s, or MB/s). If an image is selected, a small 32×32 pixel thumbnail preview is displayed; otherwise, a default file icon is shown.  
+  Users can select and upload multiple files at once. Each file’s upload is tracked individually with a progress bar showing percentage complete and upload speed (B/s, KB/s, or MB/s). If an image is selected, a small 32×32 pixel thumbnail preview is displayed; otherwise, a default file icon is shown.
+  
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/multi-upload.png" alt="multi upload" width="600">
 
 - **File Editing:**  
-  Built-in editing functionality for text-based files allows quick modifications directly within the browser. Files open in a modal window with a consistent, rounded design. Edit window can be resized to allow for easier editting. 
+  Built-in editing functionality for text-based files allows quick modifications directly within the browser. Files open in a modal window with a consistent, rounded design. Edit window can be resized to allow for easier editting.
+  
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit-larger-window.png" alt="edit larger window" width="600">
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit-small-window.png" alt="edit smaller window" width="600">
 
@@ -27,7 +29,8 @@ This project is a lightweight, secure web application for uploading, editing, an
   Files can be sorted by attributes such as name, date modified, upload date, size, or uploader, making it easier to navigate large file sets.
 
 - **User Management:**  
-  Secure, session-based authentication is implemented along with admin-only controls for adding and removing users. Passwords are hashed for security.  
+  Secure, session-based authentication is implemented along with admin-only controls for adding and removing users. Passwords are hashed for security.
+   
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/create-user.png" alt="new user" width="600">
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/remove-user.png" alt="remove user" width="600">
 
@@ -36,6 +39,7 @@ This project is a lightweight, secure web application for uploading, editing, an
 
 - **Progress Feedback:**  
   During uploads, each file shows a progress bar next to its name, complete with upload percentage and speed. Once all files have been uploaded, the progress list automatically clears after a short delay.
+  
  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/progress-bar.png" alt="progress bar" width="600"> 
 
 ---
@@ -88,8 +92,9 @@ This project is a lightweight, secure web application for uploading, editing, an
   This multi-file uploader with editing and user management is ideal for scenarios involving document management, image galleries, firmware updates, and more.
 
 ---
+- **Login Page**
 
-<img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png" alt="login page" width="600">
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png" alt="login page" width="600">
 
       
 
