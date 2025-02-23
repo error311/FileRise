@@ -17,7 +17,7 @@ This project is a lightweight, secure web application for uploading, editing, an
 
 - **File Editing:**  
   Built-in editing functionality for text-based files allows quick modifications directly within the browser. Files open in a modal window with a consistent, rounded design.  
-  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit-large-window.png" alt="edit window" width="600">
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit-larger-window.png" alt="edit window" width="600">
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit-small-window.png" alt="edit window" width="600">
 
 - **Batch Deleting:**  
