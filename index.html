@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Multi File Upload & Edit</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="shortcut icon" href="logo.svg">
   <!-- Google Fonts and Material Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -113,12 +116,31 @@
       text-decoration: underline;
       white-space: nowrap;
     }
+    .container { margin-top: 20px; }
+    /* Progress bar styling */
+    .progress {
+      background-color: #e9ecef;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 10px;
+      height: 20px;
+    }
+    .progress-bar {
+      background-color: #007bff;
+      height: 100%;
+      line-height: 20px;
+      color: #fff;
+      text-align: center;
+      transition: width 0.4s ease;
+    }
   </style>
 </head>
 <body>
   <!-- Header -->
   <header>
-    <div class="header-left"></div>
+    <div class="header-left">
+      <img src="logo.svg" alt="Filing Cabinet Logo" style="height: 60px; width: auto;">
+    </div>
     <div class="header-title">
       <h1>Multi File Upload & Edit</h1>
     </div>
@@ -153,19 +175,20 @@
       </div>
     </div>
     
-    <!-- Upload Form -->
-    <div class="row" id="uploadForm">
-      <div class="col-12">
-        <form id="uploadFileForm" method="post" enctype="multipart/form-data">
-          <div class="form-group">
-            <label for="file"></label>
-            <input type="file" id="file" name="file[]" class="form-control-file" multiple required style="max-width: 768px;">
-          </div>
-          <button type="submit" id="uploadBtn" class="btn btn-primary" disabled>Upload</button>
-          <div id="statusMessage"></div>
-        </form>
-      </div>
+      <!-- Upload Form (shown when authenticated) -->
+  <div class="row" id="uploadForm">
+    <div class="col-12">
+      <form id="uploadFileForm" method="post" enctype="multipart/form-data">
+        <div class="form-group">
+          <label for="file">Choose files to upload:</label>
+          <input type="file" id="file" name="file[]" class="form-control-file" multiple required>
+        </div>
+        <button type="submit" id="uploadBtn" class="btn btn-primary">Upload</button>
+        <!-- This container will display per-file progress bars -->
+        <div id="uploadProgressContainer"></div>
+      </form>
     </div>
+  </div>
     
     <!-- File List -->
     <div id="fileListContainer">
