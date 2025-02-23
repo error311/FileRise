@@ -40,7 +40,7 @@ This project is a lightweight, secure web application for uploading, editing, an
 - **Progress Feedback:**  
   During uploads, each file shows a progress bar next to its name, complete with upload percentage and speed. Once all files have been uploaded, the progress list automatically clears after a short delay.
   
- <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/progress-bar.png" alt="progress bar" width="600"> 
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/progress-bar.png" alt="progress bar" width="600"> 
 
 ---
 
