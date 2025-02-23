@@ -14,6 +14,72 @@
     gap: 5px;
 }
 
+/* Progress bar container style */
+#uploadProgressContainer ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+#uploadProgressContainer li {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  /* Allow wrapping for long file names */
+  flex-wrap: wrap;
+}
+
+/* Force file preview container to be 32x32 pixels and adjust vertical position */
+#uploadProgressContainer .file-preview {
+  width: 32px !important;
+  height: 32px !important;
+  margin-right: 10px;
+  flex-shrink: 0;
+  /* Use transform to nudge down the preview */
+  transform: translateY(10px);
+}
+
+/* Ensure that the image inside the preview fills the container */
+#uploadProgressContainer .file-preview img {
+  width: 32px !important;
+  height: 32px !important;
+  object-fit: cover;
+}
+
+/* File name styling */
+#uploadProgressContainer .file-name {
+  margin-right: 20px;
+  flex-grow: 1;
+  word-break: break-word;
+}
+
+/* Progress bar container style */
+#uploadProgressContainer .progress {
+  background-color: #e9ecef;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-top: 5px;
+  margin-bottom: 10px;
+  height: 24px;
+  width: 250px;  /* Increased width */
+  /* No extra left margin so it sits right next to file name */
+}
+
+/* Progress bar element style */
+#uploadProgressContainer .progress-bar {
+  background-color: #007bff;
+  height: 100%;
+  line-height: 24px;
+  color: #000; /* black text for legibility */
+  text-align: center;
+  transition: width 0.4s ease;
+  font-size: 0.9rem;
+}
+
+/* Ensure the upload progress container has some top margin */
+#uploadProgressContainer {
+  margin-top: 20px;
+}
+
 /* On small screens, move buttons below title */
 @media (max-width: 768px) {
     .logout-container {
@@ -42,7 +108,6 @@
     z-index: 1000;
     width: 280px; /* slightly narrower */
     height: auto; /* Let height adjust to content */
-    /* Flex styling if needed for vertical alignment */
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -68,7 +133,6 @@ header {
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  /* Ensure header has sufficient height if text wraps */
   min-height: 80px;
 }
 
