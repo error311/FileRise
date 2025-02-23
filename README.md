@@ -1,82 +1,100 @@
 Here are list of changes made to original code base:
 
 
-<img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./main_screen.png" alt="main screen">
+<img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/main_screen.png" alt="main screen">
 
+# Multi File Upload & Edit
 
-# Functionality & Features
+This project is a lightweight, secure web application for uploading, editing, and managing files. It’s built with Apache, PHP, and modern front-end JavaScript, and it features a responsive interface with dynamic updates.
+
+---
+
+## Functionality & Features
 
 - **Multi-file Upload:**  
-  Allows users to upload multiple files at once, which improves efficiency and user experience.
-  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./multifile_upload.png" alt="edit window" width="600">
- 
+  Users can select and upload multiple files at once. Each file’s upload is tracked individually with a progress bar showing percentage complete and upload speed (B/s, KB/s, or MB/s). If an image is selected, a small 32×32 pixel thumbnail preview is displayed; otherwise, a default file icon is shown.  
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/multifile_upload.png" alt="multi file upload" width="600">
 
 - **File Editing:**  
-  Built-in editing functionality for text-based files enables quick modifications without leaving the interface.
-  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./edit_window.png" alt="edit window" width="600">
+  Built-in editing functionality for text-based files allows quick modifications directly within the browser. Files open in a modal window with a consistent, rounded design.  
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit_window.png" alt="edit window" width="600">
 
 - **Batch Deleting:**  
-  The ability to select multiple files and delete them in one action streamlines file management.
+  Users can select multiple files and delete them in one action, streamlining file management.
 
 - **Sorting & Filtering:**  
-  Users can sort files by various attributes (name, date modified, uploaded date, size, uploader), making navigation easier.
+  Files can be sorted by attributes such as name, date modified, upload date, size, or uploader, making it easier to navigate large file sets.
 
 - **User Management:**  
-  Incorporates secure authentication (with hashed passwords) and admin-only controls for adding new users.
-  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./new_user_window.png" alt="new user" width="600">
-
-# Security
-
-- **Password Hashing:**  
-  Using PHP's `password_hash()` and `password_verify()` ensures that user credentials are securely stored and verified.
-
-- **Session-based Authentication:**  
-  Leveraging PHP sessions to maintain secure user state across the application.
-
-- **Access Control:**  
-  Admins have extra privileges (such as creating new users), which is properly enforced via session checks and restricted endpoints.
-
-- **Safe File Operations:**  
-  File metadata (including uploader info) is stored securely in JSON, helping avoid direct exposure of sensitive details.
-
-# User Experience & Interface
-
-- **Responsive Design:**  
-  The layout adapts to different screen sizes, ensuring a good experience on both desktop and mobile devices.
+  Secure, session-based authentication is implemented along with admin-only controls for adding and removing users. Passwords are hashed for security.  
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/new_user_window.png" alt="new user" width="600">
 
 - **Dynamic UI Updates:**  
-  Uses modern JavaScript (Fetch API, asynchronous calls) to update the file list and authentication state without full page reloads.
+  The application uses asynchronous JavaScript (via the Fetch API and XMLHttpRequest) to update the file list and upload progress in real time without requiring full page reloads.
 
-- **Clear Feedback:**  
-  Users receive immediate alerts and visual feedback for actions like login, file upload, and deletion.
+- **Progress Feedback:**  
+  During uploads, each file shows a progress bar next to its name, complete with upload percentage and speed. Once all files have been uploaded, the progress list automatically clears after a short delay.
 
-# Extensibility & Maintainability
+---
+
+## Security
+
+- **Password Hashing:**  
+  PHP's `password_hash()` and `password_verify()` functions are used to securely store and check user credentials.
+
+- **Session-based Authentication:**  
+  User state is managed using PHP sessions, with proper access control for admin-specific actions.
+
+- **Safe File Operations:**  
+  Uploaded file metadata (including uploader and upload timestamp) is stored in a JSON file, minimizing exposure of sensitive data.
+
+---
+
+## User Experience & Interface
+
+- **Responsive Design:**  
+  The interface adapts seamlessly to different screen sizes, ensuring usability on desktops, tablets, and mobile devices.
+
+- **Modern and Dynamic:**  
+  The application uses dynamic UI updates (via the Fetch API and XMLHttpRequest) to show real-time progress for each file upload, including visual feedback with thumbnail previews and progress bars.
+
+- **Clean and Intuitive Layout:**  
+  A structured header with a logo, centered title, and action buttons (Logout, Add User, Remove User) provides an intuitive navigation experience.
+
+---
+
+## Extensibility & Maintainability
 
 - **Modular Code Structure:**  
-  The project is divided into distinct files (`auth.js`, `upload.js`, `displayFileList.js`, etc.), which makes it easier to manage and extend.
+  The codebase is organized into separate files (e.g., `auth.js`, `upload.js`, `displayFileList.js`), making it easy to manage and extend.
+  
+- **Removal of Legacy Files:**  
+  Files such as `checkUploadLimit.js`, `checkUploadLimit.php`, and `getUploadSize.php` are no longer used and have been removed to streamline the project.
 
 - **Customization Options:**  
-  The codebase is flexible enough to allow the addition of more file types, new features (e.g., versioning, file previews), or integration with other systems.
+  The project is flexible and can be adapted to support additional file types, enhanced previews, or integration with other systems.
 
-- **Good Practices Demonstrated:**  
-  The project illustrates the use of best practices in PHP (such as session management and secure password handling) and modern front-end JavaScript, making it a valuable learning resource.
+---
 
-# Deployment & Real-world Use
+## Deployment & Real-world Use
 
 - **Reverse Proxy Compatibility:**  
-  With proper server configuration and security measures, this project can be deployed behind a reverse proxy, offering an extra layer of security.
+  With proper configuration, the application can be deployed behind a reverse proxy, providing an additional layer of security.
 
-- **Real-world Scenario:**  
-  A multi-file uploader with editing and user management is useful in many environments—whether for managing firmware, documents, images, or any files—making this a practical solution.
+- **Practical Applications:**  
+  This multi-file uploader with editing and user management is ideal for scenarios involving document management, image galleries, firmware updates, and more.
 
+---
 
-<img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources./login_screen.png" alt="login screen" width="600">
+<img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login_screen.png" alt="login screen" width="600">
 
       
 
 
 
-Original readme:
+
+
+fork of:
 https://github.com/sensboston/uploader
 
 
@@ -92,7 +110,4 @@ The application uses PHP, running on Apache2, Ubuntu (but definitely should work
 - Required PHP extensions: `php-json`, `php-curl`
 
 ...........
-
-
-![screenshot](https://github.com/sensboston/uploader/assets/1036158/5428672d-7dcc-4d7a-a96f-dfe578618c75)
 
