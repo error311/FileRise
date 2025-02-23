@@ -14,20 +14,17 @@ document.addEventListener("DOMContentLoaded", function() {
       
       Array.from(files).forEach((file, index) => {
         const listItem = document.createElement("li");
-        // Add padding to move the row contents down slightly
-        listItem.style.paddingTop = "20px";
+        listItem.style.paddingTop = "20px";  // pushes contents down
         listItem.style.marginBottom = "10px";
         listItem.style.display = "flex";
         listItem.style.alignItems = "center";
-        listItem.style.flexWrap = "wrap"; // allow wrapping for long file names
+        listItem.style.flexWrap = "wrap";
         
         // Create preview container (32x32)
         const previewContainer = document.createElement("div");
         previewContainer.className = "file-preview";
-        // If the file is an image, display its thumbnail; otherwise, show default icon.
         if (file.type.startsWith("image/")) {
           const img = document.createElement("img");
-          // Force dimensions via inline style:
           img.style.width = "32px";
           img.style.height = "32px";
           img.style.objectFit = "cover";
@@ -41,18 +38,18 @@ document.addEventListener("DOMContentLoaded", function() {
           const icon = document.createElement("i");
           icon.className = "material-icons";
           icon.textContent = "insert_drive_file";
-          icon.style.fontSize = "32px";  // Ensure icon is 32px
+          icon.style.fontSize = "32px";
           previewContainer.appendChild(icon);
         }
         
-        // File name container – allow full file name with wrapping.
+        // File name container – allow wrapping
         const fileNameDiv = document.createElement("div");
         fileNameDiv.textContent = file.name;
         fileNameDiv.style.flexGrow = "1";
         fileNameDiv.style.marginLeft = "10px";
         fileNameDiv.style.wordBreak = "break-word";
         
-        // Create progress bar container (fixed width of 250px)
+        // Progress bar container (fixed width)
         const progressDiv = document.createElement("div");
         progressDiv.classList.add("progress");
         progressDiv.style.flex = "0 0 250px";
@@ -65,12 +62,12 @@ document.addEventListener("DOMContentLoaded", function() {
         
         progressDiv.appendChild(progressBar);
         
-        // Assemble the list item.
+        // Assemble the list item
         listItem.appendChild(previewContainer);
         listItem.appendChild(fileNameDiv);
         listItem.appendChild(progressDiv);
         
-        // Save reference for progress updates and record start time.
+        // Save reference for updates and record start time for speed calculation.
         listItem.progressBar = progressBar;
         listItem.startTime = Date.now();
         
@@ -95,14 +92,16 @@ document.addEventListener("DOMContentLoaded", function() {
     
     Array.from(files).forEach((file, index) => {
       const formData = new FormData();
-      // Use the field name "file[]" as your upload.php expects.
+      // Using the original field name "file[]" as expected by upload.php
       formData.append("file[]", file);
       
       const xhr = new XMLHttpRequest();
+      let currentPercent = 0;
       
+      // Update progress events.
       xhr.upload.addEventListener("progress", function(e) {
         if (e.lengthComputable) {
-          const percentComplete = Math.round((e.loaded / e.total) * 100);
+          currentPercent = Math.round((e.loaded / e.total) * 100);
           const elapsedTime = (Date.now() - listItems[index].startTime) / 1000; // seconds
           let speedText = "";
           if (elapsedTime > 0) {
@@ -115,33 +114,34 @@ document.addEventListener("DOMContentLoaded", function() {
               speedText = (speed / 1048576).toFixed(1) + " MB/s";
             }
           }
-          listItems[index].progressBar.style.width = percentComplete + "%";
-          listItems[index].progressBar.innerText = percentComplete + "% (" + speedText + ")";
+          listItems[index].progressBar.style.width = currentPercent + "%";
+          listItems[index].progressBar.innerText = currentPercent + "% (" + speedText + ")";
         }
       });
       
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
-          finishedCount++;
-          if (xhr.status === 200) {
-            listItems[index].progressBar.innerText = "Done";
-          } else {
-            listItems[index].progressBar.innerText = "Error";
-          }
-          console.log("Upload response for file", file.name, xhr.responseText);
-          if (finishedCount === files.length) {
-            if (typeof loadFileList === "function") {
-              loadFileList();
-            }
-            // Reset the file input so it shows "No files selected"
-            fileInput.value = "";
-            // Clear the progress container after 5 seconds
-            setTimeout(() => {
-              progressContainer.innerHTML = "";
-            }, 5000);
-          }
+      // Use the load event for final update.
+      xhr.addEventListener("load", function() {
+        // Only update to Done if currentPercent is 100
+        if (currentPercent >= 100) {
+          listItems[index].progressBar.innerText = "Done";
         }
-      };
+        finishedCount++;
+        console.log("Upload response for file", file.name, xhr.responseText);
+        if (finishedCount === files.length) {
+          if (typeof loadFileList === "function") {
+            loadFileList();
+          }
+          // Reset file input so "No files selected" appears
+          fileInput.value = "";
+          setTimeout(() => {
+            progressContainer.innerHTML = "";
+          }, 5000);
+        }
+      });
+      
+      xhr.addEventListener("error", function() {
+        listItems[index].progressBar.innerText = "Error";
+      });
       
       xhr.open("POST", "upload.php", true);
       xhr.send(formData);
