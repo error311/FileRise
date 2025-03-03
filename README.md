@@ -9,7 +9,7 @@
 
   some refactoring
 
-  config added USERS_FILE
+  config added USERS_DIR & USERS_FILE
 
 # Multi File Upload & Edit
 

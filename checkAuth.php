@@ -4,7 +4,7 @@ session_start();
 header('Content-Type: application/json');
 
 // Check if users.txt is empty or doesn't exist
-$usersFile = UPLOAD_DIR . USERS_FILE;
+$usersFile = USERS_DIR . USERS_FILE;
 if (!file_exists($usersFile) || trim(file_get_contents($usersFile)) === '') {
     // Return JSON indicating setup mode
     echo json_encode(["setup" => true]);

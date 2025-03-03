@@ -3,7 +3,7 @@ require 'config.php';
 session_start();
 header('Content-Type: application/json');
 
-$usersFile = UPLOAD_DIR . USERS_FILE;
+$usersFile = USERS_DIR . USERS_FILE;
 
 // Determine if we are in setup mode:
 // - Query parameter setup=1 is passed

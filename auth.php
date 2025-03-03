@@ -3,7 +3,7 @@ require 'config.php';
 session_start();
 header('Content-Type: application/json');
 
-$usersFile = UPLOAD_DIR . USERS_FILE;
+$usersFile = USERS_DIR . USERS_FILE;
 
 // Function to authenticate user
 function authenticate($username, $password) {
