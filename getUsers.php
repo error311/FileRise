@@ -7,7 +7,7 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
     echo json_encode(["error" => "Unauthorized"]);
     exit;
 }
-$usersFile = USERS_FILE;
+$usersFile = UPLOAD_DIR . USERS_FILE;
 $users = [];
 if (file_exists($usersFile)) {
     $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);

@@ -3,7 +3,7 @@ require 'config.php';
 session_start();
 header('Content-Type: application/json');
 
-$usersFile = USERS_FILE;
+$usersFile = UPLOAD_DIR . USERS_FILE;
 
 // Only allow admins to remove users
 if (
