@@ -3,10 +3,9 @@
 
 <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/main-screen.png" alt="main screen">
 
-Changes 3/3/2025:
-folder management added
-some refactoring
- 
+**Changes 3/3/2025:**
+  folder management added
+  some refactoring
  
 
 # Multi File Upload & Edit
