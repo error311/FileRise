@@ -5,7 +5,7 @@ header('Content-Type: application/json');
 
 $data = json_decode(file_get_contents("php://input"), true);
 
-// Debugging: Check what data is received
+// Debugging: Check what data is received.
 if (!$data) {
     echo json_encode(["error" => "No data received"]);
     exit;
@@ -17,15 +17,18 @@ if (!isset($data["fileName"]) || !isset($data["content"])) {
 }
 
 $fileName = basename($data["fileName"]);
-$filePath = UPLOAD_DIR . $fileName;
 
-// Ensure only .txt and .json files are allowed
-if (!preg_match("/\\.txt$|\\.json$/", $fileName)) {
-    echo json_encode(["error" => "Invalid file type"]);
-    exit;
+// Determine the folder. Default to "root" if not provided.
+$folder = isset($data["folder"]) ? trim($data["folder"]) : "root";
+if ($folder !== "root") {
+    $targetDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
+} else {
+    $targetDir = UPLOAD_DIR;
 }
 
-// Try to save the file
+$filePath = $targetDir . $fileName;
+
+// Try to save the file.
 if (file_put_contents($filePath, $data["content"]) !== false) {
     echo json_encode(["success" => "File saved successfully"]);
 } else {

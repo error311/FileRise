@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const progressContainer = document.getElementById("uploadProgressContainer");
   const uploadForm = document.getElementById("uploadFileForm");
 
-  // When files are selected, display a list with preview, full file name, and a progress bar.
+  // When files are selected, display a list with preview, file name, and a progress bar.
   fileInput.addEventListener("change", function() {
     progressContainer.innerHTML = ""; // Clear previous entries
     const files = fileInput.files;
@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       Array.from(files).forEach((file, index) => {
         const listItem = document.createElement("li");
-        listItem.style.paddingTop = "20px";  // pushes contents down
+        listItem.style.paddingTop = "20px";
         listItem.style.marginBottom = "10px";
         listItem.style.display = "flex";
         listItem.style.alignItems = "center";
@@ -92,8 +92,10 @@ document.addEventListener("DOMContentLoaded", function() {
     
     Array.from(files).forEach((file, index) => {
       const formData = new FormData();
-      // Using the original field name "file[]" as expected by upload.php
+      // Append the file
       formData.append("file[]", file);
+      // Append the current folder value from the hidden input
+      formData.append("folder", document.getElementById("uploadFolder").value);
       
       const xhr = new XMLHttpRequest();
       let currentPercent = 0;
@@ -121,7 +123,6 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Use the load event for final update.
       xhr.addEventListener("load", function() {
-        // Only update to Done if currentPercent is 100
         if (currentPercent >= 100) {
           listItems[index].progressBar.innerText = "Done";
         }

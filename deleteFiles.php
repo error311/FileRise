@@ -19,7 +19,14 @@ if (!isset($data['files']) || !is_array($data['files'])) {
     exit;
 }
 
-$uploadDir = UPLOAD_DIR;
+// Determine folder – default to 'root'
+$folder = isset($data['folder']) ? trim($data['folder']) : 'root';
+if ($folder !== 'root') {
+    $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
+} else {
+    $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+}
+
 $deletedFiles = [];
 $errors = [];
 
@@ -33,14 +40,14 @@ foreach ($data['files'] as $fileName) {
             $errors[] = "Failed to delete $fileName";
         }
     } else {
-        $errors[] = "$fileName not found";
+        // If file not found, consider it already deleted.
+        $deletedFiles[] = $fileName;
     }
 }
 
-// Return response
 if (empty($errors)) {
     echo json_encode(["success" => "Files deleted: " . implode(", ", $deletedFiles)]);
 } else {
-    echo json_encode(["error" => implode("; ", $errors)]);
+    echo json_encode(["error" => implode("; ", $errors) . ". Files deleted: " . implode(", ", $deletedFiles)]);
 }
 ?>

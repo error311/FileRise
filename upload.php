@@ -8,26 +8,34 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
-$uploadDir = UPLOAD_DIR;
-$metadataFile = "file_metadata.json";
+$folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
 
-if (!file_exists($uploadDir)) {
-    mkdir($uploadDir, 0775, true);
+// Determine the target upload directory.
+$uploadDir = UPLOAD_DIR;
+if ($folder !== 'root') {
+    $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0775, true);
+    }
+} else {
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0775, true);
+    }
 }
 
-// Load existing metadata
+$metadataFile = "file_metadata.json";
 $metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
 $metadataChanged = false;
 
 foreach ($_FILES["file"]["name"] as $index => $fileName) {
-    $filePath = $uploadDir . basename($fileName);
-
-    if (move_uploaded_file($_FILES["file"]["tmp_name"][$index], $filePath)) {
-        // Store "Uploaded Date" and "Uploader" only if not already stored
-        if (!isset($metadata[$fileName])) {
-            $uploadedDate = date(DATE_TIME_FORMAT); // Store only the first upload time
+    $targetPath = $uploadDir . basename($fileName);
+    if (move_uploaded_file($_FILES["file"]["tmp_name"][$index], $targetPath)) {
+        // Use a metadata key that includes the folder if not in root.
+        $metaKey = ($folder !== 'root') ? $folder . "/" . $fileName : $fileName;
+        if (!isset($metadata[$metaKey])) {
+            $uploadedDate = date(DATE_TIME_FORMAT);
             $uploader = $_SESSION['username'] ?? "Unknown";
-            $metadata[$fileName] = [
+            $metadata[$metaKey] = [
                 "uploaded" => $uploadedDate,
                 "uploader" => $uploader
             ];
@@ -39,7 +47,6 @@ foreach ($_FILES["file"]["name"] as $index => $fileName) {
     }
 }
 
-// Save metadata only if modified
 if ($metadataChanged) {
     file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
 }

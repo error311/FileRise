@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
-    document.getElementById("fileListContainer").style.display = "none"; // Hide file list on load
-    document.getElementById("uploadForm").style.display = "none"; // Hide upload form on load
+    // Hide file list and upload form on load
+    document.getElementById("fileListContainer").style.display = "none"; 
+    document.getElementById("uploadFileForm").style.display = "none"; 
 
     checkAuthentication();
 
@@ -25,7 +26,7 @@ document.addEventListener("DOMContentLoaded", function () {
             if (data.success) {
                 console.log("Login successful.");
                 document.getElementById("loginForm").style.display = "none";
-                document.getElementById("uploadForm").style.display = "block";
+                document.getElementById("uploadFileForm").style.display = "block";
                 document.getElementById("fileListContainer").style.display = "block";
                 checkAuthentication(); // Recheck authentication to show the file list
             } else {
@@ -44,19 +45,18 @@ function checkAuthentication() {
             if (data.authenticated) {
                 console.log("User authenticated, showing file list.");
                 document.getElementById("loginForm").style.display = "none";
-                document.getElementById("uploadForm").style.display = "block";
+                document.getElementById("uploadFileForm").style.display = "block";
                 document.getElementById("fileListContainer").style.display = "block";
                 loadFileList();
             } else {
                 // Only log a warning if the file list is supposed to be shown (i.e. after a login)
-                if (document.getElementById("uploadForm").style.display === "block") {
+                if (document.getElementById("uploadFileForm").style.display === "block") {
                     console.warn("User not authenticated.");
                 }
                 document.getElementById("loginForm").style.display = "block";
-                document.getElementById("uploadForm").style.display = "none";
+                document.getElementById("uploadFileForm").style.display = "none";
                 document.getElementById("fileListContainer").style.display = "none";
             }
         })
         .catch(error => console.error("Error checking authentication:", error));
 }
-

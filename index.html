@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,34 +13,31 @@
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <!-- Bootstrap CSS -->
   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-  
   <!-- Scripts (order is important) -->
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="auth.js"></script>
   <script src="upload.js"></script>
-  <!-- Include your original displayFileList.js here -->
   <script src="displayFileList.js"></script>
-  
   <style>
     /* General styles */
     body {
       font-family: 'Roboto', sans-serif;
       background-color: #f5f5f5;
     }
-    .container { 
-      margin-top: 30px; 
+    .container {
+      margin-top: 30px;
     }
-    /* Header: three fixed-width sections so the title stays centered */
     header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       background-color: #2196F3;
       padding: 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
       min-height: 80px;
     }
-    .header-left, .header-buttons {
+    .header-left,
+    .header-buttons {
       width: 150px;
     }
     .header-title {
@@ -66,24 +64,22 @@
       transition: background-color 0.2s ease, box-shadow 0.2s ease;
     }
     .header-buttons button:hover {
-      background-color: rgba(255,255,255,0.2);
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      background-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     }
     .material-icons {
       font-size: 24px;
       vertical-align: middle;
       color: white;
     }
-    /* Login form styling */
     #loginForm {
       margin: 0 auto;
       max-width: 400px;
       background: white;
       padding: 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       border-radius: 4px;
     }
-    /* Common modal styling */
     .modal {
       display: none;
       position: fixed;
@@ -94,13 +90,12 @@
       padding: 20px;
       border: 1px solid #ccc;
       border-radius: 4px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
       z-index: 1000;
       width: 350px;
       max-width: 90%;
       height: auto;
     }
-    /* Editor modal styling for the edit popup */
     .editor-modal {
       width: 80vw;
       max-width: 90vw;
@@ -110,14 +105,14 @@
       overflow: auto;
       resize: both;
     }
-    /* Table header styling */
     table.table th {
       cursor: pointer;
       text-decoration: underline;
       white-space: nowrap;
     }
-    .container { margin-top: 20px; }
-    /* Progress bar styling */
+    .container {
+      margin-top: 20px;
+    }
     .progress {
       background-color: #e9ecef;
       border-radius: 5px;
@@ -133,8 +128,16 @@
       text-align: center;
       transition: width 0.4s ease;
     }
+    .card {
+      margin-bottom: 20px;
+    }
+    /* Keep action buttons on one line */
+    .actions-cell {
+      white-space: nowrap;
+    }
   </style>
 </head>
+
 <body>
   <!-- Header -->
   <header>
@@ -156,7 +159,7 @@
       </button>
     </div>
   </header>
-  
+
   <div class="container">
     <!-- Login Form -->
     <div class="row" id="loginForm">
@@ -174,29 +177,57 @@
         </form>
       </div>
     </div>
-    
-      <!-- Upload Form (shown when authenticated) -->
-  <div class="row" id="uploadForm">
-    <div class="col-12">
-      <form id="uploadFileForm" method="post" enctype="multipart/form-data">
-        <div class="form-group">
-          <label for="file">Choose files to upload:</label>
-          <input type="file" id="file" name="file[]" class="form-control-file" multiple required>
+
+    <!-- Main Operations: Upload and Folder Management -->
+    <div id="mainOperations" style="display: none;">
+      <div class="row" id="uploadFolderRow">
+        <!-- Upload Card: 60% width -->
+        <div class="col-md-7 d-flex">
+          <div class="card flex-fill">
+            <div class="card-header">Upload Files</div>
+            <div class="card-body">
+              <form id="uploadFileForm" method="post" enctype="multipart/form-data">
+                <!-- We'll use the global currentFolder -->
+                <div class="form-group">
+                  <label for="file">Choose files to upload:</label>
+                  <input type="file" id="file" name="file[]" class="form-control-file" multiple required>
+                </div>
+                <button type="submit" id="uploadBtn" class="btn btn-primary">Upload</button>
+                <div id="uploadProgressContainer"></div>
+              </form>
+            </div>
+          </div>
         </div>
-        <button type="submit" id="uploadBtn" class="btn btn-primary">Upload</button>
-        <!-- This container will display per-file progress bars -->
-        <div id="uploadProgressContainer"></div>
-      </form>
+        <!-- Folder Management Card: 40% width -->
+        <div class="col-md-5 d-flex">
+          <div class="card flex-fill">
+            <div class="card-header">Folder Management</div>
+            <div class="card-body">
+              <button id="createFolderBtn" class="btn btn-primary mb-3">Create Folder</button>
+              <div class="form-group d-flex align-items-center">
+                <select id="folderSelect" class="form-control">
+                  <!-- (Root) and folders will be loaded dynamically -->
+                </select>
+                <button id="renameFolderBtn" class="btn btn-secondary ml-2" title="Rename Folder">
+                  <i class="material-icons">edit</i>
+                </button>
+                <button id="deleteFolderBtn" class="btn btn-danger ml-2" title="Delete Folder">
+                  <i class="material-icons">delete</i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- File List Section -->
+      <div id="fileListContainer">
+        <h2 id="fileListTitle">Files in (Root)</h2>
+        <!-- Delete Selected button (initially hidden) -->
+        <button id="deleteSelectedBtn" class="btn btn-danger" style="margin-bottom: 10px; display: none;">Delete Selected</button>
+        <div id="fileList"></div>
+      </div>
     </div>
-  </div>
-    
-    <!-- File List -->
-    <div id="fileListContainer">
-      <h2>Uploaded Files</h2>
-      <button id="deleteSelectedBtn" class="btn btn-danger" style="margin-bottom: 10px; display: none;">Delete Selected</button>
-      <div id="fileList"></div>
-    </div>
-    
+
     <!-- Add User Modal -->
     <div id="addUserModal" class="modal">
       <h3>Create New User</h3>
@@ -211,7 +242,7 @@
       <button id="saveUserBtn" class="btn btn-primary">Save User</button>
       <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
     </div>
-    
+
     <!-- Remove User Modal -->
     <div id="removeUserModal" class="modal">
       <h3>Remove User</h3>
@@ -221,29 +252,64 @@
       <button id="cancelRemoveUserBtn" class="btn btn-secondary">Cancel</button>
     </div>
   </div>
-  
+
   <script>
-    // Global flag for setup mode.
-    window.setupMode = false;
-    
+    // Global variable to track current folder.
+    let currentFolder = "root";
+    // Global variable to track if we're in setup mode.
+    let setupMode = false;
+
+    // Helper: Determine if a file can be edited based on its extension.
+    function canEditFile(fileName) {
+      const allowedExtensions = ["txt", "html", "htm", "php", "css", "js", "json", "xml", "md", "py"];
+      const parts = fileName.split('.');
+      if (parts.length < 2) return false;
+      const ext = parts.pop().toLowerCase();
+      return allowedExtensions.includes(ext);
+    }
+
+    // Helper: Display a file preview in the container.
+    function displayFilePreview(file, container) {
+      if (file.type.startsWith("image/")) {
+        const img = document.createElement("img");
+        img.style.width = "32px";
+        img.style.height = "32px";
+        img.style.objectFit = "cover";
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        container.appendChild(img);
+      } else {
+        const icon = document.createElement("i");
+        icon.className = "material-icons";
+        icon.style.fontSize = "32px";
+        icon.textContent = "insert_drive_file";
+        container.appendChild(icon);
+      }
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
       checkAuthentication();
-      
+
       function updateUI(data) {
         console.log("Auth data:", data);
+        // If in setup mode, set our global flag and show only the Add User modal.
         if (data.setup) {
-          // Setup mode: hide login, upload, file list; hide header buttons (reserve space)
+          setupMode = true;
           document.getElementById("loginForm").style.display = "none";
-          document.getElementById("uploadForm").style.display = "none";
+          document.getElementById("mainOperations").style.display = "none";
           document.getElementById("fileListContainer").style.display = "none";
           document.querySelector(".header-buttons").style.visibility = "hidden";
           document.getElementById("addUserModal").style.display = "block";
-          window.setupMode = true;
           return;
+        } else {
+          setupMode = false;
         }
         if (data.authenticated) {
           document.getElementById("loginForm").style.display = "none";
-          document.getElementById("uploadForm").style.display = "block";
+          document.getElementById("mainOperations").style.display = "block";
           document.getElementById("fileListContainer").style.display = "block";
           document.querySelector(".header-buttons").style.visibility = "visible";
           if (data.isAdmin) {
@@ -255,22 +321,22 @@
             document.getElementById("addUserBtn").style.display = "none";
             document.getElementById("removeUserBtn").style.display = "none";
           }
-          loadFileList();
+          loadFolderList();
         } else {
           document.getElementById("loginForm").style.display = "block";
-          document.getElementById("uploadForm").style.display = "none";
+          document.getElementById("mainOperations").style.display = "none";
           document.getElementById("fileListContainer").style.display = "none";
           document.querySelector(".header-buttons").style.visibility = "hidden";
         }
       }
-      
+
       function checkAuthentication() {
         fetch("checkAuth.php")
           .then(response => response.json())
           .then(updateUI)
           .catch(error => console.error("Error checking authentication:", error));
       }
-      
+
       document.getElementById("authForm").addEventListener("submit", function (event) {
         event.preventDefault();
         const formData = {
@@ -282,69 +348,67 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData)
         })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            updateUI({ authenticated: true, isAdmin: data.isAdmin });
-          } else {
-            alert("Login failed: " + (data.error || "Unknown error"));
-          }
-        })
-        .catch(error => console.error("Error logging in:", error));
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              updateUI({ authenticated: true, isAdmin: data.isAdmin });
+            } else {
+              alert("Login failed: " + (data.error || "Unknown error"));
+            }
+          })
+          .catch(error => console.error("Error logging in:", error));
       });
-      
+
       document.getElementById("logoutBtn").addEventListener("click", function () {
         fetch("logout.php", { method: "POST" })
           .then(() => window.location.reload(true))
           .catch(error => console.error("Logout error:", error));
       });
-      
+
+      // --- Add User Functionality ---
       document.getElementById("addUserBtn").addEventListener("click", function () {
         resetUserForm();
         document.getElementById("addUserModal").style.display = "block";
       });
-      
       document.getElementById("saveUserBtn").addEventListener("click", function () {
         const newUsername = document.getElementById("newUsername").value.trim();
         const newPassword = document.getElementById("newPassword").value.trim();
-        const isAdmin = window.setupMode ? true : document.getElementById("isAdmin").checked;
+        const isAdmin = document.getElementById("isAdmin").checked;
         if (!newUsername || !newPassword) {
           alert("Username and password are required!");
           return;
         }
+        // If in setup mode, add the setup query parameter.
         let url = "addUser.php";
-        if (window.setupMode) { url += "?setup=1"; }
+        if (setupMode) {
+          url += "?setup=1";
+        }
         fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
         })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            alert("User added successfully!");
-            closeAddUserModal();
-            if (window.setupMode) {
-              window.location.reload(true);
-            } else {
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              alert("User added successfully!");
+              closeAddUserModal();
               checkAuthentication();
+            } else {
+              alert("Error: " + (data.error || "Could not add user"));
             }
-          } else {
-            alert("Error: " + (data.error || "Could not add user"));
-          }
-        })
-        .catch(error => console.error("Error adding user:", error));
+          })
+          .catch(error => console.error("Error adding user:", error));
       });
-      
       document.getElementById("cancelUserBtn").addEventListener("click", function () {
         closeAddUserModal();
       });
-      
+
+      // --- Remove User Functionality ---
       document.getElementById("removeUserBtn").addEventListener("click", function () {
         loadUserList();
         document.getElementById("removeUserModal").style.display = "block";
       });
-      
       document.getElementById("deleteUserBtn").addEventListener("click", function () {
         const selectElem = document.getElementById("removeUsernameSelect");
         const usernameToRemove = selectElem.value;
@@ -360,120 +424,458 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username: usernameToRemove })
         })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            alert("User removed successfully!");
-            closeRemoveUserModal();
-            loadUserList();
-          } else {
-            alert("Error: " + (data.error || "Could not remove user"));
-          }
-        })
-        .catch(error => console.error("Error removing user:", error));
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              alert("User removed successfully!");
+              closeRemoveUserModal();
+              loadUserList();
+            } else {
+              alert("Error: " + (data.error || "Could not remove user"));
+            }
+          })
+          .catch(error => console.error("Error removing user:", error));
       });
-      
       document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
         closeRemoveUserModal();
       });
-      
       function closeAddUserModal() {
         document.getElementById("addUserModal").style.display = "none";
         resetUserForm();
       }
-      
       function resetUserForm() {
         document.getElementById("newUsername").value = "";
         document.getElementById("newPassword").value = "";
-        document.getElementById("isAdmin").checked = false;
-        document.getElementById("isAdmin").disabled = false;
-        document.getElementById("adminCheckboxContainer").style.display = "block";
       }
-      
       function closeRemoveUserModal() {
         document.getElementById("removeUserModal").style.display = "none";
         document.getElementById("removeUsernameSelect").innerHTML = "";
       }
-      
       function loadUserList() {
         fetch("getUsers.php")
-        .then(response => response.json())
-        .then(users => {
-          const selectElem = document.getElementById("removeUsernameSelect");
-          selectElem.innerHTML = "";
-          const currentUser = "<?php echo isset($_SESSION['username']) ? $_SESSION['username'] : ''; ?>";
-          users.forEach(user => {
-            if (user.username === currentUser) return;
-            const option = document.createElement("option");
-            option.value = user.username;
-            option.textContent = user.username;
-            selectElem.appendChild(option);
-          });
-          if (selectElem.options.length === 0) {
-            alert("No other users found to remove.");
-            closeRemoveUserModal();
-          }
-        })
-        .catch(error => console.error("Error loading user list:", error));
+          .then(response => response.json())
+          .then(data => {
+            // Accept either an array directly or in data.users
+            const users = Array.isArray(data) ? data : (data.users || []);
+            if (!users || !Array.isArray(users)) {
+              console.error("Invalid users data:", data);
+              return;
+            }
+            const selectElem = document.getElementById("removeUsernameSelect");
+            selectElem.innerHTML = "";
+            users.forEach(user => {
+              const option = document.createElement("option");
+              option.value = user.username;
+              option.textContent = user.username;
+              selectElem.appendChild(option);
+            });
+            if (selectElem.options.length === 0) {
+              alert("No other users found to remove.");
+              closeRemoveUserModal();
+            }
+          })
+          .catch(error => console.error("Error loading user list:", error));
       }
-    });
-    
-    // Global file list functions (from your original displayFileList.js) are loaded externally.
-    // We override only the editFile and saveFile functions here for modal styling.
-    
-    window.editFile = function(fileName) {
-      console.log("Edit button clicked for:", fileName);
-      let existingEditor = document.getElementById("editorContainer");
-      if (existingEditor) { existingEditor.remove(); }
-      fetch("uploads/" + encodeURIComponent(fileName) + "?t=" + new Date().getTime())
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("HTTP error! Status: " + response.status);
+
+      // Folder Management functions.
+      function loadFolderList(selectedFolder) {
+        const folderSelect = document.getElementById("folderSelect");
+        folderSelect.innerHTML = "";
+        const rootOption = document.createElement("option");
+        rootOption.value = "root";
+        rootOption.textContent = "(Root)";
+        folderSelect.appendChild(rootOption);
+        fetch("getFolderList.php")
+          .then(response => response.json())
+          .then(folders => {
+            folders.forEach(function (folder) {
+              let option = document.createElement("option");
+              option.value = folder;
+              option.textContent = folder;
+              folderSelect.appendChild(option);
+            });
+            if (selectedFolder && [...folderSelect.options].some(opt => opt.value === selectedFolder)) {
+              folderSelect.value = selectedFolder;
+            } else {
+              folderSelect.value = "root";
+            }
+            currentFolder = folderSelect.value; // update global variable
+            document.getElementById("fileListTitle").textContent =
+              currentFolder === "root" ? "Files in (Root)" : "Files in (" + currentFolder + ")";
+            loadFileList(currentFolder);
+          })
+          .catch(error => console.error("Error loading folder list:", error));
+      }
+      document.getElementById("folderSelect").addEventListener("change", function () {
+        currentFolder = this.value;
+        document.getElementById("fileListTitle").textContent =
+          currentFolder === "root" ? "Files in (Root)" : "Files in (" + currentFolder + ")";
+        loadFileList(currentFolder);
+      });
+      document.getElementById("createFolderBtn").addEventListener("click", function () {
+        let folderName = prompt("Enter folder name:");
+        if (folderName) {
+          fetch("createFolder.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder: folderName })
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert("Folder created successfully!");
+                loadFolderList(folderName);
+              } else {
+                alert("Error: " + (data.error || "Could not create folder"));
+              }
+            })
+            .catch(error => console.error("Error creating folder:", error));
         }
-        return response.text();
-      })
-      .then(content => {
-        const modal = document.createElement("div");
-        modal.id = "editorContainer";
-        // Apply modal and editor-modal classes for rounded corners and consistent styling.
-        modal.classList.add("modal", "editor-modal");
-        modal.innerHTML = `
-          <h3>Editing: ${fileName}</h3>
-          <textarea id="fileEditor" style="width:100%; height:80%; resize:none;">${content}</textarea>
-          <div style="margin-top:10px; text-align:right;">
-            <button onclick="saveFile('${fileName}')" class="btn btn-primary">Save</button>
-            <button onclick="document.getElementById('editorContainer').remove()" class="btn btn-secondary">Close</button>
-          </div>
-        `;
-        document.body.appendChild(modal);
-        modal.style.display = "block";
-      })
-      .catch(error => console.error("Error loading file:", error));
-    };
-    
-    window.saveFile = function(fileName) {
-      const editor = document.getElementById("fileEditor");
-      if (!editor) {
-        console.error("Editor not found!");
-        return;
+      });
+      document.getElementById("renameFolderBtn").addEventListener("click", function () {
+        const folderSelect = document.getElementById("folderSelect");
+        const selectedFolder = folderSelect.value;
+        if (!selectedFolder || selectedFolder === "root") {
+          alert("Please select a valid folder to rename.");
+          return;
+        }
+        let newFolderName = prompt("Enter new folder name for '" + selectedFolder + "':", selectedFolder);
+        if (newFolderName && newFolderName !== selectedFolder) {
+          fetch("renameFolder.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ oldFolder: selectedFolder, newFolder: newFolderName })
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert("Folder renamed successfully!");
+                loadFolderList(newFolderName);
+              } else {
+                alert("Error: " + (data.error || "Could not rename folder"));
+              }
+            })
+            .catch(error => console.error("Error renaming folder:", error));
+        }
+      });
+      document.getElementById("deleteFolderBtn").addEventListener("click", function () {
+        const folderSelect = document.getElementById("folderSelect");
+        const selectedFolder = folderSelect.value;
+        if (!selectedFolder || selectedFolder === "root") {
+          alert("Please select a valid folder to delete.");
+          return;
+        }
+        if (confirm("Are you sure you want to delete folder " + selectedFolder + "?")) {
+          fetch("deleteFolder.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder: selectedFolder })
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert("Folder deleted successfully!");
+                loadFolderList("root");
+              } else {
+                alert("Error: " + (data.error || "Could not delete folder"));
+              }
+            })
+            .catch(error => console.error("Error deleting folder:", error));
+        }
+      });
+
+      // loadFileList function accepts a folder parameter.
+      function loadFileList(folderParam) {
+        const folder = folderParam || currentFolder || "root";
+        fetch("getFileList.php?folder=" + encodeURIComponent(folder))
+          .then(response => response.json())
+          .then(data => {
+            const fileListContainer = document.getElementById("fileList");
+            fileListContainer.innerHTML = "";
+            if (data.files && data.files.length > 0) {
+              const table = document.createElement("table");
+              table.classList.add("table");
+              const thead = document.createElement("thead");
+              const headerRow = document.createElement("tr");
+              // Add select-all checkbox in header.
+              const selectTh = document.createElement("th");
+              const selectAll = document.createElement("input");
+              selectAll.type = "checkbox";
+              selectAll.id = "selectAllFiles";
+              selectAll.addEventListener("change", function () {
+                const checkboxes = document.querySelectorAll(".file-checkbox");
+                checkboxes.forEach(chk => chk.checked = this.checked);
+                updateDeleteSelectedVisibility();
+              });
+              selectTh.appendChild(selectAll);
+              headerRow.appendChild(selectTh);
+              ["Name", "Modified", "Uploaded", "Size", "Uploader", "Actions"].forEach(headerText => {
+                const th = document.createElement("th");
+                th.textContent = headerText;
+                headerRow.appendChild(th);
+              });
+              thead.appendChild(headerRow);
+              table.appendChild(thead);
+              const tbody = document.createElement("tbody");
+              const folderPath = (folder === "root") ? "uploads/" : "uploads/" + encodeURIComponent(folder) + "/";
+              data.files.forEach(file => {
+                const row = document.createElement("tr");
+                const checkboxTd = document.createElement("td");
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.className = "file-checkbox";
+                checkbox.value = file.name;
+                checkbox.addEventListener("change", updateDeleteSelectedVisibility);
+                checkboxTd.appendChild(checkbox);
+                row.appendChild(checkboxTd);
+                const nameTd = document.createElement("td");
+                nameTd.textContent = file.name;
+                row.appendChild(nameTd);
+                const modifiedTd = document.createElement("td");
+                modifiedTd.textContent = file.modified;
+                row.appendChild(modifiedTd);
+                const uploadedTd = document.createElement("td");
+                uploadedTd.textContent = file.uploaded;
+                row.appendChild(uploadedTd);
+                const sizeTd = document.createElement("td");
+                sizeTd.textContent = file.size;
+                row.appendChild(sizeTd);
+                const uploaderTd = document.createElement("td");
+                uploaderTd.textContent = file.uploader;
+                row.appendChild(uploaderTd);
+                const actionsTd = document.createElement("td");
+                actionsTd.className = "actions-cell"; // prevent wrapping
+                const downloadButton = document.createElement("a");
+                downloadButton.className = "btn btn-sm btn-success";
+                downloadButton.href = folderPath + encodeURIComponent(file.name);
+                downloadButton.download = file.name;
+                downloadButton.textContent = "Download";
+                actionsTd.appendChild(downloadButton);
+                if (canEditFile(file.name)) {
+                  const editButton = document.createElement("button");
+                  editButton.className = "btn btn-sm btn-primary ml-2";
+                  editButton.textContent = "Edit";
+                  editButton.addEventListener("click", function () {
+                    editFile(file.name, currentFolder);
+                  });
+                  actionsTd.appendChild(editButton);
+                }
+                row.appendChild(actionsTd);
+                tbody.appendChild(row);
+              });
+              table.appendChild(tbody);
+              fileListContainer.appendChild(table);
+              updateDeleteSelectedVisibility();
+            } else {
+              fileListContainer.textContent = "No files found.";
+              document.getElementById("deleteSelectedBtn").style.display = "none";
+            }
+          })
+          .catch(error => console.error("Error loading file list:", error));
       }
-      const fileDataObj = {
-        fileName: fileName,
-        content: editor.value
+
+      function updateDeleteSelectedVisibility() {
+        const checkboxes = document.querySelectorAll(".file-checkbox");
+        const deleteBtn = document.getElementById("deleteSelectedBtn");
+        if (checkboxes.length > 0) {
+          deleteBtn.style.display = "inline-block";
+          let anyChecked = false;
+          checkboxes.forEach(chk => {
+            if (chk.checked) anyChecked = true;
+          });
+          deleteBtn.disabled = !anyChecked;
+        } else {
+          deleteBtn.style.display = "none";
+        }
+      }
+
+      function handleDeleteSelected(e) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+        if (checkboxes.length === 0) {
+          alert("No files selected.");
+          return;
+        }
+        if (!confirm("Are you sure you want to delete the selected files?")) {
+          return;
+        }
+        const filesToDelete = Array.from(checkboxes).map(chk => chk.value);
+        fetch("deleteFiles.php", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folder: currentFolder, files: filesToDelete })
+        })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              alert("Selected files deleted successfully!");
+              loadFileList(currentFolder);
+            } else {
+              alert("Error: " + (data.error || "Could not delete files"));
+            }
+          })
+          .catch(error => console.error("Error deleting files:", error));
+      }
+
+      const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
+      deleteSelectedBtn.replaceWith(deleteSelectedBtn.cloneNode(true));
+      document.getElementById("deleteSelectedBtn").addEventListener("click", handleDeleteSelected);
+
+      window.editFile = function (fileName, folder) {
+        console.log("Edit button clicked for:", fileName);
+        let existingEditor = document.getElementById("editorContainer");
+        if (existingEditor) { existingEditor.remove(); }
+        const folderUsed = folder || currentFolder || "root";
+        const folderPath = (folderUsed === "root") ? "uploads/" : "uploads/" + encodeURIComponent(folderUsed) + "/";
+        fetch(folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime())
+          .then(response => {
+            if (!response.ok) { throw new Error("HTTP error! Status: " + response.status); }
+            return response.text();
+          })
+          .then(content => {
+            const modal = document.createElement("div");
+            modal.id = "editorContainer";
+            modal.classList.add("modal", "editor-modal");
+            modal.innerHTML = `
+              <h3>Editing: ${fileName}</h3>
+              <textarea id="fileEditor" style="width:100%; height:80%; resize:none;">${content}</textarea>
+              <div style="margin-top:10px; text-align:right;">
+                <button onclick="saveFile('${fileName}', '${folderUsed}')" class="btn btn-primary">Save</button>
+                <button onclick="document.getElementById('editorContainer').remove()" class="btn btn-secondary">Close</button>
+              </div>
+            `;
+            document.body.appendChild(modal);
+            modal.style.display = "block";
+          })
+          .catch(error => console.error("Error loading file:", error));
       };
-      fetch("saveFile.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fileDataObj)
-      })
-      .then(response => response.json())
-      .then(result => {
-        alert(result.success || result.error);
-        document.getElementById("editorContainer")?.remove();
-        loadFileList();
-      })
-      .catch(error => console.error("Error saving file:", error));
-    };
+
+      window.saveFile = function (fileName, folder) {
+        const editor = document.getElementById("fileEditor");
+        if (!editor) {
+          console.error("Editor not found!");
+          return;
+        }
+        const folderUsed = folder || currentFolder || "root";
+        const fileDataObj = {
+          fileName: fileName,
+          content: editor.value,
+          folder: folderUsed
+        };
+        fetch("saveFile.php", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fileDataObj)
+        })
+          .then(response => response.json())
+          .then(result => {
+            alert(result.success || result.error);
+            document.getElementById("editorContainer")?.remove();
+            loadFileList(folderUsed);
+          })
+          .catch(error => console.error("Error saving file:", error));
+      };
+
+      // --- Upload Form Handling ---
+      const fileInput = document.getElementById("file");
+      const progressContainer = document.getElementById("uploadProgressContainer");
+      const uploadForm = document.getElementById("uploadFileForm");
+
+      fileInput.addEventListener("change", function () {
+        progressContainer.innerHTML = "";
+        const files = fileInput.files;
+        if (files.length > 0) {
+          const list = document.createElement("ul");
+          list.style.listStyle = "none";
+          list.style.padding = "0";
+          Array.from(files).forEach((file, index) => {
+            const listItem = document.createElement("li");
+            listItem.style.paddingTop = "20px";
+            listItem.style.marginBottom = "10px";
+            listItem.style.display = "flex";
+            listItem.style.alignItems = "center";
+            listItem.style.flexWrap = "wrap";
+            const previewContainer = document.createElement("div");
+            previewContainer.className = "file-preview";
+            displayFilePreview(file, previewContainer);
+            const fileNameDiv = document.createElement("div");
+            fileNameDiv.textContent = file.name;
+            fileNameDiv.style.flexGrow = "1";
+            fileNameDiv.style.marginLeft = "10px";
+            fileNameDiv.style.wordBreak = "break-word";
+            const progressDiv = document.createElement("div");
+            progressDiv.classList.add("progress");
+            progressDiv.style.flex = "0 0 250px";
+            progressDiv.style.marginLeft = "5px";
+            const progressBar = document.createElement("div");
+            progressBar.classList.add("progress-bar");
+            progressBar.style.width = "0%";
+            progressBar.innerText = "0%";
+            progressDiv.appendChild(progressBar);
+            listItem.appendChild(previewContainer);
+            listItem.appendChild(fileNameDiv);
+            listItem.appendChild(progressDiv);
+            listItem.progressBar = progressBar;
+            listItem.startTime = Date.now();
+            list.appendChild(listItem);
+          });
+          progressContainer.appendChild(list);
+        }
+      });
+
+      uploadForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const files = fileInput.files;
+        if (files.length === 0) {
+          alert("No files selected.");
+          return;
+        }
+        const folderToUse = currentFolder || "root";
+        const listItems = progressContainer.querySelectorAll("li");
+        let finishedCount = 0;
+        Array.from(files).forEach((file, index) => {
+          const formData = new FormData();
+          formData.append("file[]", file);
+          formData.append("folder", folderToUse);
+          const xhr = new XMLHttpRequest();
+          let currentPercent = 0;
+          xhr.upload.addEventListener("progress", function (e) {
+            if (e.lengthComputable) {
+              currentPercent = Math.round((e.loaded / e.total) * 100);
+              const elapsedTime = (Date.now() - listItems[index].startTime) / 1000;
+              let speedText = "";
+              if (elapsedTime > 0) {
+                const speed = e.loaded / elapsedTime;
+                if (speed < 1024) speedText = speed.toFixed(0) + " B/s";
+                else if (speed < 1048576) speedText = (speed / 1024).toFixed(1) + " KB/s";
+                else speedText = (speed / 1048576).toFixed(1) + " MB/s";
+              }
+              listItems[index].progressBar.style.width = currentPercent + "%";
+              listItems[index].progressBar.innerText = currentPercent + "% (" + speedText + ")";
+            }
+          });
+          xhr.addEventListener("load", function () {
+            if (currentPercent >= 100) {
+              listItems[index].progressBar.innerText = "Done";
+            }
+            finishedCount++;
+            console.log("Upload response for file", file.name, xhr.responseText);
+            if (finishedCount === files.length) {
+              loadFileList(folderToUse);
+              fileInput.value = "";
+              setTimeout(() => { progressContainer.innerHTML = ""; }, 5000);
+            }
+          });
+          xhr.addEventListener("error", function () {
+            listItems[index].progressBar.innerText = "Error";
+          });
+          xhr.open("POST", "upload.php", true);
+          xhr.send(formData);
+        });
+      });
+    });
   </script>
 </body>
+
 </html>

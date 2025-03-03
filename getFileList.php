@@ -3,21 +3,23 @@ require_once 'config.php';
 session_start();
 header('Content-Type: application/json');
 
-$response = ["files" => []];
-
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     echo json_encode(["error" => "Unauthorized"]);
     exit;
 }
 
-$directory = UPLOAD_DIR;
-$metadataFile = "file_metadata.json";
+$folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
+if ($folder !== 'root') {
+    $directory = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
+} else {
+    $directory = UPLOAD_DIR;
+}
 
-// Load stored metadata
+$metadataFile = "file_metadata.json";
 $metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
 
 if (!is_dir($directory)) {
-    echo json_encode(["error" => "Uploads directory not found."]);
+    echo json_encode(["error" => "Directory not found."]);
     exit;
 }
 
@@ -26,20 +28,16 @@ $fileList = [];
 
 foreach ($files as $file) {
     $filePath = $directory . DIRECTORY_SEPARATOR . $file;
-    if (!file_exists($filePath)) {
-        continue;
-    }
+    // Only include files (skip directories)
+    if (!is_file($filePath)) continue;
 
-    // Get "Date Modified" using filemtime()
+    // Build the metadata key.
+    $metaKey = ($folder !== 'root') ? $folder . "/" . $file : $file;
+
     $fileDateModified = filemtime($filePath) ? date(DATE_TIME_FORMAT, filemtime($filePath)) : "Unknown";
+    $fileUploadedDate = isset($metadata[$metaKey]["uploaded"]) ? $metadata[$metaKey]["uploaded"] : "Unknown";
+    $fileUploader = isset($metadata[$metaKey]["uploader"]) ? $metadata[$metaKey]["uploader"] : "Unknown";
 
-    // Get "Uploaded Date" from metadata (set during upload)
-    $fileUploadedDate = isset($metadata[$file]["uploaded"]) ? $metadata[$file]["uploaded"] : "Unknown";
-
-    // Get the uploader from metadata
-    $fileUploader = isset($metadata[$file]["uploader"]) ? $metadata[$file]["uploader"] : "Unknown";
-
-    // Calculate File Size
     $fileSizeBytes = filesize($filePath);
     if ($fileSizeBytes >= 1073741824) {
         $fileSizeFormatted = sprintf("%.1f GB", $fileSizeBytes / 1073741824);
