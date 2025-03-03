@@ -1,4 +1,5 @@
 <?php
+require 'config.php';
 session_start();
 header('Content-Type: application/json');
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
@@ -6,7 +7,7 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
     echo json_encode(["error" => "Unauthorized"]);
     exit;
 }
-$usersFile = 'users.txt';
+$usersFile = USERS_FILE;
 $users = [];
 if (file_exists($usersFile)) {
     $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);

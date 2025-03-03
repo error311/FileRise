@@ -1,8 +1,9 @@
 <?php
+require 'config.php';
 session_start();
 header('Content-Type: application/json');
 
-$usersFile = 'users.txt';
+$usersFile = USERS_FILE;
 
 // Only allow admins to remove users
 if (
