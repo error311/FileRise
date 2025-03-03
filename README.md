@@ -3,6 +3,11 @@
 
 <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/main-screen.png" alt="main screen">
 
+Changes 3/3/2025:
+folder management added
+some refactoring
+
+
 # Multi File Upload & Edit
 
 This project is a lightweight, secure web application for uploading, editing, and managing files. It’s built with Apache, PHP, and modern front-end JavaScript, and it features a responsive interface with dynamic updates.
