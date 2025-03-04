@@ -33,7 +33,16 @@ export function loadFileList() {
     .catch(error => console.error("Error loading file list:", error));
 }
 
-
+export function toggleDeleteButton() {
+  const selectedFiles = document.querySelectorAll(".file-checkbox:checked");
+  const deleteBtn = document.getElementById("deleteSelectedBtn");
+  const copyBtn = document.getElementById("copySelectedBtn");
+  const moveBtn = document.getElementById("moveSelectedBtn");
+  const disabled = selectedFiles.length === 0;
+  deleteBtn.disabled = disabled;
+  if (copyBtn) copyBtn.disabled = disabled;
+  if (moveBtn) moveBtn.disabled = disabled;
+}
 
 export function toggleAllCheckboxes(source) {
   const checkboxes = document.querySelectorAll(".file-checkbox");
@@ -127,6 +136,11 @@ export function moveSelectedFiles() {
     alert("Cannot move files to the same folder.");
     return;
   }
+  console.log("Payload:", {
+    source: currentFolder,
+    destination: targetFolder,
+    files: selectedFiles
+  });
   sendRequest("moveFiles.php", "POST", {
     source: currentFolder,
     destination: targetFolder,
@@ -159,6 +173,7 @@ export function loadCopyMoveFolderList() {
 }
 
 // Attach functions to window for inline onclick support
+window.toggleDeleteButton = toggleDeleteButton;
 window.toggleAllCheckboxes = toggleAllCheckboxes;
 window.deleteSelectedFiles = deleteSelectedFiles;
 window.loadFileList = loadFileList;
