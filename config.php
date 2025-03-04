@@ -7,5 +7,7 @@ define('DATE_TIME_FORMAT', 'm/d/y  h:iA');
 define('TOTAL_UPLOAD_SIZE', '5G');
 define('USERS_DIR', '/var/www/users/');
 define('USERS_FILE', 'users.txt');
+define('META_DIR','/var/www/metadata/');
+define('META_FILE','file_metadata.json');
 date_default_timezone_set(TIMEZONE);
 ?>

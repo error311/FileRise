@@ -23,7 +23,7 @@ if ($folder !== 'root') {
     }
 }
 
-$metadataFile = "file_metadata.json";
+$metadataFile = META_DIR . META_FILE;
 $metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
 $metadataChanged = false;
 

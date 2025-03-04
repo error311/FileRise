@@ -24,7 +24,7 @@ $sourceDir = ($sourceFolder === 'root') ? UPLOAD_DIR : rtrim(UPLOAD_DIR, '/\\') 
 $destDir = ($destinationFolder === 'root') ? UPLOAD_DIR : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $destinationFolder . DIRECTORY_SEPARATOR;
 
 // Load metadata.
-$metadataFile = "file_metadata.json";
+$metadataFile = META_DIR . META_FILE;
 $metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
 
 // Ensure destination directory exists.
