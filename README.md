@@ -3,13 +3,19 @@
 
 <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/main-screen.png" alt="main screen">
 
-**Changes 3/3/2025:**
+**Changes 3/4/2025:**  
+  Copy & Move functionality added  
+  Header Layout  
+  Modal Popups (Edit, Add User, Remove User) changes  
+  Consolidated table styling  
+  CSS Consolidation  
+  assets folder  
 
-  folder management added
-
-  some refactoring
-
-  config added USERS_DIR & USERS_FILE
+    
+**Changes 3/3/2025:**  
+  folder management added  
+  some refactoring  
+  config added USERS_DIR & USERS_FILE  
 
 # Multi File Upload & Edit
 
@@ -110,14 +116,9 @@ This project is a lightweight, secure web application for uploading, editing, an
 
 
 
-fork of:
+based off of:
 https://github.com/sensboston/uploader
 
-
-# File Uploader
-
-A simple file uploader web app that allows authenticated users to upload, list, and delete files. 
-The application uses PHP, running on Apache2, Ubuntu (but definitely should work everywhere).
 
 ## Prerequisites
 

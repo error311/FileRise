@@ -2,162 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multi File Upload & Edit</title>
-  <link rel="icon" type="image/svg+xml" href="logo.svg">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="shortcut icon" href="logo.svg">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi File Upload Editor</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+  <!-- External CSS -->
+  <link rel="stylesheet" href="styles.css">
   <!-- Google Fonts and Material Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <!-- Bootstrap CSS -->
   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Scripts (order is important) -->
-  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-  <script type="module" src="utils.js"></script>
-  <script type="module" src="auth.js"></script>
-  <script type="module" src="upload.js"></script>
-  <script type="module" src="displayFileList.js"></script>
-  
-  <style>
-    /* General styles */
-    body {
-      font-family: 'Roboto', sans-serif;
-      background-color: #f5f5f5;
-    }
-    .container {
-      margin-top: 30px;
-    }
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background-color: #2196F3;
-      padding: 20px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      min-height: 80px;
-    }
-    .header-left,
-    .header-buttons {
-      width: 150px;
-    }
-    .header-title {
-      flex: 1;
-      text-align: center;
-    }
-    .header-title h1 {
-      margin: 0;
-      font-weight: 500;
-      color: white;
-    }
-    .header-buttons {
-      display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-      align-items: center;
-    }
-    .header-buttons button {
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 10px;
-      border-radius: 50%;
-      transition: background-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    .header-buttons button:hover {
-      background-color: rgba(255, 255, 255, 0.2);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    }
-    .material-icons {
-      font-size: 24px;
-      vertical-align: middle;
-      color: white;
-    }
-    #loginForm {
-      margin: 0 auto;
-      max-width: 400px;
-      background: white;
-      padding: 20px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      border-radius: 4px;
-    }
-    .modal {
-      display: none;
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: white;
-      padding: 20px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-      z-index: 1000;
-      width: 350px;
-      max-width: 90%;
-      height: auto;
-    }
-    .editor-modal {
-      width: 80vw;
-      max-width: 90vw;
-      min-width: 400px;
-      height: 600px;
-      max-height: 80vh;
-      overflow: auto;
-      resize: both;
-    }
-    table.table th {
-      cursor: pointer;
-      text-decoration: underline;
-      white-space: nowrap;
-    }
-    .container {
-      margin-top: 20px;
-    }
-    .progress {
-      background-color: #e9ecef;
-      border-radius: 5px;
-      overflow: hidden;
-      margin-bottom: 10px;
-      height: 20px;
-    }
-    .progress-bar {
-      background-color: #007bff;
-      height: 100%;
-      line-height: 20px;
-      color: #fff;
-      text-align: center;
-      transition: width 0.4s ease;
-    }
-    .card {
-      margin-bottom: 20px;
-    }
-    .actions-cell {
-      white-space: nowrap;
-    }
-  </style>
 </head>
 <body>
   <!-- Header -->
   <header>
     <div class="header-left">
-      <img src="logo.svg" alt="Filing Cabinet Logo" style="height: 60px; width: auto;">
+      <img src="/assets/logo.svg" alt="Filing Cabinet Logo">
     </div>
     <div class="header-title">
-      <h1>Multi File Upload & Edit</h1>
+      <h1>Multi File Upload Editor</h1>
     </div>
     <div class="header-buttons">
-      <button id="logoutBtn" title="Logout" style="display: none;">
-        <i class="material-icons">exit_to_app</i>
-      </button>
-      <button id="addUserBtn" title="Add User" style="display: none;">
-        <i class="material-icons">person_add</i>
-      </button>
-      <button id="removeUserBtn" title="Remove User" style="display: none;">
-        <i class="material-icons">person_remove</i>
-      </button>
+      <button id="logoutBtn" title="Logout"><i class="material-icons">exit_to_app</i></button>
+      <button id="addUserBtn" title="Add User"><i class="material-icons">person_add</i></button>
+      <button id="removeUserBtn" title="Remove User"><i class="material-icons">person_remove</i></button>
     </div>
   </header>
+  
   <div class="container">
     <!-- Login Form -->
     <div class="row" id="loginForm">
@@ -175,6 +46,7 @@
         </form>
       </div>
     </div>
+    
     <!-- Main Operations: Upload and Folder Management -->
     <div id="mainOperations" style="display: none;">
       <div class="row" id="uploadFolderRow">
@@ -199,8 +71,7 @@
           <div class="card flex-fill">
             <div class="card-header">Folder Management</div>
             <div class="card-body">
-              <button id="createFolderBtn" class="btn btn-primary mb-3">Create Folder</button>
-              <div class="form-group d-flex align-items-center">
+              <div class="form-group d-flex align-items-center" style="padding-top:15px;">
                 <select id="folderSelect" class="form-control"></select>
                 <button id="renameFolderBtn" class="btn btn-secondary ml-2" title="Rename Folder">
                   <i class="material-icons">edit</i>
@@ -209,17 +80,26 @@
                   <i class="material-icons">delete</i>
                 </button>
               </div>
+              <button id="createFolderBtn" class="btn btn-primary mt-3">Create Folder</button>
             </div>
           </div>
         </div>
+        
       </div>
+      
       <!-- File List Section -->
       <div id="fileListContainer">
         <h2 id="fileListTitle">Files in (Root)</h2>
-        <button id="deleteSelectedBtn" class="btn btn-danger" style="margin-bottom: 10px; display: none;">Delete Selected</button>
+        <div id="fileListActions" class="file-list-actions">
+          <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;">Delete Selected</button>
+          <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled>Copy Selected</button>
+          <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled>Move Selected</button>
+          <select id="copyMoveFolderSelect" class="form-control folder-dropdown"></select>
+        </div>
         <div id="fileList"></div>
       </div>
     </div>
+    
     <!-- Add User Modal -->
     <div id="addUserModal" class="modal">
       <h3>Create New User</h3>
@@ -234,6 +114,7 @@
       <button id="saveUserBtn" class="btn btn-primary">Save User</button>
       <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
     </div>
+    
     <!-- Remove User Modal -->
     <div id="removeUserModal" class="modal">
       <h3>Remove User</h3>
@@ -243,5 +124,12 @@
       <button id="cancelRemoveUserBtn" class="btn btn-secondary">Cancel</button>
     </div>
   </div>
+  
+  <!-- JavaScript Files -->
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script type="module" src="utils.js"></script>
+  <script type="module" src="auth.js"></script>
+  <script type="module" src="upload.js"></script>
+  <script type="module" src="displayFileList.js"></script>
 </body>
 </html>

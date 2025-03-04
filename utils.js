@@ -1,6 +1,8 @@
 // =======================
 // Utility Functions
 // =======================
+let fileData = []; // will store the fetched file data
+let sortOrder = { column: "uploaded", ascending: true };
 
 /**
  * Sends an AJAX request using the Fetch API.
@@ -61,8 +63,9 @@ let setupMode = false;
  * @param {string} fileName 
  * @returns {boolean}
  */
+
 function canEditFile(fileName) {
-  const allowedExtensions = ["txt", "html", "htm", "php", "css", "js", "json", "xml", "md", "py"];
+  const allowedExtensions = ["txt", "html", "htm", "php", "css", "js", "json", "xml", "md", "py", "ini", "csv", "log", "conf", "config", "bat", "rtf", "doc", "docx"];
   const parts = fileName.split('.');
   if (parts.length < 2) return false;
   const ext = parts.pop().toLowerCase();
@@ -406,6 +409,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // -----------------------
   // File List Management
   // -----------------------
+
+  // Load the file list for a given folder (defaults to currentFolder or "root")
   function loadFileList(folderParam) {
     const folder = folderParam || currentFolder || "root";
     fetch("getFileList.php?folder=" + encodeURIComponent(folder))
@@ -414,102 +419,145 @@ document.addEventListener("DOMContentLoaded", function () {
         const fileListContainer = document.getElementById("fileList");
         fileListContainer.innerHTML = "";
         if (data.files && data.files.length > 0) {
-          const table = document.createElement("table");
-          table.classList.add("table");
-          const thead = document.createElement("thead");
-          const headerRow = document.createElement("tr");
-          // Add select-all checkbox in header.
-          const selectTh = document.createElement("th");
-          const selectAll = document.createElement("input");
-          selectAll.type = "checkbox";
-          selectAll.id = "selectAllFiles";
-          selectAll.addEventListener("change", function () {
-            const checkboxes = document.querySelectorAll(".file-checkbox");
-            checkboxes.forEach(chk => chk.checked = this.checked);
-            updateDeleteSelectedVisibility();
-          });
-          selectTh.appendChild(selectAll);
-          headerRow.appendChild(selectTh);
-          ["Name", "Modified", "Uploaded", "Size", "Uploader", "Actions"].forEach(headerText => {
-            const th = document.createElement("th");
-            th.textContent = headerText;
-            headerRow.appendChild(th);
-          });
-          thead.appendChild(headerRow);
-          table.appendChild(thead);
-          const tbody = document.createElement("tbody");
-          const folderPath = (folder === "root") ? "uploads/" : "uploads/" + encodeURIComponent(folder) + "/";
-          data.files.forEach(file => {
-            const row = document.createElement("tr");
-            const checkboxTd = document.createElement("td");
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.className = "file-checkbox";
-            checkbox.value = file.name;
-            checkbox.addEventListener("change", updateDeleteSelectedVisibility);
-            checkboxTd.appendChild(checkbox);
-            row.appendChild(checkboxTd);
-            const nameTd = document.createElement("td");
-            nameTd.textContent = file.name;
-            row.appendChild(nameTd);
-            const modifiedTd = document.createElement("td");
-            modifiedTd.textContent = file.modified;
-            row.appendChild(modifiedTd);
-            const uploadedTd = document.createElement("td");
-            uploadedTd.textContent = file.uploaded;
-            row.appendChild(uploadedTd);
-            const sizeTd = document.createElement("td");
-            sizeTd.textContent = file.size;
-            row.appendChild(sizeTd);
-            const uploaderTd = document.createElement("td");
-            uploaderTd.textContent = file.uploader;
-            row.appendChild(uploaderTd);
-            const actionsTd = document.createElement("td");
-            actionsTd.className = "actions-cell";
-            const downloadButton = document.createElement("a");
-            downloadButton.className = "btn btn-sm btn-success";
-            downloadButton.href = folderPath + encodeURIComponent(file.name);
-            downloadButton.download = file.name;
-            downloadButton.textContent = "Download";
-            actionsTd.appendChild(downloadButton);
-            if (canEditFile(file.name)) {
-              const editButton = document.createElement("button");
-              editButton.className = "btn btn-sm btn-primary ml-2";
-              editButton.textContent = "Edit";
-              editButton.addEventListener("click", function () {
-                editFile(file.name, currentFolder);
-              });
-              actionsTd.appendChild(editButton);
-            }
-            row.appendChild(actionsTd);
-            tbody.appendChild(row);
-          });
-          table.appendChild(tbody);
-          fileListContainer.appendChild(table);
-          updateDeleteSelectedVisibility();
+          // Save the file list globally for sorting
+          fileData = data.files;
+          // Render the table initially using the current sortOrder
+          renderFileTable(folder);
         } else {
           fileListContainer.textContent = "No files found.";
           document.getElementById("deleteSelectedBtn").style.display = "none";
+          document.getElementById("copySelectedBtn").style.display = "none";
+          document.getElementById("moveSelectedBtn").style.display = "none";
         }
       })
       .catch(error => console.error("Error loading file list:", error));
   }
 
-  function updateDeleteSelectedVisibility() {
-    const checkboxes = document.querySelectorAll(".file-checkbox");
-    const deleteBtn = document.getElementById("deleteSelectedBtn");
-    if (checkboxes.length > 0) {
-      deleteBtn.style.display = "inline-block";
-      let anyChecked = false;
-      checkboxes.forEach(chk => {
-        if (chk.checked) anyChecked = true;
+  function renderFileTable(folder) {
+    const fileListContainer = document.getElementById("fileList");
+    const folderPath = (folder === "root") ? "uploads/" : "uploads/" + encodeURIComponent(folder) + "/";
+    let tableHTML = `<table class="table">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
+        <th data-column="name" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
+          File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+        </th>
+        <th data-column="modified" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
+          Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+        </th>
+        <th data-column="uploaded" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
+          Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+        </th>
+        <th data-column="size" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
+          File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+        </th>
+        <th data-column="uploader" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
+          Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+        </th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+    fileData.forEach(file => {
+      // Determine if file is editable via your canEditFile() helper
+      const isEditable = canEditFile(file.name);
+      tableHTML += `<tr>
+      <td><input type="checkbox" class="file-checkbox" value="${file.name}" onclick="toggleDeleteButton()"></td>
+      <td>${file.name}</td>
+      <td style="white-space: nowrap;">${file.modified}</td>
+      <td style="white-space: nowrap;">${file.uploaded}</td>
+      <td style="white-space: nowrap;">${file.size}</td>
+      <td style="white-space: nowrap;">${file.uploader || "Unknown"}</td>
+      <td>
+        <div style="display: inline-flex; align-items: center; gap: 5px; flex-wrap: nowrap;">
+          <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
+          ${isEditable ? `<button class="btn btn-sm btn-primary ml-2" onclick="editFile('${file.name}', '${folder}')">Edit</button>` : ""}
+        </div>
+      </td>
+    </tr>`;
+    });
+
+    tableHTML += `</tbody></table>`;
+    fileListContainer.innerHTML = tableHTML;
+
+    // Attach click event listeners to header cells for sorting
+    const headerCells = document.querySelectorAll("table.table thead th[data-column]");
+    headerCells.forEach(cell => {
+      cell.addEventListener("click", function () {
+        const column = this.getAttribute("data-column");
+        sortFiles(column, folder);
       });
-      deleteBtn.disabled = !anyChecked;
+    });
+
+    // Show or hide action buttons based on whether files exist
+    const deleteBtn = document.getElementById("deleteSelectedBtn");
+    const copyBtn = document.getElementById("copySelectedBtn");
+    const moveBtn = document.getElementById("moveSelectedBtn");
+    if (fileData.length > 0) {
+      deleteBtn.style.display = "block";
+      copyBtn.style.display = "block";
+      moveBtn.style.display = "block";
     } else {
       deleteBtn.style.display = "none";
+      copyBtn.style.display = "none";
+      moveBtn.style.display = "none";
     }
   }
 
+  function sortFiles(column, folder) {
+    // Toggle sort direction if the same column is clicked; otherwise, sort ascending
+    if (sortOrder.column === column) {
+      sortOrder.ascending = !sortOrder.ascending;
+    } else {
+      sortOrder.column = column;
+      sortOrder.ascending = true;
+    }
+    fileData.sort((a, b) => {
+      let valA = a[column] || "";
+      let valB = b[column] || "";
+      // If sorting by date, convert to timestamp
+      if (column === "modified" || column === "uploaded") {
+        valA = new Date(valA).getTime();
+        valB = new Date(valB).getTime();
+      } else if (typeof valA === "string") {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+      if (valA < valB) return sortOrder.ascending ? -1 : 1;
+      if (valA > valB) return sortOrder.ascending ? 1 : -1;
+      return 0;
+    });
+    // Re-render the table after sorting
+    renderFileTable(folder);
+  }
+
+
+  // Update the visibility and enabled state of the Delete, Copy, and Move buttons
+  function updateDeleteSelectedVisibility() {
+    const checkboxes = document.querySelectorAll(".file-checkbox");
+    const deleteBtn = document.getElementById("deleteSelectedBtn");
+    const copyBtn = document.getElementById("copySelectedBtn");
+    const moveBtn = document.getElementById("moveSelectedBtn");
+    if (checkboxes.length > 0) {
+      // Show all three action buttons
+      deleteBtn.style.display = "inline-block";
+      copyBtn.style.display = "inline-block";
+      moveBtn.style.display = "inline-block";
+      let anyChecked = false;
+      checkboxes.forEach(chk => { if (chk.checked) anyChecked = true; });
+      deleteBtn.disabled = !anyChecked;
+      copyBtn.disabled = !anyChecked;
+      moveBtn.disabled = !anyChecked;
+    } else {
+      deleteBtn.style.display = "none";
+      copyBtn.style.display = "none";
+      moveBtn.style.display = "none";
+    }
+  }
+
+  // Delete Selected Files handler (existing)
   function handleDeleteSelected(e) {
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -539,9 +587,115 @@ document.addEventListener("DOMContentLoaded", function () {
       .catch(error => console.error("Error deleting files:", error));
   }
 
+  // NEW: Handle Copy Selected Files
+  function handleCopySelected(e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+    if (checkboxes.length === 0) {
+      alert("No files selected for copying.");
+      return;
+    }
+    const targetFolder = document.getElementById("copyMoveFolderSelect").value;
+    if (!targetFolder) {
+      alert("Please select a target folder for copying.");
+      return;
+    }
+    const filesToCopy = Array.from(checkboxes).map(chk => chk.value);
+    fetch("copyFiles.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: currentFolder, files: filesToCopy, destination: targetFolder })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert("Selected files copied successfully!");
+          loadFileList(currentFolder);
+        } else {
+          alert("Error: " + (data.error || "Could not copy files"));
+        }
+      })
+      .catch(error => console.error("Error copying files:", error));
+  }
+
+  // NEW: Handle Move Selected Files
+  function handleMoveSelected(e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+    if (checkboxes.length === 0) {
+      alert("No files selected for moving.");
+      return;
+    }
+    const targetFolder = document.getElementById("copyMoveFolderSelect").value;
+    if (!targetFolder) {
+      alert("Please select a target folder for moving.");
+      return;
+    }
+    const filesToMove = Array.from(checkboxes).map(chk => chk.value);
+    fetch("moveFiles.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: currentFolder, files: filesToMove, destination: targetFolder })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert("Selected files moved successfully!");
+          loadFileList(currentFolder);
+        } else {
+          alert("Error: " + (data.error || "Could not move files"));
+        }
+      })
+      .catch(error => console.error("Error moving files:", error));
+  }
+
+  // Attach event listeners to the action buttons.
+  // Use cloneNode() to remove any previously attached listeners.
   const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
   deleteSelectedBtn.replaceWith(deleteSelectedBtn.cloneNode(true));
   document.getElementById("deleteSelectedBtn").addEventListener("click", handleDeleteSelected);
+
+  const copySelectedBtn = document.getElementById("copySelectedBtn");
+  copySelectedBtn.replaceWith(copySelectedBtn.cloneNode(true));
+  document.getElementById("copySelectedBtn").addEventListener("click", handleCopySelected);
+
+  const moveSelectedBtn = document.getElementById("moveSelectedBtn");
+  moveSelectedBtn.replaceWith(moveSelectedBtn.cloneNode(true));
+  document.getElementById("moveSelectedBtn").addEventListener("click", handleMoveSelected);
+
+  // NEW: Load the folder list into the copy/move dropdown
+  function loadCopyMoveFolderList() {
+    fetch("getFolderList.php")
+      .then(response => response.json())
+      .then(data => {
+        const folderSelect = document.getElementById("copyMoveFolderSelect");
+        folderSelect.innerHTML = "";
+        // Optionally, add a default prompt option
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "Select folder";
+        folderSelect.appendChild(defaultOption);
+        if (data && data.length > 0) {
+          data.forEach(folder => {
+            const option = document.createElement("option");
+            option.value = folder;
+            option.textContent = folder;
+            folderSelect.appendChild(option);
+          });
+        }
+      })
+      .catch(error => console.error("Error loading folder list:", error));
+  }
+
+  // On DOMContentLoaded, load the file list and the folder dropdown.
+  // Ensure currentFolder is defined globally (defaulting to "root" if not).
+  document.addEventListener("DOMContentLoaded", function () {
+    currentFolder = currentFolder || "root";
+    loadFileList(currentFolder);
+    loadCopyMoveFolderList();
+  });
 
   // -----------------------
   // File Editing Functions
