@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const fileNameDiv = document.createElement("div");
         fileNameDiv.textContent = file.name;
         fileNameDiv.style.flexGrow = "1";
-        fileNameDiv.style.marginLeft = "10px";
+        fileNameDiv.style.marginLeft = "5px";
         fileNameDiv.style.wordBreak = "break-word";
 
         const progressDiv = document.createElement("div");

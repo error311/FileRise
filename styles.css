@@ -60,7 +60,6 @@ header {
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-
 .header-buttons button:hover {
   background-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -139,7 +138,7 @@ header {
 #uploadProgressContainer .file-preview {
   width: 32px !important;
   height: 32px !important;
-  margin-right: 10px;
+  margin-right: 1px;
   flex-shrink: 0;
 }
 #uploadProgressContainer .file-preview img {
@@ -252,9 +251,6 @@ header {
   background-color: #fb8c00;
 }
 
-
-
-
 /* Material green style for Edit button in file list */
 #fileList button.edit-btn {
   background-color: #4CAF50;
@@ -328,7 +324,6 @@ label {
 #loginForm, #uploadForm {
   display: none;
 }
-
 
 /* Remove bottom margin from the form group */
 .card-body .form-group {
