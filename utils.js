@@ -428,6 +428,7 @@ document.addEventListener("DOMContentLoaded", function () {
           document.getElementById("deleteSelectedBtn").style.display = "none";
           document.getElementById("copySelectedBtn").style.display = "none";
           document.getElementById("moveSelectedBtn").style.display = "none";
+          document.getElementById("copyMoveFolderSelect").style.display = "none";
         }
       })
       .catch(error => console.error("Error loading file list:", error));
@@ -499,11 +500,14 @@ document.addEventListener("DOMContentLoaded", function () {
       deleteBtn.style.display = "block";
       copyBtn.style.display = "block";
       moveBtn.style.display = "block";
+      document.getElementById("copyMoveFolderSelect").style.display = "inline-block";
     } else {
       deleteBtn.style.display = "none";
       copyBtn.style.display = "none";
       moveBtn.style.display = "none";
+      document.getElementById("copyMoveFolderSelect").style.display = "none";
     }
+    
   }
 
   function sortFiles(column, folder) {
@@ -534,28 +538,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
 
-  // Update the visibility and enabled state of the Delete, Copy, and Move buttons
-  function updateDeleteSelectedVisibility() {
-    const checkboxes = document.querySelectorAll(".file-checkbox");
-    const deleteBtn = document.getElementById("deleteSelectedBtn");
-    const copyBtn = document.getElementById("copySelectedBtn");
-    const moveBtn = document.getElementById("moveSelectedBtn");
-    if (checkboxes.length > 0) {
-      // Show all three action buttons
-      deleteBtn.style.display = "inline-block";
-      copyBtn.style.display = "inline-block";
-      moveBtn.style.display = "inline-block";
-      let anyChecked = false;
-      checkboxes.forEach(chk => { if (chk.checked) anyChecked = true; });
-      deleteBtn.disabled = !anyChecked;
-      copyBtn.disabled = !anyChecked;
-      moveBtn.disabled = !anyChecked;
-    } else {
-      deleteBtn.style.display = "none";
-      copyBtn.style.display = "none";
-      moveBtn.style.display = "none";
-    }
-  }
+
 
   // Delete Selected Files handler (existing)
   function handleDeleteSelected(e) {
@@ -706,9 +689,23 @@ document.addEventListener("DOMContentLoaded", function () {
     if (existingEditor) { existingEditor.remove(); }
     const folderUsed = folder || currentFolder || "root";
     const folderPath = (folderUsed === "root") ? "uploads/" : "uploads/" + encodeURIComponent(folderUsed) + "/";
-    fetch(folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime())
+    const fileUrl = folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime();
+    
+    // First, use a HEAD request to check file size
+    fetch(fileUrl, { method: "HEAD" })
       .then(response => {
-        if (!response.ok) { throw new Error("HTTP error! Status: " + response.status); }
+        const contentLength = response.headers.get("Content-Length");
+        if (contentLength && parseInt(contentLength) > 10485760) {
+          alert("This file is larger than 10 MB and cannot be edited in the browser.");
+          throw new Error("File too large.");
+        }
+        // File size is acceptable; now fetch the file content
+        return fetch(fileUrl);
+      })
+      .then(response => {
+        if (!response.ok) { 
+          throw new Error("HTTP error! Status: " + response.status); 
+        }
         return response.text();
       })
       .then(content => {
@@ -728,6 +725,7 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .catch(error => console.error("Error loading file:", error));
   };
+  
 
   window.saveFile = function (fileName, folder) {
     const editor = document.getElementById("fileEditor");
