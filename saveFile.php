@@ -3,6 +3,13 @@ require_once 'config.php';
 session_start();
 header('Content-Type: application/json');
 
+// Ensure user is authenticated
+if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+    echo json_encode(["error" => "Unauthorized"]);
+    http_response_code(401);
+    exit;
+}
+
 $data = json_decode(file_get_contents("php://input"), true);
 
 // Debugging: Check what data is received.
