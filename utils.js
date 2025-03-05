@@ -435,8 +435,19 @@ document.addEventListener("DOMContentLoaded", function () {
       .catch(error => console.error("Error loading file list:", error));
   }
 
+  // Helper function to escape special HTML characters
+  function escapeHTML(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function renderFileTable(folder) {
     const fileListContainer = document.getElementById("fileList");
+    // Use encodeURIComponent on folder for the URL part
     const folderPath = (folder === "root") ? "uploads/" : "uploads/" + encodeURIComponent(folder) + "/";
     let tableHTML = `<table class="table">
     <thead>
@@ -465,17 +476,27 @@ document.addEventListener("DOMContentLoaded", function () {
     fileData.forEach(file => {
       // Determine if file is editable via your canEditFile() helper
       const isEditable = canEditFile(file.name);
+      // Escape user-supplied file name and other properties for safe HTML output.
+      const safeFileName = escapeHTML(file.name);
+      const safeModified = escapeHTML(file.modified);
+      const safeUploaded = escapeHTML(file.uploaded);
+      const safeSize = escapeHTML(file.size);
+      const safeUploader = escapeHTML(file.uploader || "Unknown");
+
       tableHTML += `<tr>
-      <td><input type="checkbox" class="file-checkbox" value="${file.name}" onclick="toggleDeleteButton()"></td>
-      <td>${file.name}</td>
-      <td style="white-space: nowrap;">${file.modified}</td>
-      <td style="white-space: nowrap;">${file.uploaded}</td>
-      <td style="white-space: nowrap;">${file.size}</td>
-      <td style="white-space: nowrap;">${file.uploader || "Unknown"}</td>
+      <td><input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="toggleDeleteButton()"></td>
+      <td>${safeFileName}</td>
+      <td style="white-space: nowrap;">${safeModified}</td>
+      <td style="white-space: nowrap;">${safeUploaded}</td>
+      <td style="white-space: nowrap;">${safeSize}</td>
+      <td style="white-space: nowrap;">${safeUploader}</td>
       <td>
         <div style="display: inline-flex; align-items: center; gap: 5px; flex-wrap: nowrap;">
           <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
-          ${isEditable ? `<button class="btn btn-sm btn-primary ml-2" onclick="editFile('${file.name}', '${folder}')">Edit</button>` : ""}
+          ${isEditable
+          ? `<button class="btn btn-sm btn-primary ml-2" onclick="editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})">Edit</button>`
+          : ""
+        }
         </div>
       </td>
     </tr>`;
@@ -493,6 +514,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
 
+
+
     // Show or hide action buttons based on whether files exist
     const deleteBtn = document.getElementById("deleteSelectedBtn");
     const copyBtn = document.getElementById("copySelectedBtn");
@@ -508,7 +531,7 @@ document.addEventListener("DOMContentLoaded", function () {
       moveBtn.style.display = "none";
       document.getElementById("copyMoveFolderSelect").style.display = "none";
     }
-    
+
   }
 
   function sortFiles(column, folder) {
@@ -691,7 +714,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const folderUsed = folder || currentFolder || "root";
     const folderPath = (folderUsed === "root") ? "uploads/" : "uploads/" + encodeURIComponent(folderUsed) + "/";
     const fileUrl = folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime();
-    
+
     // First, use a HEAD request to check file size
     fetch(fileUrl, { method: "HEAD" })
       .then(response => {
@@ -704,8 +727,8 @@ document.addEventListener("DOMContentLoaded", function () {
         return fetch(fileUrl);
       })
       .then(response => {
-        if (!response.ok) { 
-          throw new Error("HTTP error! Status: " + response.status); 
+        if (!response.ok) {
+          throw new Error("HTTP error! Status: " + response.status);
         }
         return response.text();
       })
@@ -726,7 +749,7 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .catch(error => console.error("Error loading file:", error));
   };
-  
+
 
   window.saveFile = function (fileName, folder) {
     const editor = document.getElementById("fileEditor");

@@ -8,7 +8,12 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
+// Validate folder name input. Only allow letters, numbers, underscores, dashes, and spaces.
 $folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
+if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- ]+$/', $folder)) {
+    echo json_encode(["error" => "Invalid folder name"]);
+    exit;
+}
 
 // Determine the target upload directory.
 $uploadDir = UPLOAD_DIR;
@@ -23,15 +28,28 @@ if ($folder !== 'root') {
     }
 }
 
+// Load metadata for uploaded files.
 $metadataFile = META_DIR . META_FILE;
 $metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
 $metadataChanged = false;
 
+// Define a safe pattern for file names: letters, numbers, underscores, dashes, dots, and spaces.
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+
 foreach ($_FILES["file"]["name"] as $index => $fileName) {
-    $targetPath = $uploadDir . basename($fileName);
+    // Use basename to strip any directory components.
+    $safeFileName = basename($fileName);
+    
+    // Validate that the sanitized file name contains only allowed characters.
+    if (!preg_match($safeFileNamePattern, $safeFileName)) {
+        echo json_encode(["error" => "Invalid file name: " . $fileName]);
+        exit;
+    }
+    
+    $targetPath = $uploadDir . $safeFileName;
     if (move_uploaded_file($_FILES["file"]["tmp_name"][$index], $targetPath)) {
-        // Use a metadata key that includes the folder if not in root.
-        $metaKey = ($folder !== 'root') ? $folder . "/" . $fileName : $fileName;
+        // Build the metadata key, including the folder if not in root.
+        $metaKey = ($folder !== 'root') ? $folder . "/" . $safeFileName : $safeFileName;
         if (!isset($metadata[$metaKey])) {
             $uploadedDate = date(DATE_TIME_FORMAT);
             $uploader = $_SESSION['username'] ?? "Unknown";
