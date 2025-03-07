@@ -39,10 +39,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // Initialize authentication and user management.
   initAuth();
   window.currentFolder = window.currentFolder || "root";
+  window.updateFileActionButtons = updateFileActionButtons;
   loadFileList(window.currentFolder);
   loadCopyMoveFolderList();
   initFileActions();
   initUpload();
   loadFolderList();
-  updateFileActionButtons();
 });
