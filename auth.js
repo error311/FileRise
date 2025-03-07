@@ -30,6 +30,21 @@ export function initAuth() {
           toggleVisibility("mainOperations", true);
           toggleVisibility("uploadFileForm", true);
           toggleVisibility("fileListContainer", true);
+          // Check if the user is an admin.
+          if (data.isAdmin) {
+            // Show Add and Remove User buttons for admin.
+            const addUserBtn = document.getElementById("addUserBtn");
+            const removeUserBtn = document.getElementById("removeUserBtn");
+            if (addUserBtn) addUserBtn.style.display = "block";
+            if (removeUserBtn) removeUserBtn.style.display = "block";
+          } else {
+            // Hide Add and Remove User buttons for non-admin.
+            const addUserBtn = document.getElementById("addUserBtn");
+            const removeUserBtn = document.getElementById("removeUserBtn");
+            if (addUserBtn) addUserBtn.style.display = "none";
+            if (removeUserBtn) removeUserBtn.style.display = "none";
+          }
+          // Show header buttons (at least the Logout button) always.
           document.querySelector(".header-buttons").style.visibility = "visible";
           // Refresh the file list immediately using the current folder.
           loadFileList(window.currentFolder || "root");
@@ -148,6 +163,18 @@ export function checkAuthentication() {
         toggleVisibility("mainOperations", true);
         toggleVisibility("uploadFileForm", true);
         toggleVisibility("fileListContainer", true);
+        // Check admin status to determine if Add/Remove User buttons should be shown.
+        if (data.isAdmin) {
+          const addUserBtn = document.getElementById("addUserBtn");
+          const removeUserBtn = document.getElementById("removeUserBtn");
+          if (addUserBtn) addUserBtn.style.display = "block";
+          if (removeUserBtn) removeUserBtn.style.display = "block";
+        } else {
+          const addUserBtn = document.getElementById("addUserBtn");
+          const removeUserBtn = document.getElementById("removeUserBtn");
+          if (addUserBtn) addUserBtn.style.display = "none";
+          if (removeUserBtn) removeUserBtn.style.display = "none";
+        }
         document.querySelector(".header-buttons").style.visibility = "visible";
       } else {
         toggleVisibility("loginForm", true);
@@ -200,4 +227,4 @@ function loadUserList() {
       }
     })
     .catch(error => console.error("Error loading user list:", error));
-}
+  }
