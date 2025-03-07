@@ -1,129 +1,209 @@
 // upload.js
-import { displayFilePreview } from './utils.js';
 
-document.addEventListener("DOMContentLoaded", function () {
+import { loadFileList, displayFilePreview, initFileActions } from './fileManager.js';
+
+export function initUpload() {
   const fileInput = document.getElementById("file");
   const progressContainer = document.getElementById("uploadProgressContainer");
   const uploadForm = document.getElementById("uploadFileForm");
 
-  function updateUploadProgress(e, listItem) {
-    if (e.lengthComputable) {
-      const currentPercent = Math.round((e.loaded / e.total) * 100);
-      const elapsedTime = (Date.now() - listItem.startTime) / 1000;
-      let speedText = "";
-      if (elapsedTime > 0) {
-        const speed = e.loaded / elapsedTime;
-        if (speed < 1024) {
-          speedText = speed.toFixed(0) + " B/s";
-        } else if (speed < 1048576) {
-          speedText = (speed / 1024).toFixed(1) + " KB/s";
-        } else {
-          speedText = (speed / 1048576).toFixed(1) + " MB/s";
+  // Build progress list when files are selected.
+  if (fileInput) {
+    fileInput.addEventListener("change", function () {
+      progressContainer.innerHTML = "";
+      const files = fileInput.files;
+      if (files.length > 0) {
+        const allFiles = Array.from(files);
+        const maxDisplay = 10;
+        const list = document.createElement("ul");
+        list.style.listStyle = "none";
+        list.style.padding = "0";
+        allFiles.forEach((file, index) => {
+          const li = document.createElement("li");
+          li.style.paddingTop = "20px";
+          li.style.marginBottom = "10px";
+          // Only display progress items for the first maxDisplay files.
+          li.style.display = (index < maxDisplay) ? "flex" : "none";
+          li.style.alignItems = "center";
+          li.style.flexWrap = "wrap";
+          
+          const preview = document.createElement("div");
+          preview.className = "file-preview";
+          displayFilePreview(file, preview);
+          
+          const nameDiv = document.createElement("div");
+          nameDiv.textContent = file.name;
+          nameDiv.style.flexGrow = "1";
+          nameDiv.style.marginLeft = "5px";
+          nameDiv.style.wordBreak = "break-word";
+          
+          const progDiv = document.createElement("div");
+          progDiv.classList.add("progress");
+          progDiv.style.flex = "0 0 250px";
+          progDiv.style.marginLeft = "5px";
+          
+          const progBar = document.createElement("div");
+          progBar.classList.add("progress-bar");
+          progBar.style.width = "0%";
+          progBar.innerText = "0%";
+          
+          progDiv.appendChild(progBar);
+          li.appendChild(preview);
+          li.appendChild(nameDiv);
+          li.appendChild(progDiv);
+          // Save references for later updates.
+          li.progressBar = progBar;
+          li.startTime = Date.now();
+          list.appendChild(li);
+        });
+        // If more than maxDisplay files, add a note.
+        if (allFiles.length > maxDisplay) {
+          const extra = document.createElement("li");
+          extra.style.paddingTop = "20px";
+          extra.style.marginBottom = "10px";
+          extra.textContent = `Uploading additional ${allFiles.length - maxDisplay} file(s)...`;
+          extra.style.display = "flex";
+          list.appendChild(extra);
         }
+        progressContainer.appendChild(list);
       }
-      listItem.progressBar.style.width = currentPercent + "%";
-      listItem.progressBar.innerText = currentPercent + "% (" + speedText + ")";
-      return currentPercent;
-    }
-    return 0;
+    });
   }
 
-  fileInput.addEventListener("change", function () {
-    progressContainer.innerHTML = "";
-    const files = fileInput.files;
-    if (files.length > 0) {
-      const list = document.createElement("ul");
-      list.style.listStyle = "none";
-      list.style.padding = "0";
-      Array.from(files).forEach((file) => {
-        const listItem = document.createElement("li");
-        listItem.style.paddingTop = "20px";
-        listItem.style.marginBottom = "10px";
-        listItem.style.display = "flex";
-        listItem.style.alignItems = "center";
-        listItem.style.flexWrap = "wrap";
-
-        const previewContainer = document.createElement("div");
-        previewContainer.className = "file-preview";
-        displayFilePreview(file, previewContainer);
-
-        const fileNameDiv = document.createElement("div");
-        fileNameDiv.textContent = file.name;
-        fileNameDiv.style.flexGrow = "1";
-        fileNameDiv.style.marginLeft = "5px";
-        fileNameDiv.style.wordBreak = "break-word";
-
-        const progressDiv = document.createElement("div");
-        progressDiv.classList.add("progress");
-        progressDiv.style.flex = "0 0 250px";
-        progressDiv.style.marginLeft = "5px";
-
-        const progressBar = document.createElement("div");
-        progressBar.classList.add("progress-bar");
-        progressBar.style.width = "0%";
-        progressBar.innerText = "0%";
-
-        progressDiv.appendChild(progressBar);
-
-        listItem.appendChild(previewContainer);
-        listItem.appendChild(fileNameDiv);
-        listItem.appendChild(progressDiv);
-
-        listItem.progressBar = progressBar;
-        listItem.startTime = Date.now();
-
-        list.appendChild(listItem);
-      });
-      progressContainer.appendChild(list);
-    }
-  });
-
-  uploadForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    const files = fileInput.files;
-    if (files.length === 0) {
-      alert("No files selected.");
-      return;
-    }
-
-    const listItems = progressContainer.querySelectorAll("li");
-    let finishedCount = 0;
-
-    Array.from(files).forEach((file, index) => {
-      const formData = new FormData();
-      formData.append("file[]", file);
-      const folderElem = document.getElementById("folderSelect");
-      if (folderElem) {
-        formData.append("folder", folderElem.value);
-      } else {
-        console.error("Folder selection element not found!");
+  // Submit handler: upload all files and then check the server's file list.
+  if (uploadForm) {
+    uploadForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const files = fileInput.files;
+      if (files.length === 0) {
+        alert("No files selected.");
+        return;
       }
-      const xhr = new XMLHttpRequest();
-      let currentPercent = 0;
-      xhr.upload.addEventListener("progress", function (e) {
-        currentPercent = updateUploadProgress(e, listItems[index]);
-      });
-      xhr.addEventListener("load", function () {
-        if (currentPercent >= 100) {
-          listItems[index].progressBar.innerText = "Done";
-        }
-        finishedCount++;
-        console.log("Upload response for file", file.name, xhr.responseText);
-        if (finishedCount === files.length) {
-          if (typeof loadFileList === "function") {
-            loadFileList();
+      const allFiles = Array.from(files);
+      const maxDisplay = 10; // Only show progress for first 10 items.
+      const folderToUse = window.currentFolder || "root";
+      const listItems = progressContainer.querySelectorAll("li");
+      let finishedCount = 0;
+      let allSucceeded = true;
+      // Array to track each file's upload result.
+      const uploadResults = new Array(allFiles.length).fill(false);
+      
+      allFiles.forEach((file, index) => {
+        const formData = new FormData();
+        formData.append("file[]", file);
+        formData.append("folder", folderToUse);
+        
+        const xhr = new XMLHttpRequest();
+        let currentPercent = 0;
+        
+        xhr.upload.addEventListener("progress", function (e) {
+          if (e.lengthComputable) {
+            currentPercent = Math.round((e.loaded / e.total) * 100);
+            if (index < maxDisplay && listItems[index]) {
+              const elapsed = (Date.now() - listItems[index].startTime) / 1000;
+              let speed = "";
+              if (elapsed > 0) {
+                const spd = e.loaded / elapsed;
+                if (spd < 1024) speed = spd.toFixed(0) + " B/s";
+                else if (spd < 1048576) speed = (spd / 1024).toFixed(1) + " KB/s";
+                else speed = (spd / 1048576).toFixed(1) + " MB/s";
+              }
+              listItems[index].progressBar.style.width = currentPercent + "%";
+              listItems[index].progressBar.innerText = currentPercent + "% (" + speed + ")";
+            }
           }
-          fileInput.value = "";
-          setTimeout(() => {
-            progressContainer.innerHTML = "";
-          }, 5000);
-        }
+        });
+        
+        xhr.addEventListener("load", function () {
+          let jsonResponse;
+          try {
+            jsonResponse = JSON.parse(xhr.responseText);
+          } catch (e) {
+            jsonResponse = null;
+          }
+          if (xhr.status >= 200 && xhr.status < 300 && (!jsonResponse || !jsonResponse.error)) {
+            if (index < maxDisplay && listItems[index]) {
+              listItems[index].progressBar.style.width = "100%";
+              listItems[index].progressBar.innerText = "Done";
+            }
+            uploadResults[index] = true;
+          } else {
+            if (index < maxDisplay && listItems[index]) {
+              listItems[index].progressBar.innerText = "Error";
+            }
+            allSucceeded = false;
+          }
+          finishedCount++;
+          console.log("Upload response for file", file.name, xhr.responseText);
+          if (finishedCount === allFiles.length) {
+            // Immediately refresh the file list.
+            refreshFileList();
+          }
+        });
+        
+        xhr.addEventListener("error", function () {
+          if (index < maxDisplay && listItems[index]) {
+            listItems[index].progressBar.innerText = "Error";
+          }
+          uploadResults[index] = false;
+          allSucceeded = false;
+          finishedCount++;
+          console.error("Error uploading file:", file.name);
+          if (finishedCount === allFiles.length) {
+            refreshFileList();
+          }
+        });
+        
+        xhr.addEventListener("abort", function () {
+          if (index < maxDisplay && listItems[index]) {
+            listItems[index].progressBar.innerText = "Aborted";
+          }
+          uploadResults[index] = false;
+          allSucceeded = false;
+          finishedCount++;
+          console.error("Upload aborted for file:", file.name);
+          if (finishedCount === allFiles.length) {
+            refreshFileList();
+          }
+        });
+        
+        xhr.open("POST", "upload.php", true);
+        xhr.send(formData);
       });
-      xhr.addEventListener("error", function () {
-        listItems[index].progressBar.innerText = "Error";
-      });
-      xhr.open("POST", "upload.php", true);
-      xhr.send(formData);
+      
+      function refreshFileList() {
+        // Call loadFileList immediately (with a timestamp added inside loadFileList, if needed).
+        loadFileList(folderToUse)
+          .then(serverFiles => {
+            initFileActions();
+            // Normalize server file names to lowercase.
+            serverFiles = (serverFiles || []).map(item => item.name.trim().toLowerCase());
+            // For each file, if it was successful and is present on the server, leave its progress item;
+            // if not, mark it as "Error".
+            allFiles.forEach((file, index) => {
+              const fileName = file.name.trim().toLowerCase();
+              if (index < maxDisplay && listItems[index]) {
+                if (!uploadResults[index] || !serverFiles.includes(fileName)) {
+                  listItems[index].progressBar.innerText = "Error";
+                  allSucceeded = false;
+                }
+              }
+            });
+            // Now, the file list is refreshed instantly.
+            // However, we want the progress list to remain visible for 10 seconds.
+            setTimeout(() => {
+              progressContainer.innerHTML = "";
+              fileInput.value = "";
+            }, 10000);
+            if (!allSucceeded) {
+              alert("Some files failed to upload. Please check the list.");
+            }
+          })
+          .catch(error => {
+            console.error("Error fetching file list:", error);
+            alert("Some files may have failed to upload. Please check the list.");
+          });
+      }
     });
-  });
-});
+  }
+}

@@ -33,7 +33,12 @@ header {
 }
 
 .header-title {
-  flex: 1 1 auto;
+  position: absolute;
+  /* Absolutely position the title */
+  left: 50%;
+  /* Position it 50% from the left edge */
+  transform: translateX(-50%);
+  /* Center it by moving it left by 50% of its own width */
   text-align: center;
   margin: 0;
   color: white;
@@ -64,6 +69,7 @@ header {
   background-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
+
 .material-icons {
   font-size: 24px;
   vertical-align: middle;
@@ -86,7 +92,8 @@ header {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(75%, 75%);  /* centers the modal */
+  transform: translate(75%, 75%);
+  /* centers the modal */
   background: white;
   padding: 20px;
   border: 1px solid #ccc;
@@ -98,11 +105,13 @@ header {
   height: 600px;
   max-height: 35vh;
 }
+
 .editor-modal {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(5%, 10%);  /* centers the editor modal */
+  transform: translate(5%, 10%);
+  /* centers the editor modal */
   width: 50vw;
   max-width: 90vw;
   min-width: 400px;
@@ -129,28 +138,34 @@ header {
   padding: 0;
   margin: 0;
 }
+
 #uploadProgressContainer li {
   display: flex;
   align-items: center;
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
+
 #uploadProgressContainer .file-preview {
   width: 32px !important;
   height: 32px !important;
-  margin-right: 1px;
+  margin-right: 0px;
   flex-shrink: 0;
 }
+
 #uploadProgressContainer .file-preview img {
   width: 32px !important;
   height: 32px !important;
   object-fit: cover;
 }
+
 #uploadProgressContainer .file-name {
   margin-right: 20px;
+  margin-left: 2px;
   flex-grow: 1;
   word-break: break-word;
 }
+
 #uploadProgressContainer .progress {
   background-color: #e9ecef;
   border-radius: 5px;
@@ -160,6 +175,7 @@ header {
   height: 24px;
   width: 250px;
 }
+
 #uploadProgressContainer .progress-bar {
   background-color: #007bff;
   height: 100%;
@@ -169,6 +185,7 @@ header {
   transition: width 0.4s ease;
   font-size: 0.9rem;
 }
+
 #uploadProgressContainer {
   margin-top: 20px;
 }
@@ -181,10 +198,16 @@ header {
     text-align: right;
     margin-top: 10px;
   }
+
   .logout-container button {
     width: auto;
     min-width: 120px;
   }
+
+  .hide-small {
+    display: none;
+  }
+
 }
 
 /* BUTTON STYLES (MATERIAL THEME) */
@@ -198,9 +221,11 @@ header {
   text-decoration: none;
   display: inline-block;
 }
+
 .btn:hover {
   opacity: 0.9;
 }
+
 /* File list action buttons (for Delete, Copy, Move) */
 .file-list-actions button {
   background-color: #2196F3;
@@ -211,12 +236,14 @@ header {
   cursor: pointer;
   white-space: nowrap;
 }
+
 .file-list-actions button:hover {
   background-color: #1976D2;
 }
 
 #deleteSelectedBtn {
-  background-color: #f44336;  /* Material red */
+  background-color: #f44336;
+  /* Material red */
   color: white;
   border: none;
   border-radius: 4px;
@@ -228,7 +255,8 @@ header {
 }
 
 #copySelectedBtn {
-  background-color: #9E9E9E;  /* Material grey */
+  background-color: #9E9E9E;
+  /* Material grey */
   color: white;
   border: none;
   border-radius: 4px;
@@ -240,7 +268,8 @@ header {
 }
 
 #moveSelectedBtn {
-  background-color: #ff9800;  /* Material orange */
+  background-color: #ff9800;
+  /* Material orange */
   color: white;
   border: none;
   border-radius: 4px;
@@ -261,6 +290,7 @@ header {
   cursor: pointer;
   white-space: nowrap;
 }
+
 #fileList button.edit-btn:hover {
   background-color: #43A047;
 }
@@ -273,6 +303,7 @@ header {
   align-items: center;
   max-width: 800px;
 }
+
 .folder-dropdown {
   width: 100px;
 }
@@ -282,15 +313,20 @@ header {
   width: 100%;
   border-collapse: collapse;
 }
+
 #fileList table th,
 #fileList table td {
   padding: 10px;
   text-align: left;
-  border: none; /* Remove table borders */
+  border: none;
+  /* Remove table borders */
 }
+
 #fileList table tr:nth-child(even) {
-  background-color: transparent; /* Remove alternating grey rows */
+  background-color: transparent;
+  /* Remove alternating grey rows */
 }
+
 #fileList table tr:hover {
   background-color: #e0e0e0;
 }
@@ -299,6 +335,7 @@ header {
 h2 {
   font-size: 2em;
 }
+
 .form-group {
   margin-bottom: 10px;
 }
@@ -312,6 +349,7 @@ label {
   display: flex;
   align-items: center;
 }
+
 .table th button {
   background: none;
   border: none;
@@ -321,7 +359,8 @@ label {
 }
 
 /* INITIAL HIDE FORMS */
-#loginForm, #uploadForm {
+#loginForm,
+#uploadForm {
   display: none;
 }
 
