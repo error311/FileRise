@@ -5,8 +5,10 @@ header("Pragma: no-cache");
 header("Expires: 0");
 header('Content-Type: application/json');
 
+// Ensure user is authenticated
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     echo json_encode(["error" => "Unauthorized"]);
+    http_response_code(401);
     exit;
 }
 

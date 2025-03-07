@@ -5,8 +5,10 @@ header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
 
+// Ensure user is authenticated
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     echo json_encode(["error" => "Unauthorized"]);
+    http_response_code(401);
     exit;
 }
 

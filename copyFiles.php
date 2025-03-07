@@ -2,9 +2,10 @@
 require_once 'config.php';
 header('Content-Type: application/json');
 
-// Check authentication.
+// Ensure user is authenticated
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     echo json_encode(["error" => "Unauthorized"]);
+    http_response_code(401);
     exit;
 }
 
