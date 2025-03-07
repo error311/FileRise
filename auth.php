@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-session_start();
 header('Content-Type: application/json');
 
 $usersFile = USERS_DIR . USERS_FILE;

@@ -1,6 +1,5 @@
 <?php
 require_once 'config.php';
-session_start();
 header('Content-Type: application/json');
 header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");

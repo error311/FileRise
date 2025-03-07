@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-session_start();
 header('Content-Type: application/json');
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
     !isset($_SESSION['isAdmin']) || $_SESSION['isAdmin'] !== true) {

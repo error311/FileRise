@@ -1,4 +1,5 @@
 <?php
+session_start();
 // config.php
 define('UPLOAD_DIR', '/var/www/uploads/');
 define('BASE_URL', 'http://yourwebsite/uploads/');

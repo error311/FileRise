@@ -36,6 +36,8 @@ window.currentFolder = "root";
 
 // DOMContentLoaded initialization.
 document.addEventListener("DOMContentLoaded", function () {
+  // Initialize authentication and user management.
+  initAuth();
   window.currentFolder = window.currentFolder || "root";
   loadFileList(window.currentFolder);
   loadCopyMoveFolderList();
@@ -43,6 +45,4 @@ document.addEventListener("DOMContentLoaded", function () {
   initUpload();
   loadFolderList();
   updateFileActionButtons();
-  // Initialize authentication and user management.
-  initAuth();
 });

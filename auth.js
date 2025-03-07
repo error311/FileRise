@@ -6,13 +6,10 @@ import { toggleVisibility } from './domUtils.js';
 import { loadFileList } from './fileManager.js';
 
 export function initAuth() {
-  // On initial load, show the login form and hide the main operations.
-  toggleVisibility("loginForm", true);
-  toggleVisibility("mainOperations", false);
-  // Ensure header buttons are hidden.
-  document.querySelector(".header-buttons").style.visibility = "hidden";
+  // First, check if the user is already authenticated.
+  checkAuthentication(); 
 
-  // Set up the authentication form listener.
+  // Attach event listener for login.
   document.getElementById("authForm").addEventListener("submit", function (event) {
     event.preventDefault();
     const formData = {
@@ -24,38 +21,35 @@ export function initAuth() {
       .then(data => {
         console.log("Login response:", data);
         if (data.success) {
-          console.log("Login successful.");
-          // On successful login, hide the login form and show main operations.
-          toggleVisibility("loginForm", false);
-          toggleVisibility("mainOperations", true);
-          toggleVisibility("uploadFileForm", true);
-          toggleVisibility("fileListContainer", true);
-          // Check if the user is an admin.
-          if (data.isAdmin) {
-            // Show Add and Remove User buttons for admin.
-            const addUserBtn = document.getElementById("addUserBtn");
-            const removeUserBtn = document.getElementById("removeUserBtn");
-            if (addUserBtn) addUserBtn.style.display = "block";
-            if (removeUserBtn) removeUserBtn.style.display = "block";
-          } else {
-            // Hide Add and Remove User buttons for non-admin.
-            const addUserBtn = document.getElementById("addUserBtn");
-            const removeUserBtn = document.getElementById("removeUserBtn");
-            if (addUserBtn) addUserBtn.style.display = "none";
-            if (removeUserBtn) removeUserBtn.style.display = "none";
-          }
-          // Show header buttons (at least the Logout button) always.
-          document.querySelector(".header-buttons").style.visibility = "visible";
-          // Refresh the file list immediately using the current folder.
-          loadFileList(window.currentFolder || "root");
-          // Optionally, you can also call checkAuthentication() to update UI further.
-          checkAuthentication();
+          console.log("✅ Login successful.");
+          updateUIOnLogin(data.isAdmin);
+          checkAuthentication(); // Double-check session persistence.
         } else {
           alert("Login failed: " + (data.error || "Unknown error"));
         }
       })
-      .catch(error => console.error("Error logging in:", error));
+      .catch(error => console.error("❌ Error logging in:", error));
   });
+}
+
+// Helper function to update UI based on authentication.
+function updateUIOnLogin(isAdmin) {
+  toggleVisibility("loginForm", false);
+  toggleVisibility("mainOperations", true);
+  toggleVisibility("uploadFileForm", true);
+  toggleVisibility("fileListContainer", true);
+  
+  if (isAdmin) {
+    document.getElementById("addUserBtn").style.display = "block";
+    document.getElementById("removeUserBtn").style.display = "block";
+  } else {
+    document.getElementById("addUserBtn").style.display = "none";
+    document.getElementById("removeUserBtn").style.display = "none";
+  }
+
+  document.querySelector(".header-buttons").style.visibility = "visible";
+  loadFileList(window.currentFolder || "root");
+}
 
   // Set up the logout button.
   document.getElementById("logoutBtn").addEventListener("click", function () {
@@ -141,12 +135,10 @@ export function initAuth() {
   document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
     closeRemoveUserModal();
   });
-}
 
 export function checkAuthentication() {
   sendRequest("checkAuth.php")
     .then(data => {
-      console.log("Authentication check:", data);
       if (data.setup) {
         window.setupMode = true;
         // In setup mode, hide login and main operations; show Add User modal.

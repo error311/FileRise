@@ -1,6 +1,5 @@
 <?php
 require_once 'config.php';
-session_start();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {

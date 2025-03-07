@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-session_start();
 header('Content-Type: application/json');
 
 // Check if users.txt is empty or doesn't exist
