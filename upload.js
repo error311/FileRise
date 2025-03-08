@@ -6,12 +6,100 @@ export function initUpload() {
   const fileInput = document.getElementById("file");
   const progressContainer = document.getElementById("uploadProgressContainer");
   const uploadForm = document.getElementById("uploadFileForm");
+  const dropArea = document.getElementById("uploadDropArea");
 
-  // Build progress list when files are selected.
+  // Helper function: set the drop area's default layout.
+  function setDropAreaDefault() {
+    if (dropArea) {
+      dropArea.innerHTML = `
+        <div id="uploadInstruction" style="margin-bottom:10px; font-size:16px;">
+          Drop files here or click 'Choose files'
+        </div>
+        <div id="uploadFileRow" style="display:flex; align-items:center; justify-content:center;">
+          <button id="customChooseBtn" type="button" style="background-color:#9E9E9E; color:#fff; border:none; border-radius:4px; padding:8px 18px; font-size:16px; cursor:pointer;">
+            Choose files
+          </button>
+          <div id="fileInfoContainer" style="margin-left:10px; font-size:16px; display:flex; align-items:center;">
+            <span id="fileInfoDefault">No files selected</span>
+          </div>
+        </div>
+      `;
+      // Wire up the custom button.
+     /* const customChooseBtn = document.getElementById("customChooseBtn");
+      if (customChooseBtn) {
+        customChooseBtn.addEventListener("click", function () {
+          fileInput.click();
+        });
+      }*/
+    }
+  }
+
+  // Initialize drop area.
+  if (dropArea) {
+    dropArea.style.border = "2px dashed #ccc";
+    dropArea.style.padding = "20px";
+    dropArea.style.textAlign = "center";
+    dropArea.style.marginBottom = "15px";
+    dropArea.style.cursor = "pointer";
+    // Set default content once.
+    setDropAreaDefault();
+
+    // Prevent default behavior for drag events.
+    dropArea.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      dropArea.style.backgroundColor = "#f8f8f8";
+    });
+    dropArea.addEventListener("dragleave", function (e) {
+      e.preventDefault();
+      dropArea.style.backgroundColor = "";
+    });
+    dropArea.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dropArea.style.backgroundColor = "";
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length > 0) {
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event("change"));
+      }
+    });
+
+    // Clicking the drop area triggers file selection.
+    dropArea.addEventListener("click", function () {
+      fileInput.click();
+    });
+  }
+
+  // When files are selected, update only the file info container.
   if (fileInput) {
     fileInput.addEventListener("change", function () {
-      progressContainer.innerHTML = "";
       const files = fileInput.files;
+      // Update the file info container without replacing the entire drop area.
+      const fileInfoContainer = document.getElementById("fileInfoContainer");
+      if (fileInfoContainer) {
+        if (files.length > 0) {
+          if (files.length === 1) {
+            fileInfoContainer.innerHTML = `
+              <div id="filePreviewContainer" style="display:inline-block; vertical-align:middle;"></div>
+              <span id="fileNameDisplay" style="vertical-align:middle; margin-left:5px;">${files[0].name}</span>
+            `;
+          } else {
+            fileInfoContainer.innerHTML = `
+              <div id="filePreviewContainer" style="display:inline-block; vertical-align:middle;"></div>
+              <span id="fileCountDisplay" style="vertical-align:middle; margin-left:5px;">${files.length} files selected</span>
+            `;
+          }
+          const previewContainer = document.getElementById("filePreviewContainer");
+          if (previewContainer) {
+            previewContainer.innerHTML = "";
+            displayFilePreview(files[0], previewContainer);
+          }
+        } else {
+          fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
+        }
+      }
+      
+      // Build progress list as before.
+      progressContainer.innerHTML = "";
       if (files.length > 0) {
         const allFiles = Array.from(files);
         const maxDisplay = 10;
@@ -22,7 +110,6 @@ export function initUpload() {
           const li = document.createElement("li");
           li.style.paddingTop = "20px";
           li.style.marginBottom = "10px";
-          // Only display progress items for the first maxDisplay files.
           li.style.display = (index < maxDisplay) ? "flex" : "none";
           li.style.alignItems = "center";
           li.style.flexWrap = "wrap";
@@ -51,12 +138,10 @@ export function initUpload() {
           li.appendChild(preview);
           li.appendChild(nameDiv);
           li.appendChild(progDiv);
-          // Save references for later updates.
           li.progressBar = progBar;
           li.startTime = Date.now();
           list.appendChild(li);
         });
-        // If more than maxDisplay files, add a note.
         if (allFiles.length > maxDisplay) {
           const extra = document.createElement("li");
           extra.style.paddingTop = "20px";
@@ -70,7 +155,7 @@ export function initUpload() {
     });
   }
 
-  // Submit handler: upload all files and then check the server's file list.
+  // Submit handler remains unchanged.
   if (uploadForm) {
     uploadForm.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -80,22 +165,21 @@ export function initUpload() {
         return;
       }
       const allFiles = Array.from(files);
-      const maxDisplay = 10; // Only show progress for first 10 items.
+      const maxDisplay = 10;
       const folderToUse = window.currentFolder || "root";
       const listItems = progressContainer.querySelectorAll("li");
       let finishedCount = 0;
       let allSucceeded = true;
-      // Array to track each file's upload result.
       const uploadResults = new Array(allFiles.length).fill(false);
-      
+
       allFiles.forEach((file, index) => {
         const formData = new FormData();
         formData.append("file[]", file);
         formData.append("folder", folderToUse);
-        
+
         const xhr = new XMLHttpRequest();
         let currentPercent = 0;
-        
+
         xhr.upload.addEventListener("progress", function (e) {
           if (e.lengthComputable) {
             currentPercent = Math.round((e.loaded / e.total) * 100);
@@ -113,7 +197,7 @@ export function initUpload() {
             }
           }
         });
-        
+
         xhr.addEventListener("load", function () {
           let jsonResponse;
           try {
@@ -136,11 +220,10 @@ export function initUpload() {
           finishedCount++;
           console.log("Upload response for file", file.name, xhr.responseText);
           if (finishedCount === allFiles.length) {
-            // Immediately refresh the file list.
             refreshFileList();
           }
         });
-        
+
         xhr.addEventListener("error", function () {
           if (index < maxDisplay && listItems[index]) {
             listItems[index].progressBar.innerText = "Error";
@@ -153,7 +236,7 @@ export function initUpload() {
             refreshFileList();
           }
         });
-        
+
         xhr.addEventListener("abort", function () {
           if (index < maxDisplay && listItems[index]) {
             listItems[index].progressBar.innerText = "Aborted";
@@ -166,20 +249,16 @@ export function initUpload() {
             refreshFileList();
           }
         });
-        
+
         xhr.open("POST", "upload.php", true);
         xhr.send(formData);
       });
-      
+
       function refreshFileList() {
-        // Call loadFileList immediately (with a timestamp added inside loadFileList, if needed).
         loadFileList(folderToUse)
           .then(serverFiles => {
             initFileActions();
-            // Normalize server file names to lowercase.
             serverFiles = (serverFiles || []).map(item => item.name.trim().toLowerCase());
-            // For each file, if it was successful and is present on the server, leave its progress item;
-            // if not, mark it as "Error".
             allFiles.forEach((file, index) => {
               const fileName = file.name.trim().toLowerCase();
               if (index < maxDisplay && listItems[index]) {
@@ -189,11 +268,10 @@ export function initUpload() {
                 }
               }
             });
-            // Now, the file list is refreshed instantly.
-            // However, we want the progress list to remain visible for 10 seconds.
             setTimeout(() => {
               progressContainer.innerHTML = "";
               fileInput.value = "";
+              if (dropArea) setDropAreaDefault();
             }, 10000);
             if (!allSucceeded) {
               alert("Some files failed to upload. Please check the list.");

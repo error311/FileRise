@@ -85,90 +85,161 @@ export function loadFileList(folderParam) {
     });
 }
 
-// Render the file table with pagination controls.
 export function renderFileTable(folder) {
   const fileListContainer = document.getElementById("fileList");
   const folderPath = (folder === "root")
     ? "uploads/"
     : "uploads/" + encodeURIComponent(folder) + "/";
 
-  // Pagination variables:
+  // Get current search term from the search input, if it exists.
+  let searchInputElement = document.getElementById("searchInput");
+  const searchHadFocus = searchInputElement && (document.activeElement === searchInputElement);
+  let searchTerm = searchInputElement ? searchInputElement.value : "";
+
+  // Filter fileData using the search term (case-insensitive).
+  const filteredFiles = fileData.filter(file =>
+    file.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Pagination variables.
   const itemsPerPage = window.itemsPerPage || 10;
   const currentPage = window.currentPage || 1;
-  const totalFiles = fileData.length;
+  const totalFiles = filteredFiles.length;
   const totalPages = Math.ceil(totalFiles / itemsPerPage);
 
-  // Build table header.
-  let tableHTML = `<table class="table">
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
-        <th data-column="name" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
-          File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-        </th>
-        <th data-column="modified" class="hide-small" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
-          Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-        </th>
-        <th data-column="uploaded" class="hide-small" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
-          Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-        </th>
-        <th data-column="size" class="hide-small" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
-          File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-        </th>
-        <th data-column="uploader" class="hide-small" style="cursor:pointer; text-decoration: underline; white-space: nowrap;">
-          Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-        </th>
-        <th>Actions</th>
-      </tr>
-    </thead>`;
+  // 1. Top controls: Responsive row with search box on the left and Prev/Next on the right.
+  const topControlsHTML = `
+<div class="row align-items-center mb-3">
+  <!-- Search box: occupies 8 columns on medium+ screens -->
+  <div class="col-12 col-md-5">
+    <div class="input-group" style="max-width: 500px;">
+      <div class="input-group-prepend">
+        <span class="input-group-text" id="searchIcon">
+          <i class="material-icons">search</i>
+        </span>
+      </div>
+      <input
+        type="text"
+        id="searchInput"
+        class="form-control"
+        placeholder="Search files..."
+        value="${searchTerm}"
+        aria-describedby="searchIcon"
+      >
+    </div>
+  </div>
+  <!-- Prev/Next buttons: occupies 4 columns on medium+ screens, left-aligned -->
+  <div class="col-12 col-md-4 text-left mt-2 mt-md-0">
+    <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">
+      Prev
+    </button>
+    <span style="margin: 0 8px;">Page ${currentPage} of ${totalPages || 1}</span>
+    <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">
+      Next
+    </button>
+  </div>
+</div>
+  `;
+
+  // 2. Build the File Table with Bootstrap styling.
+  let tableHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th style="width: 40px;">
+            <input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)">
+          </th>
+          <th data-column="name" style="cursor:pointer; white-space: nowrap;">
+            File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+          </th>
+          <th data-column="modified" class="hide-small" style="cursor:pointer; white-space: nowrap;">
+            Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+          </th>
+          <th data-column="uploaded" class="hide-small" style="cursor:pointer; white-space: nowrap;">
+            Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+          </th>
+          <th data-column="size" class="hide-small" style="cursor:pointer; white-space: nowrap;">
+            File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+          </th>
+          <th data-column="uploader" class="hide-small" style="cursor:pointer; white-space: nowrap;">
+            Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}
+          </th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+  `;
 
   // Calculate slice for current page.
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = Math.min(startIndex + itemsPerPage, totalFiles);
   let tableBody = `<tbody>`;
 
-  fileData.slice(startIndex, endIndex).forEach(file => {
-    const isEditable = canEditFile(file.name);
-    const safeFileName = escapeHTML(file.name);
-    const safeModified = escapeHTML(file.modified);
-    const safeUploaded = escapeHTML(file.uploaded);
-    const safeSize = escapeHTML(file.size);
-    const safeUploader = escapeHTML(file.uploader || "Unknown");
+  if (totalFiles > 0) {
+    filteredFiles.slice(startIndex, endIndex).forEach(file => {
+      const isEditable = canEditFile(file.name);
+      const safeFileName = escapeHTML(file.name);
+      const safeModified = escapeHTML(file.modified);
+      const safeUploaded = escapeHTML(file.uploaded);
+      const safeSize = escapeHTML(file.size);
+      const safeUploader = escapeHTML(file.uploader || "Unknown");
 
-    tableBody += `<tr>
-      <td><input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="updateFileActionButtons()"></td>
-      <td>${safeFileName}</td>
-      <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
-      <td class="hide-small" style="white-space: nowrap;">${safeUploaded}</td>
-      <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
-      <td class="hide-small" style="white-space: nowrap;">${safeUploader}</td>
-      <td>
-        <div style="display: inline-flex; align-items: center; gap: 5px; flex-wrap: nowrap;">
-          <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
-          ${isEditable ? `<button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Edit</button>` : ""}
-          <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Rename</button>
-        </div>
-      </td>
-    </tr>`;
-  });
-
+      tableBody += `
+        <tr onclick="toggleRowSelection(event, '${safeFileName}')" style="cursor:pointer;">
+          <td>
+            <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
+          </td>
+          <td>${safeFileName}</td>
+          <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
+          <td class="hide-small" style="white-space: nowrap;">${safeUploaded}</td>
+          <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
+          <td class="hide-small" style="white-space: nowrap;">${safeUploader}</td>
+          <td>
+            <div style="display: inline-flex; align-items: center; gap: 5px;">
+              <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
+              ${isEditable ? `
+                <button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
+                  Edit
+                </button>
+              ` : ""}
+              <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
+                Rename
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+  } else {
+    tableBody += `<tr><td colspan="7">No files found.</td></tr>`;
+  }
   tableBody += `</tbody></table>`;
 
-  // Build pagination controls.
-  let paginationHTML = `<div class="pagination-controls" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between;">`;
-  paginationHTML += `<div>`;
-  paginationHTML += `<button ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">Prev</button> `;
-  paginationHTML += `<span>Page ${currentPage} of ${totalPages}</span> `;
-  paginationHTML += `<button ${currentPage === totalPages ? "disabled" : ""} onclick="changePage(${currentPage + 1})">Next</button>`;
-  paginationHTML += `</div>`;
-  paginationHTML += `<div>Show <select onchange="changeItemsPerPage(this.value)">`;
-  [10, 20, 50, 100].forEach(num => {
-    paginationHTML += `<option value="${num}" ${num === itemsPerPage ? "selected" : ""}>${num}</option>`;
-  });
-  paginationHTML += `</select> items per page</div>`;
-  paginationHTML += `</div>`;
+  // 3. Bottom controls: "Show [dropdown] items per page" with consistent 16px font.
+  const bottomControlsHTML = `
+    <div class="d-flex align-items-center mt-3" style="font-size:16px; line-height:1.5;">
+      <label class="mr-2 mb-0" style="font-size:16px; line-height:1.5;">Show</label>
+      <select class="form-control" style="width:auto; font-size:16px; height:auto;" onchange="changeItemsPerPage(this.value)">
+        ${[10, 20, 50, 100].map(num => `<option value="${num}" ${num === itemsPerPage ? "selected" : ""}>${num}</option>`).join("")}
+      </select>
+      <span class="ml-2 mb-0" style="font-size:16px; line-height:1.5;">items per page</span>
+    </div>
+  `;
 
-  fileListContainer.innerHTML = tableHTML + tableBody + paginationHTML;
+  // Combine top controls, table, and bottom controls.
+  fileListContainer.innerHTML = topControlsHTML + tableHTML + tableBody + bottomControlsHTML;
+
+  // Re-focus the search input if it was previously focused.
+  const newSearchInput = document.getElementById("searchInput");
+  if (searchHadFocus && newSearchInput) {
+    newSearchInput.focus();
+    newSearchInput.setSelectionRange(newSearchInput.value.length, newSearchInput.value.length);
+  }
+
+  // Attach event listener for search input.
+  newSearchInput.addEventListener("input", function () {
+    window.currentPage = 1;
+    renderFileTable(folder);
+  });
 
   // Attach sorting event listeners on header cells.
   const headerCells = document.querySelectorAll("table.table thead th[data-column]");
@@ -179,52 +250,45 @@ export function renderFileTable(folder) {
     });
   });
 
-  // After rendering the table, reattach the file checkbox event listener.
+  // Reattach event listeners for file checkboxes.
   document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
-    checkbox.addEventListener('change', updateFileActionButtons);
+    checkbox.addEventListener('change', function (e) {
+      updateRowHighlight(e.target);
+      updateFileActionButtons();
+    });
   });
 
-  // Finally, call updateFileActionButtons so the buttons show (or are disabled) correctly.
   updateFileActionButtons();
 }
 
-// Sort files and re-render the table.
-export function sortFiles(column, folder) {
-  if (sortOrder.column === column) {
-    sortOrder.ascending = !sortOrder.ascending;
-  } else {
-    sortOrder.column = column;
-    sortOrder.ascending = true;
+/**
+ * Toggles row selection when the user clicks any part of the row (except buttons/links).
+ */
+window.toggleRowSelection = function (event, fileName) {
+  const targetTag = event.target.tagName.toLowerCase();
+  if (targetTag === 'a' || targetTag === 'button' || targetTag === 'input') {
+    return;
   }
+  const row = event.currentTarget;
+  const checkbox = row.querySelector('.file-checkbox');
+  if (!checkbox) return;
+  checkbox.checked = !checkbox.checked;
+  updateRowHighlight(checkbox);
+  updateFileActionButtons();
+};
 
-  fileData.sort((a, b) => {
-    let valA = a[column] || "";
-    let valB = b[column] || "";
-
-    if (column === "modified" || column === "uploaded") {
-      // Log the raw date strings.
-      console.log(`Sorting ${column}: raw values ->`, valA, valB);
-
-      const parsedA = parseCustomDate(valA);
-      const parsedB = parseCustomDate(valB);
-
-      // Log the parsed numeric timestamps.
-      console.log(`Sorting ${column}: parsed values ->`, parsedA, parsedB);
-
-      valA = parsedA;
-      valB = parsedB;
-    } else if (typeof valA === "string") {
-      valA = valA.toLowerCase();
-      valB = valB.toLowerCase();
-    }
-
-    if (valA < valB) return sortOrder.ascending ? -1 : 1;
-    if (valA > valB) return sortOrder.ascending ? 1 : -1;
-    return 0;
-  });
-
-  renderFileTable(folder);
-}
+/**
+ * Updates row highlight based on whether the checkbox is checked.
+ */
+window.updateRowHighlight = function (checkbox) {
+  const row = checkbox.closest('tr');
+  if (!row) return;
+  if (checkbox.checked) {
+    row.classList.add('row-selected');
+  } else {
+    row.classList.remove('row-selected');
+  }
+};
 
 // Delete selected files.
 export function handleDeleteSelected(e) {

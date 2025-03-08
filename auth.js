@@ -21,9 +21,8 @@ export function initAuth() {
       .then(data => {
         console.log("Login response:", data);
         if (data.success) {
-          console.log("✅ Login successful.");
-          updateUIOnLogin(data.isAdmin);
-          checkAuthentication(); // Double-check session persistence.
+          console.log("✅ Login successful. Reloading page.");
+          window.location.reload();
         } else {
           alert("Login failed: " + (data.error || "Unknown error"));
         }

@@ -10,6 +10,7 @@
   <!-- Google Fonts and Material Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
   <!-- Bootstrap CSS -->
   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -57,10 +58,13 @@
             <div class="card-body">
               <form id="uploadFileForm" method="post" enctype="multipart/form-data">
                 <div class="form-group">
-                  <label for="file">Choose files to upload:</label>
-                  <input type="file" id="file" name="file[]" class="form-control-file" multiple required>
+                  <div id="uploadDropArea" style="border:2px dashed #ccc; padding:20px; text-align:center; cursor:pointer;">
+                    <span>Drop files here or click 'Choose files'</span>
+                    <br>
+                    <input type="file" id="file" name="file[]" class="form-control-file" multiple required style="display:none;">
+                  </div>
                 </div>
-                <button type="submit" id="uploadBtn" class="btn btn-primary">Upload</button>
+                <button type="submit" id="uploadBtn" class="btn btn-primary d-block mx-auto">Upload</button>
                 <div id="uploadProgressContainer"></div>
               </form>
             </div>

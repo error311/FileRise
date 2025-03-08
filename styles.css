@@ -132,6 +132,12 @@ header {
   gap: 5px;
 }
 
+#uploadBtn {
+  font-size: 16px;
+  padding: 10px 22px;
+  align-items: center;
+}
+
 /* UPLOAD PROGRESS */
 #uploadProgressContainer ul {
   list-style: none;
@@ -377,3 +383,22 @@ label {
 #fileListContainer {
   margin-top: 40px !important;
 }
+
+.row-selected {
+  background-color: #f2f2f2 !important;
+}
+
+.custom-prev-next-btn {
+  background-color: #e0e0e0;
+  color: #000;
+  border: none;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+  margin: 0 4px;
+  cursor: pointer;
+}
+.custom-prev-next-btn:hover:not(:disabled) {
+  background-color: #d5d5d5;
+}
+
