@@ -290,6 +290,47 @@ window.updateRowHighlight = function (checkbox) {
   }
 };
 
+export function sortFiles(column, folder) {
+  // Toggle sort order if the column is the same, otherwise set ascending to true.
+  if (sortOrder.column === column) {
+    sortOrder.ascending = !sortOrder.ascending;
+  } else {
+    sortOrder.column = column;
+    sortOrder.ascending = true;
+  }
+  
+  // Sort fileData based on the column.
+  fileData.sort((a, b) => {
+    let valA = a[column] || "";
+    let valB = b[column] || "";
+  
+    if (column === "modified" || column === "uploaded") {
+      // Log the raw date strings.
+      //console.log(`Sorting ${column}: raw values ->`, valA, valB);
+  
+      const parsedA = parseCustomDate(valA);
+      const parsedB = parseCustomDate(valB);
+  
+      // Log the parsed numeric timestamps.
+      //console.log(`Sorting ${column}: parsed values ->`, parsedA, parsedB);
+  
+      valA = parsedA;
+      valB = parsedB;
+    } else if (typeof valA === "string") {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+    }
+  
+    if (valA < valB) return sortOrder.ascending ? -1 : 1;
+    if (valA > valB) return sortOrder.ascending ? 1 : -1;
+    return 0;
+  });
+  
+  // Re-render the file table after sorting.
+  renderFileTable(folder);
+}
+
+
 // Delete selected files.
 export function handleDeleteSelected(e) {
   e.preventDefault();
