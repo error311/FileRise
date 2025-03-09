@@ -107,40 +107,42 @@ export function renderFileTable(folder) {
   const currentPage = window.currentPage || 1;
   const totalFiles = filteredFiles.length;
   const totalPages = Math.ceil(totalFiles / itemsPerPage);
-
+  const safeSearchTerm = escapeHTML(searchTerm);
   // 1. Top controls: Responsive row with search box on the left and Prev/Next on the right.
   const topControlsHTML = `
-<div class="row align-items-center mb-3">
-  <!-- Search box: occupies 8 columns on medium+ screens -->
-  <div class="col-12 col-md-5">
-    <div class="input-group" style="max-width: 500px;">
-      <div class="input-group-prepend">
-        <span class="input-group-text" id="searchIcon">
-          <i class="material-icons">search</i>
-        </span>
+  <div class="row align-items-center mb-3">
+    <!-- Search box: full width on small, 8 columns on md+ -->
+    <div class="col-12 col-md-8 mb-2 mb-md-0">
+      <div class="input-group" style="max-width: 100%;">
+        <div class="input-group-prepend">
+          <span class="input-group-text" id="searchIcon">
+            <i class="material-icons">search</i>
+          </span>
+        </div>
+        <input
+          type="text"
+          id="searchInput"
+          class="form-control"
+          placeholder="Search files..."
+          value="${safeSearchTerm}"
+          aria-describedby="searchIcon"
+        >
       </div>
-      <input
-        type="text"
-        id="searchInput"
-        class="form-control"
-        placeholder="Search files..."
-        value="${searchTerm}"
-        aria-describedby="searchIcon"
-      >
+    </div>
+    <!-- Prev/Next buttons: full width on small, 4 columns on md+ -->
+    <div class="col-12 col-md-4 text-left">
+      <div class="d-flex justify-content-center justify-content-md-start align-items-center">
+        <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">
+          Prev
+        </button>
+        <span style="margin: 0 8px; white-space: nowrap;">Page ${currentPage} of ${totalPages || 1}</span>
+        <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">
+          Next
+        </button>
+      </div>
     </div>
   </div>
-  <!-- Prev/Next buttons: occupies 4 columns on medium+ screens, left-aligned -->
-  <div class="col-12 col-md-4 text-left mt-2 mt-md-0">
-    <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">
-      Prev
-    </button>
-    <span style="margin: 0 8px;">Page ${currentPage} of ${totalPages || 1}</span>
-    <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">
-      Next
-    </button>
-  </div>
-</div>
-  `;
+`;
 
   // 2. Build the File Table with Bootstrap styling.
   let tableHTML = `
@@ -185,30 +187,32 @@ export function renderFileTable(folder) {
       const safeUploader = escapeHTML(file.uploader || "Unknown");
 
       tableBody += `
-        <tr onclick="toggleRowSelection(event, '${safeFileName}')" style="cursor:pointer;">
-          <td>
-            <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
-          </td>
-          <td>${safeFileName}</td>
-          <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
-          <td class="hide-small" style="white-space: nowrap;">${safeUploaded}</td>
-          <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
-          <td class="hide-small" style="white-space: nowrap;">${safeUploader}</td>
-          <td>
-            <div style="display: inline-flex; align-items: center; gap: 5px;">
-              <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
-              ${isEditable ? `
-                <button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
-                  Edit
-                </button>
-              ` : ""}
-              <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
-                Rename
+      <tr onclick="toggleRowSelection(event, '${safeFileName}')" style="cursor:pointer;">
+        <td>
+          <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
+        </td>
+        <td>${safeFileName}</td>
+        <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
+        <td class="hide-small" style="white-space: nowrap;">${safeUploaded}</td>
+        <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
+        <td class="hide-small" style="white-space: nowrap;">${safeUploader}</td>
+        <td>
+          <div class="button-wrap">
+            <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>
+              Download
+            </a>
+            ${isEditable ? `
+              <button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
+                Edit
               </button>
-            </div>
-          </td>
-        </tr>
-      `;
+            ` : ""}
+            <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
+              Rename
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
     });
   } else {
     tableBody += `<tr><td colspan="7">No files found.</td></tr>`;
@@ -299,34 +303,34 @@ export function sortFiles(column, folder) {
     sortOrder.column = column;
     sortOrder.ascending = true;
   }
-  
+
   // Sort fileData based on the column.
   fileData.sort((a, b) => {
     let valA = a[column] || "";
     let valB = b[column] || "";
-  
+
     if (column === "modified" || column === "uploaded") {
       // Log the raw date strings.
       //console.log(`Sorting ${column}: raw values ->`, valA, valB);
-  
+
       const parsedA = parseCustomDate(valA);
       const parsedB = parseCustomDate(valB);
-  
+
       // Log the parsed numeric timestamps.
       //console.log(`Sorting ${column}: parsed values ->`, parsedA, parsedB);
-  
+
       valA = parsedA;
       valB = parsedB;
     } else if (typeof valA === "string") {
       valA = valA.toLowerCase();
       valB = valB.toLowerCase();
     }
-  
+
     if (valA < valB) return sortOrder.ascending ? -1 : 1;
     if (valA > valB) return sortOrder.ascending ? 1 : -1;
     return 0;
   });
-  
+
   // Re-render the file table after sorting.
   renderFileTable(folder);
 }
@@ -408,15 +412,15 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
     const response = await fetch('getFolderList.php');
     const folders = await response.json();
     console.log('Folders fetched for modal:', folders);
-    
+
     const folderSelect = document.getElementById(dropdownId);
     folderSelect.innerHTML = '';
-  
+
     const rootOption = document.createElement('option');
     rootOption.value = 'root';
     rootOption.textContent = '(Root)';
     folderSelect.appendChild(rootOption);
-  
+
     if (Array.isArray(folders) && folders.length > 0) {
       folders.forEach(folder => {
         const option = document.createElement('option');
@@ -462,7 +466,7 @@ document.addEventListener("DOMContentLoaded", function () {
             showToast("Selected files copied successfully!", 5000);
             loadFileList(window.currentFolder);
           } else {
-            showToast("Error: " + (data.error || "Could not copy files"), 5000);          
+            showToast("Error: " + (data.error || "Could not copy files"), 5000);
           }
         })
         .catch(error => console.error("Error copying files:", error))
@@ -656,10 +660,10 @@ export function renameFile(oldName, folder) {
   // Store the file name and folder globally for use in the modal.
   window.fileToRename = oldName;
   window.fileFolder = folder || window.currentFolder || "root";
-  
+
   // Pre-fill the input with the current file name.
   document.getElementById("newFileName").value = oldName;
-  
+
   // Show the rename file modal.
   document.getElementById("renameFileModal").style.display = "block";
 }
@@ -669,16 +673,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Cancel button: hide modal and clear input.
   const cancelBtn = document.getElementById("cancelRenameFile");
   if (cancelBtn) {
-    cancelBtn.addEventListener("click", function() {
+    cancelBtn.addEventListener("click", function () {
       document.getElementById("renameFileModal").style.display = "none";
       document.getElementById("newFileName").value = "";
     });
   }
-  
+
   // Submit button: send rename request.
   const submitBtn = document.getElementById("submitRenameFile");
   if (submitBtn) {
-    submitBtn.addEventListener("click", function() {
+    submitBtn.addEventListener("click", function () {
       const newName = document.getElementById("newFileName").value.trim();
       if (!newName || newName === window.fileToRename) {
         // No change; just hide the modal.

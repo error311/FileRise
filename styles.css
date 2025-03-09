@@ -1,3 +1,7 @@
+/* ===========================================================
+   GENERAL STYLES & BASE LAYOUT
+   =========================================================== */
+
 /* GENERAL STYLES */
 body {
   font-family: 'Roboto', sans-serif;
@@ -10,7 +14,11 @@ body {
   margin-top: 20px;
 }
 
-/* HEADER */
+/* ===========================================================
+   HEADER & NAVIGATION
+   =========================================================== */
+
+/* HEADER (Large Screens) */
 header {
   display: flex !important;
   flex-direction: row !important;
@@ -34,11 +42,9 @@ header {
 
 .header-title {
   position: absolute;
-  /* Absolutely position the title */
+  /* Center the title using absolute positioning */
   left: 50%;
-  /* Position it 50% from the left edge */
   transform: translateX(-50%);
-  /* Center it by moving it left by 50% of its own width */
   text-align: center;
   margin: 0;
   color: white;
@@ -70,11 +76,55 @@ header {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* Responsive Header (Small Screens) */
+@media (max-width: 600px) {
+  header {
+    flex-direction: column !important;
+    height: auto !important;
+    padding: 10px 20px !important;
+    position: relative !important;
+  }
+  
+  /* Remove absolute positioning to let items stack */
+  .header-title {
+    position: static !important;
+    left: auto !important;
+    transform: none !important;
+    margin: 10px 0 !important;
+    font-size: 1.2em !important;
+  }
+  
+  /* Ensure logo and buttons are centered and full width */
+  .header-left,
+  .header-buttons {
+    position: static !important;
+    transform: none !important;
+    margin: 5px 0 !important;
+    width: 100% !important;
+    text-align: center !important;
+  }
+  
+  .header-left img {
+    height: 50px !important;
+  }
+  
+  .header-buttons {
+    justify-content: center !important;
+  }
+}
+
+/* ===========================================================
+   MATERIAL ICONS
+   =========================================================== */
 .material-icons {
   font-size: 24px;
   vertical-align: middle;
   color: white;
 }
+
+/* ===========================================================
+   FORMS & LOGIN
+   =========================================================== */
 
 /* LOGIN FORM */
 #loginForm {
@@ -86,7 +136,11 @@ header {
   border-radius: 4px;
 }
 
-/* MODALS & EDITOR MODALS */
+/* ===========================================================
+   MODALS & EDITOR MODALS
+   =========================================================== */
+
+/* General Modal Styles */
 .modal {
   display: none; /* Hidden by default */
   position: fixed;
@@ -114,6 +168,7 @@ header {
   overflow-y: auto;
 }
 
+/* Editor Modal */
 .editor-modal {
   position: fixed;
   top: 50%;
@@ -123,7 +178,6 @@ header {
   padding: 20px;
   border: 1px solid #ccc;
   border-radius: 4px;
-  /* centers the editor modal */
   width: 50vw;
   max-width: 90vw;
   min-width: 400px;
@@ -132,10 +186,12 @@ header {
   overflow: auto;
   resize: both;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  z-index: 1100; /* make sure it’s on top of any overlay */
+  z-index: 1100; /* Ensure it's on top of any overlay */
 }
 
-/* LOGOUT & USER BUTTON CONTAINER */
+/* ===========================================================
+   LOGOUT & USER CONTROLS
+   =========================================================== */
 .logout-container {
   position: absolute;
   top: 10px;
@@ -152,7 +208,9 @@ header {
   align-items: center;
 }
 
-/* UPLOAD PROGRESS */
+/* ===========================================================
+   UPLOAD PROGRESS STYLES
+   =========================================================== */
 #uploadProgressContainer ul {
   list-style: none;
   padding: 0;
@@ -169,7 +227,7 @@ header {
 #uploadProgressContainer .file-preview {
   width: 32px !important;
   height: 32px !important;
-  margin-right: 0px;
+  margin-right: 0;
   flex-shrink: 0;
 }
 
@@ -180,8 +238,7 @@ header {
 }
 
 #uploadProgressContainer .file-name {
-  margin-right: 20px;
-  margin-left: 2px;
+  margin: 0 20px 0 2px;
   flex-grow: 1;
   word-break: break-word;
 }
@@ -190,8 +247,7 @@ header {
   background-color: #e9ecef;
   border-radius: 5px;
   overflow: hidden;
-  margin-top: 5px;
-  margin-bottom: 10px;
+  margin: 5px 0 10px;
   height: 24px;
   width: 250px;
 }
@@ -210,7 +266,9 @@ header {
   margin-top: 20px;
 }
 
-/* RESPONSIVE (small screens) */
+/* ===========================================================
+   RESPONSIVE ADJUSTMENTS (General Small Screens)
+   =========================================================== */
 @media (max-width: 768px) {
   .logout-container {
     position: static;
@@ -227,10 +285,11 @@ header {
   .hide-small {
     display: none;
   }
-
 }
 
-/* BUTTON STYLES (MATERIAL THEME) */
+/* ===========================================================
+   BUTTON STYLES (MATERIAL THEME)
+   =========================================================== */
 .btn {
   font-size: 0.9rem;
   border: none;
@@ -246,9 +305,9 @@ header {
   opacity: 0.9;
 }
 
+/* Specific Action Buttons */
 #deleteSelectedBtn {
-  background-color: #f44336;
-  /* Material red */
+  background-color: #f44336; /* Material red */
   color: white;
   border: none;
   border-radius: 4px;
@@ -260,8 +319,7 @@ header {
 }
 
 #copySelectedBtn {
-  background-color: #9E9E9E;
-  /* Material grey */
+  background-color: #9E9E9E; /* Material grey */
   color: white;
   border: none;
   border-radius: 4px;
@@ -273,8 +331,7 @@ header {
 }
 
 #moveSelectedBtn {
-  background-color: #ff9800;
-  /* Material orange */
+  background-color: #ff9800; /* Material orange */
   color: white;
   border: none;
   border-radius: 4px;
@@ -285,7 +342,7 @@ header {
   background-color: #fb8c00;
 }
 
-/* Material green style for Edit button in file list */
+/* File List Edit Button (Material Green) */
 #fileList button.edit-btn {
   background-color: #4CAF50;
   color: white;
@@ -300,43 +357,20 @@ header {
   background-color: #43A047;
 }
 
-/* FILE LIST ACTIONS CONTAINER */
-.file-list-actions {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 10px;
-  align-items: center;
-  max-width: 800px;
-}
-
-.folder-dropdown {
-  width: 100px;
-}
-
-/* FILE LIST TABLE */
-#fileList table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-#fileList table th,
-#fileList table td {
-  padding: 10px;
-  text-align: left;
-  border: none;
-  /* Remove table borders */
-}
-
+/* ===========================================================
+   FILE LIST & TABLE STYLES
+   =========================================================== */
 #fileList table tr:nth-child(even) {
-  background-color: transparent;
-  /* Remove alternating grey rows */
+  background-color: transparent; /* Remove alternating grey rows */
 }
 
 #fileList table tr:hover {
   background-color: #e0e0e0;
 }
 
-/* HEADINGS & FORM LABELS */
+/* ===========================================================
+   HEADINGS & FORM LABELS
+   =========================================================== */
 h2 {
   font-size: 2em;
 }
@@ -349,7 +383,9 @@ label {
   font-size: 0.9rem;
 }
 
-/* UTILITY CLASSES */
+/* ===========================================================
+   UTILITY CLASSES
+   =========================================================== */
 .align-items-center {
   display: flex;
   align-items: center;
@@ -369,24 +405,22 @@ label {
   display: none;
 }
 
-/* Remove bottom margin from the form group */
+/* Remove bottom margin from the form group in cards */
 .card-body .form-group {
   margin-bottom: 5px !important;
 }
 
-/* Force a small top margin for the Create Folder button */
+/* Create Folder Button */
 #createFolderBtn {
   margin-top: 0px !important;
 }
 
-#fileListContainer {
-  margin-top: 40px !important;
-}
-
+/* Row Selected Highlight */
 .row-selected {
   background-color: #f2f2f2 !important;
 }
 
+/* Custom Prev/Next Buttons */
 .custom-prev-next-btn {
   background-color: #e0e0e0;
   color: #000;
@@ -397,22 +431,28 @@ label {
   margin: 0 4px;
   cursor: pointer;
 }
+
 .custom-prev-next-btn:hover:not(:disabled) {
   background-color: #d5d5d5;
 }
 
+/* Folder Options */
 .folder-option:hover {
   background-color: #f0f0f0;
 }
+
 .folder-option.selected {
   background-color: #d0d0d0;
 }
 
+/* Custom Folder Card Body */
 .custom-folder-card-body {
   padding-top: 5px !important;
-  /* You can leave the other padding values as default or specify them if needed */
 }
 
+/* ===========================================================
+   TOAST NOTIFICATIONS
+   =========================================================== */
 #customToast {
   position: fixed;
   top: 20px;
@@ -424,11 +464,82 @@ label {
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
   opacity: 0;
   transition: opacity 0.5s ease;
-  z-index: 9999; /* Increased z-index */
+  z-index: 9999;
   min-width: 250px;
   display: none;
 }
 
 #customToast.show {
   opacity: 1;
+}
+
+/* ===========================================================
+   BUTTON WRAP (For File List Actions)
+   =========================================================== */
+.button-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: left;
+  gap: 2px;
+}
+
+/* Media Query for Button Wrap on Smaller Devices */
+@media (max-width: 500px) {
+  .button-wrap {
+    display: flex;      /* Use block-level flex */
+    width: 100%;        /* Take full available width */
+    justify-content: center;
+  }
+}
+
+/* ===========================================================
+   FILE LIST SECTION
+   =========================================================== */
+#fileListContainer {
+  padding: 10px;
+}
+
+#fileListTitle {
+  font-size: 1.8em;
+  margin-bottom: 15px;
+}
+
+.file-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.file-list-actions .action-btn {
+  flex: 0 1 auto;
+}
+
+.modal-footer {
+  margin-top: 15px;
+  text-align: right;
+}
+
+.modal-input {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* Responsive File List Section (Small Devices) */
+@media (max-width: 600px) {
+  #fileListTitle {
+    font-size: 1.4em;
+  }
+  .file-list-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .file-list-actions .action-btn {
+    width: 100%;
+  }
+  .modal-content {
+    width: 95%;
+    margin: 20% auto;
+  }
 }

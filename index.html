@@ -26,9 +26,15 @@
       <h1>Multi File Upload Editor</h1>
     </div>
     <div class="header-buttons">
-      <button id="logoutBtn" title="Logout"><i class="material-icons">exit_to_app</i></button>
-      <button id="addUserBtn" title="Add User"><i class="material-icons">person_add</i></button>
-      <button id="removeUserBtn" title="Remove User"><i class="material-icons">person_remove</i></button>
+      <button id="logoutBtn" title="Logout">
+        <i class="material-icons">exit_to_app</i>
+      </button>
+      <button id="addUserBtn" title="Add User">
+        <i class="material-icons">person_add</i>
+      </button>
+      <button id="removeUserBtn" title="Remove User">
+        <i class="material-icons">person_remove</i>
+      </button>
     </div>
   </header>
   <!-- Custom Toast Container -->
@@ -163,39 +169,53 @@
       <div id="fileListContainer">
         <h2 id="fileListTitle">Files in (Root)</h2>
         <div id="fileListActions" class="file-list-actions">
-          <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;">Delete Selected</button>
+          <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;">
+            Delete Selected
+          </button>
           <!-- Delete Files Modal -->
           <div id="deleteFilesModal" class="modal">
             <div class="modal-content">
               <h4>Delete Selected Files</h4>
-              <p id="deleteFilesMessage">Are you sure you want to delete the selected files?</p>
-              <div style="margin-top:15px; text-align:right;">
+              <p id="deleteFilesMessage">
+                Are you sure you want to delete the selected files?
+              </p>
+              <div class="modal-footer">
                 <button id="cancelDeleteFiles" class="btn btn-secondary">Cancel</button>
                 <button id="confirmDeleteFiles" class="btn btn-danger">Delete</button>
               </div>
             </div>
           </div>
-          <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled>Copy Selected</button>
+
+          <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled>
+            Copy Selected
+          </button>
           <!-- Copy Files Modal -->
           <div id="copyFilesModal" class="modal">
             <div class="modal-content">
               <h4>Copy Selected Files</h4>
-              <p id="copyFilesMessage">Select a target folder for copying the selected files:</p>
-              <select id="copyTargetFolder" class="form-control" style="margin-top:10px;"></select>
-              <div style="margin-top:15px; text-align:right;">
+              <p id="copyFilesMessage">
+                Select a target folder for copying the selected files:
+              </p>
+              <select id="copyTargetFolder" class="form-control modal-input"></select>
+              <div class="modal-footer">
                 <button id="cancelCopyFiles" class="btn btn-secondary">Cancel</button>
                 <button id="confirmCopyFiles" class="btn btn-primary">Copy</button>
               </div>
             </div>
           </div>
-          <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled>Move Selected</button>
+
+          <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled>
+            Move Selected
+          </button>
           <!-- Move Files Modal -->
           <div id="moveFilesModal" class="modal">
             <div class="modal-content">
               <h4>Move Selected Files</h4>
-              <p id="moveFilesMessage">Select a target folder for moving the selected files:</p>
-              <select id="moveTargetFolder" class="form-control" style="margin-top:10px;"></select>
-              <div style="margin-top:15px; text-align:right;">
+              <p id="moveFilesMessage">
+                Select a target folder for moving the selected files:
+              </p>
+              <select id="moveTargetFolder" class="form-control modal-input"></select>
+              <div class="modal-footer">
                 <button id="cancelMoveFiles" class="btn btn-secondary">Cancel</button>
                 <button id="confirmMoveFiles" class="btn btn-primary">Move</button>
               </div>
