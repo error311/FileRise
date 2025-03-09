@@ -18,7 +18,7 @@ import {
 import { 
   loadFolderTree, 
   loadCopyMoveFolderList, 
-  loadFolderList, 
+  loadFolderList
 } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth } from './auth.js';
