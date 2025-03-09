@@ -246,21 +246,6 @@ header {
   opacity: 0.9;
 }
 
-/* File list action buttons (for Delete, Copy, Move) */
-.file-list-actions button {
-  background-color: #2196F3;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.file-list-actions button:hover {
-  background-color: #1976D2;
-}
-
 #deleteSelectedBtn {
   background-color: #f44336;
   /* Material red */

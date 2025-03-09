@@ -16,8 +16,7 @@ import {
   renameFile
 } from './fileManager.js';
 import { 
-  loadFolderTree, 
-  loadCopyMoveFolderList, 
+  loadFolderTree,  
   loadFolderList
 } from './folderManager.js';
 import { initUpload } from './upload.js';

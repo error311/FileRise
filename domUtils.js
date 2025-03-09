@@ -35,20 +35,17 @@ export function updateFileActionButtons() {
   const copyBtn = document.getElementById("copySelectedBtn");
   const moveBtn = document.getElementById("moveSelectedBtn");
   const deleteBtn = document.getElementById("deleteSelectedBtn");
-  const folderDropdown = document.getElementById("copyMoveFolderSelect");
   
   // Hide the buttons and dropdown if no files exist.
   if (fileCheckboxes.length === 0) {
     copyBtn.style.display = "none";
     moveBtn.style.display = "none";
     deleteBtn.style.display = "none";
-    folderDropdown.style.display = "none";
   } else {
     // Otherwise, show the buttons and dropdown.
     copyBtn.style.display = "inline-block";
     moveBtn.style.display = "inline-block";
     deleteBtn.style.display = "inline-block";
-    folderDropdown.style.display = "none";
     
     // Enable the buttons if at least one file is selected; otherwise disable.
     if (selectedCheckboxes.length > 0) {

@@ -241,7 +241,6 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
         showToast("Folder renamed successfully!");
         window.currentFolder = newFolderName;
         loadFolderList(newFolderName);
-        loadCopyMoveFolderList();
       } else {
         showToast("Error: " + (data.error || "Could not rename folder"));
       }
@@ -288,7 +287,6 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
           window.currentFolder = "root";
         }
         loadFolderList("root");
-        loadCopyMoveFolderList();
       } else {
         showToast("Error: " + (data.error || "Could not delete folder"));
       }
@@ -336,7 +334,6 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
         showToast("Folder created successfully!");
         window.currentFolder = fullFolderName;
         loadFolderList(fullFolderName);
-        loadCopyMoveFolderList();
       } else {
         showToast("Error: " + (data.error || "Could not create folder"));
       }
@@ -349,33 +346,3 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
       document.getElementById("createFolderModal").style.display = "none";
     });
 });
-
-// For copy/move folder dropdown.
-export async function loadCopyMoveFolderList() {
-  try {
-    const response = await fetch('getFolderList.php');
-    const folders = await response.json();
-    if (!Array.isArray(folders)) {
-      console.error("Folder list response is not an array:", folders);
-      return;
-    }
-    const folderSelect = document.getElementById('copyMoveFolderSelect').style.display = "none";
-    folderSelect.innerHTML = '';
-
-    const rootOption = document.createElement('option');
-    rootOption.value = 'root';
-    rootOption.textContent = '(Root)';
-    folderSelect.appendChild(rootOption);
-
-    if (Array.isArray(folders) && folders.length > 0) {
-      folders.forEach(folder => {
-        const option = document.createElement('option');
-        option.value = folder;
-        option.textContent = formatFolderName(folder);
-        folderSelect.appendChild(option);
-      });
-    }
-  } catch (error) {
-    console.error('Error loading folder list:', error);
-  }
-}
