@@ -10,7 +10,12 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
 }
 
 $data = json_decode(file_get_contents("php://input"), true);
-if (!$data || !isset($data['source']) || !isset($data['destination']) || !isset($data['files'])) {
+if (
+    !$data || 
+    !isset($data['source']) || 
+    !isset($data['destination']) || 
+    !isset($data['files'])
+) {
     echo json_encode(["error" => "Invalid request"]);
     exit;
 }
@@ -19,9 +24,29 @@ $sourceFolder = trim($data['source']);
 $destinationFolder = trim($data['destination']);
 $files = $data['files'];
 
+// Validate folder names: allow letters, numbers, underscores, dashes, spaces, and forward slashes.
+$folderPattern = '/^[A-Za-z0-9_\- \/]+$/';
+if ($sourceFolder !== 'root' && !preg_match($folderPattern, $sourceFolder)) {
+    echo json_encode(["error" => "Invalid source folder name."]);
+    exit;
+}
+if ($destinationFolder !== 'root' && !preg_match($folderPattern, $destinationFolder)) {
+    echo json_encode(["error" => "Invalid destination folder name."]);
+    exit;
+}
+
+// Trim any leading/trailing slashes and spaces.
+$sourceFolder = trim($sourceFolder, "/\\ ");
+$destinationFolder = trim($destinationFolder, "/\\ ");
+
 // Build the source and destination directories.
-$sourceDir = ($sourceFolder === 'root') ? UPLOAD_DIR : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $sourceFolder . DIRECTORY_SEPARATOR;
-$destDir = ($destinationFolder === 'root') ? UPLOAD_DIR : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $destinationFolder . DIRECTORY_SEPARATOR;
+$baseDir = rtrim(UPLOAD_DIR, '/\\');
+$sourceDir = ($sourceFolder === 'root') 
+    ? $baseDir . DIRECTORY_SEPARATOR 
+    : $baseDir . DIRECTORY_SEPARATOR . $sourceFolder . DIRECTORY_SEPARATOR;
+$destDir = ($destinationFolder === 'root') 
+    ? $baseDir . DIRECTORY_SEPARATOR 
+    : $baseDir . DIRECTORY_SEPARATOR . $destinationFolder . DIRECTORY_SEPARATOR;
 
 // Load metadata.
 $metadataFile = META_DIR . META_FILE;
@@ -36,10 +61,21 @@ if (!is_dir($destDir)) {
 }
 
 $errors = [];
+
+// Define a safe file name pattern: letters, numbers, underscores, dashes, dots, and spaces.
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+
 foreach ($files as $fileName) {
-    $basename = basename($fileName);
+    $basename = basename(trim($fileName));
+    // Validate the file name.
+    if (!preg_match($safeFileNamePattern, $basename)) {
+        $errors[] = "$basename has an invalid name.";
+        continue;
+    }
+    
     $srcPath = $sourceDir . $basename;
     $destPath = $destDir . $basename;
+    
     // Build metadata keys.
     $srcKey = ($sourceFolder === 'root') ? $basename : $sourceFolder . "/" . $basename;
     $destKey = ($destinationFolder === 'root') ? $basename : $destinationFolder . "/" . $basename;

@@ -24,12 +24,19 @@ if (!isset($input['folder'])) {
 
 $folderName = trim($input['folder']);
 
-// Basic sanitation: allow only letters, numbers, underscores, dashes, and spaces
-if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $folderName)) {
+// Prevent deletion of root.
+if ($folderName === 'root') {
+    echo json_encode(['success' => false, 'error' => 'Cannot delete root folder.']);
+    exit;
+}
+
+// Allow letters, numbers, underscores, dashes, spaces, and forward slashes.
+if (!preg_match('/^[A-Za-z0-9_\- \/]+$/', $folderName)) {
     echo json_encode(['success' => false, 'error' => 'Invalid folder name.']);
     exit;
 }
 
+// Build the folder path (supports subfolder paths like "FolderTest/FolderTestSub")
 $folderPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folderName;
 
 // Check if the folder exists and is a directory

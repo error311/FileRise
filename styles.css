@@ -88,22 +88,30 @@ header {
 
 /* MODALS & EDITOR MODALS */
 .modal {
-  display: none;
+  display: none; /* Hidden by default */
   position: fixed;
+  top: 0; 
+  left: 0;
+  width: 100%; 
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1050;
+}
+
+.modal .modal-content {
+  position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(75%, 75%);
-  /* centers the modal */
-  background: white;
+  transform: translate(-50%, -50%);
+  background: #fff;
   padding: 20px;
   border: 1px solid #ccc;
   border-radius: 4px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
-  width: 40vw;
-  max-width: 40vw;
-  height: 600px;
-  max-height: 35vh;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  max-width: 400px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .editor-modal {
@@ -111,6 +119,10 @@ header {
   top: 50%;
   left: 50%;
   transform: translate(5%, 10%);
+  background-color: #fff; /* Ensures modal is opaque */
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
   /* centers the editor modal */
   width: 50vw;
   max-width: 90vw;
@@ -119,6 +131,8 @@ header {
   max-height: 80vh;
   overflow: auto;
   resize: both;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  z-index: 1100; /* make sure it’s on top of any overlay */
 }
 
 /* LOGOUT & USER BUTTON CONTAINER */
@@ -402,3 +416,34 @@ label {
   background-color: #d5d5d5;
 }
 
+.folder-option:hover {
+  background-color: #f0f0f0;
+}
+.folder-option.selected {
+  background-color: #d0d0d0;
+}
+
+.custom-folder-card-body {
+  padding-top: 5px !important;
+  /* You can leave the other padding values as default or specify them if needed */
+}
+
+#customToast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #333;
+  color: #fff;
+  padding: 15px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  z-index: 9999; /* Increased z-index */
+  min-width: 250px;
+  display: none;
+}
+
+#customToast.show {
+  opacity: 1;
+}

@@ -19,9 +19,22 @@ if (!$data || !isset($data['folder']) || !isset($data['oldName']) || !isset($dat
 }
 
 $folder = trim($data['folder']) ?: 'root';
+// For subfolders, allow letters, numbers, underscores, dashes, spaces, and forward slashes.
+if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+    echo json_encode(["error" => "Invalid folder name"]);
+    exit;
+}
+
 $oldName = basename(trim($data['oldName']));
 $newName = basename(trim($data['newName']));
 
+// Validate file names: allow letters, numbers, underscores, dashes, dots, and spaces.
+if (!preg_match('/^[A-Za-z0-9_\-\. ]+$/', $oldName) || !preg_match('/^[A-Za-z0-9_\-\. ]+$/', $newName)) {
+    echo json_encode(["error" => "Invalid file name."]);
+    exit;
+}
+
+// Determine the directory path based on the folder.
 if ($folder !== 'root') {
     $directory = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
 } else {
@@ -47,7 +60,7 @@ if (rename($oldPath, $newPath)) {
     // Update metadata.
     if (file_exists($metadataFile)) {
         $metadata = json_decode(file_get_contents($metadataFile), true);
-        // Build the keys.
+        // Build metadata keys using the folder (if not root).
         $oldKey = ($folder !== 'root') ? $folder . "/" . $oldName : $oldName;
         $newKey = ($folder !== 'root') ? $folder . "/" . $newName : $newName;
         if (isset($metadata[$oldKey])) {

@@ -26,15 +26,38 @@ $fileName = basename($data["fileName"]);
 
 // Determine the folder. Default to "root" if not provided.
 $folder = isset($data["folder"]) ? trim($data["folder"]) : "root";
-if ($folder !== "root") {
-    $targetDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
+
+// If a subfolder is provided, validate it.
+// Allow letters, numbers, underscores, dashes, spaces, and forward slashes.
+if ($folder !== "root" && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+    echo json_encode(["error" => "Invalid folder name"]);
+    exit;
+}
+
+// Trim any leading/trailing slashes or spaces.
+$folder = trim($folder, "/\\ ");
+
+// Determine the target upload directory.
+$baseDir = rtrim(UPLOAD_DIR, '/\\');
+if ($folder && strtolower($folder) !== "root") {
+    $targetDir = $baseDir . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
 } else {
-    $targetDir = UPLOAD_DIR;
+    $targetDir = $baseDir . DIRECTORY_SEPARATOR;
+}
+
+// (Optional security check: Ensure $targetDir starts with $baseDir)
+if (strpos(realpath($targetDir), realpath($baseDir)) !== 0) {
+    echo json_encode(["error" => "Invalid folder path"]);
+    exit;
+}
+
+if (!is_dir($targetDir)) {
+    mkdir($targetDir, 0775, true);
 }
 
 $filePath = $targetDir . $fileName;
 
-// Try to save the file.
+// Attempt to save the file.
 if (file_put_contents($filePath, $data["content"]) !== false) {
     echo json_encode(["success" => "File saved successfully"]);
 } else {

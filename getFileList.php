@@ -13,6 +13,14 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
 }
 
 $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
+
+// Allow only safe characters in the folder parameter (letters, numbers, underscores, dashes, spaces, and forward slashes).
+if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+    echo json_encode(["error" => "Invalid folder name."]);
+    exit;
+}
+
+// Determine the directory based on the folder parameter.
 if ($folder !== 'root') {
     $directory = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
 } else {
@@ -30,12 +38,20 @@ if (!is_dir($directory)) {
 $files = array_values(array_diff(scandir($directory), array('.', '..')));
 $fileList = [];
 
+// Define a safe file name pattern: letters, numbers, underscores, dashes, dots, and spaces.
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+
 foreach ($files as $file) {
     $filePath = $directory . DIRECTORY_SEPARATOR . $file;
     // Only include files (skip directories)
     if (!is_file($filePath)) continue;
-
-    // Build the metadata key.
+    
+    // Optionally, skip files with unsafe names.
+    if (!preg_match($safeFileNamePattern, $file)) {
+        continue;
+    }
+    
+    // Build the metadata key; if not in root, include the folder path.
     $metaKey = ($folder !== 'root') ? $folder . "/" . $file : $file;
 
     $fileDateModified = filemtime($filePath) ? date(DATE_TIME_FORMAT, filemtime($filePath)) : "Unknown";

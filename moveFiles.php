@@ -10,18 +10,43 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
 }
 
 $data = json_decode(file_get_contents("php://input"), true);
-if (!$data || !isset($data['source']) || !isset($data['destination']) || !isset($data['files'])) {
+if (
+    !$data ||
+    !isset($data['source']) ||
+    !isset($data['destination']) ||
+    !isset($data['files'])
+) {
     echo json_encode(["error" => "Invalid request"]);
     exit;
 }
 
-$sourceFolder = trim($data['source']);
-$destinationFolder = trim($data['destination']);
-$files = $data['files'];
+// Get and trim folder parameters.
+$sourceFolder = trim($data['source']) ?: 'root';
+$destinationFolder = trim($data['destination']) ?: 'root';
+
+// Allow only letters, numbers, underscores, dashes, spaces, and forward slashes in folder names.
+$folderPattern = '/^[A-Za-z0-9_\- \/]+$/';
+if ($sourceFolder !== 'root' && !preg_match($folderPattern, $sourceFolder)) {
+    echo json_encode(["error" => "Invalid source folder name."]);
+    exit;
+}
+if ($destinationFolder !== 'root' && !preg_match($folderPattern, $destinationFolder)) {
+    echo json_encode(["error" => "Invalid destination folder name."]);
+    exit;
+}
+
+// Remove any leading/trailing slashes.
+$sourceFolder = trim($sourceFolder, "/\\ ");
+$destinationFolder = trim($destinationFolder, "/\\ ");
 
 // Build the source and destination directories.
-$sourceDir = ($sourceFolder === 'root') ? UPLOAD_DIR : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $sourceFolder . DIRECTORY_SEPARATOR;
-$destDir = ($destinationFolder === 'root') ? UPLOAD_DIR : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $destinationFolder . DIRECTORY_SEPARATOR;
+$baseDir = rtrim(UPLOAD_DIR, '/\\');
+$sourceDir = ($sourceFolder === 'root') 
+    ? $baseDir . DIRECTORY_SEPARATOR 
+    : $baseDir . DIRECTORY_SEPARATOR . $sourceFolder . DIRECTORY_SEPARATOR;
+$destDir = ($destinationFolder === 'root')
+    ? $baseDir . DIRECTORY_SEPARATOR
+    : $baseDir . DIRECTORY_SEPARATOR . $destinationFolder . DIRECTORY_SEPARATOR;
 
 // Load metadata.
 $metadataFile = META_DIR . META_FILE;
@@ -36,10 +61,20 @@ if (!is_dir($destDir)) {
 }
 
 $errors = [];
-foreach ($files as $fileName) {
+// Define a safe pattern for file names: letters, numbers, underscores, dashes, dots, and spaces.
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+
+foreach ($data['files'] as $fileName) {
     $basename = basename($fileName);
+    // Validate file name.
+    if (!preg_match($safeFileNamePattern, $basename)) {
+        $errors[] = "$basename has invalid characters.";
+        continue;
+    }
+    
     $srcPath = $sourceDir . $basename;
     $destPath = $destDir . $basename;
+    
     // Build metadata keys.
     $srcKey = ($sourceFolder === 'root') ? $basename : $sourceFolder . "/" . $basename;
     $destKey = ($destinationFolder === 'root') ? $basename : $destinationFolder . "/" . $basename;
@@ -52,7 +87,7 @@ foreach ($files as $fileName) {
         $errors[] = "Failed to move $basename";
         continue;
     }
-    // Update metadata: if source key exists, copy it to destination key then remove source key.
+    // Update metadata: copy source metadata to destination key and remove source key.
     if (isset($metadata[$srcKey])) {
         $metadata[$destKey] = $metadata[$srcKey];
         unset($metadata[$srcKey]);

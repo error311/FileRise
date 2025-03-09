@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,6 +15,7 @@
   <!-- Bootstrap CSS -->
   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
 </head>
+
 <body>
   <!-- Header -->
   <header>
@@ -29,7 +31,8 @@
       <button id="removeUserBtn" title="Remove User"><i class="material-icons">person_remove</i></button>
     </div>
   </header>
-  
+  <!-- Custom Toast Container -->
+  <div id="customToast"></div>
   <div class="container">
     <!-- Login Form -->
     <div class="row" id="loginForm">
@@ -47,7 +50,7 @@
         </form>
       </div>
     </div>
-    
+
     <!-- Main Operations: Upload and Folder Management -->
     <div id="mainOperations" style="display: none;">
       <div class="row" id="uploadFolderRow">
@@ -58,10 +61,12 @@
             <div class="card-body">
               <form id="uploadFileForm" method="post" enctype="multipart/form-data">
                 <div class="form-group">
-                  <div id="uploadDropArea" style="border:2px dashed #ccc; padding:20px; text-align:center; cursor:pointer;">
+                  <div id="uploadDropArea"
+                    style="border:2px dashed #ccc; padding:20px; text-align:center; cursor:pointer;">
                     <span>Drop files here or click 'Choose files'</span>
                     <br>
-                    <input type="file" id="file" name="file[]" class="form-control-file" multiple required style="display:none;">
+                    <input type="file" id="file" name="file[]" class="form-control-file" multiple required
+                      style="display:none;">
                   </div>
                 </div>
                 <button type="submit" id="uploadBtn" class="btn btn-primary d-block mx-auto">Upload</button>
@@ -73,65 +78,167 @@
         <!-- Folder Management Card: 40% width -->
         <div class="col-md-5 d-flex">
           <div class="card flex-fill">
-            <div class="card-header">Folder Management</div>
-            <div class="card-body">
-              <div class="form-group d-flex align-items-center" style="padding-top:15px;">
-                <select id="folderSelect" class="form-control"></select>
-                <button id="renameFolderBtn" class="btn btn-secondary ml-2" title="Rename Folder">
-                  <i class="material-icons">edit</i>
-                </button>
-                <button id="deleteFolderBtn" class="btn btn-danger ml-2" title="Delete Folder">
-                  <i class="material-icons">delete</i>
-                </button>
+            <div class="card-header">Folder Navigation & Management</div>
+            <div class="card-body custom-folder-card-body">
+              <div class="form-group d-flex align-items-top" style="padding-top:0px; margin-bottom:0;">
+                <div id="folderTreeContainer"></div>
               </div>
               <button id="createFolderBtn" class="btn btn-primary mt-3">Create Folder</button>
+
+              <!-- Create Folder Modal -->
+              <div id="createFolderModal" class="modal">
+                <div class="modal-content">
+                  <h4>Create Folder</h4>
+                  <input type="text" id="newFolderName" class="form-control" placeholder="Enter folder name"
+                    style="margin-top:10px;">
+                  <div style="margin-top:15px; text-align:right;">
+                    <button id="cancelCreateFolder" class="btn btn-secondary">Cancel</button>
+                    <button id="submitCreateFolder" class="btn btn-primary">Create</button>
+                  </div>
+                </div>
+              </div>
+              <button id="renameFolderBtn" class="btn btn-secondary ml-2" title="Rename Folder">
+                <i class="material-icons">edit</i>
+              </button>
+              <!-- Rename Folder Modal -->
+              <div id="renameFolderModal" class="modal">
+                <div class="modal-content">
+                  <h4>Rename Folder</h4>
+                  <input type="text" id="newRenameFolderName" class="form-control" placeholder="Enter new folder name"
+                    style="margin-top:10px;">
+                  <div style="margin-top:15px; text-align:right;">
+                    <button id="cancelRenameFolder" class="btn btn-secondary">Cancel</button>
+                    <button id="submitRenameFolder" class="btn btn-primary">Rename</button>
+                  </div>
+                </div>
+              </div>
+              <button id="deleteFolderBtn" class="btn btn-danger ml-2" title="Delete Folder">
+                <i class="material-icons">delete</i>
+              </button>
+              <!-- Delete Folder Modal -->
+              <div id="deleteFolderModal" class="modal">
+                <div class="modal-content">
+                  <h4>Delete Folder</h4>
+                  <p id="deleteFolderMessage">Are you sure you want to delete this folder?</p>
+                  <div style="margin-top:15px; text-align:right;">
+                    <button id="cancelDeleteFolder" class="btn btn-secondary">Cancel</button>
+                    <button id="confirmDeleteFolder" class="btn btn-danger">Delete</button>
+                  </div>
+                </div>
+              </div>
+              <div id="folderExplanation" style="
+              margin-top:15px; 
+              font-size:12px; 
+              color:#555; 
+              background-color:#f9f9f9; 
+              border:1px solid #ddd; 
+              border-radius:4px; 
+              padding:10px;
+            ">
+                <ul style="margin: 0; padding-left:20px;">
+                  <li>To view files in a folder, click on the folder name in the tree.</li>
+                  <li>To create a subfolder, select a folder from the tree above and click "Create Folder".</li>
+                  <li>To rename or delete a folder, first select it from the tree, then click "Rename Folder" or "Delete
+                    Folder" respectively.</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
-        
       </div>
-      
+
       <!-- File List Section -->
       <div id="fileListContainer">
         <h2 id="fileListTitle">Files in (Root)</h2>
         <div id="fileListActions" class="file-list-actions">
           <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;">Delete Selected</button>
+          <!-- Delete Files Modal -->
+          <div id="deleteFilesModal" class="modal">
+            <div class="modal-content">
+              <h4>Delete Selected Files</h4>
+              <p id="deleteFilesMessage">Are you sure you want to delete the selected files?</p>
+              <div style="margin-top:15px; text-align:right;">
+                <button id="cancelDeleteFiles" class="btn btn-secondary">Cancel</button>
+                <button id="confirmDeleteFiles" class="btn btn-danger">Delete</button>
+              </div>
+            </div>
+          </div>
           <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled>Copy Selected</button>
+          <!-- Copy Files Modal -->
+          <div id="copyFilesModal" class="modal">
+            <div class="modal-content">
+              <h4>Copy Selected Files</h4>
+              <p id="copyFilesMessage">Select a target folder for copying the selected files:</p>
+              <select id="copyTargetFolder" class="form-control" style="margin-top:10px;"></select>
+              <div style="margin-top:15px; text-align:right;">
+                <button id="cancelCopyFiles" class="btn btn-secondary">Cancel</button>
+                <button id="confirmCopyFiles" class="btn btn-primary">Copy</button>
+              </div>
+            </div>
+          </div>
           <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled>Move Selected</button>
-          <select id="copyMoveFolderSelect" class="form-control folder-dropdown"></select>
+          <!-- Move Files Modal -->
+          <div id="moveFilesModal" class="modal">
+            <div class="modal-content">
+              <h4>Move Selected Files</h4>
+              <p id="moveFilesMessage">Select a target folder for moving the selected files:</p>
+              <select id="moveTargetFolder" class="form-control" style="margin-top:10px;"></select>
+              <div style="margin-top:15px; text-align:right;">
+                <button id="cancelMoveFiles" class="btn btn-secondary">Cancel</button>
+                <button id="confirmMoveFiles" class="btn btn-primary">Move</button>
+              </div>
+            </div>
+          </div>
+          <select id="copyMoveFolderSelect" style="display: none;"></select>
         </div>
         <div id="fileList"></div>
       </div>
     </div>
-    
+
     <!-- Add User Modal -->
     <div id="addUserModal" class="modal">
-      <h3>Create New User</h3>
-      <label for="newUsername">Username:</label>
-      <input type="text" id="newUsername" class="form-control">
-      <label for="newPassword">Password:</label>
-      <input type="password" id="newPassword" class="form-control">
-      <div id="adminCheckboxContainer">
-        <input type="checkbox" id="isAdmin">
-        <label for="isAdmin">Grant Admin Access</label>
+      <div class="modal-content">
+        <h3>Create New User</h3>
+        <label for="newUsername">Username:</label>
+        <input type="text" id="newUsername" class="form-control">
+        <label for="newPassword">Password:</label>
+        <input type="password" id="newPassword" class="form-control">
+        <div id="adminCheckboxContainer">
+          <input type="checkbox" id="isAdmin">
+          <label for="isAdmin">Grant Admin Access</label>
+        </div>
+        <button id="saveUserBtn" class="btn btn-primary">Save User</button>
+        <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
       </div>
-      <button id="saveUserBtn" class="btn btn-primary">Save User</button>
-      <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
     </div>
-    
+
     <!-- Remove User Modal -->
     <div id="removeUserModal" class="modal">
-      <h3>Remove User</h3>
-      <label for="removeUsernameSelect">Select a user to remove:</label>
-      <select id="removeUsernameSelect" class="form-control"></select>
-      <button id="deleteUserBtn" class="btn btn-danger">Delete User</button>
-      <button id="cancelRemoveUserBtn" class="btn btn-secondary">Cancel</button>
+      <div class="modal-content">
+        <h3>Remove User</h3>
+        <label for="removeUsernameSelect">Select a user to remove:</label>
+        <select id="removeUsernameSelect" class="form-control"></select>
+        <button id="deleteUserBtn" class="btn btn-danger">Delete User</button>
+        <button id="cancelRemoveUserBtn" class="btn btn-secondary">Cancel</button>
+      </div>
     </div>
-  </div>
-  
-  <!-- JavaScript Files -->
-  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-  <script type="module" src="main.js"></script>
+
+    <!-- Rename File Modal -->
+    <div id="renameFileModal" class="modal">
+      <div class="modal-content">
+        <h4>Rename File</h4>
+        <input type="text" id="newFileName" class="form-control" placeholder="Enter new file name"
+          style="margin-top:10px;">
+        <div style="margin-top:15px; text-align:right;">
+          <button id="cancelRenameFile" class="btn btn-secondary">Cancel</button>
+          <button id="submitRenameFile" class="btn btn-primary">Rename</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- JavaScript Files -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script type="module" src="main.js"></script>
 
 </body>
 </html>

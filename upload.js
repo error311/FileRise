@@ -1,6 +1,8 @@
 // upload.js
 
 import { loadFileList, displayFilePreview, initFileActions } from './fileManager.js';
+import { showToast } from './domUtils.js';
+
 
 export function initUpload() {
   const fileInput = document.getElementById("file");
@@ -108,7 +110,7 @@ export function initUpload() {
         list.style.padding = "0";
         allFiles.forEach((file, index) => {
           const li = document.createElement("li");
-          li.style.paddingTop = "20px";
+          li.style.paddingTop = "10px";
           li.style.marginBottom = "10px";
           li.style.display = (index < maxDisplay) ? "flex" : "none";
           li.style.alignItems = "center";
@@ -144,7 +146,7 @@ export function initUpload() {
         });
         if (allFiles.length > maxDisplay) {
           const extra = document.createElement("li");
-          extra.style.paddingTop = "20px";
+          extra.style.paddingTop = "10px";
           extra.style.marginBottom = "10px";
           extra.textContent = `Uploading additional ${allFiles.length - maxDisplay} file(s)...`;
           extra.style.display = "flex";
@@ -161,7 +163,7 @@ export function initUpload() {
       e.preventDefault();
       const files = fileInput.files;
       if (files.length === 0) {
-        alert("No files selected.");
+        showToast("No files selected.");
         return;
       }
       const allFiles = Array.from(files);
@@ -274,12 +276,12 @@ export function initUpload() {
               if (dropArea) setDropAreaDefault();
             }, 10000);
             if (!allSucceeded) {
-              alert("Some files failed to upload. Please check the list.");
+              showToast("Some files failed to upload. Please check the list.");
             }
           })
           .catch(error => {
             console.error("Error fetching file list:", error);
-            alert("Some files may have failed to upload. Please check the list.");
+            showToast("Some files may have failed to upload. Please check the list.");
           });
       }
     });

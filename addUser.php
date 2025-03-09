@@ -41,6 +41,12 @@ if (!$newUsername || !$newPassword) {
     exit;
 }
 
+// Validate username using preg_match (allow letters, numbers, underscores, dashes, and spaces).
+if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $newUsername)) {
+    echo json_encode(["error" => "Invalid username. Only letters, numbers, underscores, dashes, and spaces are allowed."]);
+    exit;
+}
+
 // Ensure users.txt exists
 if (!file_exists($usersFile)) {
     file_put_contents($usersFile, '');

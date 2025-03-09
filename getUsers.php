@@ -13,7 +13,10 @@ if (file_exists($usersFile)) {
     foreach ($lines as $line) {
         $parts = explode(':', trim($line));
         if (count($parts) >= 3) {
-            $users[] = ["username" => $parts[0]];
+            // Optionally, validate username format:
+            if (preg_match('/^[A-Za-z0-9_\- ]+$/', $parts[0])) {
+                $users[] = ["username" => $parts[0]];
+            }
         }
     }
 }

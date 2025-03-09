@@ -9,9 +9,10 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
-// Validate folder name input. Only allow letters, numbers, underscores, dashes, and spaces.
+// Validate folder name input. Allow letters, numbers, underscores, dashes, spaces, and forward slashes.
 $folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
-if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- ]+$/', $folder)) {
+// When folder is not 'root', allow "/" in the folder name to denote subfolders.
+if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
     echo json_encode(["error" => "Invalid folder name"]);
     exit;
 }
@@ -21,6 +22,7 @@ $uploadDir = UPLOAD_DIR;
 if ($folder !== 'root') {
     $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
     if (!is_dir($uploadDir)) {
+        // Recursively create subfolders as needed.
         mkdir($uploadDir, 0775, true);
     }
 } else {

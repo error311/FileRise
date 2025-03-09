@@ -4,7 +4,8 @@ import { sendRequest } from './networkUtils.js';
 import { 
   toggleVisibility, 
   toggleAllCheckboxes, 
-  updateFileActionButtons
+  updateFileActionButtons,
+  showToast
 } from './domUtils.js';
 import { 
   loadFileList, 
@@ -12,12 +13,12 @@ import {
   editFile, 
   saveFile, 
   displayFilePreview,
-  renameFile 
+  renameFile
 } from './fileManager.js';
 import { 
-  deleteFolder, 
+  loadFolderTree, 
   loadCopyMoveFolderList, 
-  loadFolderList 
+  loadFolderList, 
 } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth } from './auth.js';
@@ -35,14 +36,19 @@ window.renameFile = renameFile;
 window.currentFolder = "root";
 
 // DOMContentLoaded initialization.
+
 document.addEventListener("DOMContentLoaded", function () {
-  // Initialize authentication and user management.
-  initAuth();
-  window.currentFolder = window.currentFolder || "root";
-  window.updateFileActionButtons = updateFileActionButtons;
-  loadFileList(window.currentFolder);
-  loadCopyMoveFolderList();
-  initFileActions();
-  initUpload();
-  loadFolderList();
-});
+    // Call initAuth synchronously.
+    initAuth();
+    const message = sessionStorage.getItem("welcomeMessage");
+    if (message) {
+      showToast(message);
+      sessionStorage.removeItem("welcomeMessage");
+    }
+    window.currentFolder = "root";
+    window.updateFileActionButtons = updateFileActionButtons;
+    loadFileList(window.currentFolder);
+    initFileActions();
+    initUpload();
+    loadFolderTree();    
+  });

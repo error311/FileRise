@@ -20,6 +20,16 @@ if (!isset($data['files']) || !is_array($data['files'])) {
 
 // Determine folder – default to 'root'
 $folder = isset($data['folder']) ? trim($data['folder']) : 'root';
+
+// Validate folder: allow letters, numbers, underscores, dashes, spaces, and forward slashes
+if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+    echo json_encode(["error" => "Invalid folder name."]);
+    exit;
+}
+// Trim any leading/trailing slashes and spaces.
+$folder = trim($folder, "/\\ ");
+
+// Build the upload directory.
 if ($folder !== 'root') {
     $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
 } else {
@@ -29,8 +39,19 @@ if ($folder !== 'root') {
 $deletedFiles = [];
 $errors = [];
 
+// Define a safe file name pattern: allow letters, numbers, underscores, dashes, dots, and spaces.
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+
 foreach ($data['files'] as $fileName) {
-    $filePath = $uploadDir . basename($fileName);
+    $basename = basename(trim($fileName));
+    
+    // Validate the file name.
+    if (!preg_match($safeFileNamePattern, $basename)) {
+        $errors[] = "$basename has an invalid name.";
+        continue;
+    }
+    
+    $filePath = $uploadDir . $basename;
     
     if (file_exists($filePath)) {
         if (unlink($filePath)) {
@@ -39,7 +60,7 @@ foreach ($data['files'] as $fileName) {
             $errors[] = "Failed to delete $fileName";
         }
     } else {
-        // If file not found, consider it already deleted.
+        // Consider file already deleted.
         $deletedFiles[] = $fileName;
     }
 }

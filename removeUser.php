@@ -22,6 +22,12 @@ if (!$usernameToRemove) {
     exit;
 }
 
+// Optional: Validate the username format (allow letters, numbers, underscores, dashes, and spaces)
+if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $usernameToRemove)) {
+    echo json_encode(["error" => "Invalid username format"]);
+    exit;
+}
+
 // Prevent removal of the currently logged-in user
 if (isset($_SESSION['username']) && $_SESSION['username'] === $usernameToRemove) {
     echo json_encode(["error" => "Cannot remove yourself"]);

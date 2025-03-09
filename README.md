@@ -111,7 +111,14 @@ This project is a lightweight, secure web application for uploading, editing, an
 
 ---
 
-## Changelog
+## changes 3/8/2025
+
+- Validation was added in endpoints.
+- Toast notifications were implemented in domUtils.js and integrated throughout the app.
+- Modals replaced inline prompts and confirms for rename, create, delete, copy, and move actions.
+- Folder tree UI was added and improved to be interactive plus reflect the current state after actions.
+
+## changes 3/7/2025
 
 - **Module Refactoring:**
   - Split the original `utils.js` into multiple ES6 modules for network requests, DOM utilities, file management, folder management, uploads, and authentication.

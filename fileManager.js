@@ -1,5 +1,6 @@
 // fileManager.js
-import { escapeHTML, updateFileActionButtons } from './domUtils.js';
+import { escapeHTML, updateFileActionButtons, showToast } from './domUtils.js';
+import { formatFolderName } from './folderManager.js';
 
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
@@ -337,29 +338,53 @@ export function handleDeleteSelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = document.querySelectorAll(".file-checkbox:checked");
   if (checkboxes.length === 0) {
-    alert("No files selected.");
+    showToast("No files selected.");
     return;
   }
-  if (!confirm("Are you sure you want to delete the selected files?")) {
-    return;
-  }
-  const filesToDelete = Array.from(checkboxes).map(chk => chk.value);
-  fetch("deleteFiles.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folder: window.currentFolder, files: filesToDelete })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        alert("Selected files deleted successfully!");
-        loadFileList(window.currentFolder);
-      } else {
-        alert("Error: " + (data.error || "Could not delete files"));
-      }
-    })
-    .catch(error => console.error("Error deleting files:", error));
+  // Save selected file names in a global variable for use in the modal.
+  window.filesToDelete = Array.from(checkboxes).map(chk => chk.value);
+  // Update modal message (optional)
+  document.getElementById("deleteFilesMessage").textContent =
+    "Are you sure you want to delete " + window.filesToDelete.length + " selected file(s)?";
+  // Show the delete modal.
+  document.getElementById("deleteFilesModal").style.display = "block";
 }
+
+// Attach event listeners for delete modal buttons (wrap in DOMContentLoaded):
+document.addEventListener("DOMContentLoaded", function () {
+  const cancelDelete = document.getElementById("cancelDeleteFiles");
+  if (cancelDelete) {
+    cancelDelete.addEventListener("click", function () {
+      document.getElementById("deleteFilesModal").style.display = "none";
+      window.filesToDelete = [];
+    });
+  }
+  const confirmDelete = document.getElementById("confirmDeleteFiles");
+  if (confirmDelete) {
+    confirmDelete.addEventListener("click", function () {
+      // Proceed with deletion
+      fetch("deleteFiles.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: window.currentFolder, files: window.filesToDelete })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showToast("Selected files deleted successfully!");
+            loadFileList(window.currentFolder);
+          } else {
+            showToast("Error: " + (data.error || "Could not delete files"));
+          }
+        })
+        .catch(error => console.error("Error deleting files:", error))
+        .finally(() => {
+          document.getElementById("deleteFilesModal").style.display = "none";
+          window.filesToDelete = [];
+        });
+    });
+  }
+});
 
 // Copy selected files.
 export function handleCopySelected(e) {
@@ -367,31 +392,87 @@ export function handleCopySelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = document.querySelectorAll(".file-checkbox:checked");
   if (checkboxes.length === 0) {
-    alert("No files selected for copying.");
+    showToast("No files selected for copying.", 5000);
     return;
   }
-  const targetFolder = document.getElementById("copyMoveFolderSelect").value;
-  if (!targetFolder) {
-    alert("Please select a target folder for copying.");
-    return;
-  }
-  const filesToCopy = Array.from(checkboxes).map(chk => chk.value);
-  fetch("copyFiles.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source: window.currentFolder, files: filesToCopy, destination: targetFolder })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        alert("Selected files copied successfully!");
-        loadFileList(window.currentFolder);
-      } else {
-        alert("Error: " + (data.error || "Could not copy files"));
-      }
-    })
-    .catch(error => console.error("Error copying files:", error));
+  window.filesToCopy = Array.from(checkboxes).map(chk => chk.value);
+  // Open the Copy modal.
+  document.getElementById("copyFilesModal").style.display = "block";
+  // Populate target folder dropdown.
+  loadCopyMoveFolderListForModal("copyTargetFolder");
 }
+
+// In your loadCopyMoveFolderListForModal function, target the dropdown by its ID.
+export async function loadCopyMoveFolderListForModal(dropdownId) {
+  try {
+    const response = await fetch('getFolderList.php');
+    const folders = await response.json();
+    console.log('Folders fetched for modal:', folders);
+    
+    const folderSelect = document.getElementById(dropdownId);
+    folderSelect.innerHTML = '';
+  
+    const rootOption = document.createElement('option');
+    rootOption.value = 'root';
+    rootOption.textContent = '(Root)';
+    folderSelect.appendChild(rootOption);
+  
+    if (Array.isArray(folders) && folders.length > 0) {
+      folders.forEach(folder => {
+        const option = document.createElement('option');
+        option.value = folder;
+        option.textContent = formatFolderName(folder);
+        folderSelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error loading folder list for modal:', error);
+  }
+}
+
+// Attach event listeners for copy modal buttons.
+document.addEventListener("DOMContentLoaded", function () {
+  const cancelCopy = document.getElementById("cancelCopyFiles");
+  if (cancelCopy) {
+    cancelCopy.addEventListener("click", function () {
+      document.getElementById("copyFilesModal").style.display = "none";
+      window.filesToCopy = [];
+    });
+  }
+  const confirmCopy = document.getElementById("confirmCopyFiles");
+  if (confirmCopy) {
+    confirmCopy.addEventListener("click", function () {
+      const targetFolder = document.getElementById("copyTargetFolder").value;
+      if (!targetFolder) {
+        showToast("Please select a target folder for copying.!", 5000);
+        return;
+      }
+      if (targetFolder === window.currentFolder) {
+        showToast("Error: Cannot move files to the same folder.");
+        return;
+      }
+      fetch("copyFiles.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: window.currentFolder, files: window.filesToCopy, destination: targetFolder })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showToast("Selected files copied successfully!", 5000);
+            loadFileList(window.currentFolder);
+          } else {
+            showToast("Error: " + (data.error || "Could not copy files"), 5000);          
+          }
+        })
+        .catch(error => console.error("Error copying files:", error))
+        .finally(() => {
+          document.getElementById("copyFilesModal").style.display = "none";
+          window.filesToCopy = [];
+        });
+    });
+  }
+});
 
 // Move selected files.
 export function handleMoveSelected(e) {
@@ -399,35 +480,58 @@ export function handleMoveSelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = document.querySelectorAll(".file-checkbox:checked");
   if (checkboxes.length === 0) {
-    alert("No files selected for moving.");
+    showToast("No files selected for moving.");
     return;
   }
-  const targetFolder = document.getElementById("copyMoveFolderSelect").value;
-  if (!targetFolder) {
-    alert("Please select a target folder for moving.");
-    return;
-  }
-  if (targetFolder === window.currentFolder) {
-    alert("Error: Cannot move files to the same folder.");
-    return;
-  }
-  const filesToMove = Array.from(checkboxes).map(chk => chk.value);
-  fetch("moveFiles.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source: window.currentFolder, files: filesToMove, destination: targetFolder })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        alert("Selected files moved successfully!");
-        loadFileList(window.currentFolder);
-      } else {
-        alert("Error: " + (data.error || "Could not move files"));
-      }
-    })
-    .catch(error => console.error("Error moving files:", error));
+  window.filesToMove = Array.from(checkboxes).map(chk => chk.value);
+  // Open the Move modal.
+  document.getElementById("moveFilesModal").style.display = "block";
+  // Populate target folder dropdown.
+  loadCopyMoveFolderListForModal("moveTargetFolder");
 }
+
+document.addEventListener("DOMContentLoaded", function () {
+  const cancelMove = document.getElementById("cancelMoveFiles");
+  if (cancelMove) {
+    cancelMove.addEventListener("click", function () {
+      document.getElementById("moveFilesModal").style.display = "none";
+      window.filesToMove = [];
+    });
+  }
+  const confirmMove = document.getElementById("confirmMoveFiles");
+  if (confirmMove) {
+    confirmMove.addEventListener("click", function () {
+      const targetFolder = document.getElementById("moveTargetFolder").value;
+      if (!targetFolder) {
+        showToast("Please select a target folder for moving.");
+        return;
+      }
+      if (targetFolder === window.currentFolder) {
+        showToast("Error: Cannot move files to the same folder.");
+        return;
+      }
+      fetch("moveFiles.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: window.currentFolder, files: window.filesToMove, destination: targetFolder })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showToast("Selected files moved successfully!");
+            loadFileList(window.currentFolder);
+          } else {
+            showToast("Error: " + (data.error || "Could not move files"));
+          }
+        })
+        .catch(error => console.error("Error moving files:", error))
+        .finally(() => {
+          document.getElementById("moveFilesModal").style.display = "none";
+          window.filesToMove = [];
+        });
+    });
+  }
+});
 
 // File Editing Functions.
 export function editFile(fileName, folder) {
@@ -435,16 +539,17 @@ export function editFile(fileName, folder) {
   let existingEditor = document.getElementById("editorContainer");
   if (existingEditor) { existingEditor.remove(); }
   const folderUsed = folder || window.currentFolder || "root";
+  // For subfolders, encode each segment separately to preserve slashes.
   const folderPath = (folderUsed === "root")
     ? "uploads/"
-    : "uploads/" + encodeURIComponent(folderUsed) + "/";
+    : "uploads/" + folderUsed.split("/").map(encodeURIComponent).join("/") + "/";
   const fileUrl = folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime();
 
   fetch(fileUrl, { method: "HEAD" })
     .then(response => {
       const contentLength = response.headers.get("Content-Length");
       if (contentLength && parseInt(contentLength) > 10485760) {
-        alert("This file is larger than 10 MB and cannot be edited in the browser.");
+        showToast("This file is larger than 10 MB and cannot be edited in the browser.");
         throw new Error("File too large.");
       }
       return fetch(fileUrl);
@@ -492,7 +597,7 @@ export function saveFile(fileName, folder) {
   })
     .then(response => response.json())
     .then(result => {
-      alert(result.success || result.error);
+      showToast(result.success || result.error);
       document.getElementById("editorContainer")?.remove();
       loadFileList(folderUsed);
     })
@@ -546,31 +651,66 @@ export function initFileActions() {
 
 
 // Rename function: always available.
+// Expose renameFile to global scope.
 export function renameFile(oldName, folder) {
-  const newName = prompt(`Enter new name for file "${oldName}":`, oldName);
-  if (!newName || newName === oldName) {
-    return; // No change.
-  }
-  const folderUsed = folder || window.currentFolder || "root";
-  fetch("renameFile.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folder: folderUsed, oldName: oldName, newName: newName })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        alert("File renamed successfully!");
-        loadFileList(folderUsed);
-      } else {
-        alert("Error renaming file: " + (data.error || "Unknown error"));
-      }
-    })
-    .catch(error => {
-      console.error("Error renaming file:", error);
-      alert("Error renaming file");
-    });
+  // Store the file name and folder globally for use in the modal.
+  window.fileToRename = oldName;
+  window.fileFolder = folder || window.currentFolder || "root";
+  
+  // Pre-fill the input with the current file name.
+  document.getElementById("newFileName").value = oldName;
+  
+  // Show the rename file modal.
+  document.getElementById("renameFileModal").style.display = "block";
 }
+
+// Attach event listeners after DOM content is loaded.
+document.addEventListener("DOMContentLoaded", () => {
+  // Cancel button: hide modal and clear input.
+  const cancelBtn = document.getElementById("cancelRenameFile");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", function() {
+      document.getElementById("renameFileModal").style.display = "none";
+      document.getElementById("newFileName").value = "";
+    });
+  }
+  
+  // Submit button: send rename request.
+  const submitBtn = document.getElementById("submitRenameFile");
+  if (submitBtn) {
+    submitBtn.addEventListener("click", function() {
+      const newName = document.getElementById("newFileName").value.trim();
+      if (!newName || newName === window.fileToRename) {
+        // No change; just hide the modal.
+        document.getElementById("renameFileModal").style.display = "none";
+        return;
+      }
+      const folderUsed = window.fileFolder;
+      fetch("renameFile.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: folderUsed, oldName: window.fileToRename, newName: newName })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showToast("File renamed successfully!");
+            loadFileList(folderUsed);
+          } else {
+            showToast("Error renaming file: " + (data.error || "Unknown error"));
+          }
+        })
+        .catch(error => {
+          console.error("Error renaming file:", error);
+          showToast("Error renaming file");
+        })
+        .finally(() => {
+          document.getElementById("renameFileModal").style.display = "none";
+          document.getElementById("newFileName").value = "";
+        });
+    });
+  }
+});
 
 // Expose renameFile to global scope.
 window.renameFile = renameFile;

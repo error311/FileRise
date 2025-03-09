@@ -1,7 +1,7 @@
 // auth.js
 
 import { sendRequest } from './networkUtils.js';
-import { toggleVisibility } from './domUtils.js';
+import { toggleVisibility, showToast } from './domUtils.js';
 // Import loadFileList from fileManager.js to refresh the file list upon login.
 import { loadFileList } from './fileManager.js';
 
@@ -23,31 +23,13 @@ export function initAuth() {
         if (data.success) {
           console.log("✅ Login successful. Reloading page.");
           window.location.reload();
+          sessionStorage.setItem("welcomeMessage", "Welcome back, " + formData.username + "!");
         } else {
-          alert("Login failed: " + (data.error || "Unknown error"));
+          showToast("Login failed: " + (data.error || "Unknown error"));
         }
       })
       .catch(error => console.error("❌ Error logging in:", error));
   });
-}
-
-// Helper function to update UI based on authentication.
-function updateUIOnLogin(isAdmin) {
-  toggleVisibility("loginForm", false);
-  toggleVisibility("mainOperations", true);
-  toggleVisibility("uploadFileForm", true);
-  toggleVisibility("fileListContainer", true);
-  
-  if (isAdmin) {
-    document.getElementById("addUserBtn").style.display = "block";
-    document.getElementById("removeUserBtn").style.display = "block";
-  } else {
-    document.getElementById("addUserBtn").style.display = "none";
-    document.getElementById("removeUserBtn").style.display = "none";
-  }
-
-  document.querySelector(".header-buttons").style.visibility = "visible";
-  loadFileList(window.currentFolder || "root");
 }
 
   // Set up the logout button.
@@ -68,7 +50,7 @@ function updateUIOnLogin(isAdmin) {
     const newPassword = document.getElementById("newPassword").value.trim();
     const isAdmin = document.getElementById("isAdmin").checked;
     if (!newUsername || !newPassword) {
-      alert("Username and password are required!");
+      showToast("Username and password are required!");
       return;
     }
     let url = "addUser.php";
@@ -83,11 +65,11 @@ function updateUIOnLogin(isAdmin) {
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          alert("User added successfully!");
+          showToast("User added successfully!");
           closeAddUserModal();
           checkAuthentication();
         } else {
-          alert("Error: " + (data.error || "Could not add user"));
+          showToast("Error: " + (data.error || "Could not add user"));
         }
       })
       .catch(error => console.error("Error adding user:", error));
@@ -107,7 +89,7 @@ function updateUIOnLogin(isAdmin) {
     const selectElem = document.getElementById("removeUsernameSelect");
     const usernameToRemove = selectElem.value;
     if (!usernameToRemove) {
-      alert("Please select a user to remove.");
+      showToast("Please select a user to remove.");
       return;
     }
     if (!confirm("Are you sure you want to delete user " + usernameToRemove + "?")) {
@@ -121,11 +103,11 @@ function updateUIOnLogin(isAdmin) {
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          alert("User removed successfully!");
+          showToast("User removed successfully!");
           closeRemoveUserModal();
           loadUserList();
         } else {
-          alert("Error: " + (data.error || "Could not remove user"));
+          showToast("Error: " + (data.error || "Could not remove user"));
         }
       })
       .catch(error => console.error("Error removing user:", error));
@@ -140,6 +122,7 @@ export function checkAuthentication() {
     .then(data => {
       if (data.setup) {
         window.setupMode = true;
+        showToast("Setup mode: No users found. Please add an admin user.");
         // In setup mode, hide login and main operations; show Add User modal.
         toggleVisibility("loginForm", false);
         toggleVisibility("mainOperations", false);
@@ -168,6 +151,7 @@ export function checkAuthentication() {
         }
         document.querySelector(".header-buttons").style.visibility = "visible";
       } else {
+        showToast("Please log in to continue.");
         toggleVisibility("loginForm", true);
         toggleVisibility("mainOperations", false);
         toggleVisibility("uploadFileForm", false);
@@ -213,7 +197,7 @@ function loadUserList() {
         selectElem.appendChild(option);
       });
       if (selectElem.options.length === 0) {
-        alert("No other users found to remove.");
+        showToast("No other users found to remove.");
         closeRemoveUserModal();
       }
     })
