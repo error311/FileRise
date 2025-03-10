@@ -185,11 +185,11 @@ export function renderFileTable(folder) {
 
       // Build the preview button HTML string using the file's properties directly.
       const previewButton = isImage
-        ? `<button class="btn btn-sm btn-info ml-2" onclick="previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
-               <i class="material-icons">image</i>
-             </button>`
-        : "";
-
+      ? `<button class="btn btn-sm btn-info ml-2" onclick="event.stopPropagation(); previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
+           <i class="material-icons">image</i>
+         </button>`
+      : "";
+      
       tableBody += `
           <tr onclick="toggleRowSelection(event, '${safeFileName}')" style="cursor:pointer;">
             <td>
