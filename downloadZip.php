@@ -1,8 +1,6 @@
 <?php
-// downloadZip.php
-
+session_start();
 require_once 'config.php';
-require_once 'lib/pclzip.lib.php';
 
 // Check if the user is authenticated.
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
@@ -54,7 +52,6 @@ if ($baseDir === false) {
 
 $folderPath = $baseDir . DIRECTORY_SEPARATOR . $relativePath;
 $folderPathReal = realpath($folderPath);
-
 if ($folderPathReal === false || strpos($folderPathReal, $baseDir) !== 0) {
     http_response_code(404);
     header('Content-Type: application/json');
@@ -95,18 +92,23 @@ if (empty($filesToZip)) {
 }
 
 // Create a temporary file for the ZIP archive.
-$tempZip = tempnam(sys_get_temp_dir(), 'zip') . '.zip';
+$tempZip = tempnam(sys_get_temp_dir(), 'zip');
+unlink($tempZip); // Remove the temporary file so ZipArchive can create a new one.
+$tempZip .= '.zip';
 
-// Create the archive using PclZip.
-$archive = new PclZip($tempZip);
-$v_list = $archive->create($filesToZip, PCLZIP_OPT_REMOVE_PATH, $folderPathReal);
-
-if ($v_list === 0) {
+$zip = new ZipArchive();
+if ($zip->open($tempZip, ZipArchive::CREATE) !== TRUE) {
     http_response_code(500);
     header('Content-Type: application/json');
-    echo json_encode(["error" => "Failed to create zip archive."]);
+    echo json_encode(["error" => "Could not create zip archive."]);
     exit;
 }
+
+// Add each file to the archive using its base name.
+foreach ($filesToZip as $filePath) {
+    $zip->addFile($filePath, basename($filePath));
+}
+$zip->close();
 
 // Serve the ZIP file.
 header('Content-Type: application/zip');

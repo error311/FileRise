@@ -590,7 +590,7 @@ export function editFile(fileName, folder) {
     ? "uploads/"
     : "uploads/" + folderUsed.split("/").map(encodeURIComponent).join("/") + "/";
   const fileUrl = folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime();
-
+  
   fetch(fileUrl, { method: "HEAD" })
     .then(response => {
       const contentLength = response.headers.get("Content-Length");
@@ -625,7 +625,7 @@ export function editFile(fileName, folder) {
         `;
       document.body.appendChild(modal);
       modal.style.display = "block";
-
+      
       // Initialize CodeMirror on the textarea.
       const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
         lineNumbers: true,
@@ -635,33 +635,33 @@ export function editFile(fileName, folder) {
       });
       // Set editor size to use most of the modal height.
       editor.setSize("100%", "60vh");
-
+      
       // Store the CodeMirror instance globally for saving.
       window.currentEditor = editor;
-
+      
       // Set a starting font size and apply it.
       let currentFontSize = 14; // default font size in px
       editor.getWrapperElement().style.fontSize = currentFontSize + "px";
       editor.refresh();
-
+      
       // Zoom out button: Decrease font size.
-      document.getElementById("decreaseFont").addEventListener("click", function () {
+      document.getElementById("decreaseFont").addEventListener("click", function() {
         currentFontSize = Math.max(8, currentFontSize - 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";
         editor.refresh();
       });
-
+      
       // Zoom in button: Increase font size.
-      document.getElementById("increaseFont").addEventListener("click", function () {
+      document.getElementById("increaseFont").addEventListener("click", function() {
         currentFontSize = Math.min(32, currentFontSize + 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";
         editor.refresh();
       });
-
-      document.getElementById("saveBtn").addEventListener("click", function () {
+      
+      document.getElementById("saveBtn").addEventListener("click", function() {
         saveFile(fileName, folderUsed);
       });
-      document.getElementById("closeBtn").addEventListener("click", function () {
+      document.getElementById("closeBtn").addEventListener("click", function() {
         modal.remove();
       });
     })
