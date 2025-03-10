@@ -158,13 +158,13 @@ export function renderFileTable(folder) {
           <th data-column="modified" class="hide-small" style="cursor:pointer; white-space: nowrap;">
             Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}
           </th>
-          <th data-column="uploaded" class="hide-small" style="cursor:pointer; white-space: nowrap;">
+          <th data-column="uploaded" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">
             Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}
           </th>
           <th data-column="size" class="hide-small" style="cursor:pointer; white-space: nowrap;">
             File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}
           </th>
-          <th data-column="uploader" class="hide-small" style="cursor:pointer; white-space: nowrap;">
+          <th data-column="uploader" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">
             Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}
           </th>
           <th>Actions</th>
@@ -193,9 +193,9 @@ export function renderFileTable(folder) {
         </td>
         <td>${safeFileName}</td>
         <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
-        <td class="hide-small" style="white-space: nowrap;">${safeUploaded}</td>
+        <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploaded}</td>
         <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
-        <td class="hide-small" style="white-space: nowrap;">${safeUploader}</td>
+        <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploader}</td>
         <td>
           <div class="button-wrap">
             <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>

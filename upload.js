@@ -1,8 +1,7 @@
 // upload.js
 
 import { loadFileList, displayFilePreview, initFileActions } from './fileManager.js';
-import { showToast } from './domUtils.js';
-
+import { showToast, escapeHTML } from './domUtils.js';
 
 export function initUpload() {
   const fileInput = document.getElementById("file");
@@ -18,8 +17,8 @@ export function initUpload() {
           Drop files here or click 'Choose files'
         </div>
         <div id="uploadFileRow" style="display:flex; align-items:center; justify-content:center;">
-          <button id="customChooseBtn" type="button" style="background-color:#9E9E9E; color:#fff; border:none; border-radius:4px; padding:8px 18px; font-size:16px; cursor:pointer;">
-            Choose files
+          <button id="customChooseBtn" type="button">
+           Choose files
           </button>
           <div id="fileInfoContainer" style="margin-left:10px; font-size:16px; display:flex; align-items:center;">
             <span id="fileInfoDefault">No files selected</span>
@@ -27,12 +26,12 @@ export function initUpload() {
         </div>
       `;
       // Wire up the custom button.
-     /* const customChooseBtn = document.getElementById("customChooseBtn");
+      /* const customChooseBtn = document.getElementById("customChooseBtn");
       if (customChooseBtn) {
         customChooseBtn.addEventListener("click", function () {
           fileInput.click();
         });
-      }*/
+      } */
     }
   }
 
@@ -82,7 +81,7 @@ export function initUpload() {
           if (files.length === 1) {
             fileInfoContainer.innerHTML = `
               <div id="filePreviewContainer" style="display:inline-block; vertical-align:middle;"></div>
-              <span id="fileNameDisplay" style="vertical-align:middle; margin-left:5px;">${files[0].name}</span>
+              <span id="fileNameDisplay" style="vertical-align:middle; margin-left:5px;">${escapeHTML(files[0].name)}</span>
             `;
           } else {
             fileInfoContainer.innerHTML = `
@@ -121,6 +120,7 @@ export function initUpload() {
           displayFilePreview(file, preview);
           
           const nameDiv = document.createElement("div");
+          // Using textContent here is safe, so no need to escape
           nameDiv.textContent = file.name;
           nameDiv.style.flexGrow = "1";
           nameDiv.style.marginLeft = "5px";

@@ -208,6 +208,24 @@ header {
   align-items: center;
 }
 
+#customChooseBtn {
+  background-color: #9E9E9E;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 18px;
+  font-size: 16px;
+  cursor: pointer;
+  white-space: nowrap; /* Prevent text wrapping */
+}
+
+/* For medium screens, reduce font size and padding */
+@media (max-width: 768px) {
+  #customChooseBtn {
+    font-size: 14px;
+    padding: 6px 14px;
+  }
+}
 /* ===========================================================
    UPLOAD PROGRESS STYLES
    =========================================================== */
@@ -284,6 +302,11 @@ header {
 
   .hide-small {
     display: none;
+  }
+}
+@media (min-width: 768px) and (max-width: 991px) {
+  .hide-medium {
+    display: none !important;
   }
 }
 
