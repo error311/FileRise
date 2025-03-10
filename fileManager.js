@@ -9,61 +9,88 @@ export let sortOrder = { column: "uploaded", ascending: true };
 window.itemsPerPage = window.itemsPerPage || 10;
 window.currentPage = window.currentPage || 1;
 
-// Helper to parse date strings in the "m/d/y h:iA" format into a timestamp.
-// Custom date parser (expected format: "MM/DD/YY hh:mma", e.g., "03/07/25 01:01AM")
-function parseCustomDate(dateStr) {
-  // Normalize whitespace (replace one or more whitespace characters with a single space)
-  dateStr = dateStr.replace(/\s+/g, " ").trim();
+// -------------------------------
+// Helper Functions
+// -------------------------------
 
-  // Expected format: "MM/DD/YY hh:mma" (e.g., "03/07/25 01:01AM")
+// Parse date strings in "m/d/y h:iA" format into a timestamp.
+function parseCustomDate(dateStr) {
+  dateStr = dateStr.replace(/\s+/g, " ").trim();
   const parts = dateStr.split(" ");
   if (parts.length !== 2) {
     return new Date(dateStr).getTime();
   }
-  const datePart = parts[0]; // e.g., "03/07/25"
-  const timePart = parts[1]; // e.g., "01:01AM"
-
+  const datePart = parts[0];
+  const timePart = parts[1];
   const dateComponents = datePart.split("/");
   if (dateComponents.length !== 3) {
     return new Date(dateStr).getTime();
   }
-
   let month = parseInt(dateComponents[0], 10);
   let day = parseInt(dateComponents[1], 10);
   let year = parseInt(dateComponents[2], 10);
   if (year < 100) {
     year += 2000;
   }
-
-  // Expect timePart in format hh:mma, e.g., "01:01AM"
   const timeRegex = /^(\d{1,2}):(\d{2})(AM|PM)$/i;
   const match = timePart.match(timeRegex);
   if (!match) {
     return new Date(dateStr).getTime();
   }
-
   let hour = parseInt(match[1], 10);
   const minute = parseInt(match[2], 10);
   const period = match[3].toUpperCase();
-
   if (period === "PM" && hour !== 12) {
     hour += 12;
   }
   if (period === "AM" && hour === 12) {
     hour = 0;
   }
-
   return new Date(year, month - 1, day, hour, minute).getTime();
 }
 
 // Determines if a file is editable based on its extension.
 export function canEditFile(fileName) {
-  const allowedExtensions = ["txt", "html", "htm", "php", "css", "js", "json", "xml", "md", "py", "ini", "csv", "log", "conf", "config", "bat", "rtf", "doc", "docx"];
+  const allowedExtensions = [
+    "txt", "html", "htm", "php", "css", "js", "json", "xml",
+    "md", "py", "ini", "csv", "log", "conf", "config", "bat",
+    "rtf", "doc", "docx"
+  ];
   const ext = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase();
   return allowedExtensions.includes(ext);
 }
 
-// Load the file list for a given folder.
+// -------------------------------
+// Global Functions (attached to window)
+// -------------------------------
+
+window.toggleRowSelection = function (event, fileName) {
+  const targetTag = event.target.tagName.toLowerCase();
+  if (targetTag === 'a' || targetTag === 'button' || targetTag === 'input') {
+    return;
+  }
+  const row = event.currentTarget;
+  const checkbox = row.querySelector('.file-checkbox');
+  if (!checkbox) return;
+  checkbox.checked = !checkbox.checked;
+  window.updateRowHighlight(checkbox);
+  updateFileActionButtons();
+};
+
+window.updateRowHighlight = function (checkbox) {
+  const row = checkbox.closest('tr');
+  if (!row) return;
+  if (checkbox.checked) {
+    row.classList.add('row-selected');
+  } else {
+    row.classList.remove('row-selected');
+  }
+};
+
+// -------------------------------
+// File List Rendering
+// -------------------------------
+
 export function loadFileList(folderParam) {
   const folder = folderParam || "root";
   return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&t=" + new Date().getTime())
@@ -90,28 +117,21 @@ export function renderFileTable(folder) {
   const fileListContainer = document.getElementById("fileList");
   const folderPath = (folder === "root")
     ? "uploads/"
-    : "uploads/" + encodeURIComponent(folder) + "/";
-
-  // Get current search term from the search input, if it exists.
+    : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
   let searchInputElement = document.getElementById("searchInput");
   const searchHadFocus = searchInputElement && (document.activeElement === searchInputElement);
   let searchTerm = searchInputElement ? searchInputElement.value : "";
-
-  // Filter fileData using the search term (case-insensitive).
   const filteredFiles = fileData.filter(file =>
     file.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Pagination variables.
   const itemsPerPage = window.itemsPerPage || 10;
   const currentPage = window.currentPage || 1;
   const totalFiles = filteredFiles.length;
   const totalPages = Math.ceil(totalFiles / itemsPerPage);
   const safeSearchTerm = escapeHTML(searchTerm);
-  // 1. Top controls: Responsive row with search box on the left and Prev/Next on the right.
+
   const topControlsHTML = `
   <div class="row align-items-center mb-3">
-    <!-- Search box: full width on small, 8 columns on md+ -->
     <div class="col-12 col-md-8 mb-2 mb-md-0">
       <div class="input-group" style="max-width: 100%;">
         <div class="input-group-prepend">
@@ -119,60 +139,34 @@ export function renderFileTable(folder) {
             <i class="material-icons">search</i>
           </span>
         </div>
-        <input
-          type="text"
-          id="searchInput"
-          class="form-control"
-          placeholder="Search files..."
-          value="${safeSearchTerm}"
-          aria-describedby="searchIcon"
-        >
+        <input type="text" id="searchInput" class="form-control" placeholder="Search files..." value="${safeSearchTerm}" aria-describedby="searchIcon">
       </div>
     </div>
-    <!-- Prev/Next buttons: full width on small, 4 columns on md+ -->
     <div class="col-12 col-md-4 text-left">
       <div class="d-flex justify-content-center justify-content-md-start align-items-center">
-        <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">
-          Prev
-        </button>
+        <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">Prev</button>
         <span style="margin: 0 8px; white-space: nowrap;">Page ${currentPage} of ${totalPages || 1}</span>
-        <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">
-          Next
-        </button>
+        <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">Next</button>
       </div>
     </div>
   </div>
-`;
+  `;
 
-  // 2. Build the File Table with Bootstrap styling.
   let tableHTML = `
     <table class="table">
       <thead>
         <tr>
-          <th style="width: 40px;">
-            <input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)">
-          </th>
-          <th data-column="name" style="cursor:pointer; white-space: nowrap;">
-            File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-          </th>
-          <th data-column="modified" class="hide-small" style="cursor:pointer; white-space: nowrap;">
-            Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-          </th>
-          <th data-column="uploaded" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">
-            Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-          </th>
-          <th data-column="size" class="hide-small" style="cursor:pointer; white-space: nowrap;">
-            File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-          </th>
-          <th data-column="uploader" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">
-            Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}
-          </th>
+          <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
+          <th data-column="name" style="cursor:pointer; white-space: nowrap;">File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="modified" class="hide-small" style="cursor:pointer; white-space: nowrap;">Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploaded" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="size" class="hide-small" style="cursor:pointer; white-space: nowrap;">File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploader" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th>Actions</th>
         </tr>
       </thead>
   `;
 
-  // Calculate slice for current page.
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = Math.min(startIndex + itemsPerPage, totalFiles);
   let tableBody = `<tbody>`;
@@ -186,40 +180,42 @@ export function renderFileTable(folder) {
       const safeSize = escapeHTML(file.size);
       const safeUploader = escapeHTML(file.uploader || "Unknown");
 
+      // Check if the file is an image using a regex
+      const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name);
+
+      // Build the preview button HTML string using the file's properties directly.
+      const previewButton = isImage
+        ? `<button class="btn btn-sm btn-info ml-2" onclick="previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
+               <i class="material-icons">image</i>
+             </button>`
+        : "";
+
       tableBody += `
-      <tr onclick="toggleRowSelection(event, '${safeFileName}')" style="cursor:pointer;">
-        <td>
-          <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
-        </td>
-        <td>${safeFileName}</td>
-        <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
-        <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploaded}</td>
-        <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
-        <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploader}</td>
-        <td>
-          <div class="button-wrap">
-            <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>
-              Download
-            </a>
-            ${isEditable ? `
-              <button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
-                Edit
-              </button>
-            ` : ""}
-            <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>
-              Rename
-            </button>
-          </div>
-        </td>
-      </tr>
-    `;
+          <tr onclick="toggleRowSelection(event, '${safeFileName}')" style="cursor:pointer;">
+            <td>
+              <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
+            </td>
+            <td>${safeFileName}</td>
+            <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
+            <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploaded}</td>
+            <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
+            <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploader}</td>
+            <td>
+              <div class="button-wrap">
+                <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
+                ${isEditable ? `<button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Edit</button>` : ""}
+                <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Rename</button>
+                ${previewButton}
+              </div>
+            </td>
+          </tr>
+        `;
     });
   } else {
     tableBody += `<tr><td colspan="7">No files found.</td></tr>`;
   }
   tableBody += `</tbody></table>`;
 
-  // 3. Bottom controls: "Show [dropdown] items per page" with consistent 16px font.
   const bottomControlsHTML = `
     <div class="d-flex align-items-center mt-3" style="font-size:16px; line-height:1.5;">
       <label class="mr-2 mb-0" style="font-size:16px; line-height:1.5;">Show</label>
@@ -230,23 +226,17 @@ export function renderFileTable(folder) {
     </div>
   `;
 
-  // Combine top controls, table, and bottom controls.
   fileListContainer.innerHTML = topControlsHTML + tableHTML + tableBody + bottomControlsHTML;
 
-  // Re-focus the search input if it was previously focused.
   const newSearchInput = document.getElementById("searchInput");
   if (searchHadFocus && newSearchInput) {
     newSearchInput.focus();
     newSearchInput.setSelectionRange(newSearchInput.value.length, newSearchInput.value.length);
   }
-
-  // Attach event listener for search input.
   newSearchInput.addEventListener("input", function () {
     window.currentPage = 1;
     renderFileTable(folder);
   });
-
-  // Attach sorting event listeners on header cells.
   const headerCells = document.querySelectorAll("table.table thead th[data-column]");
   headerCells.forEach(cell => {
     cell.addEventListener("click", function () {
@@ -254,87 +244,81 @@ export function renderFileTable(folder) {
       sortFiles(column, folder);
     });
   });
-
-  // Reattach event listeners for file checkboxes.
   document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', function (e) {
       updateRowHighlight(e.target);
       updateFileActionButtons();
     });
   });
-
   updateFileActionButtons();
 }
 
-/**
- * Toggles row selection when the user clicks any part of the row (except buttons/links).
- */
-window.toggleRowSelection = function (event, fileName) {
-  const targetTag = event.target.tagName.toLowerCase();
-  if (targetTag === 'a' || targetTag === 'button' || targetTag === 'input') {
-    return;
+// Global function to show an image preview modal.
+window.previewImage = function (imageUrl, fileName) {
+  let modal = document.getElementById("imagePreviewModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "imagePreviewModal";
+    // Full-screen overlay using flexbox, with no padding.
+    Object.assign(modal.style, {
+      display: "none",
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100vw",
+      height: "100vh",
+      backgroundColor: "rgba(0,0,0,0.7)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: "1000"
+    });
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width: 90vw; max-height: 90vh; background: white; padding: 20px; border-radius: 4px; overflow: auto; margin: auto; position: relative;">
+        <span id="closeImageModal" style="position: absolute; top: 10px; right: 20px; font-size: 28px; cursor: pointer;">&times;</span>
+        <h4 style="text-align: center; margin: 0 0 10px;"></h4>
+        <img src="" style="max-width: 100%; max-height: 80vh; object-fit: contain; display: block; margin: 0 auto;" />
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById("closeImageModal").addEventListener("click", function () {
+      modal.style.display = "none";
+    });
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal) {
+        modal.style.display = "none";
+      }
+    });
   }
-  const row = event.currentTarget;
-  const checkbox = row.querySelector('.file-checkbox');
-  if (!checkbox) return;
-  checkbox.checked = !checkbox.checked;
-  updateRowHighlight(checkbox);
-  updateFileActionButtons();
-};
-
-/**
- * Updates row highlight based on whether the checkbox is checked.
- */
-window.updateRowHighlight = function (checkbox) {
-  const row = checkbox.closest('tr');
-  if (!row) return;
-  if (checkbox.checked) {
-    row.classList.add('row-selected');
-  } else {
-    row.classList.remove('row-selected');
-  }
+  modal.querySelector("h4").textContent = "Preview: " + fileName;
+  modal.querySelector("img").src = imageUrl;
+  modal.style.display = "flex";
 };
 
 export function sortFiles(column, folder) {
-  // Toggle sort order if the column is the same, otherwise set ascending to true.
   if (sortOrder.column === column) {
     sortOrder.ascending = !sortOrder.ascending;
   } else {
     sortOrder.column = column;
     sortOrder.ascending = true;
   }
-
-  // Sort fileData based on the column.
   fileData.sort((a, b) => {
     let valA = a[column] || "";
     let valB = b[column] || "";
-
     if (column === "modified" || column === "uploaded") {
-      // Log the raw date strings.
-      //console.log(`Sorting ${column}: raw values ->`, valA, valB);
-
       const parsedA = parseCustomDate(valA);
       const parsedB = parseCustomDate(valB);
-
-      // Log the parsed numeric timestamps.
-      //console.log(`Sorting ${column}: parsed values ->`, parsedA, parsedB);
-
       valA = parsedA;
       valB = parsedB;
     } else if (typeof valA === "string") {
       valA = valA.toLowerCase();
       valB = valB.toLowerCase();
     }
-
     if (valA < valB) return sortOrder.ascending ? -1 : 1;
     if (valA > valB) return sortOrder.ascending ? 1 : -1;
     return 0;
   });
-
-  // Re-render the file table after sorting.
   renderFileTable(folder);
 }
-
 
 // Delete selected files.
 export function handleDeleteSelected(e) {
@@ -345,16 +329,12 @@ export function handleDeleteSelected(e) {
     showToast("No files selected.");
     return;
   }
-  // Save selected file names in a global variable for use in the modal.
   window.filesToDelete = Array.from(checkboxes).map(chk => chk.value);
-  // Update modal message (optional)
   document.getElementById("deleteFilesMessage").textContent =
     "Are you sure you want to delete " + window.filesToDelete.length + " selected file(s)?";
-  // Show the delete modal.
   document.getElementById("deleteFilesModal").style.display = "block";
 }
 
-// Attach event listeners for delete modal buttons (wrap in DOMContentLoaded):
 document.addEventListener("DOMContentLoaded", function () {
   const cancelDelete = document.getElementById("cancelDeleteFiles");
   if (cancelDelete) {
@@ -366,7 +346,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const confirmDelete = document.getElementById("confirmDeleteFiles");
   if (confirmDelete) {
     confirmDelete.addEventListener("click", function () {
-      // Proceed with deletion
       fetch("deleteFiles.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -390,6 +369,77 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+// Download selected files as Zip.
+export function handleDownloadZipSelected(e) {
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  if (checkboxes.length === 0) {
+    showToast("No files selected for download.");
+    return;
+  }
+  window.filesToDownload = Array.from(checkboxes).map(chk => chk.value);
+  document.getElementById("downloadZipModal").style.display = "block";
+}
+
+// Attach event listeners for the download zip modal.
+document.addEventListener("DOMContentLoaded", function () {
+  const cancelDownloadZip = document.getElementById("cancelDownloadZip");
+  if (cancelDownloadZip) {
+    cancelDownloadZip.addEventListener("click", function () {
+      document.getElementById("downloadZipModal").style.display = "none";
+    });
+  }
+  const confirmDownloadZip = document.getElementById("confirmDownloadZip");
+  if (confirmDownloadZip) {
+    confirmDownloadZip.addEventListener("click", function () {
+      let zipName = document.getElementById("zipFileNameInput").value.trim();
+      if (!zipName) {
+        showToast("Please enter a name for the zip file.");
+        return;
+      }
+      if (!zipName.toLowerCase().endsWith(".zip")) {
+        zipName += ".zip";
+      }
+      document.getElementById("downloadZipModal").style.display = "none";
+      const folder = window.currentFolder || "root";
+      fetch("downloadZip.php", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: folder, files: window.filesToDownload })
+      })
+        .then(response => {
+          if (!response.ok) {
+            return response.text().then(text => {
+              throw new Error("Failed to create zip file: " + text);
+            });
+          }
+          return response.blob();
+        })
+        .then(blob => {
+          if (!blob || blob.size === 0) {
+            throw new Error("Received empty zip file.");
+          }
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.style.display = "none";
+          a.href = url;
+          a.download = zipName;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          a.remove();
+          showToast("Download started.");
+        })
+        .catch(error => {
+          console.error("Error downloading zip:", error);
+          showToast("Error downloading selected files as zip: " + error.message);
+        });
+    });
+  }
+});
+
 // Copy selected files.
 export function handleCopySelected(e) {
   e.preventDefault();
@@ -400,9 +450,7 @@ export function handleCopySelected(e) {
     return;
   }
   window.filesToCopy = Array.from(checkboxes).map(chk => chk.value);
-  // Open the Copy modal.
   document.getElementById("copyFilesModal").style.display = "block";
-  // Populate target folder dropdown.
   loadCopyMoveFolderListForModal("copyTargetFolder");
 }
 
@@ -412,15 +460,12 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
     const response = await fetch('getFolderList.php');
     const folders = await response.json();
     console.log('Folders fetched for modal:', folders);
-
     const folderSelect = document.getElementById(dropdownId);
     folderSelect.innerHTML = '';
-
     const rootOption = document.createElement('option');
     rootOption.value = 'root';
     rootOption.textContent = '(Root)';
     folderSelect.appendChild(rootOption);
-
     if (Array.isArray(folders) && folders.length > 0) {
       folders.forEach(folder => {
         const option = document.createElement('option');
@@ -488,9 +533,7 @@ export function handleMoveSelected(e) {
     return;
   }
   window.filesToMove = Array.from(checkboxes).map(chk => chk.value);
-  // Open the Move modal.
   document.getElementById("moveFilesModal").style.display = "block";
-  // Populate target folder dropdown.
   loadCopyMoveFolderListForModal("moveTargetFolder");
 }
 
@@ -543,7 +586,6 @@ export function editFile(fileName, folder) {
   let existingEditor = document.getElementById("editorContainer");
   if (existingEditor) { existingEditor.remove(); }
   const folderUsed = folder || window.currentFolder || "root";
-  // For subfolders, encode each segment separately to preserve slashes.
   const folderPath = (folderUsed === "root")
     ? "uploads/"
     : "uploads/" + folderUsed.split("/").map(encodeURIComponent).join("/") + "/";
@@ -565,25 +607,70 @@ export function editFile(fileName, folder) {
       return response.text();
     })
     .then(content => {
+      // Create the modal with zoom controls in a new controls div.
       const modal = document.createElement("div");
       modal.id = "editorContainer";
       modal.classList.add("modal", "editor-modal");
       modal.innerHTML = `
           <h3>Editing: ${fileName}</h3>
-          <textarea id="fileEditor" style="width:100%; height:80%; resize:none;">${content}</textarea>
+          <div id="editorControls" style="text-align:right; margin-bottom:5px;">
+             <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
+             <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
+          </div>
+          <textarea id="fileEditor" style="width:100%; height:60%; resize:none;">${content}</textarea>
           <div style="margin-top:10px; text-align:right;">
-            <button onclick="saveFile('${fileName}', '${folderUsed}')" class="btn btn-primary">Save</button>
-            <button onclick="document.getElementById('editorContainer').remove()" class="btn btn-secondary">Close</button>
+            <button id="saveBtn" class="btn btn-primary">Save</button>
+            <button id="closeBtn" class="btn btn-secondary">Close</button>
           </div>
         `;
       document.body.appendChild(modal);
       modal.style.display = "block";
+
+      // Initialize CodeMirror on the textarea.
+      const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
+        lineNumbers: true,
+        mode: "text/html", // Adjust mode based on file type if needed.
+        theme: "default",
+        viewportMargin: Infinity
+      });
+      // Set editor size to use most of the modal height.
+      editor.setSize("100%", "60vh");
+
+      // Store the CodeMirror instance globally for saving.
+      window.currentEditor = editor;
+
+      // Set a starting font size and apply it.
+      let currentFontSize = 14; // default font size in px
+      editor.getWrapperElement().style.fontSize = currentFontSize + "px";
+      editor.refresh();
+
+      // Zoom out button: Decrease font size.
+      document.getElementById("decreaseFont").addEventListener("click", function () {
+        currentFontSize = Math.max(8, currentFontSize - 2);
+        editor.getWrapperElement().style.fontSize = currentFontSize + "px";
+        editor.refresh();
+      });
+
+      // Zoom in button: Increase font size.
+      document.getElementById("increaseFont").addEventListener("click", function () {
+        currentFontSize = Math.min(32, currentFontSize + 2);
+        editor.getWrapperElement().style.fontSize = currentFontSize + "px";
+        editor.refresh();
+      });
+
+      document.getElementById("saveBtn").addEventListener("click", function () {
+        saveFile(fileName, folderUsed);
+      });
+      document.getElementById("closeBtn").addEventListener("click", function () {
+        modal.remove();
+      });
     })
     .catch(error => console.error("Error loading file:", error));
 }
 
 export function saveFile(fileName, folder) {
-  const editor = document.getElementById("fileEditor");
+  // Retrieve updated content from the CodeMirror instance.
+  const editor = window.currentEditor;
   if (!editor) {
     console.error("Editor not found!");
     return;
@@ -591,7 +678,7 @@ export function saveFile(fileName, folder) {
   const folderUsed = folder || window.currentFolder || "root";
   const fileDataObj = {
     fileName: fileName,
-    content: editor.value,
+    content: editor.getValue(),
     folder: folderUsed
   };
   fetch("saveFile.php", {
@@ -638,39 +725,34 @@ export function initFileActions() {
     deleteSelectedBtn.replaceWith(deleteSelectedBtn.cloneNode(true));
     document.getElementById("deleteSelectedBtn").addEventListener("click", handleDeleteSelected);
   }
-
   const copySelectedBtn = document.getElementById("copySelectedBtn");
   if (copySelectedBtn) {
     copySelectedBtn.replaceWith(copySelectedBtn.cloneNode(true));
     document.getElementById("copySelectedBtn").addEventListener("click", handleCopySelected);
   }
-
   const moveSelectedBtn = document.getElementById("moveSelectedBtn");
   if (moveSelectedBtn) {
     moveSelectedBtn.replaceWith(moveSelectedBtn.cloneNode(true));
     document.getElementById("moveSelectedBtn").addEventListener("click", handleMoveSelected);
   }
-  // No need to set display styles here; let updateFileActionButtons handle it.
+  // New: Download Selected as Zip button.
+  const downloadZipBtn = document.getElementById("downloadZipBtn");
+  if (downloadZipBtn) {
+    downloadZipBtn.replaceWith(downloadZipBtn.cloneNode(true));
+    document.getElementById("downloadZipBtn").addEventListener("click", handleDownloadZipSelected);
+  }
 }
 
-
 // Rename function: always available.
-// Expose renameFile to global scope.
 export function renameFile(oldName, folder) {
-  // Store the file name and folder globally for use in the modal.
   window.fileToRename = oldName;
   window.fileFolder = folder || window.currentFolder || "root";
-
-  // Pre-fill the input with the current file name.
   document.getElementById("newFileName").value = oldName;
-
-  // Show the rename file modal.
   document.getElementById("renameFileModal").style.display = "block";
 }
 
 // Attach event listeners after DOM content is loaded.
 document.addEventListener("DOMContentLoaded", () => {
-  // Cancel button: hide modal and clear input.
   const cancelBtn = document.getElementById("cancelRenameFile");
   if (cancelBtn) {
     cancelBtn.addEventListener("click", function () {
@@ -678,14 +760,11 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("newFileName").value = "";
     });
   }
-
-  // Submit button: send rename request.
   const submitBtn = document.getElementById("submitRenameFile");
   if (submitBtn) {
     submitBtn.addEventListener("click", function () {
       const newName = document.getElementById("newFileName").value.trim();
       if (!newName || newName === window.fileToRename) {
-        // No change; just hide the modal.
         document.getElementById("renameFileModal").style.display = "none";
         return;
       }
@@ -727,6 +806,6 @@ window.changePage = function (newPage) {
 
 window.changeItemsPerPage = function (newCount) {
   window.itemsPerPage = parseInt(newCount);
-  window.currentPage = 1; // Reset to first page.
+  window.currentPage = 1;
   renderFileTable(window.currentFolder);
 };

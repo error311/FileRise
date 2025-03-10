@@ -35,27 +35,32 @@ export function updateFileActionButtons() {
   const copyBtn = document.getElementById("copySelectedBtn");
   const moveBtn = document.getElementById("moveSelectedBtn");
   const deleteBtn = document.getElementById("deleteSelectedBtn");
+  const zipBtn = document.getElementById("downloadZipBtn");
   
   // Hide the buttons and dropdown if no files exist.
   if (fileCheckboxes.length === 0) {
     copyBtn.style.display = "none";
     moveBtn.style.display = "none";
     deleteBtn.style.display = "none";
+    zipBtn.style.display = "none";
   } else {
     // Otherwise, show the buttons and dropdown.
     copyBtn.style.display = "inline-block";
     moveBtn.style.display = "inline-block";
     deleteBtn.style.display = "inline-block";
+    zipBtn.style.display = "inline-block";
     
     // Enable the buttons if at least one file is selected; otherwise disable.
     if (selectedCheckboxes.length > 0) {
       copyBtn.disabled = false;
       moveBtn.disabled = false;
       deleteBtn.disabled = false;
+      zipBtn.disabled = false;
     } else {
       copyBtn.disabled = true;
       moveBtn.disabled = true;
       deleteBtn.disabled = true;
+      zipBtn.disabled = true;
     }
   }
 }

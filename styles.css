@@ -189,6 +189,12 @@ header {
   z-index: 1100; /* Ensure it's on top of any overlay */
 }
 
+#deleteFolderMessage {
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+
 /* ===========================================================
    LOGOUT & USER CONTROLS
    =========================================================== */
@@ -363,6 +369,18 @@ header {
 
 #moveSelectedBtn:hover {
   background-color: #fb8c00;
+}
+
+#downloadZipBtn {
+  background-color: #009688; /* Material Teal */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+}
+
+#downloadZipBtn:hover {
+  background-color: #00796B; /* A slightly darker teal for hover */
 }
 
 /* File List Edit Button (Material Green) */

@@ -17,13 +17,14 @@ export function initAuth() {
       password: document.getElementById("loginPassword").value.trim()
     };
     console.log("Sending login data:", formData);
+    // sendRequest already handles credentials if configured in networkUtils.js.
     sendRequest("auth.php", "POST", formData)
       .then(data => {
         console.log("Login response:", data);
         if (data.success) {
           console.log("✅ Login successful. Reloading page.");
-          window.location.reload();
           sessionStorage.setItem("welcomeMessage", "Welcome back, " + formData.username + "!");
+          window.location.reload();
         } else {
           showToast("Login failed: " + (data.error || "Unknown error"));
         }
@@ -34,7 +35,10 @@ export function initAuth() {
 
 // Set up the logout button.
 document.getElementById("logoutBtn").addEventListener("click", function () {
-  fetch("logout.php", { method: "POST" })
+  fetch("logout.php", { 
+    method: "POST",
+    credentials: "include"  // Ensure the session cookie is sent.
+  })
     .then(() => window.location.reload(true))
     .catch(error => console.error("Logout error:", error));
 });
@@ -59,6 +63,7 @@ document.getElementById("saveUserBtn").addEventListener("click", function () {
   }
   fetch(url, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
   })
@@ -97,6 +102,7 @@ document.getElementById("deleteUserBtn").addEventListener("click", function () {
   }
   fetch("removeUser.php", {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: usernameToRemove })
   })
@@ -186,7 +192,7 @@ function closeRemoveUserModal() {
 }
 
 function loadUserList() {
-  fetch("getUsers.php")
+  fetch("getUsers.php", { credentials: "include" })
     .then(response => response.json())
     .then(data => {
       const users = Array.isArray(data) ? data : (data.users || []);

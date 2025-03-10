@@ -13,9 +13,12 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 - **Multiple File Uploads with Progress:**
   - Users can select and upload multiple files at once. Each file upload shows an individual progress bar with percentage and upload speed, and image files display a small thumbnail preview (default icons for other file types).
 - **Built-in File Editing & Renaming:**
-  - Text-based files (e.g., .txt, .html, .js) can be opened and edited in a modal window without leaving the page. The editor modal is resizable for convenience. Any file can be renamed in-place via a dedicated “Rename” action, without needing to open or re-upload it.
-- **Batch Operations (Delete/Copy/Move):**
-  - Users can select one or many files and perform batch actions: delete files, copy them to another folder, or move them to a different folder. Action buttons for these operations remain visible whenever files exist and become enabled only when one or more files are selected.
+  - Text-based files (e.g., .txt, .html, .js) can be opened and edited in a modal window without leaving the page. The editor modal is resizable and now uses CodeMirror for syntax highlighting, line numbering, and zoom in/out functionality—allowing users to adjust the text size for a better editing experience. Files can also be renamed via a dedicated “Rename” action without needing to re-upload them.
+- **Batch Operations (Delete/Copy/Move/Download):**
+  - Delete Files: Delete multiple files at once.
+  - Copy Files: Copy selected files to another folder.
+  - Move Files: Move selected files to a different folder.
+  - Download Files as ZIP: Download selected files as a ZIP archive. Users can specify a custom name for the ZIP file via a modal dialog.
 - **Folder Management:**
   - Supports organizing files into folders and subfolders. Users can create new folders, rename existing folders, or delete folders. A dynamic folder tree in the UI allows navigation through directories and updates in real-time to reflect changes after any create, rename, or delete action.
 - **Sorting & Pagination:**
@@ -31,9 +34,9 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 
   ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)  
   ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit-larger-window.png)  
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/move-selected.png)  
+  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/preview-image.png)  
   ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/create-folder.png)  
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/delete-folder.png)  
+  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/download-zip.png)  
   ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/create-user.png)  
 
 based off of:

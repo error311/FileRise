@@ -14,6 +14,12 @@
   <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
   <!-- Bootstrap CSS -->
   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+  <!-- Load mode(s) you need, e.g., HTML mode: -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/xml/xml.min.js"></script>
+  <!-- Optionally, load CSS mode if needed: -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/css/css.min.js"></script>
 </head>
 
 <body>
@@ -172,7 +178,7 @@
       <h2 id="fileListTitle">Files in (Root)</h2>
       <div id="fileListActions" class="file-list-actions">
         <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;">
-          Delete Selected
+          Delete Files
         </button>
         <!-- Delete Files Modal -->
         <div id="deleteFilesModal" class="modal">
@@ -189,7 +195,7 @@
         </div>
 
         <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled>
-          Copy Selected
+          Copy Files
         </button>
         <!-- Copy Files Modal -->
         <div id="copyFilesModal" class="modal">
@@ -207,7 +213,7 @@
         </div>
 
         <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled>
-          Move Selected
+          Move Files
         </button>
         <!-- Move Files Modal -->
         <div id="moveFilesModal" class="modal">
@@ -220,6 +226,21 @@
             <div class="modal-footer">
               <button id="cancelMoveFiles" class="btn btn-secondary">Cancel</button>
               <button id="confirmMoveFiles" class="btn btn-primary">Move</button>
+            </div>
+          </div>
+        </div>
+        <button id="downloadZipBtn" class="btn action-btn" style="display: none;" disabled>
+          Download ZIP
+        </button>
+        <!-- Download Zip Modal -->
+        <div id="downloadZipModal" class="modal" style="display:none;">
+          <div class="modal-content">
+            <h4>Download Selected Files as Zip</h4>
+            <p>Enter a name for the zip file:</p>
+            <input type="text" id="zipFileNameInput" class="form-control" placeholder="files.zip" />
+            <div class="modal-footer" style="margin-top:15px; text-align:right;">
+              <button id="cancelDownloadZip" class="btn btn-secondary">Cancel</button>
+              <button id="confirmDownloadZip" class="btn btn-primary">Download</button>
             </div>
           </div>
         </div>
