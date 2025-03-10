@@ -415,6 +415,20 @@ label {
   margin-top: 0px !important;
 }
 
+.folder-actions {
+  display: flex;
+  flex-wrap: nowrap; /* Prevent wrapping */
+  align-items: center;
+  white-space: nowrap; /* Extra safeguard */
+}
+
+/* Optional: On medium screens, if needed, ensure the container doesn't force wrapping */
+@media (min-width: 600px) and (max-width: 992px) {
+  .folder-actions {
+    white-space: nowrap;
+  }
+}
+
 /* Row Selected Highlight */
 .row-selected {
   background-color: #f2f2f2 !important;
