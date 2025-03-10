@@ -46,4 +46,4 @@ based off of:
 
 - Apache2, configured, up and running
 - PHP 8.1 or higher
-- Required PHP extensions: `php-json`, `php-curl`, `php-zip` 
+- Required PHP extensions: `php-json`, `php-curl`, `php-zip`
