@@ -600,7 +600,6 @@ function getModeForFile(fileName) {
   }
 }
 
-// File Editing Functions.
 export function editFile(fileName, folder) {
   console.log("Edit button clicked for:", fileName);
   let existingEditor = document.getElementById("editorContainer");
@@ -614,7 +613,9 @@ export function editFile(fileName, folder) {
   fetch(fileUrl, { method: "HEAD" })
     .then(response => {
       const contentLength = response.headers.get("Content-Length");
-      if (contentLength && parseInt(contentLength) > 10485760) {
+      console.log("Content-Length:", contentLength);
+      // If header is missing or file size exceeds threshold, block editing.
+      if (contentLength === null || parseInt(contentLength) > 10485760) {
         showToast("This file is larger than 10 MB and cannot be edited in the browser.");
         throw new Error("File too large.");
       }
@@ -627,7 +628,6 @@ export function editFile(fileName, folder) {
       return response.text();
     })
     .then(content => {
-      // Create the modal with zoom controls in a new controls div.
       const modal = document.createElement("div");
       modal.id = "editorContainer";
       modal.classList.add("modal", "editor-modal");
@@ -646,33 +646,25 @@ export function editFile(fileName, folder) {
       document.body.appendChild(modal);
       modal.style.display = "block";
       
-      // Initialize CodeMirror on the textarea.
-      const mode = getModeForFile(fileName); // fileName should be the current file's name
+      const mode = getModeForFile(fileName);
       const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
         lineNumbers: true,
-        mode: mode, // dynamic mode based on file extension
+        mode: mode,
         theme: "default",
         viewportMargin: Infinity
       });
-      // Set editor size to use most of the modal height.
       editor.setSize("100%", "60vh");
-      
-      // Store the CodeMirror instance globally for saving.
       window.currentEditor = editor;
-      
-      // Set a starting font size and apply it.
-      let currentFontSize = 14; // default font size in px
+      let currentFontSize = 14;
       editor.getWrapperElement().style.fontSize = currentFontSize + "px";
       editor.refresh();
       
-      // Zoom out button: Decrease font size.
       document.getElementById("decreaseFont").addEventListener("click", function() {
         currentFontSize = Math.max(8, currentFontSize - 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";
         editor.refresh();
       });
       
-      // Zoom in button: Increase font size.
       document.getElementById("increaseFont").addEventListener("click", function() {
         currentFontSize = Math.min(32, currentFontSize + 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";
