@@ -15,12 +15,9 @@ import {
   displayFilePreview,
   renameFile
 } from './fileManager.js';
-import { 
-  loadFolderTree,  
-  loadFolderList
-} from './folderManager.js';
+import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
-import { initAuth } from './auth.js';
+import { initAuth, checkAuthentication } from './auth.js';
 
 // Expose functions for inline handlers.
 window.sendRequest = sendRequest;
@@ -44,10 +41,16 @@ document.addEventListener("DOMContentLoaded", function () {
       showToast(message);
       sessionStorage.removeItem("welcomeMessage");
     }
-    window.currentFolder = "root";
-    window.updateFileActionButtons = updateFileActionButtons;
-    loadFileList(window.currentFolder);
-    initFileActions();
-    initUpload();
-    loadFolderTree();    
+    checkAuthentication().then(authenticated => {
+      if (authenticated) {
+        window.currentFolder = "root";
+        loadFileList(window.currentFolder);
+        initFileActions();
+        initUpload();
+        loadFolderTree();
+      } else {
+        console.warn("User not authenticated. Data loading deferred.");
+        // Optionally redirect to login
+      }
+    });
   });

@@ -7,7 +7,7 @@ import { loadFileList } from './fileManager.js';
 
 export function initAuth() {
   // First, check if the user is already authenticated.
-  checkAuthentication(); 
+  checkAuthentication();
 
   // Attach event listener for login.
   document.getElementById("authForm").addEventListener("submit", function (event) {
@@ -32,93 +32,94 @@ export function initAuth() {
   });
 }
 
-  // Set up the logout button.
-  document.getElementById("logoutBtn").addEventListener("click", function () {
-    fetch("logout.php", { method: "POST" })
-      .then(() => window.location.reload(true))
-      .catch(error => console.error("Logout error:", error));
-  });
+// Set up the logout button.
+document.getElementById("logoutBtn").addEventListener("click", function () {
+  fetch("logout.php", { method: "POST" })
+    .then(() => window.location.reload(true))
+    .catch(error => console.error("Logout error:", error));
+});
 
-  // Set up Add User functionality.
-  document.getElementById("addUserBtn").addEventListener("click", function () {
-    resetUserForm();
-    toggleVisibility("addUserModal", true);
-  });
+// Set up Add User functionality.
+document.getElementById("addUserBtn").addEventListener("click", function () {
+  resetUserForm();
+  toggleVisibility("addUserModal", true);
+});
 
-  document.getElementById("saveUserBtn").addEventListener("click", function () {
-    const newUsername = document.getElementById("newUsername").value.trim();
-    const newPassword = document.getElementById("newPassword").value.trim();
-    const isAdmin = document.getElementById("isAdmin").checked;
-    if (!newUsername || !newPassword) {
-      showToast("Username and password are required!");
-      return;
-    }
-    let url = "addUser.php";
-    if (window.setupMode) {
-      url += "?setup=1";
-    }
-    fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
+document.getElementById("saveUserBtn").addEventListener("click", function () {
+  const newUsername = document.getElementById("newUsername").value.trim();
+  const newPassword = document.getElementById("newPassword").value.trim();
+  const isAdmin = document.getElementById("isAdmin").checked;
+  if (!newUsername || !newPassword) {
+    showToast("Username and password are required!");
+    return;
+  }
+  let url = "addUser.php";
+  if (window.setupMode) {
+    url += "?setup=1";
+  }
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast("User added successfully!");
+        closeAddUserModal();
+        checkAuthentication();
+      } else {
+        showToast("Error: " + (data.error || "Could not add user"));
+      }
     })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          showToast("User added successfully!");
-          closeAddUserModal();
-          checkAuthentication();
-        } else {
-          showToast("Error: " + (data.error || "Could not add user"));
-        }
-      })
-      .catch(error => console.error("Error adding user:", error));
-  });
+    .catch(error => console.error("Error adding user:", error));
+});
 
-  document.getElementById("cancelUserBtn").addEventListener("click", function () {
-    closeAddUserModal();
-  });
+document.getElementById("cancelUserBtn").addEventListener("click", function () {
+  closeAddUserModal();
+});
 
-  // Set up Remove User functionality.
-  document.getElementById("removeUserBtn").addEventListener("click", function () {
-    loadUserList();
-    toggleVisibility("removeUserModal", true);
-  });
+// Set up Remove User functionality.
+document.getElementById("removeUserBtn").addEventListener("click", function () {
+  loadUserList();
+  toggleVisibility("removeUserModal", true);
+});
 
-  document.getElementById("deleteUserBtn").addEventListener("click", function () {
-    const selectElem = document.getElementById("removeUsernameSelect");
-    const usernameToRemove = selectElem.value;
-    if (!usernameToRemove) {
-      showToast("Please select a user to remove.");
-      return;
-    }
-    if (!confirm("Are you sure you want to delete user " + usernameToRemove + "?")) {
-      return;
-    }
-    fetch("removeUser.php", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: usernameToRemove })
+document.getElementById("deleteUserBtn").addEventListener("click", function () {
+  const selectElem = document.getElementById("removeUsernameSelect");
+  const usernameToRemove = selectElem.value;
+  if (!usernameToRemove) {
+    showToast("Please select a user to remove.");
+    return;
+  }
+  if (!confirm("Are you sure you want to delete user " + usernameToRemove + "?")) {
+    return;
+  }
+  fetch("removeUser.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: usernameToRemove })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast("User removed successfully!");
+        closeRemoveUserModal();
+        loadUserList();
+      } else {
+        showToast("Error: " + (data.error || "Could not remove user"));
+      }
     })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          showToast("User removed successfully!");
-          closeRemoveUserModal();
-          loadUserList();
-        } else {
-          showToast("Error: " + (data.error || "Could not remove user"));
-        }
-      })
-      .catch(error => console.error("Error removing user:", error));
-  });
+    .catch(error => console.error("Error removing user:", error));
+});
 
-  document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
-    closeRemoveUserModal();
-  });
+document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
+  closeRemoveUserModal();
+});
 
 export function checkAuthentication() {
-  sendRequest("checkAuth.php")
+  // Return the promise from sendRequest
+  return sendRequest("checkAuth.php")
     .then(data => {
       if (data.setup) {
         window.setupMode = true;
@@ -128,7 +129,7 @@ export function checkAuthentication() {
         toggleVisibility("mainOperations", false);
         document.querySelector(".header-buttons").style.visibility = "hidden";
         toggleVisibility("addUserModal", true);
-        return;
+        return false;
       } else {
         window.setupMode = false;
       }
@@ -137,7 +138,7 @@ export function checkAuthentication() {
         toggleVisibility("mainOperations", true);
         toggleVisibility("uploadFileForm", true);
         toggleVisibility("fileListContainer", true);
-        // Check admin status to determine if Add/Remove User buttons should be shown.
+        // Show Add/Remove User buttons if admin.
         if (data.isAdmin) {
           const addUserBtn = document.getElementById("addUserBtn");
           const removeUserBtn = document.getElementById("removeUserBtn");
@@ -150,6 +151,7 @@ export function checkAuthentication() {
           if (removeUserBtn) removeUserBtn.style.display = "none";
         }
         document.querySelector(".header-buttons").style.visibility = "visible";
+        return true;
       } else {
         showToast("Please log in to continue.");
         toggleVisibility("loginForm", true);
@@ -157,9 +159,13 @@ export function checkAuthentication() {
         toggleVisibility("uploadFileForm", false);
         toggleVisibility("fileListContainer", false);
         document.querySelector(".header-buttons").style.visibility = "hidden";
+        return false;
       }
     })
-    .catch(error => console.error("Error checking authentication:", error));
+    .catch(error => {
+      console.error("Error checking authentication:", error);
+      return false;
+    });
 }
 window.checkAuthentication = checkAuthentication;
 
@@ -202,4 +208,4 @@ function loadUserList() {
       }
     })
     .catch(error => console.error("Error loading user list:", error));
-  }
+}
