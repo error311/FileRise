@@ -580,6 +580,26 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+// helper function
+function getModeForFile(fileName) {
+  const ext = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase();
+  switch (ext) {
+    case 'css':
+      return "css";
+    case 'json':
+      return { name: "javascript", json: true };
+    case 'js':
+      return "javascript";
+    case 'html':
+    case 'htm':
+      return "text/html";
+    case 'xml':
+      return "xml";
+    default:
+      return "text/plain";
+  }
+}
+
 // File Editing Functions.
 export function editFile(fileName, folder) {
   console.log("Edit button clicked for:", fileName);
@@ -627,9 +647,10 @@ export function editFile(fileName, folder) {
       modal.style.display = "block";
       
       // Initialize CodeMirror on the textarea.
+      const mode = getModeForFile(fileName); // fileName should be the current file's name
       const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
         lineNumbers: true,
-        mode: "text/html", // Adjust mode based on file type if needed.
+        mode: mode, // dynamic mode based on file extension
         theme: "default",
         viewportMargin: Infinity
       });
