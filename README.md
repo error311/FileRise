@@ -34,7 +34,6 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 - **Dark Mode/Light Mode**
   - Automatically adapts to the operating system’s theme preference by default, with a manual toggle option.
   - A theme toggle allows users to switch between Dark Mode and Light Mode for an optimized viewing experience.
-  - The selected mode persists across sessions, ensuring the theme remains active even after a page refresh.
   - Every element, including the header, buttons, tables, modals, and the file editor, dynamically adapts to the selected theme.
   - Dark Mode: Uses a dark gray background with lighter text to reduce eye strain in low-light environments.
   - Light Mode: Retains the classic bright interface for high visibility in well-lit conditions.
