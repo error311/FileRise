@@ -7,6 +7,7 @@ body {
   font-family: 'Roboto', sans-serif;
   background-color: #f5f5f5;
   margin: 0;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 /* CONTAINER */
@@ -18,56 +19,109 @@ body {
    HEADER & NAVIGATION
    =========================================================== */
 
-/* HEADER (Large Screens) */
-header {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  height: 100px !important;
-  padding: 0 20px !important;
+/************************************************************/
+/* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
+/************************************************************/
+
+/* 🔹 Header Container (Keeps Everything Aligned) */
+.header-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Ensures logo-left, title-center, buttons-right */
+  width: 100%;
+  height: 80px;
+  padding: 10px 20px;
+  background-color: #2196F3; /* Light Mode */
+  transition: background-color 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  background-color: #2196F3 !important;
 }
 
+/* 🔹 Dark Mode */
+body.dark-mode .header-container {
+  background-color: #1f1f1f;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+/* 🔹 Logo (Left Side) */
 .header-left {
-  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto; /* Prevent it from growing */
 }
 
+/* 🔹 Make Logo Bigger */
 .header-left img {
-  display: block;
-  height: 60px;
-  width: auto;
+  max-height: 70px; /* Previously 60px */
+  width: auto; /* Ensures aspect ratio stays correct */
 }
 
+.header-logo {
+  max-height: 50px;
+  width: auto;
+  display: block;
+}
+
+/* 🔹 Header Layout */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Ensures left, center, right alignment */
+  width: 100%;
+  height: 80px;
+  padding: 0 20px;
+  background-color: #2196F3; /* Light mode */
+  transition: background-color 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 🔹 Dark Mode: Header */
+body.dark-mode header {
+  background-color: #1f1f1f;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+/* 🔹 Left Section (Logo) */
+/* 🔹 Left Section (Logo) */
+.header-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 100px;
+}
+
+/* 🔹 Title (Perfectly Centered) */
 .header-title {
   position: absolute;
-  /* Center the title using absolute positioning */
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  margin: 0;
-  color: white;
-  font-size: 1.5em;
+  white-space: nowrap;
 }
 
 .header-title h1 {
+  font-size: 2rem;
+  color: #fff;
   margin: 0;
 }
 
+/* 🔹 Right Section (Buttons) */
 .header-buttons {
-  flex: 0 0 auto;
   display: flex;
-  gap: 10px;
   align-items: center;
+  justify-content: flex-end;
+  flex: 1; /* Equal space to prevent shifting */
+  min-width: 150px; /* Prevent shrinking */
+  gap: 10px;
 }
 
+/* 🔹 Buttons */
 .header-buttons button {
   background: none;
   border: none;
   cursor: pointer;
   padding: 10px;
   border-radius: 50%;
+  color: #fff;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -76,42 +130,122 @@ header {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* Responsive Header (Small Screens) */
+/* 🔹 Small Screens: Stack Layout */
 @media (max-width: 600px) {
   header {
-    flex-direction: column !important;
-    height: auto !important;
-    padding: 10px 20px !important;
-    position: relative !important;
+    flex-direction: column;
+    text-align: center;
+    height: auto;
+    padding: 10px;
   }
-  
-  /* Remove absolute positioning to let items stack */
+
+  .header-left, .header-buttons {
+    justify-content: center;
+    flex: unset;
+  }
+
   .header-title {
-    position: static !important;
-    left: auto !important;
-    transform: none !important;
-    margin: 10px 0 !important;
-    font-size: 1.2em !important;
+    order: 1;
+    width: 100%;
+    margin-bottom: 10px;
+    position: relative;
+    left: auto;
+    transform: none;
   }
-  
-  /* Ensure logo and buttons are centered and full width */
-  .header-left,
+
   .header-buttons {
-    position: static !important;
-    transform: none !important;
-    margin: 5px 0 !important;
-    width: 100% !important;
-    text-align: center !important;
-  }
-  
-  .header-left img {
-    height: 50px !important;
-  }
-  
-  .header-buttons {
-    justify-content: center !important;
+    order: 2;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }
+
+.header-buttons button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 50%;
+  color: #fff;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.header-buttons button i {
+  font-size: 24px; /* Ensures Material Icons show correctly */
+}
+
+.header-buttons button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 🔹 Dark Mode Toggle Button */
+.dark-mode-toggle {
+  background-color: #424242;
+  border: 1px solid #fff;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background 0.3s;
+}
+
+.dark-mode-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/************************************************************/
+/* RESPONSIVE HEADER FIXES                                 */
+/************************************************************/
+
+/* 🔹 Medium Screens */
+@media (max-width: 900px) {
+  .header-container {
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  .header-title {
+    text-align: center;
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .header-right {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
+    margin-top: 10px;
+  }
+}
+
+/* 🔹 Small Screens */
+@media (max-width: 600px) {
+  .header-container {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .header-left {
+    justify-content: center;
+    flex-basis: 100%;
+  }
+
+  .header-title {
+    font-size: 1.7rem;
+    margin-top: 5px;
+  }
+
+  .header-buttons {
+    flex-direction: row;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 10px;
+  }
+}
+
+/* end of header */
 
 /* ===========================================================
    MATERIAL ICONS
@@ -125,8 +259,6 @@ header {
 /* ===========================================================
    FORMS & LOGIN
    =========================================================== */
-
-/* LOGIN FORM */
 #loginForm {
   margin: 0 auto;
   max-width: 400px;
@@ -136,13 +268,57 @@ header {
   border-radius: 4px;
 }
 
+/* Dark mode for login form */
+body.dark-mode #loginForm {
+  background-color: #2c2c2c; /* Dark background */
+  color: #e0e0e0; /* Light text */
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(255, 255, 255, 0.2);
+}
+
+/* Dark mode for input fields */
+body.dark-mode #loginForm input {
+  background-color: #333;
+  color: #fff;
+  border: 1px solid #555;
+}
+
+/* Dark mode for labels */
+body.dark-mode #loginForm label {
+  color: #ddd;
+}
+
+/* Dark mode for login button */
+body.dark-mode #loginForm button {
+  background-color: #007bff; /* Keep Bootstrap blue button */
+  color: white;
+  border: none;
+}
+
+body.dark-mode #loginForm button:hover {
+  background-color: #0056b3; /* Darker blue on hover */
+}
+
 /* ===========================================================
-   MODALS & EDITOR MODALS
+   CARDS & MODALS
    =========================================================== */
 
-/* General Modal Styles */
+/* Cards */
+.card {
+  background-color: #fff;
+  color: #000;
+  border: 1px solid #ddd;
+}
+body.dark-mode .card {
+  background-color: #2c2c2c;
+  color: #e0e0e0;
+  border: 1px solid #444;
+}
+
+/* Modal & Editor Modal */
 .modal {
-  display: none; /* Hidden by default */
+  display: none;
   position: fixed;
   top: 0; 
   left: 0;
@@ -151,7 +327,6 @@ header {
   background-color: rgba(0, 0, 0, 0.5);
   z-index: 1050;
 }
-
 .modal .modal-content {
   position: absolute;
   top: 50%;
@@ -164,8 +339,17 @@ header {
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
   max-width: 400px;
   width: 90%;
-  max-height: 90vh;
   overflow-y: auto;
+  white-space: normal; /* Allow text wrapping */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  height: auto;            /* Let the modal height adjust based on content */
+  max-height: 90vh;        /* But limit to 90% of the viewport height */
+}
+body.dark-mode .modal .modal-content {
+  background-color: #2c2c2c;
+  color: #e0e0e0;
+  border-color: #444;
 }
 
 /* Editor Modal */
@@ -174,7 +358,7 @@ header {
   top: 50%;
   left: 50%;
   transform: translate(5%, 10%);
-  background-color: #fff; /* Ensures modal is opaque */
+  background-color: #fff;
   padding: 20px;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -186,14 +370,13 @@ header {
   overflow: auto;
   resize: both;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  z-index: 1100; /* Ensure it's on top of any overlay */
+  z-index: 1100;
 }
-
-#deleteFolderMessage {
-  white-space: normal;
-  word-wrap: break-word;
+body.dark-mode .editor-modal {
+  background-color: #2c2c2c;
+  color: #e0e0e0;
+  border-color: #444;
 }
-
 
 /* ===========================================================
    LOGOUT & USER CONTROLS
@@ -222,16 +405,16 @@ header {
   padding: 8px 18px;
   font-size: 16px;
   cursor: pointer;
-  white-space: nowrap; /* Prevent text wrapping */
+  white-space: nowrap;
 }
 
-/* For medium screens, reduce font size and padding */
 @media (max-width: 768px) {
   #customChooseBtn {
     font-size: 14px;
     padding: 6px 14px;
   }
 }
+
 /* ===========================================================
    UPLOAD PROGRESS STYLES
    =========================================================== */
@@ -317,7 +500,7 @@ header {
 }
 
 /* ===========================================================
-   BUTTON STYLES (MATERIAL THEME)
+   BUTTON STYLES (MATERIAL THEME) & Preserve Bootstrap colors
    =========================================================== */
 .btn {
   font-size: 0.9rem;
@@ -336,11 +519,8 @@ header {
 
 /* Specific Action Buttons */
 #deleteSelectedBtn {
-  background-color: #f44336; /* Material red */
+  background-color: #f44336;
   color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
 }
 
 #deleteSelectedBtn:hover {
@@ -348,11 +528,8 @@ header {
 }
 
 #copySelectedBtn {
-  background-color: #9E9E9E; /* Material grey */
+  background-color: #9E9E9E;
   color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
 }
 
 #copySelectedBtn:hover {
@@ -360,11 +537,8 @@ header {
 }
 
 #moveSelectedBtn {
-  background-color: #ff9800; /* Material orange */
+  background-color: #ff9800;
   color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
 }
 
 #moveSelectedBtn:hover {
@@ -372,26 +546,17 @@ header {
 }
 
 #downloadZipBtn {
-  background-color: #009688; /* Material Teal */
+  background-color: #009688;
   color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
 }
 
 #downloadZipBtn:hover {
-  background-color: #00796B; /* A slightly darker teal for hover */
+  background-color: #00796B;
 }
 
-/* File List Edit Button (Material Green) */
 #fileList button.edit-btn {
   background-color: #4CAF50;
   color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
 }
 
 #fileList button.edit-btn:hover {
@@ -401,12 +566,37 @@ header {
 /* ===========================================================
    FILE LIST & TABLE STYLES
    =========================================================== */
+#fileList table {
+  background-color: transparent;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+}
+
 #fileList table tr:nth-child(even) {
-  background-color: transparent; /* Remove alternating grey rows */
+  background-color: transparent;
 }
 
 #fileList table tr:hover {
   background-color: #e0e0e0;
+}
+body.dark-mode #fileList table tr:hover {
+  background-color: #444;
+}
+
+#fileList table tr {
+  box-shadow: none; 
+  border: none !important;
+  outline: none !important; 
+}
+body.dark-mode #fileList table tr {
+  box-shadow: none; 
+  border: none !important; 
+  outline: none !important;
+}
+
+#fileList table th, 
+#fileList table td {
+  border: none !important;
 }
 
 /* ===========================================================
@@ -440,42 +630,47 @@ label {
   padding: 0;
 }
 
-/* INITIAL HIDE FORMS */
 #loginForm,
 #uploadForm {
   display: none;
 }
 
-/* Remove bottom margin from the form group in cards */
+/* Add spacing below the row of cards */
+#uploadFolderRow {
+  margin-bottom: 20px;
+}
+
 .card-body .form-group {
   margin-bottom: 5px !important;
 }
 
-/* Create Folder Button */
 #createFolderBtn {
   margin-top: 0px !important;
 }
 
 .folder-actions {
   display: flex;
-  flex-wrap: nowrap; /* Prevent wrapping */
+  flex-wrap: nowrap;
+  padding-left: 8px;
   align-items: center;
-  white-space: nowrap; /* Extra safeguard */
+  white-space: nowrap;
 }
 
-/* Optional: On medium screens, if needed, ensure the container doesn't force wrapping */
 @media (min-width: 600px) and (max-width: 992px) {
   .folder-actions {
     white-space: nowrap;
   }
 }
 
-/* Row Selected Highlight */
 .row-selected {
   background-color: #f2f2f2 !important;
 }
 
-/* Custom Prev/Next Buttons */
+body.dark-mode .row-selected {
+  background-color: #444 !important; /* Dark background */
+  color: #fff !important;            /* White text for contrast */
+}
+
 .custom-prev-next-btn {
   background-color: #e0e0e0;
   color: #000;
@@ -491,23 +686,45 @@ label {
   background-color: #d5d5d5;
 }
 
-/* Folder Options */
+body.dark-mode .custom-prev-next-btn {
+  background-color: #444; /* Darker background for dark mode */
+  color: #fff; /* White text for contrast */
+  border: none;
+}
+
+body.dark-mode .custom-prev-next-btn:hover:not(:disabled) {
+  background-color: #555; /* Slightly lighter background for hover effect */
+}
+
 .folder-option:hover {
   background-color: #f0f0f0;
+  padding: 2px 4px;  
 }
 
 .folder-option.selected {
   background-color: #d0d0d0;
+  border-radius: 4px;    
+  padding: 2px 4px;  
 }
 
-/* Custom Folder Card Body */
+body.dark-mode .folder-option.selected {
+  background-color: #444; /* a dark gray that stands out */
+  color: #fff;            /* white text */
+  border-radius: 4px;    
+  padding: 2px 4px;      
+}
+
+body.dark-mode .folder-option:hover {
+  background-color: #333; /* a dark gray background */
+  color: #fff;            /* ensure the text remains white */
+  padding: 2px 4px;  
+}
+
 .custom-folder-card-body {
   padding-top: 5px !important;
 }
 
-/* ===========================================================
-   TOAST NOTIFICATIONS
-   =========================================================== */
+/* Toast Notifications */
 #customToast {
   position: fixed;
   top: 20px;
@@ -528,9 +745,7 @@ label {
   opacity: 1;
 }
 
-/* ===========================================================
-   BUTTON WRAP (For File List Actions)
-   =========================================================== */
+/* Button Wrap */
 .button-wrap {
   display: inline-flex;
   flex-wrap: wrap;
@@ -538,20 +753,53 @@ label {
   gap: 2px;
 }
 
-/* Media Query for Button Wrap on Smaller Devices */
 @media (max-width: 500px) {
   .button-wrap {
-    display: flex;      /* Use block-level flex */
-    width: 100%;        /* Take full available width */
+    display: flex;
+    width: 100%;
     justify-content: center;
   }
 }
 
-/* ===========================================================
-   FILE LIST SECTION
-   =========================================================== */
+/* File List Section */
 #fileListContainer {
   padding: 10px;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+body.dark-mode #fileListContainer {
+  background-color: #2c2c2c;
+  color: #e0e0e0;
+  border: 1px solid #444;  /* adjust border color if needed */
+  border-radius: 8px;      /* adjust the roundness as desired */
+  padding: 10px;
+  margin-top: 20px;
+
+}
+
+#fileListContainer > h2,
+#fileListContainer > .file-list-actions,
+#fileListContainer > #fileList {
+  margin-left: 15px; /* Moves title, buttons, and file list to the right */
+}
+
+@media (max-width: 768px) {
+  #fileListContainer > h2,
+  #fileListContainer > .file-list-actions,
+  #fileListContainer > #fileList {
+    margin-left: 10px; /* Smaller adjustment for mobile */
+  }
+}
+
+.col-12.col-md-4.text-left {
+  margin-left: -10px; /* Adjust the value as needed */
+}
+
+@media (max-width: 768px) {
+  .col-12.col-md-4.text-left {
+    margin-left: -10px; /* Slightly adjust for smaller screens */
+  }
 }
 
 #fileListTitle {
@@ -581,7 +829,7 @@ label {
   margin-top: 10px;
 }
 
-/* Responsive File List Section (Small Devices) */
+/* Responsive adjustments for File List */
 @media (max-width: 600px) {
   #fileListTitle {
     font-size: 1.4em;
@@ -597,4 +845,420 @@ label {
     width: 95%;
     margin: 20% auto;
   }
+}
+
+/* ===========================================================
+   FOLDER TREE STYLES
+   =========================================================== */
+   .folder-tree {
+    list-style-type: none;
+    padding-left: 20px;
+    margin: 0;
+  }
+  .folder-tree.collapsed {
+    display: none;
+  }
+  .folder-tree.expanded {
+    display: block;
+  }
+  
+  .folder-item {
+    margin: 4px 0;
+    display: block;
+  }
+  
+  .folder-toggle {
+    cursor: pointer;
+    margin-right: 5px;
+  }
+  
+  .folder-indent-placeholder {
+    display: inline-block;
+    width: 18px;
+  }
+  
+  .folder-option {
+    cursor: pointer;
+  }
+
+  #folderTreeContainer {
+    display: block;
+  }
+
+/* ===========================================================
+   FILE MANAGER INLINE STYLE REMOVAL - New Classes
+   =========================================================== */
+.image-preview-modal-content {
+  max-width: 90vw;
+  max-height: 90vh;
+  background: #fff;
+  padding: 20px;
+  border-radius: 4px;
+  overflow: auto;
+  margin: auto;
+  position: relative;
+}
+body.dark-mode .image-preview-modal-content {
+  background: #2c2c2c;
+  border-color: #444;
+}
+
+.close-image-modal {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.image-modal-header {
+  text-align: center;
+  margin: 0 0 10px;
+}
+
+.image-modal-img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+.page-indicator {
+  margin: 0 8px;
+  white-space: nowrap;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.file-preview-img {
+  max-width: 100px;
+  max-height: 100px;
+  margin-right: 5px;
+  margin-left: 0;
+}
+
+.file-icon {
+  color: #333;
+  margin-right: 0;
+  margin-left: 0;
+  font-size: 32px;
+}
+
+.editor-controls {
+  text-align: right;
+  margin-bottom: 5px;
+}
+
+.editor-textarea {
+  width: 100%;
+  height: 60%;
+  resize: none;
+}
+
+.editor-footer {
+  margin-top: 10px;
+  text-align: right;
+}
+
+.bottom-select {
+  display: inline-block;
+  width: auto !important;
+  font-size: 16px !important;
+  height: 28px !important; /* Matches the dropdown */
+  padding: 2px 8px !important;
+  line-height: 1.2 !important;
+  border-radius: 4px !important;
+  vertical-align: middle !important;
+}
+
+.label-inline {
+  display: inline-flex;
+  align-items: center; /* Ensure vertical alignment */
+  height: 28px !important; /* Match dropdown */
+  font-size: 16px !important;
+  line-height: 1.2;
+  margin-bottom: 0; /* Remove any extra space */
+}
+
+.items-per-page-text {
+  display: inline-flex;
+  align-items: center;
+  height: 28px !important; /* Match dropdown */
+  font-size: 16px !important;
+  line-height: 1.2;
+  margin-left: 8px; /* Add a small gap */
+}
+
+/* ===========================================================
+   UPLOAD MODULE INLINE STYLE REMOVAL - New Classes
+   =========================================================== */
+.upload-instruction {
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.upload-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-info-container {
+  margin-left: 10px;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.file-preview-container {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.file-name-display {
+  vertical-align: middle;
+  margin-left: 5px;
+}
+
+.upload-progress-list {
+  list-style: none;
+  padding: 0;
+}
+
+.upload-progress-item {
+  padding-top: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.upload-progress-extra {
+  padding-top: 10px;
+  margin-bottom: 10px;
+  display: flex;
+}
+
+.upload-file-name {
+  flex-grow: 1;
+  margin-left: 5px;
+  word-break: break-word;
+}
+
+.upload-progress-div {
+  flex: 0 0 250px;
+  margin-left: 5px;
+}
+
+/* ===========================================================
+   DARK MODE STYLES
+   =========================================================== */
+body.dark-mode {
+  background-color: #121212;
+  color: #e0e0e0;
+}
+
+/* Remove/override container background in dark mode */
+body.dark-mode .container {
+  /* background-color: #1e1e1e; */ /* comment this out or remove */
+  background-color: transparent !important;
+}
+
+/* Preserve Bootstrap button colors in dark mode */
+body.dark-mode .btn-primary {
+  background-color: #007bff;
+  color: #fff;
+  border-color: #007bff;
+}
+body.dark-mode .btn-secondary {
+  background-color: #6c757d;
+  color: #fff;
+  border-color: #6c757d;
+}
+body.dark-mode .btn-danger {
+  background-color: #dc3545;
+  color: #fff;
+  border-color: #dc3545;
+}
+
+/* Dark mode for modals */
+body.dark-mode .modal .modal-content,
+body.dark-mode .editor-modal {
+  background-color: #2c2c2c;
+  color: #e0e0e0;
+  border: 1px solid #444;
+}
+
+/* Dark mode for file list/table */
+body.dark-mode table {
+  background-color: #2c2c2c;
+  color: #e0e0e0;
+}
+body.dark-mode table tr:hover {
+  background-color: #444;
+}
+
+/* Dark mode for uploads */
+body.dark-mode #uploadProgressContainer .progress {
+  background-color: #333;
+}
+body.dark-mode #uploadProgressContainer .progress-bar {
+  background-color: #007bff;
+  color: #e0e0e0;
+}
+
+/* 🔹 Dark Mode Toggle Styled to Blend into Header */
+.dark-mode-toggle {
+  background-color: transparent !important; /* Match header */
+  border: 1px solid transparent !important; /* Invisible border */
+  color: white !important; /* White text */
+  padding: 6px 12px !important;
+  border-radius: 6px !important; /* Rounded edges */
+  font-size: 0.9em !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background 0.3s, border 0.3s !important;
+}
+
+/* 🔹 Hover Effect - Subtle Border */
+.dark-mode-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important; /* Slight highlight */
+}
+
+/* 🔹 Active/Clicked Effect */
+.dark-mode-toggle:active {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* 🔹 Dark Mode Version */
+body.dark-mode .dark-mode-toggle {
+  background-color: transparent !important; /* Match dark header */
+  color: white !important;
+}
+
+/* 🔹 Dark Mode Hover Effect */
+body.dark-mode .dark-mode-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* 🔹 Remove Circle Effect */
+.dark-mode-toggle:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Default (light mode) styling */
+.folder-help-details {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #555;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.folder-help-summary {
+  cursor: pointer;
+  list-style: none;
+  color: #000;
+  background: #f9f9f9;
+  padding: 2px;
+  display: inline-block; /* or block, up to you */
+}
+
+.folder-help-icon {
+  vertical-align: middle;
+  color: #d96601; /* the orange color for info icon */
+  font-size: 20px !important;
+}
+
+.folder-help-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+/* Dark mode overrides */
+body.dark-mode .folder-help-details {
+  color: #ddd;
+  background-color: #2c2c2c;
+  border-color: #444;
+}
+
+body.dark-mode .folder-help-summary {
+  color: #ddd;
+  background: #2c2c2c;
+}
+
+body.dark-mode .folder-help-icon {
+  color: #f6a72c; /* or another color you prefer for the icon in dark mode */
+  font-size: 20px;
+}
+
+body.dark-mode #searchIcon {
+  background-color: #444;  /* dark background */
+  border: 1px solid #555;  /* subtle border */
+  border-radius: 4px;      /* rounded corners */
+  color: #fff;             /* white icon color */
+  padding: 4px 8px;        /* adjust padding as needed */
+}
+
+body.dark-mode #searchInput {
+  background-color: #333;
+  color: #e0e0e0;
+  border: 1px solid #555;
+}
+
+/* Default (light mode) styling for folderExplanation */
+.folder-explanation {
+  margin-top: 5px;
+  padding: 5px;
+  font-size: 12px;
+  color: #555;
+  background-color: solid transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+/* Dark mode override */
+body.dark-mode .folder-explanation {
+  color: #ddd;              /* or another light color for text */
+  background-color: solid transparent; /* or another dark color for the background */
+  border: 1px solid transparent;  /* darker border in dark mode */
+}
+
+/* Apply dark theme for CodeMirror when dark mode is enabled */
+body.dark-mode .CodeMirror {
+  background: #1e1e1e !important;  /* Dark background */
+  color: #ffffff !important; /* White text */
+}
+
+/* Ensure cursor is visible */
+body.dark-mode .CodeMirror-cursor {
+  border-left: 2px solid #ffffff !important;
+}
+
+/* Change line number gutter background */
+body.dark-mode .CodeMirror-gutters {
+  background: #252526 !important;
+  border-right: 1px solid #444 !important;
+}
+
+/* Change line number text color */
+body.dark-mode .CodeMirror-linenumber {
+  color: #aaaaaa !important;
+}
+
+/* Change text selection background */
+body.dark-mode .CodeMirror-selected {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Change matching brackets highlight */
+body.dark-mode .CodeMirror-matchingbracket {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px solid #ffffff !important;
 }

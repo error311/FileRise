@@ -2,46 +2,53 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Multi File Upload Editor</title>
-  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
   <!-- External CSS -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css" />
   <!-- Google Fonts and Material Icons -->
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" />
   <!-- Bootstrap CSS -->
-  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/material-darker.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/xml/xml.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/css/css.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/javascript/javascript.min.js"></script>
+  
 </head>
 
 <body>
-  <!-- Header -->
-  <header>
+  <header class="header-container">
     <div class="header-left">
-      <img src="/assets/logo.svg" alt="Filing Cabinet Logo">
+      <img src="/assets/logo.svg" alt="Filing Cabinet Logo" class="header-logo">
     </div>
+  
     <div class="header-title">
       <h1>Multi File Upload Editor</h1>
     </div>
-    <div class="header-buttons">
-      <button id="logoutBtn" title="Logout">
-        <i class="material-icons">exit_to_app</i>
-      </button>
-      <button id="addUserBtn" title="Add User">
-        <i class="material-icons">person_add</i>
-      </button>
-      <button id="removeUserBtn" title="Remove User">
-        <i class="material-icons">person_remove</i>
-      </button>
+  
+    <div class="header-right">
+      <div class="header-buttons">
+        <button id="logoutBtn" title="Logout">
+          <i class="material-icons">exit_to_app</i>
+        </button>
+        <button id="addUserBtn" title="Add User">
+          <i class="material-icons">person_add</i>
+        </button>
+        <button id="removeUserBtn" title="Remove User">
+          <i class="material-icons">person_remove</i>
+        </button>
+        <button id="darkModeToggle" class="dark-mode-toggle">Dark Mode</button>
+      </div>
     </div>
   </header>
+
   <!-- Custom Toast Container -->
   <div id="customToast"></div>
   <div class="container">
@@ -51,11 +58,11 @@
         <form id="authForm" method="post">
           <div class="form-group">
             <label for="loginUsername">User:</label>
-            <input type="text" class="form-control" id="loginUsername" name="username" required>
+            <input type="text" class="form-control" id="loginUsername" name="username" required />
           </div>
           <div class="form-group">
             <label for="loginPassword">Password:</label>
-            <input type="password" class="form-control" id="loginPassword" name="password" required>
+            <input type="password" class="form-control" id="loginPassword" name="password" required />
           </div>
           <button type="submit" class="btn btn-primary btn-block">Login</button>
         </form>
@@ -69,19 +76,14 @@
         <div class="col-md-6 col-lg-7 d-flex">
           <div class="card flex-fill">
             <div class="card-header">Upload Files</div>
-            <!-- Make card-body a flex container in column direction -->
+            <!-- Card body is a flex container in column direction -->
             <div class="card-body d-flex flex-column">
-              <form id="uploadFileForm" method="post" enctype="multipart/form-data" class="d-flex flex-column"
-                style="height: 100%;">
-                <!-- Make the form-group container flex-grow so it fills available space -->
+              <form id="uploadFileForm" method="post" enctype="multipart/form-data" class="d-flex flex-column" style="height: 100%;">
                 <div class="form-group flex-grow-1" style="margin-bottom: 1rem;">
-                  <!-- Set drop area to grow to fill its parent -->
-                  <div id="uploadDropArea"
-                    style="border:2px dashed #ccc; padding:20px; cursor:pointer; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                  <div id="uploadDropArea" style="border:2px dashed #ccc; padding:20px; cursor:pointer; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                     <span>Drop files here or click 'Choose files'</span>
-                    <br>
-                    <input type="file" id="file" name="file[]" class="form-control-file" multiple required
-                      style="display:none;">
+                    <br />
+                    <input type="file" id="file" name="file[]" class="form-control-file" multiple required style="display:none;" />
                   </div>
                 </div>
                 <button type="submit" id="uploadBtn" class="btn btn-primary d-block mx-auto">Upload</button>
@@ -98,15 +100,14 @@
               <div class="form-group d-flex align-items-top" style="padding-top:0; margin-bottom:0;">
                 <div id="folderTreeContainer"></div>
               </div>
-              <!-- Wrap folder buttons in a container to prevent wrapping -->
+              <!-- Folder actions -->
               <div class="folder-actions mt-3">
                 <button id="createFolderBtn" class="btn btn-primary">Create Folder</button>
                 <!-- Create Folder Modal -->
                 <div id="createFolderModal" class="modal">
                   <div class="modal-content">
                     <h4>Create Folder</h4>
-                    <input type="text" id="newFolderName" class="form-control" placeholder="Enter folder name"
-                      style="margin-top:10px;">
+                    <input type="text" id="newFolderName" class="form-control" placeholder="Enter folder name" style="margin-top:10px;" />
                     <div style="margin-top:15px; text-align:right;">
                       <button id="cancelCreateFolder" class="btn btn-secondary">Cancel</button>
                       <button id="submitCreateFolder" class="btn btn-primary">Create</button>
@@ -120,8 +121,7 @@
                 <div id="renameFolderModal" class="modal">
                   <div class="modal-content">
                     <h4>Rename Folder</h4>
-                    <input type="text" id="newRenameFolderName" class="form-control" placeholder="Enter new folder name"
-                      style="margin-top:10px;">
+                    <input type="text" id="newRenameFolderName" class="form-control" placeholder="Enter new folder name" style="margin-top:10px;" />
                     <div style="margin-top:15px; text-align:right;">
                       <button id="cancelRenameFolder" class="btn btn-secondary">Cancel</button>
                       <button id="submitRenameFolder" class="btn btn-primary">Rename</button>
@@ -143,26 +143,17 @@
                   </div>
                 </div>
               </div>
-              <div id="folderExplanation" style="
-            margin-top:15px; 
-            font-size:12px; 
-            color:#555; 
-            background-color:#f9f9f9; 
-            border:1px solid #ddd; 
-            border-radius:4px; 
-            padding:10px;
-          ">
-                <details style="margin-top:2px; font-size:12px; color:#555;">
-                  <summary style="cursor:pointer; list-style: none; color: #000; background: #f9f9f9; padding: 2px;">
-                    <i class="material-icons" style="vertical-align: middle; color: #d96601;">info</i>
+              <div id="folderExplanation" class="folder-explanation">
+                <details class="folder-help-details">
+                  <summary class="folder-help-summary">
+                    <i class="material-icons folder-help-icon">info</i>
                     Folder Navigation &amp; Management Help Info
                   </summary>
-                  <ul style="margin: 0; padding-left:20px;">
-                    <li>To view files in a folder, click on the folder name in the tree.</li>
-                    <li>[-] expands and [+] collapses a folder in the tree.</li>
-                    <li>To create a subfolder, select a folder from the tree above and click "Create Folder".</li>
-                    <li>To rename or delete a folder, first select it from the tree, then click "Rename Folder" or
-                      "Delete Folder" respectively.</li>
+                  <ul class="folder-help-list">
+                    <li>Click on a folder in the tree to view its files.</li>
+                    <li>Use [-] to collapse and [+] to expand folders.</li>
+                    <li>Select a folder and click "Create Folder" to add a subfolder.</li>
+                    <li>To rename or delete a folder, select it and then click the appropriate button.</li>
                   </ul>
                 </details>
               </div>
@@ -176,16 +167,12 @@
     <div id="fileListContainer" style="display: none;">
       <h2 id="fileListTitle">Files in (Root)</h2>
       <div id="fileListActions" class="file-list-actions">
-        <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;">
-          Delete Files
-        </button>
+        <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;">Delete Files</button>
         <!-- Delete Files Modal -->
         <div id="deleteFilesModal" class="modal">
           <div class="modal-content">
             <h4>Delete Selected Files</h4>
-            <p id="deleteFilesMessage">
-              Are you sure you want to delete the selected files?
-            </p>
+            <p id="deleteFilesMessage">Are you sure you want to delete the selected files?</p>
             <div class="modal-footer">
               <button id="cancelDeleteFiles" class="btn btn-secondary">Cancel</button>
               <button id="confirmDeleteFiles" class="btn btn-danger">Delete</button>
@@ -193,16 +180,12 @@
           </div>
         </div>
 
-        <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled>
-          Copy Files
-        </button>
+        <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled>Copy Files</button>
         <!-- Copy Files Modal -->
         <div id="copyFilesModal" class="modal">
           <div class="modal-content">
             <h4>Copy Selected Files</h4>
-            <p id="copyFilesMessage">
-              Select a target folder for copying the selected files:
-            </p>
+            <p id="copyFilesMessage">Select a target folder for copying the selected files:</p>
             <select id="copyTargetFolder" class="form-control modal-input"></select>
             <div class="modal-footer">
               <button id="cancelCopyFiles" class="btn btn-secondary">Cancel</button>
@@ -211,16 +194,12 @@
           </div>
         </div>
 
-        <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled>
-          Move Files
-        </button>
+        <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled>Move Files</button>
         <!-- Move Files Modal -->
         <div id="moveFilesModal" class="modal">
           <div class="modal-content">
             <h4>Move Selected Files</h4>
-            <p id="moveFilesMessage">
-              Select a target folder for moving the selected files:
-            </p>
+            <p id="moveFilesMessage">Select a target folder for moving the selected files:</p>
             <select id="moveTargetFolder" class="form-control modal-input"></select>
             <div class="modal-footer">
               <button id="cancelMoveFiles" class="btn btn-secondary">Cancel</button>
@@ -228,9 +207,8 @@
             </div>
           </div>
         </div>
-        <button id="downloadZipBtn" class="btn action-btn" style="display: none;" disabled>
-          Download ZIP
-        </button>
+
+        <button id="downloadZipBtn" class="btn action-btn" style="display: none;" disabled>Download ZIP</button>
         <!-- Download Zip Modal -->
         <div id="downloadZipModal" class="modal" style="display:none;">
           <div class="modal-content">
@@ -253,11 +231,11 @@
     <div class="modal-content">
       <h3>Create New User</h3>
       <label for="newUsername">Username:</label>
-      <input type="text" id="newUsername" class="form-control">
+      <input type="text" id="newUsername" class="form-control" />
       <label for="newPassword">Password:</label>
-      <input type="password" id="newPassword" class="form-control">
+      <input type="password" id="newPassword" class="form-control" />
       <div id="adminCheckboxContainer">
-        <input type="checkbox" id="isAdmin">
+        <input type="checkbox" id="isAdmin" />
         <label for="isAdmin">Grant Admin Access</label>
       </div>
       <button id="saveUserBtn" class="btn btn-primary">Save User</button>
@@ -280,8 +258,7 @@
   <div id="renameFileModal" class="modal">
     <div class="modal-content">
       <h4>Rename File</h4>
-      <input type="text" id="newFileName" class="form-control" placeholder="Enter new file name"
-        style="margin-top:10px;">
+      <input type="text" id="newFileName" class="form-control" placeholder="Enter new file name" style="margin-top:10px;" />
       <div style="margin-top:15px; text-align:right;">
         <button id="cancelRenameFile" class="btn btn-secondary">Cancel</button>
         <button id="submitRenameFile" class="btn btn-primary">Rename</button>
@@ -292,6 +269,13 @@
   <!-- JavaScript Files -->
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script type="module" src="main.js"></script>
-
+  <script>
+    // Dark mode toggle script
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    darkModeToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      darkModeToggle.innerText = document.body.classList.contains('dark-mode') ? 'Light Mode' : 'Dark Mode';
+    });
+  </script>
 </body>
 </html>

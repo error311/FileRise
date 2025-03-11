@@ -1,5 +1,6 @@
 import { loadFileList } from './fileManager.js';
 import { showToast } from './domUtils.js';
+
 // ----------------------
 // Helper functions
 // ----------------------
@@ -35,26 +36,26 @@ function buildFolderTree(folders) {
 }
 
 /**
- * Render the folder tree as nested <ul> elements with toggle icons.
+ * Render the folder tree as nested <ul> elements using CSS classes.
  * @param {object} tree - The tree object.
  * @param {string} parentPath - The path prefix.
  * @param {string} defaultDisplay - "block" (open) or "none" (collapsed)
  */
-function renderFolderTree(tree, parentPath = "", defaultDisplay = "none") {
-  let html = `<ul style="list-style-type:none; padding-left:20px; margin:0; display:${defaultDisplay};">`;
+function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
+  // Determine display class based on defaultDisplay value.
+  const displayClass = defaultDisplay === 'none' ? 'collapsed' : 'expanded';
+  let html = `<ul class="folder-tree ${displayClass}">`;
   for (const folder in tree) {
     const fullPath = parentPath ? parentPath + "/" + folder : folder;
     const hasChildren = Object.keys(tree[folder]).length > 0;
-    html += `<li style="margin:4px 0; display:block;">`;
+    html += `<li class="folder-item">`;
     if (hasChildren) {
-      // For nested levels (below root) default to collapsed: toggle label "[+]"
-      html += `<span class="folder-toggle" style="cursor:pointer; margin-right:5px;">[+]</span>`;
+      html += `<span class="folder-toggle">[+]</span>`;
     } else {
-      html += `<span style="display:inline-block; width:18px;"></span>`;
+      html += `<span class="folder-indent-placeholder"></span>`;
     }
-    html += `<span class="folder-option" data-folder="${fullPath}" style="cursor:pointer;">${folder}</span>`;
+    html += `<span class="folder-option" data-folder="${fullPath}">${folder}</span>`;
     if (hasChildren) {
-      // Nested children always collapse by default.
       html += renderFolderTree(tree[folder], fullPath, "none");
     }
     html += `</li>`;
@@ -76,8 +77,9 @@ function expandTreePath(path) {
     if (option) {
       const li = option.parentNode;
       const nestedUl = li.querySelector("ul");
-      if (nestedUl && (nestedUl.style.display === "none" || nestedUl.style.display === "")) {
-        nestedUl.style.display = "block";
+      if (nestedUl && (nestedUl.classList.contains("collapsed") || !nestedUl.classList.contains("expanded"))) {
+        nestedUl.classList.remove("collapsed");
+        nestedUl.classList.add("expanded");
         const toggle = li.querySelector(".folder-toggle");
         if (toggle) {
           toggle.textContent = "[-]";
@@ -95,52 +97,62 @@ export async function loadFolderTree(selectedFolder) {
   try {
     const response = await fetch('getFolderList.php');
 
-    // Check for Unauthorized status
     if (response.status === 401) {
       console.error("Unauthorized: Please log in to view folders.");
-      // Optionally, redirect to the login page:
-       // window.location.href = "/login.html";
       return;
     }
 
     const folders = await response.json();
+    console.log("Fetched folders:", folders);
     if (!Array.isArray(folders)) {
       console.error("Folder list response is not an array:", folders);
       return;
     }
-    
+
     const container = document.getElementById("folderTreeContainer");
-    if (!container) return;
-    
-    const tree = buildFolderTree(folders);
-    
-    // Build the root row.
-    let html = `<div id="rootRow" style="margin-bottom:10px; display:flex; align-items:center;">`;
-    html += `<span class="folder-toggle" style="cursor:pointer; margin-right:5px;">[-]</span>`;
-    html += `<span class="folder-option" data-folder="root" style="cursor:pointer; font-weight:bold;">(Root)</span>`;
-    html += `</div>`;
-    // Append the nested tree for root. Force its display to "block".
-    html += renderFolderTree(tree, "", "block");
-    
+    if (!container) {
+      console.error("Folder tree container not found.");
+      return;
+    }
+
+    let html = "";
+    // Build the root row without inline styles.
+    html += `<div id="rootRow" class="root-row">
+               <span class="folder-toggle">[-]</span>
+               <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
+             </div>`;
+    // If no folders exist (empty array), render a default tree with just (Root).
+    if (folders.length === 0) {
+      html += `<ul class="folder-tree expanded">
+                 <li class="folder-item">
+                   <span class="folder-option" data-folder="root">(Root)</span>
+                 </li>
+               </ul>`;
+    } else {
+      const tree = buildFolderTree(folders);
+      html += renderFolderTree(tree, "", "block");
+    }
+
     container.innerHTML = html;
-    
+    console.log("Rendered folder tree HTML:", container.innerHTML);
+
     if (selectedFolder) {
       window.currentFolder = selectedFolder;
     } else if (!window.currentFolder) {
       window.currentFolder = "root";
     }
-    
+
     document.getElementById("fileListTitle").textContent =
       window.currentFolder === "root" ? "Files in (Root)" : "Files in (" + window.currentFolder + ")";
     loadFileList(window.currentFolder);
-    
+
     if (window.currentFolder !== "root") {
       expandTreePath(window.currentFolder);
     }
-    
-    // --- Attach events ---
+
+    // Attach events to folder options.
     container.querySelectorAll(".folder-option").forEach(el => {
-      el.addEventListener("click", function(e) {
+      el.addEventListener("click", function (e) {
         e.stopPropagation();
         container.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
         this.classList.add("selected");
@@ -151,34 +163,40 @@ export async function loadFolderTree(selectedFolder) {
         loadFileList(selected);
       });
     });
-    
+
+    // Attach toggle event for the root toggle.
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
-      rootToggle.addEventListener("click", function(e) {
+      rootToggle.addEventListener("click", function (e) {
         e.stopPropagation();
         const nestedUl = container.querySelector("#rootRow + ul");
         if (nestedUl) {
-          if (nestedUl.style.display === "none" || nestedUl.style.display === "") {
-            nestedUl.style.display = "block";
+          if (nestedUl.classList.contains("collapsed") || !nestedUl.classList.contains("expanded")) {
+            nestedUl.classList.remove("collapsed");
+            nestedUl.classList.add("expanded");
             this.textContent = "[-]";
           } else {
-            nestedUl.style.display = "none";
+            nestedUl.classList.remove("expanded");
+            nestedUl.classList.add("collapsed");
             this.textContent = "[+]";
           }
         }
       });
     }
-    
+
+    // Attach toggle events for all folder toggles.
     container.querySelectorAll(".folder-toggle").forEach(toggle => {
-      toggle.addEventListener("click", function(e) {
+      toggle.addEventListener("click", function (e) {
         e.stopPropagation();
         const siblingUl = this.parentNode.querySelector("ul");
         if (siblingUl) {
-          if (siblingUl.style.display === "none" || siblingUl.style.display === "") {
-            siblingUl.style.display = "block";
+          if (siblingUl.classList.contains("collapsed") || !siblingUl.classList.contains("expanded")) {
+            siblingUl.classList.remove("collapsed");
+            siblingUl.classList.add("expanded");
             this.textContent = "[-]";
           } else {
-            siblingUl.style.display = "none";
+            siblingUl.classList.remove("expanded");
+            siblingUl.classList.add("collapsed");
             this.textContent = "[+]";
           }
         }
@@ -194,7 +212,6 @@ export function loadFolderList(selectedFolder) {
   loadFolderTree(selectedFolder);
 }
 
-
 // ----------------------
 // Folder Management Functions
 // ----------------------
@@ -209,19 +226,15 @@ function openRenameFolderModal() {
     showToast("Please select a valid folder to rename.");
     return;
   }
-  // Pre-fill the input with the current folder name (optional)
   document.getElementById("newRenameFolderName").value = selectedFolder;
-  // Show the modal
   document.getElementById("renameFolderModal").style.display = "block";
 }
 
-// Attach event listener for Cancel button in the rename modal
 document.getElementById("cancelRenameFolder").addEventListener("click", function () {
   document.getElementById("renameFolderModal").style.display = "none";
   document.getElementById("newRenameFolderName").value = "";
 });
 
-// Attach event listener for the Rename (Submit) button in the rename modal
 document.getElementById("submitRenameFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
   const newFolderName = document.getElementById("newRenameFolderName").value.trim();
@@ -247,7 +260,6 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
     })
     .catch(error => console.error("Error renaming folder:", error))
     .finally(() => {
-      // Hide the modal and clear the input
       document.getElementById("renameFolderModal").style.display = "none";
       document.getElementById("newRenameFolderName").value = "";
     });
@@ -259,19 +271,15 @@ function openDeleteFolderModal() {
     showToast("Please select a valid folder to delete.");
     return;
   }
-  // Update the modal message to include the folder name.
   document.getElementById("deleteFolderMessage").textContent =
     "Are you sure you want to delete folder " + selectedFolder + "?";
-  // Show the modal.
   document.getElementById("deleteFolderModal").style.display = "block";
 }
 
-// Attach event for Cancel button in the delete modal.
 document.getElementById("cancelDeleteFolder").addEventListener("click", function () {
   document.getElementById("deleteFolderModal").style.display = "none";
 });
 
-// Attach event for Confirm/Delete button.
 document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
   fetch("deleteFolder.php", {
@@ -293,23 +301,19 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
     })
     .catch(error => console.error("Error deleting folder:", error))
     .finally(() => {
-      // Hide the modal after the request completes.
       document.getElementById("deleteFolderModal").style.display = "none";
     });
 });
 
-// Instead of using prompt, show the modal.
 document.getElementById("createFolderBtn").addEventListener("click", function () {
   document.getElementById("createFolderModal").style.display = "block";
 });
 
-// Attach event for the Cancel button.
 document.getElementById("cancelCreateFolder").addEventListener("click", function () {
   document.getElementById("createFolderModal").style.display = "none";
   document.getElementById("newFolderName").value = "";
 });
 
-// Attach event for the Submit (Create) button.
 document.getElementById("submitCreateFolder").addEventListener("click", function () {
   const folderInput = document.getElementById("newFolderName").value.trim();
   if (!folderInput) {
@@ -337,7 +341,6 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
       } else {
         showToast("Error: " + (data.error || "Could not create folder"));
       }
-      // Hide modal and clear input.
       document.getElementById("createFolderModal").style.display = "none";
       document.getElementById("newFolderName").value = "";
     })

@@ -133,7 +133,7 @@ export function renderFileTable(folder) {
   const topControlsHTML = `
   <div class="row align-items-center mb-3">
     <div class="col-12 col-md-8 mb-2 mb-md-0">
-      <div class="input-group" style="max-width: 100%;">
+      <div class="input-group">
         <div class="input-group-prepend">
           <span class="input-group-text" id="searchIcon">
             <i class="material-icons">search</i>
@@ -145,7 +145,7 @@ export function renderFileTable(folder) {
     <div class="col-12 col-md-4 text-left">
       <div class="d-flex justify-content-center justify-content-md-start align-items-center">
         <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">Prev</button>
-        <span style="margin: 0 8px; white-space: nowrap;">Page ${currentPage} of ${totalPages || 1}</span>
+        <span class="page-indicator">Page ${currentPage} of ${totalPages || 1}</span>
         <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">Next</button>
       </div>
     </div>
@@ -156,12 +156,12 @@ export function renderFileTable(folder) {
     <table class="table">
       <thead>
         <tr>
-          <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
-          <th data-column="name" style="cursor:pointer; white-space: nowrap;">File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="modified" class="hide-small" style="cursor:pointer; white-space: nowrap;">Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploaded" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="size" class="hide-small" style="cursor:pointer; white-space: nowrap;">File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploader" class="hide-small hide-medium" style="cursor:pointer; white-space: nowrap;">Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th class="checkbox-col"><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
+          <th data-column="name" class="sortable-col">File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="modified" class="hide-small sortable-col">Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploaded" class="hide-small hide-medium sortable-col">Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="size" class="hide-small sortable-col">File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploader" class="hide-small hide-medium sortable-col">Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -185,21 +185,21 @@ export function renderFileTable(folder) {
 
       // Build the preview button HTML string using the file's properties directly.
       const previewButton = isImage
-      ? `<button class="btn btn-sm btn-info ml-2" onclick="event.stopPropagation(); previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
+        ? `<button class="btn btn-sm btn-info ml-2" onclick="event.stopPropagation(); previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
            <i class="material-icons">image</i>
          </button>`
-      : "";
-      
+        : "";
+
       tableBody += `
-          <tr onclick="toggleRowSelection(event, '${safeFileName}')" style="cursor:pointer;">
+          <tr onclick="toggleRowSelection(event, '${safeFileName}')" class="clickable-row">
             <td>
               <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
             </td>
             <td>${safeFileName}</td>
-            <td class="hide-small" style="white-space: nowrap;">${safeModified}</td>
-            <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploaded}</td>
-            <td class="hide-small" style="white-space: nowrap;">${safeSize}</td>
-            <td class="hide-small hide-medium" style="white-space: nowrap;">${safeUploader}</td>
+            <td class="hide-small nowrap">${safeModified}</td>
+            <td class="hide-small hide-medium nowrap">${safeUploaded}</td>
+            <td class="hide-small nowrap">${safeSize}</td>
+            <td class="hide-small hide-medium nowrap">${safeUploader}</td>
             <td>
               <div class="button-wrap">
                 <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
@@ -217,12 +217,12 @@ export function renderFileTable(folder) {
   tableBody += `</tbody></table>`;
 
   const bottomControlsHTML = `
-    <div class="d-flex align-items-center mt-3" style="font-size:16px; line-height:1.5;">
-      <label class="mr-2 mb-0" style="font-size:16px; line-height:1.5;">Show</label>
-      <select class="form-control" style="width:auto; font-size:16px; height:auto;" onchange="changeItemsPerPage(this.value)">
+    <div class="d-flex align-items-center mt-3 bottom-controls">
+      <label class="label-inline mr-2 mb-0">Show</label>
+      <select class="form-control bottom-select" onchange="changeItemsPerPage(this.value)">
         ${[10, 20, 50, 100].map(num => `<option value="${num}" ${num === itemsPerPage ? "selected" : ""}>${num}</option>`).join("")}
       </select>
-      <span class="ml-2 mb-0" style="font-size:16px; line-height:1.5;">items per page</span>
+      <span class="items-per-page-text ml-2 mb-0">items per page</span>
     </div>
   `;
 
@@ -274,10 +274,10 @@ window.previewImage = function (imageUrl, fileName) {
       zIndex: "1000"
     });
     modal.innerHTML = `
-      <div class="modal-content" style="max-width: 90vw; max-height: 90vh; background: white; padding: 20px; border-radius: 4px; overflow: auto; margin: auto; position: relative;">
-        <span id="closeImageModal" style="position: absolute; top: 10px; right: 20px; font-size: 28px; cursor: pointer;">&times;</span>
-        <h4 style="text-align: center; margin: 0 0 10px;"></h4>
-        <img src="" style="max-width: 100%; max-height: 80vh; object-fit: contain; display: block; margin: 0 auto;" />
+      <div class="modal-content image-preview-modal-content">
+        <span id="closeImageModal" class="close-image-modal">&times;</span>
+        <h4 class="image-modal-header"></h4>
+        <img src="" class="image-modal-img" />
       </div>`;
     document.body.appendChild(modal);
     document.getElementById("closeImageModal").addEventListener("click", function () {
@@ -602,20 +602,26 @@ function getModeForFile(fileName) {
 
 export function editFile(fileName, folder) {
   console.log("Edit button clicked for:", fileName);
+
+  // Remove any existing editor modal before creating a new one
   let existingEditor = document.getElementById("editorContainer");
-  if (existingEditor) { existingEditor.remove(); }
+  if (existingEditor) {
+    existingEditor.remove();
+  }
+
   const folderUsed = folder || window.currentFolder || "root";
   const folderPath = (folderUsed === "root")
     ? "uploads/"
     : "uploads/" + folderUsed.split("/").map(encodeURIComponent).join("/") + "/";
   const fileUrl = folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime();
-  
+
   fetch(fileUrl, { method: "HEAD" })
     .then(response => {
       const contentLength = response.headers.get("Content-Length");
       console.log("Content-Length:", contentLength);
-      // If header is missing or file size exceeds threshold, block editing.
-      if (contentLength === null || parseInt(contentLength) > 10485760) {
+
+      // Block editing if file size exceeds 10MB or Content-Length is missing
+      if (!contentLength || parseInt(contentLength) > 10485760) {
         showToast("This file is larger than 10 MB and cannot be edited in the browser.");
         throw new Error("File too large.");
       }
@@ -628,55 +634,76 @@ export function editFile(fileName, folder) {
       return response.text();
     })
     .then(content => {
+      // Create the editor modal
       const modal = document.createElement("div");
       modal.id = "editorContainer";
       modal.classList.add("modal", "editor-modal");
       modal.innerHTML = `
-          <h3>Editing: ${fileName}</h3>
-          <div id="editorControls" style="text-align:right; margin-bottom:5px;">
-             <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
-             <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
-          </div>
-          <textarea id="fileEditor" style="width:100%; height:60%; resize:none;">${content}</textarea>
-          <div style="margin-top:10px; text-align:right;">
-            <button id="saveBtn" class="btn btn-primary">Save</button>
-            <button id="closeBtn" class="btn btn-secondary">Close</button>
-          </div>
-        `;
+        <h3 class="editor-title">Editing: ${fileName}</h3>
+        <div id="editorControls" class="editor-controls">
+           <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
+           <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
+        </div>
+        <textarea id="fileEditor" class="editor-textarea">${content}</textarea>
+        <div class="editor-footer">
+          <button id="saveBtn" class="btn btn-primary">Save</button>
+          <button id="closeBtn" class="btn btn-secondary">Close</button>
+        </div>
+      `;
+
       document.body.appendChild(modal);
       modal.style.display = "block";
-      
+
+      // Determine file mode and set CodeMirror editor
       const mode = getModeForFile(fileName);
+      const isDarkMode = document.body.classList.contains("dark-mode");
+      const theme = isDarkMode ? "material-darker" : "default";
+
       const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
         lineNumbers: true,
         mode: mode,
-        theme: "default",
+        theme: theme,
         viewportMargin: Infinity
       });
+
       editor.setSize("100%", "60vh");
       window.currentEditor = editor;
+
+      // Font size control
       let currentFontSize = 14;
       editor.getWrapperElement().style.fontSize = currentFontSize + "px";
       editor.refresh();
-      
-      document.getElementById("decreaseFont").addEventListener("click", function() {
+
+      document.getElementById("decreaseFont").addEventListener("click", function () {
         currentFontSize = Math.max(8, currentFontSize - 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";
         editor.refresh();
       });
-      
-      document.getElementById("increaseFont").addEventListener("click", function() {
+
+      document.getElementById("increaseFont").addEventListener("click", function () {
         currentFontSize = Math.min(32, currentFontSize + 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";
         editor.refresh();
       });
-      
-      document.getElementById("saveBtn").addEventListener("click", function() {
+
+      // Save function
+      document.getElementById("saveBtn").addEventListener("click", function () {
         saveFile(fileName, folderUsed);
       });
-      document.getElementById("closeBtn").addEventListener("click", function() {
+
+      // Close function
+      document.getElementById("closeBtn").addEventListener("click", function () {
         modal.remove();
       });
+
+      // Function to update the editor theme when dark mode is toggled
+      function updateEditorTheme() {
+        const isDarkMode = document.body.classList.contains("dark-mode");
+        editor.setOption("theme", isDarkMode ? "material-darker" : "default");
+      }
+
+      // Listen for dark mode toggle and update the theme dynamically
+      document.getElementById("darkModeToggle").addEventListener("click", updateEditorTheme);
     })
     .catch(error => console.error("Error loading file:", error));
 }
@@ -714,19 +741,12 @@ export function displayFilePreview(file, container) {
   if (file.type.startsWith("image/")) {
     const img = document.createElement("img");
     img.src = URL.createObjectURL(file);
-    img.style.maxWidth = "100px";
-    img.style.maxHeight = "100px";
-    img.style.marginRight = "5px";
-    img.style.marginLeft = "0px";
+    img.classList.add("file-preview-img");
     container.appendChild(img);
   } else {
     const iconSpan = document.createElement("span");
-    iconSpan.classList.add("material-icons");
-    iconSpan.style.color = "#333";
+    iconSpan.classList.add("material-icons", "file-icon");
     iconSpan.textContent = "insert_drive_file";
-    iconSpan.style.marginRight = "0px";
-    iconSpan.style.marginLeft = "0px";
-    iconSpan.style.fontSize = "32px";
     container.appendChild(iconSpan);
   }
 }

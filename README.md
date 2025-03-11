@@ -1,6 +1,10 @@
 # Multi File Upload Editor
 
+**Light mode**
 ![Main Screen](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/main-screen.png)
+
+**Dark mode**
+![Main Screen](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
 
 changelogs available here: <https://github.com/error311/multi-file-upload-editor-docker/>
 
@@ -27,6 +31,14 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
   - Secure, session-based authentication protects the editor. An admin user can add or remove users through the interface. Passwords are hashed using PHP’s password_hash() for security, and session checks prevent unauthorized access to backend endpoints.
 - **Responsive, Dynamic UI:**
   - The interface is mobile-friendly and adjusts to different screen sizes (hiding non-critical columns on small devices to avoid clutter). Updates to the file list, folder tree, and upload progress happen asynchronously (via Fetch API and XMLHttpRequest), so the page never needs to fully reload. Users receive immediate feedback through toast notifications and modal dialogs for actions like confirmations and error messages, creating a smooth user experience.
+- **Dark Mode/Light Mode**
+  - Automatically adapts to the operating system’s theme preference by default, with a manual toggle option.
+  - A theme toggle allows users to switch between Dark Mode and Light Mode for an optimized viewing experience.
+  - The selected mode persists across sessions, ensuring the theme remains active even after a page refresh.
+  - Every element, including the header, buttons, tables, modals, and the file editor, dynamically adapts to the selected theme.
+  - Dark Mode: Uses a dark gray background with lighter text to reduce eye strain in low-light environments.
+  - Light Mode: Retains the classic bright interface for high visibility in well-lit conditions.
+  - CodeMirror editor applies a matching dark theme in Dark Mode for better readability when editing files.
 
 ---
 

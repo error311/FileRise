@@ -9,43 +9,33 @@ export function initUpload() {
   const uploadForm = document.getElementById("uploadFileForm");
   const dropArea = document.getElementById("uploadDropArea");
 
-  // Helper function: set the drop area's default layout.
+  // Helper function: set the drop area's default layout using CSS classes.
   function setDropAreaDefault() {
     if (dropArea) {
       dropArea.innerHTML = `
-        <div id="uploadInstruction" style="margin-bottom:10px; font-size:16px;">
+        <div id="uploadInstruction" class="upload-instruction">
           Drop files here or click 'Choose files'
         </div>
-        <div id="uploadFileRow" style="display:flex; align-items:center; justify-content:center;">
+        <div id="uploadFileRow" class="upload-file-row">
           <button id="customChooseBtn" type="button">
            Choose files
           </button>
-          <div id="fileInfoContainer" style="margin-left:10px; font-size:16px; display:flex; align-items:center;">
+          <div id="fileInfoContainer" class="file-info-container">
             <span id="fileInfoDefault">No files selected</span>
           </div>
         </div>
       `;
-      // Wire up the custom button.
-      /* const customChooseBtn = document.getElementById("customChooseBtn");
-      if (customChooseBtn) {
-        customChooseBtn.addEventListener("click", function () {
-          fileInput.click();
-        });
-      } */
+      // (Optional: wire up the custom button if needed.)
     }
   }
 
   // Initialize drop area.
   if (dropArea) {
-    dropArea.style.border = "2px dashed #ccc";
-    dropArea.style.padding = "20px";
-    dropArea.style.textAlign = "center";
-    dropArea.style.marginBottom = "15px";
-    dropArea.style.cursor = "pointer";
-    // Set default content once.
+    // Instead of inline styles here, ensure dropArea is styled in CSS.
+    // But if necessary, you can add minimal inline styles that you later override:
+    dropArea.classList.add("upload-drop-area"); // Define in CSS if needed.
     setDropAreaDefault();
 
-    // Prevent default behavior for drag events.
     dropArea.addEventListener("dragover", function (e) {
       e.preventDefault();
       dropArea.style.backgroundColor = "#f8f8f8";
@@ -63,30 +53,27 @@ export function initUpload() {
         fileInput.dispatchEvent(new Event("change"));
       }
     });
-
-    // Clicking the drop area triggers file selection.
     dropArea.addEventListener("click", function () {
       fileInput.click();
     });
   }
 
-  // When files are selected, update only the file info container.
+  // When files are selected, update file info container.
   if (fileInput) {
     fileInput.addEventListener("change", function () {
       const files = fileInput.files;
-      // Update the file info container without replacing the entire drop area.
       const fileInfoContainer = document.getElementById("fileInfoContainer");
       if (fileInfoContainer) {
         if (files.length > 0) {
           if (files.length === 1) {
             fileInfoContainer.innerHTML = `
-              <div id="filePreviewContainer" style="display:inline-block; vertical-align:middle;"></div>
-              <span id="fileNameDisplay" style="vertical-align:middle; margin-left:5px;">${escapeHTML(files[0].name)}</span>
+              <div id="filePreviewContainer" class="file-preview-container"></div>
+              <span id="fileNameDisplay" class="file-name-display">${escapeHTML(files[0].name)}</span>
             `;
           } else {
             fileInfoContainer.innerHTML = `
-              <div id="filePreviewContainer" style="display:inline-block; vertical-align:middle;"></div>
-              <span id="fileCountDisplay" style="vertical-align:middle; margin-left:5px;">${files.length} files selected</span>
+              <div id="filePreviewContainer" class="file-preview-container"></div>
+              <span id="fileCountDisplay" class="file-name-display">${files.length} files selected</span>
             `;
           }
           const previewContainer = document.getElementById("filePreviewContainer");
@@ -99,35 +86,30 @@ export function initUpload() {
         }
       }
       
-      // Build progress list as before.
+      // Build progress list using CSS classes.
       progressContainer.innerHTML = "";
       if (files.length > 0) {
         const allFiles = Array.from(files);
         const maxDisplay = 10;
         const list = document.createElement("ul");
-        list.style.listStyle = "none";
-        list.style.padding = "0";
+        list.classList.add("upload-progress-list");
         allFiles.forEach((file, index) => {
           const li = document.createElement("li");
-          li.style.paddingTop = "10px";
-          li.style.marginBottom = "10px";
+          li.classList.add("upload-progress-item");
+          // For dynamic display, we still set display property via JS.
           li.style.display = (index < maxDisplay) ? "flex" : "none";
-          li.style.alignItems = "center";
-          li.style.flexWrap = "wrap";
           
           const preview = document.createElement("div");
-          preview.className = "file-preview";
+          preview.className = "file-preview"; // Already styled in CSS.
           displayFilePreview(file, preview);
           
           const nameDiv = document.createElement("div");
-          // Using textContent here is safe, so no need to escape
+          nameDiv.classList.add("upload-file-name");
           nameDiv.textContent = file.name;
-          nameDiv.style.flexGrow = "1";
-          nameDiv.style.marginLeft = "5px";
-          nameDiv.style.wordBreak = "break-word";
           
           const progDiv = document.createElement("div");
-          progDiv.classList.add("progress");
+          progDiv.classList.add("progress", "upload-progress-div");
+          // If needed, dynamic style for flex sizing remains:
           progDiv.style.flex = "0 0 250px";
           progDiv.style.marginLeft = "5px";
           
@@ -146,10 +128,9 @@ export function initUpload() {
         });
         if (allFiles.length > maxDisplay) {
           const extra = document.createElement("li");
-          extra.style.paddingTop = "10px";
-          extra.style.marginBottom = "10px";
+          extra.classList.add("upload-progress-extra");
           extra.textContent = `Uploading additional ${allFiles.length - maxDisplay} file(s)...`;
-          extra.style.display = "flex";
+          extra.style.display = "flex"; // If dynamic, otherwise define in CSS.
           list.appendChild(extra);
         }
         progressContainer.appendChild(list);
@@ -157,7 +138,7 @@ export function initUpload() {
     });
   }
 
-  // Submit handler remains unchanged.
+  // Submit handler.
   if (uploadForm) {
     uploadForm.addEventListener("submit", function (e) {
       e.preventDefault();
