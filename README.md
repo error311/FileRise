@@ -26,7 +26,7 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 - **Folder Management:**
   - Supports organizing files into folders and subfolders. Users can create new folders, rename existing folders, or delete folders. A dynamic folder tree in the UI allows navigation through directories and updates in real-time to reflect changes after any create, rename, or delete action.
 - **Sorting & Pagination:**
-  - The file list can be sorted by name, last modified date, upload date, size, or uploader. Dates are reliably sortable thanks to a custom date parser. For easier browsing, the interface supports pagination with selectable page sizes (10, 20, 50, or 100 items per page) and navigation controls (“Prev”, “Next”, specific page numbers).
+  - The file list can be sorted by name, last modified date, upload date, size, or uploader. For easier browsing, the interface supports pagination with selectable page sizes (10, 20, 50, or 100 items per page) and navigation controls (“Prev”, “Next”, specific page numbers).
 - **User Authentication & Management:**
   - Secure, session-based authentication protects the editor. An admin user can add or remove users through the interface. Passwords are hashed using PHP’s password_hash() for security, and session checks prevent unauthorized access to backend endpoints.
 - **Responsive, Dynamic UI:**
