@@ -1155,7 +1155,6 @@ body.dark-mode #fileListContainer {
     margin: 0 auto;
   }
   
-/* Image Preview Close Button (Same as Editor, Adjusted X Position) */
 /* Image Preview Close Button (Perfect Alignment) */
 .close-image-modal {
   position: absolute;
@@ -1225,6 +1224,11 @@ body.dark-mode .image-preview-modal-content {
   margin-right: 0;
   margin-left: 0;
   font-size: 32px;
+}
+
+/* Dark Mode Styles */
+body.dark-mode .file-icon {
+  color: white;
 }
 
 .bottom-select {
