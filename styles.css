@@ -1134,20 +1134,27 @@ body.dark-mode #fileListContainer {
   }
   
   .image-preview-modal-content {
-    max-width: 90vw;
+    max-width: fit-content !important; /* Allow modal to shrink to image size */
     max-height: 90vh;
     background: #fff;
-    padding: 20px;
+    padding: 20px !important;
     border-radius: 4px;
     overflow: hidden !important;  /* Prevents unexpected scrolling */
     margin: auto;
     position: relative;
-    display: flex;
+    display: inline-flex !important; /* Makes sure the modal content only wraps the image */
     flex-direction: column;
     align-items: center;
     justify-content: center;
   }
-  
+  @media (max-width: 600px) {
+    .image-preview-modal-content {
+      max-width: fit-content !important; /* Allow modal to shrink to image size */  
+      padding: 5px !important;
+      overflow: hidden !important;  /* Prevents unexpected scrolling */
+      display: inline-flex !important; /* Makes sure the modal content only wraps the image */
+    }
+  }
   body.dark-mode .image-preview-modal-content {
     background: #2c2c2c;
     border-color: #444;
