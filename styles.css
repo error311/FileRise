@@ -367,6 +367,13 @@ body.dark-mode .card {
   height: auto;            /* Let the modal height adjust based on content */
   max-height: 90vh;        /* But limit to 90% of the viewport height */
 }
+
+@media (max-width: 600px) {
+  .modal .modal-content {
+    transform: translate(-50%, -70%);
+  }
+}
+
 body.dark-mode .modal .modal-content {
   background-color: #2c2c2c;
   color: #e0e0e0;
