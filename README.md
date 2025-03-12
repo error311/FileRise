@@ -1,10 +1,10 @@
 # Multi File Upload Editor
 
 **Light mode**
-![Main Screen](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/main-screen.png)
+![Light Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-mode.png)
 
 **Dark mode**
-![Main Screen](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
+![Dark Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
 
 changelogs available here: <https://github.com/error311/multi-file-upload-editor-docker/>
 
@@ -43,12 +43,13 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 
 ## Screenshots
 
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)  
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/edit-larger-window.png)  
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/preview-image.png)  
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/create-folder.png)  
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/download-zip.png)  
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/create-user.png)  
+  ![dark-editor](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-editor.png)  
+  ![dark-preview](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-preview.png)  
+  ![light-downloadzip](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-downloadzip.png)
+  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)
+
+  **iphone:**  
+  ![dark-iphone](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-iphone.png) ![light-preview-iphone](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-preview-iphone.png)  
 
 based off of:
 <https://github.com/sensboston/uploader>
