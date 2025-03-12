@@ -15,6 +15,27 @@ body {
   margin-top: 20px;
 }
 
+.container-fluid {
+  padding-left: 5px !important;  /* Default padding for small screens */
+  padding-right: 5px !important;
+  margin-top: 20px;    /* Restores space below the header */
+}
+
+/* Increase left/right padding for larger screens */
+@media (min-width: 768px) {
+  .container-fluid {
+    padding-left: 50px !important;
+    padding-right: 50px !important;
+  }
+}
+
+@media (min-width: 1200px) {
+  .container-fluid {
+    padding-left: 100px !important;  /* More space on extra-large screens */
+    padding-right: 100px !important;
+  }
+}
+
 /* ===========================================================
    HEADER & NAVIGATION
    =========================================================== */
@@ -352,12 +373,72 @@ body.dark-mode .modal .modal-content {
   border-color: #444;
 }
 
-/* Editor Modal */
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+}
+
+body.dark-mode .editor-header {
+  background-color: #2c2c2c;
+}
+
+/* Editor Modal Close Button - Perfectly Centered */
+/* Fully Centered Close Button with Slight X Adjustment */
+.editor-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  font-size: 20px; /* Keep it readable */
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+
+  /* Perfectly Sized Circular Button */
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  text-align: center;
+
+  /* Fix X alignment */
+  line-height: 30px; /* Slightly reduce so "X" moves up */
+  
+  color: #ff4d4d;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 2px solid transparent;
+  transition: all 0.3s ease-in-out;
+}
+
+/* Hover Effect */
+.editor-close-btn:hover {
+  color: white;
+  background-color: #ff4d4d;
+  box-shadow: 0px 0px 6px rgba(255, 77, 77, 0.8);
+  transform: scale(1.05);
+}
+
+/* Dark Mode Fix */
+body.dark-mode .editor-close-btn {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #ff6666;
+}
+
+body.dark-mode .editor-close-btn:hover {
+  background-color: #ff6666;
+  color: #000;
+}
+
+/* Default Editor Modal */
 .editor-modal {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(5%, 10%);
+  transform: translate(5%, 5%);
   background-color: #fff;
   padding: 20px;
   border: 1px solid #ccc;
@@ -366,16 +447,67 @@ body.dark-mode .modal .modal-content {
   max-width: 90vw;
   min-width: 400px;
   height: 600px;
-  max-height: 80vh;
-  overflow: auto;
   resize: both;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
 }
+
+/* Dark mode styling */
 body.dark-mode .editor-modal {
   background-color: #2c2c2c;
   color: #e0e0e0;
   border-color: #444;
+}
+
+/* 🔹 Small Screens: Adjust Position */
+@media (max-width: 768px) {
+  .editor-modal {
+    top: 0%;
+    left: 0%;
+    transform: translate(4%, 4%) !important;  /* Reset transform */
+    width: 90vw !important;  /* Expand width */
+    max-height: 90vh;
+    padding: 15px;
+    min-width: auto !important;  /* Remove min-width restriction */
+  }
+}
+.editor-title {
+  white-space: nowrap !important; /* Prevents wrapping */
+  overflow: hidden !important; /* Hides overflow */
+  text-overflow: ellipsis !important; /* Adds "..." when text is too long */
+  font-size: 1.5rem; /* Default font size */
+  max-width: 95%;
+  display: block; /* Ensures it's a block element for proper sizing */
+}
+
+@media (max-width: 600px) {
+  .editor-title {
+    font-size: 1.2rem; /* Smaller font size on small screens */
+    max-width: 95%; /* Ensures it doesn't overflow the container */
+  }
+}
+
+.editor-controls {
+  text-align: right;
+  margin-bottom: 5px;
+}
+
+.editor-textarea {
+  flex-grow: 1;
+  min-height: 5px !important;  /* Allow shrinking */
+  height: auto !important;     /* Let JavaScript control height */
+  max-height: 100vh !important; /* Prevent overflow */
+  resize: none;
+  overflow: auto;
+}
+
+.editor-footer {
+  margin-top: 10px;
+  text-align: right;
 }
 
 /* ===========================================================
@@ -570,6 +702,8 @@ body.dark-mode .editor-modal {
   background-color: transparent;
   border-collapse: collapse !important;
   border-spacing: 0 !important;
+  table-layout: auto !important; /* Ensures flexible column widths */
+  width: 100% !important;
 }
 
 #fileList table tr:nth-child(even) {
@@ -581,6 +715,22 @@ body.dark-mode .editor-modal {
 }
 body.dark-mode #fileList table tr:hover {
   background-color: #444;
+}
+
+#fileListTitle {
+  white-space: normal !important;  /* Allow text to wrap */
+  word-wrap: break-word !important; /* Break long words */
+  overflow-wrap: break-word !important; /* Ensure compatibility */
+  max-width: 100% !important; /* Prevent it from going outside the container */
+  display: block !important; /* Ensure it behaves as a block element */
+  text-align: left !important; /* Keep it aligned properly */
+}
+
+/* Small screens: Reduce font size for better wrapping */
+@media (max-width: 600px) {
+  #fileListTitle {
+    font-size: 1.4rem !important; /* Adjust size for smaller screens */
+  }
 }
 
 #fileList table tr {
@@ -597,7 +747,55 @@ body.dark-mode #fileList table tr {
 #fileList table th, 
 #fileList table td {
   border: none !important;
+  white-space: nowrap; /* Prevents wrapping for all other columns */
 }
+
+/* Ensure only File Name column wraps */
+#fileList table th[data-column="name"],
+#fileList table td:nth-child(2) {
+  white-space: normal !important;  /* Allow wrapping */
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  text-align: left !important;
+  line-height: 1.2 !important; /* Reduce spacing between lines */
+  padding: 8px 10px !important; /* Adjust padding for better fit */
+
+  /* Default (Small Screens) */
+  max-width: 200px !important;
+  min-width: 120px !important;
+}
+
+/* Medium Screens */
+@media (min-width: 500px) {
+  #fileList table th[data-column="name"],
+  #fileList table td:nth-child(2) {
+    max-width: 250px !important;
+    min-width: 120px !important;
+  }
+}
+
+/* Large Screens */
+@media (min-width: 1024px) {
+  #fileList table th[data-column="name"],
+  #fileList table td:nth-child(2) {
+    max-width: 280px !important;
+    min-width: 180px !important;
+  }
+}
+
+/* Ensure all other columns stay in one line */
+#fileList table th:not([data-column="name"]),
+#fileList table td:not(:nth-child(2)) {
+  white-space: nowrap !important;
+}
+
+/* Reduce excessive row height */
+#fileList table td {
+  vertical-align: middle !important; /* Keep content centered */
+  padding: 8px 10px !important; /* Reduce excess padding */
+}
+
 
 /* ===========================================================
    HEADINGS & FORM LABELS
@@ -638,6 +836,21 @@ label {
 /* Add spacing below the row of cards */
 #uploadFolderRow {
   margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  #uploadFolderRow .col-md-6 {
+    margin-bottom: 15px; /* Adjust the spacing between stacked cards */
+  }
+
+  #uploadFolderRow .col-md-6:last-child {
+    margin-bottom: 0; /* Remove extra spacing from the last stacked card */
+  }
+}
+
+.card-header {
+  font-size: 1.2rem; /* Increase font size */
+  font-weight: bold; /* Make it bold */
 }
 
 .card-body .form-group {
@@ -747,18 +960,30 @@ body.dark-mode .folder-option:hover {
 
 /* Button Wrap */
 .button-wrap {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
-  align-items: left;
-  gap: 2px;
+  row-gap: 5px; /* Removes vertical gap */
+  column-gap: 0px; /* Optional: Keeps a small horizontal gap */
 }
 
+/* Center-align on small screens */
 @media (max-width: 500px) {
   .button-wrap {
-    display: flex;
     width: 100%;
-    justify-content: center;
   }
+}
+
+.button-wrap .btn {
+  align-items: center;
+  height: 32px !important;  /* Adjust as needed to match Download/Rename */
+  font-size: 14px !important;  /* Keeps text aligned */
+}
+
+/* Ensure Material Icons inside buttons do not enlarge buttons */
+.button-wrap .btn i.material-icons {
+  font-size: 16px !important;  /* Match text size */
+  line-height: 1 !important;
+  vertical-align: middle !important; /* Align icon with text */
 }
 
 /* File List Section */
@@ -788,17 +1013,17 @@ body.dark-mode #fileListContainer {
   #fileListContainer > h2,
   #fileListContainer > .file-list-actions,
   #fileListContainer > #fileList {
-    margin-left: 10px; /* Smaller adjustment for mobile */
+    margin-left: 1px; /* Smaller adjustment for mobile */
   }
 }
 
 .col-12.col-md-4.text-left {
-  margin-left: -10px; /* Adjust the value as needed */
+  margin-left: -15px; /* Adjust the value as needed */
 }
 
-@media (max-width: 768px) {
+@media (max-width: 600px) {
   .col-12.col-md-4.text-left {
-    margin-left: -10px; /* Slightly adjust for smaller screens */
+    margin-left: -15px; /* Slightly adjust for smaller screens */
   }
 }
 
@@ -879,6 +1104,7 @@ body.dark-mode #fileListContainer {
   
   .folder-option {
     cursor: pointer;
+    
   }
 
   #folderTreeContainer {
@@ -888,32 +1114,94 @@ body.dark-mode #fileListContainer {
 /* ===========================================================
    FILE MANAGER INLINE STYLE REMOVAL - New Classes
    =========================================================== */
-.image-preview-modal-content {
-  max-width: 90vw;
-  max-height: 90vh;
-  background: #fff;
-  padding: 20px;
-  border-radius: 4px;
-  overflow: auto;
-  margin: auto;
-  position: relative;
-}
-body.dark-mode .image-preview-modal-content {
-  background: #2c2c2c;
-  border-color: #444;
-}
-
+  
+  .image-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap; /* Allows filename to wrap */
+    text-align: center;
+    min-height: 30px; /* Ensures enough space if wrapping */
+    margin: 0 auto 10px; /* Centers it properly */
+    padding: 10px;
+    width: 95%;
+  }
+  
+  .image-preview-modal-content {
+    max-width: 90vw;
+    max-height: 90vh;
+    background: #fff;
+    padding: 20px;
+    border-radius: 4px;
+    overflow: hidden !important;  /* Prevents unexpected scrolling */
+    margin: auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  body.dark-mode .image-preview-modal-content {
+    background: #2c2c2c;
+    border-color: #444;
+  }
+  
+  /* Ensure the image resizes properly */
+  .image-modal-img {
+    max-width: 100%;
+    max-height: 80vh;  /* Ensure it doesn't force a scrollbar */
+    object-fit: contain;  /* Prevents stretching */
+    display: block;
+    margin: 0 auto;
+  }
+  
+/* Image Preview Close Button (Same as Editor, Adjusted X Position) */
+/* Image Preview Close Button (Perfect Alignment) */
 .close-image-modal {
   position: absolute;
   top: 10px;
-  right: 20px;
-  font-size: 28px;
+  right: 15px;
+  font-size: 24px; /* Ensures X is same size */
+  font-weight: bold;
   cursor: pointer;
+  z-index: 1000;
+  color: #ff4d4d;
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  width: 32px; /* Ensures exact width */
+  height: 32px; /* Ensures exact height */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1; /* Fixes text alignment */
+  padding-bottom: 2px; /* Moves X up slightly */
+  transition: all 0.3s ease-in-out;
 }
 
-.image-modal-header {
-  text-align: center;
-  margin: 0 0 10px;
+/* Hover Effect */
+.close-image-modal:hover {
+  color: white;
+  background-color: #ff4d4d;
+  box-shadow: 0px 0px 6px rgba(255, 77, 77, 0.8);
+  transform: scale(1.05); /* Keeps position even on hover */
+}
+
+/* Dark Mode Adjustments */
+body.dark-mode .close-image-modal {
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #ff6666;
+}
+
+body.dark-mode .close-image-modal:hover {
+  background-color: #ff6666;
+  color: #000;
+}
+
+/* Fix Dark Mode */
+body.dark-mode .image-preview-modal-content {
+  background: #2c2c2c;
+  border-color: #444;
 }
 
 .image-modal-img {
@@ -933,34 +1221,11 @@ body.dark-mode .image-preview-modal-content {
   cursor: pointer;
 }
 
-.file-preview-img {
-  max-width: 100px;
-  max-height: 100px;
-  margin-right: 5px;
-  margin-left: 0;
-}
-
 .file-icon {
   color: #333;
   margin-right: 0;
   margin-left: 0;
   font-size: 32px;
-}
-
-.editor-controls {
-  text-align: right;
-  margin-bottom: 5px;
-}
-
-.editor-textarea {
-  width: 100%;
-  height: 60%;
-  resize: none;
-}
-
-.editor-footer {
-  margin-top: 10px;
-  text-align: right;
 }
 
 .bottom-select {
@@ -1000,22 +1265,58 @@ body.dark-mode .image-preview-modal-content {
   font-size: 16px;
 }
 
+/* Upload row stays a row */
 .upload-file-row {
   display: flex;
   align-items: center;
   justify-content: center;
+  word-break: break-word;
 }
 
-.file-info-container {
-  margin-left: 10px;
-  font-size: 16px;
+/* New wrapper ensures File Info appears below */
+.file-info-wrapper {
   display: flex;
+  flex-direction: column; /* Stack content below */
+  justify-content: center !important; /* Keep it centered */
+  align-items: center !important;
+  margin-top: 10px; /* Add spacing */
+}
+
+/* Ensure file info wraps properly */
+.file-info-container {
+  display: flex;
+  flex-wrap: wrap !important; /* Allow wrapping */
+  justify-content: center !important; /* Keep it centered */
   align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 .file-preview-container {
-  display: inline-block;
-  vertical-align: middle;
+  display: flex !important;  /* Use flex to control layout */
+  flex-wrap: wrap !important; /* Allow wrapping */
+  justify-content: center !important; /* Keep it centered */
+  align-items: center !important; /* Align items properly */
+  gap: 5px !important; /* Small spacing between previews */
+  max-width: 100% !important; /* Prevent overflow */
+  text-align: center !important;
+}
+
+/* Ensure images are responsive */
+.file-preview-img {
+  max-width: 100px;
+  max-height: 100px;
+  margin-right: 5px;
+  justify-content: center !important; /* Keep it centered */
+  height: auto;
+  display: block !important; /* Prevent spacing issues */
+}
+
+/* Small screens: Ensure it wraps properly */
+@media (max-width: 600px) {
+  .file-preview-container {
+    justify-content: center !important;
+  }
 }
 
 .file-name-display {

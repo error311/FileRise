@@ -202,10 +202,10 @@ export function renderFileTable(folder) {
             <td class="hide-small hide-medium nowrap">${safeUploader}</td>
             <td>
               <div class="button-wrap">
-                <a class="btn btn-sm btn-success" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
+                <a class="btn btn-sm btn-success ml-2" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
                 ${isEditable ? `<button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Edit</button>` : ""}
-                <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Rename</button>
                 ${previewButton}
+                <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Rename</button>
               </div>
             </td>
           </tr>
@@ -600,6 +600,32 @@ function getModeForFile(fileName) {
   }
 }
 
+function adjustEditorSize() {
+  const modal = document.querySelector(".editor-modal");
+  if (modal && window.currentEditor) {
+    // Get modal height
+    const modalHeight = modal.getBoundingClientRect().height || 600;
+
+    // Keep 70% of modal height for the editor, but allow it to shrink
+    const newEditorHeight = Math.max(modalHeight * 0.80, 5) + "px";
+
+    console.log("Adjusting editor height to:", newEditorHeight); // Debugging output
+
+    // Apply new height to the editor
+    window.currentEditor.setSize("100%", newEditorHeight);
+  }
+}
+
+function observeModalResize(modal) {
+  if (!modal) return;
+
+  const resizeObserver = new ResizeObserver(() => {
+    adjustEditorSize();
+  });
+
+  resizeObserver.observe(modal);
+}
+
 export function editFile(fileName, folder) {
   console.log("Edit button clicked for:", fileName);
 
@@ -639,17 +665,20 @@ export function editFile(fileName, folder) {
       modal.id = "editorContainer";
       modal.classList.add("modal", "editor-modal");
       modal.innerHTML = `
+      <div class="editor-header">
         <h3 class="editor-title">Editing: ${fileName}</h3>
-        <div id="editorControls" class="editor-controls">
-           <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
-           <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
-        </div>
-        <textarea id="fileEditor" class="editor-textarea">${content}</textarea>
-        <div class="editor-footer">
-          <button id="saveBtn" class="btn btn-primary">Save</button>
-          <button id="closeBtn" class="btn btn-secondary">Close</button>
-        </div>
-      `;
+        <button id="closeEditorX" class="editor-close-btn">&times;</button>
+      </div>
+      <div id="editorControls" class="editor-controls">
+         <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
+         <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
+      </div>
+      <textarea id="fileEditor" class="editor-textarea">${content}</textarea>
+      <div class="editor-footer">
+        <button id="saveBtn" class="btn btn-primary">Save</button>
+        <button id="closeBtn" class="btn btn-secondary">Close</button>
+      </div>
+    `;
 
       document.body.appendChild(modal);
       modal.style.display = "block";
@@ -659,21 +688,35 @@ export function editFile(fileName, folder) {
       const isDarkMode = document.body.classList.contains("dark-mode");
       const theme = isDarkMode ? "material-darker" : "default";
 
+      // Initialize CodeMirror
+      // Initialize CodeMirror
       const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
         lineNumbers: true,
         mode: mode,
         theme: theme,
         viewportMargin: Infinity
       });
-
-      editor.setSize("100%", "60vh");
+      
+      // Ensure height adjustment
       window.currentEditor = editor;
+      
+      // Adjust height AFTER modal appears
+      setTimeout(() => {
+        adjustEditorSize(); // Set initial height
+      }, 50);
+      
+      // Attach modal resize observer
+      observeModalResize(modal);
 
       // Font size control
       let currentFontSize = 14;
       editor.getWrapperElement().style.fontSize = currentFontSize + "px";
       editor.refresh();
 
+      document.getElementById("closeEditorX").addEventListener("click", function () {
+        modal.remove();
+      });
+      
       document.getElementById("decreaseFont").addEventListener("click", function () {
         currentFontSize = Math.max(8, currentFontSize - 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";

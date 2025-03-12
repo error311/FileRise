@@ -12,22 +12,26 @@ export function initUpload() {
   // Helper function: set the drop area's default layout using CSS classes.
   function setDropAreaDefault() {
     if (dropArea) {
-      dropArea.innerHTML = `
-        <div id="uploadInstruction" class="upload-instruction">
-          Drop files here or click 'Choose files'
-        </div>
-        <div id="uploadFileRow" class="upload-file-row">
-          <button id="customChooseBtn" type="button">
-           Choose files
-          </button>
-          <div id="fileInfoContainer" class="file-info-container">
-            <span id="fileInfoDefault">No files selected</span>
+        dropArea.innerHTML = `
+          <div id="uploadInstruction" class="upload-instruction">
+            Drop files here or click 'Choose files'
           </div>
-        </div>
-      `;
-      // (Optional: wire up the custom button if needed.)
+          
+          <div id="uploadFileRow" class="upload-file-row">
+            <button id="customChooseBtn" type="button">
+              Choose files
+            </button>
+          </div>
+
+          <!-- New wrapper below the upload row -->
+          <div id="fileInfoWrapper" class="file-info-wrapper">
+            <div id="fileInfoContainer" class="file-info-container">
+              <span id="fileInfoDefault">No files selected</span>
+            </div>
+          </div>
+        `;
     }
-  }
+}
 
   // Initialize drop area.
   if (dropArea) {
