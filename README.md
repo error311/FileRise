@@ -49,7 +49,10 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
   ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)
 
   **iphone:**  
-  ![dark-iphone](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-iphone.png) ![light-preview-iphone](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-preview-iphone.png)  
+<p align="center">
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-iphone.png" width="45%">
+  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-preview-iphone.png" width="45%">
+</p>
 
 based off of:
 <https://github.com/sensboston/uploader>
