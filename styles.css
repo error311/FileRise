@@ -384,7 +384,6 @@ body.dark-mode .editor-header {
   background-color: #2c2c2c;
 }
 
-/* Editor Modal Close Button - Perfectly Centered */
 /* Fully Centered Close Button with Slight X Adjustment */
 .editor-close-btn {
   position: absolute;
@@ -506,7 +505,7 @@ body.dark-mode .editor-modal {
 }
 
 .editor-footer {
-  margin-top: 10px;
+  margin-top: 5px;
   text-align: right;
 }
 
