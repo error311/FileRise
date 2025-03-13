@@ -790,6 +790,15 @@ body.dark-mode #fileList table tr {
   }
 }
 
+/* Larger Screens */
+@media (min-width: 1440px) {
+  #fileList table th[data-column="name"],
+  #fileList table td:nth-child(2) {
+    max-width: 380px !important;
+    min-width: 180px !important;
+  }
+}
+
 /* Ensure all other columns stay in one line */
 #fileList table th:not([data-column="name"]),
 #fileList table td:not(:nth-child(2)) {
