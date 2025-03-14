@@ -277,14 +277,14 @@ body.dark-mode header {
   color: white;
 }
 
-/* Default (light mode) */
 .material-icons.folder-icon {
   color: black;
+  margin-right: 5px; /* adjust the value as needed */
 }
 
-/* Dark mode */
 body.dark-mode .material-icons.folder-icon {
   color: white;
+  margin-right: 5px;
 }
 
 /* ===========================================================
