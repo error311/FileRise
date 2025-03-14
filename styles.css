@@ -330,7 +330,11 @@ body.dark-mode #loginForm button:hover {
   background-color: #fff;
   color: #000;
   border: 1px solid #ddd;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
 }
+
 body.dark-mode .card {
   background-color: #2c2c2c;
   color: #e0e0e0;
