@@ -93,18 +93,28 @@ window.updateRowHighlight = function (checkbox) {
 
 export function loadFileList(folderParam) {
   const folder = folderParam || "root";
-  return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&t=" + new Date().getTime())
+  // Request a recursive listing from the server.
+  return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
     .then(response => response.json())
     .then(data => {
       const fileListContainer = document.getElementById("fileList");
       fileListContainer.innerHTML = "";
       if (data.files && data.files.length > 0) {
+        // Map each file so that we have a full name that includes subfolder information.
+        // We assume that getFileList.php returns a property 'path' that contains the full relative path (e.g. "subfolder/filename.txt")
+        data.files = data.files.map(file => {
+          // If file.path exists, use that; otherwise fallback to file.name.
+          file.fullName = (file.path || file.name).trim().toLowerCase();
+          return file;
+        });
+        // Save fileData and render file table using your full list.
         fileData = data.files;
         renderFileTable(folder);
       } else {
         fileListContainer.textContent = "No files found.";
         updateFileActionButtons();
       }
+      // Return the full file objects.
       return data.files || [];
     })
     .catch(error => {
@@ -696,15 +706,15 @@ export function editFile(fileName, folder) {
         theme: theme,
         viewportMargin: Infinity
       });
-      
+
       // Ensure height adjustment
       window.currentEditor = editor;
-      
+
       // Adjust height AFTER modal appears
       setTimeout(() => {
         adjustEditorSize(); // Set initial height
       }, 50);
-      
+
       // Attach modal resize observer
       observeModalResize(modal);
 
@@ -716,7 +726,7 @@ export function editFile(fileName, folder) {
       document.getElementById("closeEditorX").addEventListener("click", function () {
         modal.remove();
       });
-      
+
       document.getElementById("decreaseFont").addEventListener("click", function () {
         currentFontSize = Math.max(8, currentFontSize - 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";

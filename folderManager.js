@@ -116,12 +116,12 @@ export async function loadFolderTree(selectedFolder) {
     }
 
     let html = "";
-    // Build the root row without inline styles.
+    // Build the root row.
     html += `<div id="rootRow" class="root-row">
                <span class="folder-toggle">[-]</span>
                <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
              </div>`;
-    // If no folders exist (empty array), render a default tree with just (Root).
+
     if (folders.length === 0) {
       html += `<ul class="folder-tree expanded">
                  <li class="folder-item">
@@ -129,8 +129,8 @@ export async function loadFolderTree(selectedFolder) {
                  </li>
                </ul>`;
     } else {
-      const tree = buildFolderTree(folders);
-      html += renderFolderTree(tree, "", "block");
+      const tree = buildFolderTree(folders); // your existing function
+      html += renderFolderTree(tree, "", "block"); // your existing function
     }
 
     container.innerHTML = html;
@@ -164,7 +164,7 @@ export async function loadFolderTree(selectedFolder) {
       });
     });
 
-    // Attach toggle event for the root toggle.
+    // Attach toggle events (same as your original logic).
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
       rootToggle.addEventListener("click", function (e) {
@@ -184,7 +184,6 @@ export async function loadFolderTree(selectedFolder) {
       });
     }
 
-    // Attach toggle events for all folder toggles.
     container.querySelectorAll(".folder-toggle").forEach(toggle => {
       toggle.addEventListener("click", function (e) {
         e.stopPropagation();

@@ -277,6 +277,16 @@ body.dark-mode header {
   color: white;
 }
 
+/* Default (light mode) */
+.material-icons.folder-icon {
+  color: black;
+}
+
+/* Dark mode */
+body.dark-mode .material-icons.folder-icon {
+  color: white;
+}
+
 /* ===========================================================
    FORMS & LOGIN
    =========================================================== */

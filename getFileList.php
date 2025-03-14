@@ -13,7 +13,6 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
 }
 
 $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
-
 // Allow only safe characters in the folder parameter (letters, numbers, underscores, dashes, spaces, and forward slashes).
 if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);

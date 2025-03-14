@@ -1,10 +1,17 @@
-// upload.js
-
 import { loadFileList, displayFilePreview, initFileActions } from './fileManager.js';
 import { showToast, escapeHTML } from './domUtils.js';
+import { loadFolderTree } from './folderManager.js';
 
 export function initUpload() {
   const fileInput = document.getElementById("file");
+
+  // Enhancement: Allow folder upload with subfolders by setting directory attributes.
+  if (fileInput) {
+    fileInput.setAttribute("webkitdirectory", "");
+    fileInput.setAttribute("mozdirectory", "");
+    fileInput.setAttribute("directory", "");
+  }
+
   const progressContainer = document.getElementById("uploadProgressContainer");
   const uploadForm = document.getElementById("uploadFileForm");
   const dropArea = document.getElementById("uploadDropArea");
@@ -12,7 +19,7 @@ export function initUpload() {
   // Helper function: set the drop area's default layout using CSS classes.
   function setDropAreaDefault() {
     if (dropArea) {
-        dropArea.innerHTML = `
+      dropArea.innerHTML = `
           <div id="uploadInstruction" class="upload-instruction">
             Drop files here or click 'Choose files'
           </div>
@@ -31,13 +38,11 @@ export function initUpload() {
           </div>
         `;
     }
-}
+  }
 
   // Initialize drop area.
   if (dropArea) {
-    // Instead of inline styles here, ensure dropArea is styled in CSS.
-    // But if necessary, you can add minimal inline styles that you later override:
-    dropArea.classList.add("upload-drop-area"); // Define in CSS if needed.
+    dropArea.classList.add("upload-drop-area");
     setDropAreaDefault();
 
     dropArea.addEventListener("dragover", function (e) {
@@ -62,7 +67,7 @@ export function initUpload() {
     });
   }
 
-  // When files are selected, update file info container.
+  // When files are selected, update file info container and build progress list.
   if (fileInput) {
     fileInput.addEventListener("change", function () {
       const files = fileInput.files;
@@ -89,53 +94,128 @@ export function initUpload() {
           fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
         }
       }
-      
-      // Build progress list using CSS classes.
+
+      // Convert FileList to an array and assign a unique uploadIndex to each file.
+      const allFiles = Array.from(files);
+      allFiles.forEach((file, index) => {
+        file.uploadIndex = index;
+      });
+
       progressContainer.innerHTML = "";
-      if (files.length > 0) {
-        const allFiles = Array.from(files);
+      if (allFiles.length > 0) {
         const maxDisplay = 10;
         const list = document.createElement("ul");
         list.classList.add("upload-progress-list");
-        allFiles.forEach((file, index) => {
-          const li = document.createElement("li");
-          li.classList.add("upload-progress-item");
-          // For dynamic display, we still set display property via JS.
-          li.style.display = (index < maxDisplay) ? "flex" : "none";
-          
-          const preview = document.createElement("div");
-          preview.className = "file-preview"; // Already styled in CSS.
-          displayFilePreview(file, preview);
-          
-          const nameDiv = document.createElement("div");
-          nameDiv.classList.add("upload-file-name");
-          nameDiv.textContent = file.name;
-          
-          const progDiv = document.createElement("div");
-          progDiv.classList.add("progress", "upload-progress-div");
-          // If needed, dynamic style for flex sizing remains:
-          progDiv.style.flex = "0 0 250px";
-          progDiv.style.marginLeft = "5px";
-          
-          const progBar = document.createElement("div");
-          progBar.classList.add("progress-bar");
-          progBar.style.width = "0%";
-          progBar.innerText = "0%";
-          
-          progDiv.appendChild(progBar);
-          li.appendChild(preview);
-          li.appendChild(nameDiv);
-          li.appendChild(progDiv);
-          li.progressBar = progBar;
-          li.startTime = Date.now();
-          list.appendChild(li);
-        });
-        if (allFiles.length > maxDisplay) {
-          const extra = document.createElement("li");
-          extra.classList.add("upload-progress-extra");
-          extra.textContent = `Uploading additional ${allFiles.length - maxDisplay} file(s)...`;
-          extra.style.display = "flex"; // If dynamic, otherwise define in CSS.
-          list.appendChild(extra);
+
+        // Check if any file has a relative path (i.e. folder upload).
+        const hasRelativePaths = allFiles.some(file => file.webkitRelativePath && file.webkitRelativePath.trim() !== "");
+
+        if (hasRelativePaths) {
+          // Group files by folder.
+          const fileGroups = {};
+          allFiles.forEach(file => {
+            let folderName = "Root";
+            if (file.webkitRelativePath && file.webkitRelativePath.trim() !== "") {
+              const parts = file.webkitRelativePath.split("/");
+              if (parts.length > 1) {
+                folderName = parts.slice(0, parts.length - 1).join("/");
+              }
+            }
+            if (!fileGroups[folderName]) {
+              fileGroups[folderName] = [];
+            }
+            fileGroups[folderName].push(file);
+          });
+
+          // Create a list element for each folder group.
+          Object.keys(fileGroups).forEach(folderName => {
+            // Folder header with Material Icon.
+            const folderLi = document.createElement("li");
+            folderLi.classList.add("upload-folder-group");
+            folderLi.innerHTML = `<i class="material-icons folder-icon" style="vertical-align:middle;">folder</i> ${folderName}:`;
+            list.appendChild(folderLi);
+
+            // Nested list for files in this folder.
+            const nestedUl = document.createElement("ul");
+            nestedUl.classList.add("upload-folder-group-list");
+            fileGroups[folderName]
+              .sort((a, b) => a.uploadIndex - b.uploadIndex)
+              .forEach(file => {
+                const li = document.createElement("li");
+                li.classList.add("upload-progress-item");
+                li.style.display = "flex";
+                li.dataset.uploadIndex = file.uploadIndex;
+
+                const preview = document.createElement("div");
+                preview.className = "file-preview";
+                displayFilePreview(file, preview);
+
+                const nameDiv = document.createElement("div");
+                nameDiv.classList.add("upload-file-name");
+                // Only show the file's basename.
+                nameDiv.textContent = file.name;
+
+                const progDiv = document.createElement("div");
+                progDiv.classList.add("progress", "upload-progress-div");
+                progDiv.style.flex = "0 0 250px";
+                progDiv.style.marginLeft = "5px";
+
+                const progBar = document.createElement("div");
+                progBar.classList.add("progress-bar");
+                progBar.style.width = "0%";
+                progBar.innerText = "0%";
+
+                progDiv.appendChild(progBar);
+                li.appendChild(preview);
+                li.appendChild(nameDiv);
+                li.appendChild(progDiv);
+                li.progressBar = progBar;
+                li.startTime = Date.now();
+                nestedUl.appendChild(li);
+              });
+            list.appendChild(nestedUl);
+          });
+        } else {
+          // Normal flat list (no grouping)
+          allFiles.forEach((file, index) => {
+            const li = document.createElement("li");
+            li.classList.add("upload-progress-item");
+            li.style.display = (index < maxDisplay) ? "flex" : "none";
+            li.dataset.uploadIndex = index;
+
+            const preview = document.createElement("div");
+            preview.className = "file-preview";
+            displayFilePreview(file, preview);
+
+            const nameDiv = document.createElement("div");
+            nameDiv.classList.add("upload-file-name");
+            nameDiv.textContent = file.name;
+
+            const progDiv = document.createElement("div");
+            progDiv.classList.add("progress", "upload-progress-div");
+            progDiv.style.flex = "0 0 250px";
+            progDiv.style.marginLeft = "5px";
+
+            const progBar = document.createElement("div");
+            progBar.classList.add("progress-bar");
+            progBar.style.width = "0%";
+            progBar.innerText = "0%";
+
+            progDiv.appendChild(progBar);
+            li.appendChild(preview);
+            li.appendChild(nameDiv);
+            li.appendChild(progDiv);
+            li.progressBar = progBar;
+            li.startTime = Date.now();
+            list.appendChild(li);
+          });
+          if (allFiles.length > maxDisplay) {
+            const extra = document.createElement("li");
+            extra.classList.add("upload-progress-extra");
+            extra.textContent = `Uploading additional ${allFiles.length - maxDisplay} file(s)...`;
+            extra.style.display = "flex";
+            list.appendChild(extra);
+          }
         }
         progressContainer.appendChild(list);
       }
@@ -152,9 +232,19 @@ export function initUpload() {
         return;
       }
       const allFiles = Array.from(files);
+      // Make sure each file has an uploadIndex (if not already assigned).
+      allFiles.forEach((file, index) => {
+        if (typeof file.uploadIndex === "undefined") file.uploadIndex = index;
+      });
       const maxDisplay = 10;
       const folderToUse = window.currentFolder || "root";
-      const listItems = progressContainer.querySelectorAll("li");
+      // Build a mapping of uploadIndex => progress element.
+      const progressElements = {};
+      // Query all file list items (they have the class "upload-progress-item")
+      const listItems = progressContainer.querySelectorAll("li.upload-progress-item");
+      listItems.forEach(item => {
+        progressElements[item.dataset.uploadIndex] = item;
+      });
       let finishedCount = 0;
       let allSucceeded = true;
       const uploadResults = new Array(allFiles.length).fill(false);
@@ -163,6 +253,10 @@ export function initUpload() {
         const formData = new FormData();
         formData.append("file[]", file);
         formData.append("folder", folderToUse);
+        // If a relative path is available, send it.
+        if (file.webkitRelativePath && file.webkitRelativePath !== "") {
+          formData.append("relativePath", file.webkitRelativePath);
+        }
 
         const xhr = new XMLHttpRequest();
         let currentPercent = 0;
@@ -170,8 +264,9 @@ export function initUpload() {
         xhr.upload.addEventListener("progress", function (e) {
           if (e.lengthComputable) {
             currentPercent = Math.round((e.loaded / e.total) * 100);
-            if (index < maxDisplay && listItems[index]) {
-              const elapsed = (Date.now() - listItems[index].startTime) / 1000;
+            const li = progressElements[file.uploadIndex];
+            if (li) {
+              const elapsed = (Date.now() - li.startTime) / 1000;
               let speed = "";
               if (elapsed > 0) {
                 const spd = e.loaded / elapsed;
@@ -179,8 +274,8 @@ export function initUpload() {
                 else if (spd < 1048576) speed = (spd / 1024).toFixed(1) + " KB/s";
                 else speed = (spd / 1048576).toFixed(1) + " MB/s";
               }
-              listItems[index].progressBar.style.width = currentPercent + "%";
-              listItems[index].progressBar.innerText = currentPercent + "% (" + speed + ")";
+              li.progressBar.style.width = currentPercent + "%";
+              li.progressBar.innerText = currentPercent + "% (" + speed + ")";
             }
           }
         });
@@ -192,15 +287,16 @@ export function initUpload() {
           } catch (e) {
             jsonResponse = null;
           }
+          const li = progressElements[file.uploadIndex];
           if (xhr.status >= 200 && xhr.status < 300 && (!jsonResponse || !jsonResponse.error)) {
-            if (index < maxDisplay && listItems[index]) {
-              listItems[index].progressBar.style.width = "100%";
-              listItems[index].progressBar.innerText = "Done";
+            if (li) {
+              li.progressBar.style.width = "100%";
+              li.progressBar.innerText = "Done";
             }
-            uploadResults[index] = true;
+            uploadResults[file.uploadIndex] = true;
           } else {
-            if (index < maxDisplay && listItems[index]) {
-              listItems[index].progressBar.innerText = "Error";
+            if (li) {
+              li.progressBar.innerText = "Error";
             }
             allSucceeded = false;
           }
@@ -212,10 +308,11 @@ export function initUpload() {
         });
 
         xhr.addEventListener("error", function () {
-          if (index < maxDisplay && listItems[index]) {
-            listItems[index].progressBar.innerText = "Error";
+          const li = progressElements[file.uploadIndex];
+          if (li) {
+            li.progressBar.innerText = "Error";
           }
-          uploadResults[index] = false;
+          uploadResults[file.uploadIndex] = false;
           allSucceeded = false;
           finishedCount++;
           console.error("Error uploading file:", file.name);
@@ -225,10 +322,11 @@ export function initUpload() {
         });
 
         xhr.addEventListener("abort", function () {
-          if (index < maxDisplay && listItems[index]) {
-            listItems[index].progressBar.innerText = "Aborted";
+          const li = progressElements[file.uploadIndex];
+          if (li) {
+            li.progressBar.innerText = "Aborted";
           }
-          uploadResults[index] = false;
+          uploadResults[file.uploadIndex] = false;
           allSucceeded = false;
           finishedCount++;
           console.error("Upload aborted for file:", file.name);
@@ -247,12 +345,17 @@ export function initUpload() {
             initFileActions();
             serverFiles = (serverFiles || []).map(item => item.name.trim().toLowerCase());
             allFiles.forEach((file, index) => {
-              const fileName = file.name.trim().toLowerCase();
-              if (index < maxDisplay && listItems[index]) {
-                if (!uploadResults[index] || !serverFiles.includes(fileName)) {
-                  listItems[index].progressBar.innerText = "Error";
-                  allSucceeded = false;
+              // Skip verification for folder-uploaded files.
+              if (file.webkitRelativePath && file.webkitRelativePath.trim() !== "") {
+                return;
+              }
+              const clientFileName = file.name.trim().toLowerCase();
+              if (!uploadResults[file.uploadIndex] || !serverFiles.includes(clientFileName)) {
+                const li = progressElements[file.uploadIndex];
+                if (li) {
+                  li.progressBar.innerText = "Error";
                 }
+                allSucceeded = false;
               }
             });
             setTimeout(() => {
@@ -267,6 +370,9 @@ export function initUpload() {
           .catch(error => {
             console.error("Error fetching file list:", error);
             showToast("Some files may have failed to upload. Please check the list.");
+          })
+          .finally(() => {
+            loadFolderTree(window.currentFolder);
           });
       }
     });
