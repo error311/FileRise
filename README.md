@@ -34,7 +34,7 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 - **User Authentication & Management:**
   - Secure, session-based authentication protects the editor. An admin user can add or remove users through the interface. Passwords are hashed using PHP’s password_hash() for security, and session checks prevent unauthorized access to backend endpoints.
 - **Responsive, Persistent, Dynamic UI:**
-  - The interface is mobile-friendly and adjusts to different screen sizes (hiding non-critical columns on small devices to avoid clutter). Updates to the file list, folder tree, and upload progress happen asynchronously (via Fetch API and XMLHttpRequest), so the page never needs to fully reload. Users receive immediate feedback through toast notifications and modal dialogs for actions like confirmations and error messages, creating a smooth user experience. Session persistent UI elements Items Per Page & Dark/Light Mode.
+  - The interface is mobile-friendly and adjusts to different screen sizes (hiding non-critical columns on small devices to avoid clutter). Updates to the file list, folder tree, and upload progress happen asynchronously (via Fetch API and XMLHttpRequest), so the page never needs to fully reload. Users receive immediate feedback through toast notifications and modal dialogs for actions like confirmations and error messages, creating a smooth user experience. Session persistent UI elements Items Per Page, Dark/Light Mode & Folder tree view.
 - **Dark Mode/Light Mode**
   - Automatically adapts to the operating system’s theme preference by default, with a manual toggle option.
   - A theme toggle allows users to switch between Dark Mode and Light Mode for an optimized viewing experience.
