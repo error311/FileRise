@@ -45,6 +45,25 @@ function getFilesFromDataTransferItems(items) {
   return Promise.all(promises).then(results => results.flat());
 }
 
+function adjustFolderHelpExpansion() {
+  const uploadCard = document.getElementById("uploadCard");
+  const folderHelpDetails = document.querySelector(".folder-help-details");
+  if (uploadCard && folderHelpDetails) {
+    if (uploadCard.offsetHeight > 400) {
+      folderHelpDetails.setAttribute("open", "");
+    } else {
+      folderHelpDetails.removeAttribute("open");
+    }
+  }
+}
+
+function adjustFolderHelpExpansionClosed() {
+  const folderHelpDetails = document.querySelector(".folder-help-details");
+  if (folderHelpDetails) {
+    folderHelpDetails.removeAttribute("open");
+  }
+}
+
 // Helper: Update file info container count/preview.
 function updateFileInfoCount() {
   const fileInfoContainer = document.getElementById("fileInfoContainer");
@@ -226,8 +245,19 @@ function processFiles(filesInput) {
         list.appendChild(extra);
       }
     }
-    progressContainer.appendChild(list);
+    const listWrapper = document.createElement("div");
+    listWrapper.classList.add("upload-progress-wrapper");
+    // Set a maximum height (adjust as needed) and enable vertical scrolling.
+    listWrapper.style.maxHeight = "300px"; // for example, 300px
+    listWrapper.style.overflowY = "auto";
+    listWrapper.appendChild(list);
+    progressContainer.appendChild(listWrapper);
   }
+
+  // Call once on page load:
+  adjustFolderHelpExpansion();
+  // Also call on window resize:
+  window.addEventListener("resize", adjustFolderHelpExpansion);
 
   // Store files globally for submission.
   window.selectedFiles = files;
@@ -367,6 +397,8 @@ function submitFiles(allFiles) {
           removeBtns.forEach(btn => btn.style.display = "none");
           progressContainer.innerHTML = "";
           window.selectedFiles = [];
+          adjustFolderHelpExpansionClosed();
+          window.addEventListener("resize", adjustFolderHelpExpansionClosed);
           const fileInfoContainer = document.getElementById("fileInfoContainer");
           if (fileInfoContainer) {
             fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;

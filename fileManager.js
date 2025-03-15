@@ -128,16 +128,21 @@ export function renderFileTable(folder) {
   const folderPath = (folder === "root")
     ? "uploads/"
     : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-  let searchInputElement = document.getElementById("searchInput");
+
+  // Attempt to get the search input element.
+  const searchInputElement = document.getElementById("searchInput");
   const searchHadFocus = searchInputElement && (document.activeElement === searchInputElement);
-  let searchTerm = searchInputElement ? searchInputElement.value : "";
+  const searchTerm = searchInputElement ? searchInputElement.value : "";
+
   const filteredFiles = fileData.filter(file =>
     file.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const itemsPerPage = window.itemsPerPage || 10;
+
+  // Read persistent items per page from localStorage, default to 10.
+  const itemsPerPageSetting = parseInt(localStorage.getItem('itemsPerPage') || '10', 10);
   const currentPage = window.currentPage || 1;
   const totalFiles = filteredFiles.length;
-  const totalPages = Math.ceil(totalFiles / itemsPerPage);
+  const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
   const safeSearchTerm = escapeHTML(searchTerm);
 
   const topControlsHTML = `
@@ -177,8 +182,8 @@ export function renderFileTable(folder) {
       </thead>
   `;
 
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, totalFiles);
+  const startIndex = (currentPage - 1) * itemsPerPageSetting;
+  const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
   let tableBody = `<tbody>`;
 
   if (totalFiles > 0) {
@@ -190,10 +195,9 @@ export function renderFileTable(folder) {
       const safeSize = escapeHTML(file.size);
       const safeUploader = escapeHTML(file.uploader || "Unknown");
 
-      // Check if the file is an image using a regex
+      // Check if file is an image.
       const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name);
 
-      // Build the preview button HTML string using the file's properties directly.
       const previewButton = isImage
         ? `<button class="btn btn-sm btn-info ml-2" onclick="event.stopPropagation(); previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
            <i class="material-icons">image</i>
@@ -230,7 +234,9 @@ export function renderFileTable(folder) {
     <div class="d-flex align-items-center mt-3 bottom-controls">
       <label class="label-inline mr-2 mb-0">Show</label>
       <select class="form-control bottom-select" onchange="changeItemsPerPage(this.value)">
-        ${[10, 20, 50, 100].map(num => `<option value="${num}" ${num === itemsPerPage ? "selected" : ""}>${num}</option>`).join("")}
+        ${[10, 20, 50, 100]
+      .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
+      .join("")}
       </select>
       <span class="items-per-page-text ml-2 mb-0">items per page</span>
     </div>
@@ -238,28 +244,28 @@ export function renderFileTable(folder) {
 
   fileListContainer.innerHTML = topControlsHTML + tableHTML + tableBody + bottomControlsHTML;
 
-  const newSearchInput = document.getElementById("searchInput");
-  if (searchHadFocus && newSearchInput) {
-    newSearchInput.focus();
-    newSearchInput.setSelectionRange(newSearchInput.value.length, newSearchInput.value.length);
+  // Only add event listeners if searchInputElement exists.
+  if (searchInputElement) {
+    searchInputElement.addEventListener("input", function () {
+      window.currentPage = 1;
+      renderFileTable(folder);
+    });
   }
-  newSearchInput.addEventListener("input", function () {
-    window.currentPage = 1;
-    renderFileTable(folder);
-  });
-  const headerCells = document.querySelectorAll("table.table thead th[data-column]");
-  headerCells.forEach(cell => {
+
+  document.querySelectorAll("table.table thead th[data-column]").forEach(cell => {
     cell.addEventListener("click", function () {
       const column = this.getAttribute("data-column");
       sortFiles(column, folder);
     });
   });
+
   document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', function (e) {
       updateRowHighlight(e.target);
       updateFileActionButtons();
     });
   });
+
   updateFileActionButtons();
 }
 

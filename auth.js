@@ -1,11 +1,10 @@
-// auth.js
-
 import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, showToast } from './domUtils.js';
-// Import loadFileList from fileManager.js to refresh the file list upon login.
-import { loadFileList } from './fileManager.js';
+// Import loadFileList and renderFileTable from fileManager.js to refresh the file list upon login.
+import { loadFileList, renderFileTable, displayFilePreview, initFileActions } from './fileManager.js';
+import { loadFolderTree } from './folderManager.js';
 
-export function initAuth() {
+function initAuth() {
   // First, check if the user is already authenticated.
   checkAuthentication();
 
@@ -31,99 +30,99 @@ export function initAuth() {
       })
       .catch(error => console.error("❌ Error logging in:", error));
   });
+
+  // Set up the logout button.
+  document.getElementById("logoutBtn").addEventListener("click", function () {
+    fetch("logout.php", {
+      method: "POST",
+      credentials: "include"  // Ensure the session cookie is sent.
+    })
+      .then(() => window.location.reload(true))
+      .catch(error => console.error("Logout error:", error));
+  });
+
+  // Set up Add User functionality.
+  document.getElementById("addUserBtn").addEventListener("click", function () {
+    resetUserForm();
+    toggleVisibility("addUserModal", true);
+  });
+
+  document.getElementById("saveUserBtn").addEventListener("click", function () {
+    const newUsername = document.getElementById("newUsername").value.trim();
+    const newPassword = document.getElementById("newPassword").value.trim();
+    const isAdmin = document.getElementById("isAdmin").checked;
+    if (!newUsername || !newPassword) {
+      showToast("Username and password are required!");
+      return;
+    }
+    let url = "addUser.php";
+    if (window.setupMode) {
+      url += "?setup=1";
+    }
+    fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showToast("User added successfully!");
+          closeAddUserModal();
+          checkAuthentication();
+        } else {
+          showToast("Error: " + (data.error || "Could not add user"));
+        }
+      })
+      .catch(error => console.error("Error adding user:", error));
+  });
+
+  document.getElementById("cancelUserBtn").addEventListener("click", function () {
+    closeAddUserModal();
+  });
+
+  // Set up Remove User functionality.
+  document.getElementById("removeUserBtn").addEventListener("click", function () {
+    loadUserList();
+    toggleVisibility("removeUserModal", true);
+  });
+
+  document.getElementById("deleteUserBtn").addEventListener("click", function () {
+    const selectElem = document.getElementById("removeUsernameSelect");
+    const usernameToRemove = selectElem.value;
+    if (!usernameToRemove) {
+      showToast("Please select a user to remove.");
+      return;
+    }
+    if (!confirm("Are you sure you want to delete user " + usernameToRemove + "?")) {
+      return;
+    }
+    fetch("removeUser.php", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: usernameToRemove })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showToast("User removed successfully!");
+          closeRemoveUserModal();
+          loadUserList();
+        } else {
+          showToast("Error: " + (data.error || "Could not remove user"));
+        }
+      })
+      .catch(error => console.error("Error removing user:", error));
+  });
+
+  document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
+    closeRemoveUserModal();
+  });
 }
 
-// Set up the logout button.
-document.getElementById("logoutBtn").addEventListener("click", function () {
-  fetch("logout.php", { 
-    method: "POST",
-    credentials: "include"  // Ensure the session cookie is sent.
-  })
-    .then(() => window.location.reload(true))
-    .catch(error => console.error("Logout error:", error));
-});
-
-// Set up Add User functionality.
-document.getElementById("addUserBtn").addEventListener("click", function () {
-  resetUserForm();
-  toggleVisibility("addUserModal", true);
-});
-
-document.getElementById("saveUserBtn").addEventListener("click", function () {
-  const newUsername = document.getElementById("newUsername").value.trim();
-  const newPassword = document.getElementById("newPassword").value.trim();
-  const isAdmin = document.getElementById("isAdmin").checked;
-  if (!newUsername || !newPassword) {
-    showToast("Username and password are required!");
-    return;
-  }
-  let url = "addUser.php";
-  if (window.setupMode) {
-    url += "?setup=1";
-  }
-  fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        showToast("User added successfully!");
-        closeAddUserModal();
-        checkAuthentication();
-      } else {
-        showToast("Error: " + (data.error || "Could not add user"));
-      }
-    })
-    .catch(error => console.error("Error adding user:", error));
-});
-
-document.getElementById("cancelUserBtn").addEventListener("click", function () {
-  closeAddUserModal();
-});
-
-// Set up Remove User functionality.
-document.getElementById("removeUserBtn").addEventListener("click", function () {
-  loadUserList();
-  toggleVisibility("removeUserModal", true);
-});
-
-document.getElementById("deleteUserBtn").addEventListener("click", function () {
-  const selectElem = document.getElementById("removeUsernameSelect");
-  const usernameToRemove = selectElem.value;
-  if (!usernameToRemove) {
-    showToast("Please select a user to remove.");
-    return;
-  }
-  if (!confirm("Are you sure you want to delete user " + usernameToRemove + "?")) {
-    return;
-  }
-  fetch("removeUser.php", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: usernameToRemove })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        showToast("User removed successfully!");
-        closeRemoveUserModal();
-        loadUserList();
-      } else {
-        showToast("Error: " + (data.error || "Could not remove user"));
-      }
-    })
-    .catch(error => console.error("Error removing user:", error));
-});
-
-document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
-  closeRemoveUserModal();
-});
-
-export function checkAuthentication() {
+function checkAuthentication() {
   // Return the promise from sendRequest
   return sendRequest("checkAuth.php")
     .then(data => {
@@ -157,6 +156,12 @@ export function checkAuthentication() {
           if (removeUserBtn) removeUserBtn.style.display = "none";
         }
         document.querySelector(".header-buttons").style.visibility = "visible";
+        // Update persistent items-per-page select once main operations are visible.
+        const selectElem = document.querySelector(".form-control.bottom-select");
+        if (selectElem) {
+          const stored = localStorage.getItem("itemsPerPage") || "10";
+          selectElem.value = stored;
+        }
         return true;
       } else {
         showToast("Please log in to continue.");
@@ -175,7 +180,34 @@ export function checkAuthentication() {
 }
 window.checkAuthentication = checkAuthentication;
 
-// Helper functions for auth modals.
+/* ------------------------------
+   Persistent Items-Per-Page Setting
+   ------------------------------ */
+// When the select value changes, save it to localStorage and refresh the file list.
+window.changeItemsPerPage = function (value) {
+  console.log("Saving itemsPerPage:", value);
+  localStorage.setItem("itemsPerPage", value);
+  // Refresh the file list automatically.
+  const folder = window.currentFolder || "root";
+  if (typeof renderFileTable === "function") {
+    renderFileTable(folder);
+  }
+};
+
+// On DOMContentLoaded, set the select to the persisted value.
+document.addEventListener("DOMContentLoaded", function () {
+  const selectElem = document.querySelector(".form-control.bottom-select");
+  if (selectElem) {
+    const stored = localStorage.getItem("itemsPerPage") || "10";
+    console.log("Loaded itemsPerPage from localStorage:", stored);
+    selectElem.value = stored;
+  }
+});
+
+/* ------------------------------
+   Helper functions for modals and user list
+   ------------------------------ */
+
 function resetUserForm() {
   document.getElementById("newUsername").value = "";
   document.getElementById("newPassword").value = "";
@@ -215,3 +247,5 @@ function loadUserList() {
     })
     .catch(error => console.error("Error loading user list:", error));
 }
+
+export { initAuth, checkAuthentication };

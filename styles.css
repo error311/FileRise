@@ -294,13 +294,13 @@ body.dark-mode header {
 /* folder icon and remove file to be uploaded */
 .material-icons.folder-icon {
   color: black;
-  margin-right: 3px;
+  margin-right: 5px;
   /* adjust the value as needed */
 }
 
 body.dark-mode .material-icons.folder-icon {
   color: white;
-  margin-right: 3px;
+  margin-right: 5px;
 }
 
 /* Remove button default styling */
@@ -1512,6 +1512,13 @@ body.dark-mode .file-icon {
 .file-name-display {
   vertical-align: middle;
   margin-left: 5px;
+}
+
+.upload-progress-wrapper {
+  max-height: 300px;
+  /* Adjust the value as needed */
+  overflow-y: auto;
+  /* Optional: Add some padding or border if desired */
 }
 
 .upload-progress-list {
