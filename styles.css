@@ -16,9 +16,11 @@ body {
 }
 
 .container-fluid {
-  padding-left: 5px !important;  /* Default padding for small screens */
+  padding-left: 5px !important;
+  /* Default padding for small screens */
   padding-right: 5px !important;
-  margin-top: 20px;    /* Restores space below the header */
+  margin-top: 20px;
+  /* Restores space below the header */
 }
 
 /* Increase left/right padding for larger screens */
@@ -31,7 +33,8 @@ body {
 
 @media (min-width: 1200px) {
   .container-fluid {
-    padding-left: 100px !important;  /* More space on extra-large screens */
+    padding-left: 100px !important;
+    /* More space on extra-large screens */
     padding-right: 100px !important;
   }
 }
@@ -48,11 +51,13 @@ body {
 .header-container {
   display: flex;
   align-items: center;
-  justify-content: space-between; /* Ensures logo-left, title-center, buttons-right */
+  justify-content: space-between;
+  /* Ensures logo-left, title-center, buttons-right */
   width: 100%;
   height: 80px;
   padding: 10px 20px;
-  background-color: #2196F3; /* Light Mode */
+  background-color: #2196F3;
+  /* Light Mode */
   transition: background-color 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
@@ -67,13 +72,16 @@ body.dark-mode .header-container {
 .header-left {
   display: flex;
   align-items: center;
-  flex: 0 0 auto; /* Prevent it from growing */
+  flex: 0 0 auto;
+  /* Prevent it from growing */
 }
 
 /* 🔹 Make Logo Bigger */
 .header-left img {
-  max-height: 70px; /* Previously 60px */
-  width: auto; /* Ensures aspect ratio stays correct */
+  max-height: 70px;
+  /* Previously 60px */
+  width: auto;
+  /* Ensures aspect ratio stays correct */
 }
 
 .header-logo {
@@ -86,11 +94,13 @@ body.dark-mode .header-container {
 header {
   display: flex;
   align-items: center;
-  justify-content: space-between; /* Ensures left, center, right alignment */
+  justify-content: space-between;
+  /* Ensures left, center, right alignment */
   width: 100%;
   height: 80px;
   padding: 0 20px;
-  background-color: #2196F3; /* Light mode */
+  background-color: #2196F3;
+  /* Light mode */
   transition: background-color 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
@@ -130,8 +140,10 @@ body.dark-mode header {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  flex: 1; /* Equal space to prevent shifting */
-  min-width: 150px; /* Prevent shrinking */
+  flex: 1;
+  /* Equal space to prevent shifting */
+  min-width: 150px;
+  /* Prevent shrinking */
   gap: 10px;
 }
 
@@ -160,7 +172,8 @@ body.dark-mode header {
     padding: 10px;
   }
 
-  .header-left, .header-buttons {
+  .header-left,
+  .header-buttons {
     justify-content: center;
     flex: unset;
   }
@@ -192,7 +205,8 @@ body.dark-mode header {
 }
 
 .header-buttons button i {
-  font-size: 24px; /* Ensures Material Icons show correctly */
+  font-size: 24px;
+  /* Ensures Material Icons show correctly */
 }
 
 .header-buttons button:hover {
@@ -277,14 +291,37 @@ body.dark-mode header {
   color: white;
 }
 
+/* folder icon and remove file to be uploaded */
 .material-icons.folder-icon {
   color: black;
-  margin-right: 5px; /* adjust the value as needed */
+  margin-right: 3px;
+  /* adjust the value as needed */
 }
 
 body.dark-mode .material-icons.folder-icon {
   color: white;
-  margin-right: 5px;
+  margin-right: 3px;
+}
+
+/* Remove button default styling */
+.remove-file-btn {
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  background: transparent;
+  border: none;
+  color: red;
+  cursor: pointer;
+  margin-right: 8px;
+  padding: 0;
+  border-radius: 50%;
+  transition: background-color 0.3s;
+}
+
+.remove-file-btn:hover {
+  background-color: red;
+  color: white;
 }
 
 /* ===========================================================
@@ -301,8 +338,10 @@ body.dark-mode .material-icons.folder-icon {
 
 /* Dark mode for login form */
 body.dark-mode #loginForm {
-  background-color: #2c2c2c; /* Dark background */
-  color: #e0e0e0; /* Light text */
+  background-color: #2c2c2c;
+  /* Dark background */
+  color: #e0e0e0;
+  /* Light text */
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(255, 255, 255, 0.2);
@@ -322,13 +361,15 @@ body.dark-mode #loginForm label {
 
 /* Dark mode for login button */
 body.dark-mode #loginForm button {
-  background-color: #007bff; /* Keep Bootstrap blue button */
+  background-color: #007bff;
+  /* Keep Bootstrap blue button */
   color: white;
   border: none;
 }
 
 body.dark-mode #loginForm button:hover {
-  background-color: #0056b3; /* Darker blue on hover */
+  background-color: #0056b3;
+  /* Darker blue on hover */
 }
 
 /* ===========================================================
@@ -355,13 +396,14 @@ body.dark-mode .card {
 .modal {
   display: none;
   position: fixed;
-  top: 0; 
+  top: 0;
   left: 0;
-  width: 100%; 
+  width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.5);
   z-index: 1050;
 }
+
 .modal .modal-content {
   position: absolute;
   top: 50%;
@@ -371,15 +413,18 @@ body.dark-mode .card {
   padding: 20px;
   border: 1px solid #ccc;
   border-radius: 4px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   max-width: 400px;
   width: 90%;
   overflow-y: auto;
-  white-space: normal; /* Allow text wrapping */
+  white-space: normal;
+  /* Allow text wrapping */
   word-wrap: break-word;
   overflow-wrap: break-word;
-  height: auto;            /* Let the modal height adjust based on content */
-  max-height: 90vh;        /* But limit to 90% of the viewport height */
+  height: auto;
+  /* Let the modal height adjust based on content */
+  max-height: 90vh;
+  /* But limit to 90% of the viewport height */
 }
 
 @media (max-width: 600px) {
@@ -414,7 +459,8 @@ body.dark-mode .editor-header {
   justify-content: center;
   align-items: center;
 
-  font-size: 20px; /* Keep it readable */
+  font-size: 20px;
+  /* Keep it readable */
   font-weight: bold;
   cursor: pointer;
   z-index: 1000;
@@ -426,8 +472,9 @@ body.dark-mode .editor-header {
   text-align: center;
 
   /* Fix X alignment */
-  line-height: 30px; /* Slightly reduce so "X" moves up */
-  
+  line-height: 30px;
+  /* Slightly reduce so "X" moves up */
+
   color: #ff4d4d;
   background-color: rgba(255, 255, 255, 0.9);
   border: 2px solid transparent;
@@ -488,26 +535,37 @@ body.dark-mode .editor-modal {
   .editor-modal {
     top: 0%;
     left: 0%;
-    transform: translate(4%, 4%) !important;  /* Reset transform */
-    width: 90vw !important;  /* Expand width */
+    transform: translate(4%, 4%) !important;
+    /* Reset transform */
+    width: 90vw !important;
+    /* Expand width */
     max-height: 90vh;
     padding: 15px;
-    min-width: auto !important;  /* Remove min-width restriction */
+    min-width: auto !important;
+    /* Remove min-width restriction */
   }
 }
+
 .editor-title {
-  white-space: nowrap !important; /* Prevents wrapping */
-  overflow: hidden !important; /* Hides overflow */
-  text-overflow: ellipsis !important; /* Adds "..." when text is too long */
-  font-size: 1.5rem; /* Default font size */
+  white-space: nowrap !important;
+  /* Prevents wrapping */
+  overflow: hidden !important;
+  /* Hides overflow */
+  text-overflow: ellipsis !important;
+  /* Adds "..." when text is too long */
+  font-size: 1.5rem;
+  /* Default font size */
   max-width: 95%;
-  display: block; /* Ensures it's a block element for proper sizing */
+  display: block;
+  /* Ensures it's a block element for proper sizing */
 }
 
 @media (max-width: 600px) {
   .editor-title {
-    font-size: 1.2rem; /* Smaller font size on small screens */
-    max-width: 95%; /* Ensures it doesn't overflow the container */
+    font-size: 1.2rem;
+    /* Smaller font size on small screens */
+    max-width: 95%;
+    /* Ensures it doesn't overflow the container */
   }
 }
 
@@ -518,9 +576,12 @@ body.dark-mode .editor-modal {
 
 .editor-textarea {
   flex-grow: 1;
-  min-height: 5px !important;  /* Allow shrinking */
-  height: auto !important;     /* Let JavaScript control height */
-  max-height: 100vh !important; /* Prevent overflow */
+  min-height: 5px !important;
+  /* Allow shrinking */
+  height: auto !important;
+  /* Let JavaScript control height */
+  max-height: 100vh !important;
+  /* Prevent overflow */
   resize: none;
   overflow: auto;
 }
@@ -645,6 +706,7 @@ body.dark-mode .editor-modal {
     display: none;
   }
 }
+
 @media (min-width: 768px) and (max-width: 991px) {
   .hide-medium {
     display: none !important;
@@ -722,7 +784,8 @@ body.dark-mode .editor-modal {
   background-color: transparent;
   border-collapse: collapse !important;
   border-spacing: 0 !important;
-  table-layout: auto !important; /* Ensures flexible column widths */
+  table-layout: auto !important;
+  /* Ensures flexible column widths */
   width: 100% !important;
 }
 
@@ -733,53 +796,66 @@ body.dark-mode .editor-modal {
 #fileList table tr:hover {
   background-color: #e0e0e0;
 }
+
 body.dark-mode #fileList table tr:hover {
   background-color: #444;
 }
 
 #fileListTitle {
-  white-space: normal !important;  /* Allow text to wrap */
-  word-wrap: break-word !important; /* Break long words */
-  overflow-wrap: break-word !important; /* Ensure compatibility */
-  max-width: 100% !important; /* Prevent it from going outside the container */
-  display: block !important; /* Ensure it behaves as a block element */
-  text-align: left !important; /* Keep it aligned properly */
+  white-space: normal !important;
+  /* Allow text to wrap */
+  word-wrap: break-word !important;
+  /* Break long words */
+  overflow-wrap: break-word !important;
+  /* Ensure compatibility */
+  max-width: 100% !important;
+  /* Prevent it from going outside the container */
+  display: block !important;
+  /* Ensure it behaves as a block element */
+  text-align: left !important;
+  /* Keep it aligned properly */
 }
 
 /* Small screens: Reduce font size for better wrapping */
 @media (max-width: 600px) {
   #fileListTitle {
-    font-size: 1.4rem !important; /* Adjust size for smaller screens */
+    font-size: 1.4rem !important;
+    /* Adjust size for smaller screens */
   }
 }
 
 #fileList table tr {
-  box-shadow: none; 
+  box-shadow: none;
   border: none !important;
-  outline: none !important; 
-}
-body.dark-mode #fileList table tr {
-  box-shadow: none; 
-  border: none !important; 
   outline: none !important;
 }
 
-#fileList table th, 
+body.dark-mode #fileList table tr {
+  box-shadow: none;
+  border: none !important;
+  outline: none !important;
+}
+
+#fileList table th,
 #fileList table td {
   border: none !important;
-  white-space: nowrap; /* Prevents wrapping for all other columns */
+  white-space: nowrap;
+  /* Prevents wrapping for all other columns */
 }
 
 /* Ensure only File Name column wraps */
 #fileList table th[data-column="name"],
 #fileList table td:nth-child(2) {
-  white-space: normal !important;  /* Allow wrapping */
+  white-space: normal !important;
+  /* Allow wrapping */
   word-wrap: break-word !important;
   overflow-wrap: break-word !important;
   word-break: break-word !important;
   text-align: left !important;
-  line-height: 1.2 !important; /* Reduce spacing between lines */
-  padding: 8px 10px !important; /* Adjust padding for better fit */
+  line-height: 1.2 !important;
+  /* Reduce spacing between lines */
+  padding: 8px 10px !important;
+  /* Adjust padding for better fit */
 
   /* Default (Small Screens) */
   max-width: 200px !important;
@@ -788,6 +864,7 @@ body.dark-mode #fileList table tr {
 
 /* Medium Screens */
 @media (min-width: 500px) {
+
   #fileList table th[data-column="name"],
   #fileList table td:nth-child(2) {
     max-width: 250px !important;
@@ -797,6 +874,7 @@ body.dark-mode #fileList table tr {
 
 /* Large Screens */
 @media (min-width: 1024px) {
+
   #fileList table th[data-column="name"],
   #fileList table td:nth-child(2) {
     max-width: 280px !important;
@@ -806,6 +884,7 @@ body.dark-mode #fileList table tr {
 
 /* Larger Screens */
 @media (min-width: 1440px) {
+
   #fileList table th[data-column="name"],
   #fileList table td:nth-child(2) {
     max-width: 380px !important;
@@ -821,8 +900,10 @@ body.dark-mode #fileList table tr {
 
 /* Reduce excessive row height */
 #fileList table td {
-  vertical-align: middle !important; /* Keep content centered */
-  padding: 8px 10px !important; /* Reduce excess padding */
+  vertical-align: middle !important;
+  /* Keep content centered */
+  padding: 8px 10px !important;
+  /* Reduce excess padding */
 }
 
 
@@ -869,17 +950,21 @@ label {
 
 @media (max-width: 768px) {
   #uploadFolderRow .col-md-6 {
-    margin-bottom: 15px; /* Adjust the spacing between stacked cards */
+    margin-bottom: 15px;
+    /* Adjust the spacing between stacked cards */
   }
 
   #uploadFolderRow .col-md-6:last-child {
-    margin-bottom: 0; /* Remove extra spacing from the last stacked card */
+    margin-bottom: 0;
+    /* Remove extra spacing from the last stacked card */
   }
 }
 
 .card-header {
-  font-size: 1.2rem; /* Increase font size */
-  font-weight: bold; /* Make it bold */
+  font-size: 1.2rem;
+  /* Increase font size */
+  font-weight: bold;
+  /* Make it bold */
 }
 
 .card-body .form-group {
@@ -909,8 +994,10 @@ label {
 }
 
 body.dark-mode .row-selected {
-  background-color: #444 !important; /* Dark background */
-  color: #fff !important;            /* White text for contrast */
+  background-color: #444 !important;
+  /* Dark background */
+  color: #fff !important;
+  /* White text for contrast */
 }
 
 .custom-prev-next-btn {
@@ -929,37 +1016,44 @@ body.dark-mode .row-selected {
 }
 
 body.dark-mode .custom-prev-next-btn {
-  background-color: #444; /* Darker background for dark mode */
-  color: #fff; /* White text for contrast */
+  background-color: #444;
+  /* Darker background for dark mode */
+  color: #fff;
+  /* White text for contrast */
   border: none;
 }
 
 body.dark-mode .custom-prev-next-btn:hover:not(:disabled) {
-  background-color: #555; /* Slightly lighter background for hover effect */
+  background-color: #555;
+  /* Slightly lighter background for hover effect */
 }
 
 .folder-option:hover {
   background-color: #f0f0f0;
-  padding: 2px 4px;  
+  padding: 2px 4px;
 }
 
 .folder-option.selected {
   background-color: #d0d0d0;
-  border-radius: 4px;    
-  padding: 2px 4px;  
+  border-radius: 4px;
+  padding: 2px 4px;
 }
 
 body.dark-mode .folder-option.selected {
-  background-color: #444; /* a dark gray that stands out */
-  color: #fff;            /* white text */
-  border-radius: 4px;    
-  padding: 2px 4px;      
+  background-color: #444;
+  /* a dark gray that stands out */
+  color: #fff;
+  /* white text */
+  border-radius: 4px;
+  padding: 2px 4px;
 }
 
 body.dark-mode .folder-option:hover {
-  background-color: #333; /* a dark gray background */
-  color: #fff;            /* ensure the text remains white */
-  padding: 2px 4px;  
+  background-color: #333;
+  /* a dark gray background */
+  color: #fff;
+  /* ensure the text remains white */
+  padding: 2px 4px;
 }
 
 .custom-folder-card-body {
@@ -975,7 +1069,7 @@ body.dark-mode .folder-option:hover {
   color: #fff;
   padding: 15px;
   border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   opacity: 0;
   transition: opacity 0.5s ease;
   z-index: 9999;
@@ -991,8 +1085,10 @@ body.dark-mode .folder-option:hover {
 .button-wrap {
   display: flex;
   flex-wrap: wrap;
-  row-gap: 5px; /* Removes vertical gap */
-  column-gap: 0px; /* Optional: Keeps a small horizontal gap */
+  row-gap: 5px;
+  /* Removes vertical gap */
+  column-gap: 0px;
+  /* Optional: Keeps a small horizontal gap */
 }
 
 /* Center-align on small screens */
@@ -1004,15 +1100,19 @@ body.dark-mode .folder-option:hover {
 
 .button-wrap .btn {
   align-items: center;
-  height: 32px !important;  /* Adjust as needed to match Download/Rename */
-  font-size: 14px !important;  /* Keeps text aligned */
+  height: 32px !important;
+  /* Adjust as needed to match Download/Rename */
+  font-size: 14px !important;
+  /* Keeps text aligned */
 }
 
 /* Ensure Material Icons inside buttons do not enlarge buttons */
 .button-wrap .btn i.material-icons {
-  font-size: 16px !important;  /* Match text size */
+  font-size: 16px !important;
+  /* Match text size */
   line-height: 1 !important;
-  vertical-align: middle !important; /* Align icon with text */
+  vertical-align: middle !important;
+  /* Align icon with text */
 }
 
 /* File List Section */
@@ -1025,34 +1125,41 @@ body.dark-mode .folder-option:hover {
 body.dark-mode #fileListContainer {
   background-color: #2c2c2c;
   color: #e0e0e0;
-  border: 1px solid #444;  /* adjust border color if needed */
-  border-radius: 8px;      /* adjust the roundness as desired */
+  border: 1px solid #444;
+  /* adjust border color if needed */
+  border-radius: 8px;
+  /* adjust the roundness as desired */
   padding: 10px;
   margin-top: 20px;
 
 }
 
-#fileListContainer > h2,
-#fileListContainer > .file-list-actions,
-#fileListContainer > #fileList {
-  margin-left: 15px; /* Moves title, buttons, and file list to the right */
+#fileListContainer>h2,
+#fileListContainer>.file-list-actions,
+#fileListContainer>#fileList {
+  margin-left: 15px;
+  /* Moves title, buttons, and file list to the right */
 }
 
 @media (max-width: 768px) {
-  #fileListContainer > h2,
-  #fileListContainer > .file-list-actions,
-  #fileListContainer > #fileList {
-    margin-left: 1px; /* Smaller adjustment for mobile */
+
+  #fileListContainer>h2,
+  #fileListContainer>.file-list-actions,
+  #fileListContainer>#fileList {
+    margin-left: 1px;
+    /* Smaller adjustment for mobile */
   }
 }
 
 .col-12.col-md-4.text-left {
-  margin-left: -15px; /* Adjust the value as needed */
+  margin-left: -15px;
+  /* Adjust the value as needed */
 }
 
 @media (max-width: 600px) {
   .col-12.col-md-4.text-left {
-    margin-left: -15px; /* Slightly adjust for smaller screens */
+    margin-left: -15px;
+    /* Slightly adjust for smaller screens */
   }
 }
 
@@ -1088,13 +1195,16 @@ body.dark-mode #fileListContainer {
   #fileListTitle {
     font-size: 1.4em;
   }
+
   .file-list-actions {
     flex-direction: column;
     align-items: stretch;
   }
+
   .file-list-actions .action-btn {
     width: 100%;
   }
+
   .modal-content {
     width: 95%;
     margin: 20% auto;
@@ -1104,113 +1214,133 @@ body.dark-mode #fileListContainer {
 /* ===========================================================
    FOLDER TREE STYLES
    =========================================================== */
-   .folder-tree {
-    list-style-type: none;
-    padding-left: 20px;
-    margin: 0;
-  }
-  .folder-tree.collapsed {
-    display: none;
-  }
-  .folder-tree.expanded {
-    display: block;
-  }
-  
-  .folder-item {
-    margin: 4px 0;
-    display: block;
-  }
-  
-  .folder-toggle {
-    cursor: pointer;
-    margin-right: 5px;
-  }
-  
-  .folder-indent-placeholder {
-    display: inline-block;
-    width: 18px;
-  }
-  
-  .folder-option {
-    cursor: pointer;
-    
-  }
+.folder-tree {
+  list-style-type: none;
+  padding-left: 20px;
+  margin: 0;
+}
 
-  #folderTreeContainer {
-    display: block;
-  }
+.folder-tree.collapsed {
+  display: none;
+}
+
+.folder-tree.expanded {
+  display: block;
+}
+
+.folder-item {
+  margin: 4px 0;
+  display: block;
+}
+
+.folder-toggle {
+  cursor: pointer;
+  margin-right: 5px;
+}
+
+.folder-indent-placeholder {
+  display: inline-block;
+  width: 18px;
+}
+
+.folder-option {
+  cursor: pointer;
+
+}
+
+#folderTreeContainer {
+  display: block;
+}
 
 /* ===========================================================
    FILE MANAGER INLINE STYLE REMOVAL - New Classes
    =========================================================== */
-  
-  .image-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap; /* Allows filename to wrap */
-    text-align: center;
-    min-height: 30px; /* Ensures enough space if wrapping */
-    margin: 0 auto 10px; /* Centers it properly */
-    padding: 10px;
-    width: 95%;
-  }
-  
+
+.image-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  /* Allows filename to wrap */
+  text-align: center;
+  min-height: 30px;
+  /* Ensures enough space if wrapping */
+  margin: 0 auto 10px;
+  /* Centers it properly */
+  padding: 10px;
+  width: 95%;
+}
+
+.image-preview-modal-content {
+  max-width: fit-content !important;
+  /* Allow modal to shrink to image size */
+  max-height: 90vh;
+  background: #fff;
+  padding: 20px !important;
+  border-radius: 4px;
+  overflow: hidden !important;
+  /* Prevents unexpected scrolling */
+  margin: auto;
+  position: relative;
+  display: inline-flex !important;
+  /* Makes sure the modal content only wraps the image */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
   .image-preview-modal-content {
-    max-width: fit-content !important; /* Allow modal to shrink to image size */
-    max-height: 90vh;
-    background: #fff;
-    padding: 20px !important;
-    border-radius: 4px;
-    overflow: hidden !important;  /* Prevents unexpected scrolling */
-    margin: auto;
-    position: relative;
-    display: inline-flex !important; /* Makes sure the modal content only wraps the image */
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    max-width: fit-content !important;
+    /* Allow modal to shrink to image size */
+    padding: 5px !important;
+    overflow: hidden !important;
+    /* Prevents unexpected scrolling */
+    display: inline-flex !important;
+    /* Makes sure the modal content only wraps the image */
   }
-  @media (max-width: 600px) {
-    .image-preview-modal-content {
-      max-width: fit-content !important; /* Allow modal to shrink to image size */  
-      padding: 5px !important;
-      overflow: hidden !important;  /* Prevents unexpected scrolling */
-      display: inline-flex !important; /* Makes sure the modal content only wraps the image */
-    }
-  }
-  body.dark-mode .image-preview-modal-content {
-    background: #2c2c2c;
-    border-color: #444;
-  }
-  
-  /* Ensure the image resizes properly */
-  .image-modal-img {
-    max-width: 100%;
-    max-height: 80vh;  /* Ensure it doesn't force a scrollbar */
-    object-fit: contain;  /* Prevents stretching */
-    display: block;
-    margin: 0 auto;
-  }
-  
+}
+
+body.dark-mode .image-preview-modal-content {
+  background: #2c2c2c;
+  border-color: #444;
+}
+
+/* Ensure the image resizes properly */
+.image-modal-img {
+  max-width: 100%;
+  max-height: 80vh;
+  /* Ensure it doesn't force a scrollbar */
+  object-fit: contain;
+  /* Prevents stretching */
+  display: block;
+  margin: 0 auto;
+}
+
 /* Image Preview Close Button (Perfect Alignment) */
 .close-image-modal {
   position: absolute;
   top: 10px;
   right: 15px;
-  font-size: 24px; /* Ensures X is same size */
+  font-size: 24px;
+  /* Ensures X is same size */
   font-weight: bold;
   cursor: pointer;
   z-index: 1000;
   color: #ff4d4d;
   background-color: rgba(255, 255, 255, 0.8);
   border-radius: 50%;
-  width: 32px; /* Ensures exact width */
-  height: 32px; /* Ensures exact height */
+  width: 32px;
+  /* Ensures exact width */
+  height: 32px;
+  /* Ensures exact height */
   display: flex;
   justify-content: center;
   align-items: center;
-  line-height: 1; /* Fixes text alignment */
-  padding-bottom: 2px; /* Moves X up slightly */
+  line-height: 1;
+  /* Fixes text alignment */
+  padding-bottom: 2px;
+  /* Moves X up slightly */
   transition: all 0.3s ease-in-out;
 }
 
@@ -1219,7 +1349,8 @@ body.dark-mode #fileListContainer {
   color: white;
   background-color: #ff4d4d;
   box-shadow: 0px 0px 6px rgba(255, 77, 77, 0.8);
-  transform: scale(1.05); /* Keeps position even on hover */
+  transform: scale(1.05);
+  /* Keeps position even on hover */
 }
 
 /* Dark Mode Adjustments */
@@ -1272,7 +1403,8 @@ body.dark-mode .file-icon {
   display: inline-block;
   width: auto !important;
   font-size: 16px !important;
-  height: 28px !important; /* Matches the dropdown */
+  height: 28px !important;
+  /* Matches the dropdown */
   padding: 2px 8px !important;
   line-height: 1.2 !important;
   border-radius: 4px !important;
@@ -1281,20 +1413,25 @@ body.dark-mode .file-icon {
 
 .label-inline {
   display: inline-flex;
-  align-items: center; /* Ensure vertical alignment */
-  height: 28px !important; /* Match dropdown */
+  align-items: center;
+  /* Ensure vertical alignment */
+  height: 28px !important;
+  /* Match dropdown */
   font-size: 16px !important;
   line-height: 1.2;
-  margin-bottom: 0; /* Remove any extra space */
+  margin-bottom: 0;
+  /* Remove any extra space */
 }
 
 .items-per-page-text {
   display: inline-flex;
   align-items: center;
-  height: 28px !important; /* Match dropdown */
+  height: 28px !important;
+  /* Match dropdown */
   font-size: 16px !important;
   line-height: 1.2;
-  margin-left: 8px; /* Add a small gap */
+  margin-left: 8px;
+  /* Add a small gap */
 }
 
 /* ===========================================================
@@ -1316,29 +1453,40 @@ body.dark-mode .file-icon {
 /* New wrapper ensures File Info appears below */
 .file-info-wrapper {
   display: flex;
-  flex-direction: column; /* Stack content below */
-  justify-content: center !important; /* Keep it centered */
+  flex-direction: column;
+  /* Stack content below */
+  justify-content: center !important;
+  /* Keep it centered */
   align-items: center !important;
-  margin-top: 10px; /* Add spacing */
+  margin-top: 10px;
+  /* Add spacing */
 }
 
 /* Ensure file info wraps properly */
 .file-info-container {
   display: flex;
-  flex-wrap: wrap !important; /* Allow wrapping */
-  justify-content: center !important; /* Keep it centered */
+  flex-wrap: wrap !important;
+  /* Allow wrapping */
+  justify-content: center !important;
+  /* Keep it centered */
   align-items: center;
   flex-wrap: wrap;
   gap: 5px;
 }
 
 .file-preview-container {
-  display: flex !important;  /* Use flex to control layout */
-  flex-wrap: wrap !important; /* Allow wrapping */
-  justify-content: center !important; /* Keep it centered */
-  align-items: center !important; /* Align items properly */
-  gap: 5px !important; /* Small spacing between previews */
-  max-width: 100% !important; /* Prevent overflow */
+  display: flex !important;
+  /* Use flex to control layout */
+  flex-wrap: wrap !important;
+  /* Allow wrapping */
+  justify-content: center !important;
+  /* Keep it centered */
+  align-items: center !important;
+  /* Align items properly */
+  gap: 5px !important;
+  /* Small spacing between previews */
+  max-width: 100% !important;
+  /* Prevent overflow */
   text-align: center !important;
 }
 
@@ -1347,9 +1495,11 @@ body.dark-mode .file-icon {
   max-width: 100px;
   max-height: 100px;
   margin-right: 5px;
-  justify-content: center !important; /* Keep it centered */
+  justify-content: center !important;
+  /* Keep it centered */
   height: auto;
-  display: block !important; /* Prevent spacing issues */
+  display: block !important;
+  /* Prevent spacing issues */
 }
 
 /* Small screens: Ensure it wraps properly */
@@ -1404,7 +1554,8 @@ body.dark-mode {
 
 /* Remove/override container background in dark mode */
 body.dark-mode .container {
-  /* background-color: #1e1e1e; */ /* comment this out or remove */
+  /* background-color: #1e1e1e; */
+  /* comment this out or remove */
   background-color: transparent !important;
 }
 
@@ -1414,11 +1565,13 @@ body.dark-mode .btn-primary {
   color: #fff;
   border-color: #007bff;
 }
+
 body.dark-mode .btn-secondary {
   background-color: #6c757d;
   color: #fff;
   border-color: #6c757d;
 }
+
 body.dark-mode .btn-danger {
   background-color: #dc3545;
   color: #fff;
@@ -1438,6 +1591,7 @@ body.dark-mode table {
   background-color: #2c2c2c;
   color: #e0e0e0;
 }
+
 body.dark-mode table tr:hover {
   background-color: #444;
 }
@@ -1446,6 +1600,7 @@ body.dark-mode table tr:hover {
 body.dark-mode #uploadProgressContainer .progress {
   background-color: #333;
 }
+
 body.dark-mode #uploadProgressContainer .progress-bar {
   background-color: #007bff;
   color: #e0e0e0;
@@ -1453,11 +1608,15 @@ body.dark-mode #uploadProgressContainer .progress-bar {
 
 /* 🔹 Dark Mode Toggle Styled to Blend into Header */
 .dark-mode-toggle {
-  background-color: transparent !important; /* Match header */
-  border: 1px solid transparent !important; /* Invisible border */
-  color: white !important; /* White text */
+  background-color: transparent !important;
+  /* Match header */
+  border: 1px solid transparent !important;
+  /* Invisible border */
+  color: white !important;
+  /* White text */
   padding: 6px 12px !important;
-  border-radius: 6px !important; /* Rounded edges */
+  border-radius: 6px !important;
+  /* Rounded edges */
   font-size: 0.9em !important;
   font-weight: 500 !important;
   cursor: pointer !important;
@@ -1466,7 +1625,8 @@ body.dark-mode #uploadProgressContainer .progress-bar {
 
 /* 🔹 Hover Effect - Subtle Border */
 .dark-mode-toggle:hover {
-  background-color: rgba(255, 255, 255, 0.15) !important; /* Slight highlight */
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  /* Slight highlight */
 }
 
 /* 🔹 Active/Clicked Effect */
@@ -1476,7 +1636,8 @@ body.dark-mode #uploadProgressContainer .progress-bar {
 
 /* 🔹 Dark Mode Version */
 body.dark-mode .dark-mode-toggle {
-  background-color: transparent !important; /* Match dark header */
+  background-color: transparent !important;
+  /* Match dark header */
   color: white !important;
 }
 
@@ -1508,12 +1669,14 @@ body.dark-mode .dark-mode-toggle:hover {
   color: #000;
   background: #f9f9f9;
   padding: 2px;
-  display: inline-block; /* or block, up to you */
+  display: inline-block;
+  /* or block, up to you */
 }
 
 .folder-help-icon {
   vertical-align: middle;
-  color: #d96601; /* the orange color for info icon */
+  color: #d96601;
+  /* the orange color for info icon */
   font-size: 20px !important;
 }
 
@@ -1535,16 +1698,22 @@ body.dark-mode .folder-help-summary {
 }
 
 body.dark-mode .folder-help-icon {
-  color: #f6a72c; /* or another color you prefer for the icon in dark mode */
+  color: #f6a72c;
+  /* or another color you prefer for the icon in dark mode */
   font-size: 20px;
 }
 
 body.dark-mode #searchIcon {
-  background-color: #444;  /* dark background */
-  border: 1px solid #555;  /* subtle border */
-  border-radius: 4px;      /* rounded corners */
-  color: #fff;             /* white icon color */
-  padding: 4px 8px;        /* adjust padding as needed */
+  background-color: #444;
+  /* dark background */
+  border: 1px solid #555;
+  /* subtle border */
+  border-radius: 4px;
+  /* rounded corners */
+  color: #fff;
+  /* white icon color */
+  padding: 4px 8px;
+  /* adjust padding as needed */
 }
 
 body.dark-mode #searchInput {
@@ -1566,15 +1735,20 @@ body.dark-mode #searchInput {
 
 /* Dark mode override */
 body.dark-mode .folder-explanation {
-  color: #ddd;              /* or another light color for text */
-  background-color: solid transparent; /* or another dark color for the background */
-  border: 1px solid transparent;  /* darker border in dark mode */
+  color: #ddd;
+  /* or another light color for text */
+  background-color: solid transparent;
+  /* or another dark color for the background */
+  border: 1px solid transparent;
+  /* darker border in dark mode */
 }
 
 /* Apply dark theme for CodeMirror when dark mode is enabled */
 body.dark-mode .CodeMirror {
-  background: #1e1e1e !important;  /* Dark background */
-  color: #ffffff !important; /* White text */
+  background: #1e1e1e !important;
+  /* Dark background */
+  color: #ffffff !important;
+  /* White text */
 }
 
 /* Ensure cursor is visible */
