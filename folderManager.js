@@ -35,28 +35,58 @@ function buildFolderTree(folders) {
   return tree;
 }
 
+// ----------------------
+// Session State for Folder Tree
+// ----------------------
+function loadFolderTreeState() {
+  const state = sessionStorage.getItem("folderTreeState");
+  return state ? JSON.parse(state) : {};
+}
+
+function saveFolderTreeState(state) {
+  sessionStorage.setItem("folderTreeState", JSON.stringify(state));
+}
+
+// ----------------------
+// Folder Deletion Helper
+// ----------------------
+function getParentFolder(folder) {
+  if (folder === "root") return "root";
+  const lastSlash = folder.lastIndexOf("/");
+  return lastSlash === -1 ? "root" : folder.substring(0, lastSlash);
+}
+
+// ----------------------
+// Render Folder Tree
+// ----------------------
 /**
  * Render the folder tree as nested <ul> elements using CSS classes.
+ * The open/closed state of each folder is restored from session storage.
  * @param {object} tree - The tree object.
  * @param {string} parentPath - The path prefix.
  * @param {string} defaultDisplay - "block" (open) or "none" (collapsed)
  */
 function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
-  // Determine display class based on defaultDisplay value.
-  const displayClass = defaultDisplay === 'none' ? 'collapsed' : 'expanded';
-  let html = `<ul class="folder-tree ${displayClass}">`;
+  // Use the stored state (if any) for each folder.
+  const state = loadFolderTreeState();
+  let html = `<ul class="folder-tree ${defaultDisplay === 'none' ? 'collapsed' : 'expanded'}">`;
   for (const folder in tree) {
     const fullPath = parentPath ? parentPath + "/" + folder : folder;
     const hasChildren = Object.keys(tree[folder]).length > 0;
+    // Use saved state if exists; otherwise use the defaultDisplay.
+    const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;
+    const ulClass = displayState === "none" ? "collapsed" : "expanded";
     html += `<li class="folder-item">`;
     if (hasChildren) {
-      html += `<span class="folder-toggle">[+]</span>`;
+      const toggleSymbol = (displayState === "none") ? "[+]" : "[-]";
+      // Add a data-folder attribute to track which folder is toggled.
+      html += `<span class="folder-toggle" data-folder="${fullPath}">${toggleSymbol}</span>`;
     } else {
       html += `<span class="folder-indent-placeholder"></span>`;
     }
     html += `<span class="folder-option" data-folder="${fullPath}">${folder}</span>`;
     if (hasChildren) {
-      html += renderFolderTree(tree[folder], fullPath, "none");
+      html += renderFolderTree(tree[folder], fullPath, displayState);
     }
     html += `</li>`;
   }
@@ -83,6 +113,10 @@ function expandTreePath(path) {
         const toggle = li.querySelector(".folder-toggle");
         if (toggle) {
           toggle.textContent = "[-]";
+          // Also update session state.
+          let state = loadFolderTreeState();
+          state[cumulative] = "block";
+          saveFolderTreeState(state);
         }
       }
     }
@@ -92,7 +126,6 @@ function expandTreePath(path) {
 // ----------------------
 // Main Interactive Tree
 // ----------------------
-
 export async function loadFolderTree(selectedFolder) {
   try {
     const response = await fetch('getFolderList.php');
@@ -118,7 +151,7 @@ export async function loadFolderTree(selectedFolder) {
     let html = "";
     // Build the root row.
     html += `<div id="rootRow" class="root-row">
-               <span class="folder-toggle">[-]</span>
+               <span class="folder-toggle" data-folder="root">[-]</span>
                <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
              </div>`;
 
@@ -129,8 +162,8 @@ export async function loadFolderTree(selectedFolder) {
                  </li>
                </ul>`;
     } else {
-      const tree = buildFolderTree(folders); // your existing function
-      html += renderFolderTree(tree, "", "block"); // your existing function
+      const tree = buildFolderTree(folders); // build the tree from folder list
+      html += renderFolderTree(tree, "", "block");
     }
 
     container.innerHTML = html;
@@ -164,22 +197,27 @@ export async function loadFolderTree(selectedFolder) {
       });
     });
 
-    // Attach toggle events (same as your original logic).
+    // Attach toggle events.
+    // Special handling for the root toggle.
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
       rootToggle.addEventListener("click", function (e) {
         e.stopPropagation();
         const nestedUl = container.querySelector("#rootRow + ul");
         if (nestedUl) {
+          let state = loadFolderTreeState();
           if (nestedUl.classList.contains("collapsed") || !nestedUl.classList.contains("expanded")) {
             nestedUl.classList.remove("collapsed");
             nestedUl.classList.add("expanded");
             this.textContent = "[-]";
+            state["root"] = "block";
           } else {
             nestedUl.classList.remove("expanded");
             nestedUl.classList.add("collapsed");
             this.textContent = "[+]";
+            state["root"] = "none";
           }
+          saveFolderTreeState(state);
         }
       });
     }
@@ -188,16 +226,21 @@ export async function loadFolderTree(selectedFolder) {
       toggle.addEventListener("click", function (e) {
         e.stopPropagation();
         const siblingUl = this.parentNode.querySelector("ul");
+        const folderPath = this.getAttribute("data-folder");
+        let state = loadFolderTreeState();
         if (siblingUl) {
           if (siblingUl.classList.contains("collapsed") || !siblingUl.classList.contains("expanded")) {
             siblingUl.classList.remove("collapsed");
             siblingUl.classList.add("expanded");
             this.textContent = "[-]";
+            state[folderPath] = "block";
           } else {
             siblingUl.classList.remove("expanded");
             siblingUl.classList.add("collapsed");
             this.textContent = "[+]";
+            state[folderPath] = "none";
           }
+          saveFolderTreeState(state);
         }
       });
     });
@@ -290,10 +333,9 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
     .then(data => {
       if (data.success) {
         showToast("Folder deleted successfully!");
-        if (window.currentFolder === selectedFolder) {
-          window.currentFolder = "root";
-        }
-        loadFolderList("root");
+        // Set current folder to the parent folder, not root
+        window.currentFolder = getParentFolder(selectedFolder);
+        loadFolderList(window.currentFolder);
       } else {
         showToast("Error: " + (data.error || "Could not delete folder"));
       }

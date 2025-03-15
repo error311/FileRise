@@ -52,7 +52,7 @@ function parseCustomDate(dateStr) {
 // Determines if a file is editable based on its extension.
 export function canEditFile(fileName) {
   const allowedExtensions = [
-    "txt", "html", "htm", "php", "css", "js", "json", "xml",
+    "txt", "html", "htm", "css", "js", "json", "xml",
     "md", "py", "ini", "csv", "log", "conf", "config", "bat",
     "rtf", "doc", "docx"
   ];
@@ -147,9 +147,18 @@ export function renderFileTable(folder) {
 
   // Get persistent items per page from localStorage.
   const itemsPerPageSetting = parseInt(localStorage.getItem('itemsPerPage') || '10', 10);
-  const currentPage = window.currentPage || 1;
+
+  // Use a mutable currentPage variable
+  let currentPage = window.currentPage || 1;
   const totalFiles = filteredFiles.length;
   const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
+
+  // If the current page is greater than totalPages, reset it to a valid page (for example, page 1 or totalPages)
+  if (currentPage > totalPages) {
+    currentPage = totalPages > 0 ? totalPages : 1;
+    window.currentPage = currentPage;
+  }
+
   const safeSearchTerm = escapeHTML(searchTerm);
 
   const topControlsHTML = `
@@ -202,13 +211,13 @@ export function renderFileTable(folder) {
       const safeSize = escapeHTML(file.size);
       const safeUploader = escapeHTML(file.uploader || "Unknown");
 
-      const isViewable = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|ogg)$/i.test(file.name);
+      const isViewable = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|ogg)$/i.test(file.name);
       let previewButton = "";
       if (isViewable) {
         let previewIcon = "";
         if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">image</i>`;
-        } else if (/\.(mp4|webm|ogg)$/i.test(file.name)) {
+        } else if (/\.(mp4|webm|mov|ogg)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">videocam</i>`;
         } else if (/\.pdf$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
@@ -354,7 +363,7 @@ window.previewFile = function (fileUrl, fileName) {
     embed.style.height = "80vh";
     embed.style.border = "none";
     container.appendChild(embed);
-  } else if (/\.(mp4|webm|ogg)$/i.test(fileName)) {
+  } else if (/\.(mp4|webm|mov|ogg)$/i.test(fileName)) {
     // Video preview using <video>
     const video = document.createElement("video");
     video.src = fileUrl;
@@ -762,7 +771,6 @@ export function editFile(fileName, folder) {
       const isDarkMode = document.body.classList.contains("dark-mode");
       const theme = isDarkMode ? "material-darker" : "default";
 
-      // Initialize CodeMirror
       // Initialize CodeMirror
       const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
         lineNumbers: true,
