@@ -1216,7 +1216,7 @@ body.dark-mode #fileListContainer {
    =========================================================== */
 .folder-tree {
   list-style-type: none;
-  padding-left: 25px;
+  padding-left: 10px;
   margin: 0;
 }
 
@@ -1236,11 +1236,14 @@ body.dark-mode #fileListContainer {
 .folder-toggle {
   cursor: pointer;
   margin-right: 5px;
+  display: inline-block;
+  width: 25px; /* or adjust to desired width */
+  text-align: right;
 }
 
 .folder-indent-placeholder {
   display: inline-block;
-  width: 0px;
+  width: 30px;
 }
 
 .folder-option {

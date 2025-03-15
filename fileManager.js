@@ -217,7 +217,7 @@ export function renderFileTable(folder) {
         let previewIcon = "";
         if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">image</i>`;
-        } else if (/\.(mp4|webm|mov|ogg)$/i.test(file.name)) {
+        } else if (/\.(mp4|webm|ogg)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">videocam</i>`;
         } else if (/\.pdf$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
@@ -356,9 +356,10 @@ window.previewFile = function (fileUrl, fileName) {
   } else if (extension === "pdf") {
     // PDF preview using <embed> with explicit sizing
     const embed = document.createElement("embed");
-    embed.src = fileUrl;
+    // Append a timestamp to force reload
+    const separator = fileUrl.indexOf('?') === -1 ? '?' : '&';
+    embed.src = fileUrl + separator + 't=' + new Date().getTime();
     embed.type = "application/pdf";
-    // Instead of using the image-modal-img class, set larger dimensions
     embed.style.width = "80vw";
     embed.style.height = "80vh";
     embed.style.border = "none";
