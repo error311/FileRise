@@ -123,50 +123,57 @@ export function loadFileList(folderParam) {
     });
 }
 
+// Debounce helper (if not defined already)
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
 export function renderFileTable(folder) {
   const fileListContainer = document.getElementById("fileList");
   const folderPath = (folder === "root")
     ? "uploads/"
     : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-
-  // Attempt to get the search input element.
-  const searchInputElement = document.getElementById("searchInput");
-  const searchHadFocus = searchInputElement && (document.activeElement === searchInputElement);
-  const searchTerm = searchInputElement ? searchInputElement.value : "";
-
+  
+  // Use the global search term if available.
+  const searchTerm = window.currentSearchTerm || "";
+  
   const filteredFiles = fileData.filter(file =>
     file.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Read persistent items per page from localStorage, default to 10.
+  
+  // Get persistent items per page from localStorage.
   const itemsPerPageSetting = parseInt(localStorage.getItem('itemsPerPage') || '10', 10);
   const currentPage = window.currentPage || 1;
   const totalFiles = filteredFiles.length;
   const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
   const safeSearchTerm = escapeHTML(searchTerm);
-
+  
   const topControlsHTML = `
-  <div class="row align-items-center mb-3">
-    <div class="col-12 col-md-8 mb-2 mb-md-0">
-      <div class="input-group">
-        <div class="input-group-prepend">
-          <span class="input-group-text" id="searchIcon">
-            <i class="material-icons">search</i>
-          </span>
+    <div class="row align-items-center mb-3">
+      <div class="col-12 col-md-8 mb-2 mb-md-0">
+        <div class="input-group">
+          <div class="input-group-prepend">
+            <span class="input-group-text" id="searchIcon">
+              <i class="material-icons">search</i>
+            </span>
+          </div>
+          <input type="text" id="searchInput" class="form-control" placeholder="Search files..." value="${safeSearchTerm}" aria-describedby="searchIcon">
         </div>
-        <input type="text" id="searchInput" class="form-control" placeholder="Search files..." value="${safeSearchTerm}" aria-describedby="searchIcon">
+      </div>
+      <div class="col-12 col-md-4 text-left">
+        <div class="d-flex justify-content-center justify-content-md-start align-items-center">
+          <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">Prev</button>
+          <span class="page-indicator">Page ${currentPage} of ${totalPages || 1}</span>
+          <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">Next</button>
+        </div>
       </div>
     </div>
-    <div class="col-12 col-md-4 text-left">
-      <div class="d-flex justify-content-center justify-content-md-start align-items-center">
-        <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">Prev</button>
-        <span class="page-indicator">Page ${currentPage} of ${totalPages || 1}</span>
-        <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">Next</button>
-      </div>
-    </div>
-  </div>
   `;
-
+  
   let tableHTML = `
     <table class="table">
       <thead>
@@ -181,11 +188,11 @@ export function renderFileTable(folder) {
         </tr>
       </thead>
   `;
-
+  
   const startIndex = (currentPage - 1) * itemsPerPageSetting;
   const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
   let tableBody = `<tbody>`;
-
+  
   if (totalFiles > 0) {
     filteredFiles.slice(startIndex, endIndex).forEach(file => {
       const isEditable = canEditFile(file.name);
@@ -194,16 +201,15 @@ export function renderFileTable(folder) {
       const safeUploaded = escapeHTML(file.uploaded);
       const safeSize = escapeHTML(file.size);
       const safeUploader = escapeHTML(file.uploader || "Unknown");
-
-      // Check if file is an image.
+  
       const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name);
-
+  
       const previewButton = isImage
         ? `<button class="btn btn-sm btn-info ml-2" onclick="event.stopPropagation(); previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
-           <i class="material-icons">image</i>
-         </button>`
+             <i class="material-icons">image</i>
+           </button>`
         : "";
-
+  
       tableBody += `
           <tr onclick="toggleRowSelection(event, '${safeFileName}')" class="clickable-row">
             <td>
@@ -229,43 +235,55 @@ export function renderFileTable(folder) {
     tableBody += `<tr><td colspan="7">No files found.</td></tr>`;
   }
   tableBody += `</tbody></table>`;
-
+  
   const bottomControlsHTML = `
     <div class="d-flex align-items-center mt-3 bottom-controls">
       <label class="label-inline mr-2 mb-0">Show</label>
       <select class="form-control bottom-select" onchange="changeItemsPerPage(this.value)">
         ${[10, 20, 50, 100]
-      .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
-      .join("")}
+          .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
+          .join("")}
       </select>
       <span class="items-per-page-text ml-2 mb-0">items per page</span>
     </div>
   `;
-
+  
   fileListContainer.innerHTML = topControlsHTML + tableHTML + tableBody + bottomControlsHTML;
-
-  // Only add event listeners if searchInputElement exists.
-  if (searchInputElement) {
-    searchInputElement.addEventListener("input", function () {
+  
+  // Re-attach event listener for the new search input element.
+  const newSearchInput = document.getElementById("searchInput");
+  if (newSearchInput) {
+    newSearchInput.addEventListener("input", debounce(function () {
+      window.currentSearchTerm = newSearchInput.value;
       window.currentPage = 1;
       renderFileTable(folder);
-    });
+      // After re-rendering, restore focus and caret position.
+      setTimeout(() => {
+        const freshInput = document.getElementById("searchInput");
+        if (freshInput) {
+          freshInput.focus();
+          freshInput.setSelectionRange(freshInput.value.length, freshInput.value.length);
+        }
+      }, 0);
+    }, 300));
   }
-
+  
+  // Add event listeners for header sorting.
   document.querySelectorAll("table.table thead th[data-column]").forEach(cell => {
     cell.addEventListener("click", function () {
       const column = this.getAttribute("data-column");
       sortFiles(column, folder);
     });
   });
-
+  
+  // Add event listeners for checkboxes.
   document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', function (e) {
       updateRowHighlight(e.target);
       updateFileActionButtons();
     });
   });
-
+  
   updateFileActionButtons();
 }
 
@@ -712,15 +730,15 @@ export function editFile(fileName, folder) {
         theme: theme,
         viewportMargin: Infinity
       });
-
+      
       // Ensure height adjustment
       window.currentEditor = editor;
-
+      
       // Adjust height AFTER modal appears
       setTimeout(() => {
         adjustEditorSize(); // Set initial height
       }, 50);
-
+      
       // Attach modal resize observer
       observeModalResize(modal);
 
@@ -732,7 +750,7 @@ export function editFile(fileName, folder) {
       document.getElementById("closeEditorX").addEventListener("click", function () {
         modal.remove();
       });
-
+      
       document.getElementById("decreaseFont").addEventListener("click", function () {
         currentFontSize = Math.max(8, currentFontSize - 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";

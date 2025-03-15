@@ -45,6 +45,29 @@ function getFilesFromDataTransferItems(items) {
   return Promise.all(promises).then(results => results.flat());
 }
 
+// Helper: Set default drop area content.
+// Moved to module scope so it is available globally in this module.
+function setDropAreaDefault() {
+  const dropArea = document.getElementById("uploadDropArea");
+  if (dropArea) {
+    dropArea.innerHTML = `
+          <div id="uploadInstruction" class="upload-instruction">
+            Drop files/folders here or click 'Choose files'
+          </div>
+          <div id="uploadFileRow" class="upload-file-row">
+            <button id="customChooseBtn" type="button">
+              Choose files
+            </button>
+          </div>
+          <div id="fileInfoWrapper" class="file-info-wrapper">
+            <div id="fileInfoContainer" class="file-info-container">
+              <span id="fileInfoDefault">No files selected</span>
+            </div>
+          </div>
+        `;
+  }
+}
+
 function adjustFolderHelpExpansion() {
   const uploadCard = document.getElementById("uploadCard");
   const folderHelpDetails = document.querySelector(".folder-help-details");
@@ -247,8 +270,8 @@ function processFiles(filesInput) {
     }
     const listWrapper = document.createElement("div");
     listWrapper.classList.add("upload-progress-wrapper");
-    // Set a maximum height (adjust as needed) and enable vertical scrolling.
-    listWrapper.style.maxHeight = "300px"; // for example, 300px
+    // Set a maximum height and enable vertical scrolling.
+    listWrapper.style.maxHeight = "300px";
     listWrapper.style.overflowY = "auto";
     listWrapper.appendChild(list);
     progressContainer.appendChild(listWrapper);
@@ -433,30 +456,11 @@ function initUpload() {
     fileInput.setAttribute("directory", "");
   }
 
-  // Helper: Set default drop area content.
-  function setDropAreaDefault() {
-    if (dropArea) {
-      dropArea.innerHTML = `
-          <div id="uploadInstruction" class="upload-instruction">
-            Drop files/folders here or click 'Choose files'
-          </div>
-          <div id="uploadFileRow" class="upload-file-row">
-            <button id="customChooseBtn" type="button">
-              Choose files
-            </button>
-          </div>
-          <div id="fileInfoWrapper" class="file-info-wrapper">
-            <div id="fileInfoContainer" class="file-info-container">
-              <span id="fileInfoDefault">No files selected</span>
-            </div>
-          </div>
-        `;
-    }
-  }
+  // Set default drop area content.
+  setDropAreaDefault();
 
   if (dropArea) {
     dropArea.classList.add("upload-drop-area");
-    setDropAreaDefault();
     dropArea.addEventListener("dragover", function (e) {
       e.preventDefault();
       // Use a darker color if dark mode is active.
