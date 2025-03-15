@@ -20,6 +20,8 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
   - Users can select and upload multiple files & folders at once. Each file upload shows an individual progress bar with percentage and upload speed, and image files display a small thumbnail preview (default icons for other file types).
 - **Built-in File Editing & Renaming:**
   - Text-based files (e.g., .txt, .html, .js) can be opened and edited in a modal window without leaving the page. The editor modal is resizable and now uses CodeMirror for syntax highlighting, line numbering, and zoom in/out functionality—allowing users to adjust the text size for a better editing experience. Files can also be renamed via a dedicated “Rename” action without needing to re-upload them.
+- **Built-in File Preview:**
+  - Users can quickly preview images, videos, and PDFs directly in modal popups without leaving the page. The modal maintains a responsive, centered layout that scales with the content. Different Material icons—image for photos, videocam for videos, and picture_as_pdf for PDFs—provide clear visual cues, and custom CSS (including fine-tuning with negative margins) ensures that icons are perfectly aligned. PDFs are embedded at optimal dimensions for a clear, readable view, while video previews include built-in playback controls.
 - **Batch Operations (Delete/Copy/Move/Download):**
   - Delete Files: Delete multiple files at once.
   - Copy Files: Copy selected files to another folder.
