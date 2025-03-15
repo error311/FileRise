@@ -1,5 +1,7 @@
 # Multi File Upload Editor
 
+https://github.com/user-attachments/assets/6fdd60c2-6dc0-4f8f-8600-6c30ced25fe6
+
 **Light mode**
 ![Light Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-mode.png)
 
