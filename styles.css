@@ -1306,6 +1306,18 @@ body.dark-mode .image-preview-modal-content {
   border-color: #444;
 }
 
+.preview-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-btn i.material-icons {
+  vertical-align: middle;
+  margin: 0;
+  margin-top: -2px;
+}
+
 /* Ensure the image resizes properly */
 .image-modal-img {
   max-width: 100%;

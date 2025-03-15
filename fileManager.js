@@ -126,7 +126,7 @@ export function loadFileList(folderParam) {
 // Debounce helper (if not defined already)
 function debounce(func, wait) {
   let timeout;
-  return function(...args) {
+  return function (...args) {
     clearTimeout(timeout);
     timeout = setTimeout(() => func.apply(this, args), wait);
   };
@@ -137,21 +137,21 @@ export function renderFileTable(folder) {
   const folderPath = (folder === "root")
     ? "uploads/"
     : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-  
+
   // Use the global search term if available.
   const searchTerm = window.currentSearchTerm || "";
-  
+
   const filteredFiles = fileData.filter(file =>
     file.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
+
   // Get persistent items per page from localStorage.
   const itemsPerPageSetting = parseInt(localStorage.getItem('itemsPerPage') || '10', 10);
   const currentPage = window.currentPage || 1;
   const totalFiles = filteredFiles.length;
   const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
   const safeSearchTerm = escapeHTML(searchTerm);
-  
+
   const topControlsHTML = `
     <div class="row align-items-center mb-3">
       <div class="col-12 col-md-8 mb-2 mb-md-0">
@@ -173,7 +173,7 @@ export function renderFileTable(folder) {
       </div>
     </div>
   `;
-  
+
   let tableHTML = `
     <table class="table">
       <thead>
@@ -188,11 +188,11 @@ export function renderFileTable(folder) {
         </tr>
       </thead>
   `;
-  
+
   const startIndex = (currentPage - 1) * itemsPerPageSetting;
   const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
   let tableBody = `<tbody>`;
-  
+
   if (totalFiles > 0) {
     filteredFiles.slice(startIndex, endIndex).forEach(file => {
       const isEditable = canEditFile(file.name);
@@ -201,15 +201,24 @@ export function renderFileTable(folder) {
       const safeUploaded = escapeHTML(file.uploaded);
       const safeSize = escapeHTML(file.size);
       const safeUploader = escapeHTML(file.uploader || "Unknown");
-  
-      const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name);
-  
-      const previewButton = isImage
-        ? `<button class="btn btn-sm btn-info ml-2" onclick="event.stopPropagation(); previewImage('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
-             <i class="material-icons">image</i>
-           </button>`
-        : "";
-  
+
+      const isViewable = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|ogg)$/i.test(file.name);
+      let previewButton = "";
+      if (isViewable) {
+        let previewIcon = "";
+        if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
+          previewIcon = `<i class="material-icons">image</i>`;
+        } else if (/\.(mp4|webm|ogg)$/i.test(file.name)) {
+          previewIcon = `<i class="material-icons">videocam</i>`;
+        } else if (/\.pdf$/i.test(file.name)) {
+          previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
+        }
+
+        previewButton = `<button class="btn btn-sm btn-info ml-2 preview-btn" onclick="event.stopPropagation(); previewFile('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
+               ${previewIcon}
+             </button>`;
+      }
+
       tableBody += `
           <tr onclick="toggleRowSelection(event, '${safeFileName}')" class="clickable-row">
             <td>
@@ -235,21 +244,21 @@ export function renderFileTable(folder) {
     tableBody += `<tr><td colspan="7">No files found.</td></tr>`;
   }
   tableBody += `</tbody></table>`;
-  
+
   const bottomControlsHTML = `
     <div class="d-flex align-items-center mt-3 bottom-controls">
       <label class="label-inline mr-2 mb-0">Show</label>
       <select class="form-control bottom-select" onchange="changeItemsPerPage(this.value)">
         ${[10, 20, 50, 100]
-          .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
-          .join("")}
+      .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
+      .join("")}
       </select>
       <span class="items-per-page-text ml-2 mb-0">items per page</span>
     </div>
   `;
-  
+
   fileListContainer.innerHTML = topControlsHTML + tableHTML + tableBody + bottomControlsHTML;
-  
+
   // Re-attach event listener for the new search input element.
   const newSearchInput = document.getElementById("searchInput");
   if (newSearchInput) {
@@ -267,7 +276,7 @@ export function renderFileTable(folder) {
       }, 0);
     }, 300));
   }
-  
+
   // Add event listeners for header sorting.
   document.querySelectorAll("table.table thead th[data-column]").forEach(cell => {
     cell.addEventListener("click", function () {
@@ -275,7 +284,7 @@ export function renderFileTable(folder) {
       sortFiles(column, folder);
     });
   });
-  
+
   // Add event listeners for checkboxes.
   document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', function (e) {
@@ -283,17 +292,17 @@ export function renderFileTable(folder) {
       updateFileActionButtons();
     });
   });
-  
+
   updateFileActionButtons();
 }
 
 // Global function to show an image preview modal.
-window.previewImage = function (imageUrl, fileName) {
-  let modal = document.getElementById("imagePreviewModal");
+window.previewFile = function (fileUrl, fileName) {
+  let modal = document.getElementById("filePreviewModal");
   if (!modal) {
     modal = document.createElement("div");
-    modal.id = "imagePreviewModal";
-    // Full-screen overlay using flexbox, with no padding.
+    modal.id = "filePreviewModal";
+    // Use the same styling as the original image modal.
     Object.assign(modal.style, {
       display: "none",
       position: "fixed",
@@ -309,12 +318,12 @@ window.previewImage = function (imageUrl, fileName) {
     });
     modal.innerHTML = `
       <div class="modal-content image-preview-modal-content">
-        <span id="closeImageModal" class="close-image-modal">&times;</span>
+        <span id="closeFileModal" class="close-image-modal">&times;</span>
         <h4 class="image-modal-header"></h4>
-        <img src="" class="image-modal-img" />
+        <div class="file-preview-container"></div>
       </div>`;
     document.body.appendChild(modal);
-    document.getElementById("closeImageModal").addEventListener("click", function () {
+    document.getElementById("closeFileModal").addEventListener("click", function () {
       modal.style.display = "none";
     });
     modal.addEventListener("click", function (e) {
@@ -324,7 +333,38 @@ window.previewImage = function (imageUrl, fileName) {
     });
   }
   modal.querySelector("h4").textContent = "Preview: " + fileName;
-  modal.querySelector("img").src = imageUrl;
+  const container = modal.querySelector(".file-preview-container");
+  container.innerHTML = ""; // Clear previous content
+
+  const extension = fileName.split('.').pop().toLowerCase();
+
+  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(fileName)) {
+    // Image preview
+    const img = document.createElement("img");
+    img.src = fileUrl;
+    img.className = "image-modal-img";
+    container.appendChild(img);
+  } else if (extension === "pdf") {
+    // PDF preview using <embed> with explicit sizing
+    const embed = document.createElement("embed");
+    embed.src = fileUrl;
+    embed.type = "application/pdf";
+    // Instead of using the image-modal-img class, set larger dimensions
+    embed.style.width = "80vw";
+    embed.style.height = "80vh";
+    embed.style.border = "none";
+    container.appendChild(embed);
+  } else if (/\.(mp4|webm|ogg)$/i.test(fileName)) {
+    // Video preview using <video>
+    const video = document.createElement("video");
+    video.src = fileUrl;
+    video.controls = true;
+    video.className = "image-modal-img";
+    container.appendChild(video);
+  } else {
+    container.textContent = "Preview not available for this file type.";
+  }
+
   modal.style.display = "flex";
 };
 
@@ -730,15 +770,15 @@ export function editFile(fileName, folder) {
         theme: theme,
         viewportMargin: Infinity
       });
-      
+
       // Ensure height adjustment
       window.currentEditor = editor;
-      
+
       // Adjust height AFTER modal appears
       setTimeout(() => {
         adjustEditorSize(); // Set initial height
       }, 50);
-      
+
       // Attach modal resize observer
       observeModalResize(modal);
 
@@ -750,7 +790,7 @@ export function editFile(fileName, folder) {
       document.getElementById("closeEditorX").addEventListener("click", function () {
         modal.remove();
       });
-      
+
       document.getElementById("decreaseFont").addEventListener("click", function () {
         currentFontSize = Math.max(8, currentFontSize - 2);
         editor.getWrapperElement().style.fontSize = currentFontSize + "px";
