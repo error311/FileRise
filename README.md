@@ -1,12 +1,6 @@
 # Multi File Upload Editor
 
-https://github.com/user-attachments/assets/85e17adc-498b-43df-b0ac-732396331da8
-
-**Light mode**
-![Light Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-mode.png)
-
-**Dark mode**
-![Dark Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
+<https://github.com/user-attachments/assets/85e17adc-498b-43df-b0ac-732396331da8>
 
 changelogs available here: <https://github.com/error311/multi-file-upload-editor-docker/>
 
@@ -47,10 +41,16 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 
 ## Screenshots
 
-  ![dark-editor](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-editor.png)  
-  ![dark-preview](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-preview.png)  
-  ![light-downloadzip](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-downloadzip.png)
-  ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)
+**Light mode**
+![Light Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-mode.png)
+
+**Dark mode**
+![Dark Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
+
+![dark-editor](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-editor.png)  
+![dark-preview](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-preview.png)  
+![light-downloadzip](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-downloadzip.png)
+![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)
 
   **iphone:**  
 <p align="center">

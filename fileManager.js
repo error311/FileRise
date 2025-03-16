@@ -311,7 +311,6 @@ export function renderFileTable(folder) {
 }
 
 // Global function to show an image preview modal.
-// Global function to show an image preview modal.
 window.previewFile = function (fileUrl, fileName) {
   let modal = document.getElementById("filePreviewModal");
   if (!modal) {
