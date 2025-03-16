@@ -75,7 +75,6 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
     const hasChildren = Object.keys(tree[folder]).length > 0;
     // Use saved state if exists; otherwise use the defaultDisplay.
     const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;
-    const ulClass = displayState === "none" ? "collapsed" : "expanded";
     html += `<li class="folder-item">`;
     if (hasChildren) {
       const toggleSymbol = (displayState === "none") ? "[+]" : "[-]";
@@ -169,19 +168,30 @@ export async function loadFolderTree(selectedFolder) {
     container.innerHTML = html;
     console.log("Rendered folder tree HTML:", container.innerHTML);
 
+    // Use the provided selectedFolder if available,
+    // otherwise check localStorage for the last opened folder.
     if (selectedFolder) {
       window.currentFolder = selectedFolder;
-    } else if (!window.currentFolder) {
-      window.currentFolder = "root";
+    } else {
+      window.currentFolder = localStorage.getItem("lastOpenedFolder") || "root";
     }
+    localStorage.setItem("lastOpenedFolder", window.currentFolder);
 
     document.getElementById("fileListTitle").textContent =
       window.currentFolder === "root" ? "Files in (Root)" : "Files in (" + window.currentFolder + ")";
     loadFileList(window.currentFolder);
 
-    if (window.currentFolder !== "root") {
+    const folderState = loadFolderTreeState();
+    if (window.currentFolder !== "root" && folderState[window.currentFolder] !== "none") {
       expandTreePath(window.currentFolder);
     }
+
+    // --- NEW SNIPPET: Highlight the current folder ---
+    const selectedEl = container.querySelector(`.folder-option[data-folder="${window.currentFolder}"]`);
+    if (selectedEl) {
+      selectedEl.classList.add("selected");
+    }
+    // ----------------------------------------------------
 
     // Attach events to folder options.
     container.querySelectorAll(".folder-option").forEach(el => {
@@ -191,6 +201,7 @@ export async function loadFolderTree(selectedFolder) {
         this.classList.add("selected");
         const selected = this.getAttribute("data-folder");
         window.currentFolder = selected;
+        localStorage.setItem("lastOpenedFolder", selected);
         document.getElementById("fileListTitle").textContent =
           selected === "root" ? "Files in (Root)" : "Files in (" + selected + ")";
         loadFileList(selected);
@@ -303,6 +314,7 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
       if (data.success) {
         showToast("Folder renamed successfully!");
         window.currentFolder = newFolderFull;
+        localStorage.setItem("lastOpenedFolder", newFolderFull);
         loadFolderList(newFolderFull);
       } else {
         showToast("Error: " + (data.error || "Could not rename folder"));
@@ -343,6 +355,7 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
         showToast("Folder deleted successfully!");
         // Set current folder to the parent folder, not root
         window.currentFolder = getParentFolder(selectedFolder);
+        localStorage.setItem("lastOpenedFolder", window.currentFolder);
         loadFolderList(window.currentFolder);
       } else {
         showToast("Error: " + (data.error || "Could not delete folder"));
@@ -386,6 +399,7 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
       if (data.success) {
         showToast("Folder created successfully!");
         window.currentFolder = fullFolderName;
+        localStorage.setItem("lastOpenedFolder", fullFolderName);
         loadFolderList(fullFolderName);
       } else {
         showToast("Error: " + (data.error || "Could not create folder"));

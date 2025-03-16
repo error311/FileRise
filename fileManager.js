@@ -93,33 +93,38 @@ window.updateRowHighlight = function (checkbox) {
 
 export function loadFileList(folderParam) {
   const folder = folderParam || "root";
-  // Request a recursive listing from the server.
+  const fileListContainer = document.getElementById("fileList");
+  
+  // Hide the container while loading
+  fileListContainer.style.visibility = "hidden";
+  fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
+
   return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
     .then(response => response.json())
     .then(data => {
-      const fileListContainer = document.getElementById("fileList");
+      // Clear the container once data is loaded
       fileListContainer.innerHTML = "";
       if (data.files && data.files.length > 0) {
-        // Map each file so that we have a full name that includes subfolder information.
-        // We assume that getFileList.php returns a property 'path' that contains the full relative path (e.g. "subfolder/filename.txt")
         data.files = data.files.map(file => {
-          // If file.path exists, use that; otherwise fallback to file.name.
           file.fullName = (file.path || file.name).trim().toLowerCase();
           return file;
         });
-        // Save fileData and render file table using your full list.
         fileData = data.files;
         renderFileTable(folder);
       } else {
         fileListContainer.textContent = "No files found.";
         updateFileActionButtons();
       }
-      // Return the full file objects.
       return data.files || [];
     })
     .catch(error => {
       console.error("Error loading file list:", error);
+      fileListContainer.textContent = "Error loading files.";
       return [];
+    })
+    .finally(() => {
+      // Make the container visible after processing
+      fileListContainer.style.visibility = "visible";
     });
 }
 
@@ -217,7 +222,7 @@ export function renderFileTable(folder) {
         let previewIcon = "";
         if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">image</i>`;
-        } else if (/\.(mp4|webm|mov|ogg)$/i.test(file.name)) {
+        } else if (/\.(mp4|webm|ogg)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">videocam</i>`;
         } else if (/\.pdf$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
