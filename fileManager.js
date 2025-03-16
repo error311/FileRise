@@ -222,7 +222,7 @@ export function renderFileTable(folder) {
         let previewIcon = "";
         if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">image</i>`;
-        } else if (/\.(mp4|webm|ogg)$/i.test(file.name)) {
+        } else if (/\.(mp4|webm|mov|ogg)$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">videocam</i>`;
         } else if (/\.pdf$/i.test(file.name)) {
           previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
