@@ -449,11 +449,13 @@ function initUpload() {
   const dropArea = document.getElementById("uploadDropArea");
   const uploadForm = document.getElementById("uploadFileForm");
 
-  // Set folder upload attributes.
   if (fileInput) {
-    fileInput.setAttribute("webkitdirectory", "");
-    fileInput.setAttribute("mozdirectory", "");
-    fileInput.setAttribute("directory", "");
+    // Remove folder selection attributes so clicking the input shows files:
+    fileInput.removeAttribute("webkitdirectory");
+    fileInput.removeAttribute("mozdirectory");
+    fileInput.removeAttribute("directory");
+    // Allow selecting multiple files.
+    fileInput.setAttribute("multiple", "");
   }
 
   // Set default drop area content.
@@ -463,12 +465,7 @@ function initUpload() {
     dropArea.classList.add("upload-drop-area");
     dropArea.addEventListener("dragover", function (e) {
       e.preventDefault();
-      // Use a darker color if dark mode is active.
-      if (document.body.classList.contains("dark-mode")) {
-        dropArea.style.backgroundColor = "#333";
-      } else {
-        dropArea.style.backgroundColor = "#f8f8f8";
-      }
+      dropArea.style.backgroundColor = document.body.classList.contains("dark-mode") ? "#333" : "#f8f8f8";
     });
     dropArea.addEventListener("dragleave", function (e) {
       e.preventDefault();
