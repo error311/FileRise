@@ -311,6 +311,7 @@ export function renderFileTable(folder) {
 }
 
 // Global function to show an image preview modal.
+// Global function to show an image preview modal.
 window.previewFile = function (fileUrl, fileName) {
   let modal = document.getElementById("filePreviewModal");
   if (!modal) {
@@ -337,16 +338,31 @@ window.previewFile = function (fileUrl, fileName) {
         <div class="file-preview-container"></div>
       </div>`;
     document.body.appendChild(modal);
+    
+    // Close event for the close button.
     document.getElementById("closeFileModal").addEventListener("click", function () {
+      const video = modal.querySelector("video");
+      if (video) {
+        video.pause();
+        video.currentTime = 0;
+      }
       modal.style.display = "none";
     });
+    
+    // Close event when clicking outside the modal content.
     modal.addEventListener("click", function (e) {
       if (e.target === modal) {
+        const video = modal.querySelector("video");
+        if (video) {
+          video.pause();
+          video.currentTime = 0;
+        }
         modal.style.display = "none";
       }
     });
   }
-  modal.querySelector("h4").textContent = "Preview: " + fileName;
+  
+  modal.querySelector("h4").textContent = fileName;
   const container = modal.querySelector(".file-preview-container");
   container.innerHTML = ""; // Clear previous content
 

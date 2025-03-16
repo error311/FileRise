@@ -44,7 +44,6 @@ body {
 /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
 /************************************************************/
 
-/* 🔹 Header Container (Keeps Everything Aligned) */
 .header-container {
   display: flex;
   align-items: center;
@@ -57,7 +56,6 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-/* 🔹 Dark Mode */
 body.dark-mode .header-container {
   background-color: #1f1f1f;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
@@ -70,11 +68,10 @@ body.dark-mode .header-container {
 }
 
 .header-logo svg {
-  height: 70px; /* Ensure the inline SVG matches the intended size */
+  height: 70px;
   width: auto;
 }
 
-/* 🔹 Header Layout */
 header {
   display: flex;
   align-items: center;
@@ -83,18 +80,15 @@ header {
   height: 80px;
   padding: 0 20px;
   background-color: #2196F3;
-  /* Light mode */
   transition: background-color 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-/* 🔹 Dark Mode: Header */
 body.dark-mode header {
   background-color: #1f1f1f;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
 }
 
-/* 🔹 Left Section (Logo) */
 .header-left {
   display: flex;
   align-items: center;
@@ -102,7 +96,6 @@ body.dark-mode header {
   min-width: 100px;
 }
 
-/* 🔹 Title (Perfectly Centered) */
 .header-title {
   position: absolute;
   left: 50%;
@@ -117,7 +110,6 @@ body.dark-mode header {
   margin: 0;
 }
 
-/* 🔹 Right Section (Buttons) */
 .header-buttons {
   display: flex;
   align-items: center;
@@ -127,7 +119,6 @@ body.dark-mode header {
   gap: 10px;
 }
 
-/* 🔹 Buttons */
 .header-buttons button {
   background: none;
   border: none;
@@ -143,7 +134,6 @@ body.dark-mode header {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* 🔹 Small Screens: Stack Layout */
 @media (max-width: 600px) {
   header {
     flex-direction: column;
@@ -174,26 +164,10 @@ body.dark-mode header {
   }
 }
 
-.header-buttons button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 10px;
-  border-radius: 50%;
-  color: #fff;
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
-}
-
 .header-buttons button i {
   font-size: 24px;
 }
 
-.header-buttons button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-/* 🔹 Dark Mode Toggle Button */
 .dark-mode-toggle {
   background-color: #424242;
   border: 1px solid #fff;
@@ -213,7 +187,6 @@ body.dark-mode header {
 /* RESPONSIVE HEADER FIXES                                 */
 /************************************************************/
 
-/* 🔹 Medium Screens */
 @media (max-width: 900px) {
   .header-container {
     flex-wrap: wrap;
@@ -234,7 +207,6 @@ body.dark-mode header {
   }
 }
 
-/* 🔹 Small Screens */
 @media (max-width: 600px) {
   .header-container {
     flex-direction: column;
@@ -259,8 +231,6 @@ body.dark-mode header {
   }
 }
 
-/* end of header */
-
 /* ===========================================================
    MATERIAL ICONS
    =========================================================== */
@@ -270,7 +240,6 @@ body.dark-mode header {
   color: white;
 }
 
-/* folder icon and remove file to be uploaded */
 .material-icons.folder-icon {
   color: black;
   margin-right: 5px;
@@ -281,7 +250,6 @@ body.dark-mode .material-icons.folder-icon {
   margin-right: 5px;
 }
 
-/* Remove button default styling */
 .remove-file-btn {
   width: 24px;
   height: 24px;
@@ -314,30 +282,24 @@ body.dark-mode .material-icons.folder-icon {
   border-radius: 4px;
 }
 
-/* Dark mode for login form */
 body.dark-mode #loginForm {
   background-color: #2c2c2c;
-  /* Dark background */
   color: #e0e0e0;
-  /* Light text */
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(255, 255, 255, 0.2);
 }
 
-/* Dark mode for input fields */
 body.dark-mode #loginForm input {
   background-color: #333;
   color: #fff;
   border: 1px solid #555;
 }
 
-/* Dark mode for labels */
 body.dark-mode #loginForm label {
   color: #ddd;
 }
 
-/* Dark mode for login button */
 body.dark-mode #loginForm button {
   background-color: #007bff;
   color: white;
@@ -352,7 +314,6 @@ body.dark-mode #loginForm button:hover {
    CARDS & MODALS
    =========================================================== */
 
-/* Cards */
 .card {
   background-color: #fff;
   color: #000;
@@ -368,7 +329,6 @@ body.dark-mode .card {
   border: 1px solid #444;
 }
 
-/* Modal & Editor Modal */
 .modal {
   display: none;
   position: fixed;
@@ -423,7 +383,6 @@ body.dark-mode .editor-header {
   background-color: #2c2c2c;
 }
 
-/* Fully Centered Close Button with Slight X Adjustment */
 .editor-close-btn {
   position: absolute;
   top: 10px;
@@ -446,7 +405,6 @@ body.dark-mode .editor-header {
   transition: all 0.3s ease-in-out;
 }
 
-/* Hover Effect */
 .editor-close-btn:hover {
   color: white;
   background-color: #ff4d4d;
@@ -454,7 +412,6 @@ body.dark-mode .editor-header {
   transform: scale(1.05);
 }
 
-/* Dark Mode Fix */
 body.dark-mode .editor-close-btn {
   background-color: rgba(0, 0, 0, 0.7);
   color: #ff6666;
@@ -465,7 +422,6 @@ body.dark-mode .editor-close-btn:hover {
   color: #000;
 }
 
-/* Default Editor Modal */
 .editor-modal {
   position: fixed;
   top: 50%;
@@ -488,14 +444,12 @@ body.dark-mode .editor-close-btn:hover {
   overflow: hidden;
 }
 
-/* Dark mode styling */
 body.dark-mode .editor-modal {
   background-color: #2c2c2c;
   color: #e0e0e0;
   border-color: #444;
 }
 
-/* 🔹 Small Screens: Adjust Position */
 @media (max-width: 768px) {
   .editor-modal {
     top: 0%;
@@ -683,7 +637,6 @@ body.dark-mode .editor-modal {
   opacity: 0.9;
 }
 
-/* Specific Action Buttons */
 #deleteSelectedBtn {
   background-color: #f44336;
   color: white;
@@ -737,7 +690,6 @@ body.dark-mode .editor-modal {
   border-collapse: collapse !important;
   border-spacing: 0 !important;
   table-layout: auto !important;
-  /* Ensures flexible column widths */
   width: 100% !important;
 }
 
@@ -762,7 +714,6 @@ body.dark-mode #fileList table tr:hover {
   text-align: left !important;
 }
 
-/* Small screens: Reduce font size for better wrapping */
 @media (max-width: 600px) {
   #fileListTitle {
     font-size: 1.4rem !important;
@@ -802,7 +753,6 @@ body.dark-mode #fileList table tr {
   min-width: 120px !important;
 }
 
-/* Medium Screens */
 @media (min-width: 500px) {
 
   #fileList table th[data-column="name"],
@@ -812,7 +762,6 @@ body.dark-mode #fileList table tr {
   }
 }
 
-/* Large Screens */
 @media (min-width: 1024px) {
 
   #fileList table th[data-column="name"],
@@ -822,7 +771,6 @@ body.dark-mode #fileList table tr {
   }
 }
 
-/* Larger Screens */
 @media (min-width: 1440px) {
 
   #fileList table th[data-column="name"],
@@ -832,13 +780,11 @@ body.dark-mode #fileList table tr {
   }
 }
 
-/* Ensure all other columns stay in one line */
 #fileList table th:not([data-column="name"]),
 #fileList table td:not(:nth-child(2)) {
   white-space: nowrap !important;
 }
 
-/* Reduce excessive row height */
 #fileList table td {
   vertical-align: middle !important;
   padding: 8px 10px !important;
@@ -881,7 +827,6 @@ label {
   display: none;
 }
 
-/* Add spacing below the row of cards */
 #uploadFolderRow {
   margin-bottom: 20px;
 }
@@ -985,7 +930,6 @@ body.dark-mode .folder-option:hover {
   padding-top: 5px !important;
 }
 
-/* Toast Notifications */
 #customToast {
   position: fixed;
   top: 20px;
@@ -1006,7 +950,6 @@ body.dark-mode .folder-option:hover {
   opacity: 1;
 }
 
-/* Button Wrap */
 .button-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -1014,7 +957,6 @@ body.dark-mode .folder-option:hover {
   column-gap: 0px;
 }
 
-/* Center-align on small screens */
 @media (max-width: 500px) {
   .button-wrap {
     width: 100%;
@@ -1027,14 +969,12 @@ body.dark-mode .folder-option:hover {
   font-size: 14px !important;
 }
 
-/* Ensure Material Icons inside buttons do not enlarge buttons */
 .button-wrap .btn i.material-icons {
   font-size: 16px !important;
   line-height: 1 !important;
   vertical-align: middle !important;
 }
 
-/* File List Section */
 #fileListContainer {
   padding: 10px;
   margin-top: 20px;
@@ -1103,7 +1043,6 @@ body.dark-mode #fileListContainer {
   margin-top: 10px;
 }
 
-/* Responsive adjustments for File List */
 @media (max-width: 600px) {
   #fileListTitle {
     font-size: 1.4em;
@@ -1176,12 +1115,12 @@ body.dark-mode #fileListContainer {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   text-align: center;
   min-height: 30px;
   margin: 0 auto 10px;
   padding: 10px;
-  width: 95%;
+  width: 90% !important;
 }
 
 .image-preview-modal-content {
@@ -1225,7 +1164,6 @@ body.dark-mode .image-preview-modal-content {
   margin-top: -2px;
 }
 
-/* Ensure the image resizes properly */
 .image-modal-img {
   max-width: 100%;
   max-height: 80vh;
@@ -1234,7 +1172,6 @@ body.dark-mode .image-preview-modal-content {
   margin: 0 auto;
 }
 
-/* Image Preview Close Button (Perfect Alignment) */
 .close-image-modal {
   position: absolute;
   top: 10px;
@@ -1256,7 +1193,6 @@ body.dark-mode .image-preview-modal-content {
   transition: all 0.3s ease-in-out;
 }
 
-/* Hover Effect */
 .close-image-modal:hover {
   color: white;
   background-color: #ff4d4d;
@@ -1264,7 +1200,6 @@ body.dark-mode .image-preview-modal-content {
   transform: scale(1.05);
 }
 
-/* Dark Mode Adjustments */
 body.dark-mode .close-image-modal {
   background-color: rgba(0, 0, 0, 0.6);
   color: #ff6666;
@@ -1275,18 +1210,9 @@ body.dark-mode .close-image-modal:hover {
   color: #000;
 }
 
-/* Fix Dark Mode */
 body.dark-mode .image-preview-modal-content {
   background: #2c2c2c;
   border-color: #444;
-}
-
-.image-modal-img {
-  max-width: 100%;
-  max-height: 80vh;
-  object-fit: contain;
-  display: block;
-  margin: 0 auto;
 }
 
 .page-indicator {
@@ -1305,7 +1231,6 @@ body.dark-mode .image-preview-modal-content {
   font-size: 32px;
 }
 
-/* Dark Mode Styles */
 body.dark-mode .file-icon {
   color: white;
 }
@@ -1347,7 +1272,6 @@ body.dark-mode .file-icon {
   font-size: 16px;
 }
 
-/* Upload row stays a row */
 .upload-file-row {
   display: flex;
   align-items: center;
@@ -1355,7 +1279,6 @@ body.dark-mode .file-icon {
   word-break: break-word;
 }
 
-/* New wrapper ensures File Info appears below */
 .file-info-wrapper {
   display: flex;
   flex-direction: column;
@@ -1364,7 +1287,6 @@ body.dark-mode .file-icon {
   margin-top: 10px;
 }
 
-/* Ensure file info wraps properly */
 .file-info-container {
   display: flex;
   flex-wrap: wrap !important;
@@ -1384,7 +1306,6 @@ body.dark-mode .file-icon {
   text-align: center !important;
 }
 
-/* Ensure images are responsive */
 .file-preview-img {
   max-width: 100px;
   max-height: 100px;
@@ -1394,7 +1315,6 @@ body.dark-mode .file-icon {
   display: block !important;
 }
 
-/* Small screens: Ensure it wraps properly */
 @media (max-width: 600px) {
   .file-preview-container {
     justify-content: center !important;
@@ -1453,7 +1373,6 @@ body.dark-mode .container {
   background-color: transparent !important;
 }
 
-/* Preserve Bootstrap button colors in dark mode */
 body.dark-mode .btn-primary {
   background-color: #007bff;
   color: #fff;
@@ -1472,7 +1391,6 @@ body.dark-mode .btn-danger {
   border-color: #dc3545;
 }
 
-/* Dark mode for modals */
 body.dark-mode .modal .modal-content,
 body.dark-mode .editor-modal {
   background-color: #2c2c2c;
@@ -1480,7 +1398,6 @@ body.dark-mode .editor-modal {
   border: 1px solid #444;
 }
 
-/* Dark mode for file list/table */
 body.dark-mode table {
   background-color: #2c2c2c;
   color: #e0e0e0;
@@ -1490,7 +1407,6 @@ body.dark-mode table tr:hover {
   background-color: #444;
 }
 
-/* Dark mode for uploads */
 body.dark-mode #uploadProgressContainer .progress {
   background-color: #333;
 }
@@ -1500,7 +1416,6 @@ body.dark-mode #uploadProgressContainer .progress-bar {
   color: #e0e0e0;
 }
 
-/* 🔹 Dark Mode Toggle Styled to Blend into Header */
 .dark-mode-toggle {
   background-color: transparent !important;
   border: 1px solid transparent !important;
@@ -1513,35 +1428,29 @@ body.dark-mode #uploadProgressContainer .progress-bar {
   transition: background 0.3s, border 0.3s !important;
 }
 
-/* 🔹 Hover Effect - Subtle Border */
 .dark-mode-toggle:hover {
   background-color: rgba(255, 255, 255, 0.15) !important;
   /* Slight highlight */
 }
 
-/* 🔹 Active/Clicked Effect */
 .dark-mode-toggle:active {
   background-color: rgba(255, 255, 255, 0.25) !important;
 }
 
-/* 🔹 Dark Mode Version */
 body.dark-mode .dark-mode-toggle {
   background-color: transparent !important;
   color: white !important;
 }
 
-/* 🔹 Dark Mode Hover Effect */
 body.dark-mode .dark-mode-toggle:hover {
   background-color: rgba(255, 255, 255, 0.15) !important;
 }
 
-/* 🔹 Remove Circle Effect */
 .dark-mode-toggle:focus {
   outline: none !important;
   box-shadow: none !important;
 }
 
-/* Default (light mode) styling */
 .folder-help-details {
   margin-top: 2px;
   font-size: 12px;
@@ -1572,7 +1481,6 @@ body.dark-mode .dark-mode-toggle:hover {
   padding-left: 20px;
 }
 
-/* Dark mode overrides */
 body.dark-mode .folder-help-details {
   color: #ddd;
   background-color: #2c2c2c;
@@ -1603,7 +1511,6 @@ body.dark-mode #searchInput {
   border: 1px solid #555;
 }
 
-/* Default (light mode) styling for folderExplanation */
 .folder-explanation {
   margin-top: 5px;
   padding: 5px;
@@ -1614,41 +1521,34 @@ body.dark-mode #searchInput {
   border-radius: 2px;
 }
 
-/* Dark mode override */
 body.dark-mode .folder-explanation {
   color: #ddd;
   background-color: solid transparent;
   border: 1px solid transparent;
 }
 
-/* Apply dark theme for CodeMirror when dark mode is enabled */
 body.dark-mode .CodeMirror {
   background: #1e1e1e !important;
   color: #ffffff !important;
 }
 
-/* Ensure cursor is visible */
 body.dark-mode .CodeMirror-cursor {
   border-left: 2px solid #ffffff !important;
 }
 
-/* Change line number gutter background */
 body.dark-mode .CodeMirror-gutters {
   background: #252526 !important;
   border-right: 1px solid #444 !important;
 }
 
-/* Change line number text color */
 body.dark-mode .CodeMirror-linenumber {
   color: #aaaaaa !important;
 }
 
-/* Change text selection background */
 body.dark-mode .CodeMirror-selected {
   background: rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Change matching brackets highlight */
 body.dark-mode .CodeMirror-matchingbracket {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-bottom: 1px solid #ffffff !important;
