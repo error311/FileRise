@@ -39,12 +39,12 @@ function buildFolderTree(folders) {
 // Session State for Folder Tree
 // ----------------------
 function loadFolderTreeState() {
-  const state = sessionStorage.getItem("folderTreeState");
+  const state = localStorage.getItem("folderTreeState");
   return state ? JSON.parse(state) : {};
 }
 
 function saveFolderTreeState(state) {
-  sessionStorage.setItem("folderTreeState", JSON.stringify(state));
+  localStorage.setItem("folderTreeState", JSON.stringify(state));
 }
 
 // ----------------------
