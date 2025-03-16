@@ -65,6 +65,28 @@ if (file_exists($newPath)) {
 
 // Attempt to rename the folder.
 if (rename($oldPath, $newPath)) {
+    // Update metadata.
+    $metadataFile = META_DIR . META_FILE;
+    if (file_exists($metadataFile)) {
+        $metadata = json_decode(file_get_contents($metadataFile), true);
+        $updated = false;
+        // Loop through each key in the metadata.
+        foreach ($metadata as $key => $value) {
+            // Check if the key is the folder itself or is inside the folder.
+            if ($key === $oldFolder || strpos($key, $oldFolder . "/") === 0) {
+                // Construct the new key by replacing the $oldFolder prefix with $newFolder.
+                $newKey = $newFolder . substr($key, strlen($oldFolder));
+                // Optional: remove a leading slash if it appears.
+                $newKey = ltrim($newKey, "/");
+                $metadata[$newKey] = $value;
+                unset($metadata[$key]);
+                $updated = true;
+            }
+        }
+        if ($updated) {
+            file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
+        }
+    }
     echo json_encode(['success' => true]);
 } else {
     echo json_encode(['success' => false, 'error' => 'Failed to rename folder.']);

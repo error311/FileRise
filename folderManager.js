@@ -268,7 +268,9 @@ function openRenameFolderModal() {
     showToast("Please select a valid folder to rename.");
     return;
   }
-  document.getElementById("newRenameFolderName").value = selectedFolder;
+  // Extract the basename for display.
+  const parts = selectedFolder.split("/");
+  document.getElementById("newRenameFolderName").value = parts[parts.length - 1];
   document.getElementById("renameFolderModal").style.display = "block";
 }
 
@@ -279,23 +281,29 @@ document.getElementById("cancelRenameFolder").addEventListener("click", function
 
 document.getElementById("submitRenameFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
-  const newFolderName = document.getElementById("newRenameFolderName").value.trim();
-  if (!newFolderName || newFolderName === selectedFolder) {
+  const newNameBasename = document.getElementById("newRenameFolderName").value.trim();
+  if (!newNameBasename || newNameBasename === selectedFolder.split("/").pop()) {
     showToast("Please enter a valid new folder name.");
     return;
   }
+  // Get the parent folder path.
+  const parentPath = getParentFolder(selectedFolder);
+  // Build the full new folder path.
+  // If the parent is "root", new folder is just newNameBasename.
+  const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
+
   fetch("renameFolder.php", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ oldFolder: selectedFolder, newFolder: newFolderName })
+    body: JSON.stringify({ oldFolder: selectedFolder, newFolder: newFolderFull })
   })
     .then(response => response.json())
     .then(data => {
       console.log("Rename response:", data);
       if (data.success) {
         showToast("Folder renamed successfully!");
-        window.currentFolder = newFolderName;
-        loadFolderList(newFolderName);
+        window.currentFolder = newFolderFull;
+        loadFolderList(newFolderFull);
       } else {
         showToast("Error: " + (data.error || "Could not rename folder"));
       }
