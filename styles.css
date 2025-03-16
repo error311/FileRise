@@ -63,23 +63,15 @@ body.dark-mode .header-container {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
 }
 
-/* 🔹 Logo (Left Side) */
-.header-left {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-}
-
-/* 🔹 Make Logo Bigger */
-.header-left img {
+.header-logo {
   max-height: 70px;
   width: auto;
+  display: block;
 }
 
-.header-logo {
-  max-height: 50px;
+.header-logo svg {
+  height: 70px; /* Ensure the inline SVG matches the intended size */
   width: auto;
-  display: block;
 }
 
 /* 🔹 Header Layout */
