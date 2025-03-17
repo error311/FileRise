@@ -1,19 +1,180 @@
 // fileManager.js
-import { escapeHTML, updateFileActionButtons, showToast } from './domUtils.js';
-import { formatFolderName } from './folderManager.js';
+
+import {
+  escapeHTML,
+  debounce,
+  buildSearchAndPaginationControls,
+  buildFileTableHeader,
+  buildFileTableRow,
+  buildBottomControls,
+  updateFileActionButtons,
+  showToast,
+  updateRowHighlight,
+  toggleRowSelection,
+  previewFile
+} from './domUtils.js';
 
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
 
-// Global pagination defaults
 window.itemsPerPage = window.itemsPerPage || 10;
 window.currentPage = window.currentPage || 1;
 
-// -------------------------------
-// Helper Functions
-// -------------------------------
+// --- Define formatFolderName ---
+// This helper formats folder names for display. Adjust as needed.
+function formatFolderName(folder) {
+  // Example: If folder is "root", return "(Root)"
+  if (folder === "root") return "(Root)";
+  // Replace underscores/dashes with spaces and capitalize each word.
+  return folder
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
 
-// Parse date strings in "m/d/y h:iA" format into a timestamp.
+// Expose DOM helper functions for inline handlers.
+window.toggleRowSelection = toggleRowSelection;
+window.updateRowHighlight = updateRowHighlight;
+window.previewFile = previewFile;
+
+export function loadFileList(folderParam) {
+  const folder = folderParam || "root";
+  const fileListContainer = document.getElementById("fileList");
+
+  fileListContainer.style.visibility = "hidden";
+  fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
+
+  return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
+    .then(response => response.json())
+    .then(data => {
+      fileListContainer.innerHTML = "";
+      if (data.files && data.files.length > 0) {
+        data.files = data.files.map(file => {
+          file.fullName = (file.path || file.name).trim().toLowerCase();
+          file.editable = canEditFile(file.name);
+          file.folder = folder;
+          return file;
+        });
+        fileData = data.files;
+        renderFileTable(folder);
+      } else {
+        fileListContainer.textContent = "No files found.";
+        updateFileActionButtons();
+      }
+      return data.files || [];
+    })
+    .catch(error => {
+      console.error("Error loading file list:", error);
+      fileListContainer.textContent = "Error loading files.";
+      return [];
+    })
+    .finally(() => {
+      fileListContainer.style.visibility = "visible";
+    });
+}
+
+export function renderFileTable(folder) {
+  const fileListContainer = document.getElementById("fileList");
+  const searchTerm = window.currentSearchTerm || "";
+  const itemsPerPageSetting = parseInt(localStorage.getItem('itemsPerPage') || '10', 10);
+  let currentPage = window.currentPage || 1;
+
+  const filteredFiles = fileData.filter(file =>
+    file.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalFiles = filteredFiles.length;
+  const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
+
+  if (currentPage > totalPages) {
+    currentPage = totalPages > 0 ? totalPages : 1;
+    window.currentPage = currentPage;
+  }
+
+  const folderPath = (folder === "root")
+    ? "uploads/"
+    : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
+
+  const topControlsHTML = buildSearchAndPaginationControls({
+    currentPage,
+    totalPages,
+    searchTerm
+  });
+
+  const headerHTML = buildFileTableHeader(sortOrder);
+
+  const startIndex = (currentPage - 1) * itemsPerPageSetting;
+  const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
+
+  let rowsHTML = "<tbody>";
+  if (totalFiles > 0) {
+    filteredFiles.slice(startIndex, endIndex).forEach(file => {
+      rowsHTML += buildFileTableRow(file, folderPath);
+    });
+  } else {
+    rowsHTML += `<tr><td colspan="7">No files found.</td></tr>`;
+  }
+  rowsHTML += "</tbody></table>";
+
+  const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
+
+  fileListContainer.innerHTML = topControlsHTML + headerHTML + rowsHTML + bottomControlsHTML;
+
+  const newSearchInput = document.getElementById("searchInput");
+  if (newSearchInput) {
+    newSearchInput.addEventListener("input", debounce(function () {
+      window.currentSearchTerm = newSearchInput.value;
+      window.currentPage = 1;
+      renderFileTable(folder);
+      setTimeout(() => {
+        newSearchInput.focus();
+        newSearchInput.setSelectionRange(newSearchInput.value.length, newSearchInput.value.length);
+      }, 0);
+    }, 300));
+  }
+
+  document.querySelectorAll("table.table thead th[data-column]").forEach(cell => {
+    cell.addEventListener("click", function () {
+      const column = this.getAttribute("data-column");
+      sortFiles(column, folder);
+    });
+  });
+
+  document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', function (e) {
+      updateRowHighlight(e.target);
+      updateFileActionButtons();
+    });
+  });
+
+  updateFileActionButtons();
+}
+
+export function sortFiles(column, folder) {
+  if (sortOrder.column === column) {
+    sortOrder.ascending = !sortOrder.ascending;
+  } else {
+    sortOrder.column = column;
+    sortOrder.ascending = true;
+  }
+  fileData.sort((a, b) => {
+    let valA = a[column] || "";
+    let valB = b[column] || "";
+    if (column === "modified" || column === "uploaded") {
+      const parsedA = parseCustomDate(valA);
+      const parsedB = parseCustomDate(valB);
+      valA = parsedA;
+      valB = parsedB;
+    } else if (typeof valA === "string") {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+    }
+    if (valA < valB) return sortOrder.ascending ? -1 : 1;
+    if (valA > valB) return sortOrder.ascending ? 1 : -1;
+    return 0;
+  });
+  renderFileTable(folder);
+}
+
 function parseCustomDate(dateStr) {
   dateStr = dateStr.replace(/\s+/g, " ").trim();
   const parts = dateStr.split(" ");
@@ -49,7 +210,6 @@ function parseCustomDate(dateStr) {
   return new Date(year, month - 1, day, hour, minute).getTime();
 }
 
-// Determines if a file is editable based on its extension.
 export function canEditFile(fileName) {
   const allowedExtensions = [
     "txt", "html", "htm", "css", "js", "json", "xml",
@@ -60,371 +220,6 @@ export function canEditFile(fileName) {
   return allowedExtensions.includes(ext);
 }
 
-// -------------------------------
-// Global Functions (attached to window)
-// -------------------------------
-
-window.toggleRowSelection = function (event, fileName) {
-  const targetTag = event.target.tagName.toLowerCase();
-  if (targetTag === 'a' || targetTag === 'button' || targetTag === 'input') {
-    return;
-  }
-  const row = event.currentTarget;
-  const checkbox = row.querySelector('.file-checkbox');
-  if (!checkbox) return;
-  checkbox.checked = !checkbox.checked;
-  window.updateRowHighlight(checkbox);
-  updateFileActionButtons();
-};
-
-window.updateRowHighlight = function (checkbox) {
-  const row = checkbox.closest('tr');
-  if (!row) return;
-  if (checkbox.checked) {
-    row.classList.add('row-selected');
-  } else {
-    row.classList.remove('row-selected');
-  }
-};
-
-// -------------------------------
-// File List Rendering
-// -------------------------------
-
-export function loadFileList(folderParam) {
-  const folder = folderParam || "root";
-  const fileListContainer = document.getElementById("fileList");
-  
-  // Hide the container while loading
-  fileListContainer.style.visibility = "hidden";
-  fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
-
-  return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
-    .then(response => response.json())
-    .then(data => {
-      // Clear the container once data is loaded
-      fileListContainer.innerHTML = "";
-      if (data.files && data.files.length > 0) {
-        data.files = data.files.map(file => {
-          file.fullName = (file.path || file.name).trim().toLowerCase();
-          return file;
-        });
-        fileData = data.files;
-        renderFileTable(folder);
-      } else {
-        fileListContainer.textContent = "No files found.";
-        updateFileActionButtons();
-      }
-      return data.files || [];
-    })
-    .catch(error => {
-      console.error("Error loading file list:", error);
-      fileListContainer.textContent = "Error loading files.";
-      return [];
-    })
-    .finally(() => {
-      // Make the container visible after processing
-      fileListContainer.style.visibility = "visible";
-    });
-}
-
-// Debounce helper (if not defined already)
-function debounce(func, wait) {
-  let timeout;
-  return function (...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
-  };
-}
-
-export function renderFileTable(folder) {
-  const fileListContainer = document.getElementById("fileList");
-  const folderPath = (folder === "root")
-    ? "uploads/"
-    : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-
-  // Use the global search term if available.
-  const searchTerm = window.currentSearchTerm || "";
-
-  const filteredFiles = fileData.filter(file =>
-    file.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Get persistent items per page from localStorage.
-  const itemsPerPageSetting = parseInt(localStorage.getItem('itemsPerPage') || '10', 10);
-
-  // Use a mutable currentPage variable
-  let currentPage = window.currentPage || 1;
-  const totalFiles = filteredFiles.length;
-  const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
-
-  // If the current page is greater than totalPages, reset it to a valid page (for example, page 1 or totalPages)
-  if (currentPage > totalPages) {
-    currentPage = totalPages > 0 ? totalPages : 1;
-    window.currentPage = currentPage;
-  }
-
-  const safeSearchTerm = escapeHTML(searchTerm);
-
-  const topControlsHTML = `
-    <div class="row align-items-center mb-3">
-      <div class="col-12 col-md-8 mb-2 mb-md-0">
-        <div class="input-group">
-          <div class="input-group-prepend">
-            <span class="input-group-text" id="searchIcon">
-              <i class="material-icons">search</i>
-            </span>
-          </div>
-          <input type="text" id="searchInput" class="form-control" placeholder="Search files..." value="${safeSearchTerm}" aria-describedby="searchIcon">
-        </div>
-      </div>
-      <div class="col-12 col-md-4 text-left">
-        <div class="d-flex justify-content-center justify-content-md-start align-items-center">
-          <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">Prev</button>
-          <span class="page-indicator">Page ${currentPage} of ${totalPages || 1}</span>
-          <button class="custom-prev-next-btn" ${currentPage === totalPages || totalFiles === 0 ? "disabled" : ""} onclick="changePage(${currentPage + 1})">Next</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  let tableHTML = `
-    <table class="table">
-      <thead>
-        <tr>
-          <th class="checkbox-col"><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
-          <th data-column="name" class="sortable-col">File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="modified" class="hide-small sortable-col">Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploaded" class="hide-small hide-medium sortable-col">Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="size" class="hide-small sortable-col">File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploader" class="hide-small hide-medium sortable-col">Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-  `;
-
-  const startIndex = (currentPage - 1) * itemsPerPageSetting;
-  const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
-  let tableBody = `<tbody>`;
-
-  if (totalFiles > 0) {
-    filteredFiles.slice(startIndex, endIndex).forEach(file => {
-      const isEditable = canEditFile(file.name);
-      const safeFileName = escapeHTML(file.name);
-      const safeModified = escapeHTML(file.modified);
-      const safeUploaded = escapeHTML(file.uploaded);
-      const safeSize = escapeHTML(file.size);
-      const safeUploader = escapeHTML(file.uploader || "Unknown");
-
-      const isViewable = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|ogg)$/i.test(file.name);
-      let previewButton = "";
-      if (isViewable) {
-        let previewIcon = "";
-        if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
-          previewIcon = `<i class="material-icons">image</i>`;
-        } else if (/\.(mp4|webm|mov|ogg)$/i.test(file.name)) {
-          previewIcon = `<i class="material-icons">videocam</i>`;
-        } else if (/\.pdf$/i.test(file.name)) {
-          previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
-        }
-
-        previewButton = `<button class="btn btn-sm btn-info ml-2 preview-btn" onclick="event.stopPropagation(); previewFile('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
-               ${previewIcon}
-             </button>`;
-      }
-
-      tableBody += `
-          <tr onclick="toggleRowSelection(event, '${safeFileName}')" class="clickable-row">
-            <td>
-              <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
-            </td>
-            <td>${safeFileName}</td>
-            <td class="hide-small nowrap">${safeModified}</td>
-            <td class="hide-small hide-medium nowrap">${safeUploaded}</td>
-            <td class="hide-small nowrap">${safeSize}</td>
-            <td class="hide-small hide-medium nowrap">${safeUploader}</td>
-            <td>
-              <div class="button-wrap">
-                <a class="btn btn-sm btn-success ml-2" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
-                ${isEditable ? `<button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Edit</button>` : ""}
-                ${previewButton}
-                <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(folder)})'>Rename</button>
-              </div>
-            </td>
-          </tr>
-        `;
-    });
-  } else {
-    tableBody += `<tr><td colspan="7">No files found.</td></tr>`;
-  }
-  tableBody += `</tbody></table>`;
-
-  const bottomControlsHTML = `
-    <div class="d-flex align-items-center mt-3 bottom-controls">
-      <label class="label-inline mr-2 mb-0">Show</label>
-      <select class="form-control bottom-select" onchange="changeItemsPerPage(this.value)">
-        ${[10, 20, 50, 100]
-      .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
-      .join("")}
-      </select>
-      <span class="items-per-page-text ml-2 mb-0">items per page</span>
-    </div>
-  `;
-
-  fileListContainer.innerHTML = topControlsHTML + tableHTML + tableBody + bottomControlsHTML;
-
-  // Re-attach event listener for the new search input element.
-  const newSearchInput = document.getElementById("searchInput");
-  if (newSearchInput) {
-    newSearchInput.addEventListener("input", debounce(function () {
-      window.currentSearchTerm = newSearchInput.value;
-      window.currentPage = 1;
-      renderFileTable(folder);
-      // After re-rendering, restore focus and caret position.
-      setTimeout(() => {
-        const freshInput = document.getElementById("searchInput");
-        if (freshInput) {
-          freshInput.focus();
-          freshInput.setSelectionRange(freshInput.value.length, freshInput.value.length);
-        }
-      }, 0);
-    }, 300));
-  }
-
-  // Add event listeners for header sorting.
-  document.querySelectorAll("table.table thead th[data-column]").forEach(cell => {
-    cell.addEventListener("click", function () {
-      const column = this.getAttribute("data-column");
-      sortFiles(column, folder);
-    });
-  });
-
-  // Add event listeners for checkboxes.
-  document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
-    checkbox.addEventListener('change', function (e) {
-      updateRowHighlight(e.target);
-      updateFileActionButtons();
-    });
-  });
-
-  updateFileActionButtons();
-}
-
-// Global function to show an image preview modal.
-window.previewFile = function (fileUrl, fileName) {
-  let modal = document.getElementById("filePreviewModal");
-  if (!modal) {
-    modal = document.createElement("div");
-    modal.id = "filePreviewModal";
-    // Use the same styling as the original image modal.
-    Object.assign(modal.style, {
-      display: "none",
-      position: "fixed",
-      top: "0",
-      left: "0",
-      width: "100vw",
-      height: "100vh",
-      backgroundColor: "rgba(0,0,0,0.7)",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      zIndex: "1000"
-    });
-    modal.innerHTML = `
-      <div class="modal-content image-preview-modal-content">
-        <span id="closeFileModal" class="close-image-modal">&times;</span>
-        <h4 class="image-modal-header"></h4>
-        <div class="file-preview-container"></div>
-      </div>`;
-    document.body.appendChild(modal);
-    
-    // Close event for the close button.
-    document.getElementById("closeFileModal").addEventListener("click", function () {
-      const video = modal.querySelector("video");
-      if (video) {
-        video.pause();
-        video.currentTime = 0;
-      }
-      modal.style.display = "none";
-    });
-    
-    // Close event when clicking outside the modal content.
-    modal.addEventListener("click", function (e) {
-      if (e.target === modal) {
-        const video = modal.querySelector("video");
-        if (video) {
-          video.pause();
-          video.currentTime = 0;
-        }
-        modal.style.display = "none";
-      }
-    });
-  }
-  
-  modal.querySelector("h4").textContent = fileName;
-  const container = modal.querySelector(".file-preview-container");
-  container.innerHTML = ""; // Clear previous content
-
-  const extension = fileName.split('.').pop().toLowerCase();
-
-  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(fileName)) {
-    // Image preview
-    const img = document.createElement("img");
-    img.src = fileUrl;
-    img.className = "image-modal-img";
-    container.appendChild(img);
-  } else if (extension === "pdf") {
-    // PDF preview using <embed> with explicit sizing
-    const embed = document.createElement("embed");
-    // Append a timestamp to force reload
-    const separator = fileUrl.indexOf('?') === -1 ? '?' : '&';
-    embed.src = fileUrl + separator + 't=' + new Date().getTime();
-    embed.type = "application/pdf";
-    embed.style.width = "80vw";
-    embed.style.height = "80vh";
-    embed.style.border = "none";
-    container.appendChild(embed);
-  } else if (/\.(mp4|webm|mov|ogg)$/i.test(fileName)) {
-    // Video preview using <video>
-    const video = document.createElement("video");
-    video.src = fileUrl;
-    video.controls = true;
-    video.className = "image-modal-img";
-    container.appendChild(video);
-  } else {
-    container.textContent = "Preview not available for this file type.";
-  }
-
-  modal.style.display = "flex";
-};
-
-export function sortFiles(column, folder) {
-  if (sortOrder.column === column) {
-    sortOrder.ascending = !sortOrder.ascending;
-  } else {
-    sortOrder.column = column;
-    sortOrder.ascending = true;
-  }
-  fileData.sort((a, b) => {
-    let valA = a[column] || "";
-    let valB = b[column] || "";
-    if (column === "modified" || column === "uploaded") {
-      const parsedA = parseCustomDate(valA);
-      const parsedB = parseCustomDate(valB);
-      valA = parsedA;
-      valB = parsedB;
-    } else if (typeof valA === "string") {
-      valA = valA.toLowerCase();
-      valB = valB.toLowerCase();
-    }
-    if (valA < valB) return sortOrder.ascending ? -1 : 1;
-    if (valA > valB) return sortOrder.ascending ? 1 : -1;
-    return 0;
-  });
-  renderFileTable(folder);
-}
-
-// Delete selected files.
 export function handleDeleteSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -473,7 +268,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-// Download selected files as Zip.
 export function handleDownloadZipSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -486,7 +280,6 @@ export function handleDownloadZipSelected(e) {
   document.getElementById("downloadZipModal").style.display = "block";
 }
 
-// Attach event listeners for the download zip modal.
 document.addEventListener("DOMContentLoaded", function () {
   const cancelDownloadZip = document.getElementById("cancelDownloadZip");
   if (cancelDownloadZip) {
@@ -544,7 +337,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-// Copy selected files.
 export function handleCopySelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -558,7 +350,6 @@ export function handleCopySelected(e) {
   loadCopyMoveFolderListForModal("copyTargetFolder");
 }
 
-// In your loadCopyMoveFolderListForModal function, target the dropdown by its ID.
 export async function loadCopyMoveFolderListForModal(dropdownId) {
   try {
     const response = await fetch('getFolderList.php');
@@ -583,7 +374,6 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
   }
 }
 
-// Attach event listeners for copy modal buttons.
 document.addEventListener("DOMContentLoaded", function () {
   const cancelCopy = document.getElementById("cancelCopyFiles");
   if (cancelCopy) {
@@ -627,7 +417,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-// Move selected files.
 export function handleMoveSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -684,7 +473,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-// helper function
+// Helper for CodeMirror editor mode based on file extension.
 function getModeForFile(fileName) {
   const ext = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase();
   switch (ext) {
@@ -707,38 +496,27 @@ function getModeForFile(fileName) {
 function adjustEditorSize() {
   const modal = document.querySelector(".editor-modal");
   if (modal && window.currentEditor) {
-    // Get modal height
     const modalHeight = modal.getBoundingClientRect().height || 600;
-
-    // Keep 70% of modal height for the editor, but allow it to shrink
     const newEditorHeight = Math.max(modalHeight * 0.80, 5) + "px";
-
-    console.log("Adjusting editor height to:", newEditorHeight); // Debugging output
-
-    // Apply new height to the editor
+    console.log("Adjusting editor height to:", newEditorHeight);
     window.currentEditor.setSize("100%", newEditorHeight);
   }
 }
 
 function observeModalResize(modal) {
   if (!modal) return;
-
   const resizeObserver = new ResizeObserver(() => {
     adjustEditorSize();
   });
-
   resizeObserver.observe(modal);
 }
 
 export function editFile(fileName, folder) {
   console.log("Edit button clicked for:", fileName);
-
-  // Remove any existing editor modal before creating a new one
   let existingEditor = document.getElementById("editorContainer");
   if (existingEditor) {
     existingEditor.remove();
   }
-
   const folderUsed = folder || window.currentFolder || "root";
   const folderPath = (folderUsed === "root")
     ? "uploads/"
@@ -749,8 +527,6 @@ export function editFile(fileName, folder) {
     .then(response => {
       const contentLength = response.headers.get("Content-Length");
       console.log("Content-Length:", contentLength);
-
-      // Block editing if file size exceeds 10MB or Content-Length is missing
       if (!contentLength || parseInt(contentLength) > 10485760) {
         showToast("This file is larger than 10 MB and cannot be edited in the browser.");
         throw new Error("File too large.");
@@ -764,7 +540,6 @@ export function editFile(fileName, folder) {
       return response.text();
     })
     .then(content => {
-      // Create the editor modal
       const modal = document.createElement("div");
       modal.id = "editorContainer";
       modal.classList.add("modal", "editor-modal");
@@ -783,16 +558,13 @@ export function editFile(fileName, folder) {
         <button id="closeBtn" class="btn btn-secondary">Close</button>
       </div>
     `;
-
       document.body.appendChild(modal);
       modal.style.display = "block";
 
-      // Determine file mode and set CodeMirror editor
       const mode = getModeForFile(fileName);
       const isDarkMode = document.body.classList.contains("dark-mode");
       const theme = isDarkMode ? "material-darker" : "default";
 
-      // Initialize CodeMirror
       const editor = CodeMirror.fromTextArea(document.getElementById("fileEditor"), {
         lineNumbers: true,
         mode: mode,
@@ -800,18 +572,14 @@ export function editFile(fileName, folder) {
         viewportMargin: Infinity
       });
 
-      // Ensure height adjustment
       window.currentEditor = editor;
 
-      // Adjust height AFTER modal appears
       setTimeout(() => {
-        adjustEditorSize(); // Set initial height
+        adjustEditorSize();
       }, 50);
 
-      // Attach modal resize observer
       observeModalResize(modal);
 
-      // Font size control
       let currentFontSize = 14;
       editor.getWrapperElement().style.fontSize = currentFontSize + "px";
       editor.refresh();
@@ -832,30 +600,25 @@ export function editFile(fileName, folder) {
         editor.refresh();
       });
 
-      // Save function
       document.getElementById("saveBtn").addEventListener("click", function () {
         saveFile(fileName, folderUsed);
       });
 
-      // Close function
       document.getElementById("closeBtn").addEventListener("click", function () {
         modal.remove();
       });
 
-      // Function to update the editor theme when dark mode is toggled
       function updateEditorTheme() {
         const isDarkMode = document.body.classList.contains("dark-mode");
         editor.setOption("theme", isDarkMode ? "material-darker" : "default");
       }
 
-      // Listen for dark mode toggle and update the theme dynamically
       document.getElementById("darkModeToggle").addEventListener("click", updateEditorTheme);
     })
     .catch(error => console.error("Error loading file:", error));
 }
 
 export function saveFile(fileName, folder) {
-  // Retrieve updated content from the CodeMirror instance.
   const editor = window.currentEditor;
   if (!editor) {
     console.error("Editor not found!");
@@ -881,7 +644,6 @@ export function saveFile(fileName, folder) {
     .catch(error => console.error("Error saving file:", error));
 }
 
-// File Upload Handling: Display preview for image or file icon.
 export function displayFilePreview(file, container) {
   container.style.display = "inline-block";
   if (file.type.startsWith("image/")) {
@@ -897,7 +659,6 @@ export function displayFilePreview(file, container) {
   }
 }
 
-// Initialize file action buttons.
 export function initFileActions() {
   const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
   if (deleteSelectedBtn) {
@@ -914,7 +675,6 @@ export function initFileActions() {
     moveSelectedBtn.replaceWith(moveSelectedBtn.cloneNode(true));
     document.getElementById("moveSelectedBtn").addEventListener("click", handleMoveSelected);
   }
-  // New: Download Selected as Zip button.
   const downloadZipBtn = document.getElementById("downloadZipBtn");
   if (downloadZipBtn) {
     downloadZipBtn.replaceWith(downloadZipBtn.cloneNode(true));
@@ -922,7 +682,6 @@ export function initFileActions() {
   }
 }
 
-// Rename function: always available.
 export function renameFile(oldName, folder) {
   window.fileToRename = oldName;
   window.fileFolder = folder || window.currentFolder || "root";
@@ -930,7 +689,6 @@ export function renameFile(oldName, folder) {
   document.getElementById("renameFileModal").style.display = "block";
 }
 
-// Attach event listeners after DOM content is loaded.
 document.addEventListener("DOMContentLoaded", () => {
   const cancelBtn = document.getElementById("cancelRenameFile");
   if (cancelBtn) {
@@ -974,10 +732,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// Expose renameFile to global scope.
 window.renameFile = renameFile;
 
-// Global pagination functions.
 window.changePage = function (newPage) {
   window.currentPage = newPage;
   renderFileTable(window.currentFolder);
