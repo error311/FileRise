@@ -1,11 +1,13 @@
+// folderManager.js
+
 import { loadFileList } from './fileManager.js';
 import { showToast } from './domUtils.js';
 
 // ----------------------
-// Helper functions
+// Helper Functions (Data/State)
 // ----------------------
 
-// Format folder name for display (for copy/move dropdown).
+// Formats a folder name for display (e.g. adding indentations).
 export function formatFolderName(folder) {
   if (folder.indexOf("/") !== -1) {
     let parts = folder.split("/");
@@ -36,7 +38,7 @@ function buildFolderTree(folders) {
 }
 
 // ----------------------
-// Session State for Folder Tree
+// Folder Tree State (Save/Load)
 // ----------------------
 function loadFolderTreeState() {
   const state = localStorage.getItem("folderTreeState");
@@ -47,9 +49,7 @@ function saveFolderTreeState(state) {
   localStorage.setItem("folderTreeState", JSON.stringify(state));
 }
 
-// ----------------------
-// Folder Deletion Helper
-// ----------------------
+// Helper for getting the parent folder.
 function getParentFolder(folder) {
   if (folder === "root") return "root";
   const lastSlash = folder.lastIndexOf("/");
@@ -57,28 +57,20 @@ function getParentFolder(folder) {
 }
 
 // ----------------------
-// Render Folder Tree
+// DOM Building Functions
 // ----------------------
-/**
- * Render the folder tree as nested <ul> elements using CSS classes.
- * The open/closed state of each folder is restored from session storage.
- * @param {object} tree - The tree object.
- * @param {string} parentPath - The path prefix.
- * @param {string} defaultDisplay - "block" (open) or "none" (collapsed)
- */
+
+// Recursively builds HTML for the folder tree as nested <ul> elements.
 function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
-  // Use the stored state (if any) for each folder.
   const state = loadFolderTreeState();
   let html = `<ul class="folder-tree ${defaultDisplay === 'none' ? 'collapsed' : 'expanded'}">`;
   for (const folder in tree) {
     const fullPath = parentPath ? parentPath + "/" + folder : folder;
     const hasChildren = Object.keys(tree[folder]).length > 0;
-    // Use saved state if exists; otherwise use the defaultDisplay.
     const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;
     html += `<li class="folder-item">`;
     if (hasChildren) {
       const toggleSymbol = (displayState === "none") ? "[+]" : "[-]";
-      // Add a data-folder attribute to track which folder is toggled.
       html += `<span class="folder-toggle" data-folder="${fullPath}">${toggleSymbol}</span>`;
     } else {
       html += `<span class="folder-indent-placeholder"></span>`;
@@ -93,10 +85,7 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
   return html;
 }
 
-/**
- * Expand the tree path for the given folder.
- * This function splits the folder path and, for each level, finds the parent li and forces its nested ul to be open.
- */
+// Expands the folder tree along a given path.
 function expandTreePath(path) {
   const parts = path.split("/");
   let cumulative = "";
@@ -112,7 +101,6 @@ function expandTreePath(path) {
         const toggle = li.querySelector(".folder-toggle");
         if (toggle) {
           toggle.textContent = "[-]";
-          // Also update session state.
           let state = loadFolderTreeState();
           state[cumulative] = "block";
           saveFolderTreeState(state);
@@ -123,19 +111,16 @@ function expandTreePath(path) {
 }
 
 // ----------------------
-// Main Interactive Tree
+// Main Folder Tree Rendering and Event Binding
 // ----------------------
 export async function loadFolderTree(selectedFolder) {
   try {
     const response = await fetch('getFolderList.php');
-
     if (response.status === 401) {
       console.error("Unauthorized: Please log in to view folders.");
       return;
     }
-
     const folders = await response.json();
-    console.log("Fetched folders:", folders);
     if (!Array.isArray(folders)) {
       console.error("Folder list response is not an array:", folders);
       return;
@@ -147,13 +132,10 @@ export async function loadFolderTree(selectedFolder) {
       return;
     }
 
-    let html = "";
-    // Build the root row.
-    html += `<div id="rootRow" class="root-row">
-               <span class="folder-toggle" data-folder="root">[-]</span>
-               <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
-             </div>`;
-
+    let html = `<div id="rootRow" class="root-row">
+                  <span class="folder-toggle" data-folder="root">[-]</span>
+                  <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
+                </div>`;
     if (folders.length === 0) {
       html += `<ul class="folder-tree expanded">
                  <li class="folder-item">
@@ -161,39 +143,35 @@ export async function loadFolderTree(selectedFolder) {
                  </li>
                </ul>`;
     } else {
-      const tree = buildFolderTree(folders); // build the tree from folder list
+      const tree = buildFolderTree(folders);
       html += renderFolderTree(tree, "", "block");
     }
-
     container.innerHTML = html;
-    console.log("Rendered folder tree HTML:", container.innerHTML);
 
-    // Use the provided selectedFolder if available,
-    // otherwise check localStorage for the last opened folder.
+    // Determine current folder.
     if (selectedFolder) {
       window.currentFolder = selectedFolder;
     } else {
       window.currentFolder = localStorage.getItem("lastOpenedFolder") || "root";
     }
     localStorage.setItem("lastOpenedFolder", window.currentFolder);
-
     document.getElementById("fileListTitle").textContent =
       window.currentFolder === "root" ? "Files in (Root)" : "Files in (" + window.currentFolder + ")";
     loadFileList(window.currentFolder);
 
+    // Expand tree to current folder.
     const folderState = loadFolderTreeState();
     if (window.currentFolder !== "root" && folderState[window.currentFolder] !== "none") {
       expandTreePath(window.currentFolder);
     }
 
-    // --- NEW SNIPPET: Highlight the current folder ---
+    // Highlight current folder.
     const selectedEl = container.querySelector(`.folder-option[data-folder="${window.currentFolder}"]`);
     if (selectedEl) {
       selectedEl.classList.add("selected");
     }
-    // ----------------------------------------------------
 
-    // Attach events to folder options.
+    // Event binding for folder selection.
     container.querySelectorAll(".folder-option").forEach(el => {
       el.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -208,8 +186,7 @@ export async function loadFolderTree(selectedFolder) {
       });
     });
 
-    // Attach toggle events.
-    // Special handling for the root toggle.
+    // Event binding for toggling folders.
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
       rootToggle.addEventListener("click", function (e) {
@@ -255,6 +232,7 @@ export async function loadFolderTree(selectedFolder) {
         }
       });
     });
+
   } catch (error) {
     console.error("Error loading folder tree:", error);
   }
@@ -266,10 +244,9 @@ export function loadFolderList(selectedFolder) {
 }
 
 // ----------------------
-// Folder Management Functions
+// Folder Management (Rename, Delete, Create)
 // ----------------------
 
-// Attach event listeners for Rename and Delete buttons.
 document.getElementById("renameFolderBtn").addEventListener("click", openRenameFolderModal);
 document.getElementById("deleteFolderBtn").addEventListener("click", openDeleteFolderModal);
 
@@ -279,7 +256,6 @@ function openRenameFolderModal() {
     showToast("Please select a valid folder to rename.");
     return;
   }
-  // Extract the basename for display.
   const parts = selectedFolder.split("/");
   document.getElementById("newRenameFolderName").value = parts[parts.length - 1];
   document.getElementById("renameFolderModal").style.display = "block";
@@ -297,12 +273,8 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
     showToast("Please enter a valid new folder name.");
     return;
   }
-  // Get the parent folder path.
   const parentPath = getParentFolder(selectedFolder);
-  // Build the full new folder path.
-  // If the parent is "root", new folder is just newNameBasename.
   const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
-
   fetch("renameFolder.php", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -310,7 +282,6 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
   })
     .then(response => response.json())
     .then(data => {
-      console.log("Rename response:", data);
       if (data.success) {
         showToast("Folder renamed successfully!");
         window.currentFolder = newFolderFull;
@@ -353,7 +324,6 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
     .then(data => {
       if (data.success) {
         showToast("Folder deleted successfully!");
-        // Set current folder to the parent folder, not root
         window.currentFolder = getParentFolder(selectedFolder);
         localStorage.setItem("lastOpenedFolder", window.currentFolder);
         loadFolderList(window.currentFolder);
@@ -387,7 +357,6 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
   if (selectedFolder && selectedFolder !== "root") {
     fullFolderName = selectedFolder + "/" + folderInput;
   }
-  console.log("Create folder payload:", { folderName: folderInput, parent: selectedFolder === "root" ? "" : selectedFolder });
   fetch("createFolder.php", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -395,7 +364,6 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
   })
     .then(response => response.json())
     .then(data => {
-      console.log("Create folder response:", data);
       if (data.success) {
         showToast("Folder created successfully!");
         window.currentFolder = fullFolderName;
