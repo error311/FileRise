@@ -1,7 +1,7 @@
 // folderManager.js
 
 import { loadFileList } from './fileManager.js';
-import { showToast } from './domUtils.js';
+import { showToast, escapeHTML } from './domUtils.js';
 
 // ----------------------
 // Helper Functions (Data/State)
@@ -75,7 +75,8 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
     } else {
       html += `<span class="folder-indent-placeholder"></span>`;
     }
-    html += `<span class="folder-option" data-folder="${fullPath}">${folder}</span>`;
+    // Use escapeHTML to safely render the folder name.
+    html += `<span class="folder-option" data-folder="${fullPath}">${escapeHTML(folder)}</span>`;
     if (hasChildren) {
       html += renderFolderTree(tree[folder], fullPath, displayState);
     }
