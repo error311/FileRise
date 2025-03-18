@@ -1,5 +1,3 @@
-// fileManager.js
-
 import {
   escapeHTML,
   debounce,
@@ -21,11 +19,8 @@ window.itemsPerPage = window.itemsPerPage || 10;
 window.currentPage = window.currentPage || 1;
 
 // --- Define formatFolderName ---
-// This helper formats folder names for display. Adjust as needed.
 function formatFolderName(folder) {
-  // Example: If folder is "root", return "(Root)"
   if (folder === "root") return "(Root)";
-  // Replace underscores/dashes with spaces and capitalize each word.
   return folder
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, char => char.toUpperCase());
@@ -247,7 +242,11 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmDelete.addEventListener("click", function () {
       fetch("deleteFiles.php", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": window.csrfToken
+        },
         body: JSON.stringify({ folder: window.currentFolder, files: window.filesToDelete })
       })
         .then(response => response.json())
@@ -303,7 +302,10 @@ document.addEventListener("DOMContentLoaded", function () {
       fetch("downloadZip.php", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": window.csrfToken
+        },
         body: JSON.stringify({ folder: folder, files: window.filesToDownload })
       })
         .then(response => {
@@ -396,7 +398,11 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       fetch("copyFiles.php", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": window.csrfToken
+        },
         body: JSON.stringify({ source: window.currentFolder, files: window.filesToCopy, destination: targetFolder })
       })
         .then(response => response.json())
@@ -452,7 +458,11 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       fetch("moveFiles.php", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": window.csrfToken
+        },
         body: JSON.stringify({ source: window.currentFolder, files: window.filesToMove, destination: targetFolder })
       })
         .then(response => response.json())
@@ -632,7 +642,11 @@ export function saveFile(fileName, folder) {
   };
   fetch("saveFile.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": window.csrfToken
+    },
     body: JSON.stringify(fileDataObj)
   })
     .then(response => response.json())
@@ -708,7 +722,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const folderUsed = window.fileFolder;
       fetch("renameFile.php", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": window.csrfToken
+        },
         body: JSON.stringify({ folder: folderUsed, oldName: window.fileToRename, newName: newName })
       })
         .then(response => response.json())

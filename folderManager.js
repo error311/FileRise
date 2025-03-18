@@ -267,7 +267,9 @@ document.getElementById("cancelRenameFolder").addEventListener("click", function
   document.getElementById("newRenameFolderName").value = "";
 });
 
-document.getElementById("submitRenameFolder").addEventListener("click", function () {
+document.getElementById("submitRenameFolder").addEventListener("click", function (event) {
+  event.preventDefault(); // Prevent default form submission
+
   const selectedFolder = window.currentFolder || "root";
   const newNameBasename = document.getElementById("newRenameFolderName").value.trim();
   if (!newNameBasename || newNameBasename === selectedFolder.split("/").pop()) {
@@ -276,9 +278,22 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
   }
   const parentPath = getParentFolder(selectedFolder);
   const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
+
+  // Read the CSRF token from the meta tag
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+  if (!csrfToken) {
+    showToast("CSRF token not loaded yet! Please try again.");
+    return;
+  }
+
+  // Send the rename request with the CSRF token in a custom header
   fetch("renameFolder.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    credentials: "include", // ensure cookies (and session) are sent
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken
+    },
     body: JSON.stringify({ oldFolder: selectedFolder, newFolder: newFolderFull })
   })
     .then(response => response.json())
@@ -316,9 +331,15 @@ document.getElementById("cancelDeleteFolder").addEventListener("click", function
 
 document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
+  // Read CSRF token from the meta tag
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
   fetch("deleteFolder.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken
+    },
     body: JSON.stringify({ folder: selectedFolder })
   })
     .then(response => response.json())
@@ -358,10 +379,19 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
   if (selectedFolder && selectedFolder !== "root") {
     fullFolderName = selectedFolder + "/" + folderInput;
   }
+  // Read CSRF token from the meta tag
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
   fetch("createFolder.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folderName: folderInput, parent: selectedFolder === "root" ? "" : selectedFolder })
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken
+    },
+    body: JSON.stringify({
+      folderName: folderInput,
+      parent: selectedFolder === "root" ? "" : selectedFolder
+    })
   })
     .then(response => response.json())
     .then(data => {

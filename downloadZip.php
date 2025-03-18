@@ -1,6 +1,16 @@
 <?php
 require_once 'config.php';
 
+// --- CSRF Protection ---
+$headers = array_change_key_case(getallheaders(), CASE_LOWER);
+$receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+
+if ($receivedToken !== $_SESSION['csrf_token']) {
+    echo json_encode(["error" => "Invalid CSRF token"]);
+    http_response_code(403);
+    exit;
+}
+
 // Check if the user is authenticated.
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     http_response_code(401);

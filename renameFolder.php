@@ -18,6 +18,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// CSRF Protection: Read token from the custom header "X-CSRF-Token"
+$headers = array_change_key_case(getallheaders(), CASE_LOWER);
+$receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+
+if ($receivedToken !== $_SESSION['csrf_token']) {
+    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token.']);
+    http_response_code(403);
+    exit;
+}
+
 // Get the JSON input and decode it
 $input = json_decode(file_get_contents('php://input'), true);
 if (!isset($input['oldFolder']) || !isset($input['newFolder'])) {
@@ -28,22 +38,19 @@ if (!isset($input['oldFolder']) || !isset($input['newFolder'])) {
 $oldFolder = trim($input['oldFolder']);
 $newFolder = trim($input['newFolder']);
 
-// Allow letters, numbers, underscores, dashes, spaces, and forward slashes
+// Validate folder names
 if (!preg_match('/^[A-Za-z0-9_\- \/]+$/', $oldFolder) || !preg_match('/^[A-Za-z0-9_\- \/]+$/', $newFolder)) {
     echo json_encode(['success' => false, 'error' => 'Invalid folder name(s).']);
     exit;
 }
 
-// Trim any leading/trailing slashes and spaces.
 $oldFolder = trim($oldFolder, "/\\ ");
 $newFolder = trim($newFolder, "/\\ ");
 
-// Build full paths relative to UPLOAD_DIR.
 $baseDir = rtrim(UPLOAD_DIR, '/\\');
 $oldPath = $baseDir . DIRECTORY_SEPARATOR . $oldFolder;
 $newPath = $baseDir . DIRECTORY_SEPARATOR . $newFolder;
 
-// Security check: ensure both paths are within the base directory.
 if ((realpath($oldPath) === false) || (realpath(dirname($newPath)) === false) ||
     strpos(realpath($oldPath), realpath($baseDir)) !== 0 ||
     strpos(realpath(dirname($newPath)), realpath($baseDir)) !== 0) {
@@ -51,13 +58,11 @@ if ((realpath($oldPath) === false) || (realpath(dirname($newPath)) === false) ||
     exit;
 }
 
-// Check if the folder to rename exists.
 if (!file_exists($oldPath) || !is_dir($oldPath)) {
     echo json_encode(['success' => false, 'error' => 'Folder to rename does not exist.']);
     exit;
 }
 
-// Check if the new folder name already exists.
 if (file_exists($newPath)) {
     echo json_encode(['success' => false, 'error' => 'New folder name already exists.']);
     exit;

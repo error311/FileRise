@@ -7,8 +7,6 @@ function traverseFileTreePromise(item, path = "") {
   return new Promise((resolve, reject) => {
     if (item.isFile) {
       item.file(file => {
-        // Instead of modifying file.webkitRelativePath (read-only),
-        // define a new property called "customRelativePath"
         Object.defineProperty(file, 'customRelativePath', {
           value: path + file.name,
           writable: true,
@@ -23,9 +21,7 @@ function traverseFileTreePromise(item, path = "") {
         for (let i = 0; i < entries.length; i++) {
           promises.push(traverseFileTreePromise(entries[i], path + item.name + "/"));
         }
-        Promise.all(promises).then(results => {
-          resolve(results.flat());
-        });
+        Promise.all(promises).then(results => resolve(results.flat()));
       });
     } else {
       resolve([]);
@@ -46,7 +42,6 @@ function getFilesFromDataTransferItems(items) {
 }
 
 // Helper: Set default drop area content.
-// Moved to module scope so it is available globally in this module.
 function setDropAreaDefault() {
   const dropArea = document.getElementById("uploadDropArea");
   if (dropArea) {
@@ -104,7 +99,6 @@ function updateFileInfoCount() {
         <span id="fileCountDisplay" class="file-name-display">${window.selectedFiles.length} files selected</span>
       `;
     }
-    // Show preview of first file.
     const previewContainer = document.getElementById("filePreviewContainer");
     if (previewContainer && window.selectedFiles.length > 0) {
       previewContainer.innerHTML = "";
@@ -120,19 +114,16 @@ function createFileEntry(file) {
   li.style.display = "flex";
   li.dataset.uploadIndex = file.uploadIndex;
 
-  // Create remove button positioned to the left of the preview.
   const removeBtn = document.createElement("button");
   removeBtn.classList.add("remove-file-btn");
   removeBtn.textContent = "×";
   removeBtn.addEventListener("click", function (e) {
     e.stopPropagation();
-    // Remove file from global selected files array.
     const uploadIndex = file.uploadIndex;
     window.selectedFiles = window.selectedFiles.filter(f => f.uploadIndex !== uploadIndex);
     li.remove();
     updateFileInfoCount();
   });
-  // Store the button so we can hide it later when upload completes.
   li.removeBtn = removeBtn;
 
   const preview = document.createElement("div");
@@ -154,8 +145,6 @@ function createFileEntry(file) {
   progBar.innerText = "0%";
 
   progDiv.appendChild(progBar);
-
-  // Append in order: remove button, preview, name, progress.
   li.appendChild(removeBtn);
   li.appendChild(preview);
   li.appendChild(nameDiv);
@@ -171,7 +160,6 @@ function processFiles(filesInput) {
   const fileInfoContainer = document.getElementById("fileInfoContainer");
   const files = Array.from(filesInput);
 
-  // Update file info container with preview and file count.
   if (fileInfoContainer) {
     if (files.length > 0) {
       if (files.length === 1) {
@@ -195,12 +183,10 @@ function processFiles(filesInput) {
     }
   }
 
-  // Assign unique uploadIndex to each file.
   files.forEach((file, index) => {
     file.uploadIndex = index;
   });
 
-  // Build progress list.
   const progressContainer = document.getElementById("uploadProgressContainer");
   progressContainer.innerHTML = "";
 
@@ -209,14 +195,12 @@ function processFiles(filesInput) {
     const list = document.createElement("ul");
     list.classList.add("upload-progress-list");
 
-    // Determine grouping using relative path.
     const hasRelativePaths = files.some(file => {
       const rel = file.webkitRelativePath || file.customRelativePath || "";
       return rel.trim() !== "";
     });
 
     if (hasRelativePaths) {
-      // Group files by folder.
       const fileGroups = {};
       files.forEach(file => {
         let folderName = "Root";
@@ -233,15 +217,12 @@ function processFiles(filesInput) {
         fileGroups[folderName].push(file);
       });
 
-      // Create list elements for each folder group.
       Object.keys(fileGroups).forEach(folderName => {
-        // Folder header with Material Icon.
         const folderLi = document.createElement("li");
         folderLi.classList.add("upload-folder-group");
         folderLi.innerHTML = `<i class="material-icons folder-icon" style="vertical-align:middle; margin-right:8px;">folder</i> ${folderName}:`;
         list.appendChild(folderLi);
 
-        // Nested list for files.
         const nestedUl = document.createElement("ul");
         nestedUl.classList.add("upload-folder-group-list");
         fileGroups[folderName]
@@ -253,7 +234,6 @@ function processFiles(filesInput) {
         list.appendChild(nestedUl);
       });
     } else {
-      // Flat list.
       files.forEach((file, index) => {
         const li = createFileEntry(file);
         li.style.display = (index < maxDisplay) ? "flex" : "none";
@@ -270,19 +250,15 @@ function processFiles(filesInput) {
     }
     const listWrapper = document.createElement("div");
     listWrapper.classList.add("upload-progress-wrapper");
-    // Set a maximum height and enable vertical scrolling.
     listWrapper.style.maxHeight = "300px";
     listWrapper.style.overflowY = "auto";
     listWrapper.appendChild(list);
     progressContainer.appendChild(listWrapper);
   }
 
-  // Call once on page load:
   adjustFolderHelpExpansion();
-  // Also call on window resize:
   window.addEventListener("resize", adjustFolderHelpExpansion);
 
-  // Store files globally for submission.
   window.selectedFiles = files;
   updateFileInfoCount();
 }
@@ -293,7 +269,6 @@ function submitFiles(allFiles) {
   const progressContainer = document.getElementById("uploadProgressContainer");
   const fileInput = document.getElementById("file");
 
-  // Map uploadIndex to progress element.
   const progressElements = {};
   const listItems = progressContainer.querySelectorAll("li.upload-progress-item");
   listItems.forEach(item => {
@@ -308,6 +283,8 @@ function submitFiles(allFiles) {
     const formData = new FormData();
     formData.append("file[]", file);
     formData.append("folder", folderToUse);
+    // Append CSRF token as "upload_token"
+    formData.append("upload_token", window.csrfToken);
     const relativePath = file.webkitRelativePath || file.customRelativePath || "";
     if (relativePath.trim() !== "") {
       formData.append("relativePath", relativePath);
@@ -346,7 +323,6 @@ function submitFiles(allFiles) {
         if (li) {
           li.progressBar.style.width = "100%";
           li.progressBar.innerText = "Done";
-          // Hide the remove button now that upload is done.
           if (li.removeBtn) {
             li.removeBtn.style.display = "none";
           }
@@ -391,6 +367,8 @@ function submitFiles(allFiles) {
     });
 
     xhr.open("POST", "upload.php", true);
+    // Set the CSRF token header to match the folderManager approach.
+    xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
     xhr.send(formData);
   });
 
@@ -400,7 +378,6 @@ function submitFiles(allFiles) {
         initFileActions();
         serverFiles = (serverFiles || []).map(item => item.name.trim().toLowerCase());
         allFiles.forEach(file => {
-          // Skip verification for folder-uploaded files.
           if ((file.webkitRelativePath || file.customRelativePath || "").trim() !== "") {
             return;
           }
@@ -415,7 +392,6 @@ function submitFiles(allFiles) {
         });
         setTimeout(() => {
           if (fileInput) fileInput.value = "";
-          // Hide remove buttons in progress container.
           const removeBtns = progressContainer.querySelectorAll("button.remove-file-btn");
           removeBtns.forEach(btn => btn.style.display = "none");
           progressContainer.innerHTML = "";
@@ -450,15 +426,12 @@ function initUpload() {
   const uploadForm = document.getElementById("uploadFileForm");
 
   if (fileInput) {
-    // Remove folder selection attributes so clicking the input shows files:
     fileInput.removeAttribute("webkitdirectory");
     fileInput.removeAttribute("mozdirectory");
     fileInput.removeAttribute("directory");
-    // Allow selecting multiple files.
     fileInput.setAttribute("multiple", "");
   }
 
-  // Set default drop area content.
   setDropAreaDefault();
 
   if (dropArea) {

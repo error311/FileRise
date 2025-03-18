@@ -15,6 +15,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+$headers = array_change_key_case(getallheaders(), CASE_LOWER);
+$receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+
+if ($receivedToken !== $_SESSION['csrf_token']) {
+    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token.']);
+    http_response_code(403);
+    exit;
+}
+
 // Get the JSON input and decode it
 $input = json_decode(file_get_contents('php://input'), true);
 if (!isset($input['folderName'])) {

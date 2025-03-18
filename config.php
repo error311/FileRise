@@ -2,6 +2,9 @@
 session_set_cookie_params(7200); // 2 hours in seconds
 ini_set('session.gc_maxlifetime', 7200);
 session_start();
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 // config.php
 define('UPLOAD_DIR', '/var/www/uploads/');
 define('BASE_URL', 'http://yourwebsite/uploads/');

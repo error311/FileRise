@@ -3,6 +3,13 @@ require 'config.php';
 header('Content-Type: application/json');
 
 $usersFile = USERS_DIR . USERS_FILE;
+$headers = array_change_key_case(getallheaders(), CASE_LOWER);
+$receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+if ($receivedToken !== $_SESSION['csrf_token']) {
+    echo json_encode(["error" => "Invalid CSRF token"]);
+    http_response_code(403);
+    exit;
+}
 
 // Determine if we are in setup mode:
 // - Query parameter setup=1 is passed

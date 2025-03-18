@@ -16,8 +16,8 @@ function initAuth() {
       password: document.getElementById("loginPassword").value.trim()
     };
     console.log("Sending login data:", formData);
-    // sendRequest already handles credentials if configured in networkUtils.js.
-    sendRequest("auth.php", "POST", formData)
+    // Include CSRF token header with login
+    sendRequest("auth.php", "POST", formData, { "X-CSRF-Token": window.csrfToken })
       .then(data => {
         console.log("Login response:", data);
         if (data.success) {
@@ -35,7 +35,8 @@ function initAuth() {
   document.getElementById("logoutBtn").addEventListener("click", function () {
     fetch("logout.php", {
       method: "POST",
-      credentials: "include"  // Ensure the session cookie is sent.
+      credentials: "include",
+      headers: { "X-CSRF-Token": window.csrfToken }
     })
       .then(() => window.location.reload(true))
       .catch(error => console.error("Logout error:", error));
@@ -62,7 +63,10 @@ function initAuth() {
     fetch(url, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": window.csrfToken
+      },
       body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
     })
       .then(response => response.json())
@@ -101,7 +105,10 @@ function initAuth() {
     fetch("removeUser.php", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": window.csrfToken
+      },
       body: JSON.stringify({ username: usernameToRemove })
     })
       .then(response => response.json())
@@ -129,7 +136,6 @@ function checkAuthentication() {
       if (data.setup) {
         window.setupMode = true;
         showToast("Setup mode: No users found. Please add an admin user.");
-        // In setup mode, hide login and main operations; show Add User modal.
         toggleVisibility("loginForm", false);
         toggleVisibility("mainOperations", false);
         document.querySelector(".header-buttons").style.visibility = "hidden";
@@ -143,7 +149,6 @@ function checkAuthentication() {
         toggleVisibility("mainOperations", true);
         toggleVisibility("uploadFileForm", true);
         toggleVisibility("fileListContainer", true);
-        // Show Add/Remove User buttons if admin.
         if (data.isAdmin) {
           const addUserBtn = document.getElementById("addUserBtn");
           const removeUserBtn = document.getElementById("removeUserBtn");
@@ -156,7 +161,6 @@ function checkAuthentication() {
           if (removeUserBtn) removeUserBtn.style.display = "none";
         }
         document.querySelector(".header-buttons").style.visibility = "visible";
-        // Update persistent items-per-page select once main operations are visible.
         const selectElem = document.querySelector(".form-control.bottom-select");
         if (selectElem) {
           const stored = localStorage.getItem("itemsPerPage") || "10";
@@ -183,18 +187,15 @@ window.checkAuthentication = checkAuthentication;
 /* ------------------------------
    Persistent Items-Per-Page Setting
    ------------------------------ */
-// When the select value changes, save it to localStorage and refresh the file list.
 window.changeItemsPerPage = function (value) {
   console.log("Saving itemsPerPage:", value);
   localStorage.setItem("itemsPerPage", value);
-  // Refresh the file list automatically.
   const folder = window.currentFolder || "root";
   if (typeof renderFileTable === "function") {
     renderFileTable(folder);
   }
 };
 
-// On DOMContentLoaded, set the select to the persisted value.
 document.addEventListener("DOMContentLoaded", function () {
   const selectElem = document.querySelector(".form-control.bottom-select");
   if (selectElem) {
@@ -207,7 +208,6 @@ document.addEventListener("DOMContentLoaded", function () {
 /* ------------------------------
    Helper functions for modals and user list
    ------------------------------ */
-
 function resetUserForm() {
   document.getElementById("newUsername").value = "";
   document.getElementById("newPassword").value = "";

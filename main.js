@@ -17,6 +17,25 @@ import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
 
+function loadCsrfToken() {
+  fetch('token.php', { credentials: 'include' })
+    .then(response => response.json())
+    .then(data => {
+      // Assign to global variable
+      window.csrfToken = data.csrf_token;
+      // Also update the meta tag
+      let meta = document.querySelector('meta[name="csrf-token"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'csrf-token';
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', data.csrf_token);
+    })
+    .catch(error => console.error("Error loading CSRF token:", error));
+}
+
+document.addEventListener("DOMContentLoaded", loadCsrfToken);
 // Expose functions for inline handlers.
 window.sendRequest = sendRequest;
 window.toggleVisibility = toggleVisibility;
