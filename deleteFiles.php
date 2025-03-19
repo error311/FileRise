@@ -19,6 +19,15 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
+// Helper: Generate the metadata file path for a given folder.
+// For "root", returns "root_metadata.json". Otherwise, replaces slashes, backslashes, and spaces with dashes and appends "_metadata.json".
+function getMetadataFilePath($folder) {
+    if (strtolower($folder) === 'root' || $folder === '') {
+        return META_DIR . "root_metadata.json";
+    }
+    return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+}
+
 // Read request body
 $data = json_decode(file_get_contents("php://input"), true);
 
@@ -50,7 +59,7 @@ $deletedFiles = [];
 $errors = [];
 
 // Define a safe file name pattern: allow letters, numbers, underscores, dashes, dots, and spaces.
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
 
 foreach ($data['files'] as $fileName) {
     $basename = basename(trim($fileName));
@@ -65,13 +74,27 @@ foreach ($data['files'] as $fileName) {
     
     if (file_exists($filePath)) {
         if (unlink($filePath)) {
-            $deletedFiles[] = $fileName;
+            $deletedFiles[] = $basename;
         } else {
-            $errors[] = "Failed to delete $fileName";
+            $errors[] = "Failed to delete $basename";
         }
     } else {
         // Consider file already deleted.
-        $deletedFiles[] = $fileName;
+        $deletedFiles[] = $basename;
+    }
+}
+
+// Update folder-specific metadata file by removing deleted files.
+$metadataFile = getMetadataFilePath($folder);
+if (file_exists($metadataFile)) {
+    $metadata = json_decode(file_get_contents($metadataFile), true);
+    if (is_array($metadata)) {
+        foreach ($deletedFiles as $delFile) {
+            if (isset($metadata[$delFile])) {
+                unset($metadata[$delFile]);
+            }
+        }
+        file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
     }
 }
 

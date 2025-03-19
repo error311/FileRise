@@ -69,6 +69,42 @@ $filePath = $targetDir . $fileName;
 
 // Attempt to save the file.
 if (file_put_contents($filePath, $data["content"]) !== false) {
+    
+    // --- Update Metadata (Using Separate JSON per Folder) ---
+    // Determine the metadata key: for "root", use "root"; otherwise, use the folder path.
+    $metadataKey = (strtolower($folder) === "root" || $folder === "") ? "root" : $folder;
+    // Create a unique metadata filename by replacing slashes, backslashes, and spaces with dashes.
+    $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
+    $metadataFilePath = META_DIR . $metadataFileName;
+    
+    // Load existing metadata for this folder if it exists.
+    if (file_exists($metadataFilePath)) {
+        $metadata = json_decode(file_get_contents($metadataFilePath), true);
+    } else {
+        $metadata = [];
+    }
+    
+    $currentTime = date(DATE_TIME_FORMAT);
+    $uploader = $_SESSION['username'] ?? "Unknown";
+    
+    // Update metadata for this file.
+    // If the file already exists in metadata, update its "modified" field.
+    if (isset($metadata[$fileName])) {
+        $metadata[$fileName]['modified'] = $currentTime;
+        // Optionally, you might also update the uploader if desired.
+        $metadata[$fileName]['uploader'] = $uploader;
+    } else {
+        // New entry: record both uploaded and modified times.
+        $metadata[$fileName] = [
+            "uploaded" => $currentTime,
+            "modified" => $currentTime,
+            "uploader" => $uploader
+        ];
+    }
+    
+    // Save the updated metadata.
+    file_put_contents($metadataFilePath, json_encode($metadata, JSON_PRETTY_PRINT));
+    
     echo json_encode(["success" => "File saved successfully"]);
 } else {
     echo json_encode(["error" => "Error saving file"]);

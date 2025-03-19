@@ -26,7 +26,22 @@ if ($folder !== 'root') {
     $directory = UPLOAD_DIR;
 }
 
-$metadataFile = META_DIR . META_FILE;
+/**
+ * Helper: Generate the metadata file path for a given folder.
+ * For "root", returns "root_metadata.json". Otherwise, replaces slashes,
+ * backslashes, and spaces with dashes and appends "_metadata.json".
+ *
+ * @param string $folder The folder's relative path.
+ * @return string The full path to the folder's metadata file.
+ */
+function getMetadataFilePath($folder) {
+    if (strtolower($folder) === 'root' || $folder === '') {
+        return META_DIR . "root_metadata.json";
+    }
+    return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+}
+
+$metadataFile = getMetadataFilePath($folder);
 $metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
 
 if (!is_dir($directory)) {
@@ -37,10 +52,15 @@ if (!is_dir($directory)) {
 $files = array_values(array_diff(scandir($directory), array('.', '..')));
 $fileList = [];
 
-// Define a safe file name pattern: letters, numbers, underscores, dashes, dots, and spaces.
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+// Define a safe file name pattern: letters, numbers, underscores, dashes, dots, parentheses, and spaces.
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
 
 foreach ($files as $file) {
+    // Skip hidden files (those that begin with a dot)
+    if (substr($file, 0, 1) === '.') {
+        continue;
+    }
+    
     $filePath = $directory . DIRECTORY_SEPARATOR . $file;
     // Only include files (skip directories)
     if (!is_file($filePath)) continue;
@@ -50,8 +70,8 @@ foreach ($files as $file) {
         continue;
     }
     
-    // Build the metadata key; if not in root, include the folder path.
-    $metaKey = ($folder !== 'root') ? $folder . "/" . $file : $file;
+    // Since metadata is stored per folder, the key is simply the file name.
+    $metaKey = $file;
 
     $fileDateModified = filemtime($filePath) ? date(DATE_TIME_FORMAT, filemtime($filePath)) : "Unknown";
     $fileUploadedDate = isset($metadata[$metaKey]["uploaded"]) ? $metadata[$metaKey]["uploaded"] : "Unknown";

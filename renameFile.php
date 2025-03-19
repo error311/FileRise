@@ -38,8 +38,8 @@ if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
 $oldName = basename(trim($data['oldName']));
 $newName = basename(trim($data['newName']));
 
-// Validate file names: allow letters, numbers, underscores, dashes, dots, and spaces.
-if (!preg_match('/^[A-Za-z0-9_\-\. ]+$/', $oldName) || !preg_match('/^[A-Za-z0-9_\-\. ]+$/', $newName)) {
+// Validate file names: allow letters, numbers, underscores, dashes, dots, parentheses, and spaces.
+if (!preg_match('/^[A-Za-z0-9_\-\. \(\)]+$/', $oldName) || !preg_match('/^[A-Za-z0-9_\-\. \(\)]+$/', $newName)) {
     echo json_encode(["error" => "Invalid file name."]);
     exit;
 }
@@ -54,32 +54,50 @@ if ($folder !== 'root') {
 $oldPath = $directory . $oldName;
 $newPath = $directory . $newName;
 
+// Helper: Generate a unique file name if a file with the same name exists.
+function getUniqueFileName($directory, $fileName) {
+    $fullPath = $directory . $fileName;
+    clearstatcache(true, $fullPath);
+    if (!file_exists($fullPath)) {
+        return $fileName;
+    }
+    $basename = pathinfo($fileName, PATHINFO_FILENAME);
+    $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+    $counter = 1;
+    do {
+        $newName = $basename . " (" . $counter . ")" . ($extension ? "." . $extension : "");
+        $newFullPath = $directory . $newName;
+        clearstatcache(true, $newFullPath);
+        $counter++;
+    } while (file_exists($directory . $newName));
+    return $newName;
+}
+
 if (!file_exists($oldPath)) {
     echo json_encode(["error" => "File does not exist"]);
     exit;
 }
 
+// If a file with the new name exists, generate a unique name.
 if (file_exists($newPath)) {
-    echo json_encode(["error" => "A file with the new name already exists"]);
-    exit;
+    $newName = getUniqueFileName($directory, $newName);
+    $newPath = $directory . $newName;
 }
 
-$metadataFile = META_DIR . META_FILE;
-
 if (rename($oldPath, $newPath)) {
-    // Update metadata.
+    // --- Update Metadata in the Folder-Specific JSON ---
+    $metadataKey = ($folder === 'root') ? "root" : $folder;
+    $metadataFile = META_DIR . str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
+    
     if (file_exists($metadataFile)) {
         $metadata = json_decode(file_get_contents($metadataFile), true);
-        // Build metadata keys using the folder (if not root).
-        $oldKey = ($folder !== 'root') ? $folder . "/" . $oldName : $oldName;
-        $newKey = ($folder !== 'root') ? $folder . "/" . $newName : $newName;
-        if (isset($metadata[$oldKey])) {
-            $metadata[$newKey] = $metadata[$oldKey];
-            unset($metadata[$oldKey]);
+        if (isset($metadata[$oldName])) {
+            $metadata[$newName] = $metadata[$oldName];
+            unset($metadata[$oldName]);
             file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
         }
     }
-    echo json_encode(["success" => "File renamed successfully"]);
+    echo json_encode(["success" => "File renamed successfully", "newName" => $newName]);
 } else {
     echo json_encode(["error" => "Error renaming file"]);
 }

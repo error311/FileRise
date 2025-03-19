@@ -70,28 +70,21 @@ if (file_exists($newPath)) {
 
 // Attempt to rename the folder.
 if (rename($oldPath, $newPath)) {
-    // Update metadata.
-    $metadataFile = META_DIR . META_FILE;
-    if (file_exists($metadataFile)) {
-        $metadata = json_decode(file_get_contents($metadataFile), true);
-        $updated = false;
-        // Loop through each key in the metadata.
-        foreach ($metadata as $key => $value) {
-            // Check if the key is the folder itself or is inside the folder.
-            if ($key === $oldFolder || strpos($key, $oldFolder . "/") === 0) {
-                // Construct the new key by replacing the $oldFolder prefix with $newFolder.
-                $newKey = $newFolder . substr($key, strlen($oldFolder));
-                // Optional: remove a leading slash if it appears.
-                $newKey = ltrim($newKey, "/");
-                $metadata[$newKey] = $value;
-                unset($metadata[$key]);
-                $updated = true;
-            }
-        }
-        if ($updated) {
-            file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
-        }
+    // --- Update Metadata Files ---
+    // Generate a metadata prefix for the old folder path and new folder path.
+    $oldPrefix = str_replace(['/', '\\', ' '], '-', $oldFolder);
+    $newPrefix = str_replace(['/', '\\', ' '], '-', $newFolder);
+    
+    // Find all metadata files whose names start with the old prefix.
+    $metadataFiles = glob(META_DIR . $oldPrefix . '*_metadata.json');
+    foreach ($metadataFiles as $oldMetaFile) {
+        $baseName = basename($oldMetaFile);
+        // Replace the old prefix with the new prefix in the filename.
+        $newBaseName = preg_replace('/^' . preg_quote($oldPrefix, '/') . '/', $newPrefix, $baseName);
+        $newMetaFile = META_DIR . $newBaseName;
+        rename($oldMetaFile, $newMetaFile);
     }
+    
     echo json_encode(['success' => true]);
 } else {
     echo json_encode(['success' => false, 'error' => 'Failed to rename folder.']);

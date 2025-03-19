@@ -3,16 +3,10 @@ require 'config.php';
 header('Content-Type: application/json');
 
 $usersFile = USERS_DIR . USERS_FILE;
-/*$headers = array_change_key_case(getallheaders(), CASE_LOWER);
-$receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
-if ($receivedToken !== $_SESSION['csrf_token']) {
-    echo json_encode(["error" => "Invalid CSRF token"]);
-    http_response_code(403);
-    exit;
-}*/
 
 // Function to authenticate user
-function authenticate($username, $password) {
+function authenticate($username, $password)
+{
     global $usersFile;
 
     if (!file_exists($usersFile)) {
@@ -49,6 +43,8 @@ if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
 // Authenticate user
 $userRole = authenticate($username, $password);
 if ($userRole !== false) {
+    // Regenerate session ID to mitigate session fixation attacks
+    session_regenerate_id(true);
     $_SESSION["authenticated"] = true;
     $_SESSION["username"] = $username;
     $_SESSION["isAdmin"] = ($userRole === "1"); // "1" indicates admin
@@ -57,4 +53,3 @@ if ($userRole !== false) {
 } else {
     echo json_encode(["error" => "Invalid credentials"]);
 }
-?>

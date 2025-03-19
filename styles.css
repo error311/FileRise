@@ -1033,6 +1033,18 @@ body.dark-mode #fileListContainer {
   flex: 0 1 auto;
 }
 
+.file-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.file-list-actions .action-btn {
+  flex: 0 1 auto;
+}
+
 .modal-footer {
   margin-top: 15px;
   text-align: right;
@@ -1089,7 +1101,7 @@ body.dark-mode #fileListContainer {
   cursor: pointer;
   margin-right: 5px;
   display: inline-block;
-  width: 25px; 
+  width: 25px;
   text-align: right;
 }
 
@@ -1164,6 +1176,16 @@ body.dark-mode .image-preview-modal-content {
   margin-top: -2px;
 }
 
+.share-btn {
+  /* Your custom styles here */
+  border: none;
+  color: white;
+  padding: 8px 12px;
+  cursor: pointer;
+  margin-left: 0px;
+  transition: background 0.3s;
+}
+
 .image-modal-img {
   max-width: 100%;
   max-height: 80vh;
@@ -1198,6 +1220,12 @@ body.dark-mode .image-preview-modal-content {
   background-color: #ff4d4d;
   box-shadow: 0px 0px 6px rgba(255, 77, 77, 0.8);
   transform: scale(1.05);
+}
+
+.share-modal-content {
+  width: 600px !important;
+  max-width: 90vw !important;
+  /* ensures it doesn't exceed the viewport width */
 }
 
 body.dark-mode .close-image-modal {
@@ -1385,6 +1413,26 @@ body.dark-mode .btn-secondary {
   border-color: #6c757d;
 }
 
+#toggleViewBtn {
+  margin-bottom: 20px;
+  margin-left: 15px;
+  padding: 10px 20px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  /* More subtle drop shadow */
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+#toggleViewBtn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.4);
+}
+
 body.dark-mode .btn-danger {
   background-color: #dc3545;
   color: #fff;
@@ -1552,4 +1600,34 @@ body.dark-mode .CodeMirror-selected {
 body.dark-mode .CodeMirror-matchingbracket {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-bottom: 1px solid #ffffff !important;
+}
+
+.gallery-nav-btn {
+  background: rgba(80, 80, 80, 0.6) !important;
+  /* More translucent dark grey */
+  border: none !important;
+  color: white !important;
+  font-size: 48px !important;
+  cursor: pointer !important;
+  padding: 10px 15px !important;
+  border-radius: 4px !important;
+  transition: background 0.3s ease, box-shadow 0.3s ease !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+.gallery-nav-btn:hover {
+  background: rgba(80, 80, 80, 0.8) !important;
+  /* Slightly less translucent on hover */
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* If you need distinct positioning for left and right buttons */
+.gallery-nav-btn.left {
+  left: 10px;
+  right: auto;
+}
+
+.gallery-nav-btn.right {
+  right: 10px;
+  left: auto;
 }

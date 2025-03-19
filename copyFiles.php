@@ -5,7 +5,6 @@ header('Content-Type: application/json');
 // --- CSRF Protection ---
 $headers = array_change_key_case(getallheaders(), CASE_LOWER);
 $receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
-
 if ($receivedToken !== $_SESSION['csrf_token']) {
     echo json_encode(["error" => "Invalid CSRF token"]);
     http_response_code(403);
@@ -58,54 +57,82 @@ $destDir = ($destinationFolder === 'root')
     ? $baseDir . DIRECTORY_SEPARATOR 
     : $baseDir . DIRECTORY_SEPARATOR . $destinationFolder . DIRECTORY_SEPARATOR;
 
-// Load metadata.
-$metadataFile = META_DIR . META_FILE;
-$metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
-
-// Ensure destination directory exists.
-if (!is_dir($destDir)) {
-    if (!mkdir($destDir, 0775, true)) {
-        echo json_encode(["error" => "Could not create destination folder"]);
-        exit;
+// Helper: Generate the metadata file path for a given folder.
+function getMetadataFilePath($folder) {
+    if (strtolower($folder) === 'root' || $folder === '') {
+        return META_DIR . "root_metadata.json";
     }
+    return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
 }
+
+// Helper: Generate a unique file name if a file with the same name exists.
+function getUniqueFileName($destDir, $fileName) {
+    $fullPath = $destDir . $fileName;
+    clearstatcache(true, $fullPath);
+    if (!file_exists($fullPath)) {
+        return $fileName;
+    }
+    $basename = pathinfo($fileName, PATHINFO_FILENAME);
+    $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+    $counter = 1;
+    do {
+        $newName = $basename . " (" . $counter . ")" . ($extension ? "." . $extension : "");
+        $newFullPath = $destDir . $newName;
+        clearstatcache(true, $newFullPath);
+        $counter++;
+    } while (file_exists($destDir . $newName));
+    return $newName;
+}
+
+// Load source and destination metadata.
+$srcMetaFile = getMetadataFilePath($sourceFolder);
+$destMetaFile = getMetadataFilePath($destinationFolder);
+
+$srcMetadata = file_exists($srcMetaFile) ? json_decode(file_get_contents($srcMetaFile), true) : [];
+$destMetadata = file_exists($destMetaFile) ? json_decode(file_get_contents($destMetaFile), true) : [];
 
 $errors = [];
 
-// Define a safe file name pattern: letters, numbers, underscores, dashes, dots, and spaces.
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+// Define a safe file name pattern: letters, numbers, underscores, dashes, dots, parentheses, and spaces.
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
 
 foreach ($files as $fileName) {
-    $basename = basename(trim($fileName));
-    // Validate the file name.
+    // Save the original name for metadata lookup.
+    $originalName = basename(trim($fileName));
+    $basename = $originalName;
     if (!preg_match($safeFileNamePattern, $basename)) {
         $errors[] = "$basename has an invalid name.";
         continue;
     }
     
-    $srcPath = $sourceDir . $basename;
+    $srcPath = $sourceDir . $originalName;
     $destPath = $destDir . $basename;
     
-    // Build metadata keys.
-    $srcKey = ($sourceFolder === 'root') ? $basename : $sourceFolder . "/" . $basename;
-    $destKey = ($destinationFolder === 'root') ? $basename : $destinationFolder . "/" . $basename;
-    
+    clearstatcache();
     if (!file_exists($srcPath)) {
-        $errors[] = "$basename does not exist in source.";
+        $errors[] = "$originalName does not exist in source.";
         continue;
     }
+    
+    if (file_exists($destPath)) {
+        $uniqueName = getUniqueFileName($destDir, $basename);
+        $basename = $uniqueName; // update the file name for metadata and destination path
+        $destPath = $destDir . $uniqueName;
+    }
+    
     if (!copy($srcPath, $destPath)) {
         $errors[] = "Failed to copy $basename";
         continue;
     }
-    // Update metadata: if source key exists, duplicate it to destination key.
-    if (isset($metadata[$srcKey])) {
-        $metadata[$destKey] = $metadata[$srcKey];
+    
+    // Update destination metadata: if there's metadata for the original file in source, add it under the new name.
+    if (isset($srcMetadata[$originalName])) {
+        $destMetadata[$basename] = $srcMetadata[$originalName];
     }
 }
 
-if (!file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT))) {
-    $errors[] = "Failed to update metadata.";
+if (file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT)) === false) {
+    $errors[] = "Failed to update destination metadata.";
 }
 
 if (empty($errors)) {

@@ -60,8 +60,28 @@ if (count(scandir($folderPath)) > 2) {
     exit;
 }
 
-// Attempt to delete the folder
+/**
+ * Helper: Generate the metadata file path for a given folder.
+ * For "root", returns "root_metadata.json". Otherwise, it replaces
+ * slashes, backslashes, and spaces with dashes and appends "_metadata.json".
+ *
+ * @param string $folder The folder's relative path.
+ * @return string The full path to the folder's metadata file.
+ */
+function getMetadataFilePath($folder) {
+    if (strtolower($folder) === 'root' || $folder === '') {
+        return META_DIR . "root_metadata.json";
+    }
+    return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+}
+
+// Attempt to delete the folder.
 if (rmdir($folderPath)) {
+    // Remove corresponding metadata file if it exists.
+    $metadataFile = getMetadataFilePath($folderName);
+    if (file_exists($metadataFile)) {
+        unlink($metadataFile);
+    }
     echo json_encode(['success' => true]);
 } else {
     echo json_encode(['success' => false, 'error' => 'Failed to delete folder.']);

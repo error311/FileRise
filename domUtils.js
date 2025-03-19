@@ -141,30 +141,44 @@ export function buildFileTableRow(file, folderPath) {
     } else if (/\.pdf$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
     }
-    previewButton = `<button class="btn btn-sm btn-info ml-2 preview-btn" onclick="event.stopPropagation(); previewFile('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
+    previewButton = `<button class="btn btn-sm btn-info preview-btn" onclick="event.stopPropagation(); previewFile('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
                ${previewIcon}
              </button>`;
   }
 
   return `
-    <tr onclick="toggleRowSelection(event, '${safeFileName}')" class="clickable-row">
-      <td>
-        <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
-      </td>
-      <td>${safeFileName}</td>
-      <td class="hide-small nowrap">${safeModified}</td>
-      <td class="hide-small hide-medium nowrap">${safeUploaded}</td>
-      <td class="hide-small nowrap">${safeSize}</td>
-      <td class="hide-small hide-medium nowrap">${safeUploader}</td>
-      <td>
-        <div class="button-wrap">
-          <a class="btn btn-sm btn-success ml-2" href="${folderPath + encodeURIComponent(file.name)}" download>Download</a>
-          ${file.editable ? `<button class="btn btn-sm btn-primary ml-2" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'>Edit</button>` : ""}
-          ${previewButton}
-          <button class="btn btn-sm btn-warning ml-2" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'>Rename</button>
-        </div>
-      </td>
-    </tr>
+  <tr onclick="toggleRowSelection(event, '${safeFileName}')" class="clickable-row">
+    <td>
+      <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
+    </td>
+    <td>${safeFileName}</td>
+    <td class="hide-small nowrap">${safeModified}</td>
+    <td class="hide-small hide-medium nowrap">${safeUploaded}</td>
+    <td class="hide-small nowrap">${safeSize}</td>
+    <td class="hide-small hide-medium nowrap">${safeUploader}</td>
+    <td>
+      <div class="button-wrap" style="display: flex; justify-content: left; gap: 5px;">
+        <a class="btn btn-sm btn-success download-btn" 
+           href="download.php?folder=${encodeURIComponent(file.folder || 'root')}&file=${encodeURIComponent(file.name)}" 
+           title="Download">
+          <i class="material-icons">file_download</i>
+        </a>
+        ${file.editable ? `
+          <button class="btn btn-sm btn-primary" 
+                  onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
+                  title="Edit">
+            <i class="material-icons">edit</i>
+          </button>
+        ` : ""}
+        ${previewButton}
+        <button class="btn btn-sm btn-warning rename-btn" 
+                onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
+                title="Rename">
+          <i class="material-icons">drive_file_rename_outline</i>
+        </button>
+      </div>
+    </td>
+  </tr>
   `;
 }
 

@@ -3,7 +3,6 @@ require_once 'config.php';
 header('Content-Type: application/json');
 
 // --- CSRF Protection for Uploads ---
-// Use getallheaders() to read the token from the header.
 $headers = array_change_key_case(getallheaders(), CASE_LOWER);
 $receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
 
@@ -27,23 +26,22 @@ if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
     exit;
 }
 
-// Determine the target upload directory.
-$uploadDir = UPLOAD_DIR;
+// Determine the base upload directory.
+$baseUploadDir = UPLOAD_DIR;
 if ($folder !== 'root') {
-    $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0775, true);
+    $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
+    if (!is_dir($baseUploadDir)) {
+        mkdir($baseUploadDir, 0775, true);
     }
 } else {
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0775, true);
+    if (!is_dir($baseUploadDir)) {
+        mkdir($baseUploadDir, 0775, true);
     }
 }
 
-// Load metadata for uploaded files.
-$metadataFile = META_DIR . META_FILE;
-$metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
-$metadataChanged = false;
+// Prepare a collection to hold metadata for each folder.
+$metadataCollection = []; // key: folder path, value: metadata array
+$metadataChanged = [];    // key: folder path, value: boolean
 
 $safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
 
@@ -63,38 +61,58 @@ foreach ($_FILES["file"]["name"] as $index => $fileName) {
             $relativePath = $_POST['relativePath'];
         }
     }
+    
+    // Determine the complete folder path for upload and for metadata.
+    $folderPath = $folder; // Base folder as provided ("root" or a subfolder)
+    $uploadDir = $baseUploadDir; // Start with the base upload directory
     if (!empty($relativePath)) {
         $subDir = dirname($relativePath);
         if ($subDir !== '.' && $subDir !== '') {
-            if ($folder === 'root') {
-                $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $subDir . DIRECTORY_SEPARATOR;
-            } else {
-                $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR . $subDir . DIRECTORY_SEPARATOR;
-            }
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0775, true);
-            }
-            $safeFileName = basename($relativePath);
+            // If base folder is 'root', then folderPath is just the subDir
+            // Otherwise, append the subdirectory to the base folder
+            $folderPath = ($folder === 'root') ? $subDir : $folder . "/" . $subDir;
+            // Update the upload directory accordingly.
+            $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR 
+                        . str_replace('/', DIRECTORY_SEPARATOR, $folderPath) . DIRECTORY_SEPARATOR;
         }
+        // Ensure the file name is taken from the relative path.
+        $safeFileName = basename($relativePath);
     }
     // --- End Minimal Folder/Subfolder Logic ---
+
+    // Make sure the final upload directory exists.
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0775, true);
+    }
     
     $targetPath = $uploadDir . $safeFileName;
     
     if (move_uploaded_file($_FILES["file"]["tmp_name"][$index], $targetPath)) {
-        if (!empty($relativePath)) {
-            $metaKey = ($folder !== 'root') ? $folder . "/" . $relativePath : $relativePath;
-        } else {
-            $metaKey = ($folder !== 'root') ? $folder . "/" . $safeFileName : $safeFileName;
+        // Generate a unique metadata file name based on the folder path.
+        // Replace slashes, backslashes, and spaces with dashes.
+        $metadataKey = ($folderPath === '' || $folderPath === 'root') ? "root" : $folderPath;
+        $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
+        $metadataFile = META_DIR . $metadataFileName;
+        
+        // Load metadata for this folder if not already loaded.
+        if (!isset($metadataCollection[$metadataKey])) {
+            if (file_exists($metadataFile)) {
+                $metadataCollection[$metadataKey] = json_decode(file_get_contents($metadataFile), true);
+            } else {
+                $metadataCollection[$metadataKey] = [];
+            }
+            $metadataChanged[$metadataKey] = false;
         }
-        if (!isset($metadata[$metaKey])) {
+        
+        // Add metadata for this file if not already present.
+        if (!isset($metadataCollection[$metadataKey][$safeFileName])) {
             $uploadedDate = date(DATE_TIME_FORMAT);
             $uploader = $_SESSION['username'] ?? "Unknown";
-            $metadata[$metaKey] = [
+            $metadataCollection[$metadataKey][$safeFileName] = [
                 "uploaded" => $uploadedDate,
                 "uploader" => $uploader
             ];
-            $metadataChanged = true;
+            $metadataChanged[$metadataKey] = true;
         }
     } else {
         echo json_encode(["error" => "Error uploading file"]);
@@ -102,8 +120,13 @@ foreach ($_FILES["file"]["name"] as $index => $fileName) {
     }
 }
 
-if ($metadataChanged) {
-    file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
+// After processing all files, write out metadata files for folders that changed.
+foreach ($metadataCollection as $folderKey => $data) {
+    if ($metadataChanged[$folderKey]) {
+        $metadataFileName = str_replace(['/', '\\', ' '], '-', $folderKey) . '_metadata.json';
+        $metadataFile = META_DIR . $metadataFileName;
+        file_put_contents($metadataFile, json_encode($data, JSON_PRETTY_PRINT));
+    }
 }
 
 echo json_encode(["success" => "Files uploaded successfully"]);

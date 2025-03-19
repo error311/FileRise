@@ -17,25 +17,38 @@ import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
 
+
 function loadCsrfToken() {
   fetch('token.php', { credentials: 'include' })
     .then(response => response.json())
     .then(data => {
-      // Assign to global variable
+      // Set global variables.
       window.csrfToken = data.csrf_token;
-      // Also update the meta tag
-      let meta = document.querySelector('meta[name="csrf-token"]');
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = 'csrf-token';
-        document.head.appendChild(meta);
+      window.SHARE_URL = data.share_url;
+      
+      // Update (or create) the CSRF meta tag.
+      let metaCSRF = document.querySelector('meta[name="csrf-token"]');
+      if (!metaCSRF) {
+        metaCSRF = document.createElement('meta');
+        metaCSRF.name = 'csrf-token';
+        document.head.appendChild(metaCSRF);
       }
-      meta.setAttribute('content', data.csrf_token);
+      metaCSRF.setAttribute('content', data.csrf_token);
+      
+      // Update (or create) the share URL meta tag.
+      let metaShare = document.querySelector('meta[name="share-url"]');
+      if (!metaShare) {
+        metaShare = document.createElement('meta');
+        metaShare.name = 'share-url';
+        document.head.appendChild(metaShare);
+      }
+      metaShare.setAttribute('content', data.share_url);
     })
-    .catch(error => console.error("Error loading CSRF token:", error));
+    .catch(error => console.error("Error loading CSRF token and share URL:", error));
 }
 
 document.addEventListener("DOMContentLoaded", loadCsrfToken);
+
 // Expose functions for inline handlers.
 window.sendRequest = sendRequest;
 window.toggleVisibility = toggleVisibility;

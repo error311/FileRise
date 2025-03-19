@@ -19,7 +19,6 @@ function initAuth() {
     // Include CSRF token header with login
     sendRequest("auth.php", "POST", formData, { "X-CSRF-Token": window.csrfToken })
       .then(data => {
-        console.log("Login response:", data);
         if (data.success) {
           console.log("✅ Login successful. Reloading page.");
           sessionStorage.setItem("welcomeMessage", "Welcome back, " + formData.username + "!");

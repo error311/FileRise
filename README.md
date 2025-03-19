@@ -8,35 +8,63 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 
 ---
 
-## Features
+# Features
 
 - **Multiple File/Folder Uploads with Progress:**
-  - Users can select and upload multiple files & folders at once. Each file upload shows an individual progress bar with percentage and upload speed, and image files display a small thumbnail preview (default icons for other file types).
+  - Users can select and upload multiple files & folders at once.
+  - Each file upload displays an individual progress bar with percentage and upload speed.
+  - Image files show a small thumbnail preview (with default Material icons for other file types).
 - **Built-in File Editing & Renaming:**
-  - Text-based files (e.g., .txt, .html, .js) can be opened and edited in a modal window without leaving the page. The editor modal is resizable and now uses CodeMirror for syntax highlighting, line numbering, and zoom in/out functionality—allowing users to adjust the text size for a better editing experience. Files can also be renamed via a dedicated “Rename” action without needing to re-upload them.
+  - Text-based files (e.g., .txt, .html, .js) can be opened and edited in a modal window using CodeMirror for:
+    - Syntax highlighting
+    - Line numbering
+    - Adjustable font sizes
+  - Files can be renamed directly through the interface.
+  - The renaming functionality now supports names with parentheses and checks for duplicate names, automatically generating a unique name (e.g., appending “ (1)”) when needed.
+  - Folder-specific metadata is updated accordingly.
 - **Built-in File Preview:**
-  - Users can quickly preview images, videos, and PDFs directly in modal popups without leaving the page. The modal maintains a responsive, centered layout that scales with the content. Different Material icons—image for photos, videocam for videos, and picture_as_pdf for PDFs—provide clear visual cues, and custom CSS (including fine-tuning with negative margins) ensures that icons are perfectly aligned. PDFs are embedded at optimal dimensions for a clear, readable view, while video previews include built-in playback controls.
+  - Users can quickly preview images, videos, and PDFs directly in modal popups without leaving the page.
+  - The preview modal supports inline display of images (with proper scaling) and videos with playback controls.
+  - Navigation (prev/next) within image previews is supported for a seamless browsing experience.
+- **Gallery (Grid) View:**
+  - In addition to the traditional table view, users can toggle to a gallery view that arranges image thumbnails in a grid layout.
+  - The gallery view offers multiple column options (e.g., 3, 4, or 5 columns) so that users can choose the layout that best fits their screen.
+  - Action buttons (Download, Edit, Rename, Share) appear beneath each thumbnail for quick access.
 - **Batch Operations (Delete/Copy/Move/Download):**
-  - Delete Files: Delete multiple files at once.
-  - Copy Files: Copy selected files to another folder.
-  - Move Files: Move selected files to a different folder.
-  - Download Files as ZIP: Download selected files as a ZIP archive. Users can specify a custom name for the ZIP file via a modal dialog.
+  - **Delete Files:** Delete multiple files at once.
+  - **Copy Files:** Copy selected files to another folder with a unique-naming feature to prevent overwrites.
+  - **Move Files:** Move selected files to a different folder, automatically generating a unique filename if needed to avoid data loss.
+  - **Download Files as ZIP:** Download selected files as a ZIP archive. Users can specify a custom name for the ZIP file via a modal dialog.
 - **Folder Management:**
-  - Supports organizing files into folders and subfolders. Users can create new folders, rename existing folders, or delete folders. A dynamic folder tree in the UI allows navigation through directories and updates in real-time to reflect changes after any create, rename, or delete action.
+  - Organize files into folders and subfolders with the ability to create, rename, and delete folders.
+  - A dynamic folder tree in the UI allows users to navigate directories easily, and any changes are immediately reflected in real time.
+  - **Per-Folder Metadata Storage:** Each folder has its own metadata JSON file (e.g., `root_metadata.json`, `FolderName_metadata.json`), and operations (copy/move/rename) update these metadata files accordingly.
 - **Sorting & Pagination:**
-  - The file list can be sorted by name, last modified date, upload date, size, or uploader. For easier browsing, the interface supports pagination with selectable page sizes (10, 20, 50, or 100 items per page) and navigation controls (“Prev”, “Next”, specific page numbers).
+  - The file list can be sorted by name, modified date, upload date, file size, or uploader.
+  - Pagination controls let users navigate through files with selectable page sizes (10, 20, 50, or 100 items per page) and “Prev”/“Next” navigation buttons.
+- **Share Link Functionality:**
+  - Generate shareable links for files with configurable expiration times (e.g., 30, 60, 120, 180, 240 minutes, and a 1-day option) and optional password protection.
+  - Share links are stored in a JSON file with details including the folder, file, expiration timestamp, and hashed password.
+  - The share endpoint (`share.php`) validates tokens, expiration, and password before serving files (or forcing downloads).
+  - The share URL is configurable via environment variables or auto-detected from the server.
 - **User Authentication & Management:**
-  - Secure, session-based authentication protects the editor. An admin user can add or remove users through the interface. Passwords are hashed using PHP’s password_hash() for security, and session checks prevent unauthorized access to backend endpoints.
-  - **CSRF Protection:** All state-changing endpoints (such as those for folder and file operations) include CSRF token validation to ensure that only legitimate requests from authenticated users are processed.
+  - Secure, session-based authentication protects the file manager.
+  - Admin users can add or remove users through the interface.
+  - Passwords are hashed using PHP’s `password_hash()` for security.
+  - All state-changing endpoints include CSRF token validation.
 - **Responsive, Dynamic & Persistent UI:**
-  - The interface is mobile-friendly and adjusts to different screen sizes (hiding non-critical columns on small devices to avoid clutter). Updates to the file list, folder tree, and upload progress happen asynchronously (via Fetch API and XMLHttpRequest), so the page never needs to fully reload. Users receive immediate feedback through toast notifications and modal dialogs for actions like confirmations and error messages, creating a smooth user experience. Persistent UI elements Items Per Page, Dark/Light Mode, folder tree view & last open folder.
-- **Dark Mode/Light Mode**
-  - Automatically adapts to the operating system’s theme preference by default, with a manual toggle option.
-  - A theme toggle allows users to switch between Dark Mode and Light Mode for an optimized viewing experience.
-  - Every element, including the header, buttons, tables, modals, and the file editor, dynamically adapts to the selected theme.
-  - Dark Mode: Uses a dark gray background with lighter text to reduce eye strain in low-light environments.
-  - Light Mode: Retains the classic bright interface for high visibility in well-lit conditions.
-  - CodeMirror editor applies a matching dark theme in Dark Mode for better readability when editing files.
+  - The interface is mobile-friendly and adapts to various screen sizes by hiding non-critical columns on small devices.
+  - Asynchronous updates (via Fetch API and XMLHttpRequest) keep the UI responsive without full page reloads.
+  - Persistent settings (such as items per page, dark/light mode preference, folder tree state, and the last open folder) ensure a smooth and customized user experience.
+- **Dark Mode/Light Mode:**
+  - The application automatically adapts to the operating system’s theme preference by default and offers a manual toggle.
+  - The dark mode provides a darker background with lighter text and adjusts UI elements (including the CodeMirror editor) for optimal readability in low-light conditions.
+  - The light mode maintains a bright interface for well-lit environments.
+- **Server & Security Enhancements:**
+  - The Apache configuration (or .htaccess files) is set to disable directory indexing (e.g., using `Options -Indexes` in the uploads directory), preventing unauthorized users from viewing directory contents.
+  - Direct access to sensitive files (e.g., `users.txt`) is restricted through .htaccess rules.
+  - A proxy download mechanism has been implemented (via endpoints like `download.php` and `downloadZip.php`) so that every file download request goes through a PHP script. This script validates the session and CSRF token before streaming the file, ensuring that even if a file URL is guessed, only authenticated users can access it.
+  - Administrators are advised to deploy the app on a secure internal network or use the proxy download mechanism for public deployments to further protect file content.
 
 ---
 

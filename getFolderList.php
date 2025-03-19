@@ -23,7 +23,6 @@ function getSubfolders($dir, $relative = '') {
     $safeFolderNamePattern = '/^[A-Za-z0-9_\- ]+$/';
     foreach ($items as $item) {
         if ($item === '.' || $item === '..') continue;
-        // Only process folder names that match the safe pattern.
         if (!preg_match($safeFolderNamePattern, $item)) {
             continue;
         }
@@ -40,12 +39,59 @@ function getSubfolders($dir, $relative = '') {
     return $folders;
 }
 
-$baseDir = rtrim(UPLOAD_DIR, '/\\');
-$folderList = [];
-
-if (is_dir($baseDir)) {
-    $folderList = getSubfolders($baseDir);
+/**
+ * Helper: Generate the metadata file path for a given folder.
+ * For "root", it returns "root_metadata.json"; otherwise, it replaces
+ * slashes, backslashes, and spaces with dashes and appends "_metadata.json".
+ *
+ * @param string $folder The folder's relative path.
+ * @return string The full path to the folder's metadata file.
+ */
+function getMetadataFilePath($folder) {
+    if (strtolower($folder) === 'root' || $folder === '') {
+        return META_DIR . "root_metadata.json";
+    }
+    return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
 }
 
-echo json_encode($folderList);
+$baseDir = rtrim(UPLOAD_DIR, '/\\');
+
+// Build an array to hold folder information.
+$folderInfoList = [];
+
+// Include "root" as a folder.
+$rootMetaFile = getMetadataFilePath('root');
+$rootFileCount = 0;
+if (file_exists($rootMetaFile)) {
+    $rootMetadata = json_decode(file_get_contents($rootMetaFile), true);
+    $rootFileCount = is_array($rootMetadata) ? count($rootMetadata) : 0;
+}
+$folderInfoList[] = [
+    "folder" => "root",
+    "fileCount" => $rootFileCount,
+    "metadataFile" => basename($rootMetaFile)
+];
+
+// Scan for subfolders.
+$subfolders = [];
+if (is_dir($baseDir)) {
+    $subfolders = getSubfolders($baseDir);
+}
+
+// For each subfolder, load its metadata and record file count.
+foreach ($subfolders as $folder) {
+    $metaFile = getMetadataFilePath($folder);
+    $fileCount = 0;
+    if (file_exists($metaFile)) {
+        $metadata = json_decode(file_get_contents($metaFile), true);
+        $fileCount = is_array($metadata) ? count($metadata) : 0;
+    }
+    $folderInfoList[] = [
+        "folder" => $folder,
+        "fileCount" => $fileCount,
+        "metadataFile" => basename($metaFile)
+    ];
+}
+
+echo json_encode($folderInfoList);
 ?>

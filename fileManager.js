@@ -9,7 +9,7 @@ import {
   showToast,
   updateRowHighlight,
   toggleRowSelection,
-  previewFile
+  previewFile as originalPreviewFile
 } from './domUtils.js';
 
 export let fileData = [];
@@ -17,8 +17,37 @@ export let sortOrder = { column: "uploaded", ascending: true };
 
 window.itemsPerPage = window.itemsPerPage || 10;
 window.currentPage = window.currentPage || 1;
+window.viewMode = localStorage.getItem("viewMode") || "table"; // "table" or "gallery"
 
-// --- Define formatFolderName ---
+// ==============================
+// VIEW MODE TOGGLE BUTTON
+// ==============================
+function createViewToggleButton() {
+  let toggleBtn = document.getElementById("toggleViewBtn");
+  if (!toggleBtn) {
+    toggleBtn = document.createElement("button");
+    toggleBtn.id = "toggleViewBtn";
+    toggleBtn.classList.add("btn", "btn-secondary");
+    const titleElem = document.getElementById("fileListTitle");
+    if (titleElem) {
+      titleElem.parentNode.insertBefore(toggleBtn, titleElem.nextSibling);
+    }
+  }
+  toggleBtn.textContent = window.viewMode === "gallery" ? "Switch to Table View" : "Switch to Gallery View";
+  toggleBtn.onclick = () => {
+    window.viewMode = window.viewMode === "gallery" ? "table" : "gallery";
+    localStorage.setItem("viewMode", window.viewMode);
+    loadFileList(window.currentFolder);
+    toggleBtn.textContent = window.viewMode === "gallery" ? "Switch to Table View" : "Switch to Gallery View";
+  };
+  return toggleBtn;
+}
+window.createViewToggleButton = createViewToggleButton;
+
+// -----------------------------
+// Helper: formatFolderName
+// -----------------------------
+
 function formatFolderName(folder) {
   if (folder === "root") return "(Root)";
   return folder
@@ -26,11 +55,224 @@ function formatFolderName(folder) {
     .replace(/\b\w/g, char => char.toUpperCase());
 }
 
-// Expose DOM helper functions for inline handlers.
+// Expose inline DOM helpers.
 window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
-window.previewFile = previewFile;
 
+// ==============================================
+// FEATURE: Public File Sharing Modal
+// ==============================================
+
+function openShareModal(file, folder) {
+  const existing = document.getElementById("shareModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "shareModal";
+  modal.classList.add("modal");
+  modal.innerHTML = `
+    <div class="modal-content share-modal-content" style="width: 600px; max-width:90vw;">
+      <div class="modal-header">
+        <h3>Share File: ${escapeHTML(file.name)}</h3>
+        <span class="close-image-modal" id="closeShareModal" title="Close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Set Expiration:</p>
+        <select id="shareExpiration">
+          <option value="30">30 minutes</option>
+          <option value="60" selected>60 minutes</option>
+          <option value="120">120 minutes</option>
+          <option value="180">180 minutes</option>
+          <option value="240">240 minutes</option>
+          <option value="1440">1 Day</option>
+        </select>
+        <p>Password (optional):</p>
+        <input type="text" id="sharePassword" placeholder="No password by default" style="width: 100%;"/>
+        <br>
+        <button id="generateShareLinkBtn" class="btn btn-primary" style="margin-top:10px;">Generate Share Link</button>
+        <div id="shareLinkDisplay" style="margin-top: 10px; display:none;">
+          <p>Shareable Link:</p>
+          <input type="text" id="shareLinkInput" readonly style="width:100%;"/>
+          <button id="copyShareLinkBtn" class="btn btn-primary" style="margin-top:5px;">Copy Link</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.style.display = "block";
+
+  document.getElementById("closeShareModal").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  document.getElementById("generateShareLinkBtn").addEventListener("click", () => {
+    const expiration = document.getElementById("shareExpiration").value;
+    const password = document.getElementById("sharePassword").value;
+    fetch("createShareLink.php", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": window.csrfToken
+      },
+      body: JSON.stringify({
+        folder: folder,
+        file: file.name,
+        expirationMinutes: parseInt(expiration),
+        password: password
+      })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.token) {
+          // Get the share endpoint from the meta tag (or fallback to a global variable)
+          let shareEndpoint = document.querySelector('meta[name="share-url"]')
+            ? document.querySelector('meta[name="share-url"]').getAttribute('content')
+            : (window.SHARE_URL || "share.php");
+          const shareUrl = `${shareEndpoint}?token=${encodeURIComponent(data.token)}`;
+          const displayDiv = document.getElementById("shareLinkDisplay");
+          const inputField = document.getElementById("shareLinkInput");
+          inputField.value = shareUrl;
+          displayDiv.style.display = "block";
+        } else {
+          showToast("Error generating share link: " + (data.error || "Unknown error"));
+        }
+      })
+      .catch(err => {
+        console.error("Error generating share link:", err);
+        showToast("Error generating share link.");
+      });
+  });
+  
+  document.getElementById("copyShareLinkBtn").addEventListener("click", () => {
+    const input = document.getElementById("shareLinkInput");
+    input.select();
+    document.execCommand("copy");
+    showToast("Link copied to clipboard!");
+  });
+}
+
+// ==============================================
+// FEATURE: Enhanced Preview Modal with Navigation
+// =============================================
+// This function replaces the previous preview behavior for images.
+// It uses your original modal layout and, if multiple images exist,
+// overlays transparent Prev/Next buttons over the image.
+function enhancedPreviewFile(fileUrl, fileName) {
+  let modal = document.getElementById("filePreviewModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "filePreviewModal";
+    Object.assign(modal.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100vw",
+      height: "100vh",
+      backgroundColor: "rgba(0,0,0,0.7)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: "1000"
+    });
+    modal.innerHTML = `
+      <div class="modal-content image-preview-modal-content" style="position: relative; max-width: 90vw; max-height: 90vh;">
+        <span id="closeFileModal" class="close-image-modal" style="position: absolute; top: 10px; right: 10px; font-size: 24px; cursor: pointer;">&times;</span>
+        <h4 class="image-modal-header" style="text-align: center; margin-top: 40px;"></h4>
+        <div class="file-preview-container" style="position: relative; text-align: center;"></div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    document.getElementById("closeFileModal").addEventListener("click", function () {
+      modal.style.display = "none";
+    });
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal) {
+        modal.style.display = "none";
+      }
+    });
+  }
+  modal.querySelector("h4").textContent = fileName;
+  const container = modal.querySelector(".file-preview-container");
+  container.innerHTML = "";
+
+  const extension = fileName.split('.').pop().toLowerCase();
+  const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(fileName);
+  if (isImage) {
+    const img = document.createElement("img");
+    img.src = fileUrl;
+    img.className = "image-modal-img";
+    img.style.maxWidth = "80vw";
+    img.style.maxHeight = "80vh";
+    container.appendChild(img);
+
+    // If multiple images exist, add arrow navigation.
+    const images = fileData.filter(file => /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name));
+    if (images.length > 1) {
+      modal.galleryImages = images;
+      modal.galleryCurrentIndex = images.findIndex(f => f.name === fileName);
+
+      const prevBtn = document.createElement("button");
+      prevBtn.textContent = "‹";
+      prevBtn.className = "gallery-nav-btn";
+      prevBtn.style.cssText = "position: absolute; top: 50%; left: 10px; transform: translateY(-50%); background: transparent; border: none; color: white; font-size: 48px; cursor: pointer;";
+      prevBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        modal.galleryCurrentIndex = (modal.galleryCurrentIndex - 1 + modal.galleryImages.length) % modal.galleryImages.length;
+        let newFile = modal.galleryImages[modal.galleryCurrentIndex];
+        modal.querySelector("h4").textContent = newFile.name;
+        img.src = ((window.currentFolder === "root") 
+                   ? "uploads/" 
+                   : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
+                   + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+      });
+      const nextBtn = document.createElement("button");
+      nextBtn.textContent = "›";
+      nextBtn.className = "gallery-nav-btn";
+      nextBtn.style.cssText = "position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: transparent; border: none; color: white; font-size: 48px; cursor: pointer;";
+      nextBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        modal.galleryCurrentIndex = (modal.galleryCurrentIndex + 1) % modal.galleryImages.length;
+        let newFile = modal.galleryImages[modal.galleryCurrentIndex];
+        modal.querySelector("h4").textContent = newFile.name;
+        img.src = ((window.currentFolder === "root") 
+                   ? "uploads/" 
+                   : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
+                   + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+      });
+      container.appendChild(prevBtn);
+      container.appendChild(nextBtn);
+    }
+  } else {
+    if (extension === "pdf") {
+      const embed = document.createElement("embed");
+      const separator = fileUrl.indexOf('?') === -1 ? '?' : '&';
+      embed.src = fileUrl + separator + 't=' + new Date().getTime();
+      embed.type = "application/pdf";
+      embed.style.width = "80vw";
+      embed.style.height = "80vh";
+      embed.style.border = "none";
+      container.appendChild(embed);
+    } else if (/\.(mp4|webm|mov|ogg)$/i.test(fileName)) {
+      const video = document.createElement("video");
+      video.src = fileUrl;
+      video.controls = true;
+      video.className = "image-modal-img";
+      container.appendChild(video);
+    } else {
+      container.textContent = "Preview not available for this file type.";
+    }
+  }
+  modal.style.display = "flex";
+}
+
+export function previewFile(fileUrl, fileName) {
+  enhancedPreviewFile(fileUrl, fileName);
+}
+
+// ==============================================
+// ORIGINAL FILE MANAGER FUNCTIONS
+// ==============================================
 export function loadFileList(folderParam) {
   const folder = folderParam || "root";
   const fileListContainer = document.getElementById("fileList");
@@ -39,7 +281,17 @@ export function loadFileList(folderParam) {
   fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
 
   return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
-    .then(response => response.json())
+    .then(response => {
+      // Check if the session has expired.
+      if (response.status === 401) {
+        showToast("Session expired. Please log in again.");
+        // Redirect to logout.php to clear the session; this can trigger a login process.
+        window.location.href = "logout.php";
+        // Throw error to stop further processing.
+        throw new Error("Unauthorized");
+      }
+      return response.json();
+    })
     .then(data => {
       fileListContainer.innerHTML = "";
       if (data.files && data.files.length > 0) {
@@ -47,10 +299,17 @@ export function loadFileList(folderParam) {
           file.fullName = (file.path || file.name).trim().toLowerCase();
           file.editable = canEditFile(file.name);
           file.folder = folder;
+          if (!file.type && /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
+            file.type = "image";
+          }
           return file;
         });
         fileData = data.files;
-        renderFileTable(folder);
+        if (window.viewMode === "gallery") {
+          renderGalleryView(folder);
+        } else {
+          renderFileTable(folder);
+        }
       } else {
         fileListContainer.textContent = "No files found.";
         updateFileActionButtons();
@@ -59,7 +318,10 @@ export function loadFileList(folderParam) {
     })
     .catch(error => {
       console.error("Error loading file list:", error);
-      fileListContainer.textContent = "Error loading files.";
+      // Only update the container text if error is not due to an unauthorized response.
+      if (error.message !== "Unauthorized") {
+        fileListContainer.textContent = "Error loading files.";
+      }
       return [];
     })
     .finally(() => {
@@ -95,7 +357,8 @@ export function renderFileTable(folder) {
     searchTerm
   });
 
-  const headerHTML = buildFileTableHeader(sortOrder);
+  let headerHTML = buildFileTableHeader(sortOrder);
+  // Do not add a separate share column; share button goes into the actions cell.
 
   const startIndex = (currentPage - 1) * itemsPerPageSetting;
   const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
@@ -103,16 +366,23 @@ export function renderFileTable(folder) {
   let rowsHTML = "<tbody>";
   if (totalFiles > 0) {
     filteredFiles.slice(startIndex, endIndex).forEach(file => {
-      rowsHTML += buildFileTableRow(file, folderPath);
+      let rowHTML = buildFileTableRow(file, folderPath);
+      // Insert share button into the actions container.
+      rowHTML = rowHTML.replace(/(<\/div>\s*<\/td>\s*<\/tr>)/, `<button class="share-btn btn btn-sm btn-secondary" data-file="${escapeHTML(file.name)}" title="Share">
+            <i class="material-icons">share</i>
+          </button>$1`);
+      rowsHTML += rowHTML;
     });
   } else {
-    rowsHTML += `<tr><td colspan="7">No files found.</td></tr>`;
+    rowsHTML += `<tr><td colspan="8">No files found.</td></tr>`;
   }
   rowsHTML += "</tbody></table>";
 
   const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
 
   fileListContainer.innerHTML = topControlsHTML + headerHTML + rowsHTML + bottomControlsHTML;
+
+  createViewToggleButton();
 
   const newSearchInput = document.getElementById("searchInput");
   if (newSearchInput) {
@@ -138,6 +408,78 @@ export function renderFileTable(folder) {
     checkbox.addEventListener('change', function (e) {
       updateRowHighlight(e.target);
       updateFileActionButtons();
+    });
+  });
+
+  // Bind share button events in table view.
+  document.querySelectorAll(".share-btn").forEach(btn => {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      const fileName = this.getAttribute("data-file");
+      const file = fileData.find(f => f.name === fileName);
+      if (file) {
+        openShareModal(file, folder);
+      }
+    });
+  });
+
+  updateFileActionButtons();
+}
+
+export function renderGalleryView(folder) {
+  const fileListContainer = document.getElementById("fileList");
+  const folderPath = (folder === "root")
+    ? "uploads/"
+    : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
+  // Use CSS Grid for gallery layout.
+  const gridStyle = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 10px;";
+  let galleryHTML = `<div class="gallery-container" style="${gridStyle}">`;
+  fileData.forEach((file, index) => {
+    let thumbnail;
+    if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
+      thumbnail = `<img src="${folderPath + encodeURIComponent(file.name)}?t=${new Date().getTime()}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: 150px; display: block; margin: 0 auto;">`;
+    } else {
+      thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
+    }
+    galleryHTML += `<div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
+    <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
+      ${thumbnail}
+    </div>
+    <div class="gallery-info" style="margin-top: 5px;">
+      <span class="gallery-file-name" style="display: block;">${escapeHTML(file.name)}</span>
+      <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
+        <a class="btn btn-sm btn-success download-btn" 
+           href="download.php?folder=${encodeURIComponent(file.folder || 'root')}&file=${encodeURIComponent(file.name)}" 
+           title="Download">
+          <i class="material-icons">file_download</i>
+        </a>
+        ${file.editable ? `
+          <button class="btn btn-sm btn-primary" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
+            <i class="material-icons">edit</i>
+          </button>
+        ` : ""}
+        <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Rename">
+           <i class="material-icons">drive_file_rename_outline</i>
+        </button>
+        <button class="btn btn-sm btn-secondary share-btn" onclick='openShareModal(${JSON.stringify(file)}, ${JSON.stringify(folder)})' title="Share">
+           <i class="material-icons">share</i>
+        </button>
+      </div>
+    </div>
+  </div>`;
+  });
+  galleryHTML += "</div>";
+  fileListContainer.innerHTML = galleryHTML;
+
+  document.querySelectorAll(".gallery-share-btn").forEach(btn => {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      const fileName = this.getAttribute("data-file");
+      const folder = this.getAttribute("data-folder");
+      const file = fileData.find(f => f.name === fileName);
+      if (file) {
+        openShareModal(file, folder);
+      }
     });
   });
 
@@ -167,7 +509,11 @@ export function sortFiles(column, folder) {
     if (valA > valB) return sortOrder.ascending ? 1 : -1;
     return 0;
   });
-  renderFileTable(folder);
+  if (window.viewMode === "gallery") {
+    renderGalleryView(folder);
+  } else {
+    renderFileTable(folder);
+  }
 }
 
 function parseCustomDate(dateStr) {
@@ -355,8 +701,12 @@ export function handleCopySelected(e) {
 export async function loadCopyMoveFolderListForModal(dropdownId) {
   try {
     const response = await fetch('getFolderList.php');
-    const folders = await response.json();
-    console.log('Folders fetched for modal:', folders);
+    let folders = await response.json();
+    if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
+      folders = folders.map(item => item.folder);
+    }
+    folders = folders.filter(folder => folder !== "root");
+    
     const folderSelect = document.getElementById(dropdownId);
     folderSelect.innerHTML = '';
     const rootOption = document.createElement('option');
@@ -389,11 +739,11 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmCopy.addEventListener("click", function () {
       const targetFolder = document.getElementById("copyTargetFolder").value;
       if (!targetFolder) {
-        showToast("Please select a target folder for copying.!", 5000);
+        showToast("Please select a target folder for copying.", 5000);
         return;
       }
       if (targetFolder === window.currentFolder) {
-        showToast("Error: Cannot move files to the same folder.");
+        showToast("Error: Cannot copy files to the same folder.");
         return;
       }
       fetch("copyFiles.php", {
@@ -403,7 +753,11 @@ document.addEventListener("DOMContentLoaded", function () {
           "Content-Type": "application/json",
           "X-CSRF-Token": window.csrfToken
         },
-        body: JSON.stringify({ source: window.currentFolder, files: window.filesToCopy, destination: targetFolder })
+        body: JSON.stringify({ 
+          source: window.currentFolder, 
+          files: window.filesToCopy, 
+          destination: targetFolder 
+        })
       })
         .then(response => response.json())
         .then(data => {
@@ -463,7 +817,11 @@ document.addEventListener("DOMContentLoaded", function () {
           "Content-Type": "application/json",
           "X-CSRF-Token": window.csrfToken
         },
-        body: JSON.stringify({ source: window.currentFolder, files: window.filesToMove, destination: targetFolder })
+        body: JSON.stringify({ 
+          source: window.currentFolder, 
+          files: window.filesToMove, 
+          destination: targetFolder 
+        })
       })
         .then(response => response.json())
         .then(data => {
@@ -660,7 +1018,7 @@ export function saveFile(fileName, folder) {
 
 export function displayFilePreview(file, container) {
   container.style.display = "inline-block";
-  if (file.type.startsWith("image/")) {
+  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
     const img = document.createElement("img");
     img.src = URL.createObjectURL(file);
     img.classList.add("file-preview-img");
@@ -762,3 +1120,4 @@ window.changeItemsPerPage = function (newCount) {
   window.currentPage = 1;
   renderFileTable(window.currentFolder);
 };
+window.previewFile = previewFile;

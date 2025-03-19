@@ -9,6 +9,7 @@ import { showToast, escapeHTML } from './domUtils.js';
 
 // Formats a folder name for display (e.g. adding indentations).
 export function formatFolderName(folder) {
+  if (typeof folder !== "string") return "";
   if (folder.indexOf("/") !== -1) {
     let parts = folder.split("/");
     let indent = "";
@@ -25,6 +26,8 @@ export function formatFolderName(folder) {
 function buildFolderTree(folders) {
   const tree = {};
   folders.forEach(folderPath => {
+    // Ensure folderPath is a string
+    if (typeof folderPath !== "string") return;
     const parts = folderPath.split('/');
     let current = tree;
     parts.forEach(part => {
@@ -119,9 +122,20 @@ export async function loadFolderTree(selectedFolder) {
     const response = await fetch('getFolderList.php');
     if (response.status === 401) {
       console.error("Unauthorized: Please log in to view folders.");
+      showToast("Session expired. Please log in again.");
+      // Redirect to logout.php to clear the session; this can trigger a login process.
+      window.location.href = "logout.php";
       return;
     }
-    const folders = await response.json();
+    let folders = await response.json();
+
+    // If returned items are objects (with a "folder" property), extract folder paths.
+    if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
+      folders = folders.map(item => item.folder);
+    }
+    // Filter out duplicate "root" entries if present.
+    folders = folders.filter(folder => folder !== "root");
+
     if (!Array.isArray(folders)) {
       console.error("Folder list response is not an array:", folders);
       return;
@@ -294,7 +308,7 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
       "Content-Type": "application/json",
       "X-CSRF-Token": csrfToken
     },
-    body: JSON.stringify({ oldFolder: selectedFolder, newFolder: newFolderFull })
+    body: JSON.stringify({ oldFolder: window.currentFolder, newFolder: newFolderFull })
   })
     .then(response => response.json())
     .then(data => {

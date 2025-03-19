@@ -50,8 +50,10 @@ if ($parent && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $parent)) {
 $baseDir = rtrim(UPLOAD_DIR, '/\\');
 if ($parent && strtolower($parent) !== "root") {
     $fullPath = $baseDir . DIRECTORY_SEPARATOR . $parent . DIRECTORY_SEPARATOR . $folderName;
+    $relativePath = $parent . "/" . $folderName;
 } else {
     $fullPath = $baseDir . DIRECTORY_SEPARATOR . $folderName;
+    $relativePath = $folderName;
 }
 
 // Check if the folder already exists.
@@ -62,6 +64,21 @@ if (file_exists($fullPath)) {
 
 // Attempt to create the folder.
 if (mkdir($fullPath, 0755, true)) {
+
+    // --- Create an empty metadata file for the new folder ---
+    // Helper: Generate the metadata file path for a given folder.
+    // For "root", returns "root_metadata.json". Otherwise, replaces slashes, backslashes, and spaces with dashes and appends "_metadata.json".
+    function getMetadataFilePath($folder) {
+        if (strtolower($folder) === 'root' || $folder === '') {
+            return META_DIR . "root_metadata.json";
+        }
+        return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+    }
+    
+    $metadataFile = getMetadataFilePath($relativePath);
+    // Create an empty associative array (i.e. empty metadata) and write to the metadata file.
+    file_put_contents($metadataFile, json_encode([], JSON_PRETTY_PRINT));
+
     echo json_encode(['success' => true]);
 } else {
     echo json_encode(['success' => false, 'error' => 'Failed to create folder.']);

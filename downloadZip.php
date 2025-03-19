@@ -38,7 +38,7 @@ $files = $data['files'];
 if ($folder !== "root") {
     $parts = explode('/', $folder);
     foreach ($parts as $part) {
-        if (empty($part) || $part === '.' || $part === '..' || !preg_match('/^[A-Za-z0-9_\-. ]+$/', $part)) {
+        if (empty($part) || $part === '.' || $part === '..' || !preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $part)) {
             http_response_code(400);
             header('Content-Type: application/json');
             echo json_encode(["error" => "Invalid folder name."]);
@@ -76,7 +76,7 @@ if (empty($files)) {
 }
 
 foreach ($files as $fileName) {
-    if (!preg_match('/^[A-Za-z0-9_\-. ]+$/', $fileName)) {
+    if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $fileName)) {
         http_response_code(400);
         header('Content-Type: application/json');
         echo json_encode(["error" => "Invalid file name: " . $fileName]);
@@ -119,10 +119,14 @@ foreach ($filesToZip as $filePath) {
 }
 $zip->close();
 
-// Serve the ZIP file.
+// Send headers to force download and disable caching.
 header('Content-Type: application/zip');
 header('Content-Disposition: attachment; filename="files.zip"');
 header('Content-Length: ' . filesize($tempZip));
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
+
+// Output the file and delete it afterward.
 readfile($tempZip);
 unlink($tempZip);
 exit;
