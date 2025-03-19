@@ -15,7 +15,6 @@ function initAuth() {
       username: document.getElementById("loginUsername").value.trim(),
       password: document.getElementById("loginPassword").value.trim()
     };
-    console.log("Sending login data:", formData);
     // Include CSRF token header with login
     sendRequest("auth.php", "POST", formData, { "X-CSRF-Token": window.csrfToken })
       .then(data => {

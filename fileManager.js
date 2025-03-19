@@ -867,7 +867,6 @@ function adjustEditorSize() {
   if (modal && window.currentEditor) {
     const modalHeight = modal.getBoundingClientRect().height || 600;
     const newEditorHeight = Math.max(modalHeight * 0.80, 5) + "px";
-    console.log("Adjusting editor height to:", newEditorHeight);
     window.currentEditor.setSize("100%", newEditorHeight);
   }
 }
@@ -881,7 +880,6 @@ function observeModalResize(modal) {
 }
 
 export function editFile(fileName, folder) {
-  console.log("Edit button clicked for:", fileName);
   let existingEditor = document.getElementById("editorContainer");
   if (existingEditor) {
     existingEditor.remove();
@@ -895,7 +893,6 @@ export function editFile(fileName, folder) {
   fetch(fileUrl, { method: "HEAD" })
     .then(response => {
       const contentLength = response.headers.get("Content-Length");
-      console.log("Content-Length:", contentLength);
       if (!contentLength || parseInt(contentLength) > 10485760) {
         showToast("This file is larger than 10 MB and cannot be edited in the browser.");
         throw new Error("File too large.");
