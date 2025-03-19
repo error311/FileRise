@@ -482,7 +482,8 @@ export function renderGalleryView(folder) {
       }
     });
   });
-
+  
+  createViewToggleButton();
   updateFileActionButtons();
 }
 
