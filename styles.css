@@ -956,7 +956,7 @@ body.dark-mode .folder-option:hover {
 
 .button-wrap {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   row-gap: 5px;
   column-gap: 0px;
 }
