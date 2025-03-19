@@ -682,6 +682,10 @@ body.dark-mode .editor-modal {
   background-color: #43A047;
 }
 
+.rename-btn .material-icons {
+  color: black !important;
+}
+
 /* ===========================================================
    FILE LIST & TABLE STYLES
    =========================================================== */
@@ -1101,7 +1105,7 @@ body.dark-mode #fileListContainer {
   cursor: pointer;
   margin-right: 5px;
   display: inline-block;
-  width: 25px;
+  width: 25px; 
   text-align: right;
 }
 
@@ -1224,8 +1228,7 @@ body.dark-mode .image-preview-modal-content {
 
 .share-modal-content {
   width: 600px !important;
-  max-width: 90vw !important;
-  /* ensures it doesn't exceed the viewport width */
+  max-width: 90vw !important; /* ensures it doesn't exceed the viewport width */
 }
 
 body.dark-mode .close-image-modal {
@@ -1423,8 +1426,7 @@ body.dark-mode .btn-secondary {
   border-radius: 4px;
   font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  /* More subtle drop shadow */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); /* More subtle drop shadow */
   transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -1603,8 +1605,7 @@ body.dark-mode .CodeMirror-matchingbracket {
 }
 
 .gallery-nav-btn {
-  background: rgba(80, 80, 80, 0.6) !important;
-  /* More translucent dark grey */
+  background: rgba(80, 80, 80, 0.6) !important; /* More translucent dark grey */
   border: none !important;
   color: white !important;
   font-size: 48px !important;
@@ -1616,8 +1617,7 @@ body.dark-mode .CodeMirror-matchingbracket {
 }
 
 .gallery-nav-btn:hover {
-  background: rgba(80, 80, 80, 0.8) !important;
-  /* Slightly less translucent on hover */
+  background: rgba(80, 80, 80, 0.8) !important; /* Slightly less translucent on hover */
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
 }
 
