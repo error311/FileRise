@@ -35,6 +35,7 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
   - **Copy Files:** Copy selected files to another folder with a unique-naming feature to prevent overwrites.
   - **Move Files:** Move selected files to a different folder, automatically generating a unique filename if needed to avoid data loss.
   - **Download Files as ZIP:** Download selected files as a ZIP archive. Users can specify a custom name for the ZIP file via a modal dialog.
+  - **Drag & Drop:** Easily move files by selecting them from the file list and simply dragging them onto your desired folder in the folder tree. When you drop the files onto a folder, the system automatically moves them, updating your file organization in one seamless action.
 - **Folder Management:**
   - Organize files into folders and subfolders with the ability to create, rename, and delete folders.
   - A dynamic folder tree in the UI allows users to navigate directories easily, and any changes are immediately reflected in real time.
