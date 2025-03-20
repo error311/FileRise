@@ -8,7 +8,7 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 
 ---
 
-# Features
+## Features
 
 - **Multiple File/Folder Uploads with Progress:**
   - Users can select and upload multiple files & folders at once.

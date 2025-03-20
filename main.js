@@ -24,7 +24,7 @@ function loadCsrfToken() {
       // Set global variables.
       window.csrfToken = data.csrf_token;
       window.SHARE_URL = data.share_url;
-      
+
       // Update (or create) the CSRF meta tag.
       let metaCSRF = document.querySelector('meta[name="csrf-token"]');
       if (!metaCSRF) {
@@ -33,7 +33,7 @@ function loadCsrfToken() {
         document.head.appendChild(metaCSRF);
       }
       metaCSRF.setAttribute('content', data.csrf_token);
-      
+
       // Update (or create) the share URL meta tag.
       let metaShare = document.querySelector('meta[name="share-url"]');
       if (!metaShare) {
@@ -123,6 +123,21 @@ document.addEventListener("DOMContentLoaded", function () {
       initFileActions();
       initUpload();
       loadFolderTree();
+      const helpBtn = document.getElementById("folderHelpBtn");
+      const helpTooltip = document.getElementById("folderHelpTooltip");
+      helpBtn.addEventListener("click", function () {
+        // Toggle display of the tooltip.
+        if (helpTooltip.style.display === "none" || helpTooltip.style.display === "") {
+          helpTooltip.style.display = "block";
+        } else {
+          helpTooltip.style.display = "none";
+        }
+        // Set the icon color based on dark mode.
+        const helpIcon = document.querySelector("#folderHelpBtn > i.material-icons.folder-help-icon");
+        if (helpIcon) {
+          helpIcon.style.color = document.body.classList.contains("dark-mode") ? "#ffa500" : "orange";
+        }
+      });
     } else {
       console.warn("User not authenticated. Data loading deferred.");
     }
@@ -131,9 +146,9 @@ document.addEventListener("DOMContentLoaded", function () {
   // --- Auto-scroll During Drag ---
   // Adjust these values as needed:
   const SCROLL_THRESHOLD = 50; // pixels from edge to start scrolling
-  const SCROLL_SPEED = 10;     // pixels to scroll per event
+  const SCROLL_SPEED = 20;     // pixels to scroll per event
 
-  document.addEventListener("dragover", function(e) {
+  document.addEventListener("dragover", function (e) {
     if (e.clientY < SCROLL_THRESHOLD) {
       window.scrollBy(0, -SCROLL_SPEED);
     } else if (e.clientY > window.innerHeight - SCROLL_THRESHOLD) {

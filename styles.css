@@ -183,6 +183,30 @@ body.dark-mode header {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Folder Help Tooltip - Light Mode */
+.folder-help-tooltip {
+  background-color: #fff;
+  color: #333;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 10px;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+}
+
+/* Folder Help Tooltip - Dark Mode */
+body.dark-mode .folder-help-tooltip {
+  background-color: #333 !important;
+  color: #eee !important;
+  border: 1px solid #555 !important;
+}
+#folderHelpBtn i.material-icons.folder-help-icon {
+  -webkit-text-fill-color: orange !important;
+  color: inherit !important;
+}
+
+body.dark-mode #folderHelpBtn i.material-icons.folder-help-icon {
+  -webkit-text-fill-color: #ffa500 !important; /* or another color for dark mode */
+}
 /************************************************************/
 /* RESPONSIVE HEADER FIXES                                 */
 /************************************************************/
@@ -1561,21 +1585,6 @@ body.dark-mode #searchInput {
   border: 1px solid #555;
 }
 
-.folder-explanation {
-  margin-top: 5px;
-  padding: 5px;
-  font-size: 12px;
-  color: #555;
-  background-color: solid transparent;
-  border: 1px solid transparent;
-  border-radius: 2px;
-}
-
-body.dark-mode .folder-explanation {
-  color: #ddd;
-  background-color: solid transparent;
-  border: 1px solid transparent;
-}
 
 body.dark-mode .CodeMirror {
   background: #1e1e1e !important;
@@ -1635,4 +1644,9 @@ body.dark-mode .CodeMirror-matchingbracket {
 .drop-hover {
   background-color: #e0e0e0;
   border: 1px dashed #666;
+}
+
+body.dark-mode .drop-hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px dashed #ffffff !important;
 }

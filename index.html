@@ -151,10 +151,17 @@
               </div>
             </div>
           </div>
-          <!-- Folder Management Card: 50% width on medium, 42% on large -->
+          
+          <!-- Folder Management Card -->
           <div class="col-md-6 col-lg-5 d-flex">
-            <div class="card flex-fill" style="max-width: 900px; width: 100%;">
-              <div class="card-header">Folder Navigation &amp; Management</div>
+            <div class="card flex-fill" style="max-width: 900px; width: 100%; position: relative;">
+              <!-- Card header with folder management title and help icon -->
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Folder Navigation &amp; Management</span>
+                <button id="folderHelpBtn" class="btn btn-link" title="Folder Help" style="padding: 0; border: none; background: none;">
+                  <i class="material-icons folder-help-icon" style="font-size: 24px;">info</i>
+                </button>
+              </div>
               <div class="card-body custom-folder-card-body">
                 <div class="form-group d-flex align-items-top" style="padding-top:0; margin-bottom:0;">
                   <div id="folderTreeContainer"></div>
@@ -204,19 +211,15 @@
                     </div>
                   </div>
                 </div>
-                <div id="folderExplanation" class="folder-explanation">
-                  <details class="folder-help-details">
-                    <summary class="folder-help-summary">
-                      <i class="material-icons folder-help-icon">info</i>
-                      Folder Navigation &amp; Management Help Info
-                    </summary>
-                    <ul class="folder-help-list">
-                      <li>Click on a folder in the tree to view its files.</li>
-                      <li>Use [-] to collapse and [+] to expand folders.</li>
-                      <li>Select a folder and click "Create Folder" to add a subfolder.</li>
-                      <li>To rename or delete a folder, select it and then click the appropriate button.</li>
-                    </ul>
-                  </details>
+                <!-- Help Tooltip: Initially hidden -->
+                <div id="folderHelpTooltip" class="folder-help-tooltip"
+                  style="display: none; position: absolute; top: 50px; right: 15px; background: #fff; border: 1px solid #ccc; padding: 10px; z-index: 1000; box-shadow: 2px 2px 6px rgba(0,0,0,0.2);">
+                  <ul class="folder-help-list" style="margin: 0; padding-left: 20px;">
+                    <li>Click on a folder in the tree to view its files.</li>
+                    <li>Use [-] to collapse and [+] to expand folders.</li>
+                    <li>Select a folder and click "Create Folder" to add a subfolder.</li>
+                    <li>To rename or delete a folder, select it and then click the appropriate button.</li>
+                  </ul>
                 </div>
               </div>
             </div>
