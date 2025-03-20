@@ -17,7 +17,6 @@ import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
 
-
 function loadCsrfToken() {
   fetch('token.php', { credentials: 'include' })
     .then(response => response.json())
@@ -65,12 +64,9 @@ document.addEventListener("DOMContentLoaded", function () {
   initAuth();
 
   // --- Dark Mode Persistence ---
-  // Get the dark mode toggle button.
   const darkModeToggle = document.getElementById("darkModeToggle");
-  // Retrieve stored user preference (if any).
   const storedDarkMode = localStorage.getItem("darkMode");
 
-  // Apply stored preference; if none, fall back to OS setting.
   if (storedDarkMode === "true") {
     document.body.classList.add("dark-mode");
   } else if (storedDarkMode === "false") {
@@ -83,13 +79,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Set the initial button label.
   if (darkModeToggle) {
     darkModeToggle.textContent = document.body.classList.contains("dark-mode")
       ? "Light Mode"
       : "Dark Mode";
 
-    // When clicked, toggle dark mode and store preference.
     darkModeToggle.addEventListener("click", function () {
       if (document.body.classList.contains("dark-mode")) {
         document.body.classList.remove("dark-mode");
@@ -103,7 +97,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Listen for OS theme changes if no user preference is set.
   if (localStorage.getItem("darkMode") === null && window.matchMedia) {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
       if (event.matches) {
@@ -132,6 +125,19 @@ document.addEventListener("DOMContentLoaded", function () {
       loadFolderTree();
     } else {
       console.warn("User not authenticated. Data loading deferred.");
+    }
+  });
+
+  // --- Auto-scroll During Drag ---
+  // Adjust these values as needed:
+  const SCROLL_THRESHOLD = 50; // pixels from edge to start scrolling
+  const SCROLL_SPEED = 10;     // pixels to scroll per event
+
+  document.addEventListener("dragover", function(e) {
+    if (e.clientY < SCROLL_THRESHOLD) {
+      window.scrollBy(0, -SCROLL_SPEED);
+    } else if (e.clientY > window.innerHeight - SCROLL_THRESHOLD) {
+      window.scrollBy(0, SCROLL_SPEED);
     }
   });
 });

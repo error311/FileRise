@@ -102,7 +102,7 @@ $srcMetadata = file_exists($srcMetaFile) ? json_decode(file_get_contents($srcMet
 $destMetadata = file_exists($destMetaFile) ? json_decode(file_get_contents($destMetaFile), true) : [];
 
 $errors = [];
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
 
 foreach ($data['files'] as $fileName) {
     // Save the original name for metadata lookup.

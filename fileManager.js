@@ -47,7 +47,6 @@ window.createViewToggleButton = createViewToggleButton;
 // -----------------------------
 // Helper: formatFolderName
 // -----------------------------
-
 function formatFolderName(folder) {
   if (folder === "root") return "(Root)";
   return folder
@@ -62,7 +61,6 @@ window.updateRowHighlight = updateRowHighlight;
 // ==============================================
 // FEATURE: Public File Sharing Modal
 // ==============================================
-
 function openShareModal(file, folder) {
   const existing = document.getElementById("shareModal");
   if (existing) existing.remove();
@@ -125,7 +123,6 @@ function openShareModal(file, folder) {
       .then(response => response.json())
       .then(data => {
         if (data.token) {
-          // Get the share endpoint from the meta tag (or fallback to a global variable)
           let shareEndpoint = document.querySelector('meta[name="share-url"]')
             ? document.querySelector('meta[name="share-url"]').getAttribute('content')
             : (window.SHARE_URL || "share.php");
@@ -143,7 +140,7 @@ function openShareModal(file, folder) {
         showToast("Error generating share link.");
       });
   });
-  
+
   document.getElementById("copyShareLinkBtn").addEventListener("click", () => {
     const input = document.getElementById("shareLinkInput");
     input.select();
@@ -154,10 +151,7 @@ function openShareModal(file, folder) {
 
 // ==============================================
 // FEATURE: Enhanced Preview Modal with Navigation
-// =============================================
-// This function replaces the previous preview behavior for images.
-// It uses your original modal layout and, if multiple images exist,
-// overlays transparent Prev/Next buttons over the image.
+// ==============================================
 function enhancedPreviewFile(fileUrl, fileName) {
   let modal = document.getElementById("filePreviewModal");
   if (!modal) {
@@ -206,7 +200,6 @@ function enhancedPreviewFile(fileUrl, fileName) {
     img.style.maxHeight = "80vh";
     container.appendChild(img);
 
-    // If multiple images exist, add arrow navigation.
     const images = fileData.filter(file => /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name));
     if (images.length > 1) {
       modal.galleryImages = images;
@@ -221,10 +214,10 @@ function enhancedPreviewFile(fileUrl, fileName) {
         modal.galleryCurrentIndex = (modal.galleryCurrentIndex - 1 + modal.galleryImages.length) % modal.galleryImages.length;
         let newFile = modal.galleryImages[modal.galleryCurrentIndex];
         modal.querySelector("h4").textContent = newFile.name;
-        img.src = ((window.currentFolder === "root") 
-                   ? "uploads/" 
-                   : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
-                   + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+        img.src = ((window.currentFolder === "root")
+          ? "uploads/"
+          : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
+          + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
       });
       const nextBtn = document.createElement("button");
       nextBtn.textContent = "›";
@@ -235,10 +228,10 @@ function enhancedPreviewFile(fileUrl, fileName) {
         modal.galleryCurrentIndex = (modal.galleryCurrentIndex + 1) % modal.galleryImages.length;
         let newFile = modal.galleryImages[modal.galleryCurrentIndex];
         modal.querySelector("h4").textContent = newFile.name;
-        img.src = ((window.currentFolder === "root") 
-                   ? "uploads/" 
-                   : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
-                   + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+        img.src = ((window.currentFolder === "root")
+          ? "uploads/"
+          : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
+          + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
       });
       container.appendChild(prevBtn);
       container.appendChild(nextBtn);
@@ -282,12 +275,9 @@ export function loadFileList(folderParam) {
 
   return fetch("getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
     .then(response => {
-      // Check if the session has expired.
       if (response.status === 401) {
         showToast("Session expired. Please log in again.");
-        // Redirect to logout.php to clear the session; this can trigger a login process.
         window.location.href = "logout.php";
-        // Throw error to stop further processing.
         throw new Error("Unauthorized");
       }
       return response.json();
@@ -318,7 +308,6 @@ export function loadFileList(folderParam) {
     })
     .catch(error => {
       console.error("Error loading file list:", error);
-      // Only update the container text if error is not due to an unauthorized response.
       if (error.message !== "Unauthorized") {
         fileListContainer.textContent = "Error loading files.";
       }
@@ -329,10 +318,94 @@ export function loadFileList(folderParam) {
     });
 }
 
+//
+// --- DRAG & DROP SUPPORT FOR FILE ROWS ---
+//
+function fileDragStartHandler(event) {
+  const row = event.currentTarget;
+  // Check if multiple file checkboxes are selected.
+  const selectedCheckboxes = document.querySelectorAll("#fileList .file-checkbox:checked");
+  let fileNames = [];
+  if (selectedCheckboxes.length > 1) {
+    // Gather file names from all selected rows.
+    selectedCheckboxes.forEach(chk => {
+      const parentRow = chk.closest("tr");
+      if (parentRow) {
+        const cell = parentRow.querySelector("td:nth-child(2)");
+        if (cell) fileNames.push(cell.textContent.trim());
+      }
+    });
+  } else {
+    // Only one file is selected (or none), so get file name from the current row.
+    const fileNameCell = row.querySelector("td:nth-child(2)");
+    if (fileNameCell) {
+      fileNames.push(fileNameCell.textContent.trim());
+    }
+  }
+  if (fileNames.length === 0) return;
+  const dragData = {
+    files: fileNames, // use an array of file names
+    sourceFolder: window.currentFolder || "root"
+  };
+  event.dataTransfer.setData("application/json", JSON.stringify(dragData));
+
+  // (Keep your custom drag image code here.)
+  let dragImage;
+  if (fileNames.length > 1) {
+    dragImage = document.createElement("div");
+    dragImage.style.display = "inline-flex";
+    dragImage.style.width = "auto";
+    dragImage.style.maxWidth = "fit-content";
+    dragImage.style.padding = "6px 10px";
+    dragImage.style.backgroundColor = "#333";
+    dragImage.style.color = "#fff";
+    dragImage.style.border = "1px solid #555";
+    dragImage.style.borderRadius = "4px";
+    dragImage.style.alignItems = "center";
+    dragImage.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.3)";
+    const icon = document.createElement("span");
+    icon.className = "material-icons";
+    icon.textContent = "insert_drive_file";
+    icon.style.marginRight = "4px";
+    const countSpan = document.createElement("span");
+    countSpan.textContent = fileNames.length + " files";
+    dragImage.appendChild(icon);
+    dragImage.appendChild(countSpan);
+  } else {
+    dragImage = document.createElement("div");
+    dragImage.style.display = "inline-flex";
+    dragImage.style.width = "auto";
+    dragImage.style.maxWidth = "fit-content";
+    dragImage.style.padding = "6px 10px";
+    dragImage.style.backgroundColor = "#333";
+    dragImage.style.color = "#fff";
+    dragImage.style.border = "1px solid #555";
+    dragImage.style.borderRadius = "4px";
+    dragImage.style.alignItems = "center";
+    dragImage.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.3)";
+    const icon = document.createElement("span");
+    icon.className = "material-icons";
+    icon.textContent = "insert_drive_file";
+    icon.style.marginRight = "4px";
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = fileNames[0];
+    dragImage.appendChild(icon);
+    dragImage.appendChild(nameSpan);
+  }
+  document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 5, 5);
+  setTimeout(() => {
+    document.body.removeChild(dragImage);
+  }, 0);
+}
+
+//
+// --- RENDER FILE TABLE (TABLE VIEW) ---
+//
 export function renderFileTable(folder) {
   const fileListContainer = document.getElementById("fileList");
   const searchTerm = window.currentSearchTerm || "";
-  const itemsPerPageSetting = parseInt(localStorage.getItem('itemsPerPage') || '10', 10);
+  const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "10", 10);
   let currentPage = window.currentPage || 1;
 
   const filteredFiles = fileData.filter(file =>
@@ -347,7 +420,7 @@ export function renderFileTable(folder) {
     window.currentPage = currentPage;
   }
 
-  const folderPath = (folder === "root")
+  const folderPath = folder === "root"
     ? "uploads/"
     : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
 
@@ -356,18 +429,14 @@ export function renderFileTable(folder) {
     totalPages,
     searchTerm
   });
-
   let headerHTML = buildFileTableHeader(sortOrder);
-  // Do not add a separate share column; share button goes into the actions cell.
-
   const startIndex = (currentPage - 1) * itemsPerPageSetting;
   const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
-
   let rowsHTML = "<tbody>";
   if (totalFiles > 0) {
     filteredFiles.slice(startIndex, endIndex).forEach(file => {
       let rowHTML = buildFileTableRow(file, folderPath);
-      // Insert share button into the actions container.
+      // Insert share button into the actions cell.
       rowHTML = rowHTML.replace(/(<\/div>\s*<\/td>\s*<\/tr>)/, `<button class="share-btn btn btn-sm btn-secondary" data-file="${escapeHTML(file.name)}" title="Share">
             <i class="material-icons">share</i>
           </button>$1`);
@@ -377,9 +446,7 @@ export function renderFileTable(folder) {
     rowsHTML += `<tr><td colspan="8">No files found.</td></tr>`;
   }
   rowsHTML += "</tbody></table>";
-
   const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
-
   fileListContainer.innerHTML = topControlsHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
   createViewToggleButton();
@@ -404,14 +471,13 @@ export function renderFileTable(folder) {
     });
   });
 
-  document.querySelectorAll('#fileList .file-checkbox').forEach(checkbox => {
-    checkbox.addEventListener('change', function (e) {
+  document.querySelectorAll("#fileList .file-checkbox").forEach(checkbox => {
+    checkbox.addEventListener("change", function (e) {
       updateRowHighlight(e.target);
       updateFileActionButtons();
     });
   });
 
-  // Bind share button events in table view.
   document.querySelectorAll(".share-btn").forEach(btn => {
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
@@ -424,17 +490,25 @@ export function renderFileTable(folder) {
   });
 
   updateFileActionButtons();
+
+  // Add drag-and-drop support for each table row.
+  document.querySelectorAll("#fileList tbody tr").forEach(row => {
+    row.setAttribute("draggable", "true");
+    row.addEventListener("dragstart", fileDragStartHandler);
+  });
 }
 
+//
+// --- RENDER GALLERY VIEW ---
+//
 export function renderGalleryView(folder) {
   const fileListContainer = document.getElementById("fileList");
-  const folderPath = (folder === "root")
+  const folderPath = folder === "root"
     ? "uploads/"
     : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-  // Use CSS Grid for gallery layout.
   const gridStyle = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 10px;";
   let galleryHTML = `<div class="gallery-container" style="${gridStyle}">`;
-  fileData.forEach((file, index) => {
+  fileData.forEach((file) => {
     let thumbnail;
     if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
       thumbnail = `<img src="${folderPath + encodeURIComponent(file.name)}?t=${new Date().getTime()}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: 150px; display: block; margin: 0 auto;">`;
@@ -442,35 +516,36 @@ export function renderGalleryView(folder) {
       thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
     }
     galleryHTML += `<div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
-    <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
-      ${thumbnail}
-    </div>
-    <div class="gallery-info" style="margin-top: 5px;">
-      <span class="gallery-file-name" style="display: block;">${escapeHTML(file.name)}</span>
-      <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
-        <a class="btn btn-sm btn-success download-btn" 
-           href="download.php?folder=${encodeURIComponent(file.folder || 'root')}&file=${encodeURIComponent(file.name)}" 
-           title="Download">
-          <i class="material-icons">file_download</i>
-        </a>
-        ${file.editable ? `
-          <button class="btn btn-sm btn-primary" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
-            <i class="material-icons">edit</i>
-          </button>
-        ` : ""}
-        <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Rename">
-           <i class="material-icons">drive_file_rename_outline</i>
-        </button>
-        <button class="btn btn-sm btn-secondary share-btn" onclick='openShareModal(${JSON.stringify(file)}, ${JSON.stringify(folder)})' title="Share">
-           <i class="material-icons">share</i>
-        </button>
+      <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
+        ${thumbnail}
       </div>
-    </div>
-  </div>`;
+      <div class="gallery-info" style="margin-top: 5px;">
+        <span class="gallery-file-name" style="display: block;">${escapeHTML(file.name)}</span>
+        <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
+          <a class="btn btn-sm btn-success download-btn" 
+             href="download.php?folder=${encodeURIComponent(file.folder || 'root')}&file=${encodeURIComponent(file.name)}" 
+             title="Download">
+            <i class="material-icons">file_download</i>
+          </a>
+          ${file.editable ? `
+            <button class="btn btn-sm btn-primary" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
+              <i class="material-icons">edit</i>
+            </button>
+          ` : ""}
+          <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Rename">
+             <i class="material-icons">drive_file_rename_outline</i>
+          </button>
+          <button class="btn btn-sm btn-secondary share-btn" onclick='openShareModal(${JSON.stringify(file)}, ${JSON.stringify(folder)})' title="Share">
+             <i class="material-icons">share</i>
+          </button>
+        </div>
+      </div>
+    </div>`;
   });
   galleryHTML += "</div>";
   fileListContainer.innerHTML = galleryHTML;
 
+  // Re-bind share button events if necessary.
   document.querySelectorAll(".gallery-share-btn").forEach(btn => {
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
@@ -482,11 +557,14 @@ export function renderGalleryView(folder) {
       }
     });
   });
-  
+
   createViewToggleButton();
   updateFileActionButtons();
 }
 
+//
+// --- SORT FILES & PARSE DATE ---
+//
 export function sortFiles(column, folder) {
   if (sortOrder.column === column) {
     sortOrder.ascending = !sortOrder.ascending;
@@ -562,6 +640,9 @@ export function canEditFile(fileName) {
   return allowedExtensions.includes(ext);
 }
 
+//
+// --- FILE ACTIONS: DELETE, DOWNLOAD, COPY, MOVE ---
+//
 export function handleDeleteSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -701,30 +782,42 @@ export function handleCopySelected(e) {
 
 export async function loadCopyMoveFolderListForModal(dropdownId) {
   try {
-    const response = await fetch('getFolderList.php');
+    const response = await fetch("getFolderList.php");
     let folders = await response.json();
     if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
       folders = folders.map(item => item.folder);
     }
     folders = folders.filter(folder => folder !== "root");
-    
     const folderSelect = document.getElementById(dropdownId);
-    folderSelect.innerHTML = '';
-    const rootOption = document.createElement('option');
-    rootOption.value = 'root';
-    rootOption.textContent = '(Root)';
+    folderSelect.innerHTML = "";
+    const rootOption = document.createElement("option");
+    rootOption.value = "root";
+    rootOption.textContent = "(Root)";
     folderSelect.appendChild(rootOption);
     if (Array.isArray(folders) && folders.length > 0) {
       folders.forEach(folder => {
-        const option = document.createElement('option');
+        const option = document.createElement("option");
         option.value = folder;
         option.textContent = formatFolderName(folder);
         folderSelect.appendChild(option);
       });
     }
   } catch (error) {
-    console.error('Error loading folder list for modal:', error);
+    console.error("Error loading folder list for modal:", error);
   }
+}
+
+export function handleMoveSelected(e) {
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  if (checkboxes.length === 0) {
+    showToast("No files selected for moving.");
+    return;
+  }
+  window.filesToMove = Array.from(checkboxes).map(chk => chk.value);
+  document.getElementById("moveFilesModal").style.display = "block";
+  loadCopyMoveFolderListForModal("moveTargetFolder");
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -754,10 +847,10 @@ document.addEventListener("DOMContentLoaded", function () {
           "Content-Type": "application/json",
           "X-CSRF-Token": window.csrfToken
         },
-        body: JSON.stringify({ 
-          source: window.currentFolder, 
-          files: window.filesToCopy, 
-          destination: targetFolder 
+        body: JSON.stringify({
+          source: window.currentFolder,
+          files: window.filesToCopy,
+          destination: targetFolder
         })
       })
         .then(response => response.json())
@@ -777,19 +870,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 });
-
-export function handleMoveSelected(e) {
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
-  if (checkboxes.length === 0) {
-    showToast("No files selected for moving.");
-    return;
-  }
-  window.filesToMove = Array.from(checkboxes).map(chk => chk.value);
-  document.getElementById("moveFilesModal").style.display = "block";
-  loadCopyMoveFolderListForModal("moveTargetFolder");
-}
 
 document.addEventListener("DOMContentLoaded", function () {
   const cancelMove = document.getElementById("cancelMoveFiles");
@@ -818,10 +898,10 @@ document.addEventListener("DOMContentLoaded", function () {
           "Content-Type": "application/json",
           "X-CSRF-Token": window.csrfToken
         },
-        body: JSON.stringify({ 
-          source: window.currentFolder, 
-          files: window.filesToMove, 
-          destination: targetFolder 
+        body: JSON.stringify({
+          source: window.currentFolder,
+          files: window.filesToMove,
+          destination: targetFolder
         })
       })
         .then(response => response.json())
@@ -842,20 +922,74 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-// Helper for CodeMirror editor mode based on file extension.
+//
+// --- FOLDER TREE DRAG & DROP SUPPORT ---
+// When a draggable file is dragged over a folder node, allow the drop and highlight it.
+function folderDragOverHandler(event) {
+  event.preventDefault();
+  event.currentTarget.classList.add("drop-hover");
+}
+
+function folderDragLeaveHandler(event) {
+  event.currentTarget.classList.remove("drop-hover");
+}
+
+function folderDropHandler(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove("drop-hover");
+  const dropFolder = event.currentTarget.getAttribute("data-folder");
+  let dragData;
+  try {
+    dragData = JSON.parse(event.dataTransfer.getData("application/json"));
+  } catch (e) {
+    console.error("Invalid drag data");
+    return;
+  }
+  if (!dragData || !dragData.fileName) return;
+  fetch("moveFiles.php", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+    },
+    body: JSON.stringify({
+      source: dragData.sourceFolder,
+      files: [dragData.fileName],
+      destination: dropFolder
+    })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast(`File "${dragData.fileName}" moved successfully to ${dropFolder}!`);
+        loadFileList(dragData.sourceFolder);
+      } else {
+        showToast("Error moving file: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(error => {
+      console.error("Error moving file via drop:", error);
+      showToast("Error moving file.");
+    });
+}
+
+//
+// --- CODEMIRROR EDITOR & UTILITY FUNCTIONS ---
+//
 function getModeForFile(fileName) {
   const ext = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase();
   switch (ext) {
-    case 'css':
+    case "css":
       return "css";
-    case 'json':
+    case "json":
       return { name: "javascript", json: true };
-    case 'js':
+    case "js":
       return "javascript";
-    case 'html':
-    case 'htm':
+    case "html":
+    case "htm":
       return "text/html";
-    case 'xml':
+    case "xml":
       return "xml";
     default:
       return "text/plain";
@@ -866,7 +1000,7 @@ function adjustEditorSize() {
   const modal = document.querySelector(".editor-modal");
   if (modal && window.currentEditor) {
     const modalHeight = modal.getBoundingClientRect().height || 600;
-    const newEditorHeight = Math.max(modalHeight * 0.80, 5) + "px";
+    const newEditorHeight = Math.max(modalHeight * 0.8, 5) + "px";
     window.currentEditor.setSize("100%", newEditorHeight);
   }
 }
@@ -885,7 +1019,7 @@ export function editFile(fileName, folder) {
     existingEditor.remove();
   }
   const folderUsed = folder || window.currentFolder || "root";
-  const folderPath = (folderUsed === "root")
+  const folderPath = folderUsed === "root"
     ? "uploads/"
     : "uploads/" + folderUsed.split("/").map(encodeURIComponent).join("/") + "/";
   const fileUrl = folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime();
@@ -1107,15 +1241,24 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 window.renameFile = renameFile;
-
 window.changePage = function (newPage) {
   window.currentPage = newPage;
   renderFileTable(window.currentFolder);
 };
-
 window.changeItemsPerPage = function (newCount) {
   window.itemsPerPage = parseInt(newCount);
   window.currentPage = 1;
   renderFileTable(window.currentFolder);
 };
 window.previewFile = previewFile;
+
+//
+// --- Expose Drag-Drop Support for Folder Tree Nodes ---
+// (Attach dragover, dragleave, and drop events to folder tree nodes)
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".folder-option").forEach(el => {
+    el.addEventListener("dragover", folderDragOverHandler);
+    el.addEventListener("dragleave", folderDragLeaveHandler);
+    el.addEventListener("drop", folderDropHandler);
+  });
+});

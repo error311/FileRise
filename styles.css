@@ -1631,3 +1631,8 @@ body.dark-mode .CodeMirror-matchingbracket {
   right: 10px;
   left: auto;
 }
+
+.drop-hover {
+  background-color: #e0e0e0;
+  border: 1px dashed #666;
+}

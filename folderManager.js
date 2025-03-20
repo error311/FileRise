@@ -115,6 +115,64 @@ function expandTreePath(path) {
 }
 
 // ----------------------
+// Drag & Drop Support for Folder Tree Nodes
+// ----------------------
+
+// When a draggable file is dragged over a folder node, allow the drop and add a visual cue.
+function folderDragOverHandler(event) {
+  event.preventDefault();
+  event.currentTarget.classList.add("drop-hover");
+}
+
+// Remove the visual cue when the drag leaves.
+function folderDragLeaveHandler(event) {
+  event.currentTarget.classList.remove("drop-hover");
+}
+
+// When a file is dropped onto a folder node, send a move request.
+function folderDropHandler(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove("drop-hover");
+  const dropFolder = event.currentTarget.getAttribute("data-folder");
+  let dragData;
+  try {
+    dragData = JSON.parse(event.dataTransfer.getData("application/json"));
+  } catch (e) {
+    console.error("Invalid drag data");
+    return;
+  }
+  // Use the files array if present, or fall back to a single file.
+  const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
+  if (filesToMove.length === 0) return;
+  fetch("moveFiles.php", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+    },
+    body: JSON.stringify({
+      source: dragData.sourceFolder,
+      files: filesToMove,
+      destination: dropFolder
+    })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast(`File(s) moved successfully to ${dropFolder}!`);
+        loadFileList(dragData.sourceFolder);
+      } else {
+        showToast("Error moving files: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(error => {
+      console.error("Error moving files via drop:", error);
+      showToast("Error moving files.");
+    });
+}
+
+// ----------------------
 // Main Folder Tree Rendering and Event Binding
 // ----------------------
 export async function loadFolderTree(selectedFolder) {
@@ -123,7 +181,6 @@ export async function loadFolderTree(selectedFolder) {
     if (response.status === 401) {
       console.error("Unauthorized: Please log in to view folders.");
       showToast("Session expired. Please log in again.");
-      // Redirect to logout.php to clear the session; this can trigger a login process.
       window.location.href = "logout.php";
       return;
     }
@@ -162,6 +219,13 @@ export async function loadFolderTree(selectedFolder) {
       html += renderFolderTree(tree, "", "block");
     }
     container.innerHTML = html;
+
+    // Attach drag-and-drop event listeners to folder nodes.
+    container.querySelectorAll(".folder-option").forEach(el => {
+      el.addEventListener("dragover", folderDragOverHandler);
+      el.addEventListener("dragleave", folderDragLeaveHandler);
+      el.addEventListener("drop", folderDropHandler);
+    });
 
     // Determine current folder.
     if (selectedFolder) {
@@ -282,8 +346,7 @@ document.getElementById("cancelRenameFolder").addEventListener("click", function
 });
 
 document.getElementById("submitRenameFolder").addEventListener("click", function (event) {
-  event.preventDefault(); // Prevent default form submission
-
+  event.preventDefault();
   const selectedFolder = window.currentFolder || "root";
   const newNameBasename = document.getElementById("newRenameFolderName").value.trim();
   if (!newNameBasename || newNameBasename === selectedFolder.split("/").pop()) {
@@ -292,18 +355,14 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
   }
   const parentPath = getParentFolder(selectedFolder);
   const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
-
-  // Read the CSRF token from the meta tag
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
   if (!csrfToken) {
     showToast("CSRF token not loaded yet! Please try again.");
     return;
   }
-
-  // Send the rename request with the CSRF token in a custom header
   fetch("renameFolder.php", {
     method: "POST",
-    credentials: "include", // ensure cookies (and session) are sent
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       "X-CSRF-Token": csrfToken
@@ -345,9 +404,7 @@ document.getElementById("cancelDeleteFolder").addEventListener("click", function
 
 document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
-  // Read CSRF token from the meta tag
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
   fetch("deleteFolder.php", {
     method: "POST",
     headers: {
@@ -393,9 +450,7 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
   if (selectedFolder && selectedFolder !== "root") {
     fullFolderName = selectedFolder + "/" + folderInput;
   }
-  // Read CSRF token from the meta tag
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
   fetch("createFolder.php", {
     method: "POST",
     headers: {
