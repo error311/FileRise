@@ -13,6 +13,12 @@ body {
 body {
   letter-spacing: 0.2px;
 }
+.custom-dash {
+  display: inline-block;
+  transform: scaleX(1.5);
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
 
 /* CONTAINER */
 .container {
@@ -149,7 +155,7 @@ body.dark-mode header {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 7px;
+  padding: 9px;
   border-radius: 50%;
   color: #fff;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;

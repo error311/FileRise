@@ -78,7 +78,7 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
     const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;
     html += `<li class="folder-item">`;
     if (hasChildren) {
-      const toggleSymbol = (displayState === "none") ? "[+]" : "[-]";
+      const toggleSymbol = (displayState === 'none') ? '[+]' : '[' + '<span class="custom-dash">-</span>' + ']';
       html += `<span class="folder-toggle" data-folder="${fullPath}">${toggleSymbol}</span>`;
     } else {
       html += `<span class="folder-indent-placeholder"></span>`;
@@ -109,7 +109,7 @@ function expandTreePath(path) {
         nestedUl.classList.add("expanded");
         const toggle = li.querySelector(".folder-toggle");
         if (toggle) {
-          toggle.textContent = "[-]";
+          toggle.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
           let state = loadFolderTreeState();
           state[cumulative] = "block";
           saveFolderTreeState(state);
@@ -210,7 +210,7 @@ export async function loadFolderTree(selectedFolder) {
     }
 
     let html = `<div id="rootRow" class="root-row">
-                  <span class="folder-toggle" data-folder="root">[-]</span>
+                  <span class="folder-toggle" data-folder="root">[<span class="custom-dash">-</span>]</span>
                   <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
                 </div>`;
     if (folders.length === 0) {
@@ -281,7 +281,7 @@ export async function loadFolderTree(selectedFolder) {
           if (nestedUl.classList.contains("collapsed") || !nestedUl.classList.contains("expanded")) {
             nestedUl.classList.remove("collapsed");
             nestedUl.classList.add("expanded");
-            this.textContent = "[-]";
+            this.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
             state["root"] = "block";
           } else {
             nestedUl.classList.remove("expanded");
@@ -304,7 +304,7 @@ export async function loadFolderTree(selectedFolder) {
           if (siblingUl.classList.contains("collapsed") || !siblingUl.classList.contains("expanded")) {
             siblingUl.classList.remove("collapsed");
             siblingUl.classList.add("expanded");
-            this.textContent = "[-]";
+            this.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
             state[folderPath] = "block";
           } else {
             siblingUl.classList.remove("expanded");
