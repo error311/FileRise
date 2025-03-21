@@ -23,7 +23,7 @@ if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
 // Optionally, you could check if the file exists in the uploads directory here.
 
 // Generate a secure token.
-$token = bin2hex(random_bytes(4)); // 8 hex characters.
+$token = bin2hex(random_bytes(16)); // 32 hex characters.
 
 // Calculate expiration (Unix timestamp).
 $expires = time() + ($expirationMinutes * 60);
