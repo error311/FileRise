@@ -19,8 +19,22 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
+// --- Setup Trash Folder & Metadata ---
+$trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
+if (!file_exists($trashDir)) {
+    mkdir($trashDir, 0755, true);
+}
+$trashMetadataFile = $trashDir . "trash.json";
+$trashData = [];
+if (file_exists($trashMetadataFile)) {
+    $json = file_get_contents($trashMetadataFile);
+    $trashData = json_decode($json, true);
+    if (!is_array($trashData)) {
+        $trashData = [];
+    }
+}
+
 // Helper: Generate the metadata file path for a given folder.
-// For "root", returns "root_metadata.json". Otherwise, replaces slashes, backslashes, and spaces with dashes and appends "_metadata.json".
 function getMetadataFilePath($folder) {
     if (strtolower($folder) === 'root' || $folder === '') {
         return META_DIR . "root_metadata.json";
@@ -45,7 +59,6 @@ if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }
-// Trim any leading/trailing slashes and spaces.
 $folder = trim($folder, "/\\ ");
 
 // Build the upload directory.
@@ -55,7 +68,17 @@ if ($folder !== 'root') {
     $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
 }
 
-$deletedFiles = [];
+// Load folder metadata (if exists) to retrieve uploader and upload date.
+$metadataFile = getMetadataFilePath($folder);
+$folderMetadata = [];
+if (file_exists($metadataFile)) {
+    $folderMetadata = json_decode(file_get_contents($metadataFile), true);
+    if (!is_array($folderMetadata)) {
+        $folderMetadata = [];
+    }
+}
+
+$movedFiles = [];
 $errors = [];
 
 // Define a safe file name pattern: allow letters, numbers, underscores, dashes, dots, and spaces.
@@ -73,23 +96,41 @@ foreach ($data['files'] as $fileName) {
     $filePath = $uploadDir . $basename;
     
     if (file_exists($filePath)) {
-        if (unlink($filePath)) {
-            $deletedFiles[] = $basename;
+        // Append a timestamp to the file name in trash to avoid collisions.
+        $timestamp = time();
+        $trashFileName = $basename . "_" . $timestamp;
+        if (rename($filePath, $trashDir . $trashFileName)) {
+            $movedFiles[] = $basename;
+            // Record trash metadata for possible restoration.
+            $trashData[] = [
+                'type'           => 'file',
+                'originalFolder' => $uploadDir,  // You could also store a relative path here.
+                'originalName'   => $basename,
+                'trashName'      => $trashFileName,
+                'trashedAt'      => $timestamp,
+                // Enrich trash record with uploader and upload date from folder metadata (if available)
+                'uploaded'       => isset($folderMetadata[$basename]['uploaded']) ? $folderMetadata[$basename]['uploaded'] : "Unknown",
+                'uploader'       => isset($folderMetadata[$basename]['uploader']) ? $folderMetadata[$basename]['uploader'] : "Unknown",
+                // NEW: Record the username of the user who deleted the file.
+                'deletedBy'      => isset($_SESSION['username']) ? $_SESSION['username'] : "Unknown"
+            ];
         } else {
-            $errors[] = "Failed to delete $basename";
+            $errors[] = "Failed to move $basename to Trash.";
         }
     } else {
         // Consider file already deleted.
-        $deletedFiles[] = $basename;
+        $movedFiles[] = $basename;
     }
 }
 
+// Write back the updated trash metadata.
+file_put_contents($trashMetadataFile, json_encode($trashData, JSON_PRETTY_PRINT));
+
 // Update folder-specific metadata file by removing deleted files.
-$metadataFile = getMetadataFilePath($folder);
 if (file_exists($metadataFile)) {
     $metadata = json_decode(file_get_contents($metadataFile), true);
     if (is_array($metadata)) {
-        foreach ($deletedFiles as $delFile) {
+        foreach ($movedFiles as $delFile) {
             if (isset($metadata[$delFile])) {
                 unset($metadata[$delFile]);
             }
@@ -99,8 +140,8 @@ if (file_exists($metadataFile)) {
 }
 
 if (empty($errors)) {
-    echo json_encode(["success" => "Files deleted: " . implode(", ", $deletedFiles)]);
+    echo json_encode(["success" => "Files moved to Trash: " . implode(", ", $movedFiles)]);
 } else {
-    echo json_encode(["error" => implode("; ", $errors) . ". Files deleted: " . implode(", ", $deletedFiles)]);
+    echo json_encode(["error" => implode("; ", $errors) . ". Files moved to Trash: " . implode(", ", $movedFiles)]);
 }
 ?>

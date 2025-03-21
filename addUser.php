@@ -3,13 +3,6 @@ require 'config.php';
 header('Content-Type: application/json');
 
 $usersFile = USERS_DIR . USERS_FILE;
-$headers = array_change_key_case(getallheaders(), CASE_LOWER);
-$receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
-if ($receivedToken !== $_SESSION['csrf_token']) {
-    echo json_encode(["error" => "Invalid CSRF token"]);
-    http_response_code(403);
-    exit;
-}
 
 // Determine if we are in setup mode:
 // - Query parameter setup=1 is passed
@@ -20,7 +13,14 @@ if ($isSetup && (!file_exists($usersFile) || trim(file_get_contents($usersFile))
     $setupMode = true;
 } else {
     $setupMode = false;
-    // Only allow admins to add users normally.
+    // In non-setup mode, check CSRF token and require admin privileges.
+    $headers = array_change_key_case(getallheaders(), CASE_LOWER);
+    $receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+    if ($receivedToken !== $_SESSION['csrf_token']) {
+        echo json_encode(["error" => "Invalid CSRF token"]);
+        http_response_code(403);
+        exit;
+    }
     if (
         !isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
         !isset($_SESSION['isAdmin']) || $_SESSION['isAdmin'] !== true

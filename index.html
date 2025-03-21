@@ -9,8 +9,6 @@
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
   <meta name="csrf-token" content="">
   <meta name="share-url" content="">
-  <!-- External CSS -->
-  <link rel="stylesheet" href="styles.css" />
   <!-- Google Fonts and Material Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -22,7 +20,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/xml/xml.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/css/css.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/javascript/javascript.min.js"></script>
-
+  <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
@@ -93,6 +91,28 @@
         <button id="logoutBtn" title="Logout">
           <i class="material-icons">exit_to_app</i>
         </button>
+        <!-- Restore Files Modal (Admin Only) -->
+        <div id="restoreFilesModal" class="modal centered-modal" style="display: none;">
+          <div class="modal-content">
+            <h4 class="custom-restore-header">
+              <i class="material-icons orange-icon">restore_from_trash</i>
+              <span>Restore or</span>
+              <i class="material-icons red-icon">delete_for_ever</i>
+              <span>Delete Trash Items</span>
+            </h4>
+            <div id="restoreFilesList"
+              style="max-height:300px; overflow-y:auto; border:1px solid #ccc; padding:10px; margin-bottom:10px;">
+              <!-- Trash items will be loaded here -->
+            </div>
+            <div style="text-align: right;">
+              <button id="restoreSelectedBtn" class="btn btn-primary">Restore Selected</button>
+              <button id="restoreAllBtn" class="btn btn-secondary">Restore All</button>
+              <button id="deleteTrashSelectedBtn" class="btn btn-warning">Delete Selected</button>
+              <button id="deleteAllBtn" class="btn btn-danger">Delete All</button>
+              <button id="closeRestoreModal" class="btn btn-dark">Close</button>
+            </div>
+          </div>
+        </div>
         <button id="addUserBtn" title="Add User">
           <i class="material-icons">person_add</i>
         </button>
@@ -119,7 +139,7 @@
             <label for="loginPassword">Password:</label>
             <input type="password" class="form-control" id="loginPassword" name="password" required />
           </div>
-          <button type="submit" class="btn btn-primary btn-block">Login</button>
+          <button type="submit" class="btn btn-primary btn-block btn-login">Login</button>
         </form>
       </div>
     </div>
@@ -151,14 +171,15 @@
               </div>
             </div>
           </div>
-          
+
           <!-- Folder Management Card -->
           <div class="col-md-6 col-lg-5 d-flex">
             <div class="card flex-fill" style="max-width: 900px; width: 100%; position: relative;">
               <!-- Card header with folder management title and help icon -->
               <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>Folder Navigation &amp; Management</span>
-                <button id="folderHelpBtn" class="btn btn-link" title="Folder Help" style="padding: 0; border: none; background: none;">
+                <button id="folderHelpBtn" class="btn btn-link" title="Folder Help"
+                  style="padding: 0; border: none; background: none;">
                   <i class="material-icons folder-help-icon" style="font-size: 24px;">info</i>
                 </button>
               </div>
@@ -302,8 +323,10 @@
         <input type="checkbox" id="isAdmin" />
         <label for="isAdmin">Grant Admin Access</label>
       </div>
-      <button id="saveUserBtn" class="btn btn-primary">Save User</button>
-      <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
+      <div class="button-container">
+        <button id="cancelUserBtn" class="btn btn-secondary">Cancel</button>
+        <button id="saveUserBtn" class="btn btn-primary">Save User</button>
+      </div>
     </div>
   </div>
 
@@ -313,8 +336,10 @@
       <h3>Remove User</h3>
       <label for="removeUsernameSelect">Select a user to remove:</label>
       <select id="removeUsernameSelect" class="form-control"></select>
-      <button id="deleteUserBtn" class="btn btn-danger">Delete User</button>
-      <button id="cancelRemoveUserBtn" class="btn btn-secondary">Cancel</button>
+      <div class="button-container">
+        <button id="cancelRemoveUserBtn" class="btn btn-secondary">Cancel</button>
+        <button id="deleteUserBtn" class="btn btn-danger">Delete User</button>
+      </div>
     </div>
   </div>
 
@@ -327,6 +352,17 @@
       <div style="margin-top:15px; text-align:right;">
         <button id="cancelRenameFile" class="btn btn-secondary">Cancel</button>
         <button id="submitRenameFile" class="btn btn-primary">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Confirm Modal -->
+  <div id="customConfirmModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <p id="confirmMessage"></p>
+      <div class="modal-actions">
+        <button id="confirmYesBtn" class="btn btn-primary">Yes</button>
+        <button id="confirmNoBtn" class="btn btn-secondary">No</button>
       </div>
     </div>
   </div>

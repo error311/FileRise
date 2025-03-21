@@ -16,6 +16,7 @@ import {
 import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
+import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
 
 function loadCsrfToken() {
   fetch('token.php', { credentials: 'include' })
@@ -123,6 +124,7 @@ document.addEventListener("DOMContentLoaded", function () {
       initFileActions();
       initUpload();
       loadFolderTree();
+      setupTrashRestoreDelete();
       const helpBtn = document.getElementById("folderHelpBtn");
       const helpTooltip = document.getElementById("folderHelpTooltip");
       helpBtn.addEventListener("click", function () {
@@ -131,11 +133,6 @@ document.addEventListener("DOMContentLoaded", function () {
           helpTooltip.style.display = "block";
         } else {
           helpTooltip.style.display = "none";
-        }
-        // Set the icon color based on dark mode.
-        const helpIcon = document.querySelector("#folderHelpBtn > i.material-icons.folder-help-icon");
-        if (helpIcon) {
-          helpIcon.style.color = document.body.classList.contains("dark-mode") ? "#ffa500" : "orange";
         }
       });
     } else {

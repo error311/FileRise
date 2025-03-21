@@ -10,6 +10,10 @@ body {
   transition: background-color 0.3s, color 0.3s;
 }
 
+body {
+  letter-spacing: 0.2px;
+}
+
 /* CONTAINER */
 .container {
   margin-top: 20px;
@@ -43,6 +47,25 @@ body {
 /************************************************************/
 /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
 /************************************************************/
+
+.btn-login {
+  margin-top: 10px;
+}
+
+/* Color overrides */
+.orange-icon {
+  color: #2196F3 !important;
+  font-size: 34px !important;
+  transform: translateY(-3px) !important;
+}
+
+.red-icon {
+  width: 34px !important;
+  display: inline-block !important;
+  font-size: 34px !important;
+  color: red !important;
+  transform: translateY(-3px) !important;
+}
 
 .header-container {
   display: flex;
@@ -190,7 +213,7 @@ body.dark-mode header {
   border: 1px solid #ccc;
   border-radius: 4px;
   padding: 10px;
-  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 /* Folder Help Tooltip - Dark Mode */
@@ -199,19 +222,21 @@ body.dark-mode .folder-help-tooltip {
   color: #eee !important;
   border: 1px solid #555 !important;
 }
+
 #folderHelpBtn i.material-icons.folder-help-icon {
   -webkit-text-fill-color: orange !important;
   color: inherit !important;
 }
 
 body.dark-mode #folderHelpBtn i.material-icons.folder-help-icon {
-  -webkit-text-fill-color: #ffa500 !important; /* or another color for dark mode */
+  -webkit-text-fill-color: #ffa500 !important;
 }
+
 /************************************************************/
 /* RESPONSIVE HEADER FIXES                                 */
 /************************************************************/
 
-@media (max-width: 900px) {
+@media (max-width: 970px) {
   .header-container {
     flex-wrap: wrap;
     height: auto;
@@ -353,6 +378,103 @@ body.dark-mode .card {
   border: 1px solid #444;
 }
 
+#restoreFilesModal .modal-content {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  margin: 0 !important;
+  z-index: 10000 !important;
+  width: 95% !important;
+  max-width: 800px !important;
+  background: transparent !important;
+}
+
+/* Ensure the inner modal content still has a white background */
+#restoreFilesModal .modal-content {
+  background: #fff !important;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Override modal content for dark mode */
+body.dark-mode #restoreFilesModal .modal-content {
+  background: #2c2c2c !important;
+  border: 1px solid #555 !important;
+  color: #f0f0f0;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Custom styling for restore modal buttons */
+#restoreSelectedBtn,
+#restoreAllBtn,
+#deleteTrashSelectedBtn,
+#deleteAllBtn,
+#closeRestoreModal {
+  padding: 10px 20px !important;
+  font-size: 16px !important;
+  border-radius: 4px !important;
+  transition: background-color 0.3s ease !important;
+  border: none !important;
+  margin-bottom: 10px !important;
+}
+
+/* Primary button - Restore Selected */
+#restoreSelectedBtn {
+  background-color: #007bff !important;
+  color: #ffffff !important;
+}
+
+#restoreSelectedBtn:hover {
+  background-color: #0056b3 !important;
+  color: #ffffff !important;
+}
+
+/* Secondary button - Restore All */
+#restoreAllBtn {
+  background-color: #6c757d !important;
+  color: #ffffff !important;
+}
+
+#restoreAllBtn:hover {
+  background-color: #5a6268 !important;
+  color: #ffffff !important;
+}
+
+/* Warning button - Delete Selected */
+#deleteTrashSelectedBtn {
+  background-color: #ffc107 !important;
+  color: #212529 !important;
+}
+
+#deleteTrashSelectedBtn:hover {
+  background-color: #e0a800 !important;
+  color: #212529 !important;
+}
+
+/* Danger button - Delete All */
+#deleteAllBtn {
+  background-color: #dc3545 !important;
+  color: #ffffff !important;
+}
+
+#deleteAllBtn:hover {
+  background-color: #c82333 !important;
+  color: #ffffff !important;
+}
+
+/* Dark button - Close Restore Modal */
+#closeRestoreModal {
+  background-color: #343a40 !important;
+  color: #ffffff !important;
+}
+
+#closeRestoreModal:hover {
+  background-color: #23272b !important;
+  color: #ffffff !important;
+}
+
 .modal {
   display: none;
   position: fixed;
@@ -446,26 +568,31 @@ body.dark-mode .editor-close-btn:hover {
   color: #000;
 }
 
+/* Editor Modal */
 .editor-modal {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(5%, 5%);
+  top: 5%;
+  left: 5%;
+  width: 90vw;
+  height: 90vh;
   background-color: #fff;
   padding: 20px;
   border: 1px solid #ccc;
-  border-radius: 4px;
-  width: 50vw;
-  max-width: 90vw;
-  min-width: 400px;
-  height: 600px;
-  resize: both;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  z-index: 1100;
-  display: flex;
-  flex-direction: column;
-  max-height: 90vh;
-  overflow: hidden;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+  z-index: 1100 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  resize: both !important;
+}
+
+/* Editor Textarea */
+.editor-textarea {
+  flex-grow: 1 !important;
+  width: 100% !important;
+  resize: none !important;
+  overflow: auto !important;
 }
 
 body.dark-mode .editor-modal {
@@ -507,15 +634,6 @@ body.dark-mode .editor-modal {
   margin-bottom: 5px;
 }
 
-.editor-textarea {
-  flex-grow: 1;
-  min-height: 5px !important;
-  height: auto !important;
-  max-height: 100vh !important;
-  resize: none;
-  overflow: auto;
-}
-
 .editor-footer {
   margin-top: 5px;
   text-align: right;
@@ -524,6 +642,13 @@ body.dark-mode .editor-modal {
 /* ===========================================================
    LOGOUT & USER CONTROLS
    =========================================================== */
+.modal-content .button-container {
+  display: flex !important;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: 20px;
+}
+
 .logout-container {
   position: absolute;
   top: 10px;
@@ -535,7 +660,8 @@ body.dark-mode .editor-modal {
 }
 
 #uploadBtn {
-  font-size: 16px;
+  margin-top: 20px;
+  font-size: 20px;
   padding: 10px 22px;
   align-items: center;
 }
@@ -698,12 +824,8 @@ body.dark-mode .editor-modal {
 }
 
 #fileList button.edit-btn {
-  background-color: #4CAF50;
+  background-color: #007bff;
   color: white;
-}
-
-#fileList button.edit-btn:hover {
-  background-color: #43A047;
 }
 
 .rename-btn .material-icons {
@@ -764,10 +886,8 @@ body.dark-mode #fileList table tr {
 #fileList table td {
   border: none !important;
   white-space: nowrap;
-  /* Prevents wrapping for all other columns */
 }
 
-/* Ensure only File Name column wraps */
 #fileList table th[data-column="name"],
 #fileList table td:nth-child(2) {
   white-space: normal !important;
@@ -777,7 +897,7 @@ body.dark-mode #fileList table tr {
   text-align: left !important;
   line-height: 1.2 !important;
   padding: 8px 10px !important;
-  max-width: 200px !important;
+  max-width: 250px !important;
   min-width: 120px !important;
 }
 
@@ -795,7 +915,7 @@ body.dark-mode #fileList table tr {
   #fileList table th[data-column="name"],
   #fileList table td:nth-child(2) {
     max-width: 280px !important;
-    min-width: 180px !important;
+    min-width: 120px !important;
   }
 }
 
@@ -803,8 +923,8 @@ body.dark-mode #fileList table tr {
 
   #fileList table th[data-column="name"],
   #fileList table td:nth-child(2) {
-    max-width: 380px !important;
-    min-width: 180px !important;
+    max-width: 510px !important;
+    min-width: 240px !important;
   }
 }
 
@@ -880,6 +1000,8 @@ label {
 
 #createFolderBtn {
   margin-top: 0px !important;
+  height: 40px !important;
+  font-size: 1rem;
 }
 
 .folder-actions {
@@ -1129,7 +1251,7 @@ body.dark-mode #fileListContainer {
   cursor: pointer;
   margin-right: 5px;
   display: inline-block;
-  width: 25px; 
+  width: 25px;
   text-align: right;
 }
 
@@ -1192,16 +1314,15 @@ body.dark-mode .image-preview-modal-content {
   border-color: #444;
 }
 
-.preview-btn {
+.preview-btn,
+.download-btn,
+.rename-btn,
+.share-btn,
+.edit-btn {
   display: flex;
   align-items: center;
+  padding: 8px 12px;
   justify-content: center;
-}
-
-.preview-btn i.material-icons {
-  vertical-align: middle;
-  margin: 0;
-  margin-top: -2px;
 }
 
 .share-btn {
@@ -1252,7 +1373,8 @@ body.dark-mode .image-preview-modal-content {
 
 .share-modal-content {
   width: 600px !important;
-  max-width: 90vw !important; /* ensures it doesn't exceed the viewport width */
+  max-width: 90vw !important;
+  /* ensures it doesn't exceed the viewport width */
 }
 
 body.dark-mode .close-image-modal {
@@ -1450,8 +1572,16 @@ body.dark-mode .btn-secondary {
   border-radius: 4px;
   font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); /* More subtle drop shadow */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+@media (max-width: 600px) {
+  #toggleViewBtn {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: block !important;
+  }
 }
 
 #toggleViewBtn:hover {
@@ -1504,7 +1634,6 @@ body.dark-mode #uploadProgressContainer .progress-bar {
 
 .dark-mode-toggle:hover {
   background-color: rgba(255, 255, 255, 0.15) !important;
-  /* Slight highlight */
 }
 
 .dark-mode-toggle:active {
@@ -1547,7 +1676,7 @@ body.dark-mode .dark-mode-toggle:hover {
 .folder-help-icon {
   vertical-align: middle;
   color: #d96601;
-  font-size: 20px !important;
+  font-size: 24px !important;
 }
 
 .folder-help-list {
@@ -1569,6 +1698,7 @@ body.dark-mode .folder-help-summary {
 body.dark-mode .folder-help-icon {
   color: #f6a72c;
   font-size: 20px;
+  
 }
 
 body.dark-mode #searchIcon {
@@ -1614,7 +1744,7 @@ body.dark-mode .CodeMirror-matchingbracket {
 }
 
 .gallery-nav-btn {
-  background: rgba(80, 80, 80, 0.6) !important; /* More translucent dark grey */
+  background: rgba(80, 80, 80, 0.6) !important;
   border: none !important;
   color: white !important;
   font-size: 48px !important;
@@ -1626,11 +1756,10 @@ body.dark-mode .CodeMirror-matchingbracket {
 }
 
 .gallery-nav-btn:hover {
-  background: rgba(80, 80, 80, 0.8) !important; /* Slightly less translucent on hover */
+  background: rgba(80, 80, 80, 0.8) !important;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* If you need distinct positioning for left and right buttons */
 .gallery-nav-btn.left {
   left: 10px;
   right: auto;
@@ -1649,4 +1778,19 @@ body.dark-mode .CodeMirror-matchingbracket {
 body.dark-mode .drop-hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-bottom: 1px dashed #ffffff !important;
+}
+
+#restoreFilesList li {
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 5px;
+}
+
+#restoreFilesList li input[type="checkbox"] {
+  margin: 0 !important;
+  transform: translateY(-3px) !important;
+}
+
+#restoreFilesList li label {
+  margin-left: 8px !important;
 }

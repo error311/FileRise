@@ -164,7 +164,7 @@ export function buildFileTableRow(file, folderPath) {
           <i class="material-icons">file_download</i>
         </a>
         ${file.editable ? `
-          <button class="btn btn-sm btn-primary" 
+          <button class="btn btn-sm edit-btn" 
                   onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
                   title="Edit">
             <i class="material-icons">edit</i>

@@ -50,6 +50,6 @@ define('USERS_DIR', '/var/www/users/');
 define('USERS_FILE', 'users.txt');
 define('META_DIR','/var/www/metadata/');
 define('META_FILE','file_metadata.json');
-
+define('TRASH_DIR', UPLOAD_DIR . 'trash/');
 date_default_timezone_set(TIMEZONE);
 ?>

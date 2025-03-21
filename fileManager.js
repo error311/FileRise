@@ -457,9 +457,15 @@ export function renderFileTable(folder) {
       window.currentSearchTerm = newSearchInput.value;
       window.currentPage = 1;
       renderFileTable(folder);
+      // After re‑render, re-select the input element and set focus.
       setTimeout(() => {
-        newSearchInput.focus();
-        newSearchInput.setSelectionRange(newSearchInput.value.length, newSearchInput.value.length);
+        const freshInput = document.getElementById("searchInput");
+        if (freshInput) {
+          freshInput.focus();
+          // Place the caret at the end of the text.
+          const len = freshInput.value.length;
+          freshInput.setSelectionRange(len, len);
+        }
       }, 0);
     }, 300));
   }
@@ -528,7 +534,7 @@ export function renderGalleryView(folder) {
             <i class="material-icons">file_download</i>
           </a>
           ${file.editable ? `
-            <button class="btn btn-sm btn-primary" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
+            <button class="btn btn-sm edit-btn"  onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
               <i class="material-icons">edit</i>
             </button>
           ` : ""}
@@ -999,9 +1005,11 @@ function getModeForFile(fileName) {
 function adjustEditorSize() {
   const modal = document.querySelector(".editor-modal");
   if (modal && window.currentEditor) {
-    const modalHeight = modal.getBoundingClientRect().height || 600;
-    const newEditorHeight = Math.max(modalHeight * 0.8, 5) + "px";
-    window.currentEditor.setSize("100%", newEditorHeight);
+    // Calculate available height for the editor.
+    // If you have a header or footer inside the modal, subtract their heights.
+    const headerHeight = 60;
+    const availableHeight = modal.clientHeight - headerHeight;
+    window.currentEditor.setSize("100%", availableHeight + "px");
   }
 }
 

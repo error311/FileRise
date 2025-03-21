@@ -43,7 +43,7 @@ if ($folder !== 'root') {
 $metadataCollection = []; // key: folder path, value: metadata array
 $metadataChanged = [];    // key: folder path, value: boolean
 
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\. ]+$/';
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
 
 foreach ($_FILES["file"]["name"] as $index => $fileName) {
     $safeFileName = basename($fileName);

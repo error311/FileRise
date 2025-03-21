@@ -66,6 +66,26 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
   - Direct access to sensitive files (e.g., `users.txt`) is restricted through .htaccess rules.
   - A proxy download mechanism has been implemented (via endpoints like `download.php` and `downloadZip.php`) so that every file download request goes through a PHP script. This script validates the session and CSRF token before streaming the file, ensuring that even if a file URL is guessed, only authenticated users can access it.
   - Administrators are advised to deploy the app on a secure internal network or use the proxy download mechanism for public deployments to further protect file content.
+- **Trash Management with Restore & Delete:**
+  - **Trash Storage & Metadata:**
+    - Deleted files are moved to a designated “Trash” folder rather than being immediately removed.
+    - Metadata is stored in a JSON file (`trash.json`) that records:
+      - Original folder and file name
+      - Timestamp when the file was trashed
+      - Uploader information (and optionally who deleted it)
+      - Additional metadata (e.g., file type)
+  - **Restore Functionality:**
+    - Admins can view trashed files in a modal.
+    - They can restore individual files (with conflict checks) or restore all files back to their original location.
+  - **Delete Functionality:**
+    - Users can permanently delete trashed files via:
+      - **Delete Selected:** Remove specific files from the Trash and update `trash.json`.
+      - **Delete All:** Permanently remove every file from the Trash after confirmation.
+  - **Auto-Purge Mechanism:**
+    - The system automatically purges (permanently deletes) any files in the Trash older than three days, helping manage storage and prevent the accumulation of outdated files.
+  - **User Interface:**
+    - The trash modal displays details such as file name, uploader/deleter, and the trashed date/time.
+    - Material icons with tooltips visually represent the restore and delete actions.
 
 ---
 
