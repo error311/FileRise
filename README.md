@@ -1,6 +1,7 @@
 # MFE - Lightweight Multi File Upload Editor
 
 **Video demo:**
+
 https://github.com/user-attachments/assets/179e6940-5798-4482-9a69-696f806c37de
 
 **Dark mode:**
