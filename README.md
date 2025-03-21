@@ -243,12 +243,6 @@ The `config.php` file contains several key constants that may need adjustment fo
 
 ---
 
-## SEO & Documentation
-
-Multi File Upload Editor is not only powerful but also optimized for discoverability. The README is indexed by search engines, so including keywords like “self-hosted file manager,” “PHP upload,” and comparisons to other solutions (e.g., FileGator, ProjectSend) can help users find this project online. This documentation provides a comprehensive overview—from features and installation instructions to configuration guidance—making it easier for potential users to deploy and customize the application.
-
----
-
 ## Additional Information
 
 - **Security:**  
