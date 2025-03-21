@@ -142,14 +142,14 @@ body.dark-mode header {
   justify-content: flex-end;
   flex: 1;
   min-width: 150px;
-  gap: 10px;
+  gap: 0px;
 }
 
 .header-buttons button {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 10px;
+  padding: 7px;
   border-radius: 50%;
   color: #fff;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;

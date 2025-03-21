@@ -41,8 +41,8 @@ function initAuth() {
           const headerButtons = document.querySelector(".header-buttons");
           if (headerButtons) {
             // Insert after the third child if available.
-            if (headerButtons.children.length >= 4) {
-              headerButtons.insertBefore(restoreBtn, headerButtons.children[4]);
+            if (headerButtons.children.length >= 5) {
+              headerButtons.insertBefore(restoreBtn, headerButtons.children[5]);
             } else {
               headerButtons.appendChild(restoreBtn);
             }
@@ -192,6 +192,63 @@ function initAuth() {
   });
   document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
     closeRemoveUserModal();
+  });
+
+  document.getElementById("changePasswordBtn").addEventListener("click", function() {
+    // Show the modal.
+    document.getElementById("changePasswordModal").style.display = "block";
+  });
+  
+  document.getElementById("closeChangePasswordModal").addEventListener("click", function() {
+    // Hide the modal.
+    document.getElementById("changePasswordModal").style.display = "none";
+  });
+  
+  document.getElementById("saveNewPasswordBtn").addEventListener("click", function() {
+    const oldPassword = document.getElementById("oldPassword").value.trim();
+    const newPassword = document.getElementById("newPassword").value.trim();
+    const confirmPassword = document.getElementById("confirmPassword").value.trim();
+  
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      showToast("Please fill in all fields.");
+      return;
+    }
+  
+    if (newPassword !== confirmPassword) {
+      showToast("New passwords do not match.");
+      return;
+    }
+  
+    // Prepare the data to send.
+    const data = { oldPassword, newPassword, confirmPassword };
+  
+    // Send request to changePassword.php.
+    fetch("changePassword.php", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": window.csrfToken
+      },
+      body: JSON.stringify(data)
+    })
+      .then(response => response.json())
+      .then(result => {
+        if (result.success) {
+          showToast(result.success);
+          // Optionally clear form fields and close modal.
+          document.getElementById("oldPassword").value = "";
+          document.getElementById("newPassword").value = "";
+          document.getElementById("confirmPassword").value = "";
+          document.getElementById("changePasswordModal").style.display = "none";
+        } else {
+          showToast("Error: " + (result.error || "Could not change password."));
+        }
+      })
+      .catch(error => {
+        console.error("Error changing password:", error);
+        showToast("Error changing password.");
+      });
   });
 }
 

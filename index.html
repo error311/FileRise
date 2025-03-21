@@ -91,6 +91,9 @@
         <button id="logoutBtn" title="Logout">
           <i class="material-icons">exit_to_app</i>
         </button>
+        <button id="changePasswordBtn" title="Change Password">
+          <i class="material-icons">vpn_key</i>
+        </button>
         <!-- Restore Files Modal (Admin Only) -->
         <div id="restoreFilesModal" class="modal centered-modal" style="display: none;">
           <div class="modal-content">
@@ -310,6 +313,18 @@
       <div id="fileList"></div>
     </div>
   </div>
+
+  <!-- Change Password-->
+<div id="changePasswordModal" class="modal" style="display:none;">
+  <div class="modal-content" style="max-width:400px; margin:auto;">
+    <span id="closeChangePasswordModal" style="cursor:pointer;">&times;</span>
+    <h3>Change Password</h3>
+    <input type="password" id="oldPassword" placeholder="Old Password" style="width:100%; margin: 5px 0;" />
+    <input type="password" id="newPassword" placeholder="New Password" style="width:100%; margin: 5px 0;" />
+    <input type="password" id="confirmPassword" placeholder="Confirm New Password" style="width:100%; margin: 5px 0;" />
+    <button id="saveNewPasswordBtn" class="btn btn-primary" style="width:100%;">Save</button>
+  </div>
+</div>
 
   <!-- Add User Modal -->
   <div id="addUserModal" class="modal">
