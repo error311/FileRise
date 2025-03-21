@@ -1,8 +1,9 @@
 # MFE - Lightweight Multi File Upload Editor
 
+**Video demo:**
 https://github.com/user-attachments/assets/179e6940-5798-4482-9a69-696f806c37de
 
-**Dark mode**
+**Dark mode:**
 ![Dark Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
 
 changelogs available here: <https://github.com/error311/multi-file-upload-editor-docker/>
@@ -94,19 +95,19 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
 
 ## Screenshots
 
-**Light mode**
+**Light mode:**
 ![Light Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-mode.png)
 
-**Dark editor**
+**Dark editor:**
 ![dark-editor](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-editor.png)
 
 **Dark preview**
 ![dark-preview](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-preview.png)
 
-**Restore or Delete Trash**
+**Restore or Delete Trash:**
 ![restore-delete](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/restore-delete.png)
 
-**Login page**
+**Login page:**
 ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)
 
   **iphone screenshots:**  
