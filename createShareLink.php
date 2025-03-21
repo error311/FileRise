@@ -20,8 +20,6 @@ if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
     exit;
 }
 
-// Optionally, you could check if the file exists in the uploads directory here.
-
 // Generate a secure token.
 $token = bin2hex(random_bytes(16)); // 32 hex characters.
 
@@ -39,6 +37,14 @@ if (file_exists($shareFile)) {
     $shareLinks = json_decode($data, true);
     if (!is_array($shareLinks)) {
         $shareLinks = [];
+    }
+}
+
+// Clean up expired share links.
+$currentTime = time();
+foreach ($shareLinks as $key => $link) {
+    if ($link["expires"] < $currentTime) {
+        unset($shareLinks[$key]);
     }
 }
 
