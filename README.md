@@ -4,7 +4,7 @@ https://github.com/user-attachments/assets/179e6940-5798-4482-9a69-696f806c37de
 
 changelogs available here: <https://github.com/error311/multi-file-upload-editor-docker/>
 
-Multi File Upload Editor is a lightweight, secure web application for uploading, editing, and managing files. It’s built with an Apache/PHP backend and a modern JavaScript frontend (ES6 modules) to provide a responsive, dynamic file management interface. The application is ideal for scenarios like document management, image galleries, firmware file hosting, or any situation where multiple files need to be uploaded and organized through a web interface.
+Multi File Upload Editor is a lightweight, secure, self-hosted web application for uploading, editing, and managing files. Built with an Apache/PHP backend and a modern JavaScript (ES6 modules) frontend, it offers a responsive, dynamic file management interface. It serves as an alternative to solutions like FileGator or ProjectSend, providing an easy-to-setup experience ideal for document management, image galleries, firmware file hosting, and more.
 
 ---
 
@@ -97,22 +97,167 @@ Multi File Upload Editor is a lightweight, secure web application for uploading,
 **Dark mode**
 ![Dark Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
 
-![dark-editor](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-editor.png)  
-![dark-preview](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-preview.png)  
-![light-downloadzip](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-downloadzip.png)
+**Dark editor**
+![dark-editor](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-editor.png)
+
+**Dark preview**
+![dark-preview](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-preview.png)
+
+**Restore or Delete Trash**
+![restore-delete](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/restore-delete.png)
+
+**Login page**
 ![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)
 
-  **iphone:**  
+  **iphone screenshots:**  
 <p align="center">
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-iphone.png" width="45%">
   <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-preview-iphone.png" width="45%">
 </p>
 
-based off of:
-<https://github.com/sensboston/uploader>
+---
 
-## Prerequisites
+## Installation & Setup
 
-- Apache2, configured, up and running
-- PHP 8.1 or higher
-- Required PHP extensions: `php-json`, `php-curl`, `php-zip`
+### Manual Installation
+
+1. **Clone or Download the Repository:**
+   - **Clone:**  
+
+     ```bash
+     git clone https://github.com/error311/multi-file-upload-editor.git
+     ```
+
+   - **Download:**  
+     Download the latest release from the GitHub releases page and extract it into your desired directory.
+
+2. **Deploy to Your Web Server:**
+   - Place the project files in your Apache web directory (e.g., `/var/www/html`).
+   - Ensure PHP 8.1+ is installed along with the required extensions (php-json, php-curl, php-zip, etc.).
+
+3. **Directory Setup & Permissions:**
+   - Create the following directories if they do not exist, and set appropriate permissions:
+     - `uploads/` – for file storage.
+     - `users/` – to store `users.txt` (user authentication data).
+     - `metadata/` – for storing `file_metadata.json` and other metadata.
+   - Example commands:
+
+     ```bash
+     mkdir -p /var/www/uploads /var/www/users /var/www/metadata
+     chmod -R 775 /var/www/uploads /var/www/users /var/www/metadata
+     ```
+
+4. **Configure Apache:**
+   - Ensure that directory indexing is disabled (using `Options -Indexes` in your `.htaccess` or Apache configuration).
+   - Make sure the Apache configuration allows URL rewriting if needed.
+
+5. **Configuration File:**
+   - Open `config.php` and adjust the following constants as necessary:
+     - `BASE_URL`: Set this to your web app’s base URL.
+     - `UPLOAD_DIR`: Adjust the directory path for uploads.
+     - `TIMEZONE`: Set to your preferred timezone.
+     - `TOTAL_UPLOAD_SIZE`: Ensure it matches PHP’s `upload_max_filesize` and `post_max_size` settings in your `php.ini`.
+
+### Initial Setup Instructions
+
+- **First Launch Admin Setup:**  
+  On first launch, if no users exist, the application will enter a setup mode. You will be prompted to create an admin user. This is handled automatically by the application (e.g., via a “Create Admin” form).  
+  **Note:** No default credentials are provided. You must create the first admin account to log in and manage additional users.
+
+---
+
+## Docker Usage
+
+For users who prefer containerization, a Docker image is available
+
+### Quickstart
+
+1. **Pull the Docker Image:**
+
+   ```bash
+   docker pull error311/multi-file-upload-editor-docker:latest
+   ```
+
+2. **Run the Container:**
+
+   ```bash
+   docker run -d \
+   -p 80:80 \
+   -e TIMEZONE="America/New_York" \
+   -e TOTAL_UPLOAD_SIZE="5G" \
+   -e SECURE="false" \
+   -v /path/to/your/uploads:/var/www/uploads \
+   -v /path/to/your/users:/var/www/users \
+   -v /path/to/your/metadata:/var/www/metadata \
+   --name multi-file-upload-editor \
+   error311/multi-file-upload-editor-docker:latest
+   ```
+
+3. **Using Docker Compose:**
+
+   Create a docker-compose.yml file with the following content:
+
+   ```yaml
+   version: "3.8"
+   services:
+   web:
+     image: error311/multi-file-upload-editor-docker:latest
+     ports:
+       - "80:80"
+     environment:
+       TIMEZONE: "America/New_York"
+       TOTAL_UPLOAD_SIZE: "5G"
+       SECURE: "false"
+     volumes:
+       - /path/to/your/uploads:/var/www/uploads
+       - /path/to/your/users:/var/www/users
+       - /path/to/your/metadata:/var/www/metadata
+   ```
+
+**Then start the container with:**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+---
+
+## Configuration Guidance
+
+The `config.php` file contains several key constants that may need adjustment for your deployment:
+
+- **BASE_URL:**  
+  Set to the URL where your application is hosted (e.g., `http://yourdomain.com/uploads/`).
+
+- **UPLOAD_DIR, USERS_DIR, META_DIR:**  
+  Define the directories for uploads, user data, and metadata. Adjust these to match your server environment or Docker volume mounts.
+
+- **TIMEZONE & DATE_TIME_FORMAT:**  
+  Set according to your regional settings.
+
+- **TOTAL_UPLOAD_SIZE:**  
+  Defines the maximum upload size (default is `5G`). Ensure that PHP’s `upload_max_filesize` and `post_max_size` in your `php.ini` are consistent with this setting. The startup script (`start.sh`) updates PHP limits at runtime based on this value.
+
+- **Environment Variables (Docker):**  
+  The Docker image supports overriding configuration via environment variables. For example, you can set `SECURE`, `SHARE_URL`, and port settings via the container’s environment.
+
+---
+
+## SEO & Documentation
+
+Multi File Upload Editor is not only powerful but also optimized for discoverability. The README is indexed by search engines, so including keywords like “self-hosted file manager,” “PHP upload,” and comparisons to other solutions (e.g., FileGator, ProjectSend) can help users find this project online. This documentation provides a comprehensive overview—from features and installation instructions to configuration guidance—making it easier for potential users to deploy and customize the application.
+
+---
+
+## Additional Information
+
+- **Security:**  
+  All state-changing endpoints use CSRF token validation. Ensure that sessions and tokens are correctly configured as per your deployment environment.
+
+- **Permissions:**  
+  Both manual and Docker installations include steps to ensure that file and directory permissions are set correctly for the web server to read and write as needed.
+
+- **Logging & Troubleshooting:**  
+  Check Apache logs (located in `/var/log/apache2/`) for troubleshooting any issues during deployment or operation.
+
+Enjoy using the Multi File Upload Editor! For any issues or contributions, please refer to the [GitHub repository](https://github.com/error311/multi-file-upload-editor).

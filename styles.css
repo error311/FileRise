@@ -47,6 +47,9 @@ body {
 /************************************************************/
 /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
 /************************************************************/
+#uploadCard, #folderManagementCard {
+  min-height: 342px;
+}
 
 .btn-login {
   margin-top: 10px;
