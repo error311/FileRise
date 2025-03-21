@@ -58,6 +58,7 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
   - Admin users can add or remove users through the interface.
   - Passwords are hashed using PHP’s `password_hash()` for security.
   - All state-changing endpoints include CSRF token validation.
+  - Change password supported for all users.
 - **Responsive, Dynamic & Persistent UI:**
   - The interface is mobile-friendly and adapts to various screen sizes by hiding non-critical columns on small devices.
   - Asynchronous updates (via Fetch API and XMLHttpRequest) keep the UI responsive without full page reloads.
