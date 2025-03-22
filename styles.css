@@ -1245,6 +1245,24 @@ body.dark-mode #fileListContainer {
 /* ===========================================================
    FOLDER TREE STYLES
    =========================================================== */
+/* Make breadcrumb links look clickable */
+.breadcrumb-link {
+  cursor: pointer;
+  color: #007bff;
+  text-decoration: underline;
+}
+
+.breadcrumb-link:hover {
+  color: #0056b3;
+}
+
+.breadcrumb-link.selected {
+  background-color: #e9ecef;
+  font-weight: bold;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
 .folder-tree {
   list-style-type: none;
   padding-left: 10px;

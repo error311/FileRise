@@ -60,7 +60,111 @@ function getParentFolder(folder) {
 }
 
 // ----------------------
-// DOM Building Functions
+// Breadcrumb Functions
+// ----------------------
+// Render breadcrumb for a normalized folder path.
+// For example, if window.currentFolder is "Folder1/Folder1SubFolder2",
+// this will return: Root / Folder1 / Folder1SubFolder2.
+function renderBreadcrumb(normalizedFolder) {
+  if (normalizedFolder === "root") {
+    return `<span class="breadcrumb-link" data-folder="root">Root</span>`;
+  }
+  const parts = normalizedFolder.split("/");
+  let breadcrumbItems = [];
+  // Always start with "Root".
+  breadcrumbItems.push(`<span class="breadcrumb-link" data-folder="root">Root</span>`);
+  let cumulative = "";
+  parts.forEach((part, index) => {
+    cumulative = index === 0 ? part : cumulative + "/" + part;
+    breadcrumbItems.push(`<span class="breadcrumb-separator"> / </span>`);
+    breadcrumbItems.push(`<span class="breadcrumb-link" data-folder="${cumulative}">${escapeHTML(part)}</span>`);
+  });
+  return breadcrumbItems.join('');
+}
+
+// Bind click and drag-and-drop events to breadcrumb links.
+function bindBreadcrumbEvents() {
+  const breadcrumbLinks = document.querySelectorAll(".breadcrumb-link");
+  breadcrumbLinks.forEach(link => {
+    // Click event for navigation.
+    link.addEventListener("click", function(e) {
+      e.stopPropagation();
+      let folder = this.getAttribute("data-folder");
+      window.currentFolder = folder;
+      localStorage.setItem("lastOpenedFolder", folder);
+      const titleEl = document.getElementById("fileListTitle");
+      if (folder === "root") {
+        titleEl.innerHTML = "Files in (" + renderBreadcrumb("root") + ")";
+      } else {
+        titleEl.innerHTML = "Files in (" + renderBreadcrumb(folder) + ")";
+      }
+      // Expand the folder tree to ensure the target is visible.
+      expandTreePath(folder);
+      // Update folder tree selection.
+      document.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
+      const targetOption = document.querySelector(`.folder-option[data-folder="${folder}"]`);
+      if (targetOption) {
+        targetOption.classList.add("selected");
+      }
+      // Load the file list.
+      loadFileList(folder);
+      // Re-bind breadcrumb events to ensure all links remain active.
+      bindBreadcrumbEvents();
+    });
+
+    // Drag-and-drop events.
+    link.addEventListener("dragover", function(e) {
+      e.preventDefault();
+      this.classList.add("drop-hover");
+    });
+    link.addEventListener("dragleave", function(e) {
+      this.classList.remove("drop-hover");
+    });
+    link.addEventListener("drop", function(e) {
+      e.preventDefault();
+      this.classList.remove("drop-hover");
+      const dropFolder = this.getAttribute("data-folder");
+      let dragData;
+      try {
+        dragData = JSON.parse(e.dataTransfer.getData("application/json"));
+      } catch (err) {
+        console.error("Invalid drag data on breadcrumb:", err);
+        return;
+      }
+      const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
+      if (filesToMove.length === 0) return;
+      fetch("moveFiles.php", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+        },
+        body: JSON.stringify({
+          source: dragData.sourceFolder,
+          files: filesToMove,
+          destination: dropFolder
+        })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showToast(`File(s) moved successfully to ${dropFolder}!`);
+            loadFileList(dragData.sourceFolder);
+          } else {
+            showToast("Error moving files: " + (data.error || "Unknown error"));
+          }
+        })
+        .catch(error => {
+          console.error("Error moving files via drop on breadcrumb:", error);
+          showToast("Error moving files.");
+        });
+    });
+  });
+}
+
+// ----------------------
+// DOM Building Functions for Folder Tree
 // ----------------------
 
 // Recursively builds HTML for the folder tree as nested <ul> elements.
@@ -72,7 +176,6 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
     if (folder.toLowerCase() === "trash") {
       continue;
     }
-    
     const fullPath = parentPath ? parentPath + "/" + folder : folder;
     const hasChildren = Object.keys(tree[folder]).length > 0;
     const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;
@@ -83,7 +186,6 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
     } else {
       html += `<span class="folder-indent-placeholder"></span>`;
     }
-    // Use escapeHTML to safely render the folder name.
     html += `<span class="folder-option" data-folder="${fullPath}">${escapeHTML(folder)}</span>`;
     if (hasChildren) {
       html += renderFolderTree(tree[folder], fullPath, displayState);
@@ -94,7 +196,7 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
   return html;
 }
 
-// Expands the folder tree along a given path.
+// Expands the folder tree along a given normalized path.
 function expandTreePath(path) {
   const parts = path.split("/");
   let cumulative = "";
@@ -122,19 +224,15 @@ function expandTreePath(path) {
 // ----------------------
 // Drag & Drop Support for Folder Tree Nodes
 // ----------------------
-
-// When a draggable file is dragged over a folder node, allow the drop and add a visual cue.
 function folderDragOverHandler(event) {
   event.preventDefault();
   event.currentTarget.classList.add("drop-hover");
 }
 
-// Remove the visual cue when the drag leaves.
 function folderDragLeaveHandler(event) {
   event.currentTarget.classList.remove("drop-hover");
 }
 
-// When a file is dropped onto a folder node, send a move request.
 function folderDropHandler(event) {
   event.preventDefault();
   event.currentTarget.classList.remove("drop-hover");
@@ -143,10 +241,9 @@ function folderDropHandler(event) {
   try {
     dragData = JSON.parse(event.dataTransfer.getData("application/json"));
   } catch (e) {
-    console.error("Invalid drag data");
+    console.error("Invalid drag data", e);
     return;
   }
-  // Use the files array if present, or fall back to a single file.
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
   fetch("moveFiles.php", {
@@ -232,15 +329,25 @@ export async function loadFolderTree(selectedFolder) {
       el.addEventListener("drop", folderDropHandler);
     });
 
-    // Determine current folder.
+    // Determine current folder (normalized).
     if (selectedFolder) {
       window.currentFolder = selectedFolder;
     } else {
       window.currentFolder = localStorage.getItem("lastOpenedFolder") || "root";
     }
     localStorage.setItem("lastOpenedFolder", window.currentFolder);
-    document.getElementById("fileListTitle").textContent =
-      window.currentFolder === "root" ? "Files in (Root)" : "Files in (" + window.currentFolder + ")";
+
+    // Update file list title using breadcrumb.
+    const titleEl = document.getElementById("fileListTitle");
+    if (window.currentFolder === "root") {
+      titleEl.innerHTML = "Files in (" + renderBreadcrumb("root") + ")";
+    } else {
+      titleEl.innerHTML = "Files in (" + renderBreadcrumb(window.currentFolder) + ")";
+    }
+    // Bind breadcrumb events (click and drag/drop).
+    bindBreadcrumbEvents();
+
+    // Load file list.
     loadFileList(window.currentFolder);
 
     // Expand tree to current folder.
@@ -249,23 +356,30 @@ export async function loadFolderTree(selectedFolder) {
       expandTreePath(window.currentFolder);
     }
 
-    // Highlight current folder.
+    // Highlight current folder in folder tree.
     const selectedEl = container.querySelector(`.folder-option[data-folder="${window.currentFolder}"]`);
     if (selectedEl) {
+      container.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
       selectedEl.classList.add("selected");
     }
 
-    // Event binding for folder selection.
+    // Event binding for folder selection in folder tree.
     container.querySelectorAll(".folder-option").forEach(el => {
-      el.addEventListener("click", function (e) {
+      el.addEventListener("click", function(e) {
         e.stopPropagation();
         container.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
         this.classList.add("selected");
         const selected = this.getAttribute("data-folder");
         window.currentFolder = selected;
         localStorage.setItem("lastOpenedFolder", selected);
-        document.getElementById("fileListTitle").textContent =
-          selected === "root" ? "Files in (Root)" : "Files in (" + selected + ")";
+        const titleEl = document.getElementById("fileListTitle");
+        if (selected === "root") {
+          titleEl.innerHTML = "Files in (" + renderBreadcrumb("root") + ")";
+        } else {
+          titleEl.innerHTML = "Files in (" + renderBreadcrumb(selected) + ")";
+        }
+        // Re-bind breadcrumb events so the new breadcrumb is clickable.
+        bindBreadcrumbEvents();
         loadFileList(selected);
       });
     });
@@ -273,7 +387,7 @@ export async function loadFolderTree(selectedFolder) {
     // Event binding for toggling folders.
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
-      rootToggle.addEventListener("click", function (e) {
+      rootToggle.addEventListener("click", function(e) {
         e.stopPropagation();
         const nestedUl = container.querySelector("#rootRow + ul");
         if (nestedUl) {
@@ -295,7 +409,7 @@ export async function loadFolderTree(selectedFolder) {
     }
 
     container.querySelectorAll(".folder-toggle").forEach(toggle => {
-      toggle.addEventListener("click", function (e) {
+      toggle.addEventListener("click", function(e) {
         e.stopPropagation();
         const siblingUl = this.parentNode.querySelector("ul");
         const folderPath = this.getAttribute("data-folder");
@@ -345,12 +459,12 @@ function openRenameFolderModal() {
   document.getElementById("renameFolderModal").style.display = "block";
 }
 
-document.getElementById("cancelRenameFolder").addEventListener("click", function () {
+document.getElementById("cancelRenameFolder").addEventListener("click", function() {
   document.getElementById("renameFolderModal").style.display = "none";
   document.getElementById("newRenameFolderName").value = "";
 });
 
-document.getElementById("submitRenameFolder").addEventListener("click", function (event) {
+document.getElementById("submitRenameFolder").addEventListener("click", function(event) {
   event.preventDefault();
   const selectedFolder = window.currentFolder || "root";
   const newNameBasename = document.getElementById("newRenameFolderName").value.trim();
@@ -403,11 +517,11 @@ function openDeleteFolderModal() {
   document.getElementById("deleteFolderModal").style.display = "block";
 }
 
-document.getElementById("cancelDeleteFolder").addEventListener("click", function () {
+document.getElementById("cancelDeleteFolder").addEventListener("click", function() {
   document.getElementById("deleteFolderModal").style.display = "none";
 });
 
-document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
+document.getElementById("confirmDeleteFolder").addEventListener("click", function() {
   const selectedFolder = window.currentFolder || "root";
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
   fetch("deleteFolder.php", {
@@ -435,16 +549,16 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
     });
 });
 
-document.getElementById("createFolderBtn").addEventListener("click", function () {
+document.getElementById("createFolderBtn").addEventListener("click", function() {
   document.getElementById("createFolderModal").style.display = "block";
 });
 
-document.getElementById("cancelCreateFolder").addEventListener("click", function () {
+document.getElementById("cancelCreateFolder").addEventListener("click", function() {
   document.getElementById("createFolderModal").style.display = "none";
   document.getElementById("newFolderName").value = "";
 });
 
-document.getElementById("submitCreateFolder").addEventListener("click", function () {
+document.getElementById("submitCreateFolder").addEventListener("click", function() {
   const folderInput = document.getElementById("newFolderName").value.trim();
   if (!folderInput) {
     showToast("Please enter a folder name.");
