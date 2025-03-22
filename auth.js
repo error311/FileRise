@@ -78,9 +78,14 @@ function initAuth() {
   if (authForm) {
     authForm.addEventListener("submit", function (event) {
       event.preventDefault();
+      // Get the "Remember me" checkbox value.
+      const rememberMe = document.getElementById("rememberMeCheckbox") 
+        ? document.getElementById("rememberMeCheckbox").checked 
+        : false;
       const formData = {
         username: document.getElementById("loginUsername").value.trim(),
-        password: document.getElementById("loginPassword").value.trim()
+        password: document.getElementById("loginPassword").value.trim(),
+        remember_me: rememberMe
       };
       sendRequest("auth.php", "POST", formData, { "X-CSRF-Token": window.csrfToken })
         .then(data => {

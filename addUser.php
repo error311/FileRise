@@ -6,9 +6,9 @@ $usersFile = USERS_DIR . USERS_FILE;
 
 // Determine if we are in setup mode:
 // - Query parameter setup=1 is passed
-// - And users.txt is either missing or empty
+// - And users.txt is either missing or empty (zero bytes or trimmed content is empty)
 $isSetup = (isset($_GET['setup']) && $_GET['setup'] === '1');
-if ($isSetup && (!file_exists($usersFile) || trim(file_get_contents($usersFile)) === '')) {
+if ($isSetup && (!file_exists($usersFile) || filesize($usersFile) == 0 || trim(file_get_contents($usersFile)) === '')) {
     // Allow initial admin creation without session checks.
     $setupMode = true;
 } else {

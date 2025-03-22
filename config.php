@@ -27,6 +27,29 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+// Auto-login via persistent token if session is not active.
+if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) {
+    $persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
+    if (file_exists($persistentTokensFile)) {
+        $persistentTokens = json_decode(file_get_contents($persistentTokensFile), true);
+        if (is_array($persistentTokens) && isset($persistentTokens[$_COOKIE['remember_me_token']])) {
+            $tokenData = $persistentTokens[$_COOKIE['remember_me_token']];
+            if ($tokenData['expiry'] >= time()) {
+                // Token is valid; auto-authenticate the user.
+                $_SESSION["authenticated"] = true;
+                $_SESSION["username"] = $tokenData["username"];
+                // Optionally, set admin status if stored in token data:
+                // $_SESSION["isAdmin"] = $tokenData["isAdmin"];
+            } else {
+                // Token expired; remove it and clear the cookie.
+                unset($persistentTokens[$_COOKIE['remember_me_token']]);
+                file_put_contents($persistentTokensFile, json_encode($persistentTokens, JSON_PRETTY_PRINT));
+                setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
+            }
+        }
+    }
+}
+
 // Define BASE_URL (this should point to where index.html is, e.g. your uploads directory)
 define('BASE_URL', 'http://yourwebsite/uploads/');
 

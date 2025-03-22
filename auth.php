@@ -10,6 +10,9 @@ $lockoutTime = 30 * 60; // 30 minutes in seconds
 $attemptsFile = USERS_DIR . 'failed_logins.json'; // JSON file for tracking failed login attempts
 $failedLogFile = USERS_DIR . 'failed_login.log';   // Plain text log for fail2ban
 
+// Persistent tokens file for "Remember me"
+$persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
+
 // Load failed attempts data from file.
 function loadFailedAttempts($file) {
     if (file_exists($file)) {
@@ -46,11 +49,9 @@ if (isset($failedAttempts[$ip])) {
 function authenticate($username, $password)
 {
     global $usersFile;
-
     if (!file_exists($usersFile)) {
         return false;
     }
-
     $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
         list($storedUser, $storedPass, $storedRole) = explode(':', trim($line), 3);
@@ -65,6 +66,7 @@ function authenticate($username, $password)
 $data = json_decode(file_get_contents("php://input"), true);
 $username = trim($data["username"] ?? "");
 $password = trim($data["password"] ?? "");
+$rememberMe = isset($data["remember_me"]) && $data["remember_me"] === true;
 
 // Validate input: ensure both fields are provided.
 if (!$username || !$password) {
@@ -72,7 +74,7 @@ if (!$username || !$password) {
     exit;
 }
 
-// Validate username format: allow only letters, numbers, underscores, dashes, and spaces.
+// Validate username format.
 if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
     echo json_encode(["error" => "Invalid username format. Only letters, numbers, underscores, dashes, and spaces are allowed."]);
     exit;
@@ -92,6 +94,29 @@ if ($userRole !== false) {
     $_SESSION["username"] = $username;
     $_SESSION["isAdmin"] = ($userRole === "1"); // "1" indicates admin
 
+    // If "Remember me" is checked, generate a persistent login token.
+    if ($rememberMe) {
+        // Generate a secure random token.
+        $token = bin2hex(random_bytes(32));
+        $expiry = time() + (30 * 24 * 60 * 60); // 30 days
+        // Load existing persistent tokens.
+        $persistentTokens = [];
+        if (file_exists($persistentTokensFile)) {
+            $persistentTokens = json_decode(file_get_contents($persistentTokensFile), true);
+            if (!is_array($persistentTokens)) {
+                $persistentTokens = [];
+            }
+        }
+        // Save token along with username and expiry.
+        $persistentTokens[$token] = [
+            "username" => $username,
+            "expiry" => $expiry
+        ];
+        file_put_contents($persistentTokensFile, json_encode($persistentTokens, JSON_PRETTY_PRINT));
+        // Set the cookie. (Assuming $secure is defined in config.php.)
+        setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
+    }
+    
     echo json_encode(["success" => "Login successful", "isAdmin" => $_SESSION["isAdmin"]]);
 } else {
     // On failed login, update failed attempts.

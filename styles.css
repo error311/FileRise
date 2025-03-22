@@ -13,6 +13,7 @@ body {
 body {
   letter-spacing: 0.2px;
 }
+
 .custom-dash {
   display: inline-block;
   transform: scaleX(1.5);
@@ -53,7 +54,8 @@ body {
 /************************************************************/
 /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
 /************************************************************/
-#uploadCard, #folderManagementCard {
+#uploadCard,
+#folderManagementCard {
   min-height: 342px;
 }
 
@@ -333,6 +335,10 @@ body.dark-mode .material-icons.gallery-icon {
 /* ===========================================================
    FORMS & LOGIN
    =========================================================== */
+.remember-me-container {
+  margin-top: 20px !important;
+}
+
 #loginForm {
   margin: 0 auto;
   max-width: 400px;
@@ -1709,7 +1715,7 @@ body.dark-mode .folder-help-summary {
 body.dark-mode .folder-help-icon {
   color: #f6a72c;
   font-size: 20px;
-  
+
 }
 
 body.dark-mode #searchIcon {
