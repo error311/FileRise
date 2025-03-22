@@ -37,10 +37,8 @@ function initAuth() {
           restoreBtn.classList.add("btn", "btn-warning");
           // Use a material icon.
           restoreBtn.innerHTML = '<i class="material-icons" title="Restore/Delete Trash">restore_from_trash</i>';
-
           const headerButtons = document.querySelector(".header-buttons");
           if (headerButtons) {
-            // Insert after the third child if available.
             if (headerButtons.children.length >= 5) {
               headerButtons.insertBefore(restoreBtn, headerButtons.children[5]);
             } else {
@@ -54,20 +52,17 @@ function initAuth() {
         const removeUserBtn = document.getElementById("removeUserBtn");
         if (addUserBtn) addUserBtn.style.display = "none";
         if (removeUserBtn) removeUserBtn.style.display = "none";
-        // If not admin, hide the restore button.
         const restoreBtn = document.getElementById("restoreFilesBtn");
         if (restoreBtn) {
           restoreBtn.style.display = "none";
         }
       }
-      // Set items-per-page.
       const selectElem = document.querySelector(".form-control.bottom-select");
       if (selectElem) {
         const stored = localStorage.getItem("itemsPerPage") || "10";
         selectElem.value = stored;
       }
     } else {
-      // Do not show a toast message repeatedly during initial check.
       toggleVisibility("loginForm", true);
       toggleVisibility("mainOperations", false);
       toggleVisibility("uploadFileForm", false);
@@ -78,7 +73,7 @@ function initAuth() {
     console.error("Error checking authentication:", error);
   });
 
-  // Attach login event listener once.
+  // Attach login event listener.
   const authForm = document.getElementById("authForm");
   if (authForm) {
     authForm.addEventListener("submit", function (event) {
@@ -94,7 +89,19 @@ function initAuth() {
             sessionStorage.setItem("welcomeMessage", "Welcome back, " + formData.username + "!");
             window.location.reload();
           } else {
-            showToast("Login failed: " + (data.error || "Unknown error"));
+            if (data.error && data.error.includes("Too many failed login attempts")) {
+              showToast(data.error);
+              const loginButton = authForm.querySelector("button[type='submit']");
+              if (loginButton) {
+                loginButton.disabled = true;
+                setTimeout(() => {
+                  loginButton.disabled = false;
+                  showToast("You can now try logging in again.");
+                }, 30 * 60 * 1000);
+              }
+            } else {
+              showToast("Login failed: " + (data.error || "Unknown error"));
+            }
           }
         })
         .catch(error => console.error("❌ Error logging in:", error));
@@ -119,8 +126,10 @@ function initAuth() {
   });
   document.getElementById("saveUserBtn").addEventListener("click", function () {
     const newUsername = document.getElementById("newUsername").value.trim();
-    const newPassword = document.getElementById("newPassword").value.trim();
+    // Use the new ID for the add user modal's password field.
+    const newPassword = document.getElementById("addUserPassword").value.trim();
     const isAdmin = document.getElementById("isAdmin").checked;
+    console.log("newUsername:", newUsername, "newPassword:", newPassword);
     if (!newUsername || !newPassword) {
       showToast("Username and password are required!");
       return;
@@ -143,7 +152,7 @@ function initAuth() {
         if (data.success) {
           showToast("User added successfully!");
           closeAddUserModal();
-          checkAuthentication(false); // Re-check without showing toast
+          checkAuthentication(false);
         } else {
           showToast("Error: " + (data.error || "Could not add user"));
         }
@@ -195,18 +204,18 @@ function initAuth() {
   });
 
   document.getElementById("changePasswordBtn").addEventListener("click", function() {
-    // Show the modal.
+    // Show the Change Password modal.
     document.getElementById("changePasswordModal").style.display = "block";
   });
   
   document.getElementById("closeChangePasswordModal").addEventListener("click", function() {
-    // Hide the modal.
+    // Hide the Change Password modal.
     document.getElementById("changePasswordModal").style.display = "none";
   });
   
   document.getElementById("saveNewPasswordBtn").addEventListener("click", function() {
     const oldPassword = document.getElementById("oldPassword").value.trim();
-    const newPassword = document.getElementById("newPassword").value.trim();
+    const newPassword = document.getElementById("newPassword").value.trim(); // Change Password modal field
     const confirmPassword = document.getElementById("confirmPassword").value.trim();
   
     if (!oldPassword || !newPassword || !confirmPassword) {
@@ -236,7 +245,7 @@ function initAuth() {
       .then(result => {
         if (result.success) {
           showToast(result.success);
-          // Optionally clear form fields and close modal.
+          // Clear form fields and close modal.
           document.getElementById("oldPassword").value = "";
           document.getElementById("newPassword").value = "";
           document.getElementById("confirmPassword").value = "";
@@ -253,7 +262,6 @@ function initAuth() {
 }
 
 function checkAuthentication(showLoginToast = true) {
-  // Optionally pass a flag so we don't show a toast every time.
   return sendRequest("checkAuth.php")
     .then(data => {
       if (data.setup) {
@@ -303,7 +311,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function resetUserForm() {
   document.getElementById("newUsername").value = "";
-  document.getElementById("newPassword").value = "";
+  document.getElementById("addUserPassword").value = "";  // Updated for add user modal
 }
 
 function closeAddUserModal() {

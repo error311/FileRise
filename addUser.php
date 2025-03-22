@@ -7,7 +7,7 @@ $usersFile = USERS_DIR . USERS_FILE;
 // Determine if we are in setup mode:
 // - Query parameter setup=1 is passed
 // - And users.txt is either missing or empty
-$isSetup = (isset($_GET['setup']) && $_GET['setup'] == '1');
+$isSetup = (isset($_GET['setup']) && $_GET['setup'] === '1');
 if ($isSetup && (!file_exists($usersFile) || trim(file_get_contents($usersFile)) === '')) {
     // Allow initial admin creation without session checks.
     $setupMode = true;
@@ -16,7 +16,7 @@ if ($isSetup && (!file_exists($usersFile) || trim(file_get_contents($usersFile))
     // In non-setup mode, check CSRF token and require admin privileges.
     $headers = array_change_key_case(getallheaders(), CASE_LOWER);
     $receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
-    if ($receivedToken !== $_SESSION['csrf_token']) {
+    if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
         echo json_encode(["error" => "Invalid CSRF token"]);
         http_response_code(403);
         exit;
@@ -30,7 +30,7 @@ if ($isSetup && (!file_exists($usersFile) || trim(file_get_contents($usersFile))
     }
 }
 
-// Get input data from JSON
+// Get input data from JSON.
 $data = json_decode(file_get_contents("php://input"), true);
 $newUsername = trim($data["username"] ?? "");
 $newPassword = trim($data["password"] ?? "");
@@ -42,7 +42,7 @@ if ($setupMode) {
     $isAdmin = !empty($data["isAdmin"]) ? "1" : "0"; // "1" for admin, "0" for regular user.
 }
 
-// Validate input
+// Validate input.
 if (!$newUsername || !$newPassword) {
     echo json_encode(["error" => "Username and password required"]);
     exit;
@@ -54,12 +54,12 @@ if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $newUsername)) {
     exit;
 }
 
-// Ensure users.txt exists
+// Ensure users.txt exists.
 if (!file_exists($usersFile)) {
     file_put_contents($usersFile, '');
 }
 
-// Check if username already exists
+// Check if username already exists.
 $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 foreach ($existingUsers as $line) {
     list($storedUser, $storedHash, $storedRole) = explode(':', trim($line));
@@ -69,10 +69,10 @@ foreach ($existingUsers as $line) {
     }
 }
 
-// Hash the password
+// Hash the password.
 $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
 
-// Prepare new user line
+// Prepare new user line.
 $newUserLine = $newUsername . ":" . $hashedPassword . ":" . $isAdmin . PHP_EOL;
 
 // In setup mode, overwrite users.txt; otherwise, append to it.
