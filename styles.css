@@ -298,12 +298,14 @@ body.dark-mode #folderHelpBtn i.material-icons.folder-help-icon {
   color: white;
 }
 
-.material-icons.folder-icon {
+.material-icons.folder-icon,
+.material-icons.gallery-icon {
   color: black;
   margin-right: 5px;
 }
 
-body.dark-mode .material-icons.folder-icon {
+body.dark-mode .material-icons.folder-icon,
+body.dark-mode .material-icons.gallery-icon {
   color: white;
   margin-right: 5px;
 }
