@@ -216,6 +216,7 @@ body.dark-mode header {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Folder Help Tooltip - Light Mode */
 .folder-help-tooltip {
   background-color: #fff;
   color: #333;
@@ -225,6 +226,7 @@ body.dark-mode header {
   box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
 }
 
+/* Folder Help Tooltip - Dark Mode */
 body.dark-mode .folder-help-tooltip {
   background-color: #333 !important;
   color: #eee !important;
@@ -713,10 +715,23 @@ body.dark-mode .editor-header {
 
 .material-icons.pauseResumeBtn {
   color: black !important;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 body.dark-mode .material-icons.pauseResumeBtn {
   color: white !important;
+}
+
+body.dark-mode .material-icons.pauseResumeBtn:hover {
+  background-color: rgba(255, 215, 0, 0.3);
+  color: #fff;
+}
+
+body:not(.dark-mode) .material-icons.pauseResumeBtn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  color: #000;
 }
 
 #uploadProgressContainer ul {
@@ -1269,16 +1284,20 @@ body.dark-mode #fileListContainer {
 /* ===========================================================
    FOLDER TREE STYLES
    =========================================================== */
+/* Make breadcrumb links look clickable */
 .breadcrumb-link {
   cursor: pointer;
   color: #007bff;
+  /* Blue color, for example */
   text-decoration: underline;
 }
 
+/* Change color on hover */
 .breadcrumb-link:hover {
   color: #0056b3;
 }
 
+/* Style for the selected breadcrumb */
 .breadcrumb-link.selected {
   background-color: #e9ecef;
   font-weight: bold;
@@ -1334,11 +1353,17 @@ body.dark-mode #fileListContainer {
 .image-modal-header {
   display: flex;
   align-items: center;
+  /* Vertically center the text within a fixed height */
   justify-content: center;
+  /* Center horizontally */
   white-space: nowrap;
+  /* Prevent wrapping */
   overflow: hidden;
+  /* Hide any overflowing text */
   text-overflow: ellipsis;
+  /* Truncate with an ellipsis */
   height: 25px;
+  /* Fixed height for a single line */
   padding: 5px;
   margin-bottom: 10px;
   max-width: 90%;
