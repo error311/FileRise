@@ -15,10 +15,13 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
 
 ## Features
 
-- **Multiple File/Folder Uploads with Progress:**
-  - Users can select and upload multiple files & folders at once.
-  - Each file upload displays an individual progress bar with percentage and upload speed.
-  - Image files show a small thumbnail preview (with default Material icons for other file types).
+- **Multiple File/Folder Uploads with Progress (Resumable.js Integration):**
+  - Users can effortlessly upload multiple files and folders simultaneously by either selecting them through the file picker or dragging and dropping them directly into the interface.
+  - **Chunked Uploads:** Files are uploaded in configurable chunks (default set as 3 MB) to efficiently handle large files.
+  - **Pause, Resume, and Retry:** Uploads can be paused and resumed at any time, with support for retrying failed chunks.
+  - **Real-Time Progress:** Each file shows an individual progress bar that displays percentage complete and upload speed.
+  - **File & Folder Grouping:** When many files are dropped, files are automatically grouped into a scrollable wrapper, ensuring the interface remains clean.
+  - **Secure Uploads:** All uploads integrate CSRF token validation and other security checks.
 - **Built-in File Editing & Renaming:**
   - Text-based files (e.g., .txt, .html, .js) can be opened and edited in a modal window using CodeMirror for:
     - Syntax highlighting
@@ -40,11 +43,12 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
   - **Copy Files:** Copy selected files to another folder with a unique-naming feature to prevent overwrites.
   - **Move Files:** Move selected files to a different folder, automatically generating a unique filename if needed to avoid data loss.
   - **Download Files as ZIP:** Download selected files as a ZIP archive. Users can specify a custom name for the ZIP file via a modal dialog.
-  - **Drag & Drop:** Easily move files by selecting them from the file list and simply dragging them onto your desired folder in the folder tree. When you drop the files onto a folder, the system automatically moves them, updating your file organization in one seamless action.
+  - **Drag & Drop:** Easily move files by selecting them from the file list and simply dragging them onto your desired folder in the folder tree or breadcrumb. When you drop the files onto a folder, the system automatically moves them, updating your file organization in one seamless action.
 - **Folder Management:**
   - Organize files into folders and subfolders with the ability to create, rename, and delete folders.
   - A dynamic folder tree in the UI allows users to navigate directories easily, and any changes are immediately reflected in real time.
   - **Per-Folder Metadata Storage:** Each folder has its own metadata JSON file (e.g., `root_metadata.json`, `FolderName_metadata.json`), and operations (copy/move/rename) update these metadata files accordingly.
+  - **Intuitive Breadcrumb Navigation:** Clickable breadcrumbs enable users to quickly jump to any parent folder, streamlining navigation across subfolders. Supports drag & drop to move files.
 - **Sorting & Pagination:**
   - The file list can be sorted by name, modified date, upload date, file size, or uploader.
   - Pagination controls let users navigate through files with selectable page sizes (10, 20, 50, or 100 items per page) and “Prev”/“Next” navigation buttons.

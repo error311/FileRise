@@ -12,6 +12,7 @@ body {
 
 body {
   letter-spacing: 0.2px;
+  overflow-x: hidden;
 }
 
 .custom-dash {
@@ -22,17 +23,13 @@ body {
 }
 
 /* CONTAINER */
-.container {
-  margin-top: 20px;
-}
-
+.container,
 .container-fluid {
-  padding-left: 5px !important;
-  padding-right: 5px !important;
   margin-top: 20px;
+  padding-right: 4px !important;
+  padding-left: 4px !important;
 }
 
-/* Increase left/right padding for larger screens */
 @media (min-width: 768px) {
   .container-fluid {
     padding-left: 50px !important;
@@ -54,6 +51,8 @@ body {
 /************************************************************/
 /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
 /************************************************************/
+
+
 #uploadCard,
 #folderManagementCard {
   min-height: 342px;
@@ -217,7 +216,6 @@ body.dark-mode header {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-/* Folder Help Tooltip - Light Mode */
 .folder-help-tooltip {
   background-color: #fff;
   color: #333;
@@ -227,7 +225,6 @@ body.dark-mode header {
   box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
 }
 
-/* Folder Help Tooltip - Dark Mode */
 body.dark-mode .folder-help-tooltip {
   background-color: #333 !important;
   color: #eee !important;
@@ -321,7 +318,7 @@ body.dark-mode .material-icons.gallery-icon {
   border: none;
   color: red;
   cursor: pointer;
-  margin-right: 8px;
+  margin-right: 0px;
   padding: 0;
   border-radius: 50%;
   transition: background-color 0.3s;
@@ -535,17 +532,6 @@ body.dark-mode .modal .modal-content {
   border-color: #444;
 }
 
-.editor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 5px 10px;
-}
-
-body.dark-mode .editor-header {
-  background-color: #2c2c2c;
-}
-
 .editor-close-btn {
   position: absolute;
   top: 10px;
@@ -588,12 +574,12 @@ body.dark-mode .editor-close-btn:hover {
 /* Editor Modal */
 .editor-modal {
   position: fixed;
-  top: 5%;
+  top: 2%;
   left: 5%;
   width: 90vw;
   height: 90vh;
   background-color: #fff;
-  padding: 20px;
+  padding: 10px 20px 20px 20px;
   border: 1px solid #ccc;
   border-radius: 4px !important;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
@@ -630,14 +616,24 @@ body.dark-mode .editor-modal {
   }
 }
 
-.editor-title {
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  font-size: 1.5rem;
-  max-width: 95%;
-  display: block;
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 33px;
+  padding: 0 10px;
+  margin-bottom: 7px;
 }
+
+.editor-title {
+  margin: 0;
+  line-height: 33px;
+}
+
+body.dark-mode .editor-header {
+  background-color: #2c2c2c;
+}
+
 
 @media (max-width: 600px) {
   .editor-title {
@@ -648,6 +644,7 @@ body.dark-mode .editor-modal {
 
 .editor-controls {
   text-align: right;
+  margin-right: 30px;
   margin-bottom: 5px;
 }
 
@@ -704,6 +701,24 @@ body.dark-mode .editor-modal {
 /* ===========================================================
    UPLOAD PROGRESS STYLES
    =========================================================== */
+.pause-resume-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  outline: none;
+  margin-right: 5px;
+}
+
+.material-icons.pauseResumeBtn {
+  color: black !important;
+}
+
+body.dark-mode .material-icons.pauseResumeBtn {
+  color: white !important;
+}
+
 #uploadProgressContainer ul {
   list-style: none;
   padding: 0;
@@ -913,6 +928,7 @@ body.dark-mode #fileList table tr {
   word-break: break-word !important;
   text-align: left !important;
   line-height: 1.2 !important;
+  vertical-align: middle !important;
   padding: 8px 10px !important;
   max-width: 250px !important;
   min-width: 120px !important;
@@ -1143,9 +1159,15 @@ body.dark-mode .folder-option:hover {
 }
 
 #fileListContainer {
-  padding: 10px;
-  margin-top: 20px;
-  margin-bottom: 20px;
+  max-width: 100%;
+  padding: 10px 5px;
+  margin: 20px auto;
+}
+
+@media (max-width: 750px) {
+  #fileListContainer {
+    width: 99%;
+  }
 }
 
 body.dark-mode #fileListContainer {
@@ -1153,9 +1175,11 @@ body.dark-mode #fileListContainer {
   color: #e0e0e0;
   border: 1px solid #444;
   border-radius: 8px;
-  padding: 10px;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  padding-left: 5px !important;
+  padding-right: 5px !important;
   margin-top: 20px;
-
 }
 
 #fileListContainer>h2,
@@ -1174,7 +1198,7 @@ body.dark-mode #fileListContainer {
 }
 
 .col-12.col-md-4.text-left {
-  margin-left: -15px;
+  margin-left: -17px;
 }
 
 @media (max-width: 600px) {
@@ -1245,7 +1269,6 @@ body.dark-mode #fileListContainer {
 /* ===========================================================
    FOLDER TREE STYLES
    =========================================================== */
-/* Make breadcrumb links look clickable */
 .breadcrumb-link {
   cursor: pointer;
   color: #007bff;
@@ -1312,12 +1335,13 @@ body.dark-mode #fileListContainer {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: nowrap;
-  text-align: center;
-  min-height: 30px;
-  margin: 0 auto 10px;
-  padding: 10px;
-  width: 90% !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 25px;
+  padding: 5px;
+  margin-bottom: 10px;
+  max-width: 90%;
 }
 
 .image-preview-modal-content {
@@ -1599,7 +1623,7 @@ body.dark-mode .btn-secondary {
 
 #toggleViewBtn {
   margin-bottom: 20px;
-  margin-left: 15px;
+  margin-left: 14px;
   padding: 10px 20px;
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
@@ -1611,9 +1635,15 @@ body.dark-mode .btn-secondary {
   transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
+@media (max-width: 768px) {
+  #toggleViewBtn {
+    margin-left: 0 !important;
+  }
+}
+
 @media (max-width: 600px) {
   #toggleViewBtn {
-    margin-left: auto !important;
+    margin-left: 0 !important;
     margin-right: auto !important;
     display: block !important;
   }

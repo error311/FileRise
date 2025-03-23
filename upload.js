@@ -2,11 +2,15 @@ import { loadFileList, displayFilePreview, initFileActions } from './fileManager
 import { showToast, escapeHTML } from './domUtils.js';
 import { loadFolderTree } from './folderManager.js';
 
-// Helper: Recursively traverse a dropped folder.
+/* -----------------------------------------------------
+   Helpers for Drag–and–Drop Folder Uploads (Original Code)
+----------------------------------------------------- */
+// Recursively traverse a dropped folder.
 function traverseFileTreePromise(item, path = "") {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (item.isFile) {
       item.file(file => {
+        // Store relative path for folder uploads.
         Object.defineProperty(file, 'customRelativePath', {
           value: path + file.name,
           writable: true,
@@ -29,7 +33,7 @@ function traverseFileTreePromise(item, path = "") {
   });
 }
 
-// Helper: Given DataTransfer items, recursively retrieve files.
+// Recursively retrieve files from DataTransfer items.
 function getFilesFromDataTransferItems(items) {
   const promises = [];
   for (let i = 0; i < items.length; i++) {
@@ -41,25 +45,27 @@ function getFilesFromDataTransferItems(items) {
   return Promise.all(promises).then(results => results.flat());
 }
 
-// Helper: Set default drop area content.
+/* -----------------------------------------------------
+   UI Helpers (Mostly unchanged from your original code)
+----------------------------------------------------- */
 function setDropAreaDefault() {
   const dropArea = document.getElementById("uploadDropArea");
   if (dropArea) {
     dropArea.innerHTML = `
-          <div id="uploadInstruction" class="upload-instruction">
-            Drop files/folders here or click 'Choose files'
-          </div>
-          <div id="uploadFileRow" class="upload-file-row">
-            <button id="customChooseBtn" type="button">
-              Choose files
-            </button>
-          </div>
-          <div id="fileInfoWrapper" class="file-info-wrapper">
-            <div id="fileInfoContainer" class="file-info-container">
-              <span id="fileInfoDefault">No files selected</span>
-            </div>
-          </div>
-        `;
+      <div id="uploadInstruction" class="upload-instruction">
+        Drop files/folders here or click 'Choose files'
+      </div>
+      <div id="uploadFileRow" class="upload-file-row">
+        <button id="customChooseBtn" type="button">Choose files</button>
+      </div>
+      <div id="fileInfoWrapper" class="file-info-wrapper">
+        <div id="fileInfoContainer" class="file-info-container">
+          <span id="fileInfoDefault">No files selected</span>
+        </div>
+      </div>
+      <!-- File input for file picker (files only) -->
+      <input type="file" id="file" name="file[]" class="form-control-file" multiple style="opacity:0; position:absolute; width:1px; height:1px;" />
+    `;
   }
 }
 
@@ -82,7 +88,6 @@ function adjustFolderHelpExpansionClosed() {
   }
 }
 
-// Helper: Update file info container count/preview.
 function updateFileInfoCount() {
   const fileInfoContainer = document.getElementById("fileInfoContainer");
   if (fileInfoContainer && window.selectedFiles) {
@@ -90,64 +95,180 @@ function updateFileInfoCount() {
       fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
     } else if (window.selectedFiles.length === 1) {
       fileInfoContainer.innerHTML = `
-        <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;"></div>
-        <span id="fileNameDisplay" class="file-name-display">${escapeHTML(window.selectedFiles[0].name)}</span>
+        <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;">
+          <span class="material-icons file-icon">insert_drive_file</span>
+        </div>
+        <span id="fileNameDisplay" class="file-name-display">${escapeHTML(window.selectedFiles[0].name || window.selectedFiles[0].fileName || "Unnamed File")}</span>
       `;
     } else {
       fileInfoContainer.innerHTML = `
-        <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;"></div>
+        <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;">
+          <span class="material-icons file-icon">insert_drive_file</span>
+        </div>
         <span id="fileCountDisplay" class="file-name-display">${window.selectedFiles.length} files selected</span>
       `;
     }
     const previewContainer = document.getElementById("filePreviewContainer");
     if (previewContainer && window.selectedFiles.length > 0) {
       previewContainer.innerHTML = "";
-      displayFilePreview(window.selectedFiles[0], previewContainer);
+      // For image files, try to show a preview (if available from the file object).
+      displayFilePreview(window.selectedFiles[0].file || window.selectedFiles[0], previewContainer);
     }
   }
 }
 
-// Helper: Create a file entry element with a remove button.
+// Helper function to repeatedly call removeChunks.php
+function removeChunkFolderRepeatedly(identifier, csrfToken, maxAttempts = 3, interval = 1000) {
+  let attempt = 0;
+  const removalInterval = setInterval(() => {
+    attempt++;
+    const params = new URLSearchParams();
+    // Prefix with "resumable_" to match your PHP regex.
+    params.append('folder', 'resumable_' + identifier);
+    params.append('csrf_token', csrfToken);
+    fetch('removeChunks.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    })
+      .then(response => response.json())
+      .then(data => {
+        console.log(`Chunk folder removal attempt ${attempt}:`, data);
+      })
+      .catch(err => {
+        console.error(`Error on removal attempt ${attempt}:`, err);
+      });
+    if (attempt >= maxAttempts) {
+      clearInterval(removalInterval);
+    }
+  }, interval);
+}
+
+/* -----------------------------------------------------
+   File Entry Creation (with Pause/Resume and Restart)
+----------------------------------------------------- */
+// Create a file entry element with a remove button and a pause/resume button.
 function createFileEntry(file) {
   const li = document.createElement("li");
   li.classList.add("upload-progress-item");
   li.style.display = "flex";
   li.dataset.uploadIndex = file.uploadIndex;
 
+  // Remove button (always added)
   const removeBtn = document.createElement("button");
   removeBtn.classList.add("remove-file-btn");
   removeBtn.textContent = "×";
-  removeBtn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    const uploadIndex = file.uploadIndex;
-    window.selectedFiles = window.selectedFiles.filter(f => f.uploadIndex !== uploadIndex);
-    li.remove();
-    updateFileInfoCount();
-  });
+// In your remove button event listener, replace the fetch call with:
+removeBtn.addEventListener("click", function (e) {
+  e.stopPropagation();
+  const uploadIndex = file.uploadIndex;
+  window.selectedFiles = window.selectedFiles.filter(f => f.uploadIndex !== uploadIndex);
+  
+  // Cancel the file upload if possible.
+  if (typeof file.cancel === "function") {
+    file.cancel();
+    console.log("Canceled file upload:", file.fileName);
+  }
+  
+  // Remove file from the resumable queue.
+  if (resumableInstance && typeof resumableInstance.removeFile === "function") {
+    resumableInstance.removeFile(file);
+  }
+  
+  // Call our helper repeatedly to remove the chunk folder.
+  if (file.uniqueIdentifier) {
+    removeChunkFolderRepeatedly(file.uniqueIdentifier, window.csrfToken, 3, 1000);
+  }
+  
+  li.remove();
+  updateFileInfoCount();
+});
   li.removeBtn = removeBtn;
+  li.appendChild(removeBtn);
 
+  // Add pause/resume/restart button if the file supports pause/resume.
+// Conditionally add the pause/resume button only if file.pause is available
+// Pause/Resume button (for resumable file–picker uploads)
+if (typeof file.pause === "function") {
+  const pauseResumeBtn = document.createElement("button");
+  pauseResumeBtn.setAttribute("type", "button"); // not a submit button
+  pauseResumeBtn.classList.add("pause-resume-btn");
+  // Start with pause icon and disable button until upload starts
+  pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
+  pauseResumeBtn.disabled = true; 
+  pauseResumeBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (file.isError) {
+      // If the file previously failed, try restarting upload.
+      if (typeof file.retry === "function") {
+        file.retry();
+        file.isError = false;
+        pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
+      }
+    } else if (!file.paused) {
+      // Pause the upload (if possible)
+      if (typeof file.pause === "function") {
+        file.pause();
+        file.paused = true;
+        pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">play_circle_outline</span>';
+      } else {
+      }
+    } else if (file.paused) {
+      // Resume sequence: first call to resume (or upload() fallback)
+      if (typeof file.resume === "function") {
+        file.resume();
+      } else {
+        resumableInstance.upload();
+      }
+      // After a short delay, pause again then resume
+      setTimeout(() => {
+        if (typeof file.pause === "function") {
+          file.pause();
+        } else {
+          resumableInstance.upload();
+        }
+        setTimeout(() => {
+          if (typeof file.resume === "function") {
+            file.resume();
+          } else {
+            resumableInstance.upload();
+          }
+        }, 100);
+      }, 100);
+      file.paused = false;
+      pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
+    } else {
+      console.error("Pause/resume function not available for file", file);
+    }
+  });
+  li.appendChild(pauseResumeBtn);
+}
+
+  // Preview element
   const preview = document.createElement("div");
   preview.className = "file-preview";
   displayFilePreview(file, preview);
+  li.appendChild(preview);
 
+  // File name display
   const nameDiv = document.createElement("div");
   nameDiv.classList.add("upload-file-name");
-  nameDiv.textContent = file.name;
+  nameDiv.textContent = file.name || file.fileName || "Unnamed File";
+  li.appendChild(nameDiv);
 
+  // Progress bar container
   const progDiv = document.createElement("div");
   progDiv.classList.add("progress", "upload-progress-div");
   progDiv.style.flex = "0 0 250px";
   progDiv.style.marginLeft = "5px";
-
   const progBar = document.createElement("div");
   progBar.classList.add("progress-bar");
   progBar.style.width = "0%";
   progBar.innerText = "0%";
-
   progDiv.appendChild(progBar);
-  li.appendChild(removeBtn);
-  li.appendChild(preview);
-  li.appendChild(nameDiv);
   li.appendChild(progDiv);
 
   li.progressBar = progBar;
@@ -155,7 +276,11 @@ function createFileEntry(file) {
   return li;
 }
 
-// Process selected files: Build preview/progress list and store files for later submission.
+/* -----------------------------------------------------
+   Processing Files
+   - For drag–and–drop, use original processing (supports folders).
+   - For file picker, if using Resumable, those files use resumable.
+----------------------------------------------------- */
 function processFiles(filesInput) {
   const fileInfoContainer = document.getElementById("fileInfoContainer");
   const files = Array.from(filesInput);
@@ -164,12 +289,16 @@ function processFiles(filesInput) {
     if (files.length > 0) {
       if (files.length === 1) {
         fileInfoContainer.innerHTML = `
-          <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;"></div>
-          <span id="fileNameDisplay" class="file-name-display">${escapeHTML(files[0].name)}</span>
+          <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;">
+            <span class="material-icons file-icon">insert_drive_file</span>
+          </div>
+          <span id="fileNameDisplay" class="file-name-display">${escapeHTML(files[0].name || files[0].fileName || "Unnamed File")}</span>
         `;
       } else {
         fileInfoContainer.innerHTML = `
-          <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;"></div>
+          <div id="filePreviewContainer" class="file-preview-container" style="display:inline-block;">
+            <span class="material-icons file-icon">insert_drive_file</span>
+          </div>
           <span id="fileCountDisplay" class="file-name-display">${files.length} files selected</span>
         `;
       }
@@ -195,12 +324,14 @@ function processFiles(filesInput) {
     const list = document.createElement("ul");
     list.classList.add("upload-progress-list");
 
+    // Check for relative paths (for folder uploads).
     const hasRelativePaths = files.some(file => {
       const rel = file.webkitRelativePath || file.customRelativePath || "";
       return rel.trim() !== "";
     });
 
     if (hasRelativePaths) {
+      // Group files by folder.
       const fileGroups = {};
       files.forEach(file => {
         let folderName = "Root";
@@ -218,11 +349,13 @@ function processFiles(filesInput) {
       });
 
       Object.keys(fileGroups).forEach(folderName => {
-        const folderLi = document.createElement("li");
-        folderLi.classList.add("upload-folder-group");
-        folderLi.innerHTML = `<i class="material-icons folder-icon" style="vertical-align:middle; margin-right:8px;">folder</i> ${folderName}:`;
-        list.appendChild(folderLi);
-
+        // Only show folder grouping if folderName is not "Root"
+        if (folderName !== "Root") {
+          const folderLi = document.createElement("li");
+          folderLi.classList.add("upload-folder-group");
+          folderLi.innerHTML = `<i class="material-icons folder-icon" style="vertical-align:middle; margin-right:8px;">folder</i> ${folderName}:`;
+          list.appendChild(folderLi);
+        }
         const nestedUl = document.createElement("ul");
         nestedUl.classList.add("upload-folder-group-list");
         fileGroups[folderName]
@@ -234,6 +367,7 @@ function processFiles(filesInput) {
         list.appendChild(nestedUl);
       });
     } else {
+      // No relative paths – list files directly.
       files.forEach((file, index) => {
         const li = createFileEntry(file);
         li.style.display = (index < maxDisplay) ? "flex" : "none";
@@ -263,7 +397,159 @@ function processFiles(filesInput) {
   updateFileInfoCount();
 }
 
-// Function to handle file uploads; triggered when the user clicks the "Upload" button.
+/* -----------------------------------------------------
+   Resumable.js Integration for File Picker Uploads
+   (Only files chosen via file input use Resumable; folder uploads use original code.)
+----------------------------------------------------- */
+const useResumable = true; // Enable resumable for file picker uploads
+let resumableInstance;
+function initResumableUpload() {
+  resumableInstance = new Resumable({
+    target: "upload.php",
+    query: { folder: window.currentFolder || "root", upload_token: window.csrfToken },
+    chunkSize: 3 * 1024 * 1024, // 3 MB chunks
+    simultaneousUploads: 3,
+    testChunks: false,
+    throttleProgressCallbacks: 1,
+    headers: { "X-CSRF-Token": window.csrfToken }
+  });
+
+  const fileInput = document.getElementById("file");
+  if (fileInput) {
+    // Assign Resumable to file input for file picker uploads.
+    resumableInstance.assignBrowse(fileInput);
+    fileInput.addEventListener("change", function () {
+      for (let i = 0; i < fileInput.files.length; i++) {
+        resumableInstance.addFile(fileInput.files[i]);
+      }
+    });
+  }
+
+  resumableInstance.on("fileAdded", function (file) {
+    // Initialize custom paused flag
+    file.paused = false;
+    file.uploadIndex = file.uniqueIdentifier;
+    if (!window.selectedFiles) {
+      window.selectedFiles = [];
+    }
+    window.selectedFiles.push(file);
+    const progressContainer = document.getElementById("uploadProgressContainer");
+
+    // Check if a wrapper already exists; if not, create one with a UL inside.
+    let listWrapper = progressContainer.querySelector(".upload-progress-wrapper");
+    let list;
+    if (!listWrapper) {
+      listWrapper = document.createElement("div");
+      listWrapper.classList.add("upload-progress-wrapper");
+      listWrapper.style.maxHeight = "300px";
+      listWrapper.style.overflowY = "auto";
+      list = document.createElement("ul");
+      list.classList.add("upload-progress-list");
+      listWrapper.appendChild(list);
+      progressContainer.appendChild(listWrapper);
+    } else {
+      list = listWrapper.querySelector("ul.upload-progress-list");
+    }
+
+    const li = createFileEntry(file);
+    li.dataset.uploadIndex = file.uniqueIdentifier;
+    list.appendChild(li);
+    updateFileInfoCount();
+  });
+
+  resumableInstance.on("fileProgress", function (file) {
+    const percent = Math.floor(file.progress() * 100);
+    const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
+    if (li && li.progressBar) {
+      li.progressBar.style.width = percent + "%";
+      
+      // Calculate elapsed time since file entry was created.
+      const elapsed = (Date.now() - li.startTime) / 1000;
+      let speed = "";
+      if (elapsed > 0) {
+        // Calculate total bytes uploaded so far using file.progress() * file.size
+        const bytesUploaded = file.progress() * file.size;
+        const spd = bytesUploaded / elapsed;
+        if (spd < 1024) {
+          speed = spd.toFixed(0) + " B/s";
+        } else if (spd < 1048576) {
+          speed = (spd / 1024).toFixed(1) + " KB/s";
+        } else {
+          speed = (spd / 1048576).toFixed(1) + " MB/s";
+        }
+      }
+      li.progressBar.innerText = percent + "% (" + speed + ")";
+      
+      // Enable the pause/resume button once progress starts
+      const pauseResumeBtn = li.querySelector(".pause-resume-btn");
+      if (pauseResumeBtn) {
+        pauseResumeBtn.disabled = false;
+      }
+    }
+  });
+
+  resumableInstance.on("fileSuccess", function (file, message) {
+    const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
+    if (li && li.progressBar) {
+      li.progressBar.style.width = "100%";
+      li.progressBar.innerText = "Done";
+      // Hide the pause/resume button when upload is complete.
+      const pauseResumeBtn = li.querySelector(".pause-resume-btn");
+      if (pauseResumeBtn) {
+        pauseResumeBtn.style.display = "none";
+      }
+      const removeBtn = li.querySelector(".remove-file-btn");
+      if (removeBtn) {
+        removeBtn.style.display = "none";
+      }
+    }
+    loadFileList(window.currentFolder);
+  });
+
+  resumableInstance.on("fileError", function (file, message) {
+    const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
+    if (li && li.progressBar) {
+      li.progressBar.innerText = "Error";
+    }
+    // Mark file as errored so that the pause/resume button acts as a restart button.
+    file.isError = true;
+    // Change the pause/resume button to show a restart icon.
+    const pauseResumeBtn = li ? li.querySelector(".pause-resume-btn") : null;
+    if (pauseResumeBtn) {
+      pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">replay</span>';
+      pauseResumeBtn.disabled = false;
+    }
+    showToast("Error uploading file: " + file.fileName);
+  });
+
+  resumableInstance.on("complete", function () {
+    // Check if any file in the current selection is marked with an error.
+    const hasError = window.selectedFiles.some(f => f.isError);
+    if (!hasError) {
+      // All files succeeded; clear the file list after 5 seconds.
+      setTimeout(() => {
+        if (fileInput) fileInput.value = "";
+        const progressContainer = document.getElementById("uploadProgressContainer");
+        progressContainer.innerHTML = "";
+        window.selectedFiles = [];
+        adjustFolderHelpExpansionClosed();
+        window.addEventListener("resize", adjustFolderHelpExpansionClosed);
+        const fileInfoContainer = document.getElementById("fileInfoContainer");
+        if (fileInfoContainer) {
+          fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
+        }
+        const dropArea = document.getElementById("uploadDropArea");
+        if (dropArea) setDropAreaDefault();
+      }, 5000);
+    } else {
+      showToast("Some files failed to upload. Please check the list.");
+    }
+  });
+}
+
+/* -----------------------------------------------------
+   XHR-based submitFiles for Drag–and–Drop (Folder) Uploads
+----------------------------------------------------- */
 function submitFiles(allFiles) {
   const folderToUse = window.currentFolder || "root";
   const progressContainer = document.getElementById("uploadProgressContainer");
@@ -323,9 +609,7 @@ function submitFiles(allFiles) {
         if (li) {
           li.progressBar.style.width = "100%";
           li.progressBar.innerText = "Done";
-          if (li.removeBtn) {
-            li.removeBtn.style.display = "none";
-          }
+          if (li.removeBtn) li.removeBtn.style.display = "none";
         }
         uploadResults[file.uploadIndex] = true;
       } else {
@@ -367,7 +651,6 @@ function submitFiles(allFiles) {
     });
 
     xhr.open("POST", "upload.php", true);
-    // Set the CSRF token header to match the folderManager approach.
     xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
     xhr.send(formData);
   });
@@ -377,35 +660,40 @@ function submitFiles(allFiles) {
       .then(serverFiles => {
         initFileActions();
         serverFiles = (serverFiles || []).map(item => item.name.trim().toLowerCase());
+        let allSucceeded = true;
         allFiles.forEach(file => {
-          if ((file.webkitRelativePath || file.customRelativePath || "").trim() !== "") {
-            return;
-          }
-          const clientFileName = file.name.trim().toLowerCase();
-          if (!uploadResults[file.uploadIndex] || !serverFiles.includes(clientFileName)) {
-            const li = progressElements[file.uploadIndex];
-            if (li) {
-              li.progressBar.innerText = "Error";
+          // For files without a relative path
+          if ((file.webkitRelativePath || file.customRelativePath || "").trim() === "") {
+            const clientFileName = file.name.trim().toLowerCase();
+            if (!uploadResults[file.uploadIndex] || !serverFiles.includes(clientFileName)) {
+              const li = progressElements[file.uploadIndex];
+              if (li) {
+                li.progressBar.innerText = "Error";
+              }
+              allSucceeded = false;
             }
-            allSucceeded = false;
           }
         });
-        setTimeout(() => {
-          if (fileInput) fileInput.value = "";
-          const removeBtns = progressContainer.querySelectorAll("button.remove-file-btn");
-          removeBtns.forEach(btn => btn.style.display = "none");
-          progressContainer.innerHTML = "";
-          window.selectedFiles = [];
-          adjustFolderHelpExpansionClosed();
-          window.addEventListener("resize", adjustFolderHelpExpansionClosed);
-          const fileInfoContainer = document.getElementById("fileInfoContainer");
-          if (fileInfoContainer) {
-            fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
-          }
-          const dropArea = document.getElementById("uploadDropArea");
-          if (dropArea) setDropAreaDefault();
-        }, 5000);
-        if (!allSucceeded) {
+        
+        if (allSucceeded) {
+          // All files succeeded—clear the list after 5 seconds.
+          setTimeout(() => {
+            if (fileInput) fileInput.value = "";
+            const removeBtns = progressContainer.querySelectorAll("button.remove-file-btn");
+            removeBtns.forEach(btn => btn.style.display = "none");
+            progressContainer.innerHTML = "";
+            window.selectedFiles = [];
+            adjustFolderHelpExpansionClosed();
+            window.addEventListener("resize", adjustFolderHelpExpansionClosed);
+            const fileInfoContainer = document.getElementById("fileInfoContainer");
+            if (fileInfoContainer) {
+              fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
+            }
+            const dropArea = document.getElementById("uploadDropArea");
+            if (dropArea) setDropAreaDefault();
+          }, 5000);
+        } else {
+          // Some files failed—keep the list visible and show a toast.
           showToast("Some files failed to upload. Please check the list.");
         }
       })
@@ -419,12 +707,15 @@ function submitFiles(allFiles) {
   }
 }
 
-// Main initUpload: sets up file input, drop area, and form submission.
+/* -----------------------------------------------------
+   Main initUpload: Sets up file input, drop area, and form submission.
+----------------------------------------------------- */
 function initUpload() {
   const fileInput = document.getElementById("file");
   const dropArea = document.getElementById("uploadDropArea");
   const uploadForm = document.getElementById("uploadFileForm");
 
+  // For file picker, remove directory attributes so only files can be chosen.
   if (fileInput) {
     fileInput.removeAttribute("webkitdirectory");
     fileInput.removeAttribute("mozdirectory");
@@ -434,6 +725,7 @@ function initUpload() {
 
   setDropAreaDefault();
 
+  // Drag–and–drop events (for folder uploads) use original processing.
   if (dropArea) {
     dropArea.classList.add("upload-drop-area");
     dropArea.addEventListener("dragover", function (e) {
@@ -458,6 +750,7 @@ function initUpload() {
         processFiles(dt.files);
       }
     });
+    // Clicking drop area triggers file input.
     dropArea.addEventListener("click", function () {
       if (fileInput) fileInput.click();
     });
@@ -465,7 +758,14 @@ function initUpload() {
 
   if (fileInput) {
     fileInput.addEventListener("change", function () {
-      processFiles(fileInput.files);
+      if (useResumable) {
+        // For file picker, if resumable is enabled, let it handle the files.
+        for (let i = 0; i < fileInput.files.length; i++) {
+          resumableInstance.addFile(fileInput.files[i]);
+        }
+      } else {
+        processFiles(fileInput.files);
+      }
     });
   }
 
@@ -477,8 +777,20 @@ function initUpload() {
         showToast("No files selected.");
         return;
       }
-      submitFiles(files);
+      // If files come from file picker (no relative path), use Resumable.
+      if (useResumable && (!files[0].customRelativePath || files[0].customRelativePath === "")) {
+        // Ensure current folder is updated.
+        resumableInstance.opts.query.folder = window.currentFolder || "root";
+        resumableInstance.upload();
+        showToast("Resumable upload started...");
+      } else {
+        submitFiles(files);
+      }
     });
+  }
+
+  if (useResumable) {
+    initResumableUpload();
   }
 }
 

@@ -47,7 +47,6 @@ function showConfirm(message, onConfirm) {
  * This function should be called from main.js after authentication.
  */
 export function setupTrashRestoreDelete() {
-    console.log("Setting up trash restore/delete listeners.");
 
     // --- Attach listener to the restore button (created in auth.js) to open the modal.
     const restoreBtn = document.getElementById("restoreFilesBtn");
@@ -57,7 +56,6 @@ export function setupTrashRestoreDelete() {
             loadTrashItems();
         });
     } else {
-        console.warn("restoreFilesBtn not found. It may not be available for the current user.");
         setTimeout(() => {
             const retryBtn = document.getElementById("restoreFilesBtn");
             if (retryBtn) {

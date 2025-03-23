@@ -20,6 +20,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/xml/xml.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/css/css.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/resumable.js/1.1.0/resumable.min.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 
@@ -161,15 +162,16 @@
               <div class="card-header">Upload Files/Folders</div>
               <div class="card-body d-flex flex-column">
                 <form id="uploadFileForm" method="post" enctype="multipart/form-data" class="d-flex flex-column"
-                  style="height: 100%;">
+                  style="height: 100%;" novalidate>
                   <div class="form-group flex-grow-1" style="margin-bottom: 1rem;">
                     <div id="uploadDropArea"
-                      style="border:2px dashed #ccc; padding:20px; cursor:pointer; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                      <span>Drop files/folders here or click 'Choose files'</span>
+                      style="border:2px dashed #ccc; padding:20px; cursor:pointer; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; position:relative;">
+                      <span>Drop files/folders here or click 'Choose Files'</span>
                       <br />
-                      <input type="file" id="file" name="file[]" class="form-control-file" multiple required
-                        webkitdirectory directory mozdirectory style="opacity:0; position:absolute; z-index:-1;" />
-                      <button type="button" onclick="document.getElementById('file').click();">Choose Folder</button>
+                      <!-- Note: Remove directory attributes so file picker only allows files -->
+                      <input type="file" id="file" name="file[]" class="form-control-file" multiple
+                        style="opacity:0; position:absolute; width:1px; height:1px;" />
+                      <button type="button" id="customChooseBtn">Choose Files</button>
                     </div>
                   </div>
                   <button type="submit" id="uploadBtn" class="btn btn-primary d-block mx-auto">Upload</button>
@@ -181,7 +183,8 @@
 
           <!-- Folder Management Card -->
           <div class="col-md-6 col-lg-5 d-flex">
-            <div id="folderManagementCard" class="card flex-fill" style="max-width: 900px; width: 100%; position: relative;">
+            <div id="folderManagementCard" class="card flex-fill"
+              style="max-width: 900px; width: 100%; position: relative;">
               <!-- Card header with folder management title and help icon -->
               <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>Folder Navigation &amp; Management</span>
@@ -319,16 +322,17 @@
   </div>
 
   <!-- Change Password-->
-<div id="changePasswordModal" class="modal" style="display:none;">
-  <div class="modal-content" style="max-width:400px; margin:auto;">
-    <span id="closeChangePasswordModal" style="cursor:pointer;">&times;</span>
-    <h3>Change Password</h3>
-    <input type="password" id="oldPassword" placeholder="Old Password" style="width:100%; margin: 5px 0;" />
-    <input type="password" id="newPassword" placeholder="New Password" style="width:100%; margin: 5px 0;" />
-    <input type="password" id="confirmPassword" placeholder="Confirm New Password" style="width:100%; margin: 5px 0;" />
-    <button id="saveNewPasswordBtn" class="btn btn-primary" style="width:100%;">Save</button>
+  <div id="changePasswordModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:400px; margin:auto;">
+      <span id="closeChangePasswordModal" style="cursor:pointer;">&times;</span>
+      <h3>Change Password</h3>
+      <input type="password" id="oldPassword" placeholder="Old Password" style="width:100%; margin: 5px 0;" />
+      <input type="password" id="newPassword" placeholder="New Password" style="width:100%; margin: 5px 0;" />
+      <input type="password" id="confirmPassword" placeholder="Confirm New Password"
+        style="width:100%; margin: 5px 0;" />
+      <button id="saveNewPasswordBtn" class="btn btn-primary" style="width:100%;">Save</button>
+    </div>
   </div>
-</div>
 
   <!-- Add User Modal -->
   <div id="addUserModal" class="modal">

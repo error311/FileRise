@@ -87,9 +87,10 @@ function bindBreadcrumbEvents() {
   const breadcrumbLinks = document.querySelectorAll(".breadcrumb-link");
   breadcrumbLinks.forEach(link => {
     // Click event for navigation.
-    link.addEventListener("click", function(e) {
+    link.addEventListener("click", function (e) {
       e.stopPropagation();
       let folder = this.getAttribute("data-folder");
+      console.log("Breadcrumb clicked, folder:", folder);
       window.currentFolder = folder;
       localStorage.setItem("lastOpenedFolder", folder);
       const titleEl = document.getElementById("fileListTitle");
@@ -113,14 +114,14 @@ function bindBreadcrumbEvents() {
     });
 
     // Drag-and-drop events.
-    link.addEventListener("dragover", function(e) {
+    link.addEventListener("dragover", function (e) {
       e.preventDefault();
       this.classList.add("drop-hover");
     });
-    link.addEventListener("dragleave", function(e) {
+    link.addEventListener("dragleave", function (e) {
       this.classList.remove("drop-hover");
     });
-    link.addEventListener("drop", function(e) {
+    link.addEventListener("drop", function (e) {
       e.preventDefault();
       this.classList.remove("drop-hover");
       const dropFolder = this.getAttribute("data-folder");
@@ -365,7 +366,7 @@ export async function loadFolderTree(selectedFolder) {
 
     // Event binding for folder selection in folder tree.
     container.querySelectorAll(".folder-option").forEach(el => {
-      el.addEventListener("click", function(e) {
+      el.addEventListener("click", function (e) {
         e.stopPropagation();
         container.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
         this.classList.add("selected");
@@ -387,7 +388,7 @@ export async function loadFolderTree(selectedFolder) {
     // Event binding for toggling folders.
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
-      rootToggle.addEventListener("click", function(e) {
+      rootToggle.addEventListener("click", function (e) {
         e.stopPropagation();
         const nestedUl = container.querySelector("#rootRow + ul");
         if (nestedUl) {
@@ -409,7 +410,7 @@ export async function loadFolderTree(selectedFolder) {
     }
 
     container.querySelectorAll(".folder-toggle").forEach(toggle => {
-      toggle.addEventListener("click", function(e) {
+      toggle.addEventListener("click", function (e) {
         e.stopPropagation();
         const siblingUl = this.parentNode.querySelector("ul");
         const folderPath = this.getAttribute("data-folder");
@@ -459,12 +460,12 @@ function openRenameFolderModal() {
   document.getElementById("renameFolderModal").style.display = "block";
 }
 
-document.getElementById("cancelRenameFolder").addEventListener("click", function() {
+document.getElementById("cancelRenameFolder").addEventListener("click", function () {
   document.getElementById("renameFolderModal").style.display = "none";
   document.getElementById("newRenameFolderName").value = "";
 });
 
-document.getElementById("submitRenameFolder").addEventListener("click", function(event) {
+document.getElementById("submitRenameFolder").addEventListener("click", function (event) {
   event.preventDefault();
   const selectedFolder = window.currentFolder || "root";
   const newNameBasename = document.getElementById("newRenameFolderName").value.trim();
@@ -517,11 +518,11 @@ function openDeleteFolderModal() {
   document.getElementById("deleteFolderModal").style.display = "block";
 }
 
-document.getElementById("cancelDeleteFolder").addEventListener("click", function() {
+document.getElementById("cancelDeleteFolder").addEventListener("click", function () {
   document.getElementById("deleteFolderModal").style.display = "none";
 });
 
-document.getElementById("confirmDeleteFolder").addEventListener("click", function() {
+document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
   fetch("deleteFolder.php", {
@@ -549,16 +550,16 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
     });
 });
 
-document.getElementById("createFolderBtn").addEventListener("click", function() {
+document.getElementById("createFolderBtn").addEventListener("click", function () {
   document.getElementById("createFolderModal").style.display = "block";
 });
 
-document.getElementById("cancelCreateFolder").addEventListener("click", function() {
+document.getElementById("cancelCreateFolder").addEventListener("click", function () {
   document.getElementById("createFolderModal").style.display = "none";
   document.getElementById("newFolderName").value = "";
 });
 
-document.getElementById("submitCreateFolder").addEventListener("click", function() {
+document.getElementById("submitCreateFolder").addEventListener("click", function () {
   const folderInput = document.getElementById("newFolderName").value.trim();
   if (!folderInput) {
     showToast("Please enter a folder name.");

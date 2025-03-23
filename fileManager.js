@@ -172,7 +172,7 @@ function enhancedPreviewFile(fileUrl, fileName) {
     modal.innerHTML = `
       <div class="modal-content image-preview-modal-content" style="position: relative; max-width: 90vw; max-height: 90vh;">
         <span id="closeFileModal" class="close-image-modal" style="position: absolute; top: 10px; right: 10px; font-size: 24px; cursor: pointer;">&times;</span>
-        <h4 class="image-modal-header" style="text-align: center; margin-top: 40px;"></h4>
+        <h4 class="image-modal-header"></h4>
         <div class="file-preview-container" style="position: relative; text-align: center;"></div>
       </div>`;
     document.body.appendChild(modal);
@@ -1007,7 +1007,7 @@ function adjustEditorSize() {
   if (modal && window.currentEditor) {
     // Calculate available height for the editor.
     // If you have a header or footer inside the modal, subtract their heights.
-    const headerHeight = 60;
+    const headerHeight = 60; // adjust this value as needed
     const availableHeight = modal.clientHeight - headerHeight;
     window.currentEditor.setSize("100%", availableHeight + "px");
   }
@@ -1054,11 +1054,11 @@ export function editFile(fileName, folder) {
       modal.innerHTML = `
       <div class="editor-header">
         <h3 class="editor-title">Editing: ${fileName}</h3>
+        <div class="editor-controls">
+           <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
+           <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
+        </div>
         <button id="closeEditorX" class="editor-close-btn">&times;</button>
-      </div>
-      <div id="editorControls" class="editor-controls">
-         <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
-         <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
       </div>
       <textarea id="fileEditor" class="editor-textarea">${content}</textarea>
       <div class="editor-footer">
@@ -1157,13 +1157,17 @@ export function saveFile(fileName, folder) {
 }
 
 export function displayFilePreview(file, container) {
+  // Use the underlying File object if it exists (for resumable files)
+  const actualFile = file.file || file;
   container.style.display = "inline-block";
-  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
+  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(actualFile.name)) {
     const img = document.createElement("img");
-    img.src = URL.createObjectURL(file);
+    img.src = URL.createObjectURL(actualFile);
     img.classList.add("file-preview-img");
+    container.innerHTML = ""; // Clear previous content
     container.appendChild(img);
   } else {
+    container.innerHTML = ""; // Clear previous content
     const iconSpan = document.createElement("span");
     iconSpan.classList.add("material-icons", "file-icon");
     iconSpan.textContent = "insert_drive_file";
