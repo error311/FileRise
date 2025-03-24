@@ -4,20 +4,13 @@ import { toggleVisibility, showToast } from './domUtils.js';
 import { loadFileList } from './fileManager.js';
 import { loadFolderTree } from './folderManager.js';
 
-/**
- * Displays a custom confirmation modal with the given message.
- * Calls onConfirm() if the user confirms.
- */
 function showConfirm(message, onConfirm) {
-    // Assume your custom confirm modal exists with id "customConfirmModal"
-    // and has elements "confirmMessage", "confirmYesBtn", and "confirmNoBtn".
     const modal = document.getElementById("customConfirmModal");
     const messageElem = document.getElementById("confirmMessage");
     const yesBtn = document.getElementById("confirmYesBtn");
     const noBtn = document.getElementById("confirmNoBtn");
 
     if (!modal || !messageElem || !yesBtn || !noBtn) {
-        // Fallback to browser confirm if custom modal is not found.
         if (confirm(message)) {
             onConfirm();
         }
@@ -42,10 +35,6 @@ function showConfirm(message, onConfirm) {
     });
 }
 
-/**
- * Sets up event listeners for trash restore and delete operations.
- * This function should be called from main.js after authentication.
- */
 export function setupTrashRestoreDelete() {
 
     // --- Attach listener to the restore button (created in auth.js) to open the modal.

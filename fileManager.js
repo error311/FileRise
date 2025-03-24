@@ -1203,6 +1203,16 @@ export function renameFile(oldName, folder) {
   window.fileFolder = folder || window.currentFolder || "root";
   document.getElementById("newFileName").value = oldName;
   document.getElementById("renameFileModal").style.display = "block";
+  setTimeout(() => {
+    const input = document.getElementById("newFileName");
+    input.focus();
+    const lastDot = oldName.lastIndexOf('.');
+    if (lastDot > 0) {
+      input.setSelectionRange(0, lastDot);
+    } else {
+      input.select();
+    }
+  }, 100);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
