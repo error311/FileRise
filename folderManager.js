@@ -458,6 +458,12 @@ function openRenameFolderModal() {
   const parts = selectedFolder.split("/");
   document.getElementById("newRenameFolderName").value = parts[parts.length - 1];
   document.getElementById("renameFolderModal").style.display = "block";
+  // Focus the input field after a short delay to ensure modal is visible.
+  setTimeout(() => {
+    const input = document.getElementById("newRenameFolderName");
+    input.focus();
+    input.select();
+  }, 100);
 }
 
 document.getElementById("cancelRenameFolder").addEventListener("click", function () {
@@ -552,6 +558,7 @@ document.getElementById("confirmDeleteFolder").addEventListener("click", functio
 
 document.getElementById("createFolderBtn").addEventListener("click", function () {
   document.getElementById("createFolderModal").style.display = "block";
+  document.getElementById("newFolderName").focus();
 });
 
 document.getElementById("cancelCreateFolder").addEventListener("click", function () {

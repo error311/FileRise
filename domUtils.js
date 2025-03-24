@@ -306,3 +306,49 @@ export function previewFile(fileUrl, fileName) {
 
   modal.style.display = "flex";
 }
+
+export function attachEnterKeyListener(modalId, buttonId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.addEventListener("keypress", function(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const btn = document.getElementById(buttonId);
+        if (btn) {
+          btn.click();
+        }
+      }
+    });
+  }
+}
+
+export function showCustomConfirmModal(message) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("customConfirmModal");
+    const messageElem = document.getElementById("confirmMessage");
+    const yesBtn = document.getElementById("confirmYesBtn");
+    const noBtn = document.getElementById("confirmNoBtn");
+
+    messageElem.textContent = message;
+    modal.style.display = "block";
+
+    // Cleanup function to hide the modal and remove event listeners.
+    function cleanup() {
+      modal.style.display = "none";
+      yesBtn.removeEventListener("click", onYes);
+      noBtn.removeEventListener("click", onNo);
+    }
+
+    function onYes() {
+      cleanup();
+      resolve(true);
+    }
+    function onNo() {
+      cleanup();
+      resolve(false);
+    }
+
+    yesBtn.addEventListener("click", onYes);
+    noBtn.addEventListener("click", onNo);
+  });
+}

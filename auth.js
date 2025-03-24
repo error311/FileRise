@@ -1,5 +1,5 @@
 import { sendRequest } from './networkUtils.js';
-import { toggleVisibility, showToast } from './domUtils.js';
+import { toggleVisibility, showToast, attachEnterKeyListener, showCustomConfirmModal } from './domUtils.js';
 import { loadFileList, renderFileTable, displayFilePreview, initFileActions } from './fileManager.js';
 import { loadFolderTree } from './folderManager.js';
 
@@ -13,6 +13,7 @@ function initAuth() {
       toggleVisibility("mainOperations", false);
       document.querySelector(".header-buttons").style.visibility = "hidden";
       toggleVisibility("addUserModal", true);
+      document.getElementById('newUsername').focus();
       return;
     }
     window.setupMode = false;
@@ -22,6 +23,9 @@ function initAuth() {
       toggleVisibility("mainOperations", true);
       toggleVisibility("uploadFileForm", true);
       toggleVisibility("fileListContainer", true);
+      attachEnterKeyListener("addUserModal", "saveUserBtn");
+      attachEnterKeyListener("removeUserModal", "deleteUserBtn");
+      attachEnterKeyListener("changePasswordModal", "saveNewPasswordBtn");
       document.querySelector(".header-buttons").style.visibility = "visible";
       // If admin, show admin-only buttons.
       if (data.isAdmin) {
@@ -64,6 +68,7 @@ function initAuth() {
       }
     } else {
       toggleVisibility("loginForm", true);
+      attachEnterKeyListener("loginModal", "loginBtn");
       toggleVisibility("mainOperations", false);
       toggleVisibility("uploadFileForm", false);
       toggleVisibility("fileListContainer", false);
@@ -79,8 +84,8 @@ function initAuth() {
     authForm.addEventListener("submit", function (event) {
       event.preventDefault();
       // Get the "Remember me" checkbox value.
-      const rememberMe = document.getElementById("rememberMeCheckbox") 
-        ? document.getElementById("rememberMeCheckbox").checked 
+      const rememberMe = document.getElementById("rememberMeCheckbox")
+        ? document.getElementById("rememberMeCheckbox").checked
         : false;
       const formData = {
         username: document.getElementById("loginUsername").value.trim(),
@@ -128,6 +133,7 @@ function initAuth() {
   document.getElementById("addUserBtn").addEventListener("click", function () {
     resetUserForm();
     toggleVisibility("addUserModal", true);
+    document.getElementById('newUsername').focus();
   });
   document.getElementById("saveUserBtn").addEventListener("click", function () {
     const newUsername = document.getElementById("newUsername").value.trim();
@@ -173,16 +179,22 @@ function initAuth() {
     loadUserList();
     toggleVisibility("removeUserModal", true);
   });
-  document.getElementById("deleteUserBtn").addEventListener("click", function () {
+
+  document.getElementById("deleteUserBtn").addEventListener("click", async function () {
     const selectElem = document.getElementById("removeUsernameSelect");
     const usernameToRemove = selectElem.value;
     if (!usernameToRemove) {
       showToast("Please select a user to remove.");
       return;
     }
-    if (!confirm("Are you sure you want to delete user " + usernameToRemove + "?")) {
+    
+    // Await the confirmation result from your custom modal helper.
+    const confirmed = await showCustomConfirmModal("Are you sure you want to delete user " + usernameToRemove + "?");
+    if (!confirmed) {
       return;
     }
+    
+    // Proceed with deletion...
     fetch("removeUser.php", {
       method: "POST",
       credentials: "include",
@@ -204,38 +216,40 @@ function initAuth() {
       })
       .catch(error => console.error("Error removing user:", error));
   });
+
   document.getElementById("cancelRemoveUserBtn").addEventListener("click", function () {
     closeRemoveUserModal();
   });
 
-  document.getElementById("changePasswordBtn").addEventListener("click", function() {
+  document.getElementById("changePasswordBtn").addEventListener("click", function () {
     // Show the Change Password modal.
     document.getElementById("changePasswordModal").style.display = "block";
+    document.getElementById("oldPassword").focus();
   });
-  
-  document.getElementById("closeChangePasswordModal").addEventListener("click", function() {
+
+  document.getElementById("closeChangePasswordModal").addEventListener("click", function () {
     // Hide the Change Password modal.
     document.getElementById("changePasswordModal").style.display = "none";
   });
-  
-  document.getElementById("saveNewPasswordBtn").addEventListener("click", function() {
+
+  document.getElementById("saveNewPasswordBtn").addEventListener("click", function () {
     const oldPassword = document.getElementById("oldPassword").value.trim();
     const newPassword = document.getElementById("newPassword").value.trim(); // Change Password modal field
     const confirmPassword = document.getElementById("confirmPassword").value.trim();
-  
+
     if (!oldPassword || !newPassword || !confirmPassword) {
       showToast("Please fill in all fields.");
       return;
     }
-  
+
     if (newPassword !== confirmPassword) {
       showToast("New passwords do not match.");
       return;
     }
-  
+
     // Prepare the data to send.
     const data = { oldPassword, newPassword, confirmPassword };
-  
+
     // Send request to changePassword.php.
     fetch("changePassword.php", {
       method: "POST",
@@ -276,6 +290,7 @@ function checkAuthentication(showLoginToast = true) {
         toggleVisibility("mainOperations", false);
         document.querySelector(".header-buttons").style.visibility = "hidden";
         toggleVisibility("addUserModal", true);
+        document.getElementById('newUsername').focus();
         return false;
       }
       window.setupMode = false;
@@ -316,7 +331,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function resetUserForm() {
   document.getElementById("newUsername").value = "";
-  document.getElementById("addUserPassword").value = "";  // Updated for add user modal
+  document.getElementById("addUserPassword").value = "";
 }
 
 function closeAddUserModal() {
