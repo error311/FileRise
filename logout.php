@@ -32,7 +32,6 @@ if (isset($_COOKIE['remember_me_token'])) {
 $_SESSION = [];
 session_destroy();
 
-header('Content-Type: application/json');
-echo json_encode(["success" => "Logged out"]);
+header("Location: index.html");
 exit;
 ?>
