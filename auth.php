@@ -110,10 +110,11 @@ if ($userRole !== false) {
                 $persistentTokens = [];
             }
         }
-        // Save token along with username and expiry.
+        // Save token along with username, expiry, and admin status.
         $persistentTokens[$token] = [
             "username" => $username,
-            "expiry"   => $expiry
+            "expiry"   => $expiry,
+            "isAdmin"  => ($userRole === "1")
         ];
         $encryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
         file_put_contents($persistentTokensFile, $encryptedContent, LOCK_EX);

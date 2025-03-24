@@ -97,8 +97,7 @@ if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) 
             // Token is valid; auto-authenticate the user.
             $_SESSION["authenticated"] = true;
             $_SESSION["username"] = $tokenData["username"];
-            // Optionally, set admin status if stored in token data:
-            // $_SESSION["isAdmin"] = $tokenData["isAdmin"];
+            $_SESSION["isAdmin"] = $tokenData["isAdmin"]; // Restore admin status from the token
         } else {
             // Token expired; remove it and clear the cookie.
             unset($persistentTokens[$_COOKIE['remember_me_token']]);

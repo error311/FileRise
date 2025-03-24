@@ -251,7 +251,7 @@ The `config.php` file contains several key constants that may need adjustment fo
   Defines the maximum upload size (default is `5G`). Ensure that PHP’s `upload_max_filesize` and `post_max_size` in your `php.ini` are consistent with this setting. The startup script (`start.sh`) updates PHP limits at runtime based on this value.
 
 - **Environment Variables (Docker):**  
-  The Docker image supports overriding configuration via environment variables. For example, you can set `SECURE`, `SHARE_URL`, and port settings via the container’s environment.
+  The Docker image supports overriding configuration via environment variables. For example, you can set `SECURE`, `SHARE_URL`, `PERSISTENT_TOKENS_KEY` and port settings via the container’s environment.
 
 ---
 
