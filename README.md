@@ -215,6 +215,7 @@ For users who prefer containerization, a Docker image is available
        TIMEZONE: "America/New_York"
        TOTAL_UPLOAD_SIZE: "5G"
        SECURE: "false"
+       PERSISTENT_TOKENS_KEY: "default_please_change_this_key"
      volumes:
        - /path/to/your/uploads:/var/www/uploads
        - /path/to/your/users:/var/www/users
