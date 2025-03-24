@@ -63,6 +63,10 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
   - Passwords are hashed using PHP’s `password_hash()` for security.
   - All state-changing endpoints include CSRF token validation.
   - Change password supported for all users.
+  - **Persistent Login (Remember Me) with Encrypted Tokens:**
+    - Users can remain logged in across sessions securely.
+    - Persistent tokens are encrypted using AES‑256‑CBC before being stored in a JSON file.
+    - On auto-login, the tokens are decrypted on the server to re-establish user sessions without requiring re-authentication.
 - **Responsive, Dynamic & Persistent UI:**
   - The interface is mobile-friendly and adapts to various screen sizes by hiding non-critical columns on small devices.
   - Asynchronous updates (via Fetch API and XMLHttpRequest) keep the UI responsive without full page reloads.
