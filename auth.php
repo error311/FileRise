@@ -99,10 +99,13 @@ if ($userRole !== false) {
         // Generate a secure random token.
         $token = bin2hex(random_bytes(32));
         $expiry = time() + (30 * 24 * 60 * 60); // 30 days
+
         // Load existing persistent tokens.
         $persistentTokens = [];
         if (file_exists($persistentTokensFile)) {
-            $persistentTokens = json_decode(file_get_contents($persistentTokensFile), true);
+            $encryptedContent = file_get_contents($persistentTokensFile);
+            $decryptedContent = decryptData($encryptedContent, $encryptionKey);
+            $persistentTokens = json_decode($decryptedContent, true);
             if (!is_array($persistentTokens)) {
                 $persistentTokens = [];
             }
@@ -110,9 +113,10 @@ if ($userRole !== false) {
         // Save token along with username and expiry.
         $persistentTokens[$token] = [
             "username" => $username,
-            "expiry" => $expiry
+            "expiry"   => $expiry
         ];
-        file_put_contents($persistentTokensFile, json_encode($persistentTokens, JSON_PRETTY_PRINT));
+        $encryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
+        file_put_contents($persistentTokensFile, $encryptedContent, LOCK_EX);
         // Set the cookie. (Assuming $secure is defined in config.php.)
         setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
     }

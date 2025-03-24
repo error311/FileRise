@@ -1,4 +1,3 @@
-// networkUtils.js
 export function sendRequest(url, method = "GET", data = null) {
   console.log("Sending request to:", url, "with method:", method);
   const options = {
@@ -24,9 +23,11 @@ export function sendRequest(url, method = "GET", data = null) {
           throw new Error(`HTTP error ${response.status}: ${text}`);
         });
       }
+      // Clone the response so we can safely fall back if JSON parsing fails.
+      const clonedResponse = response.clone();
       return response.json().catch(() => {
         console.warn("Response is not JSON, returning as text");
-        return response.text();
+        return clonedResponse.text();
       });
     });
 }
