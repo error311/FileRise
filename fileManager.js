@@ -1372,12 +1372,14 @@ document.addEventListener("keydown", function(e) {
 // ---------- CONTEXT MENU SUPPORT FOR FILE LIST ----------
 
 // Function to display the context menu with provided items at (x, y)
+// Function to display the context menu with provided items at (x, y)
 function showFileContextMenu(x, y, menuItems) {
   let menu = document.getElementById("fileContextMenu");
   if (!menu) {
     menu = document.createElement("div");
     menu.id = "fileContextMenu";
-    menu.style.position = "absolute";
+    // Use fixed positioning so the menu is relative to the viewport
+    menu.style.position = "fixed";
     menu.style.backgroundColor = "#fff";
     menu.style.border = "1px solid #ccc";
     menu.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.2)";
@@ -1394,11 +1396,7 @@ function showFileContextMenu(x, y, menuItems) {
     menuItem.style.padding = "5px 15px";
     menuItem.style.cursor = "pointer";
     menuItem.addEventListener("mouseover", () => {
-      if (document.body.classList.contains("dark-mode")) {
-        menuItem.style.backgroundColor = "#444"; // darker gray for dark mode
-      } else {
-        menuItem.style.backgroundColor = "#f0f0f0"; // light gray for light mode
-      }
+      menuItem.style.backgroundColor = document.body.classList.contains("dark-mode") ? "#444" : "#f0f0f0";
     });
     menuItem.addEventListener("mouseout", () => {
       menuItem.style.backgroundColor = "";
@@ -1409,9 +1407,20 @@ function showFileContextMenu(x, y, menuItems) {
     });
     menu.appendChild(menuItem);
   });
+  
+  // Use the event's clientX and clientY coordinates (which are viewport-relative)
   menu.style.left = x + "px";
   menu.style.top = y + "px";
   menu.style.display = "block";
+  
+  // Adjust if the menu would extend past the bottom of the viewport
+  const menuRect = menu.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+  if (menuRect.bottom > viewportHeight) {
+    let newTop = viewportHeight - menuRect.height;
+    if (newTop < 0) newTop = 0;
+    menu.style.top = newTop + "px";
+  }
 }
 
 function hideFileContextMenu() {
@@ -1484,7 +1493,7 @@ function fileListContextMenuHandler(e) {
     });
   }
   
-  showFileContextMenu(e.pageX, e.pageY, menuItems);
+  showFileContextMenu(e.clientX, e.clientY, menuItems);
 }
 
 // Bind the context menu to the file list container.
