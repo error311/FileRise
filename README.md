@@ -22,6 +22,7 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
   - **Real-Time Progress:** Each file shows an individual progress bar that displays percentage complete and upload speed.
   - **File & Folder Grouping:** When many files are dropped, files are automatically grouped into a scrollable wrapper, ensuring the interface remains clean.
   - **Secure Uploads:** All uploads integrate CSRF token validation and other security checks.
+
 - **Built-in File Editing & Renaming:**
   - Text-based files (e.g., .txt, .html, .js) can be opened and edited in a modal window using CodeMirror for:
     - Syntax highlighting
@@ -30,33 +31,53 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
   - Files can be renamed directly through the interface.
   - The renaming functionality now supports names with parentheses and checks for duplicate names, automatically generating a unique name (e.g., appending “ (1)”) when needed.
   - Folder-specific metadata is updated accordingly.
+  - **Enhanced File Editing Check:** Files with a Content-Length of 0 KB are now allowed to be edited.
+
 - **Built-in File Preview:**
   - Users can quickly preview images, videos, and PDFs directly in modal popups without leaving the page.
   - The preview modal supports inline display of images (with proper scaling) and videos with playback controls.
   - Navigation (prev/next) within image previews is supported for a seamless browsing experience.
+
 - **Gallery (Grid) View:**
   - In addition to the traditional table view, users can toggle to a gallery view that arranges image thumbnails in a grid layout.
   - The gallery view offers multiple column options (e.g., 3, 4, or 5 columns) so that users can choose the layout that best fits their screen.
   - Action buttons (Download, Edit, Rename, Share) appear beneath each thumbnail for quick access.
-- **Batch Operations (Delete/Copy/Move/Download):**
+
+- **Batch Operations (Delete/Copy/Move/Download/Extract Zip):**
   - **Delete Files:** Delete multiple files at once.
   - **Copy Files:** Copy selected files to another folder with a unique-naming feature to prevent overwrites.
   - **Move Files:** Move selected files to a different folder, automatically generating a unique filename if needed to avoid data loss.
   - **Download Files as ZIP:** Download selected files as a ZIP archive. Users can specify a custom name for the ZIP file via a modal dialog.
+  - **Extract Zip:** When one or more ZIP files are selected, users can extract the archive(s) directly into the current folder.
   - **Drag & Drop:** Easily move files by selecting them from the file list and simply dragging them onto your desired folder in the folder tree or breadcrumb. When you drop the files onto a folder, the system automatically moves them, updating your file organization in one seamless action.
+  - **Enhanced Context Menu & Keyboard Shortcuts:**
+    - **Right-Click Context Menu:**  
+      - A custom context menu appears on right-clicking within the file list.  
+      - For multiple selections, options include Delete Selected, Copy Selected, Move Selected, Download Zip, and (if applicable) Extract Zip.  
+      - When exactly one file is selected, additional options (Preview, Edit [if editable], and Rename) are available.
+    - **Keyboard Shortcut for Deletion:**  
+      - A global keydown listener detects Delete/Backspace key presses (when no input is focused) to trigger the delete operation.
+
 - **Folder Management:**
   - Organize files into folders and subfolders with the ability to create, rename, and delete folders.
   - A dynamic folder tree in the UI allows users to navigate directories easily, and any changes are immediately reflected in real time.
   - **Per-Folder Metadata Storage:** Each folder has its own metadata JSON file (e.g., `root_metadata.json`, `FolderName_metadata.json`), and operations (copy/move/rename) update these metadata files accordingly.
   - **Intuitive Breadcrumb Navigation:** Clickable breadcrumbs enable users to quickly jump to any parent folder, streamlining navigation across subfolders. Supports drag & drop to move files.
+  - **Folder Manager Context Menu:**  
+    - Right-clicking on a folder (in the folder tree or breadcrumb) brings up a custom context menu with options for creating, renaming, and deleting folders.
+  - **Keyboard Shortcut for Folder Deletion:**  
+    - A global key listener (Delete/Backspace) is provided to trigger folder deletion (with safeguards to prevent deleting the root folder).
+
 - **Sorting & Pagination:**
   - The file list can be sorted by name, modified date, upload date, file size, or uploader.
   - Pagination controls let users navigate through files with selectable page sizes (10, 20, 50, or 100 items per page) and “Prev”/“Next” navigation buttons.
+
 - **Share Link Functionality:**
   - Generate shareable links for files with configurable expiration times (e.g., 30, 60, 120, 180, 240 minutes, and a 1-day option) and optional password protection.
   - Share links are stored in a JSON file with details including the folder, file, expiration timestamp, and hashed password.
   - The share endpoint (`share.php`) validates tokens, expiration, and password before serving files (or forcing downloads).
   - The share URL is configurable via environment variables or auto-detected from the server.
+
 - **User Authentication & Management:**
   - Secure, session-based authentication protects the file manager.
   - Admin users can add or remove users through the interface.
@@ -67,19 +88,23 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
     - Users can remain logged in across sessions securely.
     - Persistent tokens are encrypted using AES‑256‑CBC before being stored in a JSON file.
     - On auto-login, the tokens are decrypted on the server to re-establish user sessions without requiring re-authentication.
+
 - **Responsive, Dynamic & Persistent UI:**
   - The interface is mobile-friendly and adapts to various screen sizes by hiding non-critical columns on small devices.
   - Asynchronous updates (via Fetch API and XMLHttpRequest) keep the UI responsive without full page reloads.
   - Persistent settings (such as items per page, dark/light mode preference, folder tree state, and the last open folder) ensure a smooth and customized user experience.
+
 - **Dark Mode/Light Mode:**
   - The application automatically adapts to the operating system’s theme preference by default and offers a manual toggle.
   - The dark mode provides a darker background with lighter text and adjusts UI elements (including the CodeMirror editor) for optimal readability in low-light conditions.
   - The light mode maintains a bright interface for well-lit environments.
+
 - **Server & Security Enhancements:**
   - The Apache configuration (or .htaccess files) is set to disable directory indexing (e.g., using `Options -Indexes` in the uploads directory), preventing unauthorized users from viewing directory contents.
   - Direct access to sensitive files (e.g., `users.txt`) is restricted through .htaccess rules.
   - A proxy download mechanism has been implemented (via endpoints like `download.php` and `downloadZip.php`) so that every file download request goes through a PHP script. This script validates the session and CSRF token before streaming the file, ensuring that even if a file URL is guessed, only authenticated users can access it.
   - Administrators are advised to deploy the app on a secure internal network or use the proxy download mechanism for public deployments to further protect file content.
+
 - **Trash Management with Restore & Delete:**
   - **Trash Storage & Metadata:**
     - Deleted files are moved to a designated “Trash” folder rather than being immediately removed.
