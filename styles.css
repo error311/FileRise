@@ -1884,3 +1884,22 @@ body.dark-mode .drop-hover {
 #restoreFilesList li label {
   margin-left: 8px !important;
 }
+
+body.dark-mode #fileContextMenu {
+  background-color: #2c2c2c !important;
+  border: 1px solid #555 !important;
+  color: #e0e0e0 !important;
+}
+body.dark-mode #fileContextMenu div {
+  color: #e0e0e0 !important;
+}
+
+#folderContextMenu {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+body.dark-mode #folderContextMenu {
+  background-color: #2c2c2c;
+  border-color: #555;
+  color: #e0e0e0;
+}

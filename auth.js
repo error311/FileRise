@@ -3,78 +3,110 @@ import { toggleVisibility, showToast, attachEnterKeyListener, showCustomConfirmM
 import { loadFileList, renderFileTable, displayFilePreview, initFileActions } from './fileManager.js';
 import { loadFolderTree } from './folderManager.js';
 
-function initAuth() {
-  // First, check if the user is already authenticated.
-  checkAuthentication(false).then(data => {
-    if (data.setup) {
-      window.setupMode = true;
-      showToast("Setup mode: No users found. Please add an admin user.");
-      toggleVisibility("loginForm", false);
-      toggleVisibility("mainOperations", false);
-      document.querySelector(".header-buttons").style.visibility = "hidden";
-      toggleVisibility("addUserModal", true);
-      document.getElementById('newUsername').focus();
-      return;
-    }
-    window.setupMode = false;
-    if (data.authenticated) {
-      // User is logged in—show the main UI.
-      toggleVisibility("loginForm", false);
-      toggleVisibility("mainOperations", true);
-      toggleVisibility("uploadFileForm", true);
-      toggleVisibility("fileListContainer", true);
-      attachEnterKeyListener("addUserModal", "saveUserBtn");
-      attachEnterKeyListener("removeUserModal", "deleteUserBtn");
-      attachEnterKeyListener("changePasswordModal", "saveNewPasswordBtn");
-      document.querySelector(".header-buttons").style.visibility = "visible";
-      // If admin, show admin-only buttons.
-      if (data.isAdmin) {
-        const addUserBtn = document.getElementById("addUserBtn");
-        const removeUserBtn = document.getElementById("removeUserBtn");
-        if (addUserBtn) addUserBtn.style.display = "block";
-        if (removeUserBtn) removeUserBtn.style.display = "block";
-        // Create and show the restore button.
-        let restoreBtn = document.getElementById("restoreFilesBtn");
-        if (!restoreBtn) {
-          restoreBtn = document.createElement("button");
-          restoreBtn.id = "restoreFilesBtn";
-          restoreBtn.classList.add("btn", "btn-warning");
-          // Use a material icon.
-          restoreBtn.innerHTML = '<i class="material-icons" title="Restore/Delete Trash">restore_from_trash</i>';
-          const headerButtons = document.querySelector(".header-buttons");
-          if (headerButtons) {
-            if (headerButtons.children.length >= 5) {
-              headerButtons.insertBefore(restoreBtn, headerButtons.children[5]);
-            } else {
-              headerButtons.appendChild(restoreBtn);
-            }
-          }
+/**
+ * Updates the select element to reflect the stored items-per-page value.
+ */
+function updateItemsPerPageSelect() {
+  const selectElem = document.querySelector(".form-control.bottom-select");
+  if (selectElem) {
+    const stored = localStorage.getItem("itemsPerPage") || "10";
+    selectElem.value = stored;
+  }
+}
+
+/**
+ * Updates the UI for an authenticated user.
+ * This includes showing the main UI panels, attaching key listeners, updating header buttons,
+ * and displaying admin-only buttons if applicable.
+ */
+function updateAuthenticatedUI(data) {
+  toggleVisibility("loginForm", false);
+  toggleVisibility("mainOperations", true);
+  toggleVisibility("uploadFileForm", true);
+  toggleVisibility("fileListContainer", true);
+  attachEnterKeyListener("addUserModal", "saveUserBtn");
+  attachEnterKeyListener("removeUserModal", "deleteUserBtn");
+  attachEnterKeyListener("changePasswordModal", "saveNewPasswordBtn");
+  document.querySelector(".header-buttons").style.visibility = "visible";
+
+  // If admin, show admin-only buttons; otherwise hide them.
+  if (data.isAdmin) {
+    const addUserBtn = document.getElementById("addUserBtn");
+    const removeUserBtn = document.getElementById("removeUserBtn");
+    if (addUserBtn) addUserBtn.style.display = "block";
+    if (removeUserBtn) removeUserBtn.style.display = "block";
+    let restoreBtn = document.getElementById("restoreFilesBtn");
+    if (!restoreBtn) {
+      restoreBtn = document.createElement("button");
+      restoreBtn.id = "restoreFilesBtn";
+      restoreBtn.classList.add("btn", "btn-warning");
+      // Using a material icon for restore.
+      restoreBtn.innerHTML = '<i class="material-icons" title="Restore/Delete Trash">restore_from_trash</i>';
+      const headerButtons = document.querySelector(".header-buttons");
+      if (headerButtons) {
+        if (headerButtons.children.length >= 5) {
+          headerButtons.insertBefore(restoreBtn, headerButtons.children[5]);
+        } else {
+          headerButtons.appendChild(restoreBtn);
         }
-        restoreBtn.style.display = "block";
+      }
+    }
+    restoreBtn.style.display = "block";
+  } else {
+    const addUserBtn = document.getElementById("addUserBtn");
+    const removeUserBtn = document.getElementById("removeUserBtn");
+    if (addUserBtn) addUserBtn.style.display = "none";
+    if (removeUserBtn) removeUserBtn.style.display = "none";
+    const restoreBtn = document.getElementById("restoreFilesBtn");
+    if (restoreBtn) restoreBtn.style.display = "none";
+  }
+  updateItemsPerPageSelect();
+}
+
+/**
+ * Checks the user's authentication state and updates the UI accordingly.
+ * If in setup mode or not authenticated, it shows the proper UI elements.
+ * When authenticated, it calls updateAuthenticatedUI to handle the UI updates.
+ */
+function checkAuthentication(showLoginToast = true) {
+  return sendRequest("checkAuth.php")
+    .then(data => {
+      if (data.setup) {
+        window.setupMode = true;
+        if (showLoginToast) showToast("Setup mode: No users found. Please add an admin user.");
+        toggleVisibility("loginForm", false);
+        toggleVisibility("mainOperations", false);
+        document.querySelector(".header-buttons").style.visibility = "hidden";
+        toggleVisibility("addUserModal", true);
+        document.getElementById('newUsername').focus();
+        return false;
+      }
+      window.setupMode = false;
+      if (data.authenticated) {
+        updateAuthenticatedUI(data);
+        return data;
       } else {
-        const addUserBtn = document.getElementById("addUserBtn");
-        const removeUserBtn = document.getElementById("removeUserBtn");
-        if (addUserBtn) addUserBtn.style.display = "none";
-        if (removeUserBtn) removeUserBtn.style.display = "none";
-        const restoreBtn = document.getElementById("restoreFilesBtn");
-        if (restoreBtn) {
-          restoreBtn.style.display = "none";
-        }
+        if (showLoginToast) showToast("Please log in to continue.");
+        toggleVisibility("loginForm", true);
+        toggleVisibility("mainOperations", false);
+        toggleVisibility("uploadFileForm", false);
+        toggleVisibility("fileListContainer", false);
+        document.querySelector(".header-buttons").style.visibility = "hidden";
+        return false;
       }
-      const selectElem = document.querySelector(".form-control.bottom-select");
-      if (selectElem) {
-        const stored = localStorage.getItem("itemsPerPage") || "10";
-        selectElem.value = stored;
-      }
-    } else {
-      toggleVisibility("loginForm", true);
-      attachEnterKeyListener("loginModal", "loginBtn");
-      toggleVisibility("mainOperations", false);
-      toggleVisibility("uploadFileForm", false);
-      toggleVisibility("fileListContainer", false);
-      document.querySelector(".header-buttons").style.visibility = "hidden";
-    }
-  }).catch(error => {
+    })
+    .catch(error => {
+      console.error("Error checking authentication:", error);
+      return false;
+    });
+}
+
+/**
+ * Initializes authentication by checking the user's state and setting up event listeners.
+ * The UI will update automatically based on the auth state.
+ */
+function initAuth() {
+  checkAuthentication(false).catch(error => {
     console.error("Error checking authentication:", error);
   });
 
@@ -83,7 +115,6 @@ function initAuth() {
   if (authForm) {
     authForm.addEventListener("submit", function (event) {
       event.preventDefault();
-      // Get the "Remember me" checkbox value.
       const rememberMe = document.getElementById("rememberMeCheckbox")
         ? document.getElementById("rememberMeCheckbox").checked
         : false;
@@ -137,10 +168,8 @@ function initAuth() {
   });
   document.getElementById("saveUserBtn").addEventListener("click", function () {
     const newUsername = document.getElementById("newUsername").value.trim();
-    // Use the new ID for the add user modal's password field.
     const newPassword = document.getElementById("addUserPassword").value.trim();
     const isAdmin = document.getElementById("isAdmin").checked;
-    console.log("newUsername:", newUsername, "newPassword:", newPassword);
     if (!newUsername || !newPassword) {
       showToast("Username and password are required!");
       return;
@@ -163,6 +192,7 @@ function initAuth() {
         if (data.success) {
           showToast("User added successfully!");
           closeAddUserModal();
+          // Re-check auth state to update the UI after adding a user.
           checkAuthentication(false);
         } else {
           showToast("Error: " + (data.error || "Could not add user"));
@@ -187,14 +217,10 @@ function initAuth() {
       showToast("Please select a user to remove.");
       return;
     }
-    
-    // Await the confirmation result from your custom modal helper.
     const confirmed = await showCustomConfirmModal("Are you sure you want to delete user " + usernameToRemove + "?");
     if (!confirmed) {
       return;
     }
-    
-    // Proceed with deletion...
     fetch("removeUser.php", {
       method: "POST",
       credentials: "include",
@@ -222,35 +248,27 @@ function initAuth() {
   });
 
   document.getElementById("changePasswordBtn").addEventListener("click", function () {
-    // Show the Change Password modal.
     document.getElementById("changePasswordModal").style.display = "block";
     document.getElementById("oldPassword").focus();
   });
 
   document.getElementById("closeChangePasswordModal").addEventListener("click", function () {
-    // Hide the Change Password modal.
     document.getElementById("changePasswordModal").style.display = "none";
   });
 
   document.getElementById("saveNewPasswordBtn").addEventListener("click", function () {
     const oldPassword = document.getElementById("oldPassword").value.trim();
-    const newPassword = document.getElementById("newPassword").value.trim(); // Change Password modal field
+    const newPassword = document.getElementById("newPassword").value.trim();
     const confirmPassword = document.getElementById("confirmPassword").value.trim();
-
     if (!oldPassword || !newPassword || !confirmPassword) {
       showToast("Please fill in all fields.");
       return;
     }
-
     if (newPassword !== confirmPassword) {
       showToast("New passwords do not match.");
       return;
     }
-
-    // Prepare the data to send.
     const data = { oldPassword, newPassword, confirmPassword };
-
-    // Send request to changePassword.php.
     fetch("changePassword.php", {
       method: "POST",
       credentials: "include",
@@ -264,7 +282,6 @@ function initAuth() {
       .then(result => {
         if (result.success) {
           showToast(result.success);
-          // Clear form fields and close modal.
           document.getElementById("oldPassword").value = "";
           document.getElementById("newPassword").value = "";
           document.getElementById("confirmPassword").value = "";
@@ -280,39 +297,6 @@ function initAuth() {
   });
 }
 
-function checkAuthentication(showLoginToast = true) {
-  return sendRequest("checkAuth.php")
-    .then(data => {
-      if (data.setup) {
-        window.setupMode = true;
-        if (showLoginToast) showToast("Setup mode: No users found. Please add an admin user.");
-        toggleVisibility("loginForm", false);
-        toggleVisibility("mainOperations", false);
-        document.querySelector(".header-buttons").style.visibility = "hidden";
-        toggleVisibility("addUserModal", true);
-        document.getElementById('newUsername').focus();
-        return false;
-      }
-      window.setupMode = false;
-      if (data.authenticated) {
-        return data;
-      } else {
-        if (showLoginToast) showToast("Please log in to continue.");
-        toggleVisibility("loginForm", true);
-        toggleVisibility("mainOperations", false);
-        toggleVisibility("uploadFileForm", false);
-        toggleVisibility("fileListContainer", false);
-        document.querySelector(".header-buttons").style.visibility = "hidden";
-        return false;
-      }
-    })
-    .catch(error => {
-      console.error("Error checking authentication:", error);
-      return false;
-    });
-}
-window.checkAuthentication = checkAuthentication;
-
 window.changeItemsPerPage = function (value) {
   localStorage.setItem("itemsPerPage", value);
   const folder = window.currentFolder || "root";
@@ -322,11 +306,7 @@ window.changeItemsPerPage = function (value) {
 };
 
 document.addEventListener("DOMContentLoaded", function () {
-  const selectElem = document.querySelector(".form-control.bottom-select");
-  if (selectElem) {
-    const stored = localStorage.getItem("itemsPerPage") || "10";
-    selectElem.value = stored;
-  }
+  updateItemsPerPageSelect();
 });
 
 function resetUserForm() {

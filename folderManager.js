@@ -1,7 +1,7 @@
 // folderManager.js
 
 import { loadFileList } from './fileManager.js';
-import { showToast, escapeHTML } from './domUtils.js';
+import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js';
 
 // ----------------------
 // Helper Functions (Data/State)
@@ -90,7 +90,6 @@ function bindBreadcrumbEvents() {
     link.addEventListener("click", function (e) {
       e.stopPropagation();
       let folder = this.getAttribute("data-folder");
-      console.log("Breadcrumb clicked, folder:", folder);
       window.currentFolder = folder;
       localStorage.setItem("lastOpenedFolder", folder);
       const titleEl = document.getElementById("fileListTitle");
@@ -447,6 +446,7 @@ export function loadFolderList(selectedFolder) {
 // ----------------------
 
 document.getElementById("renameFolderBtn").addEventListener("click", openRenameFolderModal);
+
 document.getElementById("deleteFolderBtn").addEventListener("click", openDeleteFolderModal);
 
 function openRenameFolderModal() {
@@ -470,7 +470,7 @@ document.getElementById("cancelRenameFolder").addEventListener("click", function
   document.getElementById("renameFolderModal").style.display = "none";
   document.getElementById("newRenameFolderName").value = "";
 });
-
+attachEnterKeyListener("renameFolderModal", "submitRenameFolder");
 document.getElementById("submitRenameFolder").addEventListener("click", function (event) {
   event.preventDefault();
   const selectedFolder = window.currentFolder || "root";
@@ -527,7 +527,7 @@ function openDeleteFolderModal() {
 document.getElementById("cancelDeleteFolder").addEventListener("click", function () {
   document.getElementById("deleteFolderModal").style.display = "none";
 });
-
+attachEnterKeyListener("deleteFolderModal", "confirmDeleteFolder");
 document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -565,7 +565,7 @@ document.getElementById("cancelCreateFolder").addEventListener("click", function
   document.getElementById("createFolderModal").style.display = "none";
   document.getElementById("newFolderName").value = "";
 });
-
+attachEnterKeyListener("createFolderModal", "submitCreateFolder");
 document.getElementById("submitCreateFolder").addEventListener("click", function () {
   const folderInput = document.getElementById("newFolderName").value.trim();
   if (!folderInput) {
@@ -607,3 +607,149 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
       document.getElementById("createFolderModal").style.display = "none";
     });
 });
+
+// ---------- CONTEXT MENU SUPPORT FOR FOLDER MANAGER ----------
+
+// Function to display the custom context menu at (x, y) with given menu items.
+function showFolderManagerContextMenu(x, y, menuItems) {
+  let menu = document.getElementById("folderManagerContextMenu");
+  if (!menu) {
+    menu = document.createElement("div");
+    menu.id = "folderManagerContextMenu";
+    menu.style.position = "absolute";
+    menu.style.padding = "5px 0";
+    menu.style.minWidth = "150px";
+    menu.style.zIndex = "9999";
+    document.body.appendChild(menu);
+  }
+
+  // Set styles based on dark mode.
+  if (document.body.classList.contains("dark-mode")) {
+    menu.style.backgroundColor = "#2c2c2c";
+    menu.style.border = "1px solid #555";
+    menu.style.color = "#e0e0e0";
+  } else {
+    menu.style.backgroundColor = "#fff";
+    menu.style.border = "1px solid #ccc";
+    menu.style.color = "#000";
+  }
+
+  // Clear previous items.
+  menu.innerHTML = "";
+  menuItems.forEach(item => {
+    const menuItem = document.createElement("div");
+    menuItem.textContent = item.label;
+    menuItem.style.padding = "5px 15px";
+    menuItem.style.cursor = "pointer";
+    menuItem.addEventListener("mouseover", () => {
+      if (document.body.classList.contains("dark-mode")) {
+        menuItem.style.backgroundColor = "#444";
+      } else {
+        menuItem.style.backgroundColor = "#f0f0f0";
+      }
+    });
+    menuItem.addEventListener("mouseout", () => {
+      menuItem.style.backgroundColor = "";
+    });
+    menuItem.addEventListener("click", () => {
+      item.action();
+      hideFolderManagerContextMenu();
+    });
+    menu.appendChild(menuItem);
+  });
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  menu.style.display = "block";
+}
+
+function hideFolderManagerContextMenu() {
+  const menu = document.getElementById("folderManagerContextMenu");
+  if (menu) {
+    menu.style.display = "none";
+  }
+}
+
+// Context menu handler for folder tree and breadcrumb items.
+function folderManagerContextMenuHandler(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Get the closest folder element (either from the tree or breadcrumb).
+  const target = e.target.closest(".folder-option, .breadcrumb-link");
+  if (!target) return;
+
+  const folder = target.getAttribute("data-folder");
+  if (!folder) return;
+
+  // Update current folder and highlight the selected element.
+  window.currentFolder = folder;
+  document.querySelectorAll(".folder-option, .breadcrumb-link").forEach(el => el.classList.remove("selected"));
+  target.classList.add("selected");
+
+  // Build context menu items.
+  const menuItems = [
+    {
+      label: "Create Folder",
+      action: () => {
+        document.getElementById("createFolderModal").style.display = "block";
+        document.getElementById("newFolderName").focus();
+      }
+    },
+    {
+      label: "Rename Folder",
+      action: () => { openRenameFolderModal(); }
+    },
+    {
+      label: "Delete Folder",
+      action: () => { openDeleteFolderModal(); }
+    }
+  ];
+
+  showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+}
+
+// Bind contextmenu events to folder tree and breadcrumb elements.
+function bindFolderManagerContextMenu() {
+  // Bind context menu to folder tree container.
+  const container = document.getElementById("folderTreeContainer");
+  if (container) {
+    container.removeEventListener("contextmenu", folderManagerContextMenuHandler);
+    container.addEventListener("contextmenu", folderManagerContextMenuHandler, false);
+  }
+
+  // Bind context menu to breadcrumb links.
+  const breadcrumbNodes = document.querySelectorAll(".breadcrumb-link");
+  breadcrumbNodes.forEach(node => {
+    node.removeEventListener("contextmenu", folderManagerContextMenuHandler);
+    node.addEventListener("contextmenu", folderManagerContextMenuHandler, false);
+  });
+}
+
+// Hide context menu when clicking elsewhere.
+document.addEventListener("click", function () {
+  hideFolderManagerContextMenu();
+});
+
+document.addEventListener("DOMContentLoaded", function() {
+  document.addEventListener("keydown", function(e) {
+    // Skip if the user is typing in an input, textarea, or contentEditable element.
+    const tag = e.target.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea" || e.target.isContentEditable) {
+      return;
+    }
+    
+    // On macOS, "Delete" is typically reported as "Backspace" (keyCode 8)
+    if (e.key === "Delete" || e.key === "Backspace" || e.keyCode === 46 || e.keyCode === 8) {
+      // Ensure a folder is selected and it isn't the root folder.
+      if (window.currentFolder && window.currentFolder !== "root") {
+        // Prevent default (avoid navigating back on macOS).
+        e.preventDefault();
+        // Call your existing folder delete function.
+        openDeleteFolderModal();
+      }
+    }
+  });
+});
+
+// Call this binding function after rendering the folder tree and breadcrumbs.
+bindFolderManagerContextMenu();

@@ -28,35 +28,39 @@ export function toggleAllCheckboxes(masterCheckbox) {
 }
 
 export function updateFileActionButtons() {
-  const fileListContainer = document.getElementById("fileList");
   const fileCheckboxes = document.querySelectorAll("#fileList .file-checkbox");
   const selectedCheckboxes = document.querySelectorAll("#fileList .file-checkbox:checked");
   const copyBtn = document.getElementById("copySelectedBtn");
   const moveBtn = document.getElementById("moveSelectedBtn");
   const deleteBtn = document.getElementById("deleteSelectedBtn");
   const zipBtn = document.getElementById("downloadZipBtn");
+  const extractZipBtn = document.getElementById("extractZipBtn");
 
   if (fileCheckboxes.length === 0) {
     if (copyBtn) copyBtn.style.display = "none";
     if (moveBtn) moveBtn.style.display = "none";
     if (deleteBtn) deleteBtn.style.display = "none";
     if (zipBtn) zipBtn.style.display = "none";
+    if (extractZipBtn) extractZipBtn.style.display = "none";
   } else {
     if (copyBtn) copyBtn.style.display = "inline-block";
     if (moveBtn) moveBtn.style.display = "inline-block";
     if (deleteBtn) deleteBtn.style.display = "inline-block";
     if (zipBtn) zipBtn.style.display = "inline-block";
+    if (extractZipBtn) extractZipBtn.style.display = "inline-block";
 
-    if (selectedCheckboxes.length > 0) {
-      if (copyBtn) copyBtn.disabled = false;
-      if (moveBtn) moveBtn.disabled = false;
-      if (deleteBtn) deleteBtn.disabled = false;
-      if (zipBtn) zipBtn.disabled = false;
-    } else {
-      if (copyBtn) copyBtn.disabled = true;
-      if (moveBtn) moveBtn.disabled = true;
-      if (deleteBtn) deleteBtn.disabled = true;
-      if (zipBtn) zipBtn.disabled = true;
+    const anySelected = selectedCheckboxes.length > 0;
+    if (copyBtn) copyBtn.disabled = !anySelected;
+    if (moveBtn) moveBtn.disabled = !anySelected;
+    if (deleteBtn) deleteBtn.disabled = !anySelected;
+    if (zipBtn) zipBtn.disabled = !anySelected;
+
+    if (extractZipBtn) {
+      // Enable only if at least one selected file ends with .zip (case-insensitive).
+      const anyZipSelected = Array.from(selectedCheckboxes).some(chk =>
+        chk.value.toLowerCase().endsWith(".zip")
+      );
+      extractZipBtn.disabled = !anyZipSelected;
     }
   }
 }
@@ -310,7 +314,10 @@ export function previewFile(fileUrl, fileName) {
 export function attachEnterKeyListener(modalId, buttonId) {
   const modal = document.getElementById(modalId);
   if (modal) {
-    modal.addEventListener("keypress", function(e) {
+    // Make the modal focusable
+    modal.setAttribute("tabindex", "-1");
+    modal.focus();
+    modal.addEventListener("keydown", function(e) {
       if (e.key === "Enter") {
         e.preventDefault();
         const btn = document.getElementById(buttonId);

@@ -9,6 +9,7 @@ import {
   showToast,
   updateRowHighlight,
   toggleRowSelection,
+  attachEnterKeyListener,
   previewFile as originalPreviewFile
 } from './domUtils.js';
 
@@ -661,6 +662,7 @@ export function handleDeleteSelected(e) {
   document.getElementById("deleteFilesMessage").textContent =
     "Are you sure you want to delete " + window.filesToDelete.length + " selected file(s)?";
   document.getElementById("deleteFilesModal").style.display = "block";
+  attachEnterKeyListener("deleteFilesModal", "confirmDeleteFiles");
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -671,6 +673,7 @@ document.addEventListener("DOMContentLoaded", function () {
       window.filesToDelete = [];
     });
   }
+  
   const confirmDelete = document.getElementById("confirmDeleteFiles");
   if (confirmDelete) {
     confirmDelete.addEventListener("click", function () {
@@ -700,7 +703,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 });
-
+attachEnterKeyListener("downloadZipModal", "confirmDownloadZip");
 export function handleDownloadZipSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -711,6 +714,64 @@ export function handleDownloadZipSelected(e) {
   }
   window.filesToDownload = Array.from(checkboxes).map(chk => chk.value);
   document.getElementById("downloadZipModal").style.display = "block";
+  setTimeout(() => {
+    const input = document.getElementById("zipFileNameInput");
+    input.focus();
+  }, 100);
+  
+}
+
+export function handleExtractZipSelected(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  // Get selected file names
+  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  if (!checkboxes.length) {
+    showToast("No files selected.");
+    return;
+  }
+  // Filter for zip files only
+  const zipFiles = Array.from(checkboxes)
+    .map(chk => chk.value)
+    .filter(name => name.toLowerCase().endsWith(".zip"));
+  if (!zipFiles.length) {
+    showToast("No zip files selected.");
+    return;
+  }
+  // Call the extract endpoint with the selected zip files
+  fetch("extractZip.php", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": window.csrfToken
+    },
+    body: JSON.stringify({
+      folder: window.currentFolder || "root",
+      files: zipFiles
+    })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast("Zip file(s) extracted successfully!");
+        loadFileList(window.currentFolder);
+      } else {
+        showToast("Error extracting zip: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(error => {
+      console.error("Error extracting zip files:", error);
+      showToast("Error extracting zip files.");
+    });
+}
+
+const extractZipBtn = document.getElementById("extractZipBtn");
+if (extractZipBtn) {
+  extractZipBtn.replaceWith(extractZipBtn.cloneNode(true));
+  document.getElementById("extractZipBtn").addEventListener("click", handleExtractZipSelected);
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -720,6 +781,7 @@ document.addEventListener("DOMContentLoaded", function () {
       document.getElementById("downloadZipModal").style.display = "none";
     });
   }
+  
   const confirmDownloadZip = document.getElementById("confirmDownloadZip");
   if (confirmDownloadZip) {
     confirmDownloadZip.addEventListener("click", function () {
@@ -1035,7 +1097,7 @@ export function editFile(fileName, folder) {
   fetch(fileUrl, { method: "HEAD" })
     .then(response => {
       const contentLength = response.headers.get("Content-Length");
-      if (!contentLength || parseInt(contentLength) > 10485760) {
+      if (contentLength !== null && parseInt(contentLength) > 10485760) {
         showToast("This file is larger than 10 MB and cannot be edited in the browser.");
         throw new Error("File too large.");
       }
@@ -1196,8 +1258,13 @@ export function initFileActions() {
     downloadZipBtn.replaceWith(downloadZipBtn.cloneNode(true));
     document.getElementById("downloadZipBtn").addEventListener("click", handleDownloadZipSelected);
   }
+  const extractZipBtn = document.getElementById("extractZipBtn");
+  if (extractZipBtn) {
+    extractZipBtn.replaceWith(extractZipBtn.cloneNode(true));
+    document.getElementById("extractZipBtn").addEventListener("click", handleExtractZipSelected);
+  }
 }
-
+attachEnterKeyListener("renameFileModal", "submitRenameFile");
 export function renameFile(oldName, folder) {
   window.fileToRename = oldName;
   window.fileFolder = folder || window.currentFolder || "root";
@@ -1223,6 +1290,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("newFileName").value = "";
     });
   }
+
   const submitBtn = document.getElementById("submitRenameFile");
   if (submitBtn) {
     submitBtn.addEventListener("click", function () {
@@ -1284,3 +1352,163 @@ document.addEventListener("DOMContentLoaded", function () {
     el.addEventListener("drop", folderDropHandler);
   });
 });
+
+document.addEventListener("keydown", function(e) {
+  // Skip if focus is on an input, textarea, or any contentEditable element.
+  const tag = e.target.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea" || e.target.isContentEditable) {
+    return;
+  }
+  // On Mac, the delete key is often reported as "Backspace" (keyCode 8)
+  if (e.key === "Delete" || e.key === "Backspace" || e.keyCode === 46 || e.keyCode === 8) {
+    const selectedCheckboxes = document.querySelectorAll("#fileList .file-checkbox:checked");
+    if (selectedCheckboxes.length > 0) {
+      e.preventDefault(); // Prevent default back navigation in some browsers.
+      handleDeleteSelected(new Event("click"));
+    }
+  }
+});
+
+// ---------- CONTEXT MENU SUPPORT FOR FILE LIST ----------
+
+// Function to display the context menu with provided items at (x, y)
+function showFileContextMenu(x, y, menuItems) {
+  let menu = document.getElementById("fileContextMenu");
+  if (!menu) {
+    menu = document.createElement("div");
+    menu.id = "fileContextMenu";
+    menu.style.position = "absolute";
+    menu.style.backgroundColor = "#fff";
+    menu.style.border = "1px solid #ccc";
+    menu.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.2)";
+    menu.style.zIndex = "9999";
+    menu.style.padding = "5px 0";
+    menu.style.minWidth = "150px";
+    document.body.appendChild(menu);
+  }
+  // Clear previous items
+  menu.innerHTML = "";
+  menuItems.forEach(item => {
+    let menuItem = document.createElement("div");
+    menuItem.textContent = item.label;
+    menuItem.style.padding = "5px 15px";
+    menuItem.style.cursor = "pointer";
+    menuItem.addEventListener("mouseover", () => {
+      if (document.body.classList.contains("dark-mode")) {
+        menuItem.style.backgroundColor = "#444"; // darker gray for dark mode
+      } else {
+        menuItem.style.backgroundColor = "#f0f0f0"; // light gray for light mode
+      }
+    });
+    menuItem.addEventListener("mouseout", () => {
+      menuItem.style.backgroundColor = "";
+    });
+    menuItem.addEventListener("click", () => {
+      item.action();
+      hideFileContextMenu();
+    });
+    menu.appendChild(menuItem);
+  });
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  menu.style.display = "block";
+}
+
+function hideFileContextMenu() {
+  const menu = document.getElementById("fileContextMenu");
+  if (menu) {
+    menu.style.display = "none";
+  }
+}
+
+// Context menu handler for the file list.
+function fileListContextMenuHandler(e) {
+  e.preventDefault();
+  // If no file is selected, try to select the row that was right-clicked.
+  let row = e.target.closest("tr");
+  if (row) {
+    const checkbox = row.querySelector(".file-checkbox");
+    if (checkbox && !checkbox.checked) {
+      checkbox.checked = true;
+      updateRowHighlight(checkbox);
+      updateFileActionButtons();
+    }
+  }
+  
+  // Get selected file names.
+  const selected = Array.from(document.querySelectorAll("#fileList .file-checkbox:checked")).map(chk => chk.value);
+  
+  // Build the context menu items.
+  let menuItems = [
+    { label: "Delete Selected", action: () => { handleDeleteSelected(new Event("click")); } },
+    { label: "Copy Selected", action: () => { handleCopySelected(new Event("click")); } },
+    { label: "Move Selected", action: () => { handleMoveSelected(new Event("click")); } },
+    { label: "Download Zip", action: () => { handleDownloadZipSelected(new Event("click")); } }
+  ];
+  
+  if (selected.some(name => name.toLowerCase().endsWith(".zip"))) {
+    menuItems.push({
+      label: "Extract Zip",
+      action: () => { handleExtractZipSelected(new Event("click")); }
+    });
+  }
+  
+  if (selected.length === 1) {
+    // Look up the file object.
+    const file = fileData.find(f => f.name === selected[0]);
+    
+    // Add Preview option.
+    menuItems.push({
+      label: "Preview",
+      action: () => {
+        const folder = window.currentFolder || "root";
+        const folderPath = folder === "root"
+          ? "uploads/"
+          : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
+        previewFile(folderPath + encodeURIComponent(file.name) + "?t=" + new Date().getTime(), file.name);
+      }
+    });
+    
+    // Only show Edit option if file is editable.
+    if (canEditFile(file.name)) {
+      menuItems.push({
+        label: "Edit",
+        action: () => { editFile(selected[0], window.currentFolder); }
+      });
+    }
+    
+    // Add Rename option.
+    menuItems.push({
+      label: "Rename",
+      action: () => { renameFile(selected[0], window.currentFolder); }
+    });
+  }
+  
+  showFileContextMenu(e.pageX, e.pageY, menuItems);
+}
+
+// Bind the context menu to the file list container.
+// (This is set every time the file list is rendered.)
+function bindFileListContextMenu() {
+  const fileListContainer = document.getElementById("fileList");
+  if (fileListContainer) {
+    fileListContainer.oncontextmenu = fileListContextMenuHandler;
+  }
+}
+
+// Hide the context menu if clicking anywhere else.
+document.addEventListener("click", function(e) {
+  const menu = document.getElementById("fileContextMenu");
+  if (menu && menu.style.display === "block") {
+    hideFileContextMenu();
+  }
+});
+
+// After rendering the file table, bind the context menu handler.
+(function() {
+  const originalRenderFileTable = renderFileTable;
+  renderFileTable = function(folder) {
+    originalRenderFileTable(folder);
+    bindFileListContextMenu();
+  };
+})();
