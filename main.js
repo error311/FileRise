@@ -17,6 +17,7 @@ import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
+import { initDragAndDrop, loadSidebarOrder } from './dragAndDrop.js'
 
 function loadCsrfToken() {
   fetch('token.php', { credentials: 'include' })
@@ -64,6 +65,14 @@ document.addEventListener("DOMContentLoaded", function () {
   // Call initAuth synchronously.
   initAuth();
 
+  const newPasswordInput = document.getElementById("newPassword");
+  if (newPasswordInput) {
+    newPasswordInput.addEventListener("input", function() {
+      console.log("newPassword input event:", this.value);
+    });
+  } else {
+    console.error("newPassword input not found!");
+  }
   // --- Dark Mode Persistence ---
   const darkModeToggle = document.getElementById("darkModeToggle");
   const storedDarkMode = localStorage.getItem("darkMode");
@@ -121,6 +130,8 @@ document.addEventListener("DOMContentLoaded", function () {
     if (authenticated) {
       window.currentFolder = "root";
       loadFileList(window.currentFolder);
+      initDragAndDrop();
+      loadSidebarOrder();
       initFileActions();
       initUpload();
       loadFolderTree();

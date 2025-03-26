@@ -25,22 +25,15 @@ body {
 /* CONTAINER */
 .container,
 .container-fluid {
-  margin-top: 20px;
+  margin-top: 10px;
   padding-right: 4px !important;
   padding-left: 4px !important;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1300px) {
   .container-fluid {
-    padding-left: 50px !important;
-    padding-right: 50px !important;
-  }
-}
-
-@media (min-width: 1200px) {
-  .container-fluid {
-    padding-left: 100px !important;
-    padding-right: 100px !important;
+    padding-left: 40px !important;
+    padding-right: 40px !important;
   }
 }
 
@@ -51,12 +44,6 @@ body {
 /************************************************************/
 /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
 /************************************************************/
-
-
-#uploadCard,
-#folderManagementCard {
-  min-height: 342px;
-}
 
 .btn-login {
   margin-top: 10px;
@@ -236,17 +223,19 @@ body.dark-mode .folder-help-tooltip {
 #folderHelpBtn i.material-icons.folder-help-icon {
   -webkit-text-fill-color: orange !important;
   color: inherit !important;
+  padding-right: 10px !important;
 }
 
 body.dark-mode #folderHelpBtn i.material-icons.folder-help-icon {
   -webkit-text-fill-color: #ffa500 !important;
+  padding-right: 10px !important;
 }
 
 /************************************************************/
 /* RESPONSIVE HEADER FIXES                                 */
 /************************************************************/
 
-@media (max-width: 970px) {
+@media (max-width: 790px) {
   .header-container {
     flex-wrap: wrap;
     height: auto;
@@ -286,7 +275,7 @@ body.dark-mode #folderHelpBtn i.material-icons.folder-help-icon {
     flex-direction: row;
     justify-content: center;
     gap: 5px;
-    margin-top: 10px;
+    margin-top: 5px;
   }
 }
 
@@ -378,21 +367,6 @@ body.dark-mode #loginForm button:hover {
 /* ===========================================================
    CARDS & MODALS
    =========================================================== */
-
-.card {
-  background-color: #fff;
-  color: #000;
-  border: 1px solid #ddd;
-  max-width: 900px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-body.dark-mode .card {
-  background-color: #2c2c2c;
-  color: #e0e0e0;
-  border: 1px solid #444;
-}
 
 #restoreFilesModal .modal-content {
   position: fixed !important;
@@ -1023,29 +997,6 @@ label {
   display: none;
 }
 
-#uploadFolderRow {
-  margin-bottom: 20px;
-}
-
-@media (max-width: 768px) {
-  #uploadFolderRow .col-md-6 {
-    margin-bottom: 15px;
-  }
-
-  #uploadFolderRow .col-md-6:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.card-header {
-  font-size: 1.2rem;
-  font-weight: bold;
-}
-
-.card-body .form-group {
-  margin-bottom: 5px !important;
-}
-
 #createFolderBtn {
   margin-top: 0px !important;
   height: 40px !important;
@@ -1124,10 +1075,6 @@ body.dark-mode .folder-option:hover {
   padding: 2px 4px;
 }
 
-.custom-folder-card-body {
-  padding-top: 5px !important;
-}
-
 #customToast {
   position: fixed;
   top: 20px;
@@ -1175,8 +1122,10 @@ body.dark-mode .folder-option:hover {
 
 #fileListContainer {
   max-width: 100%;
-  padding: 10px 5px;
-  margin: 20px auto;
+  padding-bottom: 10px !important;
+  padding-left: 5px !important;
+  padding-right: 5px !important;
+  margin: 0 auto 20px;
 }
 
 @media (max-width: 750px) {
@@ -1190,11 +1139,6 @@ body.dark-mode #fileListContainer {
   color: #e0e0e0;
   border: 1px solid #444;
   border-radius: 8px;
-  padding-top: 10px !important;
-  padding-bottom: 10px !important;
-  padding-left: 5px !important;
-  padding-right: 5px !important;
-  margin-top: 20px;
 }
 
 #fileListContainer>h2,
@@ -1224,6 +1168,7 @@ body.dark-mode #fileListContainer {
 
 #fileListTitle {
   font-size: 1.8em;
+  margin-top: 10px;
   margin-bottom: 15px;
 }
 
@@ -1288,16 +1233,13 @@ body.dark-mode #fileListContainer {
 .breadcrumb-link {
   cursor: pointer;
   color: #007bff;
-  /* Blue color, for example */
   text-decoration: underline;
 }
 
-/* Change color on hover */
 .breadcrumb-link:hover {
   color: #0056b3;
 }
 
-/* Style for the selected breadcrumb */
 .breadcrumb-link.selected {
   background-color: #e9ecef;
   font-weight: bold;
@@ -1353,17 +1295,11 @@ body.dark-mode #fileListContainer {
 .image-modal-header {
   display: flex;
   align-items: center;
-  /* Vertically center the text within a fixed height */
   justify-content: center;
-  /* Center horizontally */
   white-space: nowrap;
-  /* Prevent wrapping */
   overflow: hidden;
-  /* Hide any overflowing text */
   text-overflow: ellipsis;
-  /* Truncate with an ellipsis */
   height: 25px;
-  /* Fixed height for a single line */
   padding: 5px;
   margin-bottom: 10px;
   max-width: 90%;
@@ -1410,7 +1346,6 @@ body.dark-mode .image-preview-modal-content {
 }
 
 .share-btn {
-  /* Your custom styles here */
   border: none;
   color: white;
   padding: 8px 12px;
@@ -1902,4 +1837,176 @@ body.dark-mode #folderContextMenu {
   background-color: #2c2c2c;
   border-color: #555;
   color: #e0e0e0;
+}
+
+.main-wrapper {
+  display: flex;
+  flex-direction: row;
+}
+
+.drop-target-sidebar {
+  display: none;
+  width: 50px;
+  transition: width 0.3s ease;
+  background-color: #f8f9fa;
+  border-right: 2px dashed #1565C0;
+  padding: 10px;
+}
+@media (min-width: 769px) {
+  .drop-target-sidebar {
+    display: block;
+  }
+}
+.drop-target-sidebar.active {
+  width: 350px;
+}
+
+.main-column {
+  flex: 1;
+  transition: margin-left 0.3s ease;
+}
+
+#uploadFolderRow {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1rem;
+}
+@media (max-width: 768px) {
+  #uploadFolderRow {
+    gap: 0px;
+  }
+}
+#leftCol,
+#rightCol {
+  display: flex;
+  justify-content: center;
+  min-width: 370px;
+  align-self: flex-start;
+}
+
+#leftCol {
+  flex: 0 1 60%;
+}
+#rightCol {
+  flex: 0 1 40%;
+
+}
+
+@media (max-width: 768px) {
+  .main-wrapper {
+    flex-direction: column;
+  }
+  .drop-target-sidebar {
+    display: none !important;
+  }
+  #uploadFolderRow {
+    flex-wrap: wrap;
+  }
+  #leftCol, #rightCol {
+    flex: 0 1 100% !important;
+  }
+  #rightCol {
+    margin-bottom: 0;
+  }
+}
+
+#sidebarDropArea.highlight,
+#uploadFolderRow.highlight {
+  border: 2px dashed #1565C0;
+  background-color: #eef;
+}
+
+.drag-header {
+  cursor: grab;
+  user-select: none;
+  position: relative;
+}
+
+.drag-header::after {
+  content: '⋮⋮';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: #1565C0;
+  pointer-events: none;
+}
+
+.dragging {
+  transform: scale(1.05);
+  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  z-index: 10000;
+}
+
+#uploadCard,
+#folderManagementCard {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  width: 100%;
+  margin-bottom: 20px;
+  min-height: 353px;
+}
+
+
+#uploadFolderRow.highlight {
+  min-height: 353px;
+  margin-bottom: 20px;
+}
+
+#sidebarDropArea,
+#uploadFolderRow {
+  background-color: transparent;
+}
+
+body.dark-mode #sidebarDropArea,
+body.dark-mode #uploadFolderRow {
+  background-color: transparent;
+}
+
+body.dark-mode #sidebarDropArea.highlight,
+body.dark-mode #uploadFolderRow.highlight { 
+  background-color: #333; 
+  border: 2px dashed #555; 
+  color: #fff;
+}
+
+.drop-target-sidebar.highlight {
+  margin-top: 10px;
+}
+
+.drop-target-sidebar:not(.highlight) {
+  border: none !important;
+}
+
+.dragging:focus {
+  outline: none;
+}
+
+#sidebarDropArea > .card {
+  margin-bottom: 1rem;
+}
+
+.card {
+  background-color: #fff;
+  color: #000;
+  border: 1px solid #ddd;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+body.dark-mode .card {
+  background-color: #2c2c2c;
+  color: #e0e0e0;
+  border: 1px solid #444;
+}
+
+.card-header {
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.custom-folder-card-body {
+  padding-top: 5px !important;
 }
