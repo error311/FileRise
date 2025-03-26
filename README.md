@@ -211,7 +211,7 @@ For users who prefer containerization, a Docker image is available
 1. **Pull the Docker Image:**
 
    ```bash
-   docker pull error311/multi-file-upload-editor-docker:latest
+   docker pull error311/filerise-docker:latest
    ```
 
 2. **Run the Container:**
@@ -226,7 +226,7 @@ For users who prefer containerization, a Docker image is available
    -v /path/to/your/users:/var/www/users \
    -v /path/to/your/metadata:/var/www/metadata \
    --name FileRise \
-   error311/multi-file-upload-editor-docker:latest
+   error311/filerise-docker:latest
    ```
 
 3. **Using Docker Compose:**
@@ -237,7 +237,7 @@ For users who prefer containerization, a Docker image is available
    version: "3.8"
    services:
    web:
-     image: error311/multi-file-upload-editor-docker:latest
+     image: error311/filerise-docker:latest
      ports:
        - "80:80"
      environment:
