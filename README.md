@@ -7,7 +7,7 @@ https://github.com/user-attachments/assets/179e6940-5798-4482-9a69-696f806c37de
 **Dark mode:**
 ![Dark Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-mode.png)
 
-changelogs available here: <https://github.com/error311/multi-file-upload-editor-docker/>
+changelogs available here: <https://github.com/error311/FileRise-docker/>
 
 FileRise - Multi File Upload Editor is a lightweight, secure, self-hosted web application for uploading, syntax highlight editing, drag & drop and managing files. Built with an Apache/PHP backend and a modern JavaScript (ES6 modules) frontend, it offers a responsive, dynamic file management interface. It serves as an alternative to solutions like FileGator TinyFileManager or ProjectSend, providing an easy-to-setup experience ideal for document management, image galleries, firmware file hosting, and more.
 
