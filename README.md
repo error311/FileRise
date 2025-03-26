@@ -1,15 +1,15 @@
-# MFE - Lightweight Multi File Upload Editor
+# FileRise - Elevate your File Management
 
 **Video demo:**
 
 https://github.com/user-attachments/assets/179e6940-5798-4482-9a69-696f806c37de
 
 **Dark mode:**
-![Dark Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-mode.png)
+![Dark Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-mode.png)
 
 changelogs available here: <https://github.com/error311/multi-file-upload-editor-docker/>
 
-MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web application for uploading, syntax highlight editing, drag & drop and managing files. Built with an Apache/PHP backend and a modern JavaScript (ES6 modules) frontend, it offers a responsive, dynamic file management interface. It serves as an alternative to solutions like FileGator TinyFileManager or ProjectSend, providing an easy-to-setup experience ideal for document management, image galleries, firmware file hosting, and more.
+FileRise - Multi File Upload Editor is a lightweight, secure, self-hosted web application for uploading, syntax highlight editing, drag & drop and managing files. Built with an Apache/PHP backend and a modern JavaScript (ES6 modules) frontend, it offers a responsive, dynamic file management interface. It serves as an alternative to solutions like FileGator TinyFileManager or ProjectSend, providing an easy-to-setup experience ideal for document management, image galleries, firmware file hosting, and more.
 
 ---
 
@@ -131,24 +131,24 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
 ## Screenshots
 
 **Light mode:**
-![Light Mode](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-mode.png)
+![Light Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-mode.png)
 
 **Dark editor:**
-![dark-editor](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-editor.png)
+![dark-editor](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-editor.png)
 
 **Dark preview**
-![dark-preview](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-preview.png)
+![dark-preview](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-preview.png)
 
 **Restore or Delete Trash:**
-![restore-delete](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/restore-delete.png)
+![restore-delete](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/restore-delete.png)
 
 **Login page:**
-![Login](https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/login-page.png)
+![Login](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/login-page.png)
 
   **iphone screenshots:**  
 <p align="center">
-  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/dark-iphone.png" width="45%">
-  <img src="https://raw.githubusercontent.com/error311/multi-file-upload-editor/refs/heads/master/resources/light-preview-iphone.png" width="45%">
+  <img src="https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-iphone.png" width="45%">
+  <img src="https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-preview-iphone.png" width="45%">
 </p>
 
 ---
@@ -161,7 +161,7 @@ MFE - Multi File Upload Editor is a lightweight, secure, self-hosted web applica
    - **Clone:**  
 
      ```bash
-     git clone https://github.com/error311/multi-file-upload-editor.git
+     git clone https://github.com/error311/FileRise.git
      ```
 
    - **Download:**  
@@ -225,7 +225,7 @@ For users who prefer containerization, a Docker image is available
    -v /path/to/your/uploads:/var/www/uploads \
    -v /path/to/your/users:/var/www/users \
    -v /path/to/your/metadata:/var/www/metadata \
-   --name multi-file-upload-editor \
+   --name FileRise \
    error311/multi-file-upload-editor-docker:latest
    ```
 
@@ -291,4 +291,4 @@ The `config.php` file contains several key constants that may need adjustment fo
 - **Logging & Troubleshooting:**  
   Check Apache logs (located in `/var/log/apache2/`) for troubleshooting any issues during deployment or operation.
 
-Enjoy using the Multi File Upload Editor! For any issues or contributions, please refer to the [GitHub repository](https://github.com/error311/multi-file-upload-editor).
+Enjoy using the Multi File Upload Editor! For any issues or contributions, please refer to the [GitHub repository](https://github.com/error311/FileRise).
