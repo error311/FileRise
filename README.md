@@ -84,6 +84,7 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - Passwords are hashed using PHP’s `password_hash()` for security.
   - All state-changing endpoints include CSRF token validation.
   - Change password supported for all users.
+  - Basic Auth supported for login.
   - **Persistent Login (Remember Me) with Encrypted Tokens:**
     - Users can remain logged in across sessions securely.
     - Persistent tokens are encrypted using AES‑256‑CBC before being stored in a JSON file.
