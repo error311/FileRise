@@ -80,8 +80,9 @@ $srcMetadata = file_exists($srcMetaFile) ? json_decode(file_get_contents($srcMet
 $destMetadata = file_exists($destMetaFile) ? json_decode(file_get_contents($destMetaFile), true) : [];
 
 $errors = [];
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
 $allSuccess = true;
+$extractedFiles = array(); // Array to collect names of extracted files
+$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
 
 // ---------- Process Each File ----------
 foreach ($files as $zipFileName) {
@@ -115,6 +116,14 @@ foreach ($files as $zipFileName) {
         $errors[] = "Failed to extract $originalName.";
         $allSuccess = false;
     } else {
+        // Collect extracted file names from this zip.
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entryName = $zip->getNameIndex($i);
+            $extractedFileName = basename($entryName);
+            if ($extractedFileName) {
+                $extractedFiles[] = $extractedFileName;
+            }
+        }
         // Update metadata for each extracted file if the zip file has metadata.
         if (isset($srcMetadata[$originalName])) {
             $zipMeta = $srcMetadata[$originalName];
@@ -138,7 +147,7 @@ if (file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRIN
 }
 
 if ($allSuccess) {
-    echo json_encode(["success" => true]);
+    echo json_encode(["success" => true, "extractedFiles" => $extractedFiles]);
 } else {
     echo json_encode(["success" => false, "error" => implode(" ", $errors)]);
 }

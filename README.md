@@ -143,17 +143,23 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
 **Light mode:**
 ![Light Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-mode.png)
 
+**Dark mode default:**
+![Default Layout](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-mode-default.png)
+
 **Dark editor:**
 ![dark-editor](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-editor.png)
 
-**Dark preview**
-![dark-preview](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-preview.png)
+**Light preview**
+![dark-preview](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-preview.png)
 
 **Restore or Delete Trash:**
-![restore-delete](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/restore-delete.png)
+![restore-delete](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-trash.png)
 
-**Login page:**
-![Login](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/login-page.png)
+**Dark Login page:**
+![Login](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-login.png)
+
+**Gallery view:**
+![Login](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-gallery.png)
 
   **iphone screenshots:**  
 <p align="center">

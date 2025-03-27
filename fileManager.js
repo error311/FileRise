@@ -756,7 +756,12 @@ export function handleExtractZipSelected(e) {
     .then(response => response.json())
     .then(data => {
       if (data.success) {
-        showToast("Zip file(s) extracted successfully!");
+        // If the server returned a list of extracted files, join them into a string.
+        let toastMessage = "Zip file(s) extracted successfully!";
+        if (data.extractedFiles && Array.isArray(data.extractedFiles) && data.extractedFiles.length) {
+          toastMessage = "Extracted: " + data.extractedFiles.join(", ");
+        }
+        showToast(toastMessage);
         loadFileList(window.currentFolder);
       } else {
         showToast("Error extracting zip: " + (data.error || "Unknown error"));

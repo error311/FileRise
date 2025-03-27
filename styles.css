@@ -1051,30 +1051,6 @@ body.dark-mode .custom-prev-next-btn:hover:not(:disabled) {
   background-color: #555;
 }
 
-.folder-option:hover {
-  background-color: #f0f0f0;
-  padding: 2px 4px;
-}
-
-.folder-option.selected {
-  background-color: #d0d0d0;
-  border-radius: 4px;
-  padding: 2px 4px;
-}
-
-body.dark-mode .folder-option.selected {
-  background-color: #444;
-  color: #fff;
-  border-radius: 4px;
-  padding: 2px 4px;
-}
-
-body.dark-mode .folder-option:hover {
-  background-color: #333;
-  color: #fff;
-  padding: 2px 4px;
-}
-
 #customToast {
   position: fixed;
   top: 20px;
@@ -1279,13 +1255,36 @@ body.dark-mode #fileListContainer {
   width: 30px;
 }
 
-.folder-option {
-  cursor: pointer;
-
-}
-
 #folderTreeContainer {
   display: block;
+}
+
+.folder-option {
+  cursor: pointer;
+}
+
+.folder-option:hover {
+  background-color: #f0f0f0;
+  padding: 2px 4px;
+}
+
+.folder-option.selected {
+  background-color: #d0d0d0;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+body.dark-mode .folder-option.selected {
+  background-color: #444;
+  color: #fff;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+body.dark-mode .folder-option:hover {
+  background-color: #333;
+  color: #fff;
+  padding: 2px 4px;
 }
 
 /* ===========================================================
@@ -1958,6 +1957,9 @@ body.dark-mode #folderContextMenu {
 #uploadFolderRow {
   background-color: transparent;
 }
+#sidebarDropArea {
+  display: none;
+}
 
 body.dark-mode #sidebarDropArea,
 body.dark-mode #uploadFolderRow {
@@ -2009,4 +2011,5 @@ body.dark-mode .card {
 
 .custom-folder-card-body {
   padding-top: 5px !important;
+  padding-right: 0 !important;
 }
