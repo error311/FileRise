@@ -533,7 +533,7 @@ export function renderGalleryView(folder) {
     let thumbnail;
     if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
       thumbnail = `<img src="${folderPath + encodeURIComponent(file.name)}?t=${new Date().getTime()}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: 150px; display: block; margin: 0 auto;">`;
-    } else if (/\.(mp3|wav|ogg|m4a)$/i.test(file.name)) {
+    } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
       thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
     } else {
       thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
