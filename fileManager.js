@@ -9,8 +9,7 @@ import {
   showToast,
   updateRowHighlight,
   toggleRowSelection,
-  attachEnterKeyListener,
-  previewFile as originalPreviewFile
+  attachEnterKeyListener
 } from './domUtils.js';
 
 export let fileData = [];
@@ -153,7 +152,7 @@ function openShareModal(file, folder) {
 // ==============================================
 // FEATURE: Enhanced Preview Modal with Navigation
 // ==============================================
-function enhancedPreviewFile(fileUrl, fileName) {
+function previewFile(fileUrl, fileName) {
   let modal = document.getElementById("filePreviewModal");
   if (!modal) {
     modal = document.createElement("div");
@@ -178,12 +177,24 @@ function enhancedPreviewFile(fileUrl, fileName) {
       </div>`;
     document.body.appendChild(modal);
 
-    document.getElementById("closeFileModal").addEventListener("click", function () {
+    function closeModal() {
+      // Pause and reset any video or audio elements within the modal
+      const mediaElements = modal.querySelectorAll("video, audio");
+      mediaElements.forEach(media => {
+        media.pause();
+        try {
+          media.currentTime = 0;
+        } catch(e) {
+          // Some media types might not support setting currentTime.
+        }
+      });
       modal.style.display = "none";
-    });
+    }
+
+    document.getElementById("closeFileModal").addEventListener("click", closeModal);
     modal.addEventListener("click", function (e) {
       if (e.target === modal) {
-        modal.style.display = "none";
+        closeModal();
       }
     });
   }
@@ -253,15 +264,18 @@ function enhancedPreviewFile(fileUrl, fileName) {
       video.controls = true;
       video.className = "image-modal-img";
       container.appendChild(video);
+    } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(fileName)) {
+      const audio = document.createElement("audio");
+      audio.src = fileUrl;
+      audio.controls = true;
+      audio.className = "audio-modal";
+      audio.style.maxWidth = "80vw";
+      container.appendChild(audio);
     } else {
       container.textContent = "Preview not available for this file type.";
     }
   }
   modal.style.display = "flex";
-}
-
-export function previewFile(fileUrl, fileName) {
-  enhancedPreviewFile(fileUrl, fileName);
 }
 
 // ==============================================
@@ -519,6 +533,8 @@ export function renderGalleryView(folder) {
     let thumbnail;
     if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
       thumbnail = `<img src="${folderPath + encodeURIComponent(file.name)}?t=${new Date().getTime()}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: 150px; display: block; margin: 0 auto;">`;
+    } else if (/\.(mp3|wav|ogg|m4a)$/i.test(file.name)) {
+      thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
     } else {
       thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
     }

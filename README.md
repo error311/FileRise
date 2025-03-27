@@ -34,7 +34,7 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - **Enhanced File Editing Check:** Files with a Content-Length of 0 KB are now allowed to be edited.
 
 - **Built-in File Preview:**
-  - Users can quickly preview images, videos, and PDFs directly in modal popups without leaving the page.
+  - Users can quickly preview images, videos, audio and PDFs directly in modal popups without leaving the page.
   - The preview modal supports inline display of images (with proper scaling) and videos with playback controls.
   - Navigation (prev/next) within image previews is supported for a seamless browsing experience.
 

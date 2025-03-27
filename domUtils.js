@@ -136,18 +136,20 @@ export function buildFileTableRow(file, folderPath) {
   const safeUploader = escapeHTML(file.uploader || "Unknown");
 
   let previewButton = "";
-  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|ogg)$/i.test(file.name)) {
+  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
     let previewIcon = "";
     if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">image</i>`;
-    } else if (/\.(mp4|webm|mov|ogg)$/i.test(file.name)) {
+    } else if (/\.(mp4|webm|mov)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">videocam</i>`;
     } else if (/\.pdf$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
+    } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
+      previewIcon = `<i class="material-icons">audiotrack</i>`;
     }
     previewButton = `<button class="btn btn-sm btn-info preview-btn" onclick="event.stopPropagation(); previewFile('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
-               ${previewIcon}
-             </button>`;
+                 ${previewIcon}
+               </button>`;
   }
 
   return `
@@ -229,86 +231,6 @@ export function toggleRowSelection(event, fileName) {
   checkbox.checked = !checkbox.checked;
   updateRowHighlight(checkbox);
   updateFileActionButtons();
-}
-
-export function previewFile(fileUrl, fileName) {
-  let modal = document.getElementById("filePreviewModal");
-  if (!modal) {
-    modal = document.createElement("div");
-    modal.id = "filePreviewModal";
-    Object.assign(modal.style, {
-      display: "none",
-      position: "fixed",
-      top: "0",
-      left: "0",
-      width: "100vw",
-      height: "100vh",
-      backgroundColor: "rgba(0,0,0,0.7)",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      zIndex: "1000"
-    });
-    modal.innerHTML = `
-      <div class="modal-content image-preview-modal-content">
-        <span id="closeFileModal" class="close-image-modal">&times;</span>
-        <h4 class="image-modal-header"></h4>
-        <div class="file-preview-container"></div>
-      </div>`;
-    document.body.appendChild(modal);
-
-    document.getElementById("closeFileModal").addEventListener("click", function () {
-      const video = modal.querySelector("video");
-      if (video) {
-        video.pause();
-        video.currentTime = 0;
-      }
-      modal.style.display = "none";
-    });
-
-    modal.addEventListener("click", function (e) {
-      if (e.target === modal) {
-        const video = modal.querySelector("video");
-        if (video) {
-          video.pause();
-          video.currentTime = 0;
-        }
-        modal.style.display = "none";
-      }
-    });
-  }
-
-  modal.querySelector("h4").textContent = fileName;
-  const container = modal.querySelector(".file-preview-container");
-  container.innerHTML = "";
-
-  const extension = fileName.split('.').pop().toLowerCase();
-
-  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(fileName)) {
-    const img = document.createElement("img");
-    img.src = fileUrl;
-    img.className = "image-modal-img";
-    container.appendChild(img);
-  } else if (extension === "pdf") {
-    const embed = document.createElement("embed");
-    const separator = fileUrl.indexOf('?') === -1 ? '?' : '&';
-    embed.src = fileUrl + separator + 't=' + new Date().getTime();
-    embed.type = "application/pdf";
-    embed.style.width = "80vw";
-    embed.style.height = "80vh";
-    embed.style.border = "none";
-    container.appendChild(embed);
-  } else if (/\.(mp4|webm|mov|ogg)$/i.test(fileName)) {
-    const video = document.createElement("video");
-    video.src = fileUrl;
-    video.controls = true;
-    video.className = "image-modal-img";
-    container.appendChild(video);
-  } else {
-    container.textContent = "Preview not available for this file type.";
-  }
-
-  modal.style.display = "flex";
 }
 
 export function attachEnterKeyListener(modalId, buttonId) {
