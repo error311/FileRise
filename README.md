@@ -9,7 +9,7 @@ https://github.com/user-attachments/assets/179e6940-5798-4482-9a69-696f806c37de
 
 changelogs available here: <https://github.com/error311/FileRise-docker/>
 
-FileRise - Multi File Upload Editor is a lightweight, secure, self-hosted web application for uploading, syntax highlight editing, drag & drop and managing files. Built with an Apache/PHP backend and a modern JavaScript (ES6 modules) frontend, it offers a responsive, dynamic file management interface. It serves as an alternative to solutions like FileGator TinyFileManager or ProjectSend, providing an easy-to-setup experience ideal for document management, image galleries, firmware file hosting, and more.
+FileRise is a lightweight, secure, self-hosted web application for uploading, syntax-highlight editing, drag & drop file management, and more. Built with an Apache/PHP backend and a modern JavaScript (ES6 modules) frontend, it offers a responsive and dynamic interface designed to simplify file handling. As an alternative to solutions like FileGator, TinyFileManager, or ProjectSend, FileRise provides an easy-to-set-up experience ideal for document management, image galleries, firmware hosting, and other file-intensive applications.
 
 ---
 
@@ -49,7 +49,7 @@ FileRise - Multi File Upload Editor is a lightweight, secure, self-hosted web ap
   - **Move Files:** Move selected files to a different folder, automatically generating a unique filename if needed to avoid data loss.
   - **Download Files as ZIP:** Download selected files as a ZIP archive. Users can specify a custom name for the ZIP file via a modal dialog.
   - **Extract Zip:** When one or more ZIP files are selected, users can extract the archive(s) directly into the current folder.
-  - **Drag & Drop:** Easily move files by selecting them from the file list and simply dragging them onto your desired folder in the folder tree or breadcrumb. When you drop the files onto a folder, the system automatically moves them, updating your file organization in one seamless action.
+  - **Drag & Drop (File Movement):** Easily move files by selecting them from the file list and dragging them onto your desired folder in the folder tree or breadcrumb. When you drop the files onto a folder, the system automatically moves them, updating your file organization in one seamless action.
   - **Enhanced Context Menu & Keyboard Shortcuts:**
     - **Right-Click Context Menu:**  
       - A custom context menu appears on right-clicking within the file list.  
@@ -125,6 +125,16 @@ FileRise - Multi File Upload Editor is a lightweight, secure, self-hosted web ap
   - **User Interface:**
     - The trash modal displays details such as file name, uploader/deleter, and the trashed date/time.
     - Material icons with tooltips visually represent the restore and delete actions.
+
+- **Drag & Drop Cards with Dedicated Drop Zones:**
+  - **Sidebar Drop Zone:**  
+    - Cards (such as the upload card or folder management card) can be dragged into a dedicated sidebar drop zone for quick access to frequently used operations.
+    - The sidebar drop zone expands dynamically to accept drops anywhere within its visual area.
+  - **Top Bar Drop Zone:**  
+    - A top drop zone is available for reordering or managing cards quickly.
+    - Dragging a card to the top drop zone provides immediate visual feedback, ensuring a fluid and customizable workflow.
+  - **Seamless Interaction:**  
+    - Both drop zones support smooth drag and drop interactions with animations and pointer event adjustments to prevent interference, ensuring that cards can be dropped reliably regardless of screen position.
 
 ---
 
@@ -212,6 +222,12 @@ For users who prefer containerization, a Docker image is available
 
    ```bash
    docker pull error311/filerise-docker:latest
+   ```
+
+   macos M series:
+
+   ```bash
+   docker pull --platform linux/x86_64 error311/filerise-docker:latest
    ```
 
 2. **Run the Container:**

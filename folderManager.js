@@ -63,8 +63,6 @@ function getParentFolder(folder) {
 // Breadcrumb Functions
 // ----------------------
 // Render breadcrumb for a normalized folder path.
-// For example, if window.currentFolder is "Folder1/Folder1SubFolder2",
-// this will return: Root / Folder1 / Folder1SubFolder2.
 function renderBreadcrumb(normalizedFolder) {
   if (normalizedFolder === "root") {
     return `<span class="breadcrumb-link" data-folder="root">Root</span>`;
@@ -307,16 +305,10 @@ export async function loadFolderTree(selectedFolder) {
     }
 
     let html = `<div id="rootRow" class="root-row">
-                  <span class="folder-toggle" data-folder="root">[<span class="custom-dash">-</span>]</span>
-                  <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
-                </div>`;
-    if (folders.length === 0) {
-      html += `<ul class="folder-tree expanded">
-                 <li class="folder-item">
-                   <span class="folder-option" data-folder="root">(Root)</span>
-                 </li>
-               </ul>`;
-    } else {
+    <span class="folder-toggle" data-folder="root">[<span class="custom-dash">-</span>]</span>
+    <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
+  </div>`;
+    if (folders.length > 0) {
       const tree = buildFolderTree(folders);
       html += renderFolderTree(tree, "", "block");
     }
@@ -730,14 +722,14 @@ document.addEventListener("click", function () {
   hideFolderManagerContextMenu();
 });
 
-document.addEventListener("DOMContentLoaded", function() {
-  document.addEventListener("keydown", function(e) {
+document.addEventListener("DOMContentLoaded", function () {
+  document.addEventListener("keydown", function (e) {
     // Skip if the user is typing in an input, textarea, or contentEditable element.
     const tag = e.target.tagName.toLowerCase();
     if (tag === "input" || tag === "textarea" || e.target.isContentEditable) {
       return;
     }
-    
+
     // On macOS, "Delete" is typically reported as "Backspace" (keyCode 8)
     if (e.key === "Delete" || e.key === "Backspace" || e.keyCode === 46 || e.keyCode === 8) {
       // Ensure a folder is selected and it isn't the root folder.
