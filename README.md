@@ -313,4 +313,8 @@ The `config.php` file contains several key constants that may need adjustment fo
 - **Logging & Troubleshooting:**  
   Check Apache logs (located in `/var/log/apache2/`) for troubleshooting any issues during deployment or operation.
 
-Enjoy using the Multi File Upload Editor! For any issues or contributions, please refer to the [GitHub repository](https://github.com/error311/FileRise).
+---
+
+## Contributing
+
+We welcome contributions! Please check out our [Contributing Guidelines](CONTRIBUTING.md) before getting started.
