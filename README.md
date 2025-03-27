@@ -2,7 +2,7 @@
 
 **Video demo:**
 
-https://github.com/user-attachments/assets/179e6940-5798-4482-9a69-696f806c37de
+https://github.com/user-attachments/assets/9546a76b-afb0-4068-875a-0eab478b514d
 
 **Dark mode:**
 ![Dark Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-mode.png)
