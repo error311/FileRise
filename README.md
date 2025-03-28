@@ -259,19 +259,19 @@ For users who prefer containerization, a Docker image is available
    ```yaml
    version: "3.8"
    services:
-   web:
-     image: error311/filerise-docker:latest
-     ports:
-       - "80:80"
-     environment:
-       TIMEZONE: "America/New_York"
-       TOTAL_UPLOAD_SIZE: "5G"
-       SECURE: "false"
-       PERSISTENT_TOKENS_KEY: "default_please_change_this_key"
-     volumes:
-       - /path/to/your/uploads:/var/www/uploads
-       - /path/to/your/users:/var/www/users
-       - /path/to/your/metadata:/var/www/metadata
+     web:
+       image: error311/filerise-docker:latest
+       ports:
+         - "80:80"
+       environment:
+         TIMEZONE: "America/New_York"
+         TOTAL_UPLOAD_SIZE: "5G"
+         SECURE: "false"
+         PERSISTENT_TOKENS_KEY: "default_please_change_this_key"
+       volumes:
+         - /path/to/your/uploads:/var/www/uploads
+         - /path/to/your/users:/var/www/users
+         - /path/to/your/metadata:/var/www/metadata
    ```
 
 **Then start the container with:**
