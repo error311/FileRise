@@ -204,9 +204,19 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
 
 2. **Deploy to Your Web Server:**
    - Place the project files in your Apache web directory (e.g., `/var/www/html`).
-   - Ensure PHP 8.1+ is installed along with the required extensions (php-json, php-curl, php-zip, etc.).
+   - Ensure PHP 8.1+ is installed along with the required extensions (`php-json`, `php-curl`, `php-zip`, etc.).
 
-3. **Directory Setup & Permissions:**
+3. **Install Composer Dependencies (Required for OIDC Support):**
+   - Install Composer if you haven't already ([Installation Guide](https://getcomposer.org/download/)).
+   - Navigate to the project directory and run:
+
+     ```bash
+     composer install
+     ```
+
+   - This step will install necessary dependencies like `jumbojett/openid-connect-php` and `phpseclib/phpseclib`.
+
+4. **Directory Setup & Permissions:**
    - Create the following directories if they do not exist, and set appropriate permissions:
      - `uploads/` – for file storage.
      - `users/` – to store `users.txt` (user authentication data).
@@ -218,11 +228,11 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
      chmod -R 775 /var/www/uploads /var/www/users /var/www/metadata
      ```
 
-4. **Configure Apache:**
+5. **Configure Apache:**
    - Ensure that directory indexing is disabled (using `Options -Indexes` in your `.htaccess` or Apache configuration).
    - Make sure the Apache configuration allows URL rewriting if needed.
 
-5. **Configuration File:**
+6. **Configuration File:**
    - Open `config.php` and adjust the following constants as necessary:
      - `BASE_URL`: Set this to your web app’s base URL.
      - `UPLOAD_DIR`: Adjust the directory path for uploads.
@@ -239,7 +249,9 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
 
 ## Docker Usage
 
-For users who prefer containerization, a Docker image is available
+For users who prefer containerization, a Docker image is available.
+
+**Note:** The Docker image already includes Composer dependencies pre-installed (including OIDC support).
 
 ### Quickstart
 
