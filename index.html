@@ -123,10 +123,10 @@
             </div>
           </div>
         </div>
-        <button id="addUserBtn" title="Add User">
+        <button id="addUserBtn"  title="Add User" style="display: none;">
           <i class="material-icons">person_add</i>
         </button>
-        <button id="removeUserBtn" title="Remove User">
+        <button id="removeUserBtn" title="Remove User" style="display: none;">
           <i class="material-icons">person_remove</i>
         </button>
         <button id="darkModeToggle" class="dark-mode-toggle">Dark Mode</button>
@@ -162,6 +162,10 @@
                 <label for="rememberMeCheckbox">Remember me</label>
               </div>
             </form>
+            <!-- OIDC Login Option -->
+            <div class="text-center mt-3">
+              <button id="oidcLoginBtn" class="btn btn-secondary">Login with OIDC</button>
+            </div>
             <!-- Basic HTTP Login Option -->
             <div class="text-center mt-3">
               <a href="login_basic.php" class="btn btn-secondary">Use Basic HTTP Login</a>

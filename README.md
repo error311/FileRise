@@ -137,9 +137,27 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - **Seamless Interaction:**  
     - Both drop zones support smooth drag and drop interactions with animations and pointer event adjustments to prevent interference, ensuring that cards can be dropped reliably regardless of screen position.
 
+### 🔒 Admin Panel & OpenID Connect (OIDC) Integration
+
+- **Flexible Authentication:**
+  - Supports multiple authentication methods including Form-based Login, Basic Auth, and OpenID Connect (OIDC). Allow disable of only two login options.
+
+- **Secure OIDC Authentication:**
+  - Integrates seamlessly with OIDC providers (e.g., Keycloak, Okta).
+  - Admin-configurable OIDC settings, including Provider URL, Client ID, Client Secret, and Redirect URI.
+  - All sensitive configurations are securely stored in an encrypted JSON file.
+
+- **Dynamic Admin Panel:**
+  - Intuitive Admin Panel with Material Icons for quick recognition and access.
+  - Allows administrators to easily manage authentication settings, user management, and login methods.
+  - Real-time validation prevents disabling all authentication methods simultaneously, ensuring continuous secure access.
+
 ---
 
 ## Screenshots
+
+**Light mode:**
+![Dark Admin Panel](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-admin-panel.png)
 
 **Light mode:**
 ![Light Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-mode.png)

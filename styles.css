@@ -2013,3 +2013,38 @@ body.dark-mode .card {
   padding-top: 5px !important;
   padding-right: 0 !important;
 }
+
+#addUserModal,
+#removeUserModal {
+  z-index: 5000 !important;
+}
+
+#customConfirmModal {
+  z-index: 6000 !important;  
+}
+
+/* Default (light mode) for admin panel content */
+.admin-panel-content {
+  background: #fff;
+  color: #000;
+}
+
+/* Dark mode overrides for admin panel content */
+body.dark-mode .admin-panel-content {
+  background: #2c2c2c;  /* dark background */
+  color: #e0e0e0;       /* light text */
+  border: 1px solid #444;
+}
+
+/* Optionally, adjust input, label, etc. for dark mode */
+body.dark-mode .admin-panel-content input,
+body.dark-mode .admin-panel-content select,
+body.dark-mode .admin-panel-content textarea {
+  background: #3a3a3a;
+  color: #e0e0e0;
+  border: 1px solid #555;
+}
+
+body.dark-mode .admin-panel-content label {
+  color: #e0e0e0;
+}

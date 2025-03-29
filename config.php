@@ -1,7 +1,7 @@
 <?php
 // config.php
 
-// Define constants first.
+// Define constants.
 define('UPLOAD_DIR', '/var/www/uploads/');
 define('USERS_DIR', '/var/www/users/');
 define('USERS_FILE', 'users.txt');
@@ -12,15 +12,14 @@ define('TIMEZONE', 'America/New_York');
 define('DATE_TIME_FORMAT', 'm/d/y  h:iA');
 define('TOTAL_UPLOAD_SIZE', '5G');
 
-// Set the default timezone.
 date_default_timezone_set(TIMEZONE);
 
 /**
  * Encrypts data using AES-256-CBC.
  *
- * @param string $data          The plaintext data.
- * @param string $encryptionKey The secret encryption key.
- * @return string               Base64-encoded string containing IV and ciphertext.
+ * @param string $data The plaintext.
+ * @param string $encryptionKey The encryption key.
+ * @return string Base64-encoded string containing IV and ciphertext.
  */
 function encryptData($data, $encryptionKey) {
     $cipher = 'AES-256-CBC';
@@ -33,9 +32,9 @@ function encryptData($data, $encryptionKey) {
 /**
  * Decrypts data encrypted with AES-256-CBC.
  *
- * @param string $encryptedData The Base64-encoded data containing IV and ciphertext.
- * @param string $encryptionKey The secret encryption key.
- * @return string|false         The decrypted plaintext or false on failure.
+ * @param string $encryptedData Base64-encoded data containing IV and ciphertext.
+ * @param string $encryptionKey The encryption key.
+ * @return string|false The decrypted plaintext or false on failure.
  */
 function decryptData($encryptedData, $encryptionKey) {
     $cipher = 'AES-256-CBC';
@@ -46,16 +45,15 @@ function decryptData($encryptedData, $encryptionKey) {
     return openssl_decrypt($ciphertext, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
 }
 
-// Load encryption key from an environment variable (default for testing; override in production)
+// Load encryption key from environment (override in production).
 $encryptionKey = getenv('PERSISTENT_TOKENS_KEY') ?: 'default_please_change_this_key';
 if (!$encryptionKey) {
     die('Encryption key for persistent tokens is not set.');
 }
 
-// Allow an environment variable to override HTTPS detection.
+// Determine whether HTTPS is used.
 $envSecure = getenv('SECURE');
 if ($envSecure !== false) {
-    // Convert the environment variable value to a boolean.
     $secure = filter_var($envSecure, FILTER_VALIDATE_BOOLEAN);
 } else {
     $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
@@ -64,22 +62,20 @@ if ($envSecure !== false) {
 $cookieParams = [
     'lifetime' => 7200,
     'path'     => '/',
-    'domain'   => '', // Specify your domain if needed
+    'domain'   => '', // Set your domain as needed.
     'secure'   => $secure,
     'httponly' => true,
     'samesite' => 'Lax'
 ];
 session_set_cookie_params($cookieParams);
-
 ini_set('session.gc_maxlifetime', 7200);
 session_start();
 
-// Generate CSRF token if not already set.
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Auto-login via persistent token if session is not active.
+// Auto-login via persistent token.
 if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) {
     $persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
     $persistentTokens = [];
@@ -91,15 +87,12 @@ if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) 
             $persistentTokens = [];
         }
     }
-    if (is_array($persistentTokens) && isset($persistentTokens[$_COOKIE['remember_me_token']])) {
+    if (isset($persistentTokens[$_COOKIE['remember_me_token']])) {
         $tokenData = $persistentTokens[$_COOKIE['remember_me_token']];
         if ($tokenData['expiry'] >= time()) {
-            // Token is valid; auto-authenticate the user.
             $_SESSION["authenticated"] = true;
             $_SESSION["username"] = $tokenData["username"];
-            $_SESSION["isAdmin"] = $tokenData["isAdmin"]; // Restore admin status from the token
         } else {
-            // Token expired; remove it and clear the cookie.
             unset($persistentTokens[$_COOKIE['remember_me_token']]);
             $newEncryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
             file_put_contents($persistentTokensFile, $newEncryptedContent, LOCK_EX);
@@ -108,11 +101,8 @@ if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) 
     }
 }
 
-// Define BASE_URL (this should point to where index.html is, e.g. your uploads directory)
 define('BASE_URL', 'http://yourwebsite/uploads/');
 
-// If BASE_URL is still the default placeholder, use the server's HTTP_HOST.
-// Otherwise, use BASE_URL and append share.php.
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
     $defaultShareUrl = isset($_SERVER['HTTP_HOST'])
         ? "http://" . $_SERVER['HTTP_HOST'] . "/share.php"
@@ -120,6 +110,5 @@ if (strpos(BASE_URL, 'yourwebsite') !== false) {
 } else {
     $defaultShareUrl = rtrim(BASE_URL, '/') . "/share.php";
 }
-
 define('SHARE_URL', getenv('SHARE_URL') ? getenv('SHARE_URL') : $defaultShareUrl);
 ?>
