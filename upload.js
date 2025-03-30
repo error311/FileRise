@@ -457,43 +457,51 @@ function initResumableUpload() {
     updateFileInfoCount();
   });
 
-  resumableInstance.on("fileProgress", function (file) {
-    const percent = Math.floor(file.progress() * 100);
+  resumableInstance.on("fileProgress", function(file) {
+    const progress = file.progress(); // value between 0 and 1
+    const percent = Math.floor(progress * 100);
     const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
     if (li && li.progressBar) {
-      li.progressBar.style.width = percent + "%";
-      
-      // Calculate elapsed time since file entry was created.
-      const elapsed = (Date.now() - li.startTime) / 1000;
-      let speed = "";
-      if (elapsed > 0) {
-        // Calculate total bytes uploaded so far using file.progress() * file.size
-        const bytesUploaded = file.progress() * file.size;
-        const spd = bytesUploaded / elapsed;
-        if (spd < 1024) {
-          speed = spd.toFixed(0) + " B/s";
-        } else if (spd < 1048576) {
-          speed = (spd / 1024).toFixed(1) + " KB/s";
-        } else {
-          speed = (spd / 1048576).toFixed(1) + " MB/s";
+      if (percent < 99) {
+        li.progressBar.style.width = percent + "%";
+        
+        // Calculate elapsed time and speed.
+        const elapsed = (Date.now() - li.startTime) / 1000;
+        let speed = "";
+        if (elapsed > 0) {
+          const bytesUploaded = progress * file.size;
+          const spd = bytesUploaded / elapsed;
+          if (spd < 1024) {
+            speed = spd.toFixed(0) + " B/s";
+          } else if (spd < 1048576) {
+            speed = (spd / 1024).toFixed(1) + " KB/s";
+          } else {
+            speed = (spd / 1048576).toFixed(1) + " MB/s";
+          }
         }
+        li.progressBar.innerText = percent + "% (" + speed + ")";
+      } else {
+        // When progress reaches 99% or higher, show only a spinner icon.
+        li.progressBar.style.width = "100%";
+        li.progressBar.innerHTML = '<i class="material-icons spinning" style="vertical-align: middle;">autorenew</i>';
       }
-      li.progressBar.innerText = percent + "% (" + speed + ")";
       
-      // Enable the pause/resume button once progress starts
+      // Enable the pause/resume button once progress starts.
       const pauseResumeBtn = li.querySelector(".pause-resume-btn");
       if (pauseResumeBtn) {
         pauseResumeBtn.disabled = false;
       }
     }
   });
-
-  resumableInstance.on("fileSuccess", function (file, message) {
+  
+  resumableInstance.on("fileSuccess", function(file, message) {
     const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
     if (li && li.progressBar) {
+      // Clear any merging indicators.
       li.progressBar.style.width = "100%";
       li.progressBar.innerText = "Done";
-      // Hide the pause/resume button when upload is complete.
+      
+      // Optionally hide the pause/resume and remove buttons.
       const pauseResumeBtn = li.querySelector(".pause-resume-btn");
       if (pauseResumeBtn) {
         pauseResumeBtn.style.display = "none";
