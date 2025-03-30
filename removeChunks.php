@@ -18,7 +18,7 @@ if (!isset($_POST['folder'])) {
 }
 
 $folder = $_POST['folder'];
-// Validate the folder name to allow only expected characters (adjust the regex as needed)
+// Validate the folder name (only alphanumerics, dashes allowed)
 if (!preg_match('/^resumable_[A-Za-z0-9\-]+$/', $folder)) {
     echo json_encode(["error" => "Invalid folder name"]);
     http_response_code(400);
@@ -33,27 +33,28 @@ if (!is_dir($tempDir)) {
     exit;
 }
 
-// Recursively delete directory and its contents
+// Recursively delete directory using RecursiveDirectoryIterator
 function rrmdir($dir) {
-    if (is_dir($dir)) {
-        $objects = scandir($dir);
-        foreach ($objects as $object) {
-            if ($object != "." && $object != "..") {
-                $path = $dir . DIRECTORY_SEPARATOR . $object;
-                if (is_dir($path) && !is_link($path)) {
-                    rrmdir($path);
-                } else {
-                    @unlink($path);
-                }
-            }
-        }
-        @rmdir($dir);
+    if (!is_dir($dir)) {
+        return;
     }
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($it as $file) {
+        if ($file->isDir()){
+            rmdir($file->getRealPath());
+        } else {
+            unlink($file->getRealPath());
+        }
+    }
+    rmdir($dir);
 }
 
 rrmdir($tempDir);
 
-// check if folder still exists
+// Verify removal
 if (!is_dir($tempDir)) {
     echo json_encode(["success" => true, "message" => "Temporary folder removed."]);
 } else {
