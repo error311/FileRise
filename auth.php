@@ -104,16 +104,31 @@ if (isset($failedAttempts[$ip])) {
     }
 }
 
+/*
+ * Updated authenticate() function:
+ * It reads each line from users.txt.
+ * It expects records in the format:
+ * username:hashed_password:role[:encrypted_totp_secret]
+ * If a fourth field is present and non-empty, it decrypts it to obtain the TOTP secret.
+ */
 function authenticate($username, $password) {
-    global $usersFile;
+    global $usersFile, $encryptionKey;
     if (!file_exists($usersFile)) {
         return false;
     }
     $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        list($storedUser, $storedPass, $storedRole) = explode(':', trim($line), 3);
-        if ($username === $storedUser && password_verify($password, $storedPass)) {
-            return $storedRole;
+        $parts = explode(':', trim($line));
+        if (count($parts) < 3) continue; // Skip invalid lines.
+        if ($username === $parts[0] && password_verify($password, $parts[1])) {
+            $result = ['role' => $parts[2]];
+            // If there's a fourth field, decrypt it to get the TOTP secret.
+            if (isset($parts[3]) && !empty($parts[3])) {
+                $result['totp_secret'] = decryptData($parts[3], $encryptionKey);
+            } else {
+                $result['totp_secret'] = null;
+            }
+            return $result;
         }
     }
     return false;
@@ -134,8 +149,27 @@ if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
     exit();
 }
 
-$userRole = authenticate($username, $password);
-if ($userRole !== false) {
+$user = authenticate($username, $password);
+if ($user !== false) {
+    // Only require TOTP if the user's TOTP secret is set.
+    if (!empty($user['totp_secret'])) {
+        if (empty($data['totp_code'])) {
+            echo json_encode([
+              "totp_required" => true,
+              "message" => "TOTP code required"
+            ]);
+            exit();
+        } else {
+            $tfa = new \RobThree\Auth\TwoFactorAuth('FileRise');
+            $providedCode = trim($data['totp_code']);
+            if (!$tfa->verifyCode($user['totp_secret'], $providedCode)) {
+                echo json_encode(["error" => "Invalid TOTP code"]);
+                exit();
+            }
+        }
+    }
+    // --- End TOTP Integration ---
+
     if (isset($failedAttempts[$ip])) {
         unset($failedAttempts[$ip]);
         saveFailedAttempts($attemptsFile, $failedAttempts);
@@ -143,7 +177,7 @@ if ($userRole !== false) {
     session_regenerate_id(true);
     $_SESSION["authenticated"] = true;
     $_SESSION["username"] = $username;
-    $_SESSION["isAdmin"] = ($userRole === "1");
+    $_SESSION["isAdmin"] = ($user['role'] === "1");
     
     if ($rememberMe) {
         $token = bin2hex(random_bytes(32));
@@ -160,7 +194,7 @@ if ($userRole !== false) {
         $persistentTokens[$token] = [
             "username" => $username,
             "expiry"   => $expiry,
-            "isAdmin"  => ($userRole === "1")
+            "isAdmin"  => ($user['role'] === "1")
         ];
         $encryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
         file_put_contents($persistentTokensFile, $encryptedContent, LOCK_EX);

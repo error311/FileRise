@@ -54,7 +54,19 @@ $userFound = false;
 $newLines = [];
 
 foreach ($lines as $line) {
-    list($storedUser, $storedHash, $storedRole) = explode(':', trim($line));
+    $parts = explode(':', trim($line));
+    // Expect at least 3 parts: username, hashed password, and role.
+    if (count($parts) < 3) {
+        // Skip invalid lines.
+        $newLines[] = $line;
+        continue;
+    }
+    $storedUser = $parts[0];
+    $storedHash = $parts[1];
+    $storedRole = $parts[2];
+    // Preserve TOTP secret if it exists.
+    $totpSecret = (count($parts) >= 4) ? $parts[3] : "";
+    
     if ($storedUser === $username) {
         $userFound = true;
         // Verify the old password.
@@ -64,8 +76,12 @@ foreach ($lines as $line) {
         }
         // Hash the new password.
         $newHashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
-        // Rebuild the line with the new hash.
-        $newLines[] = $username . ":" . $newHashedPassword . ":" . $storedRole;
+        // Rebuild the line with the new hash and preserve TOTP secret if present.
+        if ($totpSecret !== "") {
+            $newLines[] = $username . ":" . $newHashedPassword . ":" . $storedRole . ":" . $totpSecret;
+        } else {
+            $newLines[] = $username . ":" . $newHashedPassword . ":" . $storedRole;
+        }
     } else {
         $newLines[] = $line;
     }

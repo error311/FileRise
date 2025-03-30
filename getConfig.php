@@ -11,7 +11,12 @@ if (file_exists($configFile)) {
         echo json_encode(['error' => 'Failed to decrypt configuration.']);
         exit;
     }
-    echo $decryptedContent;
+    // Decode the configuration and ensure globalOtpauthUrl is set
+    $config = json_decode($decryptedContent, true);
+    if (!isset($config['globalOtpauthUrl'])) {
+        $config['globalOtpauthUrl'] = "";
+    }
+    echo json_encode($config);
 } else {
     echo json_encode([
         'oidc' => [
@@ -24,7 +29,8 @@ if (file_exists($configFile)) {
             'disableFormLogin' => false,
             'disableBasicAuth' => false,
             'disableOIDCLogin' => false
-        ]
+        ],
+        'globalOtpauthUrl' => ""
     ]);
 }
 ?>

@@ -2048,3 +2048,14 @@ body.dark-mode .admin-panel-content textarea {
 body.dark-mode .admin-panel-content label {
   color: #e0e0e0;
 }
+
+#openChangePasswordModalBtn {
+  width: auto;
+  padding: 5px 10px;
+  font-size: 14px;
+  margin-right: 300px;
+}
+
+#changePasswordModal {
+  z-index: 9999;
+}

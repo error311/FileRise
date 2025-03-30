@@ -51,6 +51,9 @@ $disableFormLogin = isset($data['disableFormLogin']) ? filter_var($data['disable
 $disableBasicAuth = isset($data['disableBasicAuth']) ? filter_var($data['disableBasicAuth'], FILTER_VALIDATE_BOOLEAN) : false;
 $disableOIDCLogin = isset($data['disableOIDCLogin']) ? filter_var($data['disableOIDCLogin'], FILTER_VALIDATE_BOOLEAN) : false;
 
+// Retrieve the global OTPAuth URL (new field). If not provided, default to an empty string.
+$globalOtpauthUrl = isset($data['globalOtpauthUrl']) ? trim($data['globalOtpauthUrl']) : "";
+
 // Prepare configuration array.
 $configUpdate = [
     'oidc' => [
@@ -63,7 +66,8 @@ $configUpdate = [
         'disableFormLogin' => $disableFormLogin,
         'disableBasicAuth' => $disableBasicAuth,
         'disableOIDCLogin' => $disableOIDCLogin,
-    ]
+    ],
+    'globalOtpauthUrl' => $globalOtpauthUrl
 ];
 
 // Define the configuration file path.

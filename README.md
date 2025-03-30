@@ -137,20 +137,26 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - **Seamless Interaction:**  
     - Both drop zones support smooth drag and drop interactions with animations and pointer event adjustments to prevent interference, ensuring that cards can be dropped reliably regardless of screen position.
 
-### 🔒 Admin Panel & OpenID Connect (OIDC) Integration
+# 🔒 Admin Panel, TOTP & OpenID Connect (OIDC) Integration
 
 - **Flexible Authentication:**
-  - Supports multiple authentication methods including Form-based Login, Basic Auth, and OpenID Connect (OIDC). Allow disable of only two login options.
+  - Supports multiple authentication methods including Form-based Login, Basic Auth, OpenID Connect (OIDC), and TOTP-based Two-Factor Authentication.
+  - Ensures continuous secure access by allowing administrators to disable only two of the available login options at any time.
 
 - **Secure OIDC Authentication:**
-  - Integrates seamlessly with OIDC providers (e.g., Keycloak, Okta).
-  - Admin-configurable OIDC settings, including Provider URL, Client ID, Client Secret, and Redirect URI.
-  - All sensitive configurations are securely stored in an encrypted JSON file.
+  - Seamlessly integrates with OIDC providers (e.g., Keycloak, Okta).
+  - Provides admin-configurable OIDC settings—including Provider URL, Client ID, Client Secret, and Redirect URI.
+  - Stores all sensitive configurations in an encrypted JSON file.
+
+- **TOTP Two-Factor Authentication:**
+  - Enhances security by integrating Time-based One-Time Password (TOTP) functionality.
+  - The new User Panel automatically displays the TOTP setup modal when users enable TOTP, presenting a QR code for easy configuration in authenticator apps.
+  - Administrators can customize a global OTPAuth URL template for consistent TOTP provisioning across accounts.
 
 - **Dynamic Admin Panel:**
-  - Intuitive Admin Panel with Material Icons for quick recognition and access.
-  - Allows administrators to easily manage authentication settings, user management, and login methods.
-  - Real-time validation prevents disabling all authentication methods simultaneously, ensuring continuous secure access.
+  - Features an intuitive interface with Material Icons for quick recognition and access.
+  - Allows administrators to manage authentication settings, user management, and login methods in real time.
+  - Includes real-time validation that prevents the accidental disabling of all authentication methods simultaneously.
 
 ---
 
