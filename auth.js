@@ -459,65 +459,65 @@ function openAdminPanel() {
           z-index: 3000;
         `;
         adminModal.innerHTML = `
-          <div class="modal-content" style="${modalContentStyles}">
-            <span id="closeAdminPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
-            <h3>Admin Panel</h3>
-            <form id="adminPanelForm">
-              <fieldset style="margin-bottom: 15px;">
-                <legend>OIDC Configuration</legend>
-                <div class="form-group">
-                  <label for="oidcProviderUrl">OIDC Provider URL:</label>
-                  <input type="text" id="oidcProviderUrl" class="form-control" value="${currentOIDCConfig.providerUrl}" />
-                </div>
-                <div class="form-group">
-                  <label for="oidcClientId">OIDC Client ID:</label>
-                  <input type="text" id="oidcClientId" class="form-control" value="${currentOIDCConfig.clientId}" />
-                </div>
-                <div class="form-group">
-                  <label for="oidcClientSecret">OIDC Client Secret:</label>
-                  <input type="text" id="oidcClientSecret" class="form-control" value="${currentOIDCConfig.clientSecret}" />
-                </div>
-                <div class="form-group">
-                  <label for="oidcRedirectUri">OIDC Redirect URI:</label>
-                  <input type="text" id="oidcRedirectUri" class="form-control" value="${currentOIDCConfig.redirectUri}" />
-                </div>
-              </fieldset>
-              <fieldset style="margin-bottom: 15px;">
-                <legend>Global TOTP Settings</legend>
-                <div class="form-group">
-                  <label for="globalOtpauthUrl">Global OTPAuth URL:</label>
-                  <input type="text" id="globalOtpauthUrl" class="form-control" value="${currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
-                </div>
-              </fieldset>
-              <fieldset style="margin-bottom: 15px;">
-                <legend>Login Options</legend>
-                <div class="form-group">
-                  <input type="checkbox" id="disableFormLogin" />
-                  <label for="disableFormLogin">Disable Login Form</label>
-                </div>
-                <div class="form-group">
-                  <input type="checkbox" id="disableBasicAuth" />
-                  <label for="disableBasicAuth">Disable Basic HTTP Auth</label>
-                </div>
-                <div class="form-group">
-                  <input type="checkbox" id="disableOIDCLogin" />
-                  <label for="disableOIDCLogin">Disable OIDC Login</label>
-                </div>
-              </fieldset>
-              <fieldset style="margin-bottom: 15px;">
-                <legend>User Management</legend>
-                <div style="display: flex; gap: 10px;">
-                  <button type="button" id="adminOpenAddUser" class="btn btn-success">Add User</button>
-                  <button type="button" id="adminOpenRemoveUser" class="btn btn-danger">Remove User</button>
-                </div>
-              </fieldset>
-              <div style="display: flex; justify-content: space-between;">
-                <button type="button" id="cancelAdminSettings" class="btn btn-secondary">Cancel</button>
-                <button type="button" id="saveAdminSettings" class="btn btn-primary">Save Settings</button>
+        <div class="modal-content" style="${modalContentStyles}">
+          <span id="closeAdminPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
+          <h3>Admin Panel</h3>
+          <form id="adminPanelForm">
+            <fieldset style="margin-bottom: 15px;">
+              <legend>User Management</legend>
+              <div style="display: flex; gap: 10px;">
+                <button type="button" id="adminOpenAddUser" class="btn btn-success">Add User</button>
+                <button type="button" id="adminOpenRemoveUser" class="btn btn-danger">Remove User</button>
               </div>
-            </form>
-          </div>
-        `;
+            </fieldset>
+            <fieldset style="margin-bottom: 15px;">
+              <legend>OIDC Configuration</legend>
+              <div class="form-group">
+                <label for="oidcProviderUrl">OIDC Provider URL:</label>
+                <input type="text" id="oidcProviderUrl" class="form-control" value="${currentOIDCConfig.providerUrl}" />
+              </div>
+              <div class="form-group">
+                <label for="oidcClientId">OIDC Client ID:</label>
+                <input type="text" id="oidcClientId" class="form-control" value="${currentOIDCConfig.clientId}" />
+              </div>
+              <div class="form-group">
+                <label for="oidcClientSecret">OIDC Client Secret:</label>
+                <input type="text" id="oidcClientSecret" class="form-control" value="${currentOIDCConfig.clientSecret}" />
+              </div>
+              <div class="form-group">
+                <label for="oidcRedirectUri">OIDC Redirect URI:</label>
+                <input type="text" id="oidcRedirectUri" class="form-control" value="${currentOIDCConfig.redirectUri}" />
+              </div>
+            </fieldset>
+            <fieldset style="margin-bottom: 15px;">
+              <legend>Global TOTP Settings</legend>
+              <div class="form-group">
+                <label for="globalOtpauthUrl">Global OTPAuth URL:</label>
+                <input type="text" id="globalOtpauthUrl" class="form-control" value="${currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
+              </div>
+            </fieldset>
+            <fieldset style="margin-bottom: 15px;">
+              <legend>Login Options</legend>
+              <div class="form-group">
+                <input type="checkbox" id="disableFormLogin" />
+                <label for="disableFormLogin">Disable Login Form</label>
+              </div>
+              <div class="form-group">
+                <input type="checkbox" id="disableBasicAuth" />
+                <label for="disableBasicAuth">Disable Basic HTTP Auth</label>
+              </div>
+              <div class="form-group">
+                <input type="checkbox" id="disableOIDCLogin" />
+                <label for="disableOIDCLogin">Disable OIDC Login</label>
+              </div>
+            </fieldset>
+            <div style="display: flex; justify-content: space-between;">
+              <button type="button" id="cancelAdminSettings" class="btn btn-secondary">Cancel</button>
+              <button type="button" id="saveAdminSettings" class="btn btn-primary">Save Settings</button>
+            </div>
+          </form>
+        </div>
+      `;
         document.body.appendChild(adminModal);
 
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
