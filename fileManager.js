@@ -180,14 +180,17 @@ function previewFile(fileUrl, fileName) {
     document.body.appendChild(modal);
 
     function closeModal() {
-      // Pause and reset any video or audio elements within the modal
+      // Pause media elements without resetting currentTime for video elements
       const mediaElements = modal.querySelectorAll("video, audio");
       mediaElements.forEach(media => {
         media.pause();
-        try {
-          media.currentTime = 0;
-        } catch(e) {
-          // Some media types might not support setting currentTime.
+        // Only reset if it's not a video
+        if (media.tagName.toLowerCase() !== 'video') {
+          try {
+            media.currentTime = 0;
+          } catch(e) {
+            // Some media types might not support setting currentTime.
+          }
         }
       });
       modal.style.display = "none";
@@ -265,7 +268,29 @@ function previewFile(fileUrl, fileName) {
       video.src = fileUrl;
       video.controls = true;
       video.className = "image-modal-img";
+    
+      // Create a unique key for this video (using fileUrl here)
+      const progressKey = 'videoProgress-' + fileUrl;
+    
+      // When the video's metadata is loaded, check for saved progress
+      video.addEventListener("loadedmetadata", () => {
+        const savedTime = localStorage.getItem(progressKey);
+        if (savedTime) {
+          video.currentTime = parseFloat(savedTime);
+        }
+      });
+    
+      // Listen for time updates and save the current time
+      video.addEventListener("timeupdate", () => {
+        localStorage.setItem(progressKey, video.currentTime);
+      });
+
+      video.addEventListener("ended", () => {
+        localStorage.removeItem(progressKey);
+      });
+    
       container.appendChild(video);
+
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(fileName)) {
       const audio = document.createElement("audio");
       audio.src = fileUrl;
