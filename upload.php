@@ -19,7 +19,32 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
-// Check if this is a chunked upload (Resumable.js sends "resumableChunkNumber").
+/*
+ * Handle test chunk requests.
+ * When testChunks is enabled in Resumable.js, the client sends GET requests with a "resumableTest" parameter.
+ */
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['resumableTest'])) {
+    $chunkNumber = intval($_GET['resumableChunkNumber']);
+    $resumableIdentifier = $_GET['resumableIdentifier'];
+    $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
+    // Determine the base upload directory.
+    $baseUploadDir = UPLOAD_DIR;
+    if ($folder !== 'root') {
+        $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
+    }
+    $tempDir = $baseUploadDir . 'resumable_' . $resumableIdentifier . DIRECTORY_SEPARATOR;
+    $chunkFile = $tempDir . $chunkNumber;
+    if (file_exists($chunkFile)) {
+        http_response_code(200);
+    } else {
+        http_response_code(404);
+    }
+    exit;
+}
+
+// ---------------------
+// Chunked upload handling (POST requests)
+// ---------------------
 if (isset($_POST['resumableChunkNumber'])) {
     // ------------- Chunked Upload Handling -------------
     $chunkNumber         = intval($_POST['resumableChunkNumber']); // current chunk (1-indexed)
@@ -61,70 +86,70 @@ if (isset($_POST['resumableChunkNumber'])) {
     
     // Check if all chunks have been uploaded.
     $uploadedChunks = glob($tempDir . "*");
-    if (count($uploadedChunks) >= $totalChunks) {
-        // All chunks uploaded. Merge chunks.
-        $targetPath = $baseUploadDir . $resumableFilename;
-        if (!$out = fopen($targetPath, "wb")) {
-            echo json_encode(["error" => "Failed to open target file for writing"]);
-            exit;
-        }
-        // Concatenate each chunk in order.
-        for ($i = 1; $i <= $totalChunks; $i++) {
-            $chunkPath = $tempDir . $i;
-            if (!$in = fopen($chunkPath, "rb")) {
-                fclose($out);
-                echo json_encode(["error" => "Failed to open chunk $i"]);
-                exit;
-            }
-            while ($buff = fread($in, 4096)) {
-                fwrite($out, $buff);
-            }
-            fclose($in);
-        }
-        fclose($out);
-        
-        // --- Metadata Update for Chunked Upload ---
-        // For chunked uploads, assume no relativePath; so folderPath is simply $folder.
-        $folderPath = $folder;
-        $metadataKey = ($folderPath === '' || $folderPath === 'root') ? "root" : $folderPath;
-        // Generate a metadata file name based on the folder path.
-        $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
-        $metadataFile = META_DIR . $metadataFileName;
-        
-        $uploadedDate = date(DATE_TIME_FORMAT);
-        $uploader = $_SESSION['username'] ?? "Unknown";
-        
-        // Load existing metadata, if any.
-        if (file_exists($metadataFile)) {
-            $metadataCollection = json_decode(file_get_contents($metadataFile), true);
-            if (!is_array($metadataCollection)) {
-                $metadataCollection = [];
-            }
-        } else {
-            $metadataCollection = [];
-        }
-        
-        // Add metadata for this file if not already present.
-        if (!isset($metadataCollection[$resumableFilename])) {
-            $metadataCollection[$resumableFilename] = [
-                "uploaded" => $uploadedDate,
-                "uploader" => $uploader
-            ];
-            file_put_contents($metadataFile, json_encode($metadataCollection, JSON_PRETTY_PRINT));
-        }
-        // --- End Metadata Update ---
-        
-        // Cleanup: remove the temporary directory and its chunks.
-        array_map('unlink', glob("$tempDir*"));
-        rmdir($tempDir);
-        
-        echo json_encode(["success" => "File uploaded successfully"]);
-        exit;
-    } else {
-        // Chunk successfully uploaded, but more chunks remain.
+    if (count($uploadedChunks) < $totalChunks) {
+        // More chunks remain – respond and let the client continue.
         echo json_encode(["status" => "chunk uploaded"]);
         exit;
     }
+    
+    // All chunks are present. Merge chunks.
+    $targetPath = $baseUploadDir . $resumableFilename;
+    if (!$out = fopen($targetPath, "wb")) {
+        echo json_encode(["error" => "Failed to open target file for writing"]);
+        exit;
+    }
+    // Concatenate each chunk in order.
+    for ($i = 1; $i <= $totalChunks; $i++) {
+        $chunkPath = $tempDir . $i;
+        if (!$in = fopen($chunkPath, "rb")) {
+            fclose($out);
+            echo json_encode(["error" => "Failed to open chunk $i"]);
+            exit;
+        }
+        while ($buff = fread($in, 4096)) {
+            fwrite($out, $buff);
+        }
+        fclose($in);
+    }
+    fclose($out);
+    
+    // --- Metadata Update for Chunked Upload ---
+    // For chunked uploads, assume no relativePath; so folderPath is simply $folder.
+    $folderPath = $folder;
+    $metadataKey = ($folderPath === '' || $folderPath === 'root') ? "root" : $folderPath;
+    // Generate a metadata file name based on the folder path.
+    $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
+    $metadataFile = META_DIR . $metadataFileName;
+    
+    $uploadedDate = date(DATE_TIME_FORMAT);
+    $uploader = $_SESSION['username'] ?? "Unknown";
+    
+    // Load existing metadata, if any.
+    if (file_exists($metadataFile)) {
+        $metadataCollection = json_decode(file_get_contents($metadataFile), true);
+        if (!is_array($metadataCollection)) {
+            $metadataCollection = [];
+        }
+    } else {
+        $metadataCollection = [];
+    }
+    
+    // Add metadata for this file if not already present.
+    if (!isset($metadataCollection[$resumableFilename])) {
+        $metadataCollection[$resumableFilename] = [
+            "uploaded" => $uploadedDate,
+            "uploader" => $uploader
+        ];
+        file_put_contents($metadataFile, json_encode($metadataCollection, JSON_PRETTY_PRINT));
+    }
+    // --- End Metadata Update ---
+    
+    // Cleanup: remove the temporary directory and its chunks.
+    array_map('unlink', glob("$tempDir*"));
+    rmdir($tempDir);
+    
+    echo json_encode(["success" => "File uploaded successfully"]);
+    exit;
     
 } else {
     // ------------- Full Upload (Non-chunked) -------------
