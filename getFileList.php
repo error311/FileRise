@@ -93,9 +93,14 @@ foreach ($files as $file) {
         'modified' => $fileDateModified,
         'uploaded' => $fileUploadedDate,
         'size' => $fileSizeFormatted,
-        'uploader' => $fileUploader
+        'uploader' => $fileUploader,
+        'tags' => isset($metadata[$metaKey]['tags']) ? $metadata[$metaKey]['tags'] : []
     ];
 }
 
-echo json_encode(["files" => $fileList]);
+// Load global tags from createdTags.json.
+$globalTagsFile = META_DIR . "createdTags.json";
+$globalTags = file_exists($globalTagsFile) ? json_decode(file_get_contents($globalTagsFile), true) : [];
+
+echo json_encode(["files" => $fileList, "globalTags" => $globalTags]);
 ?>

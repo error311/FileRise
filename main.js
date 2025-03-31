@@ -18,6 +18,7 @@ import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
 import { initDragAndDrop, loadSidebarOrder } from './dragAndDrop.js'
+import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
 
 function loadCsrfToken() {
   fetch('token.php', { credentials: 'include' })
@@ -129,6 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
   checkAuthentication().then(authenticated => {
     if (authenticated) {
       window.currentFolder = "root";
+      initTagSearch();
       loadFileList(window.currentFolder);
       initDragAndDrop();
       loadSidebarOrder();

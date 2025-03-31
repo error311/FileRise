@@ -97,7 +97,7 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
               <i class="material-icons">search</i>
             </span>
           </div>
-          <input type="text" id="searchInput" class="form-control" placeholder="Search files..." value="${safeSearchTerm}" aria-describedby="searchIcon">
+          <input type="text" id="searchInput" class="form-control" placeholder="Search files or tag..." value="${safeSearchTerm}" aria-describedby="searchIcon">
         </div>
       </div>
       <div class="col-12 col-md-4 text-left">
@@ -157,7 +157,7 @@ export function buildFileTableRow(file, folderPath) {
     <td>
       <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
     </td>
-    <td>${safeFileName}</td>
+    <td class="file-name-cell">${safeFileName}</td>
     <td class="hide-small nowrap">${safeModified}</td>
     <td class="hide-small hide-medium nowrap">${safeUploaded}</td>
     <td class="hide-small nowrap">${safeSize}</td>

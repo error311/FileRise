@@ -15,6 +15,8 @@ import {
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
 
+import { initTagSearch, openTagModal, openMultiTagModal } from './fileTags.js';
+
 window.itemsPerPage = window.itemsPerPage || 10;
 window.currentPage = window.currentPage || 1;
 window.viewMode = localStorage.getItem("viewMode") || "table"; // "table" or "gallery"
@@ -258,7 +260,7 @@ function previewFile(fileUrl, fileName) {
       embed.style.height = "80vh";
       embed.style.border = "none";
       container.appendChild(embed);
-    } else if (/\.(mp4|webm|mov)$/i.test(fileName)) {
+    } else if (/\.(mp4|webm|mov|ogg)$/i.test(fileName)) {
       const video = document.createElement("video");
       video.src = fileUrl;
       video.controls = true;
@@ -419,17 +421,19 @@ function fileDragStartHandler(event) {
 //
 export function renderFileTable(folder) {
   const fileListContainer = document.getElementById("fileList");
-  const searchTerm = window.currentSearchTerm || "";
+  const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "10", 10);
   let currentPage = window.currentPage || 1;
 
-  const filteredFiles = fileData.filter(file =>
-    file.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter files: include a file if its name OR any of its tags include the search term.
+  const filteredFiles = fileData.filter(file => {
+    const nameMatch = file.name.toLowerCase().includes(searchTerm);
+    const tagMatch = file.tags && file.tags.some(tag => tag.name.toLowerCase().includes(searchTerm));
+    return nameMatch || tagMatch;
+  });
 
   const totalFiles = filteredFiles.length;
   const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
-
   if (currentPage > totalPages) {
     currentPage = totalPages > 0 ? totalPages : 1;
     window.currentPage = currentPage;
@@ -442,19 +446,40 @@ export function renderFileTable(folder) {
   const topControlsHTML = buildSearchAndPaginationControls({
     currentPage,
     totalPages,
-    searchTerm
+    searchTerm: window.currentSearchTerm || ""
   });
   let headerHTML = buildFileTableHeader(sortOrder);
   const startIndex = (currentPage - 1) * itemsPerPageSetting;
   const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
   let rowsHTML = "<tbody>";
+
   if (totalFiles > 0) {
-    filteredFiles.slice(startIndex, endIndex).forEach(file => {
+    filteredFiles.slice(startIndex, endIndex).forEach((file, idx) => {
+      // Build the table row HTML.
       let rowHTML = buildFileTableRow(file, folderPath);
+      // Add a unique id attribute so that tag updates can target this row.
+      rowHTML = rowHTML.replace("<tr", `<tr id="file-row-${encodeURIComponent(file.name)}-${startIndex + idx}"`);
+
+      // Build tag badges HTML.
+      let tagBadgesHTML = "";
+      if (file.tags && file.tags.length > 0) {
+        tagBadgesHTML = '<div class="tag-badges" style="display:inline-block; margin-left:5px;">';
+        file.tags.forEach(tag => {
+          tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
+        });
+        tagBadgesHTML += "</div>";
+      }
+
+      // Insert tag badges into the file name cell.
+      rowHTML = rowHTML.replace(/(<td class="file-name-cell">)(.*?)(<\/td>)/, (match, p1, p2, p3) => {
+        return p1 + p2 + tagBadgesHTML + p3;
+      });
+
       // Insert share button into the actions cell.
       rowHTML = rowHTML.replace(/(<\/div>\s*<\/td>\s*<\/tr>)/, `<button class="share-btn btn btn-sm btn-secondary" data-file="${escapeHTML(file.name)}" title="Share">
             <i class="material-icons">share</i>
           </button>$1`);
+
       rowsHTML += rowHTML;
     });
   } else {
@@ -472,12 +497,10 @@ export function renderFileTable(folder) {
       window.currentSearchTerm = newSearchInput.value;
       window.currentPage = 1;
       renderFileTable(folder);
-      // After re‑render, re-select the input element and set focus.
       setTimeout(() => {
         const freshInput = document.getElementById("searchInput");
         if (freshInput) {
           freshInput.focus();
-          // Place the caret at the end of the text.
           const len = freshInput.value.length;
           freshInput.setSelectionRange(len, len);
         }
@@ -519,17 +542,22 @@ export function renderFileTable(folder) {
   });
 }
 
-//
-// --- RENDER GALLERY VIEW ---
-//
 export function renderGalleryView(folder) {
   const fileListContainer = document.getElementById("fileList");
+  const searchTerm = (window.currentSearchTerm || "").toLowerCase();
+  // Filter files using the same logic as table view.
+  const filteredFiles = fileData.filter(file => {
+    return file.name.toLowerCase().includes(searchTerm) ||
+           (file.tags && file.tags.some(tag => tag.name.toLowerCase().includes(searchTerm)));
+  });
+
   const folderPath = folder === "root"
     ? "uploads/"
     : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
   const gridStyle = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 10px;";
   let galleryHTML = `<div class="gallery-container" style="${gridStyle}">`;
-  fileData.forEach((file) => {
+
+  filteredFiles.forEach((file) => {
     let thumbnail;
     if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
       thumbnail = `<img src="${folderPath + encodeURIComponent(file.name)}?t=${new Date().getTime()}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: 150px; display: block; margin: 0 auto;">`;
@@ -538,12 +566,24 @@ export function renderGalleryView(folder) {
     } else {
       thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
     }
+
+    // Build tag badges HTML for the gallery view.
+    let tagBadgesHTML = "";
+    if (file.tags && file.tags.length > 0) {
+      tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
+      file.tags.forEach(tag => {
+        tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
+      });
+      tagBadgesHTML += `</div>`;
+    }
+
     galleryHTML += `<div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
       <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
         ${thumbnail}
       </div>
       <div class="gallery-info" style="margin-top: 5px;">
         <span class="gallery-file-name" style="display: block;">${escapeHTML(file.name)}</span>
+        ${tagBadgesHTML}
         <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
           <a class="btn btn-sm btn-success download-btn" 
              href="download.php?folder=${encodeURIComponent(file.folder || 'root')}&file=${encodeURIComponent(file.name)}" 
@@ -551,7 +591,7 @@ export function renderGalleryView(folder) {
             <i class="material-icons">file_download</i>
           </a>
           ${file.editable ? `
-            <button class="btn btn-sm edit-btn"  onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
+            <button class="btn btn-sm edit-btn" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
               <i class="material-icons">edit</i>
             </button>
           ` : ""}
@@ -565,21 +605,9 @@ export function renderGalleryView(folder) {
       </div>
     </div>`;
   });
+
   galleryHTML += "</div>";
   fileListContainer.innerHTML = galleryHTML;
-
-  // Re-bind share button events if necessary.
-  document.querySelectorAll(".gallery-share-btn").forEach(btn => {
-    btn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      const fileName = this.getAttribute("data-file");
-      const folder = this.getAttribute("data-folder");
-      const file = fileData.find(f => f.name === fileName);
-      if (file) {
-        openShareModal(file, folder);
-      }
-    });
-  });
 
   createViewToggleButton();
   updateFileActionButtons();
@@ -1454,6 +1482,7 @@ function hideFileContextMenu() {
 // Context menu handler for the file list.
 function fileListContextMenuHandler(e) {
   e.preventDefault();
+  
   // If no file is selected, try to select the row that was right-clicked.
   let row = e.target.closest("tr");
   if (row) {
@@ -1483,11 +1512,20 @@ function fileListContextMenuHandler(e) {
     });
   }
   
-  if (selected.length === 1) {
-    // Look up the file object.
+  // If multiple files are selected, add a "Tag Selected" option.
+  if (selected.length > 1) {
+    menuItems.push({
+      label: "Tag Selected",
+      action: () => {
+        const files = fileData.filter(f => selected.includes(f.name));
+        openMultiTagModal(files);
+      }
+    });
+  }
+  // If exactly one file is selected, add options specific to that file.
+  else if (selected.length === 1) {
     const file = fileData.find(f => f.name === selected[0]);
     
-    // Add Preview option.
     menuItems.push({
       label: "Preview",
       action: () => {
@@ -1499,7 +1537,6 @@ function fileListContextMenuHandler(e) {
       }
     });
     
-    // Only show Edit option if file is editable.
     if (canEditFile(file.name)) {
       menuItems.push({
         label: "Edit",
@@ -1507,10 +1544,14 @@ function fileListContextMenuHandler(e) {
       });
     }
     
-    // Add Rename option.
     menuItems.push({
       label: "Rename",
       action: () => { renameFile(selected[0], window.currentFolder); }
+    });
+    
+    menuItems.push({
+      label: "Tag File",
+      action: () => { openTagModal(file); }
     });
   }
   

@@ -51,31 +51,45 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - **Extract Zip:** When one or more ZIP files are selected, users can extract the archive(s) directly into the current folder.
   - **Drag & Drop (File Movement):** Easily move files by selecting them from the file list and dragging them onto your desired folder in the folder tree or breadcrumb. When you drop the files onto a folder, the system automatically moves them, updating your file organization in one seamless action.
   - **Enhanced Context Menu & Keyboard Shortcuts:**
-    - **Right-Click Context Menu:**  
-      - A custom context menu appears on right-clicking within the file list.  
-      - For multiple selections, options include Delete Selected, Copy Selected, Move Selected, Download Zip, and (if applicable) Extract Zip.  
-      - When exactly one file is selected, additional options (Preview, Edit [if editable], and Rename) are available.
-    - **Keyboard Shortcut for Deletion:**  
+    - **Right-Click Context Menu:**
+      - A custom context menu appears on right-clicking within the file list.
+      - For multiple selections, options include Delete Selected, Copy Selected, Move Selected, Download Zip, and (if applicable) Extract Zip.
+      - When exactly one file is selected, additional options (Preview, Edit [if editable], Rename, and Tag File) are available.
+    - **Keyboard Shortcut for Deletion:**
       - A global keydown listener detects Delete/Backspace key presses (when no input is focused) to trigger the delete operation.
+
+- **File Tagging and Global Tag Management:**
+  - **Context Menu Tagging:**
+    - Single-file tagging: “Tag File” option in the right-click menu opens a modal to add a tag (with name and color) to the file.
+    - Multi-file tagging: When multiple files are selected, a “Tag Selected” option opens a multi‑file tagging modal to apply the same tag to all selected files.
+  - **Tagging Modals & Custom Dropdown:**
+    - Dedicated modals provide an interface for adding and updating tags.
+    - A custom dropdown in each modal displays available global tags with a colored preview and a remove icon.
+  - **Global Tag Store:**
+    - Tags are stored globally (persisted in a JSON file) for reuse across files and sessions.
+    - New tags added to any file are automatically added to the global store.
+    - Users can remove a global tag directly from the dropdown, which removes it from the available tag list for all files.
+  - **Unified Search Filtering:**
+    - The single search box now filters files based on both file names and tag names (case‑insensitive).
 
 - **Folder Management:**
   - Organize files into folders and subfolders with the ability to create, rename, and delete folders.
-  - A dynamic folder tree in the UI allows users to navigate directories easily, and any changes are immediately reflected in real time.
-  - **Per-Folder Metadata Storage:** Each folder has its own metadata JSON file (e.g., `root_metadata.json`, `FolderName_metadata.json`), and operations (copy/move/rename) update these metadata files accordingly.
-  - **Intuitive Breadcrumb Navigation:** Clickable breadcrumbs enable users to quickly jump to any parent folder, streamlining navigation across subfolders. Supports drag & drop to move files.
-  - **Folder Manager Context Menu:**  
-    - Right-clicking on a folder (in the folder tree or breadcrumb) brings up a custom context menu with options for creating, renaming, and deleting folders.
-  - **Keyboard Shortcut for Folder Deletion:**  
-    - A global key listener (Delete/Backspace) is provided to trigger folder deletion (with safeguards to prevent deleting the root folder).
+  - A dynamic folder tree in the UI allows users to navigate directories easily, with real-time updates.
+  - **Per-Folder Metadata Storage:** Each folder has its own metadata JSON file (e.g., `root_metadata.json`, `FolderName_metadata.json`), updated with operations like copy/move/rename.
+  - **Intuitive Breadcrumb Navigation:** Clickable breadcrumbs enable users to quickly jump to any parent folder; supports drag & drop for moving files.
+  - **Folder Manager Context Menu:**
+    - Right-clicking on a folder brings up a custom context menu with options for creating, renaming, and deleting folders.
+  - **Keyboard Shortcut for Folder Deletion:**
+    - A global key listener (Delete/Backspace) triggers folder deletion with safeguards to prevent deletion of the root folder.
 
 - **Sorting & Pagination:**
-  - The file list can be sorted by name, modified date, upload date, file size, or uploader.
-  - Pagination controls let users navigate through files with selectable page sizes (10, 20, 50, or 100 items per page) and “Prev”/“Next” navigation buttons.
+  - Files can be sorted by name, modified date, upload date, file size, or uploader.
+  - Pagination controls let users navigate through files with selectable page sizes (10, 20, 50, or 100 items per page) and “Prev”/“Next” buttons.
 
 - **Share Link Functionality:**
-  - Generate shareable links for files with configurable expiration times (e.g., 30, 60, 120, 180, 240 minutes, and a 1-day option) and optional password protection.
-  - Share links are stored in a JSON file with details including the folder, file, expiration timestamp, and hashed password.
-  - The share endpoint (`share.php`) validates tokens, expiration, and password before serving files (or forcing downloads).
+  - Generate shareable links for files with configurable expiration times (e.g., 30, 60, 120, 180, 240 minutes, and 1 day) and optional password protection.
+  - Share links are stored in a JSON file with details including folder, file, expiration timestamp, and hashed password.
+  - The share endpoint validates tokens, expiration, and password before serving files (or forcing downloads).
   - The share URL is configurable via environment variables or auto-detected from the server.
 
 - **User Authentication & Management:**
@@ -83,28 +97,28 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - Admin users can add or remove users through the interface.
   - Passwords are hashed using PHP’s `password_hash()` for security.
   - All state-changing endpoints include CSRF token validation.
-  - Change password supported for all users.
-  - Basic Auth supported for login.
+  - Password change functionality is supported for all users.
+  - Basic Auth is available for login.
   - **Persistent Login (Remember Me) with Encrypted Tokens:**
     - Users can remain logged in across sessions securely.
     - Persistent tokens are encrypted using AES‑256‑CBC before being stored in a JSON file.
-    - On auto-login, the tokens are decrypted on the server to re-establish user sessions without requiring re-authentication.
+    - On auto-login, tokens are decrypted on the server to re-establish user sessions without re-authentication.
 
 - **Responsive, Dynamic & Persistent UI:**
   - The interface is mobile-friendly and adapts to various screen sizes by hiding non-critical columns on small devices.
   - Asynchronous updates (via Fetch API and XMLHttpRequest) keep the UI responsive without full page reloads.
-  - Persistent settings (such as items per page, dark/light mode preference, folder tree state, and the last open folder) ensure a smooth and customized user experience.
+  - Persistent settings (such as items per page, dark/light mode preference, folder tree state, and the last open folder) ensure a smooth, customized user experience.
 
 - **Dark Mode/Light Mode:**
-  - The application automatically adapts to the operating system’s theme preference by default and offers a manual toggle.
-  - The dark mode provides a darker background with lighter text and adjusts UI elements (including the CodeMirror editor) for optimal readability in low-light conditions.
-  - The light mode maintains a bright interface for well-lit environments.
+  - The application automatically adapts to the operating system’s theme preference by default, with a manual toggle available.
+  - Dark mode provides a darker background with lighter text, and UI elements (including the CodeMirror editor) are adjusted for optimal readability in low-light conditions.
+  - Light mode maintains a bright interface suitable for well-lit environments.
 
 - **Server & Security Enhancements:**
-  - The Apache configuration (or .htaccess files) is set to disable directory indexing (e.g., using `Options -Indexes` in the uploads directory), preventing unauthorized users from viewing directory contents.
-  - Direct access to sensitive files (e.g., `users.txt`) is restricted through .htaccess rules.
-  - A proxy download mechanism has been implemented (via endpoints like `download.php` and `downloadZip.php`) so that every file download request goes through a PHP script. This script validates the session and CSRF token before streaming the file, ensuring that even if a file URL is guessed, only authenticated users can access it.
-  - Administrators are advised to deploy the app on a secure internal network or use the proxy download mechanism for public deployments to further protect file content.
+  - Apache (or .htaccess) configurations disable directory indexing (e.g., using `Options -Indexes` in the uploads directory), preventing unauthorized file browsing.
+  - Direct access to sensitive files (e.g., `users.txt`) is restricted via .htaccess rules.
+  - A proxy download mechanism (via endpoints like `download.php` and `downloadZip.php`) routes all file downloads through PHP, ensuring session and CSRF token validation before file access.
+  - Administrators are advised to deploy the app on a secure internal network or use the proxy download mechanism for public deployments.
 
 - **Trash Management with Restore & Delete:**
   - **Trash Storage & Metadata:**
@@ -115,29 +129,28 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
       - Uploader information (and optionally who deleted it)
       - Additional metadata (e.g., file type)
   - **Restore Functionality:**
-    - Admins can view trashed files in a modal.
-    - They can restore individual files (with conflict checks) or restore all files back to their original location.
+    - Admins can view trashed files in a modal and restore individual or all files back to their original location (with conflict checks).
   - **Delete Functionality:**
     - Users can permanently delete trashed files via:
       - **Delete Selected:** Remove specific files from the Trash and update `trash.json`.
       - **Delete All:** Permanently remove every file from the Trash after confirmation.
   - **Auto-Purge Mechanism:**
-    - The system automatically purges (permanently deletes) any files in the Trash older than three days, helping manage storage and prevent the accumulation of outdated files.
-  - **User Interface:**
-    - The trash modal displays details such as file name, uploader/deleter, and the trashed date/time.
-    - Material icons with tooltips visually represent the restore and delete actions.
+    - The system automatically purges files in the Trash older than three days, managing storage and preventing accumulation of outdated files.
+  - **Trash UI:**
+    - The trash modal displays file name, uploader/deleter, and trashed date/time.
+    - Material icons with tooltips represent restore and delete actions.
 
 - **Drag & Drop Cards with Dedicated Drop Zones:**
   - **Sidebar Drop Zone:**  
-    - Cards (such as the upload card or folder management card) can be dragged into a dedicated sidebar drop zone for quick access to frequently used operations.
+    - Cards (e.g., upload or folder management) can be dragged into a dedicated sidebar drop zone for quick access to frequently used operations.
     - The sidebar drop zone expands dynamically to accept drops anywhere within its visual area.
   - **Top Bar Drop Zone:**  
     - A top drop zone is available for reordering or managing cards quickly.
     - Dragging a card to the top drop zone provides immediate visual feedback, ensuring a fluid and customizable workflow.
   - **Seamless Interaction:**  
-    - Both drop zones support smooth drag and drop interactions with animations and pointer event adjustments to prevent interference, ensuring that cards can be dropped reliably regardless of screen position.
+    - Both drop zones support smooth drag-and-drop interactions with animations and pointer event adjustments, ensuring reliable card placement regardless of screen position.
 
-# 🔒 Admin Panel, TOTP & OpenID Connect (OIDC) Integration
+## 🔒 Admin Panel, TOTP & OpenID Connect (OIDC) Integration
 
 - **Flexible Authentication:**
   - Supports multiple authentication methods including Form-based Login, Basic Auth, OpenID Connect (OIDC), and TOTP-based Two-Factor Authentication.
