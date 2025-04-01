@@ -2,10 +2,20 @@
 // config.php
 
 // Define constants.
-define('UPLOAD_DIR', '/var/www/uploads/');
-define('USERS_DIR', '/var/www/users/');
+
+// Main configuration
+if (file_exists(__DIR__ . '/config.local.php')) {
+    // Load local development settings if available
+    require_once(__DIR__ . '/config.local.php');
+} else {
+    // Default production settings
+    define('UPLOAD_DIR', '/var/www/uploads/');
+    define('USERS_DIR', '/var/www/users/');
+    define('META_DIR', '/var/www/metadata/');
+    define('BASE_URL', 'http://yourwebsite/uploads/');
+}
+
 define('USERS_FILE', 'users.txt');
-define('META_DIR', '/var/www/metadata/');
 define('META_FILE', 'file_metadata.json');
 define('TRASH_DIR', UPLOAD_DIR . 'trash/');
 define('TIMEZONE', 'America/New_York');
@@ -100,8 +110,6 @@ if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) 
         }
     }
 }
-
-define('BASE_URL', 'http://yourwebsite/uploads/');
 
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
     $defaultShareUrl = isset($_SERVER['HTTP_HOST'])

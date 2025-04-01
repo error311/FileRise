@@ -1,0 +1,56 @@
+# ------------------------------------------------------------------
+# Sensitive configuration file (keep it ignored)
+# ------------------------------------------------------------------
+config.local.php
+
+# ------------------------------------------------------------------
+# Composer dependencies (vendor directory should not be committed)
+# ------------------------------------------------------------------
+/vendor/
+
+# ------------------------------------------------------------------
+# Operating system files
+# ------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------------------------------------------
+# IDE, editor, and project files
+# ------------------------------------------------------------------
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------------------------------------------
+# Log files and temporary files
+# ------------------------------------------------------------------
+*.log
+*.tmp
+/tmp/
+cache/
+*.cache
+
+# ------------------------------------------------------------------
+# Backup and swap files
+# ------------------------------------------------------------------
+*~
+*.swp
+*.swo
+*.bak
+*.old
+
+# ------------------------------------------------------------------
+# Uploaded files and generated directories
+# ------------------------------------------------------------------
+# If your application stores user uploads or temporary files that
+# you do not want to track, ignore them here.
+uploads/trash/
+
+# ------------------------------------------------------------------
+# Optionally ignore auto-generated metadata files (if applicable)
+# ------------------------------------------------------------------
+# Uncomment the following line if metadata is generated and should not be tracked
+/users/
+/uploads/
+/metadata/
