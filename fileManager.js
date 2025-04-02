@@ -365,75 +365,74 @@ export function loadFileList(folderParam) {
 //
 function fileDragStartHandler(event) {
   const row = event.currentTarget;
+  let fileNames = [];
+
   // Check if multiple file checkboxes are selected.
   const selectedCheckboxes = document.querySelectorAll("#fileList .file-checkbox:checked");
-  let fileNames = [];
   if (selectedCheckboxes.length > 1) {
-    // Gather file names from all selected rows.
     selectedCheckboxes.forEach(chk => {
       const parentRow = chk.closest("tr");
       if (parentRow) {
         const cell = parentRow.querySelector("td:nth-child(2)");
-        if (cell) fileNames.push(cell.textContent.trim());
+        if (cell) {
+          let rawName = cell.textContent.trim();
+          // Attempt to get the tag text from a container that holds the tags.
+          const tagContainer = cell.querySelector(".tag-badges");
+          if (tagContainer) {
+            const tagText = tagContainer.innerText.trim();
+            if (rawName.endsWith(tagText)) {
+              rawName = rawName.slice(0, -tagText.length).trim();
+            }
+          }
+          fileNames.push(rawName);
+        }
       }
     });
   } else {
-    // Only one file is selected (or none), so get file name from the current row.
     const fileNameCell = row.querySelector("td:nth-child(2)");
     if (fileNameCell) {
-      fileNames.push(fileNameCell.textContent.trim());
+      let rawName = fileNameCell.textContent.trim();
+      const tagContainer = fileNameCell.querySelector(".tag-badges");
+      if (tagContainer) {
+        const tagText = tagContainer.innerText.trim();
+        if (rawName.endsWith(tagText)) {
+          rawName = rawName.slice(0, -tagText.length).trim();
+        }
+      }
+      fileNames.push(rawName);
     }
   }
+
   if (fileNames.length === 0) return;
-  const dragData = {
-    files: fileNames, // use an array of file names
-    sourceFolder: window.currentFolder || "root"
-  };
+
+  // For a single file, send fileName; for multiple, send an array.
+  const dragData = fileNames.length === 1 
+    ? { fileName: fileNames[0], sourceFolder: window.currentFolder || "root" }
+    : { files: fileNames, sourceFolder: window.currentFolder || "root" };
+
   event.dataTransfer.setData("application/json", JSON.stringify(dragData));
 
-  // (Keep your custom drag image code here.)
-  let dragImage;
-  if (fileNames.length > 1) {
-    dragImage = document.createElement("div");
-    dragImage.style.display = "inline-flex";
-    dragImage.style.width = "auto";
-    dragImage.style.maxWidth = "fit-content";
-    dragImage.style.padding = "6px 10px";
-    dragImage.style.backgroundColor = "#333";
-    dragImage.style.color = "#fff";
-    dragImage.style.border = "1px solid #555";
-    dragImage.style.borderRadius = "4px";
-    dragImage.style.alignItems = "center";
-    dragImage.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.3)";
-    const icon = document.createElement("span");
-    icon.className = "material-icons";
-    icon.textContent = "insert_drive_file";
-    icon.style.marginRight = "4px";
-    const countSpan = document.createElement("span");
-    countSpan.textContent = fileNames.length + " files";
-    dragImage.appendChild(icon);
-    dragImage.appendChild(countSpan);
-  } else {
-    dragImage = document.createElement("div");
-    dragImage.style.display = "inline-flex";
-    dragImage.style.width = "auto";
-    dragImage.style.maxWidth = "fit-content";
-    dragImage.style.padding = "6px 10px";
-    dragImage.style.backgroundColor = "#333";
-    dragImage.style.color = "#fff";
-    dragImage.style.border = "1px solid #555";
-    dragImage.style.borderRadius = "4px";
-    dragImage.style.alignItems = "center";
-    dragImage.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.3)";
-    const icon = document.createElement("span");
-    icon.className = "material-icons";
-    icon.textContent = "insert_drive_file";
-    icon.style.marginRight = "4px";
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = fileNames[0];
-    dragImage.appendChild(icon);
-    dragImage.appendChild(nameSpan);
-  }
+  // Create a custom drag image.
+  let dragImage = document.createElement("div");
+  dragImage.style.display = "inline-flex";
+  dragImage.style.width = "auto";
+  dragImage.style.maxWidth = "fit-content";
+  dragImage.style.padding = "6px 10px";
+  dragImage.style.backgroundColor = "#333";
+  dragImage.style.color = "#fff";
+  dragImage.style.border = "1px solid #555";
+  dragImage.style.borderRadius = "4px";
+  dragImage.style.alignItems = "center";
+  dragImage.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.3)";
+  const icon = document.createElement("span");
+  icon.className = "material-icons";
+  icon.textContent = "insert_drive_file";
+  icon.style.marginRight = "4px";
+  const label = document.createElement("span");
+  label.textContent = fileNames.length === 1 ? fileNames[0] : fileNames.length + " files";
+  dragImage.appendChild(icon);
+  dragImage.appendChild(label);
+  
   document.body.appendChild(dragImage);
   event.dataTransfer.setDragImage(dragImage, 5, 5);
   setTimeout(() => {
