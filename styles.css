@@ -1068,7 +1068,7 @@ body.dark-mode .custom-prev-next-btn:hover:not(:disabled) {
 }
 
 #customToast.show {
-  opacity: 0.7;
+  opacity: 0.9;
 }
 
 .button-wrap {

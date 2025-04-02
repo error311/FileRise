@@ -136,11 +136,11 @@ export function buildFileTableRow(file, folderPath) {
   const safeUploader = escapeHTML(file.uploader || "Unknown");
 
   let previewButton = "";
-  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
+  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|mp3|wav|m4a|ogg|flac|aac|wma|opus|mkv|ogv)$/i.test(file.name)) {
     let previewIcon = "";
     if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">image</i>`;
-    } else if (/\.(mp4|webm|mov)$/i.test(file.name)) {
+    } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">videocam</i>`;
     } else if (/\.pdf$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">picture_as_pdf</i>`;

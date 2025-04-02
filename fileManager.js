@@ -263,7 +263,7 @@ function previewFile(fileUrl, fileName) {
       embed.style.height = "80vh";
       embed.style.border = "none";
       container.appendChild(embed);
-    } else if (/\.(mp4|webm|mov|ogg)$/i.test(fileName)) {
+    } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(fileName)) {
       const video = document.createElement("video");
       video.src = fileUrl;
       video.controls = true;
