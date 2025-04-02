@@ -305,7 +305,13 @@ if (localStorage.getItem('globalTags')) {
 // New function to load global tags from the server's persistent JSON.
 export function loadGlobalTags() {
   fetch("metadata/createdTags.json", { credentials: "include" })
-    .then(response => response.json())
+    .then(response => {
+      if (!response.ok) {
+        // If the file doesn't exist, assume there are no global tags.
+        return [];
+      }
+      return response.json();
+    })
     .then(data => {
       window.globalTags = data;
       localStorage.setItem('globalTags', JSON.stringify(window.globalTags));

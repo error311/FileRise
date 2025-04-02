@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 
 // Retrieve headers and check CSRF token.
 $headers = array_change_key_case(getallheaders(), CASE_LOWER);

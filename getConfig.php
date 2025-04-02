@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
 
 $configFile = USERS_DIR . 'adminConfig.json';

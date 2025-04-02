@@ -3,9 +3,9 @@
 import { loadFileList } from './fileManager.js';
 import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js';
 
-// ----------------------
-// Helper Functions (Data/State)
-// ----------------------
+/* ----------------------
+   Helper Functions (Data/State)
+----------------------*/
 
 // Formats a folder name for display (e.g. adding indentations).
 export function formatFolderName(folder) {
@@ -26,7 +26,6 @@ export function formatFolderName(folder) {
 function buildFolderTree(folders) {
   const tree = {};
   folders.forEach(folderPath => {
-    // Ensure folderPath is a string
     if (typeof folderPath !== "string") return;
     const parts = folderPath.split('/');
     let current = tree;
@@ -40,9 +39,9 @@ function buildFolderTree(folders) {
   return tree;
 }
 
-// ----------------------
-// Folder Tree State (Save/Load)
-// ----------------------
+/* ----------------------
+   Folder Tree State (Save/Load)
+----------------------*/
 function loadFolderTreeState() {
   const state = localStorage.getItem("folderTreeState");
   return state ? JSON.parse(state) : {};
@@ -59,58 +58,41 @@ function getParentFolder(folder) {
   return lastSlash === -1 ? "root" : folder.substring(0, lastSlash);
 }
 
-// ----------------------
-// Breadcrumb Functions
-// ----------------------
-// Render breadcrumb for a normalized folder path.
+/* ----------------------
+   Breadcrumb Functions
+----------------------*/
 function renderBreadcrumb(normalizedFolder) {
-  if (normalizedFolder === "root") {
-    return `<span class="breadcrumb-link" data-folder="root">Root</span>`;
-  }
+  if (!normalizedFolder || normalizedFolder === "") return "";
   const parts = normalizedFolder.split("/");
   let breadcrumbItems = [];
-  // Always start with "Root".
-  breadcrumbItems.push(`<span class="breadcrumb-link" data-folder="root">Root</span>`);
-  let cumulative = "";
-  parts.forEach((part, index) => {
-    cumulative = index === 0 ? part : cumulative + "/" + part;
+  // Use the first segment as the root.
+  breadcrumbItems.push(`<span class="breadcrumb-link" data-folder="${parts[0]}">${escapeHTML(parts[0])}</span>`);
+  let cumulative = parts[0];
+  parts.slice(1).forEach(part => {
+    cumulative += "/" + part;
     breadcrumbItems.push(`<span class="breadcrumb-separator"> / </span>`);
     breadcrumbItems.push(`<span class="breadcrumb-link" data-folder="${cumulative}">${escapeHTML(part)}</span>`);
   });
   return breadcrumbItems.join('');
 }
 
-// Bind click and drag-and-drop events to breadcrumb links.
 function bindBreadcrumbEvents() {
   const breadcrumbLinks = document.querySelectorAll(".breadcrumb-link");
   breadcrumbLinks.forEach(link => {
-    // Click event for navigation.
     link.addEventListener("click", function (e) {
       e.stopPropagation();
       let folder = this.getAttribute("data-folder");
       window.currentFolder = folder;
       localStorage.setItem("lastOpenedFolder", folder);
       const titleEl = document.getElementById("fileListTitle");
-      if (folder === "root") {
-        titleEl.innerHTML = "Files in (" + renderBreadcrumb("root") + ")";
-      } else {
-        titleEl.innerHTML = "Files in (" + renderBreadcrumb(folder) + ")";
-      }
-      // Expand the folder tree to ensure the target is visible.
+      titleEl.innerHTML = "Files in (" + renderBreadcrumb(folder) + ")";
       expandTreePath(folder);
-      // Update folder tree selection.
       document.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
       const targetOption = document.querySelector(`.folder-option[data-folder="${folder}"]`);
-      if (targetOption) {
-        targetOption.classList.add("selected");
-      }
-      // Load the file list.
+      if (targetOption) targetOption.classList.add("selected");
       loadFileList(folder);
-      // Re-bind breadcrumb events to ensure all links remain active.
       bindBreadcrumbEvents();
     });
-
-    // Drag-and-drop events.
     link.addEventListener("dragover", function (e) {
       e.preventDefault();
       this.classList.add("drop-hover");
@@ -144,36 +126,73 @@ function bindBreadcrumbEvents() {
           destination: dropFolder
         })
       })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            showToast(`File(s) moved successfully to ${dropFolder}!`);
-            loadFileList(dragData.sourceFolder);
-          } else {
-            showToast("Error moving files: " + (data.error || "Unknown error"));
-          }
-        })
-        .catch(error => {
-          console.error("Error moving files via drop on breadcrumb:", error);
-          showToast("Error moving files.");
-        });
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showToast(`File(s) moved successfully to ${dropFolder}!`);
+          loadFileList(dragData.sourceFolder);
+        } else {
+          showToast("Error moving files: " + (data.error || "Unknown error"));
+        }
+      })
+      .catch(error => {
+        console.error("Error moving files via drop on breadcrumb:", error);
+        showToast("Error moving files.");
+      });
     });
   });
 }
 
-// ----------------------
-// DOM Building Functions for Folder Tree
-// ----------------------
+/* ----------------------
+   Check Current User's Folder-Only Permission
+----------------------*/
+// This function uses localStorage values (set during login) to determine if the current user is restricted.
+// If folderOnly is "true", then the personal folder (i.e. username) is forced as the effective root.
+function checkUserFolderPermission() {
+  const username = localStorage.getItem("username");
+  console.log("checkUserFolderPermission: username =", username);
+  if (!username) {
+    console.warn("No username in localStorage; skipping getUserPermissions fetch.");
+    return Promise.resolve(false);
+  }
+  if (localStorage.getItem("folderOnly") === "true") {
+    window.userFolderOnly = true;
+    console.log("checkUserFolderPermission: using localStorage.folderOnly = true");
+    localStorage.setItem("lastOpenedFolder", username);
+    window.currentFolder = username;
+    return Promise.resolve(true);
+  }
+  return fetch("getUserPermissions.php", { credentials: "include" })
+    .then(response => response.json())
+    .then(permissionsData => {
+      console.log("checkUserFolderPermission: permissionsData =", permissionsData);
+      if (permissionsData && permissionsData[username] && permissionsData[username].folderOnly) {
+        window.userFolderOnly = true;
+        localStorage.setItem("folderOnly", "true");
+        localStorage.setItem("lastOpenedFolder", username);
+        window.currentFolder = username;
+        return true;
+      } else {
+        window.userFolderOnly = false;
+        localStorage.setItem("folderOnly", "false");
+        return false;
+      }
+    })
+    .catch(err => {
+      console.error("Error fetching user permissions:", err);
+      window.userFolderOnly = false;
+      return false;
+    });
+}
 
-// Recursively builds HTML for the folder tree as nested <ul> elements.
+/* ----------------------
+   DOM Building Functions for Folder Tree
+----------------------*/
 function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
   const state = loadFolderTreeState();
   let html = `<ul class="folder-tree ${defaultDisplay === 'none' ? 'collapsed' : 'expanded'}">`;
   for (const folder in tree) {
-    // Skip the trash folder (case-insensitive)
-    if (folder.toLowerCase() === "trash") {
-      continue;
-    }
+    if (folder.toLowerCase() === "trash") continue;
     const fullPath = parentPath ? parentPath + "/" + folder : folder;
     const hasChildren = Object.keys(tree[folder]).length > 0;
     const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;
@@ -194,7 +213,6 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
   return html;
 }
 
-// Expands the folder tree along a given normalized path.
 function expandTreePath(path) {
   const parts = path.split("/");
   let cumulative = "";
@@ -219,9 +237,9 @@ function expandTreePath(path) {
   });
 }
 
-// ----------------------
-// Drag & Drop Support for Folder Tree Nodes
-// ----------------------
+/* ----------------------
+   Drag & Drop Support for Folder Tree Nodes
+----------------------*/
 function folderDragOverHandler(event) {
   event.preventDefault();
   event.currentTarget.classList.add("drop-hover");
@@ -272,90 +290,110 @@ function folderDropHandler(event) {
     });
 }
 
-// ----------------------
-// Main Folder Tree Rendering and Event Binding
-// ----------------------
+/* ----------------------
+   Main Folder Tree Rendering and Event Binding
+----------------------*/
 export async function loadFolderTree(selectedFolder) {
   try {
-    const response = await fetch('getFolderList.php');
+    // Check if the user has folder-only permission.
+    await checkUserFolderPermission();
+    
+    // Determine effective root folder.
+    const username = localStorage.getItem("username") || "root";
+    let effectiveRoot = "root";
+    let effectiveLabel = "(Root)";
+    if (window.userFolderOnly) {
+      effectiveRoot = username; // Use the username as the personal root.
+      effectiveLabel = `(Root)`;
+      // Force override of any saved folder.
+      localStorage.setItem("lastOpenedFolder", username);
+      window.currentFolder = username;
+    } else {
+      window.currentFolder = localStorage.getItem("lastOpenedFolder") || "root";
+    }
+    
+    // Build fetch URL.
+    let fetchUrl = 'getFolderList.php';
+    if (window.userFolderOnly) {
+      fetchUrl += '?restricted=1';
+    }
+    console.log("Fetching folder list from:", fetchUrl);
+    
+    // Fetch folder list from the server.
+    const response = await fetch(fetchUrl);
     if (response.status === 401) {
       console.error("Unauthorized: Please log in to view folders.");
       showToast("Session expired. Please log in again.");
       window.location.href = "logout.php";
       return;
     }
-    let folders = await response.json();
-
-    // If returned items are objects (with a "folder" property), extract folder paths.
-    if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
-      folders = folders.map(item => item.folder);
+    let folderData = await response.json();
+    console.log("Folder data received:", folderData);
+    let folders = [];
+    if (Array.isArray(folderData) && folderData.length && typeof folderData[0] === "object" && folderData[0].folder) {
+      folders = folderData.map(item => item.folder);
+    } else if (Array.isArray(folderData)) {
+      folders = folderData;
     }
-    // Filter out duplicate "root" entries if present.
-    folders = folders.filter(folder => folder !== "root");
-
-    if (!Array.isArray(folders)) {
-      console.error("Folder list response is not an array:", folders);
-      return;
+    
+    // Remove any global "root" entry.
+    folders = folders.filter(folder => folder.toLowerCase() !== "root");
+    
+    // If restricted, filter folders: keep only those that start with effectiveRoot + "/" (do not include effectiveRoot itself).
+    if (window.userFolderOnly && effectiveRoot !== "root") {
+      folders = folders.filter(folder => folder.startsWith(effectiveRoot + "/"));
+      // Force current folder to be the effective root.
+      localStorage.setItem("lastOpenedFolder", effectiveRoot);
+      window.currentFolder = effectiveRoot;
     }
-
+    
+    localStorage.setItem("lastOpenedFolder", window.currentFolder);
+    
+    // Render the folder tree.
     const container = document.getElementById("folderTreeContainer");
     if (!container) {
       console.error("Folder tree container not found.");
       return;
     }
-
+    
     let html = `<div id="rootRow" class="root-row">
-    <span class="folder-toggle" data-folder="root">[<span class="custom-dash">-</span>]</span>
-    <span class="folder-option root-folder-option" data-folder="root">(Root)</span>
-  </div>`;
+      <span class="folder-toggle" data-folder="${effectiveRoot}">[<span class="custom-dash">-</span>]</span>
+      <span class="folder-option root-folder-option" data-folder="${effectiveRoot}">${effectiveLabel}</span>
+    </div>`;
     if (folders.length > 0) {
       const tree = buildFolderTree(folders);
       html += renderFolderTree(tree, "", "block");
     }
     container.innerHTML = html;
-
-    // Attach drag-and-drop event listeners to folder nodes.
+    
+    // Attach drag/drop event listeners.
     container.querySelectorAll(".folder-option").forEach(el => {
       el.addEventListener("dragover", folderDragOverHandler);
       el.addEventListener("dragleave", folderDragLeaveHandler);
       el.addEventListener("drop", folderDropHandler);
     });
-
-    // Determine current folder (normalized).
+    
     if (selectedFolder) {
       window.currentFolder = selectedFolder;
-    } else {
-      window.currentFolder = localStorage.getItem("lastOpenedFolder") || "root";
     }
     localStorage.setItem("lastOpenedFolder", window.currentFolder);
-
-    // Update file list title using breadcrumb.
+    
     const titleEl = document.getElementById("fileListTitle");
-    if (window.currentFolder === "root") {
-      titleEl.innerHTML = "Files in (" + renderBreadcrumb("root") + ")";
-    } else {
-      titleEl.innerHTML = "Files in (" + renderBreadcrumb(window.currentFolder) + ")";
-    }
-    // Bind breadcrumb events (click and drag/drop).
+    titleEl.innerHTML = "Files in (" + renderBreadcrumb(window.currentFolder) + ")";
     bindBreadcrumbEvents();
-
-    // Load file list.
     loadFileList(window.currentFolder);
-
-    // Expand tree to current folder.
+    
     const folderState = loadFolderTreeState();
-    if (window.currentFolder !== "root" && folderState[window.currentFolder] !== "none") {
+    if (window.currentFolder !== effectiveRoot && folderState[window.currentFolder] !== "none") {
       expandTreePath(window.currentFolder);
     }
-
-    // Highlight current folder in folder tree.
+    
     const selectedEl = container.querySelector(`.folder-option[data-folder="${window.currentFolder}"]`);
     if (selectedEl) {
       container.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
       selectedEl.classList.add("selected");
     }
-
-    // Event binding for folder selection in folder tree.
+    
     container.querySelectorAll(".folder-option").forEach(el => {
       el.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -365,18 +403,12 @@ export async function loadFolderTree(selectedFolder) {
         window.currentFolder = selected;
         localStorage.setItem("lastOpenedFolder", selected);
         const titleEl = document.getElementById("fileListTitle");
-        if (selected === "root") {
-          titleEl.innerHTML = "Files in (" + renderBreadcrumb("root") + ")";
-        } else {
-          titleEl.innerHTML = "Files in (" + renderBreadcrumb(selected) + ")";
-        }
-        // Re-bind breadcrumb events so the new breadcrumb is clickable.
+        titleEl.innerHTML = "Files in (" + renderBreadcrumb(selected) + ")";
         bindBreadcrumbEvents();
         loadFileList(selected);
       });
     });
-
-    // Event binding for toggling folders.
+    
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
       rootToggle.addEventListener("click", function (e) {
@@ -388,18 +420,18 @@ export async function loadFolderTree(selectedFolder) {
             nestedUl.classList.remove("collapsed");
             nestedUl.classList.add("expanded");
             this.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
-            state["root"] = "block";
+            state[effectiveRoot] = "block";
           } else {
             nestedUl.classList.remove("expanded");
             nestedUl.classList.add("collapsed");
             this.textContent = "[+]";
-            state["root"] = "none";
+            state[effectiveRoot] = "none";
           }
           saveFolderTreeState(state);
         }
       });
     }
-
+    
     container.querySelectorAll(".folder-toggle").forEach(toggle => {
       toggle.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -422,7 +454,7 @@ export async function loadFolderTree(selectedFolder) {
         }
       });
     });
-
+    
   } catch (error) {
     console.error("Error loading folder tree:", error);
   }
@@ -433,12 +465,10 @@ export function loadFolderList(selectedFolder) {
   loadFolderTree(selectedFolder);
 }
 
-// ----------------------
-// Folder Management (Rename, Delete, Create)
-// ----------------------
-
+/* ----------------------
+   Folder Management (Rename, Delete, Create)
+----------------------*/
 document.getElementById("renameFolderBtn").addEventListener("click", openRenameFolderModal);
-
 document.getElementById("deleteFolderBtn").addEventListener("click", openDeleteFolderModal);
 
 function openRenameFolderModal() {
@@ -450,7 +480,6 @@ function openRenameFolderModal() {
   const parts = selectedFolder.split("/");
   document.getElementById("newRenameFolderName").value = parts[parts.length - 1];
   document.getElementById("renameFolderModal").style.display = "block";
-  // Focus the input field after a short delay to ensure modal is visible.
   setTimeout(() => {
     const input = document.getElementById("newRenameFolderName");
     input.focus();
@@ -601,8 +630,6 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
 });
 
 // ---------- CONTEXT MENU SUPPORT FOR FOLDER MANAGER ----------
-
-// Function to display the custom context menu at (x, y) with given menu items.
 function showFolderManagerContextMenu(x, y, menuItems) {
   let menu = document.getElementById("folderManagerContextMenu");
   if (!menu) {
@@ -614,8 +641,6 @@ function showFolderManagerContextMenu(x, y, menuItems) {
     menu.style.zIndex = "9999";
     document.body.appendChild(menu);
   }
-
-  // Set styles based on dark mode.
   if (document.body.classList.contains("dark-mode")) {
     menu.style.backgroundColor = "#2c2c2c";
     menu.style.border = "1px solid #555";
@@ -625,8 +650,6 @@ function showFolderManagerContextMenu(x, y, menuItems) {
     menu.style.border = "1px solid #ccc";
     menu.style.color = "#000";
   }
-
-  // Clear previous items.
   menu.innerHTML = "";
   menuItems.forEach(item => {
     const menuItem = document.createElement("div");
@@ -661,24 +684,16 @@ function hideFolderManagerContextMenu() {
   }
 }
 
-// Context menu handler for folder tree and breadcrumb items.
 function folderManagerContextMenuHandler(e) {
   e.preventDefault();
   e.stopPropagation();
-
-  // Get the closest folder element (either from the tree or breadcrumb).
   const target = e.target.closest(".folder-option, .breadcrumb-link");
   if (!target) return;
-
   const folder = target.getAttribute("data-folder");
   if (!folder) return;
-
-  // Update current folder and highlight the selected element.
   window.currentFolder = folder;
   document.querySelectorAll(".folder-option, .breadcrumb-link").forEach(el => el.classList.remove("selected"));
   target.classList.add("selected");
-
-  // Build context menu items.
   const menuItems = [
     {
       label: "Create Folder",
@@ -696,20 +711,15 @@ function folderManagerContextMenuHandler(e) {
       action: () => { openDeleteFolderModal(); }
     }
   ];
-
   showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
 }
 
-// Bind contextmenu events to folder tree and breadcrumb elements.
 function bindFolderManagerContextMenu() {
-  // Bind context menu to folder tree container.
   const container = document.getElementById("folderTreeContainer");
   if (container) {
     container.removeEventListener("contextmenu", folderManagerContextMenuHandler);
     container.addEventListener("contextmenu", folderManagerContextMenuHandler, false);
   }
-
-  // Bind context menu to breadcrumb links.
   const breadcrumbNodes = document.querySelectorAll(".breadcrumb-link");
   breadcrumbNodes.forEach(node => {
     node.removeEventListener("contextmenu", folderManagerContextMenuHandler);
@@ -717,31 +727,23 @@ function bindFolderManagerContextMenu() {
   });
 }
 
-// Hide context menu when clicking elsewhere.
 document.addEventListener("click", function () {
   hideFolderManagerContextMenu();
 });
 
 document.addEventListener("DOMContentLoaded", function () {
   document.addEventListener("keydown", function (e) {
-    // Skip if the user is typing in an input, textarea, or contentEditable element.
     const tag = e.target.tagName.toLowerCase();
     if (tag === "input" || tag === "textarea" || e.target.isContentEditable) {
       return;
     }
-
-    // On macOS, "Delete" is typically reported as "Backspace" (keyCode 8)
     if (e.key === "Delete" || e.key === "Backspace" || e.keyCode === 46 || e.keyCode === 8) {
-      // Ensure a folder is selected and it isn't the root folder.
       if (window.currentFolder && window.currentFolder !== "root") {
-        // Prevent default (avoid navigating back on macOS).
         e.preventDefault();
-        // Call your existing folder delete function.
         openDeleteFolderModal();
       }
     }
   });
 });
 
-// Call this binding function after rendering the folder tree and breadcrumbs.
 bindFolderManagerContextMenu();

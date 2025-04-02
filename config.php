@@ -21,7 +21,8 @@ date_default_timezone_set(TIMEZONE);
  * @param string $encryptionKey The encryption key.
  * @return string Base64-encoded string containing IV and ciphertext.
  */
-function encryptData($data, $encryptionKey) {
+function encryptData($data, $encryptionKey)
+{
     $cipher = 'AES-256-CBC';
     $ivlen = openssl_cipher_iv_length($cipher);
     $iv = openssl_random_pseudo_bytes($ivlen);
@@ -36,7 +37,8 @@ function encryptData($data, $encryptionKey) {
  * @param string $encryptionKey The encryption key.
  * @return string|false The decrypted plaintext or false on failure.
  */
-function decryptData($encryptedData, $encryptionKey) {
+function decryptData($encryptedData, $encryptionKey)
+{
     $cipher = 'AES-256-CBC';
     $data = base64_decode($encryptedData);
     $ivlen = openssl_cipher_iv_length($cipher);
@@ -49,6 +51,40 @@ function decryptData($encryptedData, $encryptionKey) {
 $encryptionKey = getenv('PERSISTENT_TOKENS_KEY') ?: 'default_please_change_this_key';
 if (!$encryptionKey) {
     die('Encryption key for persistent tokens is not set.');
+}
+
+function loadUserPermissions($username)
+{
+    global $encryptionKey;  // Ensure $encryptionKey is available
+    $permissionsFile = USERS_DIR . 'userPermissions.json';
+
+    if (file_exists($permissionsFile)) {
+        $content = file_get_contents($permissionsFile);
+
+        // Try to decrypt the content.
+        $decryptedContent = decryptData($content, $encryptionKey);
+        if ($decryptedContent !== false) {
+            $permissions = json_decode($decryptedContent, true);
+        } else {
+            $permissions = json_decode($content, true);
+        }
+
+        if (!is_array($permissions)) {
+        } else {
+        }
+
+        if (is_array($permissions) && array_key_exists($username, $permissions)) {
+            $result = $permissions[$username];
+            if (empty($result)) {
+                return false;
+            }
+            return $result;
+        } else {
+        }
+    } else {
+        error_log("loadUserPermissions: Permissions file not found: $permissionsFile");
+    }
+    return false; // Return false if no permissions found.
 }
 
 // Determine whether HTTPS is used.
@@ -67,9 +103,12 @@ $cookieParams = [
     'httponly' => true,
     'samesite' => 'Lax'
 ];
-session_set_cookie_params($cookieParams);
-ini_set('session.gc_maxlifetime', 7200);
-session_start();
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params($cookieParams);
+    ini_set('session.gc_maxlifetime', 7200);
+    session_start();
+}
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -92,6 +131,8 @@ if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) 
         if ($tokenData['expiry'] >= time()) {
             $_SESSION["authenticated"] = true;
             $_SESSION["username"] = $tokenData["username"];
+            // IMPORTANT: Set the folderOnly flag here for auto-login.
+            $_SESSION["folderOnly"] = loadFolderPermission($tokenData["username"]);
         } else {
             unset($persistentTokens[$_COOKIE['remember_me_token']]);
             $newEncryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
@@ -111,4 +152,3 @@ if (strpos(BASE_URL, 'yourwebsite') !== false) {
     $defaultShareUrl = rtrim(BASE_URL, '/') . "/share.php";
 }
 define('SHARE_URL', getenv('SHARE_URL') ? getenv('SHARE_URL') : $defaultShareUrl);
-?>

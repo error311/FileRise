@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
 
 // Ensure user is authenticated
@@ -22,6 +22,16 @@ if ($receivedToken !== $_SESSION['csrf_token']) {
     echo json_encode(['success' => false, 'error' => 'Invalid CSRF token.']);
     http_response_code(403);
     exit;
+}
+$userPermissions = loadUserPermissions($username);
+// Check if the user is read-only. (Assuming that if readOnly is true, deletion is disallowed.)
+$username = $_SESSION['username'] ?? '';
+if ($username) {
+    $userPermissions = loadUserPermissions($username);
+    if (isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        echo json_encode(["error" => "Read-only users are not allowed to delete folders."]);
+        exit();
+    }
 }
 
 // Get the JSON input and decode it

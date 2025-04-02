@@ -1,10 +1,8 @@
 <?php
 // changePassword.php
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
 
-// Make sure the user is logged in.
-session_start();
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     echo json_encode(["error" => "Unauthorized"]);
     exit;

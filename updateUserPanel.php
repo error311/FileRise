@@ -1,9 +1,7 @@
 <?php
 // updateUserPanel.php
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
-
-session_start();
 
 // Ensure the user is authenticated.
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {

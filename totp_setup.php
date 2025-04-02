@@ -2,7 +2,7 @@
 // totp_setup.php
 
 require_once 'vendor/autoload.php';
-require 'config.php';
+require_once 'config.php';
 
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\PngWriter;
@@ -12,10 +12,6 @@ use Endroid\QrCode\ErrorCorrectionLevel\ErrorCorrectionLevelHigh;
 // ini_set('display_errors', 1);
 // error_reporting(E_ALL);
 
-// Start the session and ensure the user is authenticated.
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     http_response_code(403);
     exit;

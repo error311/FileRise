@@ -170,6 +170,10 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - Features an intuitive interface with Material Icons for quick recognition and access.
   - Allows administrators to manage authentication settings, user management, and login methods in real time.
   - Includes real-time validation that prevents the accidental disabling of all authentication methods simultaneously.
+  - User Permissions options
+    - Folder Only gives user their own root folder
+    - Read Only makes it so user can only read the files
+    - Disable upload 
 
 ---
 

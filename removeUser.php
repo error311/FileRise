@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
 
 $usersFile = USERS_DIR . USERS_FILE;
@@ -72,5 +72,17 @@ if (!$userFound) {
 
 // Write the updated list back to users.txt
 file_put_contents($usersFile, implode(PHP_EOL, $newUsers) . PHP_EOL);
+
+// Also update the userPermissions.json file
+$permissionsFile = USERS_DIR . "userPermissions.json";
+if (file_exists($permissionsFile)) {
+    $permissionsJson = file_get_contents($permissionsFile);
+    $permissionsArray = json_decode($permissionsJson, true);
+    if (is_array($permissionsArray) && isset($permissionsArray[$usernameToRemove])) {
+        unset($permissionsArray[$usernameToRemove]);
+        file_put_contents($permissionsFile, json_encode($permissionsArray, JSON_PRETTY_PRINT));
+    }
+}
+
 echo json_encode(["success" => "User removed successfully"]);
 ?>

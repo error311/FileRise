@@ -1,18 +1,36 @@
 <?php
 require_once 'vendor/autoload.php';
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
 
-// --- OIDC Authentication Flow ---
-if (isset($_GET['oidc'])) {
+/**
+ * Helper: Get the user's role from users.txt.
+ */
+function getUserRole($username) {
+    $usersFile = USERS_DIR . USERS_FILE;
+    if (file_exists($usersFile)) {
+        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            $parts = explode(":", trim($line));
+            if (count($parts) >= 3 && $parts[0] === $username) {
+                return trim($parts[2]);
+            }
+        }
+    }
+    return null;
+}
 
+/* --- OIDC Authentication Flow --- */
+if (isset($_GET['oidc'])) {
     // Read and decrypt OIDC configuration from JSON file.
     $adminConfigFile = USERS_DIR . 'adminConfig.json';
     if (file_exists($adminConfigFile)) {
         $encryptedContent = file_get_contents($adminConfigFile);
         $decryptedContent = decryptData($encryptedContent, $encryptionKey);
         if ($decryptedContent === false) {
-            echo json_encode(['error' => 'Failed to decrypt admin configuration.']);
+            // Log internal error and return a generic message.
+            error_log("Failed to decrypt admin configuration.");
+            echo json_encode(['error' => 'Internal error.']);
             exit;
         }
         $adminConfig = json_decode($decryptedContent, true);
@@ -42,8 +60,6 @@ if (isset($_GET['oidc'])) {
     );
     $oidc->setRedirectURL($oidc_redirect_uri);
 
-    // Since PKCE is disabled in Keycloak, we do not set any PKCE parameters.
-
     if ($_GET['oidc'] === 'callback') {
         try {
             $oidc->authenticate();
@@ -51,11 +67,16 @@ if (isset($_GET['oidc'])) {
             session_regenerate_id(true);
             $_SESSION["authenticated"] = true;
             $_SESSION["username"] = $username;
-            $_SESSION["isAdmin"] = false;
+            // Determine the user role from users.txt.
+            $userRole = getUserRole($username);
+            $_SESSION["isAdmin"] = ($userRole === "1");
+            // *** Use loadUserPermissions() here instead of loadFolderPermission() ***
+            $_SESSION["folderOnly"] = loadUserPermissions($username);
             header("Location: index.html");
             exit();
         } catch (Exception $e) {
-            echo json_encode(["error" => "Authentication failed: " . $e->getMessage()]);
+            error_log("OIDC authentication error: " . $e->getMessage());
+            echo json_encode(["error" => "Authentication failed."]);
             exit();
         }
     } else {
@@ -63,14 +84,15 @@ if (isset($_GET['oidc'])) {
             $oidc->authenticate();
             exit();
         } catch (Exception $e) {
-            echo json_encode(["error" => "Authentication initiation failed: " . $e->getMessage()]);
+            error_log("OIDC initiation error: " . $e->getMessage());
+            echo json_encode(["error" => "Authentication initiation failed."]);
             exit();
         }
     }
 }
 
-// --- Fallback: Form-based Authentication ---
-
+/* --- Fallback: Form-based Authentication --- */
+// (Form-based branch code remains unchanged. It calls loadUserPermissions() in its basic auth branch.)
 $usersFile = USERS_DIR . USERS_FILE;
 $maxAttempts = 5;
 $lockoutTime = 30 * 60;
@@ -104,13 +126,6 @@ if (isset($failedAttempts[$ip])) {
     }
 }
 
-/*
- * Updated authenticate() function:
- * It reads each line from users.txt.
- * It expects records in the format:
- * username:hashed_password:role[:encrypted_totp_secret]
- * If a fourth field is present and non-empty, it decrypts it to obtain the TOTP secret.
- */
 function authenticate($username, $password) {
     global $usersFile, $encryptionKey;
     if (!file_exists($usersFile)) {
@@ -119,10 +134,9 @@ function authenticate($username, $password) {
     $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
         $parts = explode(':', trim($line));
-        if (count($parts) < 3) continue; // Skip invalid lines.
+        if (count($parts) < 3) continue;
         if ($username === $parts[0] && password_verify($password, $parts[1])) {
             $result = ['role' => $parts[2]];
-            // If there's a fourth field, decrypt it to get the TOTP secret.
             if (isset($parts[3]) && !empty($parts[3])) {
                 $result['totp_secret'] = decryptData($parts[3], $encryptionKey);
             } else {
@@ -151,7 +165,6 @@ if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
 
 $user = authenticate($username, $password);
 if ($user !== false) {
-    // Only require TOTP if the user's TOTP secret is set.
     if (!empty($user['totp_secret'])) {
         if (empty($data['totp_code'])) {
             echo json_encode([
@@ -168,8 +181,6 @@ if ($user !== false) {
             }
         }
     }
-    // --- End TOTP Integration ---
-
     if (isset($failedAttempts[$ip])) {
         unset($failedAttempts[$ip]);
         saveFailedAttempts($attemptsFile, $failedAttempts);
@@ -178,6 +189,7 @@ if ($user !== false) {
     $_SESSION["authenticated"] = true;
     $_SESSION["username"] = $username;
     $_SESSION["isAdmin"] = ($user['role'] === "1");
+    $_SESSION["folderOnly"] = loadUserPermissions($username);
     
     if ($rememberMe) {
         $token = bin2hex(random_bytes(32));
@@ -194,14 +206,19 @@ if ($user !== false) {
         $persistentTokens[$token] = [
             "username" => $username,
             "expiry"   => $expiry,
-            "isAdmin"  => ($user['role'] === "1")
+            "isAdmin"  => ($_SESSION["isAdmin"] === true)
         ];
         $encryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
         file_put_contents($persistentTokensFile, $encryptedContent, LOCK_EX);
         setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
     }
     
-    echo json_encode(["success" => "Login successful", "isAdmin" => $_SESSION["isAdmin"]]);
+    echo json_encode([
+      "success"   => "Login successful", 
+      "isAdmin"   => $_SESSION["isAdmin"],
+      "folderOnly"=> $_SESSION["folderOnly"],
+      "username"  => $_SESSION["username"]
+    ]);
 } else {
     if (isset($failedAttempts[$ip])) {
         $failedAttempts[$ip]['count']++;

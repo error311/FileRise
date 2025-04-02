@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
 echo json_encode([
     "csrf_token" => $_SESSION['csrf_token'],

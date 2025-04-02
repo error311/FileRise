@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 header('Content-Type: application/json');
 
 // Verify that the user is authenticated and is an admin.
@@ -76,10 +76,24 @@ $configFile = USERS_DIR . 'adminConfig.json';
 // Convert and encrypt configuration.
 $plainTextConfig = json_encode($configUpdate, JSON_PRETTY_PRINT);
 $encryptedContent = encryptData($plainTextConfig, $encryptionKey);
+
+// Attempt to write the new configuration.
 if (file_put_contents($configFile, $encryptedContent, LOCK_EX) === false) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Failed to update configuration.']);
-    exit;
+    // Log the error.
+    error_log("updateConfig.php: Initial write failed, attempting to delete the old configuration file.");
+    
+    // Delete the old file.
+    if (file_exists($configFile)) {
+        unlink($configFile);
+    }
+    
+    // Try writing again.
+    if (file_put_contents($configFile, $encryptedContent, LOCK_EX) === false) {
+        error_log("updateConfig.php: Failed to write configuration even after deletion.");
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to update configuration even after cleanup.']);
+        exit;
+    }
 }
 
 echo json_encode(['success' => 'Configuration updated successfully.']);

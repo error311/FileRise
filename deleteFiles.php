@@ -19,6 +19,20 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
+// Define $username first.
+$username = $_SESSION['username'] ?? '';
+
+// Now load the user's permissions.
+$userPermissions = loadUserPermissions($username);
+
+// Check if the user is read-only.
+if ($username) {
+    if (isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        echo json_encode(["error" => "Read-only users are not allowed to delete files."]);
+        exit();
+    }
+}
+
 // --- Setup Trash Folder & Metadata ---
 $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
 if (!file_exists($trashDir)) {

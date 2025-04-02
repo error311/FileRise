@@ -17,6 +17,16 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     echo json_encode(["error" => "Unauthorized"]);
     exit;
 }
+$userPermissions = loadUserPermissions($username);
+// Check if the user is read-only. (Assuming that if readOnly is true, deletion is disallowed.)
+$username = $_SESSION['username'] ?? '';
+if ($username) {
+    $userPermissions = loadUserPermissions($username);
+    if (isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        echo json_encode(["error" => "Read-only users are not allowed to extract zip files"]);
+        exit();
+    }
+}
 
 // Read and decode the JSON input.
 $rawData = file_get_contents("php://input");
