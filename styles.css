@@ -2023,20 +2023,17 @@ body.dark-mode .card {
   z-index: 6000 !important;  
 }
 
-/* Default (light mode) for admin panel content */
 .admin-panel-content {
   background: #fff;
   color: #000;
 }
 
-/* Dark mode overrides for admin panel content */
 body.dark-mode .admin-panel-content {
-  background: #2c2c2c;  /* dark background */
-  color: #e0e0e0;       /* light text */
+  background: #2c2c2c;
+  color: #e0e0e0;
   border: 1px solid #444;
 }
 
-/* Optionally, adjust input, label, etc. for dark mode */
 body.dark-mode .admin-panel-content input,
 body.dark-mode .admin-panel-content select,
 body.dark-mode .admin-panel-content textarea {
@@ -2066,4 +2063,74 @@ body.dark-mode .admin-panel-content label {
 }
 .spinning {
   animation: spin 1s linear infinite;
+}
+
+.rise-effect {
+  transform: translateY(-20px);
+  transition: transform 0.3s ease;
+}
+
+.toggle-modal-btn,
+.collapse-btn {
+  background: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 8px;
+  font-size: 24px;
+  color: #616161;
+  border-radius: 50%;
+  transition: background 0.3s ease;
+}
+
+.toggle-modal-btn:hover,
+.collapse-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.toggle-modal-btn:focus,
+.collapse-btn:focus {
+  outline: none;
+}
+
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: inherit;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+}
+
+.header-drop-zone {
+  width: 66px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  display: inline-flex;
+}
+
+.header-drop-zone.drag-active {
+  border: 2px dashed #1565C0;
+  background-color: #eef;
+  background-color: transparent;
+  transition: width 0.3s ease;
+  box-sizing: border-box;
+}
+body.dark-mode .header-drop-zone.drag-active { 
+  background-color: #333; 
+  border: 2px dashed #555; 
+  color: #fff;
+}
+
+.header-drop-zone.drag-active:empty::before {
+  content: "Drop";
+  font-size: 10px;
+  color: #aaa;
 }

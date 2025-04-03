@@ -95,6 +95,9 @@
       <h1>FileRise</h1>
     </div>
     <div class="header-right">
+      <div class="header-buttons-wrapper" style="display: flex; align-items: center; gap: 10px;">
+        <!-- Your header drop zone -->
+        <div id="headerDropArea" class="header-drop-zone"></div>
       <div class="header-buttons">
         <button id="logoutBtn" title="Logout">
           <i class="material-icons">exit_to_app</i>
@@ -123,7 +126,7 @@
             </div>
           </div>
         </div>
-        <button id="addUserBtn"  title="Add User" style="display: none;">
+        <button id="addUserBtn" title="Add User" style="display: none;">
           <i class="material-icons">person_add</i>
         </button>
         <button id="removeUserBtn" title="Remove User" style="display: none;">
@@ -132,10 +135,12 @@
         <button id="darkModeToggle" class="dark-mode-toggle">Dark Mode</button>
       </div>
     </div>
+    </div>
   </header>
 
   <!-- Custom Toast Container -->
   <div id="customToast"></div>
+  <div id="hiddenCardsContainer" style="display:none;"></div>
 
   <!-- Main Wrapper: Hidden by default; remove "display: none;" after login -->
   <div class="main-wrapper">
@@ -390,7 +395,6 @@
       </div>
     </div>
   </div>
-  
   <script type="module" src="main.js"></script>
 </body>
 

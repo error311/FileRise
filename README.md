@@ -147,6 +147,10 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - **Top Bar Drop Zone:**  
     - A top drop zone is available for reordering or managing cards quickly.
     - Dragging a card to the top drop zone provides immediate visual feedback, ensuring a fluid and customizable workflow.
+  - **Header Drop Zone with State Preservation:**
+    - Cards can be dragged into the header drop zone, where they are represented by a compact material icon.
+    - **State Preservation:** Instead of removing the card from the DOM, the original card is moved into a hidden container. This ensures that dynamic features (such as the folder tree in the Folder Management card or file selection in the Upload card) remain fully initialized and retain their state on page refresh.
+    - **Modal Display:** When the user interacts (via hover or click) with the header icon, the card is temporarily moved into a modal overlay for full interaction. When the modal is closed, the card is returned to the hidden container, keeping its state persistent.
   - **Seamless Interaction:**  
     - Both drop zones support smooth drag-and-drop interactions with animations and pointer event adjustments, ensuring reliable card placement regardless of screen position.
 
@@ -170,11 +174,11 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
   - Features an intuitive interface with Material Icons for quick recognition and access.
   - Allows administrators to manage authentication settings, user management, and login methods in real time.
   - Includes real-time validation that prevents the accidental disabling of all authentication methods simultaneously.
-  - User Permissions options
-    - Folder Only gives user their own root folder
-    - Read Only makes it so user can only read the files
-    - Disable upload 
-
+  - **User Permissions Options:**
+    - *Folder Only* gives user their own root folder.
+    - *Read Only* makes it so the user can only read the files.
+    - *Disable Upload* prevents file uploads.
+    
 ---
 
 ## Screenshots
