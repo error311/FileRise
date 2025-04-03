@@ -5,7 +5,7 @@
 https://github.com/user-attachments/assets/9546a76b-afb0-4068-875a-0eab478b514d
 
 **Dark mode:**
-![Dark Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-mode.png)
+![Dark Header](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-header.png)
 
 changelogs available here: <https://github.com/error311/FileRise-docker/>
 
@@ -178,19 +178,19 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
     - *Folder Only* gives user their own root folder.
     - *Read Only* makes it so the user can only read the files.
     - *Disable Upload* prevents file uploads.
-    
+
 ---
 
 ## Screenshots
 
-**Light mode:**
-![Dark Admin Panel](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-admin-panel.png)
+**Admin Panel:**
+![Light Admin Panel](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-admin-panel.png)
 
 **Light mode:**
-![Light Mode](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-mode.png)
+![Dark SideBar](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-sidebar.png)
 
-**Dark mode default:**
-![Default Layout](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-mode-default.png)
+**Light mode default:**
+![Default Layout](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-topbar.png)
 
 **Dark editor:**
 ![dark-editor](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-editor.png)
@@ -201,8 +201,8 @@ FileRise is a lightweight, secure, self-hosted web application for uploading, sy
 **Restore or Delete Trash:**
 ![restore-delete](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/light-trash.png)
 
-**Dark Login page:**
-![Login](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-login.png)
+**Dark TOTP Setup:**
+![Login](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-totp-setup.png)
 
 **Gallery view:**
 ![Login](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-gallery.png)
