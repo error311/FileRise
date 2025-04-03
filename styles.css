@@ -2093,20 +2093,6 @@ body.dark-mode .admin-panel-content label {
   outline: none;
 }
 
-.material-icons {
-  font-family: 'Material Icons';
-  font-weight: normal;
-  font-style: normal;
-  font-size: inherit;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-}
-
 .header-drop-zone {
   width: 66px;
   height: 36px;
