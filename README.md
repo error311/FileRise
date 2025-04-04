@@ -1,5 +1,10 @@
 # FileRise - Elevate your File Management
 
+**Demo link:** https://demo.filerise.net
+**UserName:** demo
+**Password:** demo
+Read only permissions but can view the interface.
+
 **4/3/2025 Video demo:**
 
 https://github.com/user-attachments/assets/221f6a53-85f5-48d4-9abe-89445e0af90e
