@@ -1,7 +1,7 @@
 import { showToast, toggleVisibility } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.0.5";
+const version = "v1.0.6";
 const adminTitle = `Admin Panel <small style="font-size: 12px; color: gray;">${version}</small>`;
 let lastLoginData = null;
 
