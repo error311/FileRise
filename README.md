@@ -1,8 +1,8 @@
 # FileRise - Elevate your File Management
 
-**Video demo:**
+**4/3/2025 Video demo:**
 
-https://github.com/user-attachments/assets/9546a76b-afb0-4068-875a-0eab478b514d
+https://github.com/user-attachments/assets/221f6a53-85f5-48d4-9abe-89445e0af90e
 
 **Dark mode:**
 ![Dark Header](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-header.png)
