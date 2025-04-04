@@ -18,8 +18,9 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     http_response_code(401);
     exit;
 }
-$userPermissions = loadUserPermissions($username);
+
 $username = $_SESSION['username'] ?? '';
+$userPermissions = loadUserPermissions($username);
 if ($username) {
     $userPermissions = loadUserPermissions($username);
     if (isset($userPermissions['disableUpload']) && $userPermissions['disableUpload'] === true) {

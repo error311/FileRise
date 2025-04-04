@@ -27,9 +27,8 @@ if ($receivedToken !== $_SESSION['csrf_token']) {
     http_response_code(403);
     exit;
 }
-$userPermissions = loadUserPermissions($username);
-// Check if the user is read-only. (Assuming that if readOnly is true, deletion is disallowed.)
 $username = $_SESSION['username'] ?? '';
+$userPermissions = loadUserPermissions($username);
 if ($username) {
     $userPermissions = loadUserPermissions($username);
     if (isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
