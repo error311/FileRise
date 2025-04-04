@@ -55,7 +55,7 @@ if (!$encryptionKey) {
 
 function loadUserPermissions($username)
 {
-    global $encryptionKey;  // Ensure $encryptionKey is available
+    global $encryptionKey;
     $permissionsFile = USERS_DIR . 'userPermissions.json';
 
     if (file_exists($permissionsFile)) {
@@ -69,21 +69,12 @@ function loadUserPermissions($username)
             $permissions = json_decode($content, true);
         }
 
-        if (!is_array($permissions)) {
-        } else {
-        }
-
         if (is_array($permissions) && array_key_exists($username, $permissions)) {
             $result = $permissions[$username];
-            if (empty($result)) {
-                return false;
-            }
-            return $result;
-        } else {
+            return !empty($result) ? $result : false;
         }
-    } else {
-        error_log("loadUserPermissions: Permissions file not found: $permissionsFile");
     }
+    // Removed error_log() to prevent flooding logs when file is not found.
     return false; // Return false if no permissions found.
 }
 
