@@ -2,14 +2,14 @@ import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, showToast, attachEnterKeyListener, showCustomConfirmModal } from './domUtils.js';
 import { loadFileList, renderFileTable, displayFilePreview, initFileActions } from './fileManager.js';
 import { loadFolderTree } from './folderManager.js';
-import { 
-  openTOTPLoginModal, 
-  openUserPanel, 
-  openTOTPModal, 
-  closeTOTPModal, 
-  openAdminPanel, 
+import {
+  openTOTPLoginModal,
+  openUserPanel,
+  openTOTPModal,
+  closeTOTPModal,
+  openAdminPanel,
   closeAdminPanel,
-  setLastLoginData 
+  setLastLoginData
 } from './authModals.js';
 
 // Production OIDC configuration (override via API as needed)
@@ -83,7 +83,7 @@ function updateAuthenticatedUI(data) {
   if (typeof data.totp_enabled !== "undefined") {
     localStorage.setItem("userTOTPEnabled", data.totp_enabled ? "true" : "false");
   }
-  
+
   if (data.username) {
     localStorage.setItem("username", data.username);
   }
@@ -126,27 +126,29 @@ function updateAuthenticatedUI(data) {
     const adminPanelBtn = document.getElementById("adminPanelBtn");
     if (adminPanelBtn) adminPanelBtn.style.display = "none";
   }
-
-  let userPanelBtn = document.getElementById("userPanelBtn");
-  if (!userPanelBtn) {
-    userPanelBtn = document.createElement("button");
-    userPanelBtn.id = "userPanelBtn";
-    userPanelBtn.classList.add("btn", "btn-user");
-    userPanelBtn.innerHTML = '<i class="material-icons" title="User Panel">account_circle</i>';
-    let adminPanelBtn = document.getElementById("adminPanelBtn");
-    if (adminPanelBtn) {
-      insertAfter(userPanelBtn, adminPanelBtn);
-    } else {
-      const firstButton = headerButtons.firstElementChild;
-      if (firstButton) {
-        insertAfter(userPanelBtn, firstButton);
+  
+  if (window.location.hostname !== "demo.filerise.net") {
+    let userPanelBtn = document.getElementById("userPanelBtn");
+    if (!userPanelBtn) {
+      userPanelBtn = document.createElement("button");
+      userPanelBtn.id = "userPanelBtn";
+      userPanelBtn.classList.add("btn", "btn-user");
+      userPanelBtn.innerHTML = '<i class="material-icons" title="User Panel">account_circle</i>';
+      let adminPanelBtn = document.getElementById("adminPanelBtn");
+      if (adminPanelBtn) {
+        insertAfter(userPanelBtn, adminPanelBtn);
       } else {
-        headerButtons.appendChild(userPanelBtn);
+        const firstButton = headerButtons.firstElementChild;
+        if (firstButton) {
+          insertAfter(userPanelBtn, firstButton);
+        } else {
+          headerButtons.appendChild(userPanelBtn);
+        }
       }
+      userPanelBtn.addEventListener("click", openUserPanel);
+    } else {
+      userPanelBtn.style.display = "block";
     }
-    userPanelBtn.addEventListener("click", openUserPanel);
-  } else {
-    userPanelBtn.style.display = "block";
   }
 
   updateItemsPerPageSelect();
