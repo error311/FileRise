@@ -17,11 +17,11 @@ import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
-import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js'
+import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js';
 import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
 
 function loadCsrfToken() {
-  fetch('token.php', { credentials: 'include' })
+  return fetch('token.php', { credentials: 'include' })
     .then(response => response.json())
     .then(data => {
       // Set global variables.
@@ -45,11 +45,14 @@ function loadCsrfToken() {
         document.head.appendChild(metaShare);
       }
       metaShare.setAttribute('content', data.share_url);
-    })
-    .catch(error => console.error("Error loading CSRF token and share URL:", error));
-}
 
-document.addEventListener("DOMContentLoaded", loadCsrfToken);
+      return data;
+    })
+    .catch(error => {
+      console.error("Error loading CSRF token and share URL:", error);
+      throw error;
+    });
+}
 
 // Expose functions for inline handlers.
 window.sendRequest = sendRequest;
@@ -63,96 +66,105 @@ window.renameFile = renameFile;
 window.currentFolder = "root";
 
 document.addEventListener("DOMContentLoaded", function () {
-  // Call initAuth synchronously.
-  initAuth();
+  // First, load the CSRF token.
+  loadCsrfToken().then(() => {
+    // Once CSRF token is loaded, initialize authentication.
+    initAuth();
 
-  const newPasswordInput = document.getElementById("newPassword");
-  if (newPasswordInput) {
-    newPasswordInput.addEventListener("input", function() {
-      console.log("newPassword input event:", this.value);
-    });
-  } else {
-    console.error("newPassword input not found!");
-  }
-  // --- Dark Mode Persistence ---
-  const darkModeToggle = document.getElementById("darkModeToggle");
-  const storedDarkMode = localStorage.getItem("darkMode");
+    // Continue with initializations that rely on a valid CSRF token:
+    checkAuthentication().then(authenticated => {
+      if (authenticated) {
+        window.currentFolder = "root";
+        initTagSearch();
+        loadFileList(window.currentFolder);
+        initDragAndDrop();
+        loadSidebarOrder();
+        loadHeaderOrder();
+        initFileActions();
+        initUpload();
+        loadFolderTree();
+        setupTrashRestoreDelete();
 
-  if (storedDarkMode === "true") {
-    document.body.classList.add("dark-mode");
-  } else if (storedDarkMode === "false") {
-    document.body.classList.remove("dark-mode");
-  } else {
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      document.body.classList.add("dark-mode");
-    } else {
-      document.body.classList.remove("dark-mode");
-    }
-  }
-
-  if (darkModeToggle) {
-    darkModeToggle.textContent = document.body.classList.contains("dark-mode")
-      ? "Light Mode"
-      : "Dark Mode";
-
-    darkModeToggle.addEventListener("click", function () {
-      if (document.body.classList.contains("dark-mode")) {
-        document.body.classList.remove("dark-mode");
-        localStorage.setItem("darkMode", "false");
-        darkModeToggle.textContent = "Dark Mode";
+        const helpBtn = document.getElementById("folderHelpBtn");
+        const helpTooltip = document.getElementById("folderHelpTooltip");
+        helpBtn.addEventListener("click", function () {
+          // Toggle display of the tooltip.
+          if (helpTooltip.style.display === "none" || helpTooltip.style.display === "") {
+            helpTooltip.style.display = "block";
+          } else {
+            helpTooltip.style.display = "none";
+          }
+        });
       } else {
-        document.body.classList.add("dark-mode");
-        localStorage.setItem("darkMode", "true");
-        darkModeToggle.textContent = "Light Mode";
+        console.warn("User not authenticated. Data loading deferred.");
       }
     });
-  }
 
-  if (localStorage.getItem("darkMode") === null && window.matchMedia) {
-    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
-      if (event.matches) {
-        document.body.classList.add("dark-mode");
-        if (darkModeToggle) darkModeToggle.textContent = "Light Mode";
-      } else {
-        document.body.classList.remove("dark-mode");
-        if (darkModeToggle) darkModeToggle.textContent = "Dark Mode";
-      }
-    });
-  }
-  // --- End Dark Mode Persistence ---
-
-  const message = sessionStorage.getItem("welcomeMessage");
-  if (message) {
-    showToast(message);
-    sessionStorage.removeItem("welcomeMessage");
-  }
-
-  checkAuthentication().then(authenticated => {
-    if (authenticated) {
-      window.currentFolder = "root";
-      initTagSearch();
-      loadFileList(window.currentFolder);
-      initDragAndDrop();
-      loadSidebarOrder();
-      loadHeaderOrder();
-      initFileActions();
-      initUpload();
-      loadFolderTree();
-      setupTrashRestoreDelete();
-
-      const helpBtn = document.getElementById("folderHelpBtn");
-      const helpTooltip = document.getElementById("folderHelpTooltip");
-      helpBtn.addEventListener("click", function () {
-        // Toggle display of the tooltip.
-        if (helpTooltip.style.display === "none" || helpTooltip.style.display === "") {
-          helpTooltip.style.display = "block";
-        } else {
-          helpTooltip.style.display = "none";
-        }
+    // Other DOM initialization that can happen after CSRF is ready.
+    const newPasswordInput = document.getElementById("newPassword");
+    if (newPasswordInput) {
+      newPasswordInput.addEventListener("input", function() {
+        console.log("newPassword input event:", this.value);
       });
     } else {
-      console.warn("User not authenticated. Data loading deferred.");
+      console.error("newPassword input not found!");
     }
+
+    // --- Dark Mode Persistence ---
+    const darkModeToggle = document.getElementById("darkModeToggle");
+    const storedDarkMode = localStorage.getItem("darkMode");
+
+    if (storedDarkMode === "true") {
+      document.body.classList.add("dark-mode");
+    } else if (storedDarkMode === "false") {
+      document.body.classList.remove("dark-mode");
+    } else {
+      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        document.body.classList.add("dark-mode");
+      } else {
+        document.body.classList.remove("dark-mode");
+      }
+    }
+
+    if (darkModeToggle) {
+      darkModeToggle.textContent = document.body.classList.contains("dark-mode")
+        ? "Light Mode"
+        : "Dark Mode";
+
+      darkModeToggle.addEventListener("click", function () {
+        if (document.body.classList.contains("dark-mode")) {
+          document.body.classList.remove("dark-mode");
+          localStorage.setItem("darkMode", "false");
+          darkModeToggle.textContent = "Dark Mode";
+        } else {
+          document.body.classList.add("dark-mode");
+          localStorage.setItem("darkMode", "true");
+          darkModeToggle.textContent = "Light Mode";
+        }
+      });
+    }
+
+    if (localStorage.getItem("darkMode") === null && window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
+        if (event.matches) {
+          document.body.classList.add("dark-mode");
+          if (darkModeToggle) darkModeToggle.textContent = "Light Mode";
+        } else {
+          document.body.classList.remove("dark-mode");
+          if (darkModeToggle) darkModeToggle.textContent = "Dark Mode";
+        }
+      });
+    }
+    // --- End Dark Mode Persistence ---
+
+    const message = sessionStorage.getItem("welcomeMessage");
+    if (message) {
+      showToast(message);
+      sessionStorage.removeItem("welcomeMessage");
+    }
+  }).catch(error => {
+    // If the CSRF token fails to load, you might choose to show an error or retry.
+    console.error("Initialization halted due to CSRF token load failure.", error);
   });
 
   // --- Auto-scroll During Drag ---
