@@ -20,9 +20,14 @@ import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
 import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js';
 import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
 
-function loadCsrfToken() {
+function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
   return fetch('token.php', { credentials: 'include' })
-    .then(response => response.json())
+    .then(response => {
+      if (!response.ok) {
+        throw new Error("Token fetch failed with status: " + response.status);
+      }
+      return response.json();
+    })
     .then(data => {
       // Set global variables.
       window.csrfToken = data.csrf_token;
@@ -49,7 +54,12 @@ function loadCsrfToken() {
       return data;
     })
     .catch(error => {
-      console.error("Error loading CSRF token and share URL:", error);
+      if (retries > 0) {
+        console.warn(`CSRF token load failed. Retrying in ${delay}ms... (${retries} retries left)`, error);
+        return new Promise(resolve => setTimeout(resolve, delay))
+          .then(() => loadCsrfTokenWithRetry(retries - 1, delay * 2));
+      }
+      console.error("Failed to load CSRF token after retries.", error);
       throw error;
     });
 }
@@ -66,8 +76,8 @@ window.renameFile = renameFile;
 window.currentFolder = "root";
 
 document.addEventListener("DOMContentLoaded", function () {
-  // First, load the CSRF token.
-  loadCsrfToken().then(() => {
+  // First, load the CSRF token (with retry).
+  loadCsrfTokenWithRetry().then(() => {
     // Once CSRF token is loaded, initialize authentication.
     initAuth();
 
@@ -163,7 +173,6 @@ document.addEventListener("DOMContentLoaded", function () {
       sessionStorage.removeItem("welcomeMessage");
     }
   }).catch(error => {
-    // If the CSRF token fails to load, you might choose to show an error or retry.
     console.error("Initialization halted due to CSRF token load failure.", error);
   });
 
