@@ -132,7 +132,7 @@ if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) 
             $_SESSION["authenticated"] = true;
             $_SESSION["username"] = $tokenData["username"];
             // IMPORTANT: Set the folderOnly flag here for auto-login.
-            $_SESSION["folderOnly"] = loadFolderPermission($tokenData["username"]);
+            $_SESSION["folderOnly"] = loadUserPermissions($tokenData["username"]);
         } else {
             unset($persistentTokens[$_COOKIE['remember_me_token']]);
             $newEncryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
