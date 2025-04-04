@@ -400,6 +400,13 @@ document.addEventListener("DOMContentLoaded", function () {
     disableBasicAuth: localStorage.getItem("disableBasicAuth") === "true",
     disableOIDCLogin: localStorage.getItem("disableOIDCLogin") === "true"
   });
+  const oidcLoginBtn = document.getElementById("oidcLoginBtn");
+  if (oidcLoginBtn) {
+    oidcLoginBtn.addEventListener("click", () => {
+      // Redirect to the OIDC auth endpoint. The endpoint can be adjusted if needed.
+      window.location.href = "auth.php?oidc=initiate";
+    });
+  }
 });
 
 export { initAuth, checkAuthentication };
