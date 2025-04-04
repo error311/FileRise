@@ -1,9 +1,9 @@
 # FileRise - Elevate your File Management
 
-**Demo link:** https://demo.filerise.net
-**UserName:** demo
-**Password:** demo
-Read only permissions but can view the interface.
+**Demo link:** https://demo.filerise.net   
+**UserName:** demo   
+**Password:** demo   
+Read only permissions but can view the interface.   
 
 **4/3/2025 Video demo:**
 
