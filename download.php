@@ -1,8 +1,6 @@
 <?php
 require_once 'config.php';
 
-// For GET requests (which download.php will use), we assume session authentication is enough.
-
 // Check if the user is authenticated.
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     http_response_code(401);
@@ -22,38 +20,70 @@ if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $file)) {
     exit;
 }
 
-// Determine the directory.
-if ($folder !== 'root') {
-    $directory = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
-} else {
-    $directory = UPLOAD_DIR;
+// Get the realpath of the upload directory.
+$uploadDirReal = realpath(UPLOAD_DIR);
+if ($uploadDirReal === false) {
+    http_response_code(500);
+    echo json_encode(["error" => "Server misconfiguration."]);
+    exit;
 }
 
-$filePath = $directory . $file;
+// Determine the directory.
+if ($folder === 'root') {
+    $directory = $uploadDirReal;
+} else {
+    // Prevent path traversal in folder parameter.
+    if (strpos($folder, '..') !== false) {
+        http_response_code(400);
+        echo json_encode(["error" => "Invalid folder name."]);
+        exit;
+    }
+    
+    $directoryPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
+    $directory = realpath($directoryPath);
+    
+    // Ensure that the resolved directory exists and is within the allowed UPLOAD_DIR.
+    if ($directory === false || strpos($directory, $uploadDirReal) !== 0) {
+        http_response_code(400);
+        echo json_encode(["error" => "Invalid folder path."]);
+        exit;
+    }
+}
 
-if (!file_exists($filePath)) {
+// Build the file path.
+$filePath = $directory . DIRECTORY_SEPARATOR . $file;
+$realFilePath = realpath($filePath);
+
+// Validate that the real file path exists and is within the allowed directory.
+if ($realFilePath === false || strpos($realFilePath, $uploadDirReal) !== 0) {
+    http_response_code(403);
+    echo json_encode(["error" => "Access forbidden."]);
+    exit;
+}
+
+if (!file_exists($realFilePath)) {
     http_response_code(404);
     echo json_encode(["error" => "File not found."]);
     exit;
 }
 
 // Serve the file.
-$mimeType = mime_content_type($filePath);
+$mimeType = mime_content_type($realFilePath);
 header("Content-Type: " . $mimeType);
 
 // For images, serve inline; for other types, force download.
-$ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+$ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
 if (in_array($ext, ['jpg','jpeg','png','gif','bmp','webp','svg','ico'])) {
-    header('Content-Disposition: inline; filename="' . basename($filePath) . '"');
+    header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
 } else {
-    header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
+    header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
 }
-header('Content-Length: ' . filesize($filePath));
+header('Content-Length: ' . filesize($realFilePath));
 
 // Disable caching.
 header('Cache-Control: no-store, no-cache, must-revalidate');
 header('Pragma: no-cache');
 
-readfile($filePath);
+readfile($realFilePath);
 exit;
 ?>
