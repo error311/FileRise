@@ -1,0 +1,11 @@
+{
+    "name": "error311/filerise",
+    "description": "FileRise – A lightweight self-hosted file manager",
+    "type": "project",
+    "require": {
+      "jumbojett/openid-connect-php": "^1.0.0",
+      "phpseclib/phpseclib": "~3.0.7",
+      "robthree/twofactorauth": "^1.7",
+      "endroid/qr-code": "^4.0"
+    }
+  }

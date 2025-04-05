@@ -922,19 +922,62 @@ export function handleCopySelected(e) {
 }
 
 export async function loadCopyMoveFolderListForModal(dropdownId) {
+  const folderSelect = document.getElementById(dropdownId);
+  folderSelect.innerHTML = "";
+
+  // Check if the user is restricted to their personal folder.
+  if (window.userFolderOnly) {
+    const username = localStorage.getItem("username") || "root";
+    try {
+      // Fetch only the user's folders (assuming getFolderList.php?restricted=1 returns only folders for the user).
+      const response = await fetch("getFolderList.php?restricted=1");
+      let folders = await response.json();
+      // If folders come as objects, extract the folder names.
+      if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
+        folders = folders.map(item => item.folder);
+      }
+      // Filter out folders named "trash" (case insensitive) and include only folders that are the user's folder or start with username + "/"
+      folders = folders.filter(folder =>
+        folder.toLowerCase() !== "trash" &&
+        (folder === username || folder.indexOf(username + "/") === 0)
+      );
+      
+      // Always include the user's root folder as the first option.
+      const rootOption = document.createElement("option");
+      rootOption.value = username;
+      rootOption.textContent = formatFolderName(username);
+      folderSelect.appendChild(rootOption);
+      
+      // Add any subfolders (if they exist).
+      folders.forEach(folder => {
+        if (folder !== username) { // Avoid duplicating the root.
+          const option = document.createElement("option");
+          option.value = folder;
+          option.textContent = formatFolderName(folder);
+          folderSelect.appendChild(option);
+        }
+      });
+    } catch (error) {
+      console.error("Error loading folder list for modal:", error);
+    }
+    return;
+  }
+  
+  // If not folder-only, fetch and show the full list (excluding "root" and "trash").
   try {
     const response = await fetch("getFolderList.php");
     let folders = await response.json();
     if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
       folders = folders.map(item => item.folder);
     }
-    folders = folders.filter(folder => folder !== "root");
-    const folderSelect = document.getElementById(dropdownId);
-    folderSelect.innerHTML = "";
+    folders = folders.filter(folder => folder !== "root" && folder.toLowerCase() !== "trash");
+    
+    // Add a "(Root)" option.
     const rootOption = document.createElement("option");
     rootOption.value = "root";
     rootOption.textContent = "(Root)";
     folderSelect.appendChild(rootOption);
+    
     if (Array.isArray(folders) && folders.length > 0) {
       folders.forEach(folder => {
         const option = document.createElement("option");

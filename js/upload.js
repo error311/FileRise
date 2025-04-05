@@ -497,11 +497,9 @@ function initResumableUpload() {
   resumableInstance.on("fileSuccess", function(file, message) {
     const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
     if (li && li.progressBar) {
-      // Clear any merging indicators.
       li.progressBar.style.width = "100%";
       li.progressBar.innerText = "Done";
-      
-      // Optionally hide the pause/resume and remove buttons.
+      // Hide pause/resume and remove buttons for successful files.
       const pauseResumeBtn = li.querySelector(".pause-resume-btn");
       if (pauseResumeBtn) {
         pauseResumeBtn.style.display = "none";
@@ -510,9 +508,17 @@ function initResumableUpload() {
       if (removeBtn) {
         removeBtn.style.display = "none";
       }
+      // Schedule removal of the file entry after 5 seconds.
+      setTimeout(() => {
+        li.remove();
+        window.selectedFiles = window.selectedFiles.filter(f => f.uniqueIdentifier !== file.uniqueIdentifier);
+        updateFileInfoCount();
+      }, 5000);
     }
     loadFileList(window.currentFolder);
   });
+  
+
 
   resumableInstance.on("fileError", function (file, message) {
     const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
@@ -521,7 +527,6 @@ function initResumableUpload() {
     }
     // Mark file as errored so that the pause/resume button acts as a restart button.
     file.isError = true;
-    // Change the pause/resume button to show a restart icon.
     const pauseResumeBtn = li ? li.querySelector(".pause-resume-btn") : null;
     if (pauseResumeBtn) {
       pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">replay</span>';
@@ -531,17 +536,17 @@ function initResumableUpload() {
   });
 
   resumableInstance.on("complete", function () {
-    // Check if any file in the current selection is marked with an error.
+    // If any file is marked with an error, leave the list intact.
     const hasError = window.selectedFiles.some(f => f.isError);
     if (!hasError) {
-      // All files succeeded; clear the file list after 5 seconds.
+      // All files succeeded—clear the file input and progress container after 5 seconds.
       setTimeout(() => {
+        const fileInput = document.getElementById("file");
         if (fileInput) fileInput.value = "";
         const progressContainer = document.getElementById("uploadProgressContainer");
         progressContainer.innerHTML = "";
         window.selectedFiles = [];
         adjustFolderHelpExpansionClosed();
-        window.addEventListener("resize", adjustFolderHelpExpansionClosed);
         const fileInfoContainer = document.getElementById("fileInfoContainer");
         if (fileInfoContainer) {
           fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
@@ -668,40 +673,39 @@ function submitFiles(allFiles) {
       .then(serverFiles => {
         initFileActions();
         serverFiles = (serverFiles || []).map(item => item.name.trim().toLowerCase());
-        let allSucceeded = true;
+        let overallSuccess = true;
         allFiles.forEach(file => {
-          // For files without a relative path
-          if ((file.webkitRelativePath || file.customRelativePath || "").trim() === "") {
-            const clientFileName = file.name.trim().toLowerCase();
-            if (!uploadResults[file.uploadIndex] || !serverFiles.includes(clientFileName)) {
-              const li = progressElements[file.uploadIndex];
-              if (li) {
-                li.progressBar.innerText = "Error";
-              }
-              allSucceeded = false;
+          const clientFileName = file.name.trim().toLowerCase();
+          const li = progressElements[file.uploadIndex];
+          if (!uploadResults[file.uploadIndex] || !serverFiles.includes(clientFileName)) {
+            if (li) {
+              li.progressBar.innerText = "Error";
             }
+            overallSuccess = false;
+          } else if (li) {
+            // Schedule removal of successful file entry after 5 seconds.
+            setTimeout(() => {
+              li.remove();
+              delete progressElements[file.uploadIndex];
+              updateFileInfoCount();
+              const progressContainer = document.getElementById("uploadProgressContainer");
+              if (progressContainer && progressContainer.querySelectorAll("li.upload-progress-item").length === 0) {
+                const fileInput = document.getElementById("file");
+                if (fileInput) fileInput.value = "";
+                progressContainer.innerHTML = "";
+                adjustFolderHelpExpansionClosed();
+                const fileInfoContainer = document.getElementById("fileInfoContainer");
+                if (fileInfoContainer) {
+                  fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
+                }
+                const dropArea = document.getElementById("uploadDropArea");
+                if (dropArea) setDropAreaDefault();
+              }
+            }, 5000);
           }
         });
         
-        if (allSucceeded) {
-          // All files succeeded—clear the list after 5 seconds.
-          setTimeout(() => {
-            if (fileInput) fileInput.value = "";
-            const removeBtns = progressContainer.querySelectorAll("button.remove-file-btn");
-            removeBtns.forEach(btn => btn.style.display = "none");
-            progressContainer.innerHTML = "";
-            window.selectedFiles = [];
-            adjustFolderHelpExpansionClosed();
-            window.addEventListener("resize", adjustFolderHelpExpansionClosed);
-            const fileInfoContainer = document.getElementById("fileInfoContainer");
-            if (fileInfoContainer) {
-              fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
-            }
-            const dropArea = document.getElementById("uploadDropArea");
-            if (dropArea) setDropAreaDefault();
-          }, 5000);
-        } else {
-          // Some files failed—keep the list visible and show a toast.
+        if (!overallSuccess) {
           showToast("Some files failed to upload. Please check the list.");
         }
       })

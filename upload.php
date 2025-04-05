@@ -20,12 +20,12 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
 }
 
 $username = $_SESSION['username'] ?? '';
-$userPermissions = loadUserPermissions($username);
 if ($username) {
     $userPermissions = loadUserPermissions($username);
     if (isset($userPermissions['disableUpload']) && $userPermissions['disableUpload'] === true) {
+        http_response_code(403);  // Return a 403 Forbidden status.
         echo json_encode(["error" => "Disabled upload users are not allowed to upload."]);
-        exit();
+        exit;
     }
 }
 
@@ -63,6 +63,14 @@ if (isset($_POST['resumableChunkNumber'])) {
     $totalSize           = intval($_POST['resumableTotalSize']);
     $resumableIdentifier = $_POST['resumableIdentifier'];           // unique file identifier
     $resumableFilename   = $_POST['resumableFilename'];
+    
+
+if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $resumableFilename)) {
+    http_response_code(400); // Set an error HTTP status code
+    echo json_encode(["error" => "Invalid file name: " . $resumableFilename]);
+    exit;
+}
+    
     $folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
     if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
         echo json_encode(["error" => "Invalid folder name"]);
