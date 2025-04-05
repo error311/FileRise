@@ -1,6 +1,8 @@
 import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, showToast, attachEnterKeyListener, showCustomConfirmModal } from './domUtils.js';
-import { loadFileList, renderFileTable, displayFilePreview, initFileActions } from './fileManager.js';
+import { loadFileList } from './fileListView.js';
+import { initFileActions } from './fileActions.js';
+import { renderFileTable } from './fileListView.js';
 import { loadFolderTree } from './folderManager.js';
 import {
   openTOTPLoginModal,

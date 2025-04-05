@@ -1,7 +1,7 @@
 // trashRestoreDelete.js
 import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, showToast } from './domUtils.js';
-import { loadFileList } from './fileManager.js';
+import { loadFileList } from './fileListView.js';
 import { loadFolderTree } from './folderManager.js';
 
 function showConfirm(message, onConfirm) {

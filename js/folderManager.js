@@ -1,6 +1,6 @@
 // folderManager.js
 
-import { loadFileList } from './fileManager.js';
+import { loadFileList } from './fileListView.js';
 import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js';
 
 /* ----------------------

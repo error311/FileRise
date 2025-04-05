@@ -1,0 +1,48 @@
+# -----------------------------
+# 1) Prevent directory listings
+# -----------------------------
+Options -Indexes
+
+# -----------------------------
+# 2) Default index files
+# -----------------------------
+DirectoryIndex index.html
+
+# -----------------------------
+# 3) Deny access to hidden files
+# -----------------------------
+# (blocks access to .htaccess, .gitignore, etc.)
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+# -----------------------------
+# 4) Enforce HTTPS (optional)
+# -----------------------------
+# Uncomment if you have SSL configured
+#RewriteEngine On
+#RewriteCond %{HTTPS} off
+#RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+<IfModule mod_headers.c>
+  # Prevent clickjacking
+  Header always set X-Frame-Options "SAMEORIGIN"
+  # Block XSS
+  Header always set X-XSS-Protection "1; mode=block"
+  # No MIME sniffing
+  Header always set X-Content-Type-Options "nosniff"
+</IfModule>
+
+<IfModule mod_headers.c>
+  # HTML: always revalidate
+  <FilesMatch "\.(html|htm)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  # JS/CSS: short‑term cache, revalidate regularly
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "public, max-age=3600, must-revalidate"
+  </FilesMatch>
+</IfModule>

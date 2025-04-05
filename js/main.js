@@ -1,24 +1,15 @@
 import { sendRequest } from './networkUtils.js';
-import {
-  toggleVisibility,
-  toggleAllCheckboxes,
-  updateFileActionButtons,
-  showToast
-} from './domUtils.js';
-import {
-  loadFileList,
-  initFileActions,
-  editFile,
-  saveFile,
-  displayFilePreview,
-  renameFile
-} from './fileManager.js';
+import { toggleVisibility, toggleAllCheckboxes, updateFileActionButtons, showToast } from './domUtils.js';
 import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
 import { initAuth, checkAuthentication } from './auth.js';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
 import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js';
 import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
+import { displayFilePreview } from './filePreview.js';
+import { loadFileList } from './fileListView.js';
+import { initFileActions, renameFile } from './fileActions.js';
+import { editFile, saveFile } from './fileEditor.js';
 
 function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
   return fetch('token.php', { credentials: 'include' })

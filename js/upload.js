@@ -1,6 +1,8 @@
-import { loadFileList, displayFilePreview, initFileActions } from './fileManager.js';
+import { initFileActions } from './fileActions.js';
+import { displayFilePreview } from './filePreview.js';
 import { showToast, escapeHTML } from './domUtils.js';
 import { loadFolderTree } from './folderManager.js';
+import { loadFileList } from './fileListView.js';
 
 /* -----------------------------------------------------
    Helpers for Drag–and–Drop Folder Uploads (Original Code)
