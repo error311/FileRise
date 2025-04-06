@@ -31,68 +31,110 @@ export function openTOTPLoginModal() {
     totpLoginModal.innerHTML = `
       <div style="background: ${modalBg}; padding:20px; border-radius:8px; text-align:center; position:relative; color:${textColor};">
         <span id="closeTOTPLoginModal" style="position:absolute; top:10px; right:10px; cursor:pointer; font-size:24px;">&times;</span>
-        <h3>Enter TOTP Code</h3>
-        <input type="text" id="totpLoginInput" maxlength="6"
-               style="font-size:24px; text-align:center; width:100%; padding:10px;"
-               placeholder="6-digit code" />
+        <div id="totpSection">
+          <h3>Enter TOTP Code</h3>
+          <input type="text" id="totpLoginInput" maxlength="6"
+                 style="font-size:24px; text-align:center; width:100%; padding:10px;"
+                 placeholder="6-digit code" />
+        </div>
+        <a href="#" id="toggleRecovery" style="display:block; margin-top:10px; font-size:14px;">Use Recovery Code instead</a>
+        <div id="recoverySection" style="display:none; margin-top:10px;">
+          <h3>Enter Recovery Code</h3>
+          <input type="text" id="recoveryInput"
+                 style="font-size:24px; text-align:center; width:100%; padding:10px;"
+                 placeholder="Recovery code" />
+          <button type="button" id="submitRecovery" class="btn btn-secondary" style="margin-top:10px;">Submit Recovery Code</button>
+        </div>
       </div>
     `;
     document.body.appendChild(totpLoginModal);
 
+    // Close button
     document.getElementById("closeTOTPLoginModal").addEventListener("click", () => {
       totpLoginModal.style.display = "none";
     });
 
+    // Toggle between TOTP and Recovery
+    document.getElementById("toggleRecovery").addEventListener("click", e => {
+      e.preventDefault();
+      document.getElementById("totpSection").style.display =
+        document.getElementById("recoverySection").style.display === "none" ? "none" : "block";
+      document.getElementById("recoverySection").style.display =
+        document.getElementById("recoverySection").style.display === "none" ? "block" : "none";
+    });
+
+    // Recovery submission
+    document.getElementById("submitRecovery").addEventListener("click", () => {
+      const recoveryCode = document.getElementById("recoveryInput").value.trim();
+      if (!recoveryCode) {
+        showToast("Please enter your recovery code.");
+        return;
+      }
+      fetch("totp_recover.php", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": window.csrfToken
+        },
+        body: JSON.stringify({ recovery_code: recoveryCode })
+      })
+      .then(res => res.json())
+      .then(json => {
+        if (json.status === "ok") {
+          // recovery succeeded → finalize login
+          window.location.href = "index.html";
+        } else {
+          showToast(json.message || "Recovery code verification failed");
+        }
+      })
+      .catch(() => {
+        showToast("Error verifying recovery code.");
+      });
+    });
+
+    // TOTP submission
     const totpInput = document.getElementById("totpLoginInput");
     totpInput.focus();
-
     totpInput.addEventListener("input", function () {
       const code = this.value.trim();
       if (code.length === 6) {
-        if (lastLoginData) {
-          totpLoginModal.style.display = "none";
-          lastLoginData.totp_code = code;
-          window.submitLogin(lastLoginData);
-        } else {
-          fetch("totp_verify.php", {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": window.csrfToken
-            },
-            body: JSON.stringify({ totp_code: code })
-          })
-          .then(res => res.json())
-          .then(json => {
-            if (json.status === "ok") {
-              window.location.href = "index.html";
-            } else {
-              showToast(json.message || "TOTP verification failed");
-              this.value = "";
-              totpLoginModal.style.display = "flex";
-              totpInput.focus();
-            }
-          })
-          .catch(() => {
-            showToast("TOTP verification failed");
+        fetch("totp_verify.php", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": window.csrfToken
+          },
+          body: JSON.stringify({ totp_code: code })
+        })
+        .then(res => res.json())
+        .then(json => {
+          if (json.status === "ok") {
+            window.location.href = "index.html";
+          } else {
+            showToast(json.message || "TOTP verification failed");
             this.value = "";
             totpLoginModal.style.display = "flex";
             totpInput.focus();
-          });
-        }
+          }
+        })
+        .catch(() => {
+          showToast("TOTP verification failed");
+          this.value = "";
+          totpLoginModal.style.display = "flex";
+          totpInput.focus();
+        });
       }
     });
   } else {
+    // Re-open existing modal
     totpLoginModal.style.display = "flex";
-    const modalContent = totpLoginModal.firstElementChild;
-    modalContent.style.background = modalBg;
-    modalContent.style.color = textColor;
     const totpInput = document.getElementById("totpLoginInput");
-    if (totpInput) {
-      totpInput.value = "";
-      totpInput.focus();
-    }
+    totpInput.value = "";
+    totpInput.style.display = "block";
+    totpInput.focus();
+    document.getElementById("recoverySection").style.display = "none";
   }
 }
 
@@ -185,6 +227,36 @@ export function openUserPanel() {
   userPanelModal.style.display = "flex";
 }
 
+function showRecoveryCodeModal(recoveryCode) {
+  const recoveryModal = document.createElement("div");
+  recoveryModal.id = "recoveryModal";
+  recoveryModal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0,0,0,0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 3200;
+  `;
+  recoveryModal.innerHTML = `
+    <div style="background: #fff; color: #000; padding: 20px; max-width: 400px; width: 90%; border-radius: 8px; text-align: center;">
+      <h3>Your Recovery Code</h3>
+      <p>Please save this code securely. It will not be shown again and can only be used once.</p>
+      <code style="display: block; margin: 10px 0; font-size: 20px;">${recoveryCode}</code>
+      <button type="button" id="closeRecoveryModal" class="btn btn-primary">OK</button>
+    </div>
+  `;
+  document.body.appendChild(recoveryModal);
+  
+  document.getElementById("closeRecoveryModal").addEventListener("click", () => {
+    recoveryModal.remove();
+  });
+}
+
 export function openTOTPModal() {
   let totpModal = document.getElementById("totpModal");
   const isDarkMode = document.body.classList.contains("dark-mode");
@@ -251,6 +323,25 @@ export function openTOTPModal() {
       .then(result => {
         if (result.status === 'ok') {
           showToast("TOTP successfully enabled.");
+          // After successful TOTP verification, fetch the recovery code
+          fetch("totp_saveCode.php", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": window.csrfToken
+            }
+          })
+          .then(r => r.json())
+          .then(data => {
+            if (data.status === 'ok' && data.recoveryCode) {
+              // Show the recovery code in a secure modal
+              showRecoveryCodeModal(data.recoveryCode);
+            } else {
+              showToast("Error generating recovery code: " + (data.message || "Unknown error."));
+            }
+          })
+          .catch(() => { showToast("Error generating recovery code."); });
           closeTOTPModal(false);
         } else {
           showToast("TOTP verification failed: " + (result.message || "Invalid code."));

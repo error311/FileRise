@@ -186,14 +186,17 @@ if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
 $user = authenticate($username, $password);
 if ($user !== false) {
     if (!empty($user['totp_secret'])) {
-        // If TOTP code is missing or malformed, indicate that TOTP is required.
-        if (empty($data['totp_code']) || !preg_match('/^\d{6}$/', $data['totp_code'])) {
-            echo json_encode([
-              "totp_required" => true,
-              "message" => "TOTP code required"
-            ]);
-            exit();
-        } else {
+                // If TOTP code is missing or malformed, indicate that TOTP is required.
+                if (empty($data['totp_code']) || !preg_match('/^\d{6}$/', $data['totp_code'])) {
+                   // ← STORE pending user & secret so recovery can see it
+                    $_SESSION['pending_login_user']   = $username;
+                    $_SESSION['pending_login_secret'] = $user['totp_secret'];
+                    echo json_encode([
+                      "totp_required" => true,
+                      "message"      => "TOTP code required"
+                    ]);
+                    exit();
+                } else {
             $tfa = new \RobThree\Auth\TwoFactorAuth('FileRise');
             $providedCode = trim($data['totp_code']);
             if (!$tfa->verifyCode($user['totp_secret'], $providedCode)) {
