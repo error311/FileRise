@@ -3,61 +3,102 @@ import { sendRequest } from './networkUtils.js';
 
 const version = "v1.0.7";
 const adminTitle = `Admin Panel <small style="font-size: 12px; color: gray;">${version}</small>`;
-let lastLoginData = null;
 
+let lastLoginData = null;
 export function setLastLoginData(data) {
-    lastLoginData = data;
+  lastLoginData = data;
+  // expose to auth.js so it can tell form-login vs basic/oidc
+  window.__lastLoginData = data;
 }
 
 export function openTOTPLoginModal() {
-    let totpLoginModal = document.getElementById("totpLoginModal");
-    const isDarkMode = document.body.classList.contains("dark-mode");
-    const modalBg = isDarkMode ? "#2c2c2c" : "#fff";
-    const textColor = isDarkMode ? "#e0e0e0" : "#000";
+  let totpLoginModal = document.getElementById("totpLoginModal");
+  const isDarkMode = document.body.classList.contains("dark-mode");
+  const modalBg = isDarkMode ? "#2c2c2c" : "#fff";
+  const textColor = isDarkMode ? "#e0e0e0" : "#000";
 
-    if (!totpLoginModal) {
-        totpLoginModal = document.createElement("div");
-        totpLoginModal.id = "totpLoginModal";
-        totpLoginModal.style.cssText = `
+  if (!totpLoginModal) {
+    totpLoginModal = document.createElement("div");
+    totpLoginModal.id = "totpLoginModal";
+    totpLoginModal.style.cssText = `
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
       background-color: rgba(0,0,0,0.5);
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      display: flex; justify-content: center; align-items: center;
       z-index: 3200;
     `;
-        totpLoginModal.innerHTML = `
-      <div style="background: ${modalBg}; padding: 20px; border-radius: 8px; text-align: center; position: relative; color: ${textColor};">
-        <span id="closeTOTPLoginModal" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
+    totpLoginModal.innerHTML = `
+      <div style="background: ${modalBg}; padding:20px; border-radius:8px; text-align:center; position:relative; color:${textColor};">
+        <span id="closeTOTPLoginModal" style="position:absolute; top:10px; right:10px; cursor:pointer; font-size:24px;">&times;</span>
         <h3>Enter TOTP Code</h3>
-        <input type="text" id="totpLoginInput" maxlength="6" style="font-size:24px; text-align:center; width:100%; padding:10px;" placeholder="6-digit code" />
+        <input type="text" id="totpLoginInput" maxlength="6"
+               style="font-size:24px; text-align:center; width:100%; padding:10px;"
+               placeholder="6-digit code" />
       </div>
     `;
-        document.body.appendChild(totpLoginModal);
-        document.getElementById("closeTOTPLoginModal").addEventListener("click", () => {
-            totpLoginModal.style.display = "none";
-        });
-        const totpInput = document.getElementById("totpLoginInput");
-        totpInput.focus();
-        totpInput.addEventListener("input", function () {
-            if (this.value.trim().length === 6 && lastLoginData) {
-                lastLoginData.totp_code = this.value.trim();
-                totpLoginModal.style.display = "none";
-                if (typeof window.submitLogin === "function") {
-                    window.submitLogin(lastLoginData);
-                }
-            }
-        });
-    } else {
-        totpLoginModal.style.display = "flex";
-        const modalContent = totpLoginModal.firstElementChild;
-        modalContent.style.background = modalBg;
-        modalContent.style.color = textColor;
+    document.body.appendChild(totpLoginModal);
+
+    document.getElementById("closeTOTPLoginModal").addEventListener("click", () => {
+      totpLoginModal.style.display = "none";
+    });
+
+    const totpInput = document.getElementById("totpLoginInput");
+    totpInput.focus();
+
+    totpInput.addEventListener("input", function () {
+      const code = this.value.trim();
+      if (code.length === 6) {
+        // FORM-BASED LOGIN
+        if (lastLoginData) {
+          totpLoginModal.style.display = "none";
+          lastLoginData.totp_code = code;
+          window.submitLogin(lastLoginData);
+
+        // BASIC-AUTH / OIDC LOGIN
+        } else {
+          // keep modal open until we know the result
+          fetch("totp_verify.php", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": window.csrfToken
+            },
+            body: JSON.stringify({ totp_code: code })
+          })
+            .then(res => res.json())
+            .then(json => {
+              if (json.success) {
+                window.location.href = "index.html";
+              } else {
+                showToast(json.error || json.message || "TOTP verification failed");
+                this.value = "";
+                totpLoginModal.style.display = "flex";
+                totpInput.focus();
+              }
+            })
+            .catch(() => {
+              showToast("TOTP verification failed");
+              this.value = "";
+              totpLoginModal.style.display = "flex";
+              totpInput.focus();
+            });
+        }
+      }
+    });
+  } else {
+    totpLoginModal.style.display = "flex";
+    const modalContent = totpLoginModal.firstElementChild;
+    modalContent.style.background = modalBg;
+    modalContent.style.color = textColor;
+    // reset input if reopening
+    const totpInput = document.getElementById("totpLoginInput");
+    if (totpInput) {
+      totpInput.value = "";
+      totpInput.focus();
     }
+  }
 }
 
 export function openUserPanel() {

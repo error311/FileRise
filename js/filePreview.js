@@ -254,3 +254,4 @@ export function displayFilePreview(file, container) {
 }
 
 window.previewFile = previewFile;
+window.openShareModal = openShareModal;

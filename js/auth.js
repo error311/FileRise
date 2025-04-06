@@ -1,11 +1,16 @@
 import { sendRequest } from './networkUtils.js';
-import { toggleVisibility, showToast, attachEnterKeyListener, showCustomConfirmModal } from './domUtils.js';
+import {
+  toggleVisibility,
+  showToast as originalShowToast,
+  attachEnterKeyListener,
+  showCustomConfirmModal
+} from './domUtils.js';
 import { loadFileList } from './fileListView.js';
 import { initFileActions } from './fileActions.js';
 import { renderFileTable } from './fileListView.js';
 import { loadFolderTree } from './folderManager.js';
 import {
-  openTOTPLoginModal,
+  openTOTPLoginModal as originalOpenTOTPLoginModal,
   openUserPanel,
   openTOTPModal,
   closeTOTPModal,
@@ -23,6 +28,43 @@ const currentOIDCConfig = {
   globalOtpauthUrl: ""
 };
 window.currentOIDCConfig = currentOIDCConfig;
+
+/* ----------------- TOTP & Toast Overrides ----------------- */
+// detect if we’re in a pending‑TOTP state
+window.pendingTOTP = new URLSearchParams(window.location.search).get('totp_required') === '1';
+
+// override showToast to suppress the "Please log in to continue." toast during TOTP
+function showToast(msg) {
+  if (window.pendingTOTP && msg === "Please log in to continue.") {
+    return;
+  }
+  originalShowToast(msg);
+}
+window.showToast = showToast;
+
+// wrap the TOTP modal opener to disable other login buttons only for Basic/OIDC flows
+function openTOTPLoginModal() {
+  originalOpenTOTPLoginModal();
+
+  const isFormLogin = Boolean(window.__lastLoginData);
+  if (!isFormLogin) {
+    // disable Basic‑Auth link
+    const basicLink = document.querySelector("a[href='login_basic.php']");
+    if (basicLink) {
+      basicLink.style.pointerEvents = 'none';
+      basicLink.style.opacity = '0.5';
+    }
+    // disable OIDC button
+    const oidcBtn = document.getElementById("oidcLoginBtn");
+    if (oidcBtn) {
+      oidcBtn.disabled = true;
+      oidcBtn.style.opacity = '0.5';
+    }
+    // hide the form login
+    const authForm = document.getElementById("authForm");
+    if (authForm) authForm.style.display = 'none';
+  }
+}
 
 /* ----------------- Utility Functions ----------------- */
 function updateItemsPerPageSelect() {
@@ -85,7 +127,6 @@ function updateAuthenticatedUI(data) {
   if (typeof data.totp_enabled !== "undefined") {
     localStorage.setItem("userTOTPEnabled", data.totp_enabled ? "true" : "false");
   }
-
   if (data.username) {
     localStorage.setItem("username", data.username);
   }
@@ -103,11 +144,8 @@ function updateAuthenticatedUI(data) {
       restoreBtn.id = "restoreFilesBtn";
       restoreBtn.classList.add("btn", "btn-warning");
       restoreBtn.innerHTML = '<i class="material-icons" title="Restore/Delete Trash">restore_from_trash</i>';
-      if (firstButton) {
-        insertAfter(restoreBtn, firstButton);
-      } else {
-        headerButtons.appendChild(restoreBtn);
-      }
+      if (firstButton) insertAfter(restoreBtn, firstButton);
+      else headerButtons.appendChild(restoreBtn);
     }
     restoreBtn.style.display = "block";
 
@@ -128,7 +166,7 @@ function updateAuthenticatedUI(data) {
     const adminPanelBtn = document.getElementById("adminPanelBtn");
     if (adminPanelBtn) adminPanelBtn.style.display = "none";
   }
-  
+
   if (window.location.hostname !== "demo.filerise.net") {
     let userPanelBtn = document.getElementById("userPanelBtn");
     if (!userPanelBtn) {
@@ -136,17 +174,10 @@ function updateAuthenticatedUI(data) {
       userPanelBtn.id = "userPanelBtn";
       userPanelBtn.classList.add("btn", "btn-user");
       userPanelBtn.innerHTML = '<i class="material-icons" title="User Panel">account_circle</i>';
-      let adminPanelBtn = document.getElementById("adminPanelBtn");
-      if (adminPanelBtn) {
-        insertAfter(userPanelBtn, adminPanelBtn);
-      } else {
-        const firstButton = headerButtons.firstElementChild;
-        if (firstButton) {
-          insertAfter(userPanelBtn, firstButton);
-        } else {
-          headerButtons.appendChild(userPanelBtn);
-        }
-      }
+      const adminBtn = document.getElementById("adminPanelBtn");
+      if (adminBtn) insertAfter(userPanelBtn, adminBtn);
+      else if (firstButton) insertAfter(userPanelBtn, firstButton);
+      else headerButtons.appendChild(userPanelBtn);
       userPanelBtn.addEventListener("click", openUserPanel);
     } else {
       userPanelBtn.style.display = "block";
@@ -193,6 +224,7 @@ function checkAuthentication(showLoginToast = true) {
 /* ----------------- Authentication Submission ----------------- */
 function submitLogin(data) {
   setLastLoginData(data);
+  window.__lastLoginData = data;
   sendRequest("auth.php", "POST", data, { "X-CSRF-Token": window.csrfToken })
     .then(response => {
       if (response.success) {
@@ -220,7 +252,7 @@ function submitLogin(data) {
 }
 window.submitLogin = submitLogin;
 
-/* ----------------- Other Helpers and Initialization ----------------- */
+/* ----------------- Other Helpers ----------------- */
 window.changeItemsPerPage = function (value) {
   localStorage.setItem("itemsPerPage", value);
   if (typeof renderFileTable === "function") renderFileTable(window.currentFolder || "root");
@@ -259,7 +291,7 @@ function loadUserList() {
         closeRemoveUserModal();
       }
     })
-    .catch(() => { });
+    .catch(() => {});
 }
 window.loadUserList = loadUserList;
 
@@ -286,7 +318,7 @@ function initAuth() {
       method: "POST",
       credentials: "include",
       headers: { "X-CSRF-Token": window.csrfToken }
-    }).then(() => window.location.reload(true)).catch(() => { });
+    }).then(() => window.location.reload(true)).catch(() => {});
   });
   document.getElementById("addUserBtn").addEventListener("click", function () {
     resetUserForm();
@@ -352,7 +384,7 @@ function initAuth() {
           showToast("Error: " + (data.error || "Could not remove user"));
         }
       })
-      .catch(() => { });
+      .catch(() => {});
   });
   document.getElementById("cancelRemoveUserBtn").addEventListener("click", closeRemoveUserModal);
   document.getElementById("changePasswordBtn").addEventListener("click", function () {
@@ -404,12 +436,18 @@ document.addEventListener("DOMContentLoaded", function () {
     disableBasicAuth: localStorage.getItem("disableBasicAuth") === "true",
     disableOIDCLogin: localStorage.getItem("disableOIDCLogin") === "true"
   });
+
   const oidcLoginBtn = document.getElementById("oidcLoginBtn");
   if (oidcLoginBtn) {
     oidcLoginBtn.addEventListener("click", () => {
-      // Redirect to the OIDC auth endpoint. The endpoint can be adjusted if needed.
       window.location.href = "auth.php?oidc=initiate";
     });
+  }
+
+  // If TOTP is pending, show modal and skip normal auth init
+  if (window.pendingTOTP) {
+    openTOTPLoginModal();
+    return;
   }
 });
 

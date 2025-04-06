@@ -297,7 +297,7 @@ export function renderGalleryView(folder) {
             <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Rename">
                <i class="material-icons">drive_file_rename_outline</i>
             </button>
-            <button class="btn btn-sm btn-secondary share-btn" onclick='openShareModal(${JSON.stringify(file)}, ${JSON.stringify(folder)})' title="Share">
+            <button class="btn btn-sm btn-secondary share-btn" data-file="${escapeHTML(file.name)}" title="Share">
                <i class="material-icons">share</i>
             </button>
           </div>
@@ -306,10 +306,23 @@ export function renderGalleryView(folder) {
     });
 
     galleryHTML += "</div>";
+
     fileListContainer.innerHTML = galleryHTML;
 
     createViewToggleButton();
     updateFileActionButtons();
+
+    // Bind share button clicks
+    document.querySelectorAll(".share-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            const fileName = btn.getAttribute("data-file");
+            const file = fileData.find(f => f.name === fileName);
+            import('./filePreview.js').then(module => {
+                module.openShareModal(file, folder);
+            });
+        });
+    });
 }
 
 export function sortFiles(column, folder) {

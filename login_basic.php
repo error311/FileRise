@@ -3,6 +3,19 @@ require_once 'config.php';
 
 $usersFile = USERS_DIR . USERS_FILE;  // Make sure the users file path is defined
 
+// Helper: retrieve a user's TOTP secret from users.txt
+function getUserTOTPSecret($username) {
+    global $encryptionKey, $usersFile;
+    if (!file_exists($usersFile)) return null;
+    foreach (file($usersFile, FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES) as $line) {
+        $parts = explode(':', trim($line));
+        if (count($parts) >= 4 && $parts[0] === $username && !empty($parts[3])) {
+            return decryptData($parts[3], $encryptionKey);
+        }
+    }
+    return null;
+}
+
 // Reuse the same authentication function
 function authenticate($username, $password)
 {
@@ -43,15 +56,9 @@ function loadFolderPermission($username) {
     $permissionsFile = USERS_DIR . 'userPermissions.json';
     if (file_exists($permissionsFile)) {
         $content = file_get_contents($permissionsFile);
-        // Try to decrypt the content.
-        $decryptedContent = decryptData($content, $encryptionKey);
-        if ($decryptedContent !== false) {
-            $permissions = json_decode($decryptedContent, true);
-        } else {
-            $permissions = json_decode($content, true);
-        }
+        $decrypted = decryptData($content, $encryptionKey);
+        $permissions = $decrypted !== false ? json_decode($decrypted, true) : json_decode($content, true);
         if (is_array($permissions)) {
-            // Use case-insensitive comparison.
             foreach ($permissions as $storedUsername => $data) {
                 if (strcasecmp($storedUsername, $username) === 0 && isset($data['folderOnly'])) {
                     return (bool)$data['folderOnly'];
@@ -59,7 +66,7 @@ function loadFolderPermission($username) {
             }
         }
     }
-    return false; // Default if not set.
+    return false;
 }
 
 // Check if the user has sent HTTP Basic auth credentials.
@@ -68,39 +75,46 @@ if (!isset($_SERVER['PHP_AUTH_USER'])) {
     header('HTTP/1.0 401 Unauthorized');
     echo 'Authorization Required';
     exit;
-} else {
-    $username = trim($_SERVER['PHP_AUTH_USER']);
-    $password = trim($_SERVER['PHP_AUTH_PW']);
-
-    // Validate username format (optional)
-    if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
-        header('WWW-Authenticate: Basic realm="FileRise Login"');
-        header('HTTP/1.0 401 Unauthorized');
-        echo 'Invalid username format';
-        exit;
-    }
-
-    // Attempt authentication
-    $roleFromAuth = authenticate($username, $password);
-    if ($roleFromAuth !== false) {
-        // Use getUserRole() to determine the user's role from the file
-        $actualRole = getUserRole($username);
-        session_regenerate_id(true);
-        $_SESSION["authenticated"] = true;
-        $_SESSION["username"] = $username;
-        $_SESSION["isAdmin"] = ($actualRole === "1");
-        // Set the folderOnly flag based on userPermissions.json.
-        $_SESSION["folderOnly"] = loadFolderPermission($username);
-
-        // Redirect to the main page (or output JSON for testing)
-        header("Location: index.html");
-        exit;
-    } else {
-        // Invalid credentials; prompt again
-        header('WWW-Authenticate: Basic realm="FileRise Login"');
-        header('HTTP/1.0 401 Unauthorized');
-        echo 'Invalid credentials';
-        exit;
-    }
 }
+
+$username = trim($_SERVER['PHP_AUTH_USER']);
+$password = trim($_SERVER['PHP_AUTH_PW']);
+
+// Validate username format (optional)
+if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
+    header('WWW-Authenticate: Basic realm="FileRise Login"');
+    header('HTTP/1.0 401 Unauthorized');
+    echo 'Invalid username format';
+    exit;
+}
+
+// Attempt authentication
+$roleFromAuth = authenticate($username, $password);
+if ($roleFromAuth !== false) {
+    // --- NEW: check for TOTP secret ---
+    $secret = getUserTOTPSecret($username);
+    if ($secret) {
+        // hold user & secret in session and ask client for TOTP
+        $_SESSION['pending_login_user']   = $username;
+        $_SESSION['pending_login_secret'] = $secret;
+        header("Location: index.html?totp_required=1");
+        exit;
+    }
+
+    // no TOTP, proceed as before
+    session_regenerate_id(true);
+    $_SESSION["authenticated"] = true;
+    $_SESSION["username"]      = $username;
+    $_SESSION["isAdmin"]       = (getUserRole($username) === "1");
+    $_SESSION["folderOnly"]    = loadFolderPermission($username);
+
+    header("Location: index.html");
+    exit;
+}
+
+// Invalid credentials; prompt again
+header('WWW-Authenticate: Basic realm="FileRise Login"');
+header('HTTP/1.0 401 Unauthorized');
+echo 'Invalid credentials';
+exit;
 ?>

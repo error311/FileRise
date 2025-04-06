@@ -4,25 +4,31 @@
 Options -Indexes
 
 # -----------------------------
-# 2) Default index files
+# Default index files
 # -----------------------------
 DirectoryIndex index.html
 
 # -----------------------------
-# 3) Deny access to hidden files
+# Deny access to hidden files
 # -----------------------------
-# (blocks access to .htaccess, .gitignore, etc.)
 <FilesMatch "^\.">
   Require all denied
 </FilesMatch>
 
 # -----------------------------
-# 4) Enforce HTTPS (optional)
+# Enforce HTTPS (optional)
 # -----------------------------
-# Uncomment if you have SSL configured
-#RewriteEngine On
+RewriteEngine On
 #RewriteCond %{HTTPS} off
 #RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+<IfModule mod_headers.c>
+    # Allow requests from a specific origin
+    #Header set Access-Control-Allow-Origin "https://demo.filerise.net"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, X-CSRF-Token"
+    Header set Access-Control-Allow-Credentials "true"
+</IfModule>
 
 <IfModule mod_headers.c>
   # Prevent clickjacking
@@ -40,9 +46,30 @@ DirectoryIndex index.html
     Header set Pragma "no-cache"
     Header set Expires "0"
   </FilesMatch>
-
   # JS/CSS: short‑term cache, revalidate regularly
   <FilesMatch "\.(js|css)$">
     Header set Cache-Control "public, max-age=3600, must-revalidate"
   </FilesMatch>
 </IfModule>
+
+# -----------------------------
+# Additional Security Headers
+# -----------------------------
+<IfModule mod_headers.c>
+    # Enforce HTTPS for a year with subdomains and preload option.
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    # Set a Referrer Policy.
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    # Permissions Policy: disable features you don't need.
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    # IE-specific header to prevent downloads from opening in IE.
+    Header always set X-Download-Options "noopen"
+    # Expect-CT header for Certificate Transparency (optional).
+    Header always set Expect-CT "max-age=86400, enforce"
+</IfModule>
+
+# -----------------------------
+# Disable TRACE method
+# -----------------------------
+RewriteCond %{REQUEST_METHOD} ^TRACE
+RewriteRule .* - [F]
