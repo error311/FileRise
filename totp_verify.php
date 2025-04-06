@@ -4,19 +4,6 @@
 require_once 'vendor/autoload.php';
 require_once 'config.php';
 
-// Secure session cookie
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'domain'   => '',        // your domain
-    'secure'   => true,      // only over HTTPS
-    'httponly' => true,
-    'samesite' => 'Lax'
-]);
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-
 // JSON + CSP
 header('Content-Type: application/json');
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';");

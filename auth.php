@@ -186,8 +186,8 @@ if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
 $user = authenticate($username, $password);
 if ($user !== false) {
     if (!empty($user['totp_secret'])) {
-        if (empty($data['totp_code'])) {
-            http_response_code(401);
+        // If TOTP code is missing or malformed, indicate that TOTP is required.
+        if (empty($data['totp_code']) || !preg_match('/^\d{6}$/', $data['totp_code'])) {
             echo json_encode([
               "totp_required" => true,
               "message" => "TOTP code required"
@@ -197,7 +197,6 @@ if ($user !== false) {
             $tfa = new \RobThree\Auth\TwoFactorAuth('FileRise');
             $providedCode = trim($data['totp_code']);
             if (!$tfa->verifyCode($user['totp_secret'], $providedCode)) {
-                http_response_code(401);
                 echo json_encode(["error" => "Invalid TOTP code"]);
                 exit();
             }
@@ -232,10 +231,13 @@ if ($user !== false) {
         ];
         $encryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
         file_put_contents($persistentTokensFile, $encryptedContent, LOCK_EX);
+        // Define $secure based on whether HTTPS is enabled
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
         setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
     }
     
     echo json_encode([
+      "status" => "ok",
       "success"   => "Login successful", 
       "isAdmin"   => $_SESSION["isAdmin"],
       "folderOnly"=> $_SESSION["folderOnly"],

@@ -98,14 +98,14 @@ function loadAdminConfigFunc() {
       localStorage.setItem("disableFormLogin", config.loginOptions.disableFormLogin);
       localStorage.setItem("disableBasicAuth", config.loginOptions.disableBasicAuth);
       localStorage.setItem("disableOIDCLogin", config.loginOptions.disableOIDCLogin);
-      localStorage.setItem("globalOtpauthUrl", config.globalOtpauthUrl || "otpauth://totp/FileRise?issuer=FileRise");
+      localStorage.setItem("globalOtpauthUrl", config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
       updateLoginOptionsUIFromStorage();
     })
     .catch(() => {
       localStorage.setItem("disableFormLogin", "false");
       localStorage.setItem("disableBasicAuth", "false");
       localStorage.setItem("disableOIDCLogin", "false");
-      localStorage.setItem("globalOtpauthUrl", "otpauth://totp/FileRise?issuer=FileRise");
+      localStorage.setItem("globalOtpauthUrl", "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
       updateLoginOptionsUIFromStorage();
     });
 }
@@ -225,15 +225,15 @@ function checkAuthentication(showLoginToast = true) {
 function submitLogin(data) {
   setLastLoginData(data);
   window.__lastLoginData = data;
-  sendRequest("auth.php", "POST", data, { "X-CSRF-Token": window.csrfToken })
-    .then(response => {
-      if (response.success) {
-        sessionStorage.setItem("welcomeMessage", "Welcome back, " + data.username + "!");
-        window.location.reload();
-      } else if (response.totp_required) {
-        openTOTPLoginModal();
-      } else if (response.error && response.error.includes("Too many failed login attempts")) {
-        showToast(response.error);
+sendRequest("auth.php", "POST", data, { "X-CSRF-Token": window.csrfToken })
+  .then(response => {
+    if (response.success || response.status === "ok") {
+      sessionStorage.setItem("welcomeMessage", "Welcome back, " + data.username + "!");
+      window.location.reload();
+    } else if (response.totp_required) {
+      openTOTPLoginModal();
+    } else if (response.error && response.error.includes("Too many failed login attempts")) {
+      showToast(response.error);
         const loginButton = document.getElementById("authForm").querySelector("button[type='submit']");
         if (loginButton) {
           loginButton.disabled = true;

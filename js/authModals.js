@@ -49,15 +49,11 @@ export function openTOTPLoginModal() {
     totpInput.addEventListener("input", function () {
       const code = this.value.trim();
       if (code.length === 6) {
-        // FORM-BASED LOGIN
         if (lastLoginData) {
           totpLoginModal.style.display = "none";
           lastLoginData.totp_code = code;
           window.submitLogin(lastLoginData);
-
-        // BASIC-AUTH / OIDC LOGIN
         } else {
-          // keep modal open until we know the result
           fetch("totp_verify.php", {
             method: "POST",
             credentials: "include",
@@ -67,23 +63,23 @@ export function openTOTPLoginModal() {
             },
             body: JSON.stringify({ totp_code: code })
           })
-            .then(res => res.json())
-            .then(json => {
-              if (json.success) {
-                window.location.href = "index.html";
-              } else {
-                showToast(json.error || json.message || "TOTP verification failed");
-                this.value = "";
-                totpLoginModal.style.display = "flex";
-                totpInput.focus();
-              }
-            })
-            .catch(() => {
-              showToast("TOTP verification failed");
+          .then(res => res.json())
+          .then(json => {
+            if (json.status === "ok") {
+              window.location.href = "index.html";
+            } else {
+              showToast(json.message || "TOTP verification failed");
               this.value = "";
               totpLoginModal.style.display = "flex";
               totpInput.focus();
-            });
+            }
+          })
+          .catch(() => {
+            showToast("TOTP verification failed");
+            this.value = "";
+            totpLoginModal.style.display = "flex";
+            totpInput.focus();
+          });
         }
       }
     });
@@ -92,7 +88,6 @@ export function openTOTPLoginModal() {
     const modalContent = totpLoginModal.firstElementChild;
     modalContent.style.background = modalBg;
     modalContent.style.color = textColor;
-    // reset input if reopening
     const totpInput = document.getElementById("totpLoginInput");
     if (totpInput) {
       totpInput.value = "";
@@ -191,10 +186,10 @@ export function openUserPanel() {
 }
 
 export function openTOTPModal() {
-    let totpModal = document.getElementById("totpModal");
-    const isDarkMode = document.body.classList.contains("dark-mode");
-    const overlayBackground = isDarkMode ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
-    const modalContentStyles = `
+  let totpModal = document.getElementById("totpModal");
+  const isDarkMode = document.body.classList.contains("dark-mode");
+  const overlayBackground = isDarkMode ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
+  const modalContentStyles = `
     background: ${isDarkMode ? "#2c2c2c" : "#fff"};
     color: ${isDarkMode ? "#e0e0e0" : "#000"};
     padding: 20px;
@@ -232,19 +227,17 @@ export function openTOTPModal() {
       </div>
     `;
     document.body.appendChild(totpModal);
-    // Bind the X button to call closeTOTPModal with disable=true
+    
     document.getElementById("closeTOTPModal").addEventListener("click", () => {
       closeTOTPModal(true);
     });
   
-    // Add event listener for TOTP confirmation
     document.getElementById("confirmTOTPBtn").addEventListener("click", function () {
       const code = document.getElementById("totpConfirmInput").value.trim();
       if (code.length !== 6) {
         showToast("Please enter a valid 6-digit code.");
         return;
       }
-      // Call the endpoint to verify the TOTP code
       fetch("totp_verify.php", {
         method: "POST",
         credentials: "include",
@@ -254,17 +247,16 @@ export function openTOTPModal() {
         },
         body: JSON.stringify({ totp_code: code })
       })
-        .then(r => r.json())
-        .then(result => {
-          if (result.success) {
-            showToast("TOTP successfully enabled.");
-            // On success, close the modal without disabling
-            closeTOTPModal(false);
-          } else {
-            showToast("TOTP verification failed: " + (result.error || "Invalid code."));
-          }
-        })
-        .catch(() => { showToast("Error verifying TOTP code."); });
+      .then(r => r.json())
+      .then(result => {
+        if (result.status === 'ok') {
+          showToast("TOTP successfully enabled.");
+          closeTOTPModal(false);
+        } else {
+          showToast("TOTP verification failed: " + (result.message || "Invalid code."));
+        }
+      })
+      .catch(() => { showToast("Error verifying TOTP code."); });
     });
   } else {
     totpModal.style.display = "flex";
@@ -508,7 +500,7 @@ export function openAdminPanel() {
                 document.getElementById("oidcClientId").value = window.currentOIDCConfig.clientId;
                 document.getElementById("oidcClientSecret").value = window.currentOIDCConfig.clientSecret;
                 document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig.redirectUri;
-                document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/FileRise?issuer=FileRise';
+                document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise';
                 document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
                 document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
                 document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
@@ -529,7 +521,7 @@ export function openAdminPanel() {
                 document.getElementById("oidcClientId").value = window.currentOIDCConfig.clientId;
                 document.getElementById("oidcClientSecret").value = window.currentOIDCConfig.clientSecret;
                 document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig.redirectUri;
-                document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/FileRise?issuer=FileRise';
+                document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise';
                 document.getElementById("disableFormLogin").checked = localStorage.getItem("disableFormLogin") === "true";
                 document.getElementById("disableBasicAuth").checked = localStorage.getItem("disableBasicAuth") === "true";
                 document.getElementById("disableOIDCLogin").checked = localStorage.getItem("disableOIDCLogin") === "true";
