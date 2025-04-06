@@ -5,12 +5,12 @@ require_once 'config.php';
 $headers = array_change_key_case(getallheaders(), CASE_LOWER);
 $receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
 
-// If there's a mismatch, log it but continue with logout.
+// Log CSRF mismatch but proceed with logout.
 if (isset($_SESSION['csrf_token']) && $receivedToken !== $_SESSION['csrf_token']) {
     error_log("CSRF token mismatch on logout. Proceeding with logout.");
 }
 
-// If the remember me token is set, remove it from the persistent tokens file.
+// Remove the remember_me token.
 if (isset($_COOKIE['remember_me_token'])) {
     $token = $_COOKIE['remember_me_token'];
     $persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
@@ -25,13 +25,26 @@ if (isset($_COOKIE['remember_me_token'])) {
         }
     }
     // Clear the cookie.
+    // Ensure $secure is defined; for example:
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
     setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
 }
 
-// Clear session data and destroy the session.
+// Clear session data and remove session cookie.
 $_SESSION = [];
+
+// Clear the session cookie.
+if (ini_get("session.use_cookies")) {
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', time() - 42000,
+        $params["path"], $params["domain"],
+        $params["secure"], $params["httponly"]
+    );
+}
+
+// Destroy the session.
 session_destroy();
 
-header("Location: index.html");
+header("Location: index.html?logout=1");
 exit;
 ?>

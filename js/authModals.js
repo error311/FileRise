@@ -1,4 +1,4 @@
-import { showToast, toggleVisibility } from './domUtils.js';
+import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
 const version = "v1.0.8";
@@ -8,7 +8,7 @@ let lastLoginData = null;
 export function setLastLoginData(data) {
   lastLoginData = data;
   // expose to auth.js so it can tell form-login vs basic/oidc
-  window.__lastLoginData = data;
+  //window.__lastLoginData = data;
 }
 
 export function openTOTPLoginModal() {
@@ -258,12 +258,34 @@ export function openTOTPModal() {
       })
       .catch(() => { showToast("Error verifying TOTP code."); });
     });
+
+    // Focus the input and attach enter key listener
+    const totpConfirmInput = document.getElementById("totpConfirmInput");
+    if (totpConfirmInput) {
+      setTimeout(() => {
+        const totpConfirmInput = document.getElementById("totpConfirmInput");
+        if (totpConfirmInput) totpConfirmInput.focus();
+      }, 100);
+    }
+    attachEnterKeyListener("totpModal", "confirmTOTPBtn");
+
   } else {
     totpModal.style.display = "flex";
     totpModal.style.backgroundColor = overlayBackground;
     const modalContent = totpModal.querySelector(".modal-content");
     modalContent.style.background = isDarkMode ? "#2c2c2c" : "#fff";
     modalContent.style.color = isDarkMode ? "#e0e0e0" : "#000";
+    
+    // Focus the input and attach enter key listener
+    const totpConfirmInput = document.getElementById("totpConfirmInput");
+    if (totpConfirmInput) {
+      totpConfirmInput.value = "";
+      setTimeout(() => {
+        const totpConfirmInput = document.getElementById("totpConfirmInput");
+        if (totpConfirmInput) totpConfirmInput.focus();
+      }, 100);
+    }
+    attachEnterKeyListener("totpModal", "confirmTOTPBtn");
   }
 }
 

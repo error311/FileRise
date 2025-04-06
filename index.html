@@ -5,6 +5,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FileRise</title>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('logout') === '1') {
+      localStorage.removeItem("username");
+      localStorage.removeItem("userTOTPEnabled");
+    }
+  </script>
   <link rel="icon" type="image/png" href="/assets/logo.png">
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
   <meta name="csrf-token" content="">
