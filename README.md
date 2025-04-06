@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/221f6a53-85f5-48d4-9abe-89445e0af90e
 **Dark mode:**
 ![Dark Header](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-header.png)
 
-changelogs available here: <https://github.com/error311/FileRise-docker/>
+Changelogs & Dockerfile available here: <https://github.com/error311/FileRise-docker/>
 
 FileRise is a lightweight, secure, self-hosted web application for uploading, syntax-highlight editing, drag & drop file management, and more. Built with an Apache/PHP backend and a modern JavaScript (ES6 modules) frontend, it offers a responsive and dynamic interface designed to simplify file handling. As an alternative to solutions like FileGator, TinyFileManager, or ProjectSend, FileRise provides an easy-to-set-up experience ideal for document management, image galleries, firmware hosting, and other file-intensive applications.
 
