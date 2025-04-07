@@ -1,7 +1,7 @@
 # FileRise
 
-Elevate your File Management – A modern, self-hosted web file manager.
-Upload, organize, and share files through a sleek web interface. FileRise is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, FileRise makes file management on your server a breeze.
+**Elevate your File Management** – A modern, self-hosted web file manager.
+Upload, organize, and share files through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, FileRise makes file management on your server a breeze.
 
 **4/3/2025 Video demo:**
 
@@ -30,7 +30,7 @@ Upload, organize, and share files through a sleek web interface. FileRise is lig
 
 - ⚙️ **Lightweight & Self-Contained:** FileRise runs on PHP 8.1+ with no external database required – data is stored in files (users, metadata) for simplicity. It’s a single-folder web app you can drop into any Apache/PHP server or run as a container. Docker & Unraid ready: use our pre-built image for a hassle-free setup. Memory and CPU footprint is minimal, yet the app scales to thousands of files with pagination and sorting features.
 
-(For a full list of features and detailed changelogs, see the [Wiki](https://github.com/error311/FileRise/wiki) or the [releases](https://github.com/error311/FileRise/releases) pages.)
+(For a full list of features and detailed changelogs, see the [Wiki](https://github.com/error311/FileRise/wiki), [changelog](https://github.com/error311/FileRise/blob/master/CHANGELOG.md) or the [releases](https://github.com/error311/FileRise/releases) pages.)
 
 ---
 
@@ -109,7 +109,7 @@ If you prefer to run FileRise on a traditional web server (LAMP stack or similar
 git clone https://github.com/error311/FileRise.git  
 ```
 
-Place the files into your web server’s directory (e.g., `/var/www/html/filerise`). It can be in a subfolder (just adjust the BASE_URL in config as below).
+Place the files into your web server’s directory (e.g., `/var/www/html/filerise`). It can be in a subfolder (just adjust the `BASE_URL` in config as below).
 
 - **Composer Dependencies:** If you plan to use OIDC (SSO login), install Composer and run `composer install` in the FileRise directory. (This pulls in a couple of PHP libraries like jumbojett/openid-connect for OAuth support.) If you skip this, FileRise will still work, but OIDC login won’t be available.
 
@@ -123,13 +123,13 @@ chmod -R 775 uploads users metadata
 
 The uploads/ folder is where files go, users/ stores the user credentials file, and metadata/ holds metadata like tags and share links.
 
-- **Configuration:** Open the config.php file in a text editor. You may want to adjust:
+- **Configuration:** Open the `config.php` file in a text editor. You may want to adjust:
 
   - `BASE_URL` – the URL where you will access FileRise (e.g., `“https://files.mydomain.com/”`). This is used for generating share links.
   
   - `TIMEZONE` and `DATE_TIME_FORMAT` – match your locale (for correct timestamps).
   
-  - `TOTAL_UPLOAD_SIZE` – max aggregate upload size (default 5G). Also adjust PHP’s upload_max_filesize and post_max_size to at least this value (the Docker start script auto-adjusts PHP limits).
+  - `TOTAL_UPLOAD_SIZE` – max aggregate upload size (default 5G). Also adjust PHP’s `upload_max_filesize` and `post_max_size` to at least this value (the Docker start script auto-adjusts PHP limits).
   
   - `PERSISTENT_TOKENS_KEY` – set a unique secret if you use “Remember Me” logins, to encrypt the tokens.
   
@@ -175,4 +175,4 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 
 ## License
 
-This project is open-source under the MIT License. That means you’re free to use, modify, and distribute FileRise, with attribution. We hope you find it useful and contribute back!
+This project is open-source under the MIT License. That means you’re free to use, modify, and distribute **FileRise**, with attribution. We hope you find it useful and contribute back!
