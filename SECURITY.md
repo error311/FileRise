@@ -9,7 +9,7 @@ FileRise is actively maintained. Only supported versions will receive security u
 If you discover a security vulnerability, please do not open a public issue. Instead, follow these steps:
 
 1. **Email Us Privately:**  
-   Send an email to [error311@gmail.com](mailto:error311@gmail.com) with the subject line “[FileRise] Security Vulnerability Report”.
+   Send an email to [security@filerise.net](mailto:security@filerise.net) with the subject line “[FileRise] Security Vulnerability Report”.
 
 2. **Include Details:**  
    Provide a detailed description of the vulnerability, steps to reproduce it, and any other relevant information (e.g., affected versions, screenshots, logs).
@@ -30,4 +30,4 @@ If you discover a security vulnerability, please do not open a public issue. Ins
 
 ## Additional Information
 
-We appreciate responsible disclosure of vulnerabilities and thank all researchers who help keep FileRise secure. For any questions related to this policy, please contact us at [error311@gmail.com](mailto:error311@gmail.com).
+We appreciate responsible disclosure of vulnerabilities and thank all researchers who help keep FileRise secure. For any questions related to this policy, please contact us at [admin@filerise.net](mailto:admin@filerise.net).
