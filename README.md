@@ -1,7 +1,7 @@
 # FileRise
 
 **Elevate your File Management** – A modern, self-hosted web file manager.
-Upload, organize, and share files through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, FileRise makes file management on your server a breeze.
+Upload, organize, and share files through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, **FileRise** makes file management on your server a breeze.
 
 **4/3/2025 Video demo:**
 
@@ -71,7 +71,7 @@ docker run -d \
   error311/filerise-docker:latest
   ```
 
-  This will start FileRise on port 8080. Visit `http://your-server-ip:8080` to access it. Environment variables shown above are optional – for instance, set `SECURE="true"` to enforce HTTPS (assuming you have SSL at proxy level) and adjust TIMEZONE as needed. The volume mounts ensure your files and user data persist outside the container.
+  This will start FileRise on port 8080. Visit `http://your-server-ip:8080` to access it. Environment variables shown above are optional – for instance, set `SECURE="true"` to enforce HTTPS (assuming you have SSL at proxy level) and adjust `TIMEZONE` as needed. The volume mounts ensure your files and user data persist outside the container.
 
 - **Using Docker Compose:**
 Alternatively, use **docker-compose**. Save the snippet below as docker-compose.yml and run `docker-compose up -d`:
