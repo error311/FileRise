@@ -58,6 +58,9 @@ function getParentFolder(folder) {
   return lastSlash === -1 ? "root" : folder.substring(0, lastSlash);
 }
 
+/* ----------------------
+    Breadcrumb Functions
+ ----------------------*/
 
 function renderBreadcrumb(normalizedFolder) {
   if (!normalizedFolder || normalizedFolder === "") return "";
@@ -75,14 +78,14 @@ function renderBreadcrumb(normalizedFolder) {
 }
 
 // --- NEW: Breadcrumb Delegation Setup ---
+// bindBreadcrumbEvents(); removed in favor of delegation
 export function setupBreadcrumbDelegation() {
   const container = document.getElementById("fileListTitle");
   if (!container) {
     console.error("Breadcrumb container (fileListTitle) not found.");
     return;
   }
-
-  // Remove any previous delegation listeners if necessary
+  // Remove any existing event listeners to avoid duplicates.
   container.removeEventListener("click", breadcrumbClickHandler);
   container.removeEventListener("dragover", breadcrumbDragOverHandler);
   container.removeEventListener("dragleave", breadcrumbDragLeaveHandler);
@@ -97,19 +100,16 @@ export function setupBreadcrumbDelegation() {
 
 // Click handler via delegation
 function breadcrumbClickHandler(e) {
-  // Look for the nearest ancestor with the "breadcrumb-link" class.
   const link = e.target.closest(".breadcrumb-link");
   if (!link) return;
   e.stopPropagation();
-  e.preventDefault(); // Prevent default link behavior if needed
+  e.preventDefault();
 
   const folder = link.getAttribute("data-folder");
   window.currentFolder = folder;
   localStorage.setItem("lastOpenedFolder", folder);
 
   // Update the container with sanitized breadcrumbs.
-  // (If you prefer, you can render the breadcrumbs into a dedicated container 
-  // and update the title separately.)
   const container = document.getElementById("fileListTitle");
   const sanitizedBreadcrumb = DOMPurify.sanitize(renderBreadcrumb(folder));
   container.innerHTML = "Files in (" + sanitizedBreadcrumb + ")";
