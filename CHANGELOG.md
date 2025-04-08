@@ -1,5 +1,12 @@
 # Changelog
 
+## Changes 4/7/2025 v1.0.9
+
+- TOTP one time recovery code added
+- fix(security): mitigate CodeQL alerts by adding SRI attributes and sanitizing DOM content
+
+---
+
 ## Changes 4/6/2025 v1.0.8
 
 **May need to log out and log back in if using remember me**  
