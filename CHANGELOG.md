@@ -5,7 +5,7 @@
 **May have missed some stuff or could have bugs. Please report any issue you may encounter.**
 
 - **i18n Integration:**
-  - Implemented a complete internationalization (i18n) system for all user-facing texts in FileRise.
+  - Implemented a semi-complete internationalization (i18n) system for all user-facing texts in FileRise.
   - Created an `i18n.js` module containing a translations object with full keys for English (en), Spanish (es), and French (fr).
   - Updated JavaScript code to replace hard-coded strings with the `t()` translation function.
   - Enhanced HTML and modal templates to support dynamic language translations using data attributes (data-i18n-key, data-i18n-placeholder, etc.).
