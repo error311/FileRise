@@ -237,15 +237,27 @@ export function previewFile(fileUrl, fileName) {
 // Added to preserve the original functionality.
 export function displayFilePreview(file, container) {
   const actualFile = file.file || file;
+  
+  // Validate that actualFile is indeed a File
+  if (!(actualFile instanceof File)) {
+    console.error("displayFilePreview called with an invalid file object");
+    return;
+  }
+  
   container.style.display = "inline-block";
+  
+  // Clear the container safely without using innerHTML
+  while (container.firstChild) {
+    container.removeChild(container.firstChild);
+  }
+  
   if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(actualFile.name)) {
     const img = document.createElement("img");
+    // Set the image source using a Blob URL (this is considered safe)
     img.src = URL.createObjectURL(actualFile);
     img.classList.add("file-preview-img");
-    container.innerHTML = "";
     container.appendChild(img);
   } else {
-    container.innerHTML = "";
     const iconSpan = document.createElement("span");
     iconSpan.classList.add("material-icons", "file-icon");
     iconSpan.textContent = "insert_drive_file";

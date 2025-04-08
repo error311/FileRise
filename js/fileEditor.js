@@ -1,5 +1,5 @@
 // editor.js
-import { showToast } from './domUtils.js';
+import { escapeHTML, showToast } from './domUtils.js';
 import { loadFileList } from './fileListView.js';
 
 function getModeForFile(fileName) {
@@ -73,14 +73,14 @@ export function editFile(fileName, folder) {
       modal.classList.add("modal", "editor-modal");
       modal.innerHTML = `
       <div class="editor-header">
-        <h3 class="editor-title">Editing: ${fileName}</h3>
+        <h3 class="editor-title">Editing: ${escapeHTML(fileName)}</h3>
         <div class="editor-controls">
            <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
            <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
         </div>
         <button id="closeEditorX" class="editor-close-btn">&times;</button>
       </div>
-      <textarea id="fileEditor" class="editor-textarea">${content}</textarea>
+      <textarea id="fileEditor" class="editor-textarea">${escapeHTML(content)}</textarea>
       <div class="editor-footer">
         <button id="saveBtn" class="btn btn-primary">Save</button>
         <button id="closeBtn" class="btn btn-secondary">Close</button>

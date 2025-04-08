@@ -58,9 +58,7 @@ function getParentFolder(folder) {
   return lastSlash === -1 ? "root" : folder.substring(0, lastSlash);
 }
 
-/* ----------------------
-   Breadcrumb Functions
-----------------------*/
+
 function renderBreadcrumb(normalizedFolder) {
   if (!normalizedFolder || normalizedFolder === "") return "";
   const parts = normalizedFolder.split("/");
@@ -76,72 +74,112 @@ function renderBreadcrumb(normalizedFolder) {
   return breadcrumbItems.join('');
 }
 
-function bindBreadcrumbEvents() {
-  const breadcrumbLinks = document.querySelectorAll(".breadcrumb-link");
-  breadcrumbLinks.forEach(link => {
-    link.addEventListener("click", function (e) {
-      e.stopPropagation();
-      let folder = this.getAttribute("data-folder");
-      window.currentFolder = folder;
-      localStorage.setItem("lastOpenedFolder", folder);
-      const titleEl = document.getElementById("fileListTitle");
-      titleEl.innerHTML = "Files in (" + renderBreadcrumb(folder) + ")";
-      expandTreePath(folder);
-      document.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
-      const targetOption = document.querySelector(`.folder-option[data-folder="${folder}"]`);
-      if (targetOption) targetOption.classList.add("selected");
-      loadFileList(folder);
-      bindBreadcrumbEvents();
-    });
-    link.addEventListener("dragover", function (e) {
-      e.preventDefault();
-      this.classList.add("drop-hover");
-    });
-    link.addEventListener("dragleave", function (e) {
-      this.classList.remove("drop-hover");
-    });
-    link.addEventListener("drop", function (e) {
-      e.preventDefault();
-      this.classList.remove("drop-hover");
-      const dropFolder = this.getAttribute("data-folder");
-      let dragData;
-      try {
-        dragData = JSON.parse(e.dataTransfer.getData("application/json"));
-      } catch (err) {
-        console.error("Invalid drag data on breadcrumb:", err);
-        return;
-      }
-      const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
-      if (filesToMove.length === 0) return;
-      fetch("moveFiles.php", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
-        },
-        body: JSON.stringify({
-          source: dragData.sourceFolder,
-          files: filesToMove,
-          destination: dropFolder
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          showToast(`File(s) moved successfully to ${dropFolder}!`);
-          loadFileList(dragData.sourceFolder);
-        } else {
-          showToast("Error moving files: " + (data.error || "Unknown error"));
-        }
-      })
-      .catch(error => {
-        console.error("Error moving files via drop on breadcrumb:", error);
-        showToast("Error moving files.");
-      });
-    });
-  });
+// --- NEW: Breadcrumb Delegation Setup ---
+export function setupBreadcrumbDelegation() {
+  const container = document.getElementById("fileListTitle");
+  if (!container) {
+    console.error("Breadcrumb container (fileListTitle) not found.");
+    return;
+  }
+
+  // Remove any previous delegation listeners if necessary
+  container.removeEventListener("click", breadcrumbClickHandler);
+  container.removeEventListener("dragover", breadcrumbDragOverHandler);
+  container.removeEventListener("dragleave", breadcrumbDragLeaveHandler);
+  container.removeEventListener("drop", breadcrumbDropHandler);
+
+  // Attach delegated listeners
+  container.addEventListener("click", breadcrumbClickHandler);
+  container.addEventListener("dragover", breadcrumbDragOverHandler);
+  container.addEventListener("dragleave", breadcrumbDragLeaveHandler);
+  container.addEventListener("drop", breadcrumbDropHandler);
 }
+
+// Click handler via delegation
+function breadcrumbClickHandler(e) {
+  // Look for the nearest ancestor with the "breadcrumb-link" class.
+  const link = e.target.closest(".breadcrumb-link");
+  if (!link) return;
+  e.stopPropagation();
+  e.preventDefault(); // Prevent default link behavior if needed
+
+  const folder = link.getAttribute("data-folder");
+  window.currentFolder = folder;
+  localStorage.setItem("lastOpenedFolder", folder);
+
+  // Update the container with sanitized breadcrumbs.
+  // (If you prefer, you can render the breadcrumbs into a dedicated container 
+  // and update the title separately.)
+  const container = document.getElementById("fileListTitle");
+  const sanitizedBreadcrumb = DOMPurify.sanitize(renderBreadcrumb(folder));
+  container.innerHTML = "Files in (" + sanitizedBreadcrumb + ")";
+
+  expandTreePath(folder);
+  document.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
+  const targetOption = document.querySelector(`.folder-option[data-folder="${folder}"]`);
+  if (targetOption) targetOption.classList.add("selected");
+  loadFileList(folder);
+}
+
+// Dragover handler via delegation
+function breadcrumbDragOverHandler(e) {
+  const link = e.target.closest(".breadcrumb-link");
+  if (!link) return;
+  e.preventDefault();
+  link.classList.add("drop-hover");
+}
+
+// Dragleave handler via delegation
+function breadcrumbDragLeaveHandler(e) {
+  const link = e.target.closest(".breadcrumb-link");
+  if (!link) return;
+  link.classList.remove("drop-hover");
+}
+
+// Drop handler via delegation
+function breadcrumbDropHandler(e) {
+  const link = e.target.closest(".breadcrumb-link");
+  if (!link) return;
+  e.preventDefault();
+  link.classList.remove("drop-hover");
+  const dropFolder = link.getAttribute("data-folder");
+  let dragData;
+  try {
+    dragData = JSON.parse(e.dataTransfer.getData("application/json"));
+  } catch (err) {
+    console.error("Invalid drag data on breadcrumb:", err);
+    return;
+  }
+  const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
+  if (filesToMove.length === 0) return;
+  fetch("moveFiles.php", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+    },
+    body: JSON.stringify({
+      source: dragData.sourceFolder,
+      files: filesToMove,
+      destination: dropFolder
+    })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast(`File(s) moved successfully to ${dropFolder}!`);
+        loadFileList(dragData.sourceFolder);
+      } else {
+        showToast("Error moving files: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(error => {
+      console.error("Error moving files via drop on breadcrumb:", error);
+      showToast("Error moving files.");
+    });
+}
+
 
 /* ----------------------
    Check Current User's Folder-Only Permission
@@ -380,7 +418,7 @@ export async function loadFolderTree(selectedFolder) {
     
     const titleEl = document.getElementById("fileListTitle");
     titleEl.innerHTML = "Files in (" + renderBreadcrumb(window.currentFolder) + ")";
-    bindBreadcrumbEvents();
+    setupBreadcrumbDelegation();
     loadFileList(window.currentFolder);
     
     const folderState = loadFolderTreeState();
@@ -404,7 +442,7 @@ export async function loadFolderTree(selectedFolder) {
         localStorage.setItem("lastOpenedFolder", selected);
         const titleEl = document.getElementById("fileListTitle");
         titleEl.innerHTML = "Files in (" + renderBreadcrumb(selected) + ")";
-        bindBreadcrumbEvents();
+        setupBreadcrumbDelegation();
         loadFileList(selected);
       });
     });
