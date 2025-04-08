@@ -1,6 +1,7 @@
 // editor.js
 import { escapeHTML, showToast } from './domUtils.js';
 import { loadFileList } from './fileListView.js';
+import { t } from './i18n.js';
 
 function getModeForFile(fileName) {
   const ext = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase();
@@ -73,17 +74,17 @@ export function editFile(fileName, folder) {
       modal.classList.add("modal", "editor-modal");
       modal.innerHTML = `
       <div class="editor-header">
-        <h3 class="editor-title">Editing: ${escapeHTML(fileName)}</h3>
+        <h3 class="editor-title">${t("editing")}: ${escapeHTML(fileName)}</h3>
         <div class="editor-controls">
-           <button id="decreaseFont" class="btn btn-sm btn-secondary">A-</button>
-           <button id="increaseFont" class="btn btn-sm btn-secondary">A+</button>
+           <button id="decreaseFont" class="btn btn-sm btn-secondary">${t("decrease_font")}</button>
+           <button id="increaseFont" class="btn btn-sm btn-secondary">${t("increase_font")}</button>
         </div>
         <button id="closeEditorX" class="editor-close-btn">&times;</button>
       </div>
       <textarea id="fileEditor" class="editor-textarea">${escapeHTML(content)}</textarea>
       <div class="editor-footer">
-        <button id="saveBtn" class="btn btn-primary">Save</button>
-        <button id="closeBtn" class="btn btn-secondary">Close</button>
+        <button id="saveBtn" class="btn btn-primary">${t("save")}</button>
+        <button id="closeBtn" class="btn btn-secondary">${t("close")}</button>
       </div>
     `;
       document.body.appendChild(modal);

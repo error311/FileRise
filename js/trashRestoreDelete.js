@@ -3,6 +3,7 @@ import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, showToast } from './domUtils.js';
 import { loadFileList } from './fileListView.js';
 import { loadFolderTree } from './folderManager.js';
+import { t } from './i18n.js';
 
 function showConfirm(message, onConfirm) {
     const modal = document.getElementById("customConfirmModal");
@@ -65,7 +66,7 @@ export function setupTrashRestoreDelete() {
             const files = Array.from(selected).map(chk => chk.value);
             console.log("Restore Selected clicked, files:", files);
             if (files.length === 0) {
-                showToast("No trash items selected for restore.");
+                showToast(t("no_trash_selected"));
                 return;
             }
             fetch("restoreFiles.php", {
@@ -105,7 +106,7 @@ export function setupTrashRestoreDelete() {
             const files = Array.from(allChk).map(chk => chk.value);
             console.log("Restore All clicked, files:", files);
             if (files.length === 0) {
-                showToast("Trash is empty.");
+                showToast(t("trash_empty"));
                 return;
             }
             fetch("restoreFiles.php", {

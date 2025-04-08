@@ -1,4 +1,5 @@
 import { sendRequest } from './networkUtils.js';
+import { t } from './i18n.js';
 import {
   toggleVisibility,
   showToast as originalShowToast,
@@ -34,8 +35,9 @@ window.currentOIDCConfig = currentOIDCConfig;
 window.pendingTOTP = new URLSearchParams(window.location.search).get('totp_required') === '1';
 
 // override showToast to suppress the "Please log in to continue." toast during TOTP
-function showToast(msg) {
-  if (window.pendingTOTP && msg === "Please log in to continue.") {
+function showToast(msgKey) {
+  const msg = t(msgKey);
+  if (window.pendingTOTP && msgKey === "please_log_in_to_continue") {
     return;
   }
   originalShowToast(msg);

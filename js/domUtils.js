@@ -1,4 +1,5 @@
 // domUtils.js
+import { t } from './i18n.js';
 
 // Basic DOM Helpers
 export function toggleVisibility(elementId, shouldShow) {
@@ -6,7 +7,7 @@ export function toggleVisibility(elementId, shouldShow) {
   if (element) {
     element.style.display = shouldShow ? "block" : "none";
   } else {
-    console.error(`Element with id "${elementId}" not found.`);
+    console.error(t("element_not_found", { id: elementId }));
   }
 }
 
@@ -97,7 +98,7 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
               <i class="material-icons">search</i>
             </span>
           </div>
-          <input type="text" id="searchInput" class="form-control" placeholder="Search files or tag..." value="${safeSearchTerm}" aria-describedby="searchIcon">
+          <input type="text" id="searchInput" class="form-control" placeholder="${t("search_placeholder")}" value="${safeSearchTerm}" aria-describedby="searchIcon">
         </div>
       </div>
       <div class="col-12 col-md-4 text-left">
@@ -117,11 +118,11 @@ export function buildFileTableHeader(sortOrder) {
       <thead>
         <tr>
           <th class="checkbox-col"><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
-          <th data-column="name" class="sortable-col">File Name ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="modified" class="hide-small sortable-col">Date Modified ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploaded" class="hide-small hide-medium sortable-col">Upload Date ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="size" class="hide-small sortable-col">File Size ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploader" class="hide-small hide-medium sortable-col">Uploader ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="name" class="sortable-col">${t("file_name")} ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="modified" class="hide-small sortable-col">${t("date_modified")} ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploaded" class="hide-small hide-medium sortable-col">${t("upload_date")} ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="size" class="hide-small sortable-col">${t("file_size")} ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploader" class="hide-small hide-medium sortable-col">${t("uploader")} ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th>Actions</th>
         </tr>
       </thead>

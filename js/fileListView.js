@@ -12,7 +12,7 @@ import {
     toggleRowSelection,
     attachEnterKeyListener
 } from './domUtils.js';
-
+import { t } from './i18n.js';
 import { bindFileListContextMenu } from './fileMenu.js';
 
 export let fileData = [];
@@ -36,12 +36,12 @@ export function createViewToggleButton() {
             titleElem.parentNode.insertBefore(toggleBtn, titleElem.nextSibling);
         }
     }
-    toggleBtn.textContent = window.viewMode === "gallery" ? "Switch to Table View" : "Switch to Gallery View";
+    toggleBtn.textContent = window.viewMode === "gallery" ? t("switch_to_table_view") : t("switch_to_gallery_view");
     toggleBtn.onclick = () => {
         window.viewMode = window.viewMode === "gallery" ? "table" : "gallery";
         localStorage.setItem("viewMode", window.viewMode);
         loadFileList(window.currentFolder);
-        toggleBtn.textContent = window.viewMode === "gallery" ? "Switch to Table View" : "Switch to Gallery View";
+        toggleBtn.textContent = window.viewMode === "gallery" ? t("switch_to_table_view") : t("switch_to_gallery_view");
     };
     return toggleBtn;
 }
@@ -97,7 +97,7 @@ export function loadFileList(folderParam) {
                     renderFileTable(folder);
                 }
             } else {
-                fileListContainer.textContent = "No files found.";
+                fileListContainer.textContent = t("no_files_found");
                 updateFileActionButtons();
             }
             return data.files || [];

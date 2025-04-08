@@ -5,6 +5,7 @@ import { previewFile } from './filePreview.js';
 import { editFile } from './fileEditor.js';
 import { canEditFile, fileData } from './fileListView.js';
 import { openTagModal, openMultiTagModal } from './fileTags.js';
+import { t } from './i18n.js';
 
 export function showFileContextMenu(x, y, menuItems) {
   let menu = document.getElementById("fileContextMenu");
@@ -74,22 +75,22 @@ export function fileListContextMenuHandler(e) {
   const selected = Array.from(document.querySelectorAll("#fileList .file-checkbox:checked")).map(chk => chk.value);
   
   let menuItems = [
-    { label: "Delete Selected", action: () => { handleDeleteSelected(new Event("click")); } },
-    { label: "Copy Selected", action: () => { handleCopySelected(new Event("click")); } },
-    { label: "Move Selected", action: () => { handleMoveSelected(new Event("click")); } },
-    { label: "Download Zip", action: () => { handleDownloadZipSelected(new Event("click")); } }
+    { label: t("delete_selected"), action: () => { handleDeleteSelected(new Event("click")); } },
+    { label: t("copy_selected"), action: () => { handleCopySelected(new Event("click")); } },
+    { label: t("move_selected"), action: () => { handleMoveSelected(new Event("click")); } },
+    { label: t("download_zip"), action: () => { handleDownloadZipSelected(new Event("click")); } }
   ];
   
   if (selected.some(name => name.toLowerCase().endsWith(".zip"))) {
     menuItems.push({
-      label: "Extract Zip",
+      label: t("extract_zip"),
       action: () => { handleExtractZipSelected(new Event("click")); }
     });
   }
   
   if (selected.length > 1) {
     menuItems.push({
-      label: "Tag Selected",
+      label: t("tag_selected"),
       action: () => {
         const files = fileData.filter(f => selected.includes(f.name));
         openMultiTagModal(files);
@@ -100,7 +101,7 @@ export function fileListContextMenuHandler(e) {
     const file = fileData.find(f => f.name === selected[0]);
     
     menuItems.push({
-      label: "Preview",
+      label: t("preview"),
       action: () => {
         const folder = window.currentFolder || "root";
         const folderPath = folder === "root"
@@ -112,18 +113,18 @@ export function fileListContextMenuHandler(e) {
     
     if (canEditFile(file.name)) {
       menuItems.push({
-        label: "Edit",
+        label: t("edit"),
         action: () => { editFile(selected[0], window.currentFolder); }
       });
     }
     
     menuItems.push({
-      label: "Rename",
+      label: t("rename"),
       action: () => { renameFile(selected[0], window.currentFolder); }
     });
     
     menuItems.push({
-      label: "Tag File",
+      label: t("tag_file"),
       action: () => { openTagModal(file); }
     });
   }

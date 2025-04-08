@@ -2,6 +2,7 @@
 
 import { loadFileList } from './fileListView.js';
 import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js';
+import { t } from './i18n.js';
 
 /* ----------------------
    Helper Functions (Data/State)
@@ -112,7 +113,7 @@ function breadcrumbClickHandler(e) {
   // Update the container with sanitized breadcrumbs.
   const container = document.getElementById("fileListTitle");
   const sanitizedBreadcrumb = DOMPurify.sanitize(renderBreadcrumb(folder));
-  container.innerHTML = "Files in (" + sanitizedBreadcrumb + ")";
+  container.innerHTML = t("files_in") + " (" + sanitizedBreadcrumb + ")";
 
   expandTreePath(folder);
   document.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));

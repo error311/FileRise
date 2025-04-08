@@ -1,5 +1,27 @@
 # Changelog
 
+## Changes 4/8/2025
+
+**May have missed some stuff or could have bugs. Please report any issue you may encounter.**
+
+- **i18n Integration:**
+  - Implemented a complete internationalization (i18n) system for all user-facing texts in FileRise.
+  - Created an `i18n.js` module containing a translations object with full keys for English (en), Spanish (es), and French (fr).
+  - Updated JavaScript code to replace hard-coded strings with the `t()` translation function.
+  - Enhanced HTML and modal templates to support dynamic language translations using data attributes (data-i18n-key, data-i18n-placeholder, etc.).
+
+- **Language Dropdown & Persistence:**
+  - Added a language dropdown to the user panel modal allowing users to select their preferred language.
+  - Persisted the selected language in localStorage, ensuring that the preferred language is automatically applied on page refresh.
+  - Updated main.js to load and set the user’s language preference on DOMContentLoaded by calling `setLocale()` and `applyTranslations()`.
+
+- **Bug Fixes & Improvements:**
+  - Fixed issues with evaluation of translation function calls in template literals (ensured proper syntax with `${t("key")}`).
+  - Updated the t() function to be more defensive against missing keys.
+  - Provided instructions and code examples to ensure the language change settings are reliably saved and applied across sessions.
+
+---
+
 ## Changes 4/7/2025 v1.0.9
 
 - TOTP one time recovery code added

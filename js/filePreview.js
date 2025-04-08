@@ -1,6 +1,7 @@
 // filePreview.js
 import { escapeHTML, showToast } from './domUtils.js';
 import { fileData } from './fileListView.js';
+import { t } from './i18n.js';
 
 export function openShareModal(file, folder) {
   const existing = document.getElementById("shareModal");
@@ -12,11 +13,11 @@ export function openShareModal(file, folder) {
   modal.innerHTML = `
     <div class="modal-content share-modal-content" style="width: 600px; max-width:90vw;">
       <div class="modal-header">
-        <h3>Share File: ${escapeHTML(file.name)}</h3>
+        <h3>${t("share_file")}: ${escapeHTML(file.name)}</h3>
         <span class="close-image-modal" id="closeShareModal" title="Close">&times;</span>
       </div>
       <div class="modal-body">
-        <p>Set Expiration:</p>
+        <p>${t("set_expiration")}</p>
         <select id="shareExpiration">
           <option value="30">30 minutes</option>
           <option value="60" selected>60 minutes</option>
@@ -26,13 +27,13 @@ export function openShareModal(file, folder) {
           <option value="1440">1 Day</option>
         </select>
         <p>Password (optional):</p>
-        <input type="text" id="sharePassword" placeholder="No password by default" style="width: 100%;"/>
+        <input type="text" id="sharePassword" placeholder=${t("password_optional")} style="width: 100%;"/>
         <br>
-        <button id="generateShareLinkBtn" class="btn btn-primary" style="margin-top:10px;">Generate Share Link</button>
+        <button id="generateShareLinkBtn" class="btn btn-primary" style="margin-top:10px;">${t("generate_share_link")}</button>
         <div id="shareLinkDisplay" style="margin-top: 10px; display:none;">
-          <p>Shareable Link:</p>
+          <p>${t("shareable_link")}</p>
           <input type="text" id="shareLinkInput" readonly style="width:100%;"/>
-          <button id="copyShareLinkBtn" class="btn btn-primary" style="margin-top:5px;">Copy Link</button>
+          <button id="copyShareLinkBtn" class="btn btn-primary" style="margin-top:5px;">${t("copy_link")}</button>
         </div>
       </div>
     </div>

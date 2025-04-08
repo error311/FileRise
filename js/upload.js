@@ -3,6 +3,7 @@ import { displayFilePreview } from './filePreview.js';
 import { showToast, escapeHTML } from './domUtils.js';
 import { loadFolderTree } from './folderManager.js';
 import { loadFileList } from './fileListView.js';
+import { t } from './i18n.js';
 
 /* -----------------------------------------------------
    Helpers for Drag–and–Drop Folder Uploads (Original Code)
@@ -55,14 +56,14 @@ function setDropAreaDefault() {
   if (dropArea) {
     dropArea.innerHTML = `
       <div id="uploadInstruction" class="upload-instruction">
-        Drop files/folders here or click 'Choose files'
+       ${t("upload_instruction")}
       </div>
       <div id="uploadFileRow" class="upload-file-row">
-        <button id="customChooseBtn" type="button">Choose files</button>
+        <button id="customChooseBtn" type="button">${t("choose_files")}</button>
       </div>
       <div id="fileInfoWrapper" class="file-info-wrapper">
         <div id="fileInfoContainer" class="file-info-container">
-          <span id="fileInfoDefault">No files selected</span>
+          <span id="fileInfoDefault"> ${t("no_files_selected_default")}</span>
         </div>
       </div>
       <!-- File input for file picker (files only) -->

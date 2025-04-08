@@ -4,6 +4,7 @@
 // updating the file row display with tag badges,
 // filtering the file list by tag, and persisting tag data.
 import { escapeHTML } from './domUtils.js';
+import { t } from './i18n.js';
 
 export function openTagModal(file) {
   // Create the modal element.
@@ -13,14 +14,14 @@ export function openTagModal(file) {
   modal.innerHTML = `
     <div class="modal-content" style="width: 400px; max-width:90vw;">
       <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0;">Tag File: ${file.name}</h3>
+        <h3 style="margin:0;">${t("tag_file")}: ${file.name}</h3>
         <span id="closeTagModal" style="cursor:pointer; font-size:24px;">&times;</span>
       </div>
       <div class="modal-body" style="margin-top:10px;">
-        <label for="tagNameInput">Tag Name:</label>
+        <label for="tagNameInput">${t("tag_name")}</label>
         <input type="text" id="tagNameInput" placeholder="Enter tag name" style="width:100%; padding:5px;"/>
         <br><br>
-        <label for="tagColorInput">Tag Color:</label>
+        <label for="tagColorInput">${t("tag_name")}</label>
         <input type="color" id="tagColorInput" value="#ff0000" style="width:100%; padding:5px;"/>
         <br><br>
         <div id="customTagDropdown" style="max-height:150px; overflow-y:auto; border:1px solid #ccc; margin-top:5px; padding:5px;">
@@ -28,7 +29,7 @@ export function openTagModal(file) {
         </div>
         <br>
         <div style="text-align:right;">
-          <button id="saveTagBtn" class="btn btn-primary">Save Tag</button>
+          <button id="saveTagBtn" class="btn btn-primary">${t("save_tag")}</button>
         </div>
         <div id="currentTags" style="margin-top:10px; font-size:0.9em;">
           <!-- Existing tags will be listed here -->

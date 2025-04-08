@@ -2,18 +2,20 @@
 import { showToast, attachEnterKeyListener } from './domUtils.js';
 import { loadFileList } from './fileListView.js';
 import { formatFolderName } from './fileListView.js';
+import { t } from './i18n.js';
 
 export function handleDeleteSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
   const checkboxes = document.querySelectorAll(".file-checkbox:checked");
   if (checkboxes.length === 0) {
-    showToast("No files selected.");
+    showToast("no_files_selected");
     return;
   }
+
   window.filesToDelete = Array.from(checkboxes).map(chk => chk.value);
-  document.getElementById("deleteFilesMessage").textContent =
-    "Are you sure you want to delete " + window.filesToDelete.length + " selected file(s)?";
+  const count = window.filesToDelete.length;
+  document.getElementById("deleteFilesMessage").textContent = t("confirm_delete_files", { count: count });
   document.getElementById("deleteFilesModal").style.display = "block";
   attachEnterKeyListener("deleteFilesModal", "confirmDeleteFiles");
 }

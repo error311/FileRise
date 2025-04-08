@@ -1,5 +1,6 @@
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
+import { t, applyTranslations, setLocale } from './i18n.js';
 
 const version = "v1.0.9";
 const adminTitle = `Admin Panel <small style="font-size: 12px; color: gray;">${version}</small>`;
@@ -32,14 +33,14 @@ export function openTOTPLoginModal() {
       <div style="background: ${modalBg}; padding:20px; border-radius:8px; text-align:center; position:relative; color:${textColor};">
         <span id="closeTOTPLoginModal" style="position:absolute; top:10px; right:10px; cursor:pointer; font-size:24px;">&times;</span>
         <div id="totpSection">
-          <h3>Enter TOTP Code</h3>
+          <h3>${t("enter_totp_code")}</h3>
           <input type="text" id="totpLoginInput" maxlength="6"
                  style="font-size:24px; text-align:center; width:100%; padding:10px;"
                  placeholder="6-digit code" />
         </div>
-        <a href="#" id="toggleRecovery" style="display:block; margin-top:10px; font-size:14px;">Use Recovery Code instead</a>
+        <a href="#" id="toggleRecovery" style="display:block; margin-top:10px; font-size:14px;">${t("use_recovery_code_instead")}</a>
         <div id="recoverySection" style="display:none; margin-top:10px;">
-          <h3>Enter Recovery Code</h3>
+          <h3>${t("enter_recovery_code")}</h3>
           <input type="text" id="recoveryInput"
                  style="font-size:24px; text-align:center; width:100%; padding:10px;"
                  placeholder="Recovery code" />
@@ -168,6 +169,8 @@ export function openUserPanel() {
     transform: none;
     transition: none;
   `;
+  // Retrieve the language setting from local storage, default to English ("en")
+  const savedLanguage = localStorage.getItem("language") || "en";
   if (!userPanelModal) {
     userPanelModal = document.createElement("div");
     userPanelModal.id = "userPanelModal";
@@ -195,15 +198,29 @@ export function openUserPanel() {
               <input type="checkbox" id="userTOTPEnabled" style="vertical-align: middle;" />
             </div>
           </fieldset>
+          <fieldset style="margin-bottom: 15px;">
+            <legend>Language</legend>
+            <div class="form-group">
+              <label for="languageSelector">Select Language:</label>
+              <select id="languageSelector">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="fr">Français</option>
+              </select>
+            </div>
+          </fieldset>
         </div>
       `;
     document.body.appendChild(userPanelModal);
+    // Close button handler
     document.getElementById("closeUserPanel").addEventListener("click", () => {
       userPanelModal.style.display = "none";
     });
+    // Change Password button
     document.getElementById("openChangePasswordModalBtn").addEventListener("click", () => {
       document.getElementById("changePasswordModal").style.display = "block";
     });
+    // TOTP checkbox behavior
     const totpCheckbox = document.getElementById("userTOTPEnabled");
     totpCheckbox.checked = localStorage.getItem("userTOTPEnabled") === "true";
     totpCheckbox.addEventListener("change", function () {
@@ -228,7 +245,17 @@ export function openUserPanel() {
         })
         .catch(() => { showToast("Error updating TOTP setting."); });
     });
+    // Language dropdown initialization
+    const languageSelector = document.getElementById("languageSelector");
+    languageSelector.value = savedLanguage;
+    languageSelector.addEventListener("change", function () {
+      const selectedLanguage = this.value;
+      localStorage.setItem("language", selectedLanguage);
+      setLocale(selectedLanguage);
+      applyTranslations();
+    });
   } else {
+    // If the modal already exists, update its colors
     userPanelModal.style.backgroundColor = overlayBackground;
     const modalContent = userPanelModal.querySelector(".modal-content");
     modalContent.style.background = isDarkMode ? "#2c2c2c" : "#fff";

@@ -26,6 +26,8 @@ Upload, organize, and share files through a sleek web interface. **FileRise** is
 
 - 🎨 **Responsive UI (Dark/Light Mode):** FileRise is mobile-friendly out of the box – manage files from your phone or tablet with a responsive layout. Choose between Dark mode or Light theme, or let it follow your system preference. The interface remembers your preferences (layout, items per page, last visited folder, etc.) for a personalized experience each time.
 
+- 🌐 **Internationalization & Localization:** FileRise supports multiple languages via an integrated i18n system. Users can switch languages through a user panel dropdown, and their choice is saved in local storage for a consistent experience across sessions. Currently available in English, Spanish, and French—please report any translation issues you encounter.
+
 - 🗑️ **Trash & File Recovery:** Mistakenly deleted files? No worries – deleted items go to the Trash instead of immediate removal. Admins can restore files from Trash or empty it to free space. FileRise auto-purges old trash entries (default 3 days) to keep your storage tidy.
 
 - ⚙️ **Lightweight & Self-Contained:** FileRise runs on PHP 8.1+ with no external database required – data is stored in files (users, metadata) for simplicity. It’s a single-folder web app you can drop into any Apache/PHP server or run as a container. Docker & Unraid ready: use our pre-built image for a hassle-free setup. Memory and CPU footprint is minimal, yet the app scales to thousands of files with pagination and sorting features.

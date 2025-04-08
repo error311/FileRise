@@ -10,6 +10,7 @@ import { displayFilePreview } from './filePreview.js';
 import { loadFileList } from './fileListView.js';
 import { initFileActions, renameFile } from './fileActions.js';
 import { editFile, saveFile } from './fileEditor.js';
+import { t, applyTranslations, setLocale } from './i18n.js';
 
 function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
   return fetch('token.php', { credentials: 'include' })
@@ -55,6 +56,7 @@ function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
     });
 }
 
+
 // Expose functions for inline handlers.
 window.sendRequest = sendRequest;
 window.toggleVisibility = toggleVisibility;
@@ -67,6 +69,12 @@ window.renameFile = renameFile;
 window.currentFolder = "root";
 
 document.addEventListener("DOMContentLoaded", function () {
+  // Retrieve the saved language from localStorage; default to "en"
+  const savedLanguage = localStorage.getItem("language") || "en";
+  // Set the locale based on the saved language
+  setLocale(savedLanguage);
+  // Apply the translations to update the UI
+  applyTranslations();
   // First, load the CSRF token (with retry).
   loadCsrfTokenWithRetry().then(() => {
     // Once CSRF token is loaded, initialize authentication.
@@ -104,7 +112,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // Other DOM initialization that can happen after CSRF is ready.
     const newPasswordInput = document.getElementById("newPassword");
     if (newPasswordInput) {
-      newPasswordInput.addEventListener("input", function() {
+      newPasswordInput.addEventListener("input", function () {
         console.log("newPassword input event:", this.value);
       });
     } else {
@@ -149,10 +157,10 @@ document.addEventListener("DOMContentLoaded", function () {
       window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
         if (event.matches) {
           document.body.classList.add("dark-mode");
-          if (darkModeToggle) darkModeToggle.textContent = "Light Mode";
+          if (darkModeToggle) darkModeToggle.textContent = t("light_mode");
         } else {
           document.body.classList.remove("dark-mode");
-          if (darkModeToggle) darkModeToggle.textContent = "Dark Mode";
+          if (darkModeToggle) darkModeToggle.textContent = t("dark_mode");
         }
       });
     }
