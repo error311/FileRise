@@ -14,6 +14,7 @@ import {
 } from './domUtils.js';
 import { t } from './i18n.js';
 import { bindFileListContextMenu } from './fileMenu.js';
+import { openDownloadModal } from './fileActions.js';
 
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
@@ -284,11 +285,11 @@ export function renderGalleryView(folder) {
           <span class="gallery-file-name" style="display: block;">${escapeHTML(file.name)}</span>
           ${tagBadgesHTML}
           <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
-            <a class="btn btn-sm btn-success download-btn" 
-               href="download.php?folder=${encodeURIComponent(file.folder || 'root')}&file=${encodeURIComponent(file.name)}" 
-               title="Download">
-              <i class="material-icons">file_download</i>
-            </a>
+            <button type="button" class="btn btn-sm btn-success download-btn" 
+                onclick="openDownloadModal('${file.name}', '${file.folder || 'root'}')" 
+                title="Download">
+                <i class="material-icons">file_download</i>
+            </button>
             ${file.editable ? `
               <button class="btn btn-sm edit-btn" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
                 <i class="material-icons">edit</i>

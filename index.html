@@ -342,6 +342,28 @@
     </div> <!-- end mainColumn -->
   </div> <!-- end main-wrapper -->
 
+  <!-- Download Progress Modal -->
+  <div id="downloadProgressModal" class="modal" style="display: none;">
+    <div class="modal-content" style="text-align: center; padding: 20px;">
+      <!-- Material icon spinner with a dedicated class -->
+      <span class="material-icons download-spinner">autorenew</span>
+      <p>Preparing your download...</p>
+    </div>
+  </div>
+
+  <!-- Single File Download Modal -->
+<div id="downloadFileModal" class="modal" style="display: none;">
+  <div class="modal-content" style="text-align: center; padding: 20px;">
+    <h4>Download File</h4>
+    <p>Confirm or change the download file name:</p>
+    <input type="text" id="downloadFileNameInput" class="form-control" placeholder="Filename" />
+    <div style="margin-top: 15px; text-align: right;">
+      <button id="cancelDownloadFile" class="btn btn-secondary" onclick="document.getElementById('downloadFileModal').style.display = 'none';">Cancel</button>
+      <button id="confirmSingleDownloadButton" class="btn btn-primary" onclick="confirmSingleDownload()">Download</button>
+    </div>
+  </div>
+</div>
+
   <!-- Change Password, Add User, Remove User, Rename File, and Custom Confirm Modals (unchanged) -->
   <div id="changePasswordModal" class="modal" style="display:none;">
     <div class="modal-content" style="max-width:400px; margin:auto;">

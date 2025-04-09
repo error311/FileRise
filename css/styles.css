@@ -2065,6 +2065,20 @@ body.dark-mode .admin-panel-content label {
   animation: spin 1s linear infinite;
 }
 
+.download-spinner {
+  font-size: 48px;
+  animation: spin 2s linear infinite;
+  color: var(--download-spinner-color, #000);
+}
+
+body:not(.dark-mode) {
+  --download-spinner-color: #000;
+}
+
+body.dark-mode {
+  --download-spinner-color: #fff;
+}
+
 .rise-effect {
   transform: translateY(-20px);
   transition: transform 0.3s ease;

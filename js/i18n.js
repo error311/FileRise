@@ -135,6 +135,8 @@ const translations = {
       "upload": "Upload",
       "copy": "Copy",
       "extract": "Extract",
+      "user": "User:",
+      "password": "Password:",
   
       // Dark Mode Toggle
       "dark_mode_toggle": "Dark Mode",

@@ -8,7 +8,7 @@ import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDro
 import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
 import { displayFilePreview } from './filePreview.js';
 import { loadFileList } from './fileListView.js';
-import { initFileActions, renameFile } from './fileActions.js';
+import { initFileActions, renameFile, openDownloadModal, confirmSingleDownload } from './fileActions.js';
 import { editFile, saveFile } from './fileEditor.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
@@ -64,6 +64,8 @@ window.toggleAllCheckboxes = toggleAllCheckboxes;
 window.editFile = editFile;
 window.saveFile = saveFile;
 window.renameFile = renameFile;
+window.confirmSingleDownload = confirmSingleDownload;
+window.openDownloadModal = openDownloadModal;
 
 // Global variable for the current folder.
 window.currentFolder = "root";

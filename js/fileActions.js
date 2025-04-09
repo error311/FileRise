@@ -28,7 +28,7 @@ document.addEventListener("DOMContentLoaded", function () {
       window.filesToDelete = [];
     });
   }
-  
+
   const confirmDelete = document.getElementById("confirmDeleteFiles");
   if (confirmDelete) {
     confirmDelete.addEventListener("click", function () {
@@ -75,6 +75,81 @@ export function handleDownloadZipSelected(e) {
     input.focus();
   }, 100);
 };
+
+export function openDownloadModal(fileName, folder) {
+  // Store file details globally for the download confirmation function.
+  window.singleFileToDownload = fileName;
+  window.currentFolder = folder || "root";
+  
+  // Optionally pre-fill the file name input in the modal.
+  const input = document.getElementById("downloadFileNameInput");
+  if (input) {
+    input.value = fileName; // Use file name as-is (or modify if desired)
+  }
+  
+  // Show the single file download modal (a new modal element).
+  document.getElementById("downloadFileModal").style.display = "block";
+  
+  // Optionally focus the input after a short delay.
+  setTimeout(() => {
+    if (input) input.focus();
+  }, 100);
+}
+
+export function confirmSingleDownload() {
+  // Get the file name from the modal. Users can change it if desired.
+  let fileName = document.getElementById("downloadFileNameInput").value.trim();
+  if (!fileName) {
+    showToast("Please enter a name for the file.");
+    return;
+  }
+  
+  // Hide the download modal.
+  document.getElementById("downloadFileModal").style.display = "none";
+  // Show the progress modal (same as in your ZIP download flow).
+  document.getElementById("downloadProgressModal").style.display = "block";
+  
+  // Build the URL for download.php using GET parameters.
+  const folder = window.currentFolder || "root";
+  const downloadURL = "download.php?folder=" + encodeURIComponent(folder) +
+                      "&file=" + encodeURIComponent(window.singleFileToDownload);
+  
+  fetch(downloadURL, {
+    method: "GET",
+    credentials: "include"
+  })
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => {
+          throw new Error("Failed to download file: " + text);
+        });
+      }
+      return response.blob();
+    })
+    .then(blob => {
+      if (!blob || blob.size === 0) {
+        throw new Error("Received empty file.");
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      // Hide the progress modal.
+      document.getElementById("downloadProgressModal").style.display = "none";
+      showToast("Download started.");
+    })
+    .catch(error => {
+      // Hide progress modal and show error.
+      document.getElementById("downloadProgressModal").style.display = "none";
+      console.error("Error downloading file:", error);
+      showToast("Error downloading file: " + error.message);
+    });
+}
 
 export function handleExtractZipSelected(e) {
   if (e) {
@@ -137,7 +212,8 @@ document.addEventListener("DOMContentLoaded", function () {
       document.getElementById("downloadZipModal").style.display = "none";
     });
   }
-  
+
+  // This part remains in your confirmDownloadZip event handler:
   const confirmDownloadZip = document.getElementById("confirmDownloadZip");
   if (confirmDownloadZip) {
     confirmDownloadZip.addEventListener("click", function () {
@@ -149,7 +225,11 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!zipName.toLowerCase().endsWith(".zip")) {
         zipName += ".zip";
       }
+      // Hide the ZIP name input modal
       document.getElementById("downloadZipModal").style.display = "none";
+      // Show the progress modal here only on confirm
+      console.log("Download confirmed. Showing progress modal.");
+      document.getElementById("downloadProgressModal").style.display = "block";
       const folder = window.currentFolder || "root";
       fetch("downloadZip.php", {
         method: "POST",
@@ -181,9 +261,13 @@ document.addEventListener("DOMContentLoaded", function () {
           a.click();
           window.URL.revokeObjectURL(url);
           a.remove();
+          // Hide the progress modal after download starts
+          document.getElementById("downloadProgressModal").style.display = "none";
           showToast("Download started.");
         })
         .catch(error => {
+          // Hide the progress modal on error
+          document.getElementById("downloadProgressModal").style.display = "none";
           console.error("Error downloading zip:", error);
           showToast("Error downloading selected files as zip: " + error.message);
         });
@@ -220,12 +304,12 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
         folder.toLowerCase() !== "trash" &&
         (folder === username || folder.indexOf(username + "/") === 0)
       );
-      
+
       const rootOption = document.createElement("option");
       rootOption.value = username;
       rootOption.textContent = formatFolderName(username);
       folderSelect.appendChild(rootOption);
-      
+
       folders.forEach(folder => {
         if (folder !== username) {
           const option = document.createElement("option");
@@ -239,7 +323,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
     }
     return;
   }
-  
+
   try {
     const response = await fetch("getFolderList.php");
     let folders = await response.json();
@@ -247,12 +331,12 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
       folders = folders.map(item => item.folder);
     }
     folders = folders.filter(folder => folder !== "root" && folder.toLowerCase() !== "trash");
-    
+
     const rootOption = document.createElement("option");
     rootOption.value = "root";
     rootOption.textContent = "(Root)";
     folderSelect.appendChild(rootOption);
-    
+
     if (Array.isArray(folders) && folders.length > 0) {
       folders.forEach(folder => {
         const option = document.createElement("option");
