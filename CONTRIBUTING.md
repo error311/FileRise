@@ -26,7 +26,7 @@ Thank you for your interest in contributing to FileRise! We appreciate your help
    ```
 
 3. **Set Up a Local Environment**
-FileRise runs on a standard LAMP stack. Ensure you have PHP, Apache, and the necessary dependencies installed. For frontend development, Node.js may be required for build tasks if applicable.
+FileRise runs on a standard LAMP stack. Ensure you have PHP, Apache, and the necessary dependencies installed.
 
 4. **Configuration**
 Copy any example configuration files (if provided) and adjust them as needed for your local setup.
