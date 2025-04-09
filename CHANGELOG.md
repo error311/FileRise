@@ -1,5 +1,43 @@
 # Changelog
 
+## Folder Sharing Feature - Changelog 4/9/2025
+
+### New Endpoints
+
+- **createFolderShareLink.php:**  
+  - Generates secure, expiring share tokens for folders (with an optional password and allow-upload flag).  
+  - Stores folder share records separately from file shares in `share_folder_links.json`.  
+  - Builds share links that point to **shareFolder.php**, using a proper BASE_URL or the server’s IP when a default placeholder is detected.
+
+- **shareFolder.php:**  
+  - Serves shared folders via GET requests by reading tokens from `share_folder_links.json`.
+  - Validates token expiration and password (if set).
+  - Displays folder contents with pagination (10 items per page) and shows file sizes in megabytes.
+  - Provides navigation links (Prev, Next, and numbered pages) for folder listings.
+  - Includes an upload form (if allowed) that redirects back to the same share page after upload.
+  
+- **downloadSharedFile.php:**  
+  - A dedicated, secure download endpoint for shared files.
+  - Validates the share token and ensures the requested file is inside the shared folder.
+  - Serves files using proper MIME types and Content-Disposition headers (inline for images, attachment for others).
+
+- **uploadToSharedFolder.php:**  
+  - Handles file uploads for public folder shares.
+  - Enforces file size limits and file type whitelists.
+  - Generates unique filenames (with a unique prefix) to prevent collisions.
+  - Updates metadata for the uploaded file (upload date and sets uploader as "Outside Share").
+  - Redirects back to **shareFolder.php** after a successful upload so the file listing refreshes.
+
+### New Front-End Module
+
+- **folderShareModal.js:**  
+  - Provides a modal interface for users to generate folder share links.
+  - Includes expiration selection, optional password entry, and an allow-upload checkbox.
+  - Uses the **createFolderShareLink.php** endpoint to generate share links.
+  - Displays the generated share link with a “copy to clipboard” button.
+
+---
+
 ## Changes 4/8/2025
 
 **May have missed some stuff or could have bugs. Please report any issue you may encounter.**
@@ -27,6 +65,9 @@
 - **Single File Download Flow**
   - Modal Popup for Single File: Replaced the direct download link for single files with a modal-driven flow. When the download button is clicked, the openDownloadModal(fileName, folder) function is called. This stores the file details and shows a modal where the user can confirm (or edit) the file name.
   - Confirm Download Function: When the user clicks the Download button in the modal, the confirmSingleDownload() function is called. This function constructs a URL for download.php (using GET parameters for folder and file), fetches the file as a blob, and triggers a download using a temporary anchor element. A progress modal is also used here to give feedback during the download process.
+
+- **Zip Extraction**
+  - Reused Zip Download modal to use same progress Modal Popup with Extracting files.... text.
 
 ---
 

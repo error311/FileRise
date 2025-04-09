@@ -84,6 +84,7 @@ const translations = {
   
       // File List keys:
       "file_list_title": "Files in (Root)",
+      "files_in": "Files in",
       "delete_files": "Delete Files",
       "delete_selected_files_title": "Delete Selected Files",
       "delete_files_message": "Are you sure you want to delete the selected files?",
@@ -126,6 +127,18 @@ const translations = {
       // Rename File keys:
       "rename_file_title": "Rename File",
       "rename_file_placeholder": "Enter new file name",
+
+      // Folder Share
+      "share_folder": "Share Folder",
+      "allow_uploads": "Allow Uploads",
+      "share_link_generated": "Share Link Generated",
+      "error_generating_share_link": "Error Generating Share Link",
+
+      // Folder
+      "create_folder": "Create Folder",
+      "rename_folder": "Rename Folder",
+      "folder_share": "Share Folder",
+      "delete_folder": "Delete Folder",
   
       // Custom Confirm Modal keys:
       "yes": "Yes",
@@ -136,7 +149,14 @@ const translations = {
       "copy": "Copy",
       "extract": "Extract",
       "user": "User:",
-      "password": "Password:",
+      "unknown_error": "Unknown Error",
+      "link_copied": "Link Copied to Clipboard",
+      "minutes": "minutes",
+        "hours": "hours",
+        "days": "days",
+        "weeks": "weeks",
+        "months": "months",
+        "seconds": "seconds",
   
       // Dark Mode Toggle
       "dark_mode_toggle": "Dark Mode",

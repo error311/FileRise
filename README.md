@@ -12,17 +12,19 @@ Upload, organize, and share files through a sleek web interface. **FileRise** is
 
 ---
 
-## Features at a Glance
+## Features at a Glance or [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
 - 🚀 **Easy File Uploads:** Upload multiple files and folders via drag & drop or file picker. Supports large files with pause/resumable chunked uploads and shows real-time progress for each file. No more failed transfers – FileRise will pick up where it left off if your connection drops.
 
 - 🗂️ **File Management:** Full set of file/folder operations – move or copy files (via intuitive drag-drop or dialogs), rename items, and delete in batches. You can even download selected files as a ZIP archive or extract uploaded ZIP files server-side. Organize content with an interactive folder tree and breadcrumb navigation for quick jumps.
 
+- 🗃️ **Folder Sharing & File Sharing:** Easily share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items per page) with navigation controls, and file sizes are displayed in MB for clarity. Share files with others using one-time or expiring public links (with password protection if desired) – convenient for sending files without exposing the whole app.
+
 - 📝 **Built-in Editor & Preview:** View images, videos, audio, and PDFs inline with a preview modal – no need to download just to see them. Edit text/code files right in your browser with a CodeMirror-based editor featuring syntax highlighting and line numbers. Great for config files or notes – tweak and save changes without leaving FileRise.
 
 - 🏷️ **Tags & Search:** Categorize your files with color-coded tags (labels) and later find them easily. The global search bar filters by filename or tag, making it simple to locate that “important” document in seconds. Tag management is built-in – create, reuse, or remove tags as needed.
 
-- 🔒 **User Authentication, User Permissions & Sharing:** Secure your portal with username/password login. Supports multiple users – create user accounts (admin UI provided) for family or team members. User permissions such as User “Folder Only” feature assigns each user a dedicated folder within the root directory, named after their username, restricting them from viewing or modifying other directories. User Read Only and Disable Upload are additional permissions. FileRise also integrates with Single Sign-On (OIDC) providers (e.g., OAuth2/OIDC for Google/Authentik/Keycloak) and offers optional TOTP two-factor auth for extra security. Share files with others using one-time or expiring public links (with password protection if desired) – convenient for sending files without exposing the whole app.
+- 🔒 **User Authentication & User Permissions:** Secure your portal with username/password login. Supports multiple users – create user accounts (admin UI provided) for family or team members. User permissions such as User “Folder Only” feature assigns each user a dedicated folder within the root directory, named after their username, restricting them from viewing or modifying other directories. User Read Only and Disable Upload are additional permissions. FileRise also integrates with Single Sign-On (OIDC) providers (e.g., OAuth2/OIDC for Google/Authentik/Keycloak) and offers optional TOTP two-factor auth for extra security.
 
 - 🎨 **Responsive UI (Dark/Light Mode):** FileRise is mobile-friendly out of the box – manage files from your phone or tablet with a responsive layout. Choose between Dark mode or Light theme, or let it follow your system preference. The interface remembers your preferences (layout, items per page, last visited folder, etc.) for a personalized experience each time.
 

@@ -849,7 +849,8 @@ body:not(.dark-mode) .material-icons.pauseResumeBtn:hover {
   color: white;
 }
 
-.rename-btn .material-icons {
+.rename-btn .material-icons,
+#renameFolderBtn .material-icons {
   color: black !important;
 }
 

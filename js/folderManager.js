@@ -3,6 +3,7 @@
 import { loadFileList } from './fileListView.js';
 import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js';
 import { t } from './i18n.js';
+import { openFolderShareModal } from './folderShareModal.js';
 
 /* ----------------------
    Helper Functions (Data/State)
@@ -418,7 +419,7 @@ export async function loadFolderTree(selectedFolder) {
     localStorage.setItem("lastOpenedFolder", window.currentFolder);
     
     const titleEl = document.getElementById("fileListTitle");
-    titleEl.innerHTML = "Files in (" + renderBreadcrumb(window.currentFolder) + ")";
+    titleEl.innerHTML = t("files_in") + " (" + renderBreadcrumb(window.currentFolder) + ")";
     setupBreadcrumbDelegation();
     loadFileList(window.currentFolder);
     
@@ -442,7 +443,7 @@ export async function loadFolderTree(selectedFolder) {
         window.currentFolder = selected;
         localStorage.setItem("lastOpenedFolder", selected);
         const titleEl = document.getElementById("fileListTitle");
-        titleEl.innerHTML = "Files in (" + renderBreadcrumb(selected) + ")";
+        titleEl.innerHTML = t("files_in") + " (" + renderBreadcrumb(selected) + ")";
         setupBreadcrumbDelegation();
         loadFileList(selected);
       });
@@ -735,18 +736,22 @@ function folderManagerContextMenuHandler(e) {
   target.classList.add("selected");
   const menuItems = [
     {
-      label: "Create Folder",
+      label: t("create_folder"),
       action: () => {
         document.getElementById("createFolderModal").style.display = "block";
         document.getElementById("newFolderName").focus();
       }
     },
     {
-      label: "Rename Folder",
+      label: t("rename_folder"),
       action: () => { openRenameFolderModal(); }
     },
     {
-      label: "Delete Folder",
+      label: t("folder_share"),
+      action: () => { openFolderShareModal(); }
+    },
+    {
+      label: t("delete_folder"),
       action: () => { openDeleteFolderModal(); }
     }
   ];
@@ -783,6 +788,23 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
   });
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+  const shareFolderBtn = document.getElementById("shareFolderBtn");
+  if (shareFolderBtn) {
+    shareFolderBtn.addEventListener("click", () => {
+      const selectedFolder = window.currentFolder || "root";
+      if (!selectedFolder || selectedFolder === "root") {
+        showToast("Please select a valid folder to share.");
+        return;
+      }
+      // Call the folder share modal from the module.
+      openFolderShareModal(selectedFolder);
+    });
+  } else {
+    console.warn("shareFolderBtn element not found in the DOM.");
+  }
 });
 
 bindFolderManagerContextMenu();

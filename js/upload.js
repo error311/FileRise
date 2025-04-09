@@ -48,9 +48,6 @@ function getFilesFromDataTransferItems(items) {
   return Promise.all(promises).then(results => results.flat());
 }
 
-/* -----------------------------------------------------
-   UI Helpers (Mostly unchanged from your original code)
------------------------------------------------------ */
 function setDropAreaDefault() {
   const dropArea = document.getElementById("uploadDropArea");
   if (dropArea) {
