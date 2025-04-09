@@ -168,6 +168,16 @@ export function handleExtractZipSelected(e) {
     showToast("No zip files selected.");
     return;
   }
+  
+  // Change progress modal text to "Extracting files..."
+  const progressText = document.querySelector("#downloadProgressModal p");
+  if (progressText) {
+    progressText.textContent = "Extracting files...";
+  }
+  
+  // Show the progress modal.
+  document.getElementById("downloadProgressModal").style.display = "block";
+  
   fetch("extractZip.php", {
     method: "POST",
     credentials: "include",
@@ -182,6 +192,8 @@ export function handleExtractZipSelected(e) {
   })
     .then(response => response.json())
     .then(data => {
+      // Hide the progress modal once the request has completed.
+      document.getElementById("downloadProgressModal").style.display = "none";
       if (data.success) {
         let toastMessage = "Zip file(s) extracted successfully!";
         if (data.extractedFiles && Array.isArray(data.extractedFiles) && data.extractedFiles.length) {
@@ -194,6 +206,8 @@ export function handleExtractZipSelected(e) {
       }
     })
     .catch(error => {
+      // Hide the progress modal on error.
+      document.getElementById("downloadProgressModal").style.display = "none";
       console.error("Error extracting zip files:", error);
       showToast("Error extracting zip files.");
     });
