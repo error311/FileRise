@@ -1,6 +1,6 @@
 # Changelog
 
-## Shift Key Multi‑Selection Changes 4/10/2025
+## Shift Key Multi‑Selection Changes 4/10/2025 v1.1.1
 
 - **Implemented Range Selection:**
   - Modified the `toggleRowSelection` function so that when the Shift key is held down, all rows between the last clicked (anchor) row (stored as `window.lastSelectedFileRow`) and the currently clicked row are selected.
@@ -30,7 +30,7 @@
   - `shareFolder.php` updated to display format size.
   - Fix to prevent the filename text from overflowing its container in the gallery view.
   - Reduced header height.
-  - Create Folder changed to Material Icon `edit`
+  - Create Folder changed to Material Icon `create_new_folder`
 
 ---
 

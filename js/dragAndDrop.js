@@ -299,7 +299,7 @@ export function loadSidebarOrder() {
           modal = document.createElement('div');
           modal.className = 'header-card-modal';
           modal.style.position = 'fixed';
-          modal.style.top = '80px';
+          modal.style.top = '55px';
           modal.style.right = '80px';
           modal.style.zIndex = '11000';
           // Render the modal but initially keep it hidden.
