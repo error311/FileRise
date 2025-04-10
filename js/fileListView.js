@@ -15,6 +15,7 @@ import {
 import { t } from './i18n.js';
 import { bindFileListContextMenu } from './fileMenu.js';
 import { openDownloadModal } from './fileActions.js';
+import { openTagModal, openMultiTagModal } from './fileTags.js';
 
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
@@ -23,9 +24,63 @@ window.itemsPerPage = window.itemsPerPage || 10;
 window.currentPage = window.currentPage || 1;
 window.viewMode = localStorage.getItem("viewMode") || "table"; // "table" or "gallery"
 
-// -----------------------------
-// VIEW MODE TOGGLE BUTTON & Helpers
-// -----------------------------
+/**
+ * --- Helper Functions ---
+ */
+
+/**
+ * Convert a file size string (e.g. "456.9KB", "1.2 MB", "1024") into bytes.
+ */
+function parseSizeToBytes(sizeStr) {
+    if (!sizeStr) return 0;
+    // Remove any whitespace
+    let s = sizeStr.trim();
+    // Extract the numerical part.
+    let value = parseFloat(s);
+    // Determine if there is a unit. Convert the unit to uppercase for easier matching.
+    let upper = s.toUpperCase();
+    if (upper.includes("KB")) {
+        value *= 1024;
+    } else if (upper.includes("MB")) {
+        value *= 1024 * 1024;
+    } else if (upper.includes("GB")) {
+        value *= 1024 * 1024 * 1024;
+    }
+    return value;
+}
+
+/**
+ * Format the total bytes as a human-readable string, choosing an appropriate unit.
+ */
+function formatSize(totalBytes) {
+    if (totalBytes < 1024) {
+        return totalBytes + " Bytes";
+    } else if (totalBytes < 1024 * 1024) {
+        return (totalBytes / 1024).toFixed(2) + " KB";
+    } else if (totalBytes < 1024 * 1024 * 1024) {
+        return (totalBytes / (1024 * 1024)).toFixed(2) + " MB";
+    } else {
+        return (totalBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    }
+}
+
+/**
+ * Build the folder summary HTML using the filtered file list.
+ * This function sums the file sizes in bytes correctly, then formats the total.
+ */
+function buildFolderSummary(filteredFiles) {
+    const totalFiles = filteredFiles.length;
+    const totalBytes = filteredFiles.reduce((sum, file) => {
+        // file.size might be something like "456.9KB" or just "1024".
+        return sum + parseSizeToBytes(file.size);
+    }, 0);
+    const sizeStr = formatSize(totalBytes);
+    return `<strong>Total Files:</strong> ${totalFiles} &nbsp;|&nbsp; <strong>Total Size:</strong> ${sizeStr}`;
+}
+
+/**
+ * --- VIEW MODE TOGGLE BUTTON & Helpers ---
+ */
 export function createViewToggleButton() {
     let toggleBtn = document.getElementById("toggleViewBtn");
     if (!toggleBtn) {
@@ -58,11 +113,9 @@ export function formatFolderName(folder) {
 window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
-import { openTagModal, openMultiTagModal } from './fileTags.js';
-
-// -----------------------------
-// FILE LIST & VIEW RENDERING
-// -----------------------------
+/**
+ * --- FILE LIST & VIEW RENDERING ---
+ */
 export function loadFileList(folderParam) {
     const folder = folderParam || "root";
     const fileListContainer = document.getElementById("fileList");
@@ -80,7 +133,7 @@ export function loadFileList(folderParam) {
             return response.json();
         })
         .then(data => {
-            fileListContainer.innerHTML = "";
+            fileListContainer.innerHTML = ""; // Clear loading message.
             if (data.files && data.files.length > 0) {
                 data.files = data.files.map(file => {
                     file.fullName = (file.path || file.name).trim().toLowerCase();
@@ -92,6 +145,26 @@ export function loadFileList(folderParam) {
                     return file;
                 });
                 fileData = data.files;
+
+                // Update the file list actions area without removing existing buttons.
+                const actionsContainer = document.getElementById("fileListActions");
+                if (actionsContainer) {
+                    let summaryElem = document.getElementById("fileSummary");
+                    if (!summaryElem) {
+                        summaryElem = document.createElement("div");
+                        summaryElem.id = "fileSummary";
+                        summaryElem.style.float = "right";
+                        summaryElem.style.marginLeft = "auto";
+                        summaryElem.style.marginRight = "60px";
+                        summaryElem.style.fontSize = "0.9em";
+                        actionsContainer.appendChild(summaryElem);
+                    } else {
+                        summaryElem.style.display = "block";
+                    }
+                    summaryElem.innerHTML = buildFolderSummary(fileData);
+                }
+
+                // Render the view normally.
                 if (window.viewMode === "gallery") {
                     renderGalleryView(folder);
                 } else {
@@ -99,6 +172,10 @@ export function loadFileList(folderParam) {
                 }
             } else {
                 fileListContainer.textContent = t("no_files_found");
+                const summaryElem = document.getElementById("fileSummary");
+                if (summaryElem) {
+                    summaryElem.style.display = "none";
+                }
                 updateFileActionButtons();
             }
             return data.files || [];
@@ -115,8 +192,12 @@ export function loadFileList(folderParam) {
         });
 }
 
-export function renderFileTable(folder) {
-    const fileListContainer = document.getElementById("fileList");
+/**
+ * Update renderFileTable so that it writes its content into the provided container.
+ * If no container is provided, it defaults to the element with id "fileList".
+ */
+export function renderFileTable(folder, container) {
+    const fileListContent = container || document.getElementById("fileList");
     const searchTerm = (window.currentSearchTerm || "").toLowerCase();
     const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "10", 10);
     let currentPage = window.currentPage || 1;
@@ -126,14 +207,12 @@ export function renderFileTable(folder) {
         const tagMatch = file.tags && file.tags.some(tag => tag.name.toLowerCase().includes(searchTerm));
         return nameMatch || tagMatch;
     });
-
     const totalFiles = filteredFiles.length;
     const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
     if (currentPage > totalPages) {
         currentPage = totalPages > 0 ? totalPages : 1;
         window.currentPage = currentPage;
     }
-
     const folderPath = folder === "root"
         ? "uploads/"
         : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
@@ -147,7 +226,6 @@ export function renderFileTable(folder) {
     const startIndex = (currentPage - 1) * itemsPerPageSetting;
     const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
     let rowsHTML = "<tbody>";
-
     if (totalFiles > 0) {
         filteredFiles.slice(startIndex, endIndex).forEach((file, idx) => {
             let rowHTML = buildFileTableRow(file, folderPath);
@@ -161,15 +239,12 @@ export function renderFileTable(folder) {
                 });
                 tagBadgesHTML += "</div>";
             }
-
             rowHTML = rowHTML.replace(/(<td class="file-name-cell">)(.*?)(<\/td>)/, (match, p1, p2, p3) => {
                 return p1 + p2 + tagBadgesHTML + p3;
             });
-
             rowHTML = rowHTML.replace(/(<\/div>\s*<\/td>\s*<\/tr>)/, `<button class="share-btn btn btn-sm btn-secondary" data-file="${escapeHTML(file.name)}" title="Share">
-              <i class="material-icons">share</i>
-            </button>$1`);
-
+                <i class="material-icons">share</i>
+              </button>$1`);
             rowsHTML += rowHTML;
         });
     } else {
@@ -177,16 +252,18 @@ export function renderFileTable(folder) {
     }
     rowsHTML += "</tbody></table>";
     const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
-    fileListContainer.innerHTML = topControlsHTML + headerHTML + rowsHTML + bottomControlsHTML;
+
+    fileListContent.innerHTML = topControlsHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
     createViewToggleButton();
 
+    // Setup event listeners as before...
     const newSearchInput = document.getElementById("searchInput");
     if (newSearchInput) {
         newSearchInput.addEventListener("input", debounce(function () {
             window.currentSearchTerm = newSearchInput.value;
             window.currentPage = 1;
-            renderFileTable(folder);
+            renderFileTable(folder, container);
             setTimeout(() => {
                 const freshInput = document.getElementById("searchInput");
                 if (freshInput) {
@@ -197,21 +274,18 @@ export function renderFileTable(folder) {
             }, 0);
         }, 300));
     }
-
     document.querySelectorAll("table.table thead th[data-column]").forEach(cell => {
         cell.addEventListener("click", function () {
             const column = this.getAttribute("data-column");
             sortFiles(column, folder);
         });
     });
-
     document.querySelectorAll("#fileList .file-checkbox").forEach(checkbox => {
         checkbox.addEventListener("change", function (e) {
             updateRowHighlight(e.target);
             updateFileActionButtons();
         });
     });
-
     document.querySelectorAll(".share-btn").forEach(btn => {
         btn.addEventListener("click", function (e) {
             e.stopPropagation();
@@ -224,40 +298,34 @@ export function renderFileTable(folder) {
             }
         });
     });
-
     updateFileActionButtons();
-
-    // Add drag-and-drop support for each table row.
-    document.querySelectorAll("#fileList tbody tr").forEach(row => {
+    document.querySelectorAll("#fileListContent tbody tr").forEach(row => {
         row.setAttribute("draggable", "true");
         import('./fileDragDrop.js').then(module => {
             row.addEventListener("dragstart", module.fileDragStartHandler);
         });
     });
-
-    // Prevent clicks on these buttons from selecting the row
     document.querySelectorAll(".download-btn, .edit-btn, .rename-btn").forEach(btn => {
         btn.addEventListener("click", e => e.stopPropagation());
     });
-
-    // re‑bind context menu
     bindFileListContextMenu();
 }
 
-export function renderGalleryView(folder) {
-    const fileListContainer = document.getElementById("fileList");
+/**
+ * Similarly, update renderGalleryView to accept an optional container.
+ */
+export function renderGalleryView(folder, container) {
+    const fileListContent = container || document.getElementById("fileList");
     const searchTerm = (window.currentSearchTerm || "").toLowerCase();
     const filteredFiles = fileData.filter(file => {
         return file.name.toLowerCase().includes(searchTerm) ||
             (file.tags && file.tags.some(tag => tag.name.toLowerCase().includes(searchTerm)));
     });
-
     const folderPath = folder === "root"
         ? "uploads/"
         : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
     const gridStyle = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 10px;";
     let galleryHTML = `<div class="gallery-container" style="${gridStyle}">`;
-
     filteredFiles.forEach((file) => {
         let thumbnail;
         if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
@@ -267,7 +335,6 @@ export function renderGalleryView(folder) {
         } else {
             thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
         }
-
         let tagBadgesHTML = "";
         if (file.tags && file.tags.length > 0) {
             tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
@@ -276,13 +343,12 @@ export function renderGalleryView(folder) {
             });
             tagBadgesHTML += `</div>`;
         }
-
         galleryHTML += `<div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
         <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
           ${thumbnail}
         </div>
         <div class="gallery-info" style="margin-top: 5px;">
-          <span class="gallery-file-name" style="display: block;">${escapeHTML(file.name)}</span>
+          <span class="gallery-file-name" style="display: block; white-space: normal; overflow-wrap: break-word; word-wrap: break-word;">${escapeHTML(file.name)}</span>
           ${tagBadgesHTML}
           <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
             <button type="button" class="btn btn-sm btn-success download-btn" 
@@ -305,15 +371,10 @@ export function renderGalleryView(folder) {
         </div>
       </div>`;
     });
-
     galleryHTML += "</div>";
-
-    fileListContainer.innerHTML = galleryHTML;
-
+    fileListContent.innerHTML = galleryHTML;
     createViewToggleButton();
     updateFileActionButtons();
-
-    // Bind share button clicks
     document.querySelectorAll(".share-btn").forEach(btn => {
         btn.addEventListener("click", e => {
             e.stopPropagation();
@@ -413,7 +474,6 @@ window.changeItemsPerPage = function (newCount) {
 };
 
 // fileListView.js (bottom)
-
 window.loadFileList = loadFileList;
 window.renderFileTable = renderFileTable;
 window.renderGalleryView = renderGalleryView;

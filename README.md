@@ -12,7 +12,7 @@ Upload, organize, and share files through a sleek web interface. **FileRise** is
 
 ---
 
-## Features at a Glance or [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
+## Features at a Glance or [Full Features Wiki](https://github.com/error311/FileRise/wiki/Features)
 
 - 🚀 **Easy File Uploads:** Upload multiple files and folders via drag & drop or file picker. Supports large files with pause/resumable chunked uploads and shows real-time progress for each file. No more failed transfers – FileRise will pick up where it left off if your connection drops.
 

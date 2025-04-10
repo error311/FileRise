@@ -2135,3 +2135,26 @@ body.dark-mode .header-drop-zone.drag-active {
   font-size: 10px;
   color: #aaa;
 }
+
+/* Disable text selection on rows to prevent accidental copying when shift-clicking */
+#fileList tbody tr.clickable-row {
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none;    /* Firefox */
+  -ms-user-select: none;     /* IE10+/Edge */
+  user-select: none;         /* Standard */
+}
+
+#fileSummary {
+  color: black;
+}
+@media only screen and (max-width: 600px) {
+  #fileSummary {
+      float: none !important;
+      margin: 0 auto !important;
+      text-align: center !important;
+  }
+}
+
+body.dark-mode #fileSummary {
+  color: white;
+}

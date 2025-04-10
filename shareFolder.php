@@ -146,6 +146,24 @@ $totalPages = max(1, ceil($totalFiles / $itemsPerPage));
 $currentPage = min($page, $totalPages);
 $startIndex = ($currentPage - 1) * $itemsPerPage;
 $filesOnPage = array_slice($allFiles, $startIndex, $itemsPerPage);
+
+/**
+ * Convert file size in bytes into a human-readable string.
+ *
+ * @param int $bytes The file size in bytes.
+ * @return string The formatted size string.
+ */
+function formatBytes($bytes) {
+    if ($bytes < 1024) {
+        return $bytes . " B";
+    } elseif ($bytes < 1024 * 1024) {
+        return round($bytes / 1024, 2) . " KB";
+    } elseif ($bytes < 1024 * 1024 * 1024) {
+        return round($bytes / (1024 * 1024), 2) . " MB";
+    } else {
+        return round($bytes / (1024 * 1024 * 1024), 2) . " GB";
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -268,13 +286,13 @@ $filesOnPage = array_slice($allFiles, $startIndex, $itemsPerPage);
             <thead>
                 <tr>
                     <th>Filename</th>
-                    <th>Size (MB)</th>
+                    <th>Size</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($filesOnPage as $file):
                     $filePath = $realFolderPath . DIRECTORY_SEPARATOR . $file;
-                    $sizeMB = round(filesize($filePath) / (1024 * 1024), 2);
+                    $fileSize = formatBytes(filesize($filePath));
                     // Build download link using share token and file name.
                     $downloadLink = "downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
                     ?>
@@ -285,7 +303,7 @@ $filesOnPage = array_slice($allFiles, $startIndex, $itemsPerPage);
                                 <span class="download-icon">&#x21E9;</span>
                             </a>
                         </td>
-                        <td><?php echo $sizeMB; ?></td>
+                        <td><?php echo $fileSize; ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

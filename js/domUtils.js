@@ -223,15 +223,63 @@ export function updateRowHighlight(checkbox) {
 }
 
 export function toggleRowSelection(event, fileName) {
+  // Prevent default text selection when shift is held.
+  if (event.shiftKey) {
+    event.preventDefault();
+  }
+
+  // Ignore clicks on interactive elements.
   const targetTag = event.target.tagName.toLowerCase();
-  if (targetTag === 'a' || targetTag === 'button' || targetTag === 'input') {
+  if (["a", "button", "input"].includes(targetTag)) {
     return;
   }
+
+  // Get the clicked row and its checkbox.
   const row = event.currentTarget;
-  const checkbox = row.querySelector('.file-checkbox');
+  const checkbox = row.querySelector(".file-checkbox");
   if (!checkbox) return;
-  checkbox.checked = !checkbox.checked;
-  updateRowHighlight(checkbox);
+
+  // Get all rows in the current file list view.
+  const allRows = Array.from(document.querySelectorAll("#fileList tbody tr"));
+
+  // Helper: clear all selections (not used in this updated version).
+  const clearAllSelections = () => {
+    allRows.forEach(r => {
+      const cb = r.querySelector(".file-checkbox");
+      if (cb) {
+        cb.checked = false;
+        updateRowHighlight(cb);
+      }
+    });
+  };
+
+  // If the user is holding the Shift key, perform range selection.
+  if (event.shiftKey) {
+    // Use the last clicked row as the anchor.
+    const lastRow = window.lastSelectedFileRow || row;
+    const currentIndex = allRows.indexOf(row);
+    const lastIndex = allRows.indexOf(lastRow);
+    const start = Math.min(currentIndex, lastIndex);
+    const end = Math.max(currentIndex, lastIndex);
+
+    // If neither CTRL nor Meta is pressed, you might choose
+    // to clear existing selections. For this example we leave existing selections intact.
+    for (let i = start; i <= end; i++) {
+      const cb = allRows[i].querySelector(".file-checkbox");
+      if (cb) {
+        cb.checked = true;
+        updateRowHighlight(cb);
+      }
+    }
+  }
+  // Otherwise, for all non-shift clicks simply toggle the selected state.
+  else {
+    checkbox.checked = !checkbox.checked;
+    updateRowHighlight(checkbox);
+  }
+
+  // Update the anchor row to the row that was clicked.
+  window.lastSelectedFileRow = row;
   updateFileActionButtons();
 }
 
@@ -241,7 +289,7 @@ export function attachEnterKeyListener(modalId, buttonId) {
     // Make the modal focusable
     modal.setAttribute("tabindex", "-1");
     modal.focus();
-    modal.addEventListener("keydown", function(e) {
+    modal.addEventListener("keydown", function (e) {
       if (e.key === "Enter") {
         e.preventDefault();
         const btn = document.getElementById(buttonId);
