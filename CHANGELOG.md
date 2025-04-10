@@ -29,6 +29,8 @@
 
   - `shareFolder.php` updated to display format size.
   - Fix to prevent the filename text from overflowing its container in the gallery view.
+  - Reduced header height.
+  - Create Folder changed to Material Icon `edit`
 
 ---
 
