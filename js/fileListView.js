@@ -348,7 +348,7 @@ export function renderGalleryView(folder, container) {
           ${thumbnail}
         </div>
         <div class="gallery-info" style="margin-top: 5px;">
-          <span class="gallery-file-name" style="display: block;">${escapeHTML(file.name)}</span>
+          <span class="gallery-file-name" style="display: block; white-space: normal; overflow-wrap: break-word; word-wrap: break-word;">${escapeHTML(file.name)}</span>
           ${tagBadgesHTML}
           <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
             <button type="button" class="btn btn-sm btn-success download-btn" 
