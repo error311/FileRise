@@ -48,9 +48,12 @@ function decryptData($encryptedData, $encryptionKey)
 }
 
 // Load encryption key from environment (override in production).
-$encryptionKey = getenv('PERSISTENT_TOKENS_KEY') ?: 'default_please_change_this_key';
-if (!$encryptionKey) {
-    die('Encryption key for persistent tokens is not set.');
+$envKey = getenv('PERSISTENT_TOKENS_KEY');
+if ($envKey === false || $envKey === '') {
+    $encryptionKey = 'default_please_change_this_key';
+    error_log('WARNING: Using default encryption key. Please set PERSISTENT_TOKENS_KEY in your environment.');
+} else {
+    $encryptionKey = $envKey;
 }
 
 function loadUserPermissions($username)
