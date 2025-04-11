@@ -10,6 +10,9 @@
 - Moved change password close button to the top right of the modal.
 - Updated upload regex pattern to be Unicode‑enabled and added additional security measures. [(#19)](https://github.com/error311/FileRise/issues/19)
 - Updated filename, folder, and username regex acceptance patterns.
+- Updated robthree/twofactorauth to v3 and endroid/qr-code to v5
+- Updated TOTP integration (namespace, enum, QR provider) accordingly
+- Updated docker image from 22.04 to 24.04 <https://github.com/error311/filerise-docker>
 
 ---
 

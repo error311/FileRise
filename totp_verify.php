@@ -8,6 +8,9 @@ require_once 'config.php';
 header('Content-Type: application/json');
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';");
 
+use RobThree\Auth\Algorithm;
+use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
+
 try {
     // standardized error helper
     function respond($status, $code, $message, $data = []) {
@@ -71,7 +74,13 @@ try {
     if (isset($_SESSION['pending_login_user'])) {
         $username   = $_SESSION['pending_login_user'];
         $totpSecret = $_SESSION['pending_login_secret'];
-        $tfa        = new \RobThree\Auth\TwoFactorAuth('FileRise');
+        $tfa = new \RobThree\Auth\TwoFactorAuth(
+            new GoogleChartsQrCodeProvider(), // QR code provider
+            'FileRise',                       // issuer
+            6,                                // number of digits
+            30,                               // period in seconds
+            Algorithm::Sha1                   // Correct enum case name from your enum
+        );
 
         if (!$tfa->verifyCode($totpSecret, $code)) {
             $_SESSION['totp_failures']++;
@@ -117,7 +126,14 @@ try {
         respond('error', 500, 'TOTP secret not found. Please set up TOTP again.');
     }
 
-    $tfa = new \RobThree\Auth\TwoFactorAuth('FileRise');
+    $tfa = new \RobThree\Auth\TwoFactorAuth(
+        new GoogleChartsQrCodeProvider(), // QR code provider
+        'FileRise',                       // issuer
+        6,                                // number of digits
+        30,                               // period in seconds
+        Algorithm::Sha1                   // Correct enum case name from your enum
+    );
+    
     if (!$tfa->verifyCode($totpSecret, $code)) {
         $_SESSION['totp_failures']++;
         respond('error', 400, 'Invalid TOTP code');

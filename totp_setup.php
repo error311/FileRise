@@ -6,11 +6,8 @@ require_once 'config.php';
 
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\PngWriter;
-use Endroid\QrCode\ErrorCorrectionLevel\ErrorCorrectionLevelHigh;
-
-// For debugging purposes, you might enable error reporting temporarily:
-// ini_set('display_errors', 1);
-// error_reporting(E_ALL);
+use RobThree\Auth\Algorithm;
+use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
 
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     http_response_code(403);
@@ -108,7 +105,13 @@ function getGlobalOtpauthUrl() {
     return "";
 }
 
-$tfa = new \RobThree\Auth\TwoFactorAuth('FileRise');
+$tfa = new \RobThree\Auth\TwoFactorAuth(
+    new GoogleChartsQrCodeProvider(), // QR code provider
+    'FileRise',                       // issuer
+    6,                                // number of digits
+    30,                               // period in seconds
+    Algorithm::Sha1                   // Correct enum case name from your enum
+);
 
 // Retrieve the current TOTP secret for the user.
 $totpSecret = getUserTOTPSecret($username);
@@ -140,7 +143,6 @@ if (!empty($globalOtpauthUrl)) {
 $result = Builder::create()
     ->writer(new PngWriter())
     ->data($otpauthUrl)
-    ->errorCorrectionLevel(new ErrorCorrectionLevelHigh())
     ->build();
 
 header('Content-Type: ' . $result->getMimeType());

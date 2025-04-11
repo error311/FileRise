@@ -2,6 +2,9 @@
 require_once 'vendor/autoload.php';
 require_once 'config.php';
 
+use RobThree\Auth\Algorithm;
+use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
+
 // Only send the Content-Type header; CORS and related headers are handled via .htaccess.
 header('Content-Type: application/json');
 
@@ -197,7 +200,13 @@ if ($user !== false) {
                     ]);
                     exit();
                 } else {
-            $tfa = new \RobThree\Auth\TwoFactorAuth('FileRise');
+                    $tfa = new \RobThree\Auth\TwoFactorAuth(
+                        new GoogleChartsQrCodeProvider(), // QR code provider
+                        'FileRise',                       // issuer
+                        6,                                // number of digits
+                        30,                               // period in seconds
+                        Algorithm::Sha1                   // Correct enum case name from your enum
+                    );
             $providedCode = trim($data['totp_code']);
             if (!$tfa->verifyCode($user['totp_secret'], $providedCode)) {
                 echo json_encode(["error" => "Invalid TOTP code"]);
