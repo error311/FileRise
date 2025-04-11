@@ -65,14 +65,16 @@ if (isset($_POST['resumableChunkNumber'])) {
     $resumableFilename   = $_POST['resumableFilename'];
     
 
-if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $resumableFilename)) {
-    http_response_code(400); // Set an error HTTP status code
+// First, strip directory components.
+$resumableFilename = urldecode(basename($_POST['resumableFilename']));
+if (!preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $resumableFilename)) {
+    http_response_code(400);
     echo json_encode(["error" => "Invalid file name: " . $resumableFilename]);
     exit;
 }
     
     $folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
-    if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+    if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
         echo json_encode(["error" => "Invalid folder name"]);
         exit;
     }
@@ -173,7 +175,7 @@ if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $resumableFilename)) {
     // ------------- Full Upload (Non-chunked) -------------
     // Validate folder name input.
     $folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
-    if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+    if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
         echo json_encode(["error" => "Invalid folder name"]);
         exit;
     }
@@ -195,10 +197,12 @@ if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $resumableFilename)) {
     $metadataCollection = []; // key: folder path, value: metadata array
     $metadataChanged = [];    // key: folder path, value: boolean
     
-    $safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
+    // Use a Unicode-enabled pattern to allow special characters.
+    $safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
     
     foreach ($_FILES["file"]["name"] as $index => $fileName) {
-        $safeFileName = basename($fileName);
+        // First, ensure we only work with the base filename to avoid traversal issues.
+        $safeFileName = trim(urldecode(basename($fileName)));
         if (!preg_match($safeFileNamePattern, $safeFileName)) {
             echo json_encode(["error" => "Invalid file name: " . $fileName]);
             exit;
@@ -224,6 +228,7 @@ if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $resumableFilename)) {
                 $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR 
                             . str_replace('/', DIRECTORY_SEPARATOR, $folderPath) . DIRECTORY_SEPARATOR;
             }
+            // Reapply basename to the relativePath to get the final safe file name.
             $safeFileName = basename($relativePath);
         }
         // --- End Minimal Folder/Subfolder Logic ---

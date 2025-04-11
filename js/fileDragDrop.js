@@ -1,4 +1,4 @@
-// dragDrop.js
+// fileDragDrop.js
 import { showToast } from './domUtils.js';
 import { loadFileList } from './fileListView.js';
 

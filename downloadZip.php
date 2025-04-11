@@ -38,7 +38,7 @@ $files = $data['files'];
 if ($folder !== "root") {
     $parts = explode('/', $folder);
     foreach ($parts as $part) {
-        if (empty($part) || $part === '.' || $part === '..' || !preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $part)) {
+        if (empty($part) || $part === '.' || $part === '..' || !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $part)) {
             http_response_code(400);
             header('Content-Type: application/json');
             echo json_encode(["error" => "Invalid folder name."]);
@@ -76,7 +76,7 @@ if (empty($files)) {
 }
 
 foreach ($files as $fileName) {
-    if (!preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $fileName)) {
+    if (!preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $fileName)) {
         http_response_code(400);
         header('Content-Type: application/json');
         echo json_encode(["error" => "Invalid file name: " . $fileName]);

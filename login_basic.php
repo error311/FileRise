@@ -81,7 +81,7 @@ $username = trim($_SERVER['PHP_AUTH_USER']);
 $password = trim($_SERVER['PHP_AUTH_PW']);
 
 // Validate username format (optional)
-if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
+if (!preg_match('/^[\p{L}\p{N}_\- ]+$/u', $username)) {
     header('WWW-Authenticate: Basic realm="FileRise Login"');
     header('HTTP/1.0 401 Unauthorized');
     echo 'Invalid username format';

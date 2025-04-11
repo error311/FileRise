@@ -109,8 +109,6 @@ if (!move_uploaded_file($fileUpload['tmp_name'], $targetPath)) {
 }
 
 // --- Metadata Update for Shared Upload ---
-// We want to update metadata similarly to your normal upload.
-// Determine a key for metadata storage for the folder.
 $metadataKey = ($folder === '' || $folder === 'root') ? "root" : $folder;
 // Sanitize the metadata file name.
 $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';

@@ -132,10 +132,11 @@ function updateAuthenticatedUI(data) {
   if (data.username) {
     localStorage.setItem("username", data.username);
   }
+  /*
   if (typeof data.folderOnly !== "undefined") {
     localStorage.setItem("folderOnly", data.folderOnly ? "true" : "false");
   }
-
+*/
   const headerButtons = document.querySelector(".header-buttons");
   const firstButton = headerButtons.firstElementChild;
 
@@ -227,15 +228,29 @@ function checkAuthentication(showLoginToast = true) {
 function submitLogin(data) {
   setLastLoginData(data);
   window.__lastLoginData = data;
-sendRequest("auth.php", "POST", data, { "X-CSRF-Token": window.csrfToken })
-  .then(response => {
-    if (response.success || response.status === "ok") {
-      sessionStorage.setItem("welcomeMessage", "Welcome back, " + data.username + "!");
-      window.location.reload();
-    } else if (response.totp_required) {
-      openTOTPLoginModal();
-    } else if (response.error && response.error.includes("Too many failed login attempts")) {
-      showToast(response.error);
+  sendRequest("auth.php", "POST", data, { "X-CSRF-Token": window.csrfToken })
+    .then(response => {
+      if (response.success || response.status === "ok") {
+        sessionStorage.setItem("welcomeMessage", "Welcome back, " + data.username + "!");
+        // Fetch and update permissions, then reload.
+        sendRequest("getUserPermissions.php", "GET")
+          .then(permissionData => {
+            if (permissionData && typeof permissionData === "object") {
+              localStorage.setItem("folderOnly", permissionData.folderOnly ? "true" : "false");
+              localStorage.setItem("readOnly", permissionData.readOnly ? "true" : "false");
+              localStorage.setItem("disableUpload", permissionData.disableUpload ? "true" : "false");
+            }
+          })
+          .catch(() => {
+            // if fetching permissions fails.
+          })
+          .finally(() => {
+            window.location.reload();
+          });
+      } else if (response.totp_required) {
+        openTOTPLoginModal();
+      } else if (response.error && response.error.includes("Too many failed login attempts")) {
+        showToast(response.error);
         const loginButton = document.getElementById("authForm").querySelector("button[type='submit']");
         if (loginButton) {
           loginButton.disabled = true;
@@ -293,7 +308,7 @@ function loadUserList() {
         closeRemoveUserModal();
       }
     })
-    .catch(() => {});
+    .catch(() => { });
 }
 window.loadUserList = loadUserList;
 
@@ -320,7 +335,7 @@ function initAuth() {
       method: "POST",
       credentials: "include",
       headers: { "X-CSRF-Token": window.csrfToken }
-    }).then(() => window.location.reload(true)).catch(() => {});
+    }).then(() => window.location.reload(true)).catch(() => { });
   });
   document.getElementById("addUserBtn").addEventListener("click", function () {
     resetUserForm();
@@ -386,7 +401,7 @@ function initAuth() {
           showToast("Error: " + (data.error || "Could not remove user"));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   });
   document.getElementById("cancelRemoveUserBtn").addEventListener("click", closeRemoveUserModal);
   document.getElementById("changePasswordBtn").addEventListener("click", function () {

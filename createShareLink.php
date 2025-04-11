@@ -9,13 +9,23 @@ if (!$input) {
     exit;
 }
 
+$username = $_SESSION['username'] ?? '';
+$userPermissions = loadUserPermissions($username);
+if ($username) {
+    $userPermissions = loadUserPermissions($username);
+    if (isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        echo json_encode(["error" => "Read-only users are not allowed to create share files."]);
+        exit();
+    }
+}
+
 $folder = isset($input['folder']) ? trim($input['folder']) : "";
 $file = isset($input['file']) ? basename($input['file']) : "";
 $expirationMinutes = isset($input['expirationMinutes']) ? intval($input['expirationMinutes']) : 60;
 $password = isset($input['password']) ? $input['password'] : "";
 
 // Validate folder using regex.
-if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }

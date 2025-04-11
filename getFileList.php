@@ -14,7 +14,7 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
 
 $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
 // Allow only safe characters in the folder parameter (letters, numbers, underscores, dashes, spaces, and forward slashes).
-if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }
@@ -53,7 +53,7 @@ $files = array_values(array_diff(scandir($directory), array('.', '..')));
 $fileList = [];
 
 // Define a safe file name pattern: letters, numbers, underscores, dashes, dots, parentheses, and spaces.
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
+$safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
 
 foreach ($files as $file) {
     // Skip hidden files (those that begin with a dot)

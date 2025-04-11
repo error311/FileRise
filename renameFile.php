@@ -40,7 +40,7 @@ if (!$data || !isset($data['folder']) || !isset($data['oldName']) || !isset($dat
 
 $folder = trim($data['folder']) ?: 'root';
 // For subfolders, allow letters, numbers, underscores, dashes, spaces, and forward slashes.
-if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
     echo json_encode(["error" => "Invalid folder name"]);
     exit;
 }
@@ -49,7 +49,7 @@ $oldName = basename(trim($data['oldName']));
 $newName = basename(trim($data['newName']));
 
 // Validate file names: allow letters, numbers, underscores, dashes, dots, parentheses, and spaces.
-if (!preg_match('/^[A-Za-z0-9_\-\. \(\)]+$/', $oldName) || !preg_match('/^[A-Za-z0-9_\-\. \(\)]+$/', $newName)) {
+if (!preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $oldName) || !preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $newName)) {
     echo json_encode(["error" => "Invalid file name."]);
     exit;
 }

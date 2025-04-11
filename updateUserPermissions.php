@@ -40,16 +40,39 @@ if (file_exists($permissionsFile)) {
     $existingPermissions = [];
 }
 
+// Load user roles from the users file (similar to getUsers.php)
+$usersFile = USERS_DIR . USERS_FILE;
+$userRoles = [];
+if (file_exists($usersFile)) {
+    $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $parts = explode(':', trim($line));
+        if (count($parts) >= 3) {
+            // Validate username format:
+            if (preg_match('/^[\p{L}\p{N}_\- ]+$/u', $parts[0])) {
+                // Use a lowercase key for consistency.
+                $userRoles[strtolower($parts[0])] = trim($parts[2]);
+            }
+        }
+    }
+}
+
 // Loop through each permission update.
 foreach ($permissions as $perm) {
     // Ensure username is provided.
     if (!isset($perm['username'])) continue;
     $username = $perm['username'];
+    
+    // Look up the user's role from the users file.
+    $role = isset($userRoles[strtolower($username)]) ? $userRoles[strtolower($username)] : null;
+    
     // Skip updating permissions for admin users.
-    if (strtolower($username) === "admin") continue;
+    if ($role === "1") {
+        continue;
+    }
     
     // Update permissions: default any missing value to false.
-    $existingPermissions[$username] = [
+    $existingPermissions[strtolower($username)] = [
         'folderOnly'    => isset($perm['folderOnly']) ? (bool)$perm['folderOnly'] : false,
         'readOnly'      => isset($perm['readOnly']) ? (bool)$perm['readOnly'] : false,
         'disableUpload' => isset($perm['disableUpload']) ? (bool)$perm['disableUpload'] : false

@@ -50,7 +50,7 @@ if ($folderName === 'root') {
 }
 
 // Allow letters, numbers, underscores, dashes, spaces, and forward slashes.
-if (!preg_match('/^[A-Za-z0-9_\- \/]+$/', $folderName)) {
+if (!preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folderName)) {
     echo json_encode(['success' => false, 'error' => 'Invalid folder name.']);
     exit;
 }

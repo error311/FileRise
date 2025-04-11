@@ -17,7 +17,7 @@ if (file_exists($usersFile)) {
         $parts = explode(':', trim($line));
         if (count($parts) >= 3) {
             // Validate username format:
-            if (preg_match('/^[A-Za-z0-9_\- ]+$/', $parts[0])) {
+            if (preg_match('/^[\p{L}\p{N}_\- ]+$/u', $parts[0])) {
                 $users[] = [
                     "username" => $parts[0],
                     "role" => trim($parts[2])

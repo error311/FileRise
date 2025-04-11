@@ -299,7 +299,7 @@ export function renderFileTable(folder, container) {
         });
     });
     updateFileActionButtons();
-    document.querySelectorAll("#fileListContent tbody tr").forEach(row => {
+    document.querySelectorAll("#fileList tbody tr").forEach(row => {
         row.setAttribute("draggable", "true");
         import('./fileDragDrop.js').then(module => {
             row.addEventListener("dragstart", module.fileDragStartHandler);

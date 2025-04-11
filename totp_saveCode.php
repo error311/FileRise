@@ -29,7 +29,7 @@ if (empty($_SESSION['username'])) {
 
 // 4) Validate username format
 $userId = $_SESSION['username'];
-if (!preg_match('/^[A-Za-z0-9_\-]+$/', $userId)) {
+if (!preg_match('/^[\p{L}\p{N}_\- ]+$/u', $userId)) {
     http_response_code(400);
     error_log("totp_saveCode: invalid username format: {$userId}");
     exit(json_encode(['status'=>'error','message'=>'Invalid user identifier']));

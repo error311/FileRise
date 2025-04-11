@@ -17,14 +17,12 @@ if (!isset($_POST['folder'])) {
     exit;
 }
 
-$folder = $_POST['folder'];
-// Validate the folder name (only alphanumerics, dashes allowed)
-if (!preg_match('/^resumable_[A-Za-z0-9\-]+$/', $folder)) {
+$folder = urldecode($_POST['folder']);
+if (!preg_match('/^resumable_[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
     echo json_encode(["error" => "Invalid folder name"]);
     http_response_code(400);
     exit;
 }
-
 $tempDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
 
 // If the folder doesn't exist, simply return success.

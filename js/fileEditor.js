@@ -1,4 +1,4 @@
-// editor.js
+// fileEditor.js
 import { escapeHTML, showToast } from './domUtils.js';
 import { loadFileList } from './fileListView.js';
 import { t } from './i18n.js';

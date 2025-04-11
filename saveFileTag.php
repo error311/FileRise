@@ -20,6 +20,16 @@ if (!isset($headers['X-CSRF-Token']) || $headers['X-CSRF-Token'] !== $_SESSION['
     exit;
 }
 
+$username = $_SESSION['username'] ?? '';
+$userPermissions = loadUserPermissions($username);
+if ($username) {
+    $userPermissions = loadUserPermissions($username);
+    if (isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        echo json_encode(["error" => "Read-only users are not allowed to file tags"]);
+        exit();
+    }
+}
+
 // Retrieve and sanitize input.
 $data = json_decode(file_get_contents('php://input'), true);
 $file = isset($data['file']) ? trim($data['file']) : '';
@@ -77,7 +87,7 @@ if ($file === "global") {
 }
 
 // Validate folder name.
-if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }

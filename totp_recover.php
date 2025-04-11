@@ -32,7 +32,7 @@ if (!$userId) {
 }
 
 // ——— Validate userId format ———
-if (!preg_match('/^[A-Za-z0-9_\-]+$/', $userId)) {
+if (!preg_match('/^[\p{L}\p{N}_\- ]+$/u', $userId)) {
     http_response_code(400);
     error_log("Invalid userId format: {$userId}");
     exit(json_encode(['status'=>'error','message'=>'Invalid user identifier']));

@@ -44,7 +44,7 @@ $destinationFolder = trim($data['destination']);
 $files = $data['files'];
 
 // Validate folder names: allow letters, numbers, underscores, dashes, spaces, and forward slashes.
-$folderPattern = '/^[A-Za-z0-9_\- \/]+$/';
+$folderPattern = '/^[\p{L}\p{N}_\-\s\/\\\\]+$/u';
 if ($sourceFolder !== 'root' && !preg_match($folderPattern, $sourceFolder)) {
     echo json_encode(["error" => "Invalid source folder name."]);
     exit;
@@ -104,7 +104,7 @@ $destMetadata = file_exists($destMetaFile) ? json_decode(file_get_contents($dest
 $errors = [];
 
 // Define a safe file name pattern: letters, numbers, underscores, dashes, dots, parentheses, and spaces.
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
+$safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
 
 foreach ($files as $fileName) {
     // Save the original name for metadata lookup.

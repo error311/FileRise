@@ -1,5 +1,18 @@
 # Changelog
 
+## Changes 4/11/2025
+
+- Fixed fileDragDrop issue from previous update.
+- Fixed User Panel height changing unexpectedly on mouse over.
+- Improved JS file comments for better documentation.
+- Fixed userPermissions not updating after initial setting.
+- Disabled folder and file sharing for readOnly users.
+- Moved change password close button to the top right of the modal.
+- Updated upload regex pattern to be Unicode‑enabled and added additional security measures. [(#19)](https://github.com/error311/FileRise/issues/19)
+- Updated filename, folder, and username regex acceptance patterns.
+
+---
+
 ## Shift Key Multi‑Selection Changes 4/10/2025 v1.1.1
 
 - **Implemented Range Selection:**

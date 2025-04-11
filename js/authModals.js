@@ -162,9 +162,9 @@ export function openUserPanel() {
     max-width: 600px;
     width: 90%;
     border-radius: 8px;
-    position: relative;
+    position: fixed;
     overflow-y: auto;
-    max-height: 90vh;
+    max-height: 350px !important;
     border: ${isDarkMode ? "1px solid #444" : "1px solid #ccc"};
     transform: none;
     transition: none;
@@ -187,7 +187,7 @@ export function openUserPanel() {
         z-index: 3000;
       `;
     userPanelModal.innerHTML = `
-        <div class="modal-content" style="${modalContentStyles}">
+        <div class="modal-content user-panel-content" style="${modalContentStyles}">
           <span id="closeUserPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
           <h3>User Panel (${username})</h3>
           <button type="button" id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom: 15px;">Change Password</button>
@@ -800,12 +800,18 @@ function loadUserPermissionsList() {
             if ((user.role && user.role === "1") || user.username.toLowerCase() === "admin") return;
 
             // Use stored permissions if available; otherwise fall back to localStorage defaults.
-            const defaultPerm = {
-              folderOnly: localStorage.getItem("folderOnly") === "true",
-              readOnly: localStorage.getItem("readOnly") === "true",
-              disableUpload: localStorage.getItem("disableUpload") === "true"
-            };
-            const userPerm = (permissionsData && typeof permissionsData === "object" && permissionsData[user.username]) || defaultPerm;
+const defaultPerm = {
+  folderOnly: false,
+  readOnly: false,
+  disableUpload: false,
+};
+
+// Normalize the username key to match server storage (e.g., lowercase)
+const usernameKey = user.username.toLowerCase();
+
+const userPerm = (permissionsData && typeof permissionsData === "object" && (usernameKey in permissionsData))
+    ? permissionsData[usernameKey]
+    : defaultPerm;
 
             // Create a row for the user.
             const row = document.createElement("div");

@@ -50,7 +50,7 @@ if (empty($files)) {
 if ($folder !== "root") {
     $parts = explode('/', $folder);
     foreach ($parts as $part) {
-        if (empty($part) || $part === '.' || $part === '..' || !preg_match('/^[A-Za-z0-9_\-\.\(\) ]+$/', $part)) {
+        if (empty($part) || $part === '.' || $part === '..' || !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $part)) {
             http_response_code(400);
             echo json_encode(["error" => "Invalid folder name."]);
             exit;
@@ -92,7 +92,7 @@ $destMetadata = file_exists($destMetaFile) ? json_decode(file_get_contents($dest
 $errors = [];
 $allSuccess = true;
 $extractedFiles = array(); // Array to collect names of extracted files
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
+$safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
 
 // ---------- Process Each File ----------
 foreach ($files as $zipFileName) {

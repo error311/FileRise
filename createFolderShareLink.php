@@ -10,6 +10,16 @@ if (!$input) {
     exit;
 }
 
+$username = $_SESSION['username'] ?? '';
+$userPermissions = loadUserPermissions($username);
+if ($username) {
+    $userPermissions = loadUserPermissions($username);
+    if (isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        echo json_encode(["error" => "Read-only users are not allowed to create shared folders."]);
+        exit();
+    }
+}
+
 $folder = isset($input['folder']) ? trim($input['folder']) : "";
 $expirationMinutes = isset($input['expirationMinutes']) ? intval($input['expirationMinutes']) : 60;
 $password = isset($input['password']) ? $input['password'] : "";
@@ -17,7 +27,7 @@ $allowUpload = isset($input['allowUpload']) ? intval($input['allowUpload']) : 0;
 
 // Validate folder name using regex.
 // Allow letters, numbers, underscores, hyphens, spaces and slashes.
-if ($folder !== 'root' && !preg_match('/^[A-Za-z0-9_\- \/]+$/', $folder)) {
+if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }

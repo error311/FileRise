@@ -62,7 +62,7 @@ $deletedFiles = [];
 $errors = [];
 
 // Define a safe file name pattern.
-$safeFileNamePattern = '/^[A-Za-z0-9_\-\.\(\) ]+$/';
+$safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
 
 foreach ($filesToDelete as $trashName) {
     $trashName = trim($trashName);

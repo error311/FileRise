@@ -1,4 +1,4 @@
-// contextMenu.js
+// fileMenu.js
 import { updateRowHighlight, showToast } from './domUtils.js';
 import { handleDeleteSelected, handleCopySelected, handleMoveSelected, handleDownloadZipSelected, handleExtractZipSelected, renameFile } from './fileActions.js';
 import { previewFile } from './filePreview.js';
