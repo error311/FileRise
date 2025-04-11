@@ -20,7 +20,7 @@ function getSubfolders($dir, $relative = '') {
     $folders = [];
     $items = scandir($dir);
     // Allow letters, numbers, underscores, dashes, and spaces in folder names.
-    $safeFolderNamePattern = '/^[\p{L}\p{N}_\-\s\/\\\\]+$/u';
+    $safeFolderNamePattern = REGEX_FOLDER_NAME;
     foreach ($items as $item) {
         if ($item === '.' || $item === '..') continue;
         if (!preg_match($safeFolderNamePattern, $item)) {

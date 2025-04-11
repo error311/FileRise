@@ -27,7 +27,7 @@ $allowUpload = isset($input['allowUpload']) ? intval($input['allowUpload']) : 0;
 
 // Validate folder name using regex.
 // Allow letters, numbers, underscores, hyphens, spaces and slashes.
-if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }

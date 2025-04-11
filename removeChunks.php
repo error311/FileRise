@@ -18,11 +18,13 @@ if (!isset($_POST['folder'])) {
 }
 
 $folder = urldecode($_POST['folder']);
-if (!preg_match('/^resumable_[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+$regex = "/^resumable_" . PATTERN_FOLDER_NAME . "$/u";  // full regex pattern
+if (!preg_match($regex, $folder)) {
     echo json_encode(["error" => "Invalid folder name"]);
     http_response_code(400);
     exit;
 }
+
 $tempDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
 
 // If the folder doesn't exist, simply return success.

@@ -48,7 +48,7 @@ $oldFolder = trim($input['oldFolder']);
 $newFolder = trim($input['newFolder']);
 
 // Validate folder names
-if (!preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $oldFolder) || !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $newFolder)) {
+if (!preg_match(REGEX_FOLDER_NAME, $oldFolder) || !preg_match(REGEX_FOLDER_NAME, $newFolder)) {
     echo json_encode(['success' => false, 'error' => 'Invalid folder name(s).']);
     exit;
 }

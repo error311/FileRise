@@ -48,7 +48,7 @@ $folder = isset($data["folder"]) ? trim($data["folder"]) : "root";
 
 // If a subfolder is provided, validate it.
 // Allow letters, numbers, underscores, dashes, spaces, and forward slashes.
-if ($folder !== "root" && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+if ($folder !== "root" && !preg_match(REGEX_FOLDER_NAME, $folder)) {
     echo json_encode(["error" => "Invalid folder name"]);
     exit;
 }

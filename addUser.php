@@ -49,7 +49,7 @@ if (!$newUsername || !$newPassword) {
 }
 
 // Validate username using preg_match (allow letters, numbers, underscores, dashes, and spaces).
-if (!preg_match('/^[\p{L}\p{N}_\- ]+$/u', $newUsername)) {
+if (!preg_match(REGEX_USER, $newUsername)) {
     echo json_encode(["error" => "Invalid username. Only letters, numbers, underscores, dashes, and spaces are allowed."]);
     exit;
 }

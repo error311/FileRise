@@ -45,13 +45,13 @@ $folderName = trim($input['folderName']);
 $parent = isset($input['parent']) ? trim($input['parent']) : "";
 
 // Basic sanitation: allow only letters, numbers, underscores, dashes, and spaces in folderName
-if (!preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folderName)) {
+if (!preg_match(REGEX_FOLDER_NAME, $folderName)) {
     echo json_encode(['success' => false, 'error' => 'Invalid folder name.']);
     exit;
 }
 
 // Optionally, sanitize the parent folder if needed.
-if ($parent && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $parent)) {
+if ($parent && !preg_match(REGEX_FOLDER_NAME, $parent)) {
     echo json_encode(['success' => false, 'error' => 'Invalid parent folder name.']);
     exit;
 }

@@ -67,14 +67,14 @@ if (isset($_POST['resumableChunkNumber'])) {
 
 // First, strip directory components.
 $resumableFilename = urldecode(basename($_POST['resumableFilename']));
-if (!preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $resumableFilename)) {
+if (!preg_match(REGEX_FILE_NAME, $resumableFilename)) {
     http_response_code(400);
     echo json_encode(["error" => "Invalid file name: " . $resumableFilename]);
     exit;
 }
     
     $folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
-    if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+    if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
         echo json_encode(["error" => "Invalid folder name"]);
         exit;
     }
@@ -175,7 +175,7 @@ if (!preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $resumableFilename)) {
     // ------------- Full Upload (Non-chunked) -------------
     // Validate folder name input.
     $folder = isset($_POST['folder']) ? trim($_POST['folder']) : 'root';
-    if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+    if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
         echo json_encode(["error" => "Invalid folder name"]);
         exit;
     }
@@ -198,7 +198,7 @@ if (!preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $resumableFilename)) {
     $metadataChanged = [];    // key: folder path, value: boolean
     
     // Use a Unicode-enabled pattern to allow special characters.
-    $safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
+    $safeFileNamePattern = REGEX_FILE_NAME
     
     foreach ($_FILES["file"]["name"] as $index => $fileName) {
         // First, ensure we only work with the base filename to avoid traversal issues.

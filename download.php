@@ -14,7 +14,7 @@ $file = isset($_GET['file']) ? basename($_GET['file']) : '';
 $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
 
 // Validate file name (allowing letters, numbers, underscores, dashes, dots, and parentheses)
-if (!preg_match('/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u', $file)) {
+if (!preg_match(REGEX_FILE_NAME, $file)) {
     http_response_code(400);
     echo json_encode(["error" => "Invalid file name."]);
     exit;

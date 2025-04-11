@@ -11,6 +11,10 @@ define('TRASH_DIR', UPLOAD_DIR . 'trash/');
 define('TIMEZONE', 'America/New_York');
 define('DATE_TIME_FORMAT', 'm/d/y  h:iA');
 define('TOTAL_UPLOAD_SIZE', '5G');
+define('REGEX_FOLDER_NAME', '/^[\p{L}\p{N}_\-\s\/\\\\]+$/u');
+define('PATTERN_FOLDER_NAME', '[\p{L}\p{N}_\-\s\/\\\\]+');
+define('REGEX_FILE_NAME', '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u');
+define('REGEX_USER', '/^[\p{L}\p{N}_\- ]+$/u');
 
 date_default_timezone_set(TIMEZONE);
 

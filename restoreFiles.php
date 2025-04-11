@@ -53,7 +53,7 @@ if (!isset($data['files']) || !is_array($data['files'])) {
 }
 
 // Define a safe file name pattern.
-$safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
+$safeFileNamePattern = REGEX_FILE_NAME;
 
 $restoredItems = [];
 $errors = [];

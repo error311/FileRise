@@ -69,7 +69,7 @@ if (!isset($data['files']) || !is_array($data['files'])) {
 $folder = isset($data['folder']) ? trim($data['folder']) : 'root';
 
 // Validate folder: allow letters, numbers, underscores, dashes, spaces, and forward slashes
-if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }
@@ -96,7 +96,7 @@ $movedFiles = [];
 $errors = [];
 
 // Define a safe file name pattern: allow letters, numbers, underscores, dashes, dots, and spaces.
-$safeFileNamePattern = '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u';
+$safeFileNamePattern = REGEX_FILE_NAME;
 
 foreach ($data['files'] as $fileName) {
     $basename = basename(trim($fileName));

@@ -49,7 +49,7 @@ if (file_exists($usersFile)) {
         $parts = explode(':', trim($line));
         if (count($parts) >= 3) {
             // Validate username format:
-            if (preg_match('/^[\p{L}\p{N}_\- ]+$/u', $parts[0])) {
+            if (preg_match(REGEX_USER, $parts[0])) {
                 // Use a lowercase key for consistency.
                 $userRoles[strtolower($parts[0])] = trim($parts[2]);
             }

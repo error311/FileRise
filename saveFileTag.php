@@ -87,7 +87,7 @@ if ($file === "global") {
 }
 
 // Validate folder name.
-if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }

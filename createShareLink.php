@@ -25,7 +25,7 @@ $expirationMinutes = isset($input['expirationMinutes']) ? intval($input['expirat
 $password = isset($input['password']) ? $input['password'] : "";
 
 // Validate folder using regex.
-if ($folder !== 'root' && !preg_match('/^[\p{L}\p{N}_\-\s\/\\\\]+$/u', $folder)) {
+if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
     echo json_encode(["error" => "Invalid folder name."]);
     exit;
 }

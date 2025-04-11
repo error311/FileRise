@@ -30,7 +30,7 @@ if (!$usernameToRemove) {
 }
 
 // Optional: Validate the username format (allow letters, numbers, underscores, dashes, and spaces)
-if (!preg_match('/^[\p{L}\p{N}_\- ]+$/u', $usernameToRemove)) {
+if (!preg_match(REGEX_USER, $usernameToRemove)) {
     echo json_encode(["error" => "Invalid username format"]);
     exit;
 }
