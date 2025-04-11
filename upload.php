@@ -198,7 +198,7 @@ if (!preg_match(REGEX_FILE_NAME, $resumableFilename)) {
     $metadataChanged = [];    // key: folder path, value: boolean
     
     // Use a Unicode-enabled pattern to allow special characters.
-    $safeFileNamePattern = REGEX_FILE_NAME
+    $safeFileNamePattern = REGEX_FILE_NAME;
     
     foreach ($_FILES["file"]["name"] as $index => $fileName) {
         // First, ensure we only work with the base filename to avoid traversal issues.
