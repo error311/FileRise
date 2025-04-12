@@ -2,7 +2,7 @@ import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.
 import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
-const version = "v1.1.1";
+const version = "v1.1.2";
 const adminTitle = `Admin Panel <small style="font-size: 12px; color: gray;">${version}</small>`;
 
 let lastLoginData = null;
