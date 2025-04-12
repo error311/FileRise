@@ -5,7 +5,7 @@ const translations = {
       "no_files_selected": "No files selected.",
       "confirm_delete_files": "Are you sure you want to delete {count} selected file(s)?",
       "element_not_found": "Element with id \"{id}\" not found.",
-      "search_placeholder": "Search files or tag...",
+      "search_placeholder": "Search files, tags, or uploader...",
       "file_name": "File Name",
       "date_modified": "Date Modified",
       "upload_date": "Upload Date",

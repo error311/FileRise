@@ -177,6 +177,26 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 
 ---
 
+## Dependencies
+
+### PHP Libraries
+
+- **[jumbojett/openid-connect-php](https://github.com/jumbojett/OpenID-Connect-PHP)** (v^1.0.0)
+- **[phpseclib/phpseclib](https://github.com/phpseclib/phpseclib)** (v~3.0.7)
+- **[robthree/twofactorauth](https://github.com/RobThree/TwoFactorAuth)** (v^3.0)
+- **[endroid/qr-code](https://github.com/endroid/qr-code)** (v^5.0)
+
+### Client-Side Libraries
+
+- **Google Fonts** – [Roboto](https://fonts.google.com/specimen/Roboto) and **Material Icons** ([Google Material Icons](https://fonts.google.com/icons))
+- **[Bootstrap](https://getbootstrap.com/)** (v4.5.2)
+- **[CodeMirror](https://codemirror.net/)** (v5.65.5) – For code editing functionality.
+- **[Resumable.js](http://www.resumablejs.com/)** (v1.1.0) – For file uploads.
+- **[DOMPurify](https://github.com/cure53/DOMPurify)** (v2.4.0) – For sanitizing HTML.
+- **[Fuse.js](https://fusejs.io/)** (v6.6.2) – For indexed, fuzzy searching.
+
+---
+
 ## License
 
 This project is open-source under the MIT License. That means you’re free to use, modify, and distribute **FileRise**, with attribution. We hope you find it useful and contribute back!

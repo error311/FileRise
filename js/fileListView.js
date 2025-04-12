@@ -33,11 +33,8 @@ window.viewMode = localStorage.getItem("viewMode") || "table"; // "table" or "ga
  */
 function parseSizeToBytes(sizeStr) {
     if (!sizeStr) return 0;
-    // Remove any whitespace
     let s = sizeStr.trim();
-    // Extract the numerical part.
     let value = parseFloat(s);
-    // Determine if there is a unit. Convert the unit to uppercase for easier matching.
     let upper = s.toUpperCase();
     if (upper.includes("KB")) {
         value *= 1024;
@@ -50,7 +47,7 @@ function parseSizeToBytes(sizeStr) {
 }
 
 /**
- * Format the total bytes as a human-readable string, choosing an appropriate unit.
+ * Format the total bytes as a human-readable string.
  */
 function formatSize(totalBytes) {
     if (totalBytes < 1024) {
@@ -66,16 +63,31 @@ function formatSize(totalBytes) {
 
 /**
  * Build the folder summary HTML using the filtered file list.
- * This function sums the file sizes in bytes correctly, then formats the total.
  */
 function buildFolderSummary(filteredFiles) {
     const totalFiles = filteredFiles.length;
     const totalBytes = filteredFiles.reduce((sum, file) => {
-        // file.size might be something like "456.9KB" or just "1024".
         return sum + parseSizeToBytes(file.size);
     }, 0);
     const sizeStr = formatSize(totalBytes);
     return `<strong>Total Files:</strong> ${totalFiles} &nbsp;|&nbsp; <strong>Total Size:</strong> ${sizeStr}`;
+}
+
+/**
+ * --- Fuse.js Search Helper ---
+ * Uses Fuse.js to perform a fuzzy search on fileData.
+ * Searches over file name, uploader, and tag names.
+ */
+function searchFiles(searchTerm) {
+    if (!searchTerm) return fileData;
+    // Define search options – adjust threshold as needed.
+    const options = {
+        keys: ['name', 'uploader', 'tags.name'],
+        threshold: 0.3
+    };
+    const fuse = new Fuse(fileData, options);
+    // Fuse returns an array of results where each result has an "item" property.
+    return fuse.search(searchTerm).map(result => result.item);
 }
 
 /**
@@ -134,7 +146,15 @@ export function loadFileList(folderParam) {
         })
         .then(data => {
             fileListContainer.innerHTML = ""; // Clear loading message.
-            if (data.files && data.files.length > 0) {
+            if (data.files && Object.keys(data.files).length > 0) {
+                // In case the returned "files" is an object instead of an array, transform it.
+                if (!Array.isArray(data.files)) {
+                    data.files = Object.entries(data.files).map(([name, meta]) => {
+                        meta.name = name;
+                        return meta;
+                    });
+                }
+                // Process each file – add computed properties.
                 data.files = data.files.map(file => {
                     file.fullName = (file.path || file.name).trim().toLowerCase();
                     file.editable = canEditFile(file.name);
@@ -146,7 +166,7 @@ export function loadFileList(folderParam) {
                 });
                 fileData = data.files;
 
-                // Update the file list actions area without removing existing buttons.
+                // Update file summary.
                 const actionsContainer = document.getElementById("fileListActions");
                 if (actionsContainer) {
                     let summaryElem = document.getElementById("fileSummary");
@@ -164,7 +184,7 @@ export function loadFileList(folderParam) {
                     summaryElem.innerHTML = buildFolderSummary(fileData);
                 }
 
-                // Render the view normally.
+                // Render view based on the view mode.
                 if (window.viewMode === "gallery") {
                     renderGalleryView(folder);
                 } else {
@@ -193,8 +213,7 @@ export function loadFileList(folderParam) {
 }
 
 /**
- * Update renderFileTable so that it writes its content into the provided container.
- * If no container is provided, it defaults to the element with id "fileList".
+ * Update renderFileTable so it writes its content into the provided container.
  */
 export function renderFileTable(folder, container) {
     const fileListContent = container || document.getElementById("fileList");
@@ -202,11 +221,9 @@ export function renderFileTable(folder, container) {
     const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "10", 10);
     let currentPage = window.currentPage || 1;
 
-    const filteredFiles = fileData.filter(file => {
-        const nameMatch = file.name.toLowerCase().includes(searchTerm);
-        const tagMatch = file.tags && file.tags.some(tag => tag.name.toLowerCase().includes(searchTerm));
-        return nameMatch || tagMatch;
-    });
+    // Use Fuse.js search via our helper function.
+    const filteredFiles = searchFiles(searchTerm);
+    
     const totalFiles = filteredFiles.length;
     const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
     if (currentPage > totalPages) {
@@ -257,7 +274,7 @@ export function renderFileTable(folder, container) {
 
     createViewToggleButton();
 
-    // Setup event listeners as before...
+    // Setup event listeners.
     const newSearchInput = document.getElementById("searchInput");
     if (newSearchInput) {
         newSearchInput.addEventListener("input", debounce(function () {
@@ -317,10 +334,8 @@ export function renderFileTable(folder, container) {
 export function renderGalleryView(folder, container) {
     const fileListContent = container || document.getElementById("fileList");
     const searchTerm = (window.currentSearchTerm || "").toLowerCase();
-    const filteredFiles = fileData.filter(file => {
-        return file.name.toLowerCase().includes(searchTerm) ||
-            (file.tags && file.tags.some(tag => tag.name.toLowerCase().includes(searchTerm)));
-    });
+    // Use Fuse.js search for gallery view as well.
+    const filteredFiles = searchFiles(searchTerm);
     const folderPath = folder === "root"
         ? "uploads/"
         : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
