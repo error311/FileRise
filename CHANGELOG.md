@@ -2,12 +2,27 @@
 
 ## Changes 4/12/2025
 
-- **Fuse.js Integration for Indexed Real-Time Searching**
-  - **Added Fuse.js Library:** Included Fuse.js via a CDN `<script>` tag to leverage its client‑side fuzzy search capabilities.
-  - **Created searchFiles Helper Function:** Introduced a new function that uses Fuse.js to build an index and perform fuzzy searches over file properties (file name, uploader, and nested tag names).
-  - **Transformed JSON Object to Array:** Updated the loadFileList() function to convert the returned file data into an array (if it isn’t already) and assign file names from JSON keys.
-  - **Updated Rendering Functions:** Modified both renderFileTable() and renderGalleryView() to use the searchFiles() helper instead of a simple in‑array .filter(). This ensures that every search—real‑time by user input—is powered by Fuse.js’s indexed search.
-  - **Enhanced Search Configuration:** Configured Fuse.js to search across multiple keys (file name, uploader, and tags) so that users can find files based on any of these properties.
+### Advanced Search Implementation
+
+- **Advanced Search Toggle:**
+  - Added a global toggle (`window.advancedSearchEnabled`) and a UI button to switch between basic and advanced search modes.
+  - The toggle button label changes between "Advanced Search" and "Basic Search" to reflect the active mode.
+
+- **Fuse.js Integration Updates:**
+  - Modified the `searchFiles()` function to conditionally include the `"content"` key in the Fuse.js keys only when advanced search mode is enabled.
+  - Adjusted Fuse.js options by adding `ignoreLocation: true`, adjusting the `threshold`, and optionally assigning weights (e.g., a lower weight for `name` and a higher weight for `content`) to prioritize matches in file content.
+
+- **Backend (PHP) Enhancements:**
+  - Updated **getFileList.php** to read the content of text-based files (e.g., `.txt`, `.html`, `.md`, etc.) using `file_get_contents()`.
+  - Added a `"content"` property to the JSON response for eligible files to allow for full-text search in advanced mode.
+
+### Fuse.js Integration for Indexed Real-Time Searching**
+
+- **Added Fuse.js Library:** Included Fuse.js via a CDN `<script>` tag to leverage its client‑side fuzzy search capabilities.
+- **Created searchFiles Helper Function:** Introduced a new function that uses Fuse.js to build an index and perform fuzzy searches over file properties (file name, uploader, and nested tag names).
+- **Transformed JSON Object to Array:** Updated the loadFileList() function to convert the returned file data into an array (if it isn’t already) and assign file names from JSON keys.
+- **Updated Rendering Functions:** Modified both renderFileTable() and renderGalleryView() to use the searchFiles() helper instead of a simple in‑array .filter(). This ensures that every search—real‑time by user input—is powered by Fuse.js’s indexed search.
+- **Enhanced Search Configuration:** Configured Fuse.js to search across multiple keys (file name, uploader, and tags) so that users can find files based on any of these properties.
 
 ---
 

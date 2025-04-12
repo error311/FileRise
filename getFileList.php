@@ -25,11 +25,6 @@ if ($folder !== 'root') {
 
 /**
  * Helper: Generate the metadata file path for a given folder.
- * For "root", returns "root_metadata.json". Otherwise, replaces slashes,
- * backslashes, and spaces with dashes and appends "_metadata.json".
- *
- * @param string $folder The folder's relative path.
- * @return string The full path to the folder's metadata file.
  */
 function getMetadataFilePath($folder) {
     if (strtolower($folder) === 'root' || $folder === '') {
@@ -69,7 +64,6 @@ foreach ($files as $file) {
     
     // Since metadata is stored per folder, the key is simply the file name.
     $metaKey = $file;
-
     $fileDateModified = filemtime($filePath) ? date(DATE_TIME_FORMAT, filemtime($filePath)) : "Unknown";
     $fileUploadedDate = isset($metadata[$metaKey]["uploaded"]) ? $metadata[$metaKey]["uploaded"] : "Unknown";
     $fileUploader = isset($metadata[$metaKey]["uploader"]) ? $metadata[$metaKey]["uploader"] : "Unknown";
@@ -85,7 +79,8 @@ foreach ($files as $file) {
         $fileSizeFormatted = sprintf("%s bytes", number_format($fileSizeBytes));
     }
 
-    $fileList[] = [
+    // Build the basic file entry.
+    $fileEntry = [
         'name' => $file,
         'modified' => $fileDateModified,
         'uploaded' => $fileUploadedDate,
@@ -93,6 +88,14 @@ foreach ($files as $file) {
         'uploader' => $fileUploader,
         'tags' => isset($metadata[$metaKey]['tags']) ? $metadata[$metaKey]['tags'] : []
     ];
+
+    // Add file content for text-based files.
+    if (preg_match('/\.(txt|html|htm|md|js|css|json|xml|php|py|ini|conf|log)$/i', $file)) {
+        $content = file_get_contents($filePath);
+        $fileEntry['content'] = $content;
+    }
+    
+    $fileList[] = $fileEntry;
 }
 
 // Load global tags from createdTags.json.

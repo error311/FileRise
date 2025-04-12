@@ -24,6 +24,9 @@ window.itemsPerPage = window.itemsPerPage || 10;
 window.currentPage = window.currentPage || 1;
 window.viewMode = localStorage.getItem("viewMode") || "table"; // "table" or "gallery"
 
+// Global flag for advanced search mode.
+window.advancedSearchEnabled = false;
+
 /**
  * --- Helper Functions ---
  */
@@ -74,21 +77,49 @@ function buildFolderSummary(filteredFiles) {
 }
 
 /**
+ * --- Advanced Search Toggle ---
+ * Toggles advanced search mode. When enabled, the search will include additional keys (e.g. "content").
+ */
+function toggleAdvancedSearch() {
+    window.advancedSearchEnabled = !window.advancedSearchEnabled;
+    const advancedBtn = document.getElementById("advancedSearchToggle");
+    if (advancedBtn) {
+        advancedBtn.textContent = window.advancedSearchEnabled ? "Basic Search" : "Advanced Search";
+    }
+    // Re-run the file table rendering with updated search settings.
+    renderFileTable(window.currentFolder);
+}
+
+/**
  * --- Fuse.js Search Helper ---
  * Uses Fuse.js to perform a fuzzy search on fileData.
- * Searches over file name, uploader, and tag names.
+ * By default, searches over file name, uploader, and tag names.
+ * When advanced search is enabled, it also includes the 'content' property.
  */
 function searchFiles(searchTerm) {
     if (!searchTerm) return fileData;
-    // Define search options – adjust threshold as needed.
+    
+    // Define search keys.
+    let keys = [
+      { name: 'name', weight: 0.1 },
+      { name: 'uploader', weight: 0.1 },
+      { name: 'tags.name', weight: 0.1 }
+    ];
+    if (window.advancedSearchEnabled) {
+      keys.push({ name: 'content', weight: 0.7 });
+    }
+    
     const options = {
-        keys: ['name', 'uploader', 'tags.name'],
-        threshold: 0.3
+      keys: keys,
+      threshold: 0.4,
+      minMatchCharLength: 2,
+      ignoreLocation: true
     };
+    
     const fuse = new Fuse(fileData, options);
-    // Fuse returns an array of results where each result has an "item" property.
-    return fuse.search(searchTerm).map(result => result.item);
-}
+    let results = fuse.search(searchTerm);
+    return results.map(result => result.item);
+  }
 
 /**
  * --- VIEW MODE TOGGLE BUTTON & Helpers ---
@@ -147,7 +178,7 @@ export function loadFileList(folderParam) {
         .then(data => {
             fileListContainer.innerHTML = ""; // Clear loading message.
             if (data.files && Object.keys(data.files).length > 0) {
-                // In case the returned "files" is an object instead of an array, transform it.
+                // If the returned "files" is an object instead of an array, transform it.
                 if (!Array.isArray(data.files)) {
                     data.files = Object.entries(data.files).map(([name, meta]) => {
                         meta.name = name;
@@ -162,6 +193,8 @@ export function loadFileList(folderParam) {
                     if (!file.type && /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
                         file.type = "image";
                     }
+                    // OPTIONAL: For text documents, preload content (if available from backend)
+                    // Example: if (/\.txt|html|md|js|css|json|xml$/i.test(file.name)) { file.content = file.content || ""; }
                     return file;
                 });
                 fileData = data.files;
@@ -234,11 +267,17 @@ export function renderFileTable(folder, container) {
         ? "uploads/"
         : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
 
+    // Build the top controls and append the advanced search toggle button.
     const topControlsHTML = buildSearchAndPaginationControls({
         currentPage,
         totalPages,
         searchTerm: window.currentSearchTerm || ""
     });
+    const advancedToggleHTML = `<button id="advancedSearchToggle" class="btn btn-sm btn-outline-secondary" style="margin-left: 10px;" onclick="toggleAdvancedSearch()">
+  ${window.advancedSearchEnabled ? "Basic Search" : "Advanced Search"}
+</button>`;
+    const combinedTopHTML = topControlsHTML + advancedToggleHTML;
+    
     let headerHTML = buildFileTableHeader(sortOrder);
     const startIndex = (currentPage - 1) * itemsPerPageSetting;
     const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
@@ -270,7 +309,7 @@ export function renderFileTable(folder, container) {
     rowsHTML += "</tbody></table>";
     const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
 
-    fileListContent.innerHTML = topControlsHTML + headerHTML + rowsHTML + bottomControlsHTML;
+    fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
     createViewToggleButton();
 
@@ -493,3 +532,4 @@ window.loadFileList = loadFileList;
 window.renderFileTable = renderFileTable;
 window.renderGalleryView = renderGalleryView;
 window.sortFiles = sortFiles;
+window.toggleAdvancedSearch = toggleAdvancedSearch;
