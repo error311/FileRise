@@ -2,6 +2,9 @@
 
 ## Changes 4/12/2025
 
+- Moved Gallery view toggle button into header.
+- Removed css entries that are not needed anymore for Gallery View Toggle.
+
 ### Advanced Search Implementation
 
 - **Advanced Search Toggle:**

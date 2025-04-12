@@ -127,23 +127,43 @@ function searchFiles(searchTerm) {
 export function createViewToggleButton() {
     let toggleBtn = document.getElementById("toggleViewBtn");
     if (!toggleBtn) {
-        toggleBtn = document.createElement("button");
-        toggleBtn.id = "toggleViewBtn";
-        toggleBtn.classList.add("btn", "btn-secondary");
-        const titleElem = document.getElementById("fileListTitle");
-        if (titleElem) {
-            titleElem.parentNode.insertBefore(toggleBtn, titleElem.nextSibling);
-        }
+      toggleBtn = document.createElement("button");
+      toggleBtn.id = "toggleViewBtn";
+      toggleBtn.classList.add("btn", "btn-toggleview");
+      
+      // Set initial icon and tooltip based on current view mode.
+      if (window.viewMode === "gallery") {
+        toggleBtn.innerHTML = '<i class="material-icons">view_list</i>';
+        toggleBtn.title =  t("switch_to_table_view");
+      } else {
+        toggleBtn.innerHTML = '<i class="material-icons">view_module</i>';
+        toggleBtn.title = t("switch_to_gallery_view");
+      }
+      
+      // Insert the button before the last button in the header.
+      const headerButtons = document.querySelector(".header-buttons");
+      if (headerButtons && headerButtons.lastElementChild) {
+        headerButtons.insertBefore(toggleBtn, headerButtons.lastElementChild);
+      } else if (headerButtons) {
+        headerButtons.appendChild(toggleBtn);
+      }
     }
-    toggleBtn.textContent = window.viewMode === "gallery" ? t("switch_to_table_view") : t("switch_to_gallery_view");
+    
     toggleBtn.onclick = () => {
-        window.viewMode = window.viewMode === "gallery" ? "table" : "gallery";
-        localStorage.setItem("viewMode", window.viewMode);
-        loadFileList(window.currentFolder);
-        toggleBtn.textContent = window.viewMode === "gallery" ? t("switch_to_table_view") : t("switch_to_gallery_view");
+      window.viewMode = window.viewMode === "gallery" ? "table" : "gallery";
+      localStorage.setItem("viewMode", window.viewMode);
+      loadFileList(window.currentFolder);
+      if (window.viewMode === "gallery") {
+        toggleBtn.innerHTML = '<i class="material-icons">view_list</i>';
+        toggleBtn.title =  t("switch_to_table_view");
+      } else {
+        toggleBtn.innerHTML = '<i class="material-icons">view_module</i>';
+        toggleBtn.title = t("switch_to_gallery_view");
+      }
     };
+    
     return toggleBtn;
-}
+  }
 
 export function formatFolderName(folder) {
     if (folder === "root") return "(Root)";

@@ -1584,39 +1584,6 @@ body.dark-mode .btn-secondary {
   border-color: #6c757d;
 }
 
-#toggleViewBtn {
-  margin-bottom: 20px;
-  margin-left: 14px;
-  padding: 10px 20px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 16px;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  transition: background 0.3s ease, box-shadow 0.3s ease;
-}
-
-@media (max-width: 768px) {
-  #toggleViewBtn {
-    margin-left: 0 !important;
-  }
-}
-
-@media (max-width: 600px) {
-  #toggleViewBtn {
-    margin-left: 0 !important;
-    margin-right: auto !important;
-    display: block !important;
-  }
-}
-
-#toggleViewBtn:hover {
-  background: rgba(0, 0, 0, 0.8);
-  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.4);
-}
-
 body.dark-mode .btn-danger {
   background-color: #dc3545;
   color: #fff;
