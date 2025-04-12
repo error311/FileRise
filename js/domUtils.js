@@ -90,6 +90,11 @@ export function showToast(message, duration = 3000) {
 
 export function buildSearchAndPaginationControls({ currentPage, totalPages, searchTerm }) {
   const safeSearchTerm = escapeHTML(searchTerm);
+  // Choose the placeholder text based on advanced search mode
+  const placeholderText = window.advancedSearchEnabled 
+    ? t("search_placeholder_advanced")
+    : t("search_placeholder");
+    
   return `
     <div class="row align-items-center mb-3">
       <div class="col-12 col-md-8 mb-2 mb-md-0">
@@ -99,7 +104,7 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
               <i class="material-icons">search</i>
             </span>
           </div>
-          <input type="text" id="searchInput" class="form-control" placeholder="${t("search_placeholder")}" value="${safeSearchTerm}" aria-describedby="searchIcon">
+          <input type="text" id="searchInput" class="form-control" placeholder="${placeholderText}" value="${safeSearchTerm}" aria-describedby="searchIcon">
         </div>
       </div>
       <div class="col-12 col-md-4 text-left">
