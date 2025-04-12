@@ -325,19 +325,21 @@ export function openTOTPModal() {
       z-index: 3100;
     `;
     totpModal.innerHTML = `
-      <div class="modal-content" style="${modalContentStyles}">
-        <span id="closeTOTPModal" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
-        <h3>TOTP Setup</h3>
-        <p>Scan this QR code with your authenticator app:</p>
-        <img src="totp_setup.php?csrf=${encodeURIComponent(window.csrfToken)}" alt="TOTP QR Code" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
-        <br/>
-        <p>Enter the 6-digit code from your app to confirm setup:</p>
-        <input type="text" id="totpConfirmInput" maxlength="6" style="font-size:24px; text-align:center; width:100%; padding:10px;" placeholder="6-digit code" />
-        <br/><br/>
-        <button type="button" id="confirmTOTPBtn" class="btn btn-primary">Confirm</button>
-      </div>
-    `;
+    <div class="modal-content" style="${modalContentStyles}">
+      <span id="closeTOTPModal" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
+      <h3>TOTP Setup</h3>
+      <p>Scan this QR code with your authenticator app:</p>
+      <!-- Create an image placeholder without the CSRF token in the src -->
+      <img id="totpQRCodeImage" src="" alt="TOTP QR Code" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
+      <br/>
+      <p>Enter the 6-digit code from your app to confirm setup:</p>
+      <input type="text" id="totpConfirmInput" maxlength="6" style="font-size:24px; text-align:center; width:100%; padding:10px;" placeholder="6-digit code" />
+      <br/><br/>
+      <button type="button" id="confirmTOTPBtn" class="btn btn-primary">Confirm</button>
+    </div>
+  `;
     document.body.appendChild(totpModal);
+    loadTOTPQRCode();
 
     document.getElementById("closeTOTPModal").addEventListener("click", () => {
       closeTOTPModal(true);
@@ -406,6 +408,13 @@ export function openTOTPModal() {
     modalContent.style.background = isDarkMode ? "#2c2c2c" : "#fff";
     modalContent.style.color = isDarkMode ? "#e0e0e0" : "#000";
 
+    // Clear any previous QR code src if needed and then load it:
+    const qrImg = document.getElementById("totpQRCodeImage");
+    if (qrImg) {
+      qrImg.src = "";
+    }
+    loadTOTPQRCode();
+
     // Focus the input and attach enter key listener
     const totpConfirmInput = document.getElementById("totpConfirmInput");
     if (totpConfirmInput) {
@@ -417,6 +426,33 @@ export function openTOTPModal() {
     }
     attachEnterKeyListener("totpModal", "confirmTOTPBtn");
   }
+}
+
+function loadTOTPQRCode() {
+  fetch("totp_setup.php", {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "X-CSRF-Token": window.csrfToken  // Send your CSRF token here
+    }
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error("Failed to fetch QR code. Status: " + response.status);
+      }
+      return response.blob();
+    })
+    .then(blob => {
+      const imageURL = URL.createObjectURL(blob);
+      const qrImg = document.getElementById("totpQRCodeImage");
+      if (qrImg) {
+        qrImg.src = imageURL;
+      }
+    })
+    .catch(error => {
+      console.error("Error loading TOTP QR code:", error);
+      showToast("Error loading QR code.");
+    });
 }
 
 // Updated closeTOTPModal function with a disable parameter
@@ -800,18 +836,18 @@ function loadUserPermissionsList() {
             if ((user.role && user.role === "1") || user.username.toLowerCase() === "admin") return;
 
             // Use stored permissions if available; otherwise fall back to localStorage defaults.
-const defaultPerm = {
-  folderOnly: false,
-  readOnly: false,
-  disableUpload: false,
-};
+            const defaultPerm = {
+              folderOnly: false,
+              readOnly: false,
+              disableUpload: false,
+            };
 
-// Normalize the username key to match server storage (e.g., lowercase)
-const usernameKey = user.username.toLowerCase();
+            // Normalize the username key to match server storage (e.g., lowercase)
+            const usernameKey = user.username.toLowerCase();
 
-const userPerm = (permissionsData && typeof permissionsData === "object" && (usernameKey in permissionsData))
-    ? permissionsData[usernameKey]
-    : defaultPerm;
+            const userPerm = (permissionsData && typeof permissionsData === "object" && (usernameKey in permissionsData))
+              ? permissionsData[usernameKey]
+              : defaultPerm;
 
             // Create a row for the user.
             const row = document.createElement("div");

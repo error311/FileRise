@@ -9,16 +9,34 @@ use Endroid\QrCode\Writer\PngWriter;
 use RobThree\Auth\Algorithm;
 use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
 
-if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+// Define the respond() helper if not already defined.
+if (!function_exists('respond')) {
+    function respond($status, $code, $message, $data = []) {
+        http_response_code($code);
+        echo json_encode([
+            'status'  => $status,
+            'code'    => $code,
+            'message' => $message,
+            'data'    => $data
+        ]);
+        exit;
+    }
+}
+
+// Allow access if the user is authenticated or pending TOTP.
+if (!((isset($_SESSION['authenticated']) && $_SESSION['authenticated'] === true) || isset($_SESSION['pending_login_user']))) {
     http_response_code(403);
     exit;
 }
 
+// Retrieve CSRF token from GET parameter or request headers.
 $headers = array_change_key_case(getallheaders(), CASE_LOWER);
-$csrfHeader = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+$receivedToken = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
 
-if (!isset($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
-    respond('error', 403, 'Invalid CSRF token');
+if ($receivedToken !== $_SESSION['csrf_token']) {
+    echo json_encode(["error" => "Invalid CSRF token"]);
+    http_response_code(403);
+    exit;
 }
 
 $username = $_SESSION['username'] ?? '';
@@ -111,7 +129,7 @@ $tfa = new \RobThree\Auth\TwoFactorAuth(
     'FileRise',                       // issuer
     6,                                // number of digits
     30,                               // period in seconds
-    Algorithm::Sha1                   // Correct enum case name from your enum
+    Algorithm::Sha1                   // enum case from your Algorithm enum
 );
 
 // Retrieve the current TOTP secret for the user.
@@ -124,8 +142,6 @@ if (!$totpSecret) {
 }
 
 // Determine the otpauth URL to use.
-// If a global OTPAuth URL template is defined, replace placeholders {label} and {secret}.
-// Otherwise, use the default method.
 $globalOtpauthUrl = getGlobalOtpauthUrl();
 if (!empty($globalOtpauthUrl)) {
     $label = "FileRise:" . $username;
