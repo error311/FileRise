@@ -5,6 +5,7 @@
 - Moved Gallery view toggle button into header.
 - Removed css entries that are not needed anymore for Gallery View Toggle.
 - Change search box text when enabling advanced search.
+- Advanced/Basic search button as material icon on same row as search bar.
 
 ### Advanced Search Implementation
 

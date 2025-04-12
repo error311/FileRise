@@ -94,16 +94,24 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
   const placeholderText = window.advancedSearchEnabled 
     ? t("search_placeholder_advanced")
     : t("search_placeholder");
-    
+
   return `
     <div class="row align-items-center mb-3">
       <div class="col-12 col-md-8 mb-2 mb-md-0">
         <div class="input-group">
+          <!-- Advanced Search Toggle Button -->
+          <div class="input-group-prepend">
+            <button id="advancedSearchToggle" class="btn btn-outline-secondary btn-icon" onclick="toggleAdvancedSearch()" title="${window.advancedSearchEnabled ? t("basic_search_tooltip") : t("advanced_search_tooltip")}">
+              <i class="material-icons">${window.advancedSearchEnabled ? "filter_alt_off" : "filter_alt"}</i>
+            </button>
+          </div>
+          <!-- Search Icon -->
           <div class="input-group-prepend">
             <span class="input-group-text" id="searchIcon">
               <i class="material-icons">search</i>
             </span>
           </div>
+          <!-- Search Input -->
           <input type="text" id="searchInput" class="form-control" placeholder="${placeholderText}" value="${safeSearchTerm}" aria-describedby="searchIcon">
         </div>
       </div>

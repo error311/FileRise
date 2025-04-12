@@ -1696,21 +1696,6 @@ body.dark-mode .folder-help-icon {
 
 }
 
-body.dark-mode #searchIcon {
-  background-color: #444;
-  border: 1px solid #555;
-  border-radius: 4px;
-  color: #fff;
-  padding: 4px 8px;
-}
-
-body.dark-mode #searchInput {
-  background-color: #333;
-  color: #e0e0e0;
-  border: 1px solid #555;
-}
-
-
 body.dark-mode .CodeMirror {
   background: #1e1e1e !important;
   color: #ffffff !important;
@@ -2127,4 +2112,58 @@ body.dark-mode .header-drop-zone.drag-active {
 
 body.dark-mode #fileSummary {
   color: white;
+}
+
+#searchIcon {
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+body.dark-mode #searchIcon {
+  background-color: #444;
+  border: 1px solid #555;
+  color: #fff;
+}
+
+body.dark-mode #searchInput {
+  background-color: #333;
+  color: #e0e0e0;
+  border: 1px solid #555;
+}
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.btn-icon .material-icons,
+#searchIcon .material-icons {
+  font-size: 24px;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  color: #333;
+}
+
+.btn-icon:hover,
+.btn-icon:focus {
+  background: rgba(0, 0, 0, 0.1);
+  outline: none;
+}
+
+body.dark-mode .btn-icon .material-icons,
+body.dark-mode #searchIcon .material-icons {
+  color: #fff;
+}
+
+body.dark-mode .btn-icon:hover,
+body.dark-mode .btn-icon:focus {
+  background: rgba(255, 255, 255, 0.1);
 }

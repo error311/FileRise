@@ -293,10 +293,8 @@ export function renderFileTable(folder, container) {
         totalPages,
         searchTerm: window.currentSearchTerm || ""
     });
-    const advancedToggleHTML = `<button id="advancedSearchToggle" class="btn btn-sm btn-outline-secondary" style="margin-left: 10px;" onclick="toggleAdvancedSearch()">
-  ${window.advancedSearchEnabled ? "Basic Search" : "Advanced Search"}
-</button>`;
-    const combinedTopHTML = topControlsHTML + advancedToggleHTML;
+
+    const combinedTopHTML = topControlsHTML;
     
     let headerHTML = buildFileTableHeader(sortOrder);
     const startIndex = (currentPage - 1) * itemsPerPageSetting;
