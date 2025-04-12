@@ -79,10 +79,6 @@ if (in_array($ext, ['jpg','jpeg','png','gif','bmp','webp','svg','ico'])) {
     header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
 }
 
-// Disable caching.
-header("Cache-Control: no-store, no-cache, must-revalidate");
-header("Pragma: no-cache");
-
 // Read and output the file.
 readfile($realFilePath);
 exit;

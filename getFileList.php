@@ -1,8 +1,5 @@
 <?php
 require_once 'config.php';
-header("Cache-Control: no-cache, no-store, must-revalidate");
-header("Pragma: no-cache");
-header("Expires: 0");
 header('Content-Type: application/json');
 
 // Ensure user is authenticated

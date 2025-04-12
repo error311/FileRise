@@ -5,7 +5,6 @@ require_once 'config.php';
 use RobThree\Auth\Algorithm;
 use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
 
-// Only send the Content-Type header; CORS and related headers are handled via .htaccess.
 header('Content-Type: application/json');
 
 // Global exception handler: logs errors and returns a generic error message.
@@ -180,7 +179,7 @@ if (!$username || !$password) {
     exit();
 }
 
-if (!preg_match('/^[A-Za-z0-9_\- ]+$/', $username)) {
+if (!preg_match(REGEX_USER, $username)) {
     http_response_code(400);
     echo json_encode(["error" => "Invalid username format. Only letters, numbers, underscores, dashes, and spaces are allowed."]);
     exit();

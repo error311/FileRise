@@ -1,5 +1,20 @@
 <?php
 // config.php
+header("Cache-Control: no-cache, must-revalidate");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
+header("Pragma: no-cache");
+header("Expires: 0");
+header('X-Content-Type-Options: nosniff');
+// Security headers
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: SAMEORIGIN");
+header("Referrer-Policy: no-referrer-when-downgrade");
+// Only include Strict-Transport-Security if you are using HTTPS
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header("Strict-Transport-Security: max-age=31536000; includeSubDomains; preload");
+}
+header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
+header("X-XSS-Protection: 1; mode=block");
 
 // Define constants.
 define('UPLOAD_DIR', '/var/www/uploads/');

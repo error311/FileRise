@@ -12,7 +12,8 @@ import { initFileActions, renameFile, openDownloadModal, confirmSingleDownload }
 import { editFile, saveFile } from './fileEditor.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
-function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
+// Remove the retry logic version and just use loadCsrfToken directly:
+function loadCsrfToken() {
   return fetch('token.php', { credentials: 'include' })
     .then(response => {
       if (!response.ok) {
@@ -21,11 +22,9 @@ function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
       return response.json();
     })
     .then(data => {
-      // Set global variables.
       window.csrfToken = data.csrf_token;
       window.SHARE_URL = data.share_url;
-
-      // Update (or create) the CSRF meta tag.
+      
       let metaCSRF = document.querySelector('meta[name="csrf-token"]');
       if (!metaCSRF) {
         metaCSRF = document.createElement('meta');
@@ -34,7 +33,6 @@ function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
       }
       metaCSRF.setAttribute('content', data.csrf_token);
 
-      // Update (or create) the share URL meta tag.
       let metaShare = document.querySelector('meta[name="share-url"]');
       if (!metaShare) {
         metaShare = document.createElement('meta');
@@ -44,15 +42,6 @@ function loadCsrfTokenWithRetry(retries = 3, delay = 1000) {
       metaShare.setAttribute('content', data.share_url);
 
       return data;
-    })
-    .catch(error => {
-      if (retries > 0) {
-        console.warn(`CSRF token load failed. Retrying in ${delay}ms... (${retries} retries left)`, error);
-        return new Promise(resolve => setTimeout(resolve, delay))
-          .then(() => loadCsrfTokenWithRetry(retries - 1, delay * 2));
-      }
-      console.error("Failed to load CSRF token after retries.", error);
-      throw error;
     });
 }
 
@@ -78,7 +67,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Apply the translations to update the UI
   applyTranslations();
   // First, load the CSRF token (with retry).
-  loadCsrfTokenWithRetry().then(() => {
+  loadCsrfToken().then(() => {
     // Once CSRF token is loaded, initialize authentication.
     initAuth();
 

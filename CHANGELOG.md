@@ -13,6 +13,7 @@
 - Updated robthree/twofactorauth to v3 and endroid/qr-code to v5
 - Updated TOTP integration (namespace, enum, QR provider) accordingly
 - Updated docker image from 22.04 to 24.04 <https://github.com/error311/filerise-docker>
+- Ensure consistent session behavior
 
 ---
 

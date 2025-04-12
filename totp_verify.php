@@ -57,8 +57,9 @@ try {
         respond('error', 403, 'Not authenticated');
     }
 
-    // CSRF check
-    $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    $headers = array_change_key_case(getallheaders(), CASE_LOWER);
+    $csrfHeader = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+    
     if (!isset($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
         respond('error', 403, 'Invalid CSRF token');
     }
@@ -133,7 +134,7 @@ try {
         30,                               // period in seconds
         Algorithm::Sha1                   // Correct enum case name from your enum
     );
-    
+
     if (!$tfa->verifyCode($totpSecret, $code)) {
         $_SESSION['totp_failures']++;
         respond('error', 400, 'Invalid TOTP code');

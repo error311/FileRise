@@ -7,8 +7,6 @@ require_once 'config.php';
 
 // Set security and content headers
 header('Content-Type: application/json; charset=utf-8');
-header('X-Content-Type-Options: nosniff');
-header('Cache-Control: no-cache, must-revalidate');
 
 $metadataPath = META_DIR . 'createdTags.json';
 

@@ -14,10 +14,11 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
     exit;
 }
 
-// Verify CSRF token provided as a GET parameter.
-if (!isset($_GET['csrf']) || $_GET['csrf'] !== $_SESSION['csrf_token']) {
-    http_response_code(403);
-    exit;
+$headers = array_change_key_case(getallheaders(), CASE_LOWER);
+$csrfHeader = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+
+if (!isset($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
+    respond('error', 403, 'Invalid CSRF token');
 }
 
 $username = $_SESSION['username'] ?? '';

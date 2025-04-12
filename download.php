@@ -80,10 +80,6 @@ if (in_array($ext, ['jpg','jpeg','png','gif','bmp','webp','svg','ico'])) {
 }
 header('Content-Length: ' . filesize($realFilePath));
 
-// Disable caching.
-header('Cache-Control: no-store, no-cache, must-revalidate');
-header('Pragma: no-cache');
-
 readfile($realFilePath);
 exit;
 ?>

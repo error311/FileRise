@@ -11,11 +11,11 @@ if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
 }
 
 // Verify CSRF token from request headers.
-$csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+$headers = array_change_key_case(getallheaders(), CASE_LOWER);
+$csrfHeader = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+
 if (!isset($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
-    http_response_code(403);
-    echo json_encode(["error" => "Invalid CSRF token"]);
-    exit;
+    respond('error', 403, 'Invalid CSRF token');
 }
 
 header('Content-Type: application/json');

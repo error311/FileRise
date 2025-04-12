@@ -1,9 +1,6 @@
 <?php
 require_once 'config.php';
 header('Content-Type: application/json');
-header("Cache-Control: no-cache, no-store, must-revalidate");
-header("Pragma: no-cache");
-header("Expires: 0");
 
 // --- CSRF Protection ---
 $headers = array_change_key_case(getallheaders(), CASE_LOWER);

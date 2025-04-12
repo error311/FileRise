@@ -13,11 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // ——— 2) CSRF check ———
-if (empty($_SERVER['HTTP_X_CSRF_TOKEN']) 
- || $_SERVER['HTTP_X_CSRF_TOKEN'] !== ($_SESSION['csrf_token'] ?? '')) {
-    http_response_code(403);
-    error_log("Invalid CSRF token on recovery for IP {$_SERVER['REMOTE_ADDR']}");
-    exit(json_encode(['status'=>'error','message'=>'Invalid CSRF token']));
+$headers = array_change_key_case(getallheaders(), CASE_LOWER);
+$csrfHeader = isset($headers['x-csrf-token']) ? trim($headers['x-csrf-token']) : '';
+
+if (!isset($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
+    respond('error', 403, 'Invalid CSRF token');
 }
 
 // ——— 3) Identify user to recover ———
