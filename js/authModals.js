@@ -267,6 +267,36 @@ export function openUserPanel() {
   userPanelModal.style.display = "flex";
 }
 
+function showRecoveryCodeModal(recoveryCode) {
+  const recoveryModal = document.createElement("div");
+  recoveryModal.id = "recoveryModal";
+  recoveryModal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0,0,0,0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 3200;
+  `;
+  recoveryModal.innerHTML = `
+    <div style="background: #fff; color: #000; padding: 20px; max-width: 400px; width: 90%; border-radius: 8px; text-align: center;">
+      <h3>${t("your_recovery_code")}</h3>
+      <p>${t("please_save_recovery_code")}</p>
+      <code style="display: block; margin: 10px 0; font-size: 20px;">${recoveryCode}</code>
+      <button type="button" id="closeRecoveryModal" class="btn btn-primary">${t("ok")}</button>
+    </div>
+  `;
+  document.body.appendChild(recoveryModal);
+
+  document.getElementById("closeRecoveryModal").addEventListener("click", () => {
+    recoveryModal.remove();
+  });
+}
+
 export function openTOTPModal() {
   let totpModal = document.getElementById("totpModal");
   const isDarkMode = document.body.classList.contains("dark-mode");
