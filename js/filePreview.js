@@ -26,7 +26,7 @@ export function openShareModal(file, folder) {
           <option value="240">240 minutes</option>
           <option value="1440">1 Day</option>
         </select>
-        <p>Password (optional):</p>
+        <p>${t("password_optional")}</p>
         <input type="text" id="sharePassword" placeholder=${t("password_optional")} style="width: 100%;"/>
         <br>
         <button id="generateShareLinkBtn" class="btn btn-primary" style="margin-top:10px;">${t("generate_share_link")}</button>

@@ -28,7 +28,7 @@ export function openFolderShareModal(folder) {
           <option value="1440">1 ${t("day")}</option>
         </select>
         <p>${t("password_optional")}</p>
-        <input type="text" id="folderSharePassword" placeholder="${t("password")}" style="width: 100%;"/>
+        <input type="text" id="folderSharePassword" placeholder="${t("enter_password")}" style="width: 100%;"/>
         <br>
         <label>
           <input type="checkbox" id="folderShareAllowUpload"> ${t("allow_uploads")}

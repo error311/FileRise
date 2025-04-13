@@ -2,7 +2,7 @@ import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.
 import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
-const version = "v1.1.2";
+const version = "v1.1.3";
 // Use t() for the admin panel title. (Make sure t("admin_panel") returns "Admin Panel" in English.)
 const adminTitle = `${t("admin_panel")} <small style="font-size: 12px; color: gray;">${version}</small>`;
 
