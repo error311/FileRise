@@ -1,5 +1,9 @@
 # Changelog
 
+## Changes 4//13/2025
+
+- Decreased header height some more and clickable logo.
+
 ## Changes 4/12/2025
 
 - Moved Gallery view toggle button into header.
