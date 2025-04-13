@@ -487,10 +487,81 @@ export function closeTOTPModal(disable = true) {
   }
 }
 
+// Global variable to hold the initial state of the admin form.
+let originalAdminConfig = {};
+
+// Capture the initial state of the admin form fields.
+function captureInitialAdminConfig() {
+  originalAdminConfig = {
+    headerTitle: document.getElementById("headerTitle").value.trim(),
+    oidcProviderUrl: document.getElementById("oidcProviderUrl").value.trim(),
+    oidcClientId: document.getElementById("oidcClientId").value.trim(),
+    oidcClientSecret: document.getElementById("oidcClientSecret").value.trim(),
+    oidcRedirectUri: document.getElementById("oidcRedirectUri").value.trim(),
+    disableFormLogin: document.getElementById("disableFormLogin").checked,
+    disableBasicAuth: document.getElementById("disableBasicAuth").checked,
+    disableOIDCLogin: document.getElementById("disableOIDCLogin").checked,
+    globalOtpauthUrl: document.getElementById("globalOtpauthUrl").value.trim()
+  };
+}
+
+// Compare current values to the captured initial state.
+function hasUnsavedChanges() {
+  return (
+    document.getElementById("headerTitle").value.trim() !== originalAdminConfig.headerTitle ||
+    document.getElementById("oidcProviderUrl").value.trim() !== originalAdminConfig.oidcProviderUrl ||
+    document.getElementById("oidcClientId").value.trim() !== originalAdminConfig.oidcClientId ||
+    document.getElementById("oidcClientSecret").value.trim() !== originalAdminConfig.oidcClientSecret ||
+    document.getElementById("oidcRedirectUri").value.trim() !== originalAdminConfig.oidcRedirectUri ||
+    document.getElementById("disableFormLogin").checked !== originalAdminConfig.disableFormLogin ||
+    document.getElementById("disableBasicAuth").checked !== originalAdminConfig.disableBasicAuth ||
+    document.getElementById("disableOIDCLogin").checked !== originalAdminConfig.disableOIDCLogin ||
+    document.getElementById("globalOtpauthUrl").value.trim() !== originalAdminConfig.globalOtpauthUrl
+  );
+}
+
+// Use your custom confirmation modal.
+function showCustomConfirmModal(message) {
+  return new Promise((resolve) => {
+    // Get modal elements from DOM.
+    const modal = document.getElementById("customConfirmModal");
+    const messageElem = document.getElementById("confirmMessage");
+    const yesBtn = document.getElementById("confirmYesBtn");
+    const noBtn = document.getElementById("confirmNoBtn");
+
+    // Set the message in the modal.
+    messageElem.textContent = message;
+    modal.style.display = "block";
+
+    // Define event handlers.
+    function onYes() {
+      cleanup();
+      resolve(true);
+    }
+    function onNo() {
+      cleanup();
+      resolve(false);
+    }
+    // Remove event listeners and hide modal after choice.
+    function cleanup() {
+      yesBtn.removeEventListener("click", onYes);
+      noBtn.removeEventListener("click", onNo);
+      modal.style.display = "none";
+    }
+    
+    yesBtn.addEventListener("click", onYes);
+    noBtn.addEventListener("click", onNo);
+  });
+}
+
 export function openAdminPanel() {
   fetch("getConfig.php", { credentials: "include" })
     .then(response => response.json())
     .then(config => {
+      if (config.header_title) {
+        document.querySelector(".header-title h1").textContent = config.header_title;
+        window.headerTitle = config.header_title || "FileRise";
+      }
       if (config.oidc) Object.assign(window.currentOIDCConfig, config.oidc);
       if (config.globalOtpauthUrl) window.currentOIDCConfig.globalOtpauthUrl = config.globalOtpauthUrl;
       const isDarkMode = document.body.classList.contains("dark-mode");
@@ -538,6 +609,28 @@ export function openAdminPanel() {
                 </div>
               </fieldset>
               <fieldset style="margin-bottom: 15px;">
+                <legend>Header Settings</legend>
+                <div class="form-group">
+                  <label for="headerTitle">Header Title:</label>
+                  <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle}" />
+                </div>
+              </fieldset>
+              <fieldset style="margin-bottom: 15px;">
+                <legend>${t("login_options")}</legend>
+                <div class="form-group">
+                  <input type="checkbox" id="disableFormLogin" />
+                  <label for="disableFormLogin">${t("disable_login_form")}</label>
+                </div>
+                <div class="form-group">
+                  <input type="checkbox" id="disableBasicAuth" />
+                  <label for="disableBasicAuth">${t("disable_basic_http_auth")}</label>
+                </div>
+                <div class="form-group">
+                  <input type="checkbox" id="disableOIDCLogin" />
+                  <label for="disableOIDCLogin">${t("disable_oidc_login")}</label>
+                </div>
+              </fieldset>
+              <fieldset style="margin-bottom: 15px;">
                 <legend>${t("oidc_configuration")}</legend>
                 <div class="form-group">
                   <label for="oidcProviderUrl">${t("oidc_provider_url")}:</label>
@@ -563,21 +656,6 @@ export function openAdminPanel() {
                   <input type="text" id="globalOtpauthUrl" class="form-control" value="${window.currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
                 </div>
               </fieldset>
-              <fieldset style="margin-bottom: 15px;">
-                <legend>${t("login_options")}</legend>
-                <div class="form-group">
-                  <input type="checkbox" id="disableFormLogin" />
-                  <label for="disableFormLogin">${t("disable_login_form")}</label>
-                </div>
-                <div class="form-group">
-                  <input type="checkbox" id="disableBasicAuth" />
-                  <label for="disableBasicAuth">${t("disable_basic_http_auth")}</label>
-                </div>
-                <div class="form-group">
-                  <input type="checkbox" id="disableOIDCLogin" />
-                  <label for="disableOIDCLogin">${t("disable_oidc_login")}</label>
-                </div>
-              </fieldset>
               <div style="display: flex; justify-content: space-between;">
                 <button type="button" id="cancelAdminSettings" class="btn btn-secondary">${t("cancel")}</button>
                 <button type="button" id="saveAdminSettings" class="btn btn-primary">${t("save_settings")}</button>
@@ -587,11 +665,14 @@ export function openAdminPanel() {
         `;
         document.body.appendChild(adminModal);
 
+        // Bind closing events that will use our enhanced close function.
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
         adminModal.addEventListener("click", (e) => {
           if (e.target === adminModal) closeAdminPanel();
         });
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
+
+        // Bind other buttons.
         document.getElementById("adminOpenAddUser").addEventListener("click", () => {
           toggleVisibility("addUserModal", true);
           document.getElementById("newUsername").focus();
@@ -602,7 +683,6 @@ export function openAdminPanel() {
           }
           toggleVisibility("removeUserModal", true);
         });
-        // New event binding for the User Permissions button:
         document.getElementById("adminOpenUserPermissions").addEventListener("click", () => {
           openUserPermissionsModal();
         });
@@ -624,6 +704,7 @@ export function openAdminPanel() {
             }
             return;
           }
+          const newHeaderTitle = document.getElementById("headerTitle").value.trim();
           const newOIDCConfig = {
             providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
             clientId: document.getElementById("oidcClientId").value.trim(),
@@ -635,6 +716,7 @@ export function openAdminPanel() {
           const disableOIDCLogin = disableOIDCLoginCheckbox.checked;
           const globalOtpauthUrl = document.getElementById("globalOtpauthUrl").value.trim();
           sendRequest("updateConfig.php", "POST", {
+            header_title: newHeaderTitle,
             oidc: newOIDCConfig,
             disableFormLogin,
             disableBasicAuth,
@@ -650,13 +732,17 @@ export function openAdminPanel() {
                 if (typeof window.updateLoginOptionsUI === "function") {
                   window.updateLoginOptionsUI({ disableFormLogin, disableBasicAuth, disableOIDCLogin });
                 }
+                // Update the captured initial state since the changes have now been saved.
+                captureInitialAdminConfig();
                 closeAdminPanel();
+              
               } else {
                 showToast(t("error_updating_settings") + ": " + (response.error || t("unknown_error")));
               }
             })
             .catch(() => { });
         });
+        // Enforce login option constraints.
         const disableFormLoginCheckbox = document.getElementById("disableFormLogin");
         const disableBasicAuthCheckbox = document.getElementById("disableBasicAuth");
         const disableOIDCLoginCheckbox = document.getElementById("disableOIDCLogin");
@@ -674,6 +760,9 @@ export function openAdminPanel() {
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
+        
+        // Capture initial state after the modal loads.
+        captureInitialAdminConfig();
       } else {
         adminModal.style.backgroundColor = overlayBackground;
         const modalContent = adminModal.querySelector(".modal-content");
@@ -691,6 +780,7 @@ export function openAdminPanel() {
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
         adminModal.style.display = "flex";
+        captureInitialAdminConfig();
       }
     })
     .catch(() => {
@@ -712,13 +802,20 @@ export function openAdminPanel() {
         document.getElementById("disableBasicAuth").checked = localStorage.getItem("disableBasicAuth") === "true";
         document.getElementById("disableOIDCLogin").checked = localStorage.getItem("disableOIDCLogin") === "true";
         adminModal.style.display = "flex";
+        captureInitialAdminConfig();
       } else {
         openAdminPanel();
       }
     });
 }
 
-export function closeAdminPanel() {
+export async function closeAdminPanel() {
+  if (hasUnsavedChanges()) {
+    const userConfirmed = await showCustomConfirmModal("You have unsaved changes. Are you sure you want to close without saving?");
+    if (!userConfirmed) {
+      return;
+    }
+  }
   const adminModal = document.getElementById("adminPanelModal");
   if (adminModal) adminModal.style.display = "none";
 }

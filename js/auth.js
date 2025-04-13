@@ -97,18 +97,36 @@ function loadAdminConfigFunc() {
   return fetch("getConfig.php", { credentials: "include" })
     .then(response => response.json())
     .then(config => {
+      // Save header_title into localStorage (if needed)
+      localStorage.setItem("headerTitle", config.header_title || "FileRise");
+
+      // Update login options and global OTPAuth URL as before
       localStorage.setItem("disableFormLogin", config.loginOptions.disableFormLogin);
       localStorage.setItem("disableBasicAuth", config.loginOptions.disableBasicAuth);
       localStorage.setItem("disableOIDCLogin", config.loginOptions.disableOIDCLogin);
       localStorage.setItem("globalOtpauthUrl", config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
+      
+      // Update the UI for login options
       updateLoginOptionsUIFromStorage();
+
+      const headerTitleElem = document.querySelector(".header-title h1");
+      if (headerTitleElem) {
+        headerTitleElem.textContent = config.header_title || "FileRise";
+      }
     })
     .catch(() => {
+      // Fallback defaults in case of error
+      localStorage.setItem("headerTitle", "FileRise");
       localStorage.setItem("disableFormLogin", "false");
       localStorage.setItem("disableBasicAuth", "false");
       localStorage.setItem("disableOIDCLogin", "false");
       localStorage.setItem("globalOtpauthUrl", "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
       updateLoginOptionsUIFromStorage();
+
+      const headerTitleElem = document.querySelector(".header-title h1");
+      if (headerTitleElem) {
+        headerTitleElem.textContent = "FileRise";
+      }
     });
 }
 

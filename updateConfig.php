@@ -33,6 +33,9 @@ if (!is_array($data)) {
     exit;
 }
 
+// Retrieve new header title, sanitize if necessary.
+$headerTitle = isset($data['header_title']) ? trim($data['header_title']) : "";
+
 // Validate and sanitize OIDC configuration.
 $oidc = isset($data['oidc']) ? $data['oidc'] : [];
 $oidcProviderUrl = isset($oidc['providerUrl']) ? filter_var($oidc['providerUrl'], FILTER_SANITIZE_URL) : '';
@@ -54,8 +57,9 @@ $disableOIDCLogin = isset($data['disableOIDCLogin']) ? filter_var($data['disable
 // Retrieve the global OTPAuth URL (new field). If not provided, default to an empty string.
 $globalOtpauthUrl = isset($data['globalOtpauthUrl']) ? trim($data['globalOtpauthUrl']) : "";
 
-// Prepare configuration array.
+// Prepare configuration array including the header title.
 $configUpdate = [
+    'header_title' => $headerTitle,  // New field for the header title
     'oidc' => [
         'providerUrl'  => $oidcProviderUrl,
         'clientId'     => $oidcClientId,
@@ -79,15 +83,10 @@ $encryptedContent = encryptData($plainTextConfig, $encryptionKey);
 
 // Attempt to write the new configuration.
 if (file_put_contents($configFile, $encryptedContent, LOCK_EX) === false) {
-    // Log the error.
     error_log("updateConfig.php: Initial write failed, attempting to delete the old configuration file.");
-    
-    // Delete the old file.
     if (file_exists($configFile)) {
         unlink($configFile);
     }
-    
-    // Try writing again.
     if (file_put_contents($configFile, $encryptedContent, LOCK_EX) === false) {
         error_log("updateConfig.php: Failed to write configuration even after deletion.");
         http_response_code(500);

@@ -11,14 +11,24 @@ if (file_exists($configFile)) {
         echo json_encode(['error' => 'Failed to decrypt configuration.']);
         exit;
     }
-    // Decode the configuration and ensure globalOtpauthUrl is set
+    // Decode the configuration and ensure required fields are set
     $config = json_decode($decryptedContent, true);
+    
+    // Ensure globalOtpauthUrl is set
     if (!isset($config['globalOtpauthUrl'])) {
         $config['globalOtpauthUrl'] = "";
     }
+    
+    // NEW: Ensure header_title is set.
+    if (!isset($config['header_title']) || empty($config['header_title'])) {
+        $config['header_title'] = "FileRise"; // default value
+    }
+    
     echo json_encode($config);
 } else {
+    // If no config file exists, provide defaults
     echo json_encode([
+        'header_title' => "FileRise",
         'oidc' => [
             'providerUrl'  => 'https://your-oidc-provider.com',
             'clientId'     => 'YOUR_CLIENT_ID',
