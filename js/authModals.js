@@ -3,7 +3,8 @@ import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
 const version = "v1.1.2";
-const adminTitle = `Admin Panel <small style="font-size: 12px; color: gray;">${version}</small>`;
+// Use t() for the admin panel title. (Make sure t("admin_panel") returns "Admin Panel" in English.)
+const adminTitle = `${t("admin_panel")} <small style="font-size: 12px; color: gray;">${version}</small>`;
 
 let lastLoginData = null;
 export function setLastLoginData(data) {
@@ -44,7 +45,7 @@ export function openTOTPLoginModal() {
           <input type="text" id="recoveryInput"
                  style="font-size:24px; text-align:center; width:100%; padding:10px;"
                  placeholder="Recovery code" />
-          <button type="button" id="submitRecovery" class="btn btn-secondary" style="margin-top:10px;">Submit Recovery Code</button>
+          <button type="button" id="submitRecovery" class="btn btn-secondary" style="margin-top:10px;">${t("submit_recovery_code")}</button>
         </div>
       </div>
     `;
@@ -66,12 +67,12 @@ export function openTOTPLoginModal() {
         // Switch to recovery
         totpSection.style.display = "none";
         recoverySection.style.display = "block";
-        toggleLink.textContent = "Use TOTP Code instead";
+        toggleLink.textContent = t("use_totp_code_instead");
       } else {
         // Switch back to TOTP
         recoverySection.style.display = "none";
         totpSection.style.display = "block";
-        toggleLink.textContent = "Use Recovery Code instead";
+        toggleLink.textContent = t("use_recovery_code_instead");
       }
     });
 
@@ -79,7 +80,7 @@ export function openTOTPLoginModal() {
     document.getElementById("submitRecovery").addEventListener("click", () => {
       const recoveryCode = document.getElementById("recoveryInput").value.trim();
       if (!recoveryCode) {
-        showToast("Please enter your recovery code.");
+        showToast(t("please_enter_recovery_code"));
         return;
       }
       fetch("totp_recover.php", {
@@ -97,11 +98,11 @@ export function openTOTPLoginModal() {
             // recovery succeeded → finalize login
             window.location.href = "index.html";
           } else {
-            showToast(json.message || "Recovery code verification failed");
+            showToast(json.message || t("recovery_code_verification_failed"));
           }
         })
         .catch(() => {
-          showToast("Error verifying recovery code.");
+          showToast(t("error_verifying_recovery_code"));
         });
     });
 
@@ -125,14 +126,14 @@ export function openTOTPLoginModal() {
             if (json.status === "ok") {
               window.location.href = "index.html";
             } else {
-              showToast(json.message || "TOTP verification failed");
+              showToast(json.message || t("totp_verification_failed"));
               this.value = "";
               totpLoginModal.style.display = "flex";
               totpInput.focus();
             }
           })
           .catch(() => {
-            showToast("TOTP verification failed");
+            showToast(t("totp_verification_failed"));
             this.value = "";
             totpLoginModal.style.display = "flex";
             totpInput.focus();
@@ -189,24 +190,24 @@ export function openUserPanel() {
     userPanelModal.innerHTML = `
         <div class="modal-content user-panel-content" style="${modalContentStyles}">
           <span id="closeUserPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
-          <h3>User Panel (${username})</h3>
-          <button type="button" id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom: 15px;">Change Password</button>
+          <h3>${t("user_panel")} (${username})</h3>
+          <button type="button" id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom: 15px;">${t("change_password")}</button>
           <fieldset style="margin-bottom: 15px;">
-            <legend>TOTP Settings</legend>
+            <legend>${t("totp_settings")}</legend>
             <div class="form-group">
-              <label for="userTOTPEnabled">Enable TOTP:</label>
+              <label for="userTOTPEnabled">${t("enable_totp")}:</label>
               <input type="checkbox" id="userTOTPEnabled" style="vertical-align: middle;" />
             </div>
           </fieldset>
           <fieldset style="margin-bottom: 15px;">
-            <legend>Language</legend>
+            <legend>${t("language")}</legend>
             <div class="form-group">
-              <label for="languageSelector">Select Language:</label>
+              <label for="languageSelector">${t("select_language")}:</label>
               <select id="languageSelector">
-                <option value="en">English</option>
-                <option value="es">Español</option>
-                <option value="fr">Français</option>
-                <option value="de">Deutsch</option>
+                <option value="en">${t("english")}</option>
+                <option value="es">${t("spanish")}</option>
+                <option value="fr">${t("french")}</option>
+                <option value="de">${t("german")}</option>
               </select>
             </div>
           </fieldset>
@@ -239,12 +240,12 @@ export function openUserPanel() {
         .then(r => r.json())
         .then(result => {
           if (!result.success) {
-            showToast("Error updating TOTP setting: " + result.error);
+            showToast(t("error_updating_totp_setting") + ": " + result.error);
           } else if (enabled) {
             openTOTPModal();
           }
         })
-        .catch(() => { showToast("Error updating TOTP setting."); });
+        .catch(() => { showToast(t("error_updating_totp_setting")); });
     });
     // Language dropdown initialization
     const languageSelector = document.getElementById("languageSelector");
@@ -264,36 +265,6 @@ export function openUserPanel() {
     modalContent.style.border = isDarkMode ? "1px solid #444" : "1px solid #ccc";
   }
   userPanelModal.style.display = "flex";
-}
-
-function showRecoveryCodeModal(recoveryCode) {
-  const recoveryModal = document.createElement("div");
-  recoveryModal.id = "recoveryModal";
-  recoveryModal.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(0,0,0,0.3);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 3200;
-  `;
-  recoveryModal.innerHTML = `
-    <div style="background: #fff; color: #000; padding: 20px; max-width: 400px; width: 90%; border-radius: 8px; text-align: center;">
-      <h3>Your Recovery Code</h3>
-      <p>Please save this code securely. It will not be shown again and can only be used once.</p>
-      <code style="display: block; margin: 10px 0; font-size: 20px;">${recoveryCode}</code>
-      <button type="button" id="closeRecoveryModal" class="btn btn-primary">OK</button>
-    </div>
-  `;
-  document.body.appendChild(recoveryModal);
-
-  document.getElementById("closeRecoveryModal").addEventListener("click", () => {
-    recoveryModal.remove();
-  });
 }
 
 export function openTOTPModal() {
@@ -327,15 +298,15 @@ export function openTOTPModal() {
     totpModal.innerHTML = `
     <div class="modal-content" style="${modalContentStyles}">
       <span id="closeTOTPModal" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
-      <h3>TOTP Setup</h3>
-      <p>Scan this QR code with your authenticator app:</p>
+      <h3>${t("totp_setup")}</h3>
+      <p>${t("scan_qr_code")}</p>
       <!-- Create an image placeholder without the CSRF token in the src -->
       <img id="totpQRCodeImage" src="" alt="TOTP QR Code" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
       <br/>
-      <p>Enter the 6-digit code from your app to confirm setup:</p>
+      <p>${t("enter_totp_confirmation")}</p>
       <input type="text" id="totpConfirmInput" maxlength="6" style="font-size:24px; text-align:center; width:100%; padding:10px;" placeholder="6-digit code" />
       <br/><br/>
-      <button type="button" id="confirmTOTPBtn" class="btn btn-primary">Confirm</button>
+      <button type="button" id="confirmTOTPBtn" class="btn btn-primary">${t("confirm")}</button>
     </div>
   `;
     document.body.appendChild(totpModal);
@@ -348,7 +319,7 @@ export function openTOTPModal() {
     document.getElementById("confirmTOTPBtn").addEventListener("click", function () {
       const code = document.getElementById("totpConfirmInput").value.trim();
       if (code.length !== 6) {
-        showToast("Please enter a valid 6-digit code.");
+        showToast(t("please_enter_valid_code"));
         return;
       }
       fetch("totp_verify.php", {
@@ -363,7 +334,7 @@ export function openTOTPModal() {
         .then(r => r.json())
         .then(result => {
           if (result.status === 'ok') {
-            showToast("TOTP successfully enabled.");
+            showToast(t("totp_enabled_successfully"));
             // After successful TOTP verification, fetch the recovery code
             fetch("totp_saveCode.php", {
               method: "POST",
@@ -379,16 +350,16 @@ export function openTOTPModal() {
                   // Show the recovery code in a secure modal
                   showRecoveryCodeModal(data.recoveryCode);
                 } else {
-                  showToast("Error generating recovery code: " + (data.message || "Unknown error."));
+                  showToast(t("error_generating_recovery_code") + ": " + (data.message || t("unknown_error")));
                 }
               })
-              .catch(() => { showToast("Error generating recovery code."); });
+              .catch(() => { showToast(t("error_generating_recovery_code")); });
             closeTOTPModal(false);
           } else {
-            showToast("TOTP verification failed: " + (result.message || "Invalid code."));
+            showToast(t("totp_verification_failed") + ": " + (result.message || t("invalid_code")));
           }
         })
-        .catch(() => { showToast("Error verifying TOTP code."); });
+        .catch(() => { showToast(t("error_verifying_totp_code")); });
     });
 
     // Focus the input and attach enter key listener
@@ -451,7 +422,7 @@ function loadTOTPQRCode() {
     })
     .catch(error => {
       console.error("Error loading TOTP QR code:", error);
-      showToast("Error loading QR code.");
+      showToast(t("error_loading_qr_code"));
     });
 }
 
@@ -479,10 +450,10 @@ export function closeTOTPModal(disable = true) {
       .then(r => r.json())
       .then(result => {
         if (!result.success) {
-          showToast("Error disabling TOTP setting: " + result.error);
+          showToast(t("error_disabling_totp_setting") + ": " + result.error);
         }
       })
-      .catch(() => { showToast("Error disabling TOTP setting."); });
+      .catch(() => { showToast(t("error_disabling_totp_setting")); });
   }
 }
 
@@ -523,66 +494,63 @@ export function openAdminPanel() {
             align-items: center;
             z-index: 3000;
           `;
-        // Added a version number next to "Admin Panel"
         adminModal.innerHTML = `
           <div class="modal-content" style="${modalContentStyles}">
             <span id="closeAdminPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
-            <h3>
-              <h3>${adminTitle}</h3>
-            </h3>
+            <h3>${adminTitle}</h3>
             <form id="adminPanelForm">
               <fieldset style="margin-bottom: 15px;">
-                <legend>User Management</legend>
+                <legend>${t("user_management")}</legend>
                 <div style="display: flex; gap: 10px;">
-                  <button type="button" id="adminOpenAddUser" class="btn btn-success">Add User</button>
-                  <button type="button" id="adminOpenRemoveUser" class="btn btn-danger">Remove User</button>
-                  <button type="button" id="adminOpenUserPermissions" class="btn btn-secondary">User Permissions</button>
+                  <button type="button" id="adminOpenAddUser" class="btn btn-success">${t("add_user")}</button>
+                  <button type="button" id="adminOpenRemoveUser" class="btn btn-danger">${t("remove_user")}</button>
+                  <button type="button" id="adminOpenUserPermissions" class="btn btn-secondary">${t("user_permissions")}</button>
                 </div>
               </fieldset>
               <fieldset style="margin-bottom: 15px;">
-                <legend>OIDC Configuration</legend>
+                <legend>${t("oidc_configuration")}</legend>
                 <div class="form-group">
-                  <label for="oidcProviderUrl">OIDC Provider URL:</label>
+                  <label for="oidcProviderUrl">${t("oidc_provider_url")}:</label>
                   <input type="text" id="oidcProviderUrl" class="form-control" value="${window.currentOIDCConfig.providerUrl}" />
                 </div>
                 <div class="form-group">
-                  <label for="oidcClientId">OIDC Client ID:</label>
+                  <label for="oidcClientId">${t("oidc_client_id")}:</label>
                   <input type="text" id="oidcClientId" class="form-control" value="${window.currentOIDCConfig.clientId}" />
                 </div>
                 <div class="form-group">
-                  <label for="oidcClientSecret">OIDC Client Secret:</label>
+                  <label for="oidcClientSecret">${t("oidc_client_secret")}:</label>
                   <input type="text" id="oidcClientSecret" class="form-control" value="${window.currentOIDCConfig.clientSecret}" />
                 </div>
                 <div class="form-group">
-                  <label for="oidcRedirectUri">OIDC Redirect URI:</label>
+                  <label for="oidcRedirectUri">${t("oidc_redirect_uri")}:</label>
                   <input type="text" id="oidcRedirectUri" class="form-control" value="${window.currentOIDCConfig.redirectUri}" />
                 </div>
               </fieldset>
               <fieldset style="margin-bottom: 15px;">
-                <legend>Global TOTP Settings</legend>
+                <legend>${t("global_totp_settings")}</legend>
                 <div class="form-group">
-                  <label for="globalOtpauthUrl">Global OTPAuth URL:</label>
+                  <label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label>
                   <input type="text" id="globalOtpauthUrl" class="form-control" value="${window.currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
                 </div>
               </fieldset>
               <fieldset style="margin-bottom: 15px;">
-                <legend>Login Options</legend>
+                <legend>${t("login_options")}</legend>
                 <div class="form-group">
                   <input type="checkbox" id="disableFormLogin" />
-                  <label for="disableFormLogin">Disable Login Form</label>
+                  <label for="disableFormLogin">${t("disable_login_form")}</label>
                 </div>
                 <div class="form-group">
                   <input type="checkbox" id="disableBasicAuth" />
-                  <label for="disableBasicAuth">Disable Basic HTTP Auth</label>
+                  <label for="disableBasicAuth">${t("disable_basic_http_auth")}</label>
                 </div>
                 <div class="form-group">
                   <input type="checkbox" id="disableOIDCLogin" />
-                  <label for="disableOIDCLogin">Disable OIDC Login</label>
+                  <label for="disableOIDCLogin">${t("disable_oidc_login")}</label>
                 </div>
               </fieldset>
               <div style="display: flex; justify-content: space-between;">
-                <button type="button" id="cancelAdminSettings" class="btn btn-secondary">Cancel</button>
-                <button type="button" id="saveAdminSettings" class="btn btn-primary">Save Settings</button>
+                <button type="button" id="cancelAdminSettings" class="btn btn-secondary">${t("cancel")}</button>
+                <button type="button" id="saveAdminSettings" class="btn btn-primary">${t("save_settings")}</button>
               </div>
             </form>
           </div>
@@ -614,7 +582,7 @@ export function openAdminPanel() {
           const disableOIDCLoginCheckbox = document.getElementById("disableOIDCLogin");
           const totalDisabled = [disableFormLoginCheckbox, disableBasicAuthCheckbox, disableOIDCLoginCheckbox].filter(cb => cb.checked).length;
           if (totalDisabled === 3) {
-            showToast("At least one login method must remain enabled.");
+            showToast(t("at_least_one_login_method"));
             disableOIDCLoginCheckbox.checked = false;
             localStorage.setItem("disableOIDCLogin", "false");
             if (typeof window.updateLoginOptionsUI === "function") {
@@ -645,7 +613,7 @@ export function openAdminPanel() {
           }, { "X-CSRF-Token": window.csrfToken })
             .then(response => {
               if (response.success) {
-                showToast("Settings updated successfully.");
+                showToast(t("settings_updated_successfully"));
                 localStorage.setItem("disableFormLogin", disableFormLogin);
                 localStorage.setItem("disableBasicAuth", disableBasicAuth);
                 localStorage.setItem("disableOIDCLogin", disableOIDCLogin);
@@ -654,7 +622,7 @@ export function openAdminPanel() {
                 }
                 closeAdminPanel();
               } else {
-                showToast("Error updating settings: " + (response.error || "Unknown error"));
+                showToast(t("error_updating_settings") + ": " + (response.error || t("unknown_error")));
               }
             })
             .catch(() => { });
@@ -665,7 +633,7 @@ export function openAdminPanel() {
         function enforceLoginOptionConstraint(changedCheckbox) {
           const totalDisabled = [disableFormLoginCheckbox, disableBasicAuthCheckbox, disableOIDCLoginCheckbox].filter(cb => cb.checked).length;
           if (changedCheckbox.checked && totalDisabled === 3) {
-            showToast("At least one login method must remain enabled.");
+            showToast(t("at_least_one_login_method"));
             changedCheckbox.checked = false;
           }
         }
@@ -726,7 +694,6 @@ export function closeAdminPanel() {
 }
 
 // --- New: User Permissions Modal ---
-
 export function openUserPermissionsModal() {
   let userPermissionsModal = document.getElementById("userPermissionsModal");
   const isDarkMode = document.body.classList.contains("dark-mode");
@@ -759,13 +726,13 @@ export function openUserPermissionsModal() {
     userPermissionsModal.innerHTML = `
         <div class="modal-content" style="${modalContentStyles}">
           <span id="closeUserPermissionsModal" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
-          <h3>User Permissions</h3>
+          <h3>${t("user_permissions")}</h3>
           <div id="userPermissionsList" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;">
             <!-- User rows will be loaded here -->
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button type="button" id="cancelUserPermissionsBtn" class="btn btn-secondary">Cancel</button>
-            <button type="button" id="saveUserPermissionsBtn" class="btn btn-primary">Save Permissions</button>
+            <button type="button" id="cancelUserPermissionsBtn" class="btn btn-secondary">${t("cancel")}</button>
+            <button type="button" id="saveUserPermissionsBtn" class="btn btn-primary">${t("save_permissions")}</button>
           </div>
         </div>
       `;
@@ -796,14 +763,14 @@ export function openUserPermissionsModal() {
       sendRequest("updateUserPermissions.php", "POST", { permissions: permissionsData }, { "X-CSRF-Token": window.csrfToken })
         .then(response => {
           if (response.success) {
-            showToast("User permissions updated successfully.");
+            showToast(t("user_permissions_updated_successfully"));
             userPermissionsModal.style.display = "none";
           } else {
-            showToast("Error updating permissions: " + (response.error || "Unknown error"));
+            showToast(t("error_updating_permissions") + ": " + (response.error || t("unknown_error")));
           }
         })
         .catch(() => {
-          showToast("Error updating permissions.");
+          showToast(t("error_updating_permissions"));
         });
     });
   } else {
@@ -828,14 +795,14 @@ function loadUserPermissionsList() {
         .then(usersData => {
           const users = Array.isArray(usersData) ? usersData : (usersData.users || []);
           if (users.length === 0) {
-            listContainer.innerHTML = "<p>No users found.</p>";
+            listContainer.innerHTML = "<p>" + t("no_users_found") + "</p>";
             return;
           }
           users.forEach(user => {
             // Skip admin users.
             if ((user.role && user.role === "1") || user.username.toLowerCase() === "admin") return;
 
-            // Use stored permissions if available; otherwise fall back to localStorage defaults.
+            // Use stored permissions if available; otherwise fall back to defaults.
             const defaultPerm = {
               folderOnly: false,
               readOnly: false,
@@ -859,15 +826,15 @@ function loadUserPermissionsList() {
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                   <label style="display: flex; align-items: center; gap: 5px;">
                     <input type="checkbox" data-permission="folderOnly" ${userPerm.folderOnly ? "checked" : ""} />
-                    User Folder Only
+                    ${t("user_folder_only")}
                   </label>
                   <label style="display: flex; align-items: center; gap: 5px;">
                     <input type="checkbox" data-permission="readOnly" ${userPerm.readOnly ? "checked" : ""} />
-                    Read Only
+                    ${t("read_only")}
                   </label>
                   <label style="display: flex; align-items: center; gap: 5px;">
                     <input type="checkbox" data-permission="disableUpload" ${userPerm.disableUpload ? "checked" : ""} />
-                    Disable Upload
+                    ${t("disable_upload")}
                   </label>
                 </div>
                 <hr style="margin-top: 10px; border: 0; border-bottom: 1px solid #ccc;">
@@ -877,6 +844,6 @@ function loadUserPermissionsList() {
         });
     })
     .catch(() => {
-      listContainer.innerHTML = "<p>Error loading users.</p>";
+      listContainer.innerHTML = "<p>" + t("error_loading_users") + "</p>";
     });
 }

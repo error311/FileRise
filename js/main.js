@@ -128,18 +128,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (darkModeToggle) {
       darkModeToggle.textContent = document.body.classList.contains("dark-mode")
-        ? "Light Mode"
-        : "Dark Mode";
+        ? t("light_mode")
+        : t("dark_mode");
 
       darkModeToggle.addEventListener("click", function () {
         if (document.body.classList.contains("dark-mode")) {
           document.body.classList.remove("dark-mode");
           localStorage.setItem("darkMode", "false");
-          darkModeToggle.textContent = "Dark Mode";
+          darkModeToggle.textContent = t("dark_mode");
         } else {
           document.body.classList.add("dark-mode");
           localStorage.setItem("darkMode", "true");
-          darkModeToggle.textContent = "Light Mode";
+          darkModeToggle.textContent = t("light_mode");
         }
       });
     }
