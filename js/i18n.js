@@ -85,6 +85,7 @@ const translations = {
     "folder_help_item_4": "To rename or delete a folder, select it and then click the appropriate button.",
 
     // File List keys:
+    "actions": "Actions",
     "file_list_title": "Files in (Root)",
     "files_in": "Files in",
     "delete_files": "Delete Files",
@@ -101,6 +102,13 @@ const translations = {
     "download_zip_title": "Download Selected Files as Zip",
     "download_zip_prompt": "Enter a name for the zip file:",
     "zip_placeholder": "files.zip",
+    "share": "Share",
+    "total_files": "Total Files",
+    "total_size": "Total Size",
+    "prev": "Prev",
+    "next": "Next",
+    "page": "Page",
+    "of": "of",
 
     // Login Form keys:
     "login": "Login",
@@ -142,6 +150,7 @@ const translations = {
     // Custom Confirm Modal keys:
     "yes": "Yes",
     "no": "No",
+    "unsaved_changes_confirm": "You have unsaved changes. Are you sure you want to close without saving?",
     "delete": "Delete",
     "download": "Download",
     "upload": "Upload",
@@ -164,6 +173,7 @@ const translations = {
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:
     "admin_panel": "Admin Panel",
     "user_panel": "User Panel",
+    "trash_restore_delete": "Trash Restore/Delete",
     "totp_settings": "TOTP Settings",
     "enable_totp": "Enable TOTP",
     "language": "Language",
@@ -217,7 +227,9 @@ const translations = {
     "save_permissions": "Save Permissions",
     "your_recovery_code": "Your Recovery Code",
     "please_save_recovery_code": "Please save this code securely. It will not be shown again and can only be used once.",
-    "ok": "OK"
+    "ok": "OK",
+    "show": "Show",
+    "items_per_page": "items per page"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",
@@ -361,6 +373,7 @@ const translations = {
     // Custom Confirm Modal keys:
     "yes": "Sí",
     "no": "No",
+    "unsaved_changes_confirm": "Tiene cambios sin guardar. ¿Está seguro de que desea cerrar sin guardar?",
     "delete": "Eliminar",
     "download": "Descargar",
     "upload": "Cargar",
@@ -580,6 +593,7 @@ const translations = {
     // Custom Confirm Modal keys:
     "yes": "Oui",
     "no": "Non",
+    "unsaved_changes_confirm": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir fermer sans enregistrer ?",
     "delete": "Supprimer",
     "download": "Télécharger",
     "upload": "Téléverser",
@@ -742,6 +756,7 @@ const translations = {
     "folder_help_item_4": "Um einen Ordner umzubenennen oder zu löschen, wählen Sie ihn aus und klicken Sie auf den entsprechenden Button.",
 
     // File List keys:
+    "actions": "Aktionen",
     "file_list_title": "Dateien in (Root)",
     "files_in": "Dateien in",
     "delete_files": "Dateien löschen",
@@ -758,6 +773,13 @@ const translations = {
     "download_zip_title": "Ausgewählte Dateien als Zip herunterladen",
     "download_zip_prompt": "Geben Sie einen Namen für die Zip-Datei ein:",
     "zip_placeholder": "files.zip",
+    "share": "Teilen",
+    "total_files": "Gesamtanzahl",
+    "total_size": "Gesamtgröße",
+    "prev": "Zurück",
+    "next": "Weiter",
+    "page": "Seite",
+    "of": "von",    
 
     // Login Form keys:
     "login": "Anmelden",
@@ -799,6 +821,7 @@ const translations = {
     // Custom Confirm Modal keys:
     "yes": "Ja",
     "no": "Nein",
+    "unsaved_changes_confirm": "Sie haben ungespeicherte Änderungen. Sind Sie sicher, dass Sie schließen möchten, ohne zu speichern?",
     "delete": "Löschen",
     "download": "Herunterladen",
     "upload": "Hochladen",
@@ -821,6 +844,7 @@ const translations = {
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:
     "admin_panel": "Administrationsbereich",
     "user_panel": "Benutzerbereich",
+    "trash_restore_delete": "Papierkorb wiederherstellen/löschen",
     "totp_settings": "TOTP-Einstellungen",
     "enable_totp": "TOTP aktivieren",
     "language": "Sprache",
@@ -874,7 +898,9 @@ const translations = {
     "save_permissions": "Berechtigungen speichern",
     "your_recovery_code": "Ihr Wiederherstellungscode",
     "please_save_recovery_code": "Bitte speichern Sie diesen Code sicher. Er wird nicht erneut angezeigt und kann nur einmal verwendet werden.",
-    "ok": "OK"
+    "ok": "OK",
+    "show": "Zeige",
+    "items_per_page": "elemente pro seite"
   }
 };
 

@@ -73,7 +73,7 @@ function buildFolderSummary(filteredFiles) {
         return sum + parseSizeToBytes(file.size);
     }, 0);
     const sizeStr = formatSize(totalBytes);
-    return `<strong>Total Files:</strong> ${totalFiles} &nbsp;|&nbsp; <strong>Total Size:</strong> ${sizeStr}`;
+    return `<strong>${t('total_files')}:</strong> ${totalFiles} &nbsp;|&nbsp; <strong>${t('total_size')}:</strong> ${sizeStr}`;
 }
 
 /**
@@ -316,7 +316,7 @@ export function renderFileTable(folder, container) {
             rowHTML = rowHTML.replace(/(<td class="file-name-cell">)(.*?)(<\/td>)/, (match, p1, p2, p3) => {
                 return p1 + p2 + tagBadgesHTML + p3;
             });
-            rowHTML = rowHTML.replace(/(<\/div>\s*<\/td>\s*<\/tr>)/, `<button class="share-btn btn btn-sm btn-secondary" data-file="${escapeHTML(file.name)}" title="Share">
+            rowHTML = rowHTML.replace(/(<\/div>\s*<\/td>\s*<\/tr>)/, `<button class="share-btn btn btn-sm btn-secondary" data-file="${escapeHTML(file.name)}" title="${t('share')}">
                 <i class="material-icons">share</i>
               </button>$1`);
             rowsHTML += rowHTML;
@@ -425,18 +425,18 @@ export function renderGalleryView(folder, container) {
           <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
             <button type="button" class="btn btn-sm btn-success download-btn" 
                 onclick="openDownloadModal('${file.name}', '${file.folder || 'root'}')" 
-                title="Download">
+                title="${t('download')}">
                 <i class="material-icons">file_download</i>
             </button>
             ${file.editable ? `
-              <button class="btn btn-sm edit-btn" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Edit">
+              <button class="btn btn-sm edit-btn" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('Edit')}">
                 <i class="material-icons">edit</i>
               </button>
             ` : ""}
-            <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="Rename">
+            <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('rename')}">
                <i class="material-icons">drive_file_rename_outline</i>
             </button>
-            <button class="btn btn-sm btn-secondary share-btn" data-file="${escapeHTML(file.name)}" title="Share">
+            <button class="btn btn-sm btn-secondary share-btn" data-file="${escapeHTML(file.name)}" title="${t('share')}">
                <i class="material-icons">share</i>
             </button>
           </div>

@@ -1,5 +1,5 @@
 import { sendRequest } from './networkUtils.js';
-import { t } from './i18n.js';
+import { t, applyTranslations } from './i18n.js';
 import {
   toggleVisibility,
   showToast as originalShowToast,
@@ -164,7 +164,8 @@ function updateAuthenticatedUI(data) {
       restoreBtn = document.createElement("button");
       restoreBtn.id = "restoreFilesBtn";
       restoreBtn.classList.add("btn", "btn-warning");
-      restoreBtn.innerHTML = '<i class="material-icons" title="Restore/Delete Trash">restore_from_trash</i>';
+      restoreBtn.setAttribute("data-i18n-title", "trash_restore_delete");
+      restoreBtn.innerHTML = '<i class="material-icons">restore_from_trash</i>';
       if (firstButton) insertAfter(restoreBtn, firstButton);
       else headerButtons.appendChild(restoreBtn);
     }
@@ -175,7 +176,8 @@ function updateAuthenticatedUI(data) {
       adminPanelBtn = document.createElement("button");
       adminPanelBtn.id = "adminPanelBtn";
       adminPanelBtn.classList.add("btn", "btn-info");
-      adminPanelBtn.innerHTML = '<i class="material-icons" title="Admin Panel">admin_panel_settings</i>';
+      adminPanelBtn.setAttribute("data-i18n-title", "admin_panel");
+      adminPanelBtn.innerHTML = '<i class="material-icons">admin_panel_settings</i>';
       insertAfter(adminPanelBtn, restoreBtn);
       adminPanelBtn.addEventListener("click", openAdminPanel);
     } else {
@@ -194,17 +196,19 @@ function updateAuthenticatedUI(data) {
       userPanelBtn = document.createElement("button");
       userPanelBtn.id = "userPanelBtn";
       userPanelBtn.classList.add("btn", "btn-user");
-      userPanelBtn.innerHTML = '<i class="material-icons" title="User Panel">account_circle</i>';
+      userPanelBtn.setAttribute("data-i18n-title", "user_panel");
+      userPanelBtn.innerHTML = '<i class="material-icons">account_circle</i>';
+      
       const adminBtn = document.getElementById("adminPanelBtn");
       if (adminBtn) insertAfter(userPanelBtn, adminBtn);
       else if (firstButton) insertAfter(userPanelBtn, firstButton);
-      else headerButtons.appendChild(userPanelBtn);
+      else headerButtons.appendChild(userPanelBtn); 
       userPanelBtn.addEventListener("click", openUserPanel);
     } else {
       userPanelBtn.style.display = "block";
     }
   }
-
+  applyTranslations();
   updateItemsPerPageSelect();
   updateLoginOptionsUIFromStorage();
 }

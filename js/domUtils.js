@@ -117,9 +117,9 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
       </div>
       <div class="col-12 col-md-4 text-left">
         <div class="d-flex justify-content-center justify-content-md-start align-items-center">
-          <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">Prev</button>
-          <span class="page-indicator">Page ${currentPage} of ${totalPages || 1}</span>
-          <button class="custom-prev-next-btn" ${currentPage === totalPages ? "disabled" : ""} onclick="changePage(${currentPage + 1})">Next</button>
+          <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">${t("prev")}</button>
+          <span class="page-indicator">${t("page")} ${currentPage} ${t("of")} ${totalPages || 1}</span>
+          <button class="custom-prev-next-btn" ${currentPage === totalPages ? "disabled" : ""} onclick="changePage(${currentPage + 1})">${t("next")}</button>
         </div>
       </div>
     </div>
@@ -137,7 +137,7 @@ export function buildFileTableHeader(sortOrder) {
           <th data-column="uploaded" class="hide-small hide-medium sortable-col">${t("upload_date")} ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="size" class="hide-small sortable-col">${t("file_size")} ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="uploader" class="hide-small hide-medium sortable-col">${t("uploader")} ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th>Actions</th>
+          <th>${t("actions")}</th>
         </tr>
       </thead>
   `;
@@ -181,36 +181,38 @@ export function buildFileTableRow(file, folderPath) {
       <div class="button-wrap" style="display: flex; justify-content: left; gap: 5px;">
         <button type="button" class="btn btn-sm btn-success download-btn" 
           onclick="openDownloadModal('${file.name}', '${file.folder || 'root'}')" 
-          title="Download">
-        <i class="material-icons">file_download</i>
+          title="${t('download')}">
+          <i class="material-icons">file_download</i>
         </button>
         ${file.editable ? `
           <button class="btn btn-sm edit-btn" 
                   onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
-                  title="Edit">
+                  title="${t('edit')}">
             <i class="material-icons">edit</i>
           </button>
         ` : ""}
         ${previewButton}
         <button class="btn btn-sm btn-warning rename-btn" 
                 onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
-                title="Rename">
+                title="${t('rename')}">
           <i class="material-icons">drive_file_rename_outline</i>
         </button>
       </div>
     </td>
   </tr>
-  `;
+`;
 }
 
 export function buildBottomControls(itemsPerPageSetting) {
   return `
     <div class="d-flex align-items-center mt-3 bottom-controls">
-      <label class="label-inline mr-2 mb-0">Show</label>
+      <label class="label-inline mr-2 mb-0">${t("show")}</label>
       <select class="form-control bottom-select" onchange="changeItemsPerPage(this.value)">
-        ${[10, 20, 50, 100].map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`).join("")}
+        ${[10, 20, 50, 100]
+          .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
+          .join("")}
       </select>
-      <span class="items-per-page-text ml-2 mb-0">items per page</span>
+      <span class="items-per-page-text ml-2 mb-0">${t("items_per_page")}</span>
     </div>
   `;
 }

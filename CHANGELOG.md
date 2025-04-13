@@ -7,6 +7,9 @@
 - main.js added Dark & Light mode i18n.js keys.
 - New Admin section Header Settings to change Header Title.
 - Admin Panel confirm unsaved changes.
+- Added translations and data attributes for almost all user-facing text
+
+---
 
 ## Changes 4/12/2025
 

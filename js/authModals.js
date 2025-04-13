@@ -811,7 +811,7 @@ export function openAdminPanel() {
 
 export async function closeAdminPanel() {
   if (hasUnsavedChanges()) {
-    const userConfirmed = await showCustomConfirmModal("You have unsaved changes. Are you sure you want to close without saving?");
+    const userConfirmed = await showCustomConfirmModal(t("unsaved_changes_confirm"));
     if (!userConfirmed) {
       return;
     }
