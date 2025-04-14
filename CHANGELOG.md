@@ -4,6 +4,7 @@
 
 - Fix Gallery View: medium screen devices get 3 max columns and small screen devices 2 max columns.
 - Ensure gallery view toggle button displays after refresh page.
+- Force resumable chunk size & fix chunk cleanup
 
 ### filePreview.js Enhancements
 

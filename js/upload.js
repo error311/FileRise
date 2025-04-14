@@ -409,6 +409,7 @@ function initResumableUpload() {
     query: { folder: window.currentFolder || "root", upload_token: window.csrfToken },
     chunkSize: 1.5 * 1024 * 1024, // 1.5 MB chunks
     simultaneousUploads: 3,
+    forceChunkSize: true,
     testChunks: false,
     throttleProgressCallbacks: 1,
     headers: { "X-CSRF-Token": window.csrfToken }
