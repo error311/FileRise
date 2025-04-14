@@ -10,6 +10,41 @@
 - Added translations and data attributes for almost all user-facing text
 - Extend i18n support: Add new translation keys for Download and Share modals
 
+- **Slider Integration:**
+  - Added a slider UI (range input, label, and value display) directly above the gallery grid.
+  - The slider allows users to adjust the number of columns in the gallery from 1 to 6.
+- **Dynamic Grid Updates:**
+  - The gallery grid’s CSS is updated in real time via the slider’s value by setting the grid-template-columns property.
+  - As the slider value changes, the layout instantly reflects the new column count.
+- **Dynamic Image Resizing:**
+  - Introduced a helper function (getMaxImageHeight) that calculates the maximum image height based on the current column count.
+  - The max height of each image is updated immediately when the slider is adjusted to create a more dynamic display.
+- **Image Caching:**
+  - Implemented an image caching mechanism using a global window.imageCache object.
+  - Images are cached on load (via an onload event) to prevent unnecessary reloading, improving performance.
+- **Event Handling:**
+  - The slider’s event listener is set up to update both the gallery grid layout and the dimensions of the thumbnails dynamically.
+  - Share button event listeners remain attached for proper functionality across the updated gallery view.
+
+- **Input Validation & Security:**
+  - Used `filter_input()` to sanitize and validate incoming GET parameters (token, pass, page).
+  - Validated file system paths using `realpath()` and ensured the shared folder lies within `UPLOAD_DIR`.
+  - Escaped all dynamic outputs with `htmlspecialchars()` to prevent XSS.
+- **Share Link Verification:**
+  - Loaded and validated share records from the JSON file.
+  - Handled expiration and password protection (with proper HTTP status codes for errors).
+- **Pagination:**
+  - Implemented pagination by slicing the full file list into a limited number of files per page (default of 10).
+  - Calculated total pages and current page to create navigation links.
+- **View Toggle (List vs. Gallery):**
+  - Added a toggle button that switches between a traditional list view and a gallery view.
+  - Maintained two separate view containers (`#listViewContainer` and `#galleryViewContainer`) to support this switching.
+- **Gallery View with Image Caching:**
+  - For the gallery view, implemented a JavaScript function that creates a grid of image thumbnails.
+  - Each image uses a cache-busting query string on first load and caches its URL in a global `window.imageCache` for subsequent renders.
+- **Persistent Pagination Controls:**
+  - Moved the pagination controls outside the individual view containers so that they remain visible regardless of the selected view.
+
 ---
 
 ## Changes 4/12/2025

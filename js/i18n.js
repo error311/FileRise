@@ -236,7 +236,8 @@ const translations = {
     "please_save_recovery_code": "Please save this code securely. It will not be shown again and can only be used once.",
     "ok": "OK",
     "show": "Show",
-    "items_per_page": "items per page"
+    "items_per_page": "items per page",
+    "columns":"Columns"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",
@@ -463,7 +464,8 @@ const translations = {
     "save_permissions": "Guardar permisos",
     "your_recovery_code": "Su código de recuperación",
     "please_save_recovery_code": "Por favor, guarde este código de forma segura. No se mostrará de nuevo y solo podrá usarse una vez.",
-    "ok": "OK"
+    "ok": "OK",
+    "columns": "Columnas"
   },
   fr: {
     "please_log_in_to_continue": "Veuillez vous connecter pour continuer.",
@@ -690,7 +692,8 @@ const translations = {
     "save_permissions": "Enregistrer les permissions",
     "your_recovery_code": "Votre code de récupération",
     "please_save_recovery_code": "Veuillez sauvegarder ce code en toute sécurité. Il ne sera plus affiché et ne pourra être utilisé qu'une seule fois.",
-    "ok": "OK"
+    "ok": "OK",
+    "columns": "Colonnes"
   },
   de: {
     "please_log_in_to_continue": "Bitte melden Sie sich an, um fortzufahren.",
@@ -928,7 +931,8 @@ const translations = {
     "please_save_recovery_code": "Bitte speichern Sie diesen Code sicher. Er wird nicht erneut angezeigt und kann nur einmal verwendet werden.",
     "ok": "OK",
     "show": "Zeige",
-    "items_per_page": "elemente pro seite"
+    "items_per_page": "elemente pro seite",
+    "columns": "Spalten"
   }
 };
 

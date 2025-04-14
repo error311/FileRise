@@ -90,6 +90,13 @@ function toggleAdvancedSearch() {
     renderFileTable(window.currentFolder);
 }
 
+window.imageCache = window.imageCache || {};
+function cacheImage(imgElem, key) {
+  // Save the current src for future renders.
+  window.imageCache[key] = imgElem.src;
+}
+window.cacheImage = cacheImage;
+
 /**
  * --- Fuse.js Search Helper ---
  * Uses Fuse.js to perform a fuzzy search on fileData.
@@ -388,76 +395,142 @@ export function renderFileTable(folder, container) {
 /**
  * Similarly, update renderGalleryView to accept an optional container.
  */
-export function renderGalleryView(folder, container) {
+// A helper to compute the max image height based on the current column count.
+function getMaxImageHeight() {
+    // Use the slider value (default to 3 if undefined).
+    const columns = parseInt(window.galleryColumns || 3, 10);
+    // Simple scaling: fewer columns yield bigger images.
+    // For instance, if columns === 6, max-height is 150px,
+    // and if columns === 1, max-height could be 150 * 6 = 900px.
+    return 150 * (7 - columns); // adjust the multiplier as needed.
+  }
+  
+  export function renderGalleryView(folder, container) {
     const fileListContent = container || document.getElementById("fileList");
     const searchTerm = (window.currentSearchTerm || "").toLowerCase();
-    // Use Fuse.js search for gallery view as well.
     const filteredFiles = searchFiles(searchTerm);
     const folderPath = folder === "root"
-        ? "uploads/"
-        : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-    const gridStyle = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 10px;";
-    let galleryHTML = `<div class="gallery-container" style="${gridStyle}">`;
+      ? "uploads/"
+      : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
+  
+    // Use the current global column value (default to 3).
+    const numColumns = window.galleryColumns || 3;
+    
+    // --- Insert slider controls ---
+    // Build the slider HTML.
+    const sliderHTML = `
+      <div class="gallery-slider" style="margin: 10px; text-align: center;">
+        <label for="galleryColumnsSlider" style="margin-right: 5px;">${t('columns')}:</label>
+        <input type="range" id="galleryColumnsSlider" min="1" max="6" value="${numColumns}" style="vertical-align: middle;">
+        <span id="galleryColumnsValue">${numColumns}</span>
+      </div>
+    `;
+    
+    // Set up the grid container using the slider's value.
+    const gridStyle = `display: grid; grid-template-columns: repeat(${numColumns}, 1fr); gap: 10px; padding: 10px;`;
+    
+    // Build the gallery container HTML and include the slider above it.
+    let galleryHTML = sliderHTML;
+    galleryHTML += `<div class="gallery-container" style="${gridStyle}">`;
+    
     filteredFiles.forEach((file) => {
-        let thumbnail;
-        if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
-            thumbnail = `<img src="${folderPath + encodeURIComponent(file.name)}?t=${new Date().getTime()}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: 150px; display: block; margin: 0 auto;">`;
-        } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
-            thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
+      let thumbnail;
+      if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
+        const cacheKey = folderPath + encodeURIComponent(file.name);
+        if (window.imageCache && window.imageCache[cacheKey]) {
+          thumbnail = `<img src="${window.imageCache[cacheKey]}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
         } else {
-            thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
+          const imageUrl = folderPath + encodeURIComponent(file.name) + "?t=" + new Date().getTime();
+          thumbnail = `<img src="${imageUrl}" onload="cacheImage(this, '${cacheKey}')" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
         }
-        let tagBadgesHTML = "";
-        if (file.tags && file.tags.length > 0) {
-            tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
-            file.tags.forEach(tag => {
-                tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
-            });
-            tagBadgesHTML += `</div>`;
-        }
-        galleryHTML += `<div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
-        <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
-          ${thumbnail}
-        </div>
-        <div class="gallery-info" style="margin-top: 5px;">
-          <span class="gallery-file-name" style="display: block; white-space: normal; overflow-wrap: break-word; word-wrap: break-word;">${escapeHTML(file.name)}</span>
-          ${tagBadgesHTML}
-          <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
-            <button type="button" class="btn btn-sm btn-success download-btn" 
-                onclick="openDownloadModal('${file.name}', '${file.folder || 'root'}')" 
-                title="${t('download')}">
-                <i class="material-icons">file_download</i>
-            </button>
-            ${file.editable ? `
-              <button class="btn btn-sm edit-btn" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('Edit')}">
-                <i class="material-icons">edit</i>
-              </button>
-            ` : ""}
-            <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('rename')}">
-               <i class="material-icons">drive_file_rename_outline</i>
-            </button>
-            <button class="btn btn-sm btn-secondary share-btn" data-file="${escapeHTML(file.name)}" title="${t('share')}">
-               <i class="material-icons">share</i>
-            </button>
+      } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
+        thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
+      } else {
+        thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
+      }
+      
+      let tagBadgesHTML = "";
+      if (file.tags && file.tags.length > 0) {
+        tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
+        file.tags.forEach(tag => {
+          tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
+        });
+        tagBadgesHTML += `</div>`;
+      }
+      
+      galleryHTML += `
+        <div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
+          <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
+            ${thumbnail}
           </div>
-        </div>
-      </div>`;
+          <div class="gallery-info" style="margin-top: 5px;">
+            <span class="gallery-file-name" style="display: block; white-space: normal; overflow-wrap: break-word; word-wrap: break-word;">
+              ${escapeHTML(file.name)}
+            </span>
+            ${tagBadgesHTML}
+            <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
+              <button type="button" class="btn btn-sm btn-success download-btn" 
+                  onclick="openDownloadModal('${file.name}', '${file.folder || 'root'}')" 
+                  title="${t('download')}">
+                  <i class="material-icons">file_download</i>
+              </button>
+              ${file.editable ? `
+                <button class="btn btn-sm edit-btn" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('Edit')}">
+                  <i class="material-icons">edit</i>
+                </button>
+              ` : ""}
+              <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('rename')}">
+                 <i class="material-icons">drive_file_rename_outline</i>
+              </button>
+              <button class="btn btn-sm btn-secondary share-btn" data-file="${escapeHTML(file.name)}" title="${t('share')}">
+                 <i class="material-icons">share</i>
+              </button>
+            </div>
+          </div>
+        </div>`;
     });
-    galleryHTML += "</div>";
+    galleryHTML += "</div>"; // End gallery container.
+    
     fileListContent.innerHTML = galleryHTML;
     createViewToggleButton();
     updateFileActionButtons();
+    
+    // Attach share button event listeners.
     document.querySelectorAll(".share-btn").forEach(btn => {
-        btn.addEventListener("click", e => {
-            e.stopPropagation();
-            const fileName = btn.getAttribute("data-file");
-            const file = fileData.find(f => f.name === fileName);
-            import('./filePreview.js').then(module => {
-                module.openShareModal(file, folder);
-            });
-        });
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        const fileName = btn.getAttribute("data-file");
+        const file = fileData.find(f => f.name === fileName);
+        if (file) {
+          import('./filePreview.js').then(module => {
+            module.openShareModal(file, folder);
+          });
+        }
+      });
     });
-}
+    
+    // --- Slider Event Listener ---
+    const slider = document.getElementById("galleryColumnsSlider");
+    if (slider) {
+      slider.addEventListener("input", function() {
+        const value = this.value;
+        // Update the slider display.
+        document.getElementById("galleryColumnsValue").textContent = value;
+        // Update global value so new renders use the correct value.
+        window.galleryColumns = value;
+        // Update the grid columns.
+        const galleryContainer = document.querySelector(".gallery-container");
+        if (galleryContainer) {
+          galleryContainer.style.gridTemplateColumns = `repeat(${value}, 1fr)`;
+        }
+        // Compute the new max image height.
+        const newMaxHeight = getMaxImageHeight();
+        document.querySelectorAll(".gallery-thumbnail").forEach(img => {
+          img.style.maxHeight = newMaxHeight + "px";
+        });
+      });
+    }
+  }
 
 export function sortFiles(column, folder) {
     if (sortOrder.column === column) {

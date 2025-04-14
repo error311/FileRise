@@ -75,7 +75,7 @@ if ($fileUpload['size'] > $maxSize) {
 }
 
 // Define allowed file extensions.
-$allowedExtensions = ['jpg','jpeg','png','gif','pdf','doc','docx','txt','xls','xlsx','ppt','pptx','mp4','webm','mp3'];
+$allowedExtensions = ['jpg','jpeg','png','gif','pdf','doc','docx','txt','xls','xlsx','ppt','pptx','mp4','webm','mp3','mkv'];
 $uploadedName = basename($fileUpload['name']);
 $ext = strtolower(pathinfo($uploadedName, PATHINFO_EXTENSION));
 if (!in_array($ext, $allowedExtensions)) {

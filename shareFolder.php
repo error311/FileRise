@@ -17,7 +17,7 @@ if (empty($token)) {
     exit;
 }
 
-// Load share folder records.
+// Load share folder records securely.
 $shareFile = META_DIR . "share_folder_links.json";
 if (!file_exists($shareFile)) {
     http_response_code(404);
@@ -139,7 +139,7 @@ $allFiles = array_values(array_filter(scandir($realFolderPath), function($item) 
 }));
 sort($allFiles);
 
-// Pagination variables.
+// Pagination variables — limits the number of files (and thus images) per page.
 $itemsPerPage = 10;
 $totalFiles = count($allFiles);
 $totalPages = max(1, ceil($totalFiles / $itemsPerPage));
@@ -195,6 +195,20 @@ function formatBytes($bytes) {
             padding: 20px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.1);
         }
+        /* Toggle button */
+        .toggle-btn {
+            margin-bottom: 20px;
+            padding: 8px 16px;
+            background: #007BFF;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .toggle-btn:hover {
+            background: #0056b3;
+        }
+        /* List view table styles */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -220,13 +234,12 @@ function formatBytes($bytes) {
         a:hover {
             text-decoration: underline;
         }
-        /* Simple download icon style */
         .download-icon {
             margin-left: 8px;
             font-weight: bold;
             color: #007BFF;
         }
-        /* Pagination styles */
+        /* Pagination styles - placed outside the view containers. */
         .pagination {
             text-align: center;
             margin-top: 20px;
@@ -242,6 +255,24 @@ function formatBytes($bytes) {
         .pagination span.current {
             background: #0056b3;
         }
+        /* Gallery view styles */
+        .shared-gallery-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            padding: 10px 0;
+        }
+        .shared-gallery-card {
+            border: 1px solid #ccc;
+            padding: 5px;
+            text-align: center;
+        }
+        .shared-gallery-card img {
+            max-width: 100%;
+            display: block;
+            margin: 0 auto;
+        }
+        /* Upload container */
         .upload-container {
             margin-top: 30px;
             text-align: center;
@@ -279,22 +310,27 @@ function formatBytes($bytes) {
     <h1>Shared Folder: <?php echo htmlspecialchars($folder, ENT_QUOTES, 'UTF-8'); ?></h1>
 </div>
 <div class="container">
-    <?php if (empty($filesOnPage)): ?>
-        <p style="text-align:center;">This folder is empty.</p>
-    <?php else: ?>
-        <table>
-            <thead>
-                <tr>
-                    <th>Filename</th>
-                    <th>Size</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($filesOnPage as $file):
-                    $filePath = $realFolderPath . DIRECTORY_SEPARATOR . $file;
-                    $fileSize = formatBytes(filesize($filePath));
-                    // Build download link using share token and file name.
-                    $downloadLink = "downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
+    <!-- Toggle Button -->
+    <button id="toggleBtn" class="toggle-btn" onclick="toggleViewMode()">Switch to Gallery View</button>
+    
+    <!-- View Containers -->
+    <div id="listViewContainer">
+        <?php if (empty($filesOnPage)): ?>
+            <p style="text-align:center;">This folder is empty.</p>
+        <?php else: ?>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Size</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($filesOnPage as $file):
+                        $filePath = $realFolderPath . DIRECTORY_SEPARATOR . $file;
+                        $fileSize = formatBytes(filesize($filePath));
+                        // Build download link using share token and file name.
+                        $downloadLink = "downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
                     ?>
                     <tr>
                         <td>
@@ -305,37 +341,41 @@ function formatBytes($bytes) {
                         </td>
                         <td><?php echo $fileSize; ?></td>
                     </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        <!-- Pagination Controls -->
-        <div class="pagination">
-            <?php if ($currentPage > 1): ?>
-                <a href="shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    </div>
+    
+    <!-- Gallery View Container (hidden by default) -->
+    <div id="galleryViewContainer" style="display:none;"></div>
+    
+    <!-- Pagination Controls (always visible) -->
+    <div class="pagination">
+        <?php if ($currentPage > 1): ?>
+            <a href="shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
+        <?php else: ?>
+            <span>Prev</span>
+        <?php endif; ?>
+
+        <?php
+        $startPage = max(1, $currentPage - 2);
+        $endPage = min($totalPages, $currentPage + 2);
+        for ($i = $startPage; $i <= $endPage; $i++): ?>
+            <?php if ($i == $currentPage): ?>
+                <span class="current"><?php echo $i; ?></span>
             <?php else: ?>
-                <span>Prev</span>
+                <a href="shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $i; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>"><?php echo $i; ?></a>
             <?php endif; ?>
+        <?php endfor; ?>
 
-            <?php
-            // Display up to 5 page links centered around the current page.
-            $startPage = max(1, $currentPage - 2);
-            $endPage = min($totalPages, $currentPage + 2);
-            for ($i = $startPage; $i <= $endPage; $i++): ?>
-                <?php if ($i == $currentPage): ?>
-                    <span class="current"><?php echo $i; ?></span>
-                <?php else: ?>
-                    <a href="shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $i; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>"><?php echo $i; ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-
-            <?php if ($currentPage < $totalPages): ?>
-                <a href="shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
-            <?php else: ?>
-                <span>Next</span>
-            <?php endif; ?>
-        </div>
-    <?php endif; ?>
-
+        <?php if ($currentPage < $totalPages): ?>
+            <a href="shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
+        <?php else: ?>
+            <span>Next</span>
+        <?php endif; ?>
+    </div>
+    
     <?php if ($record['allowUpload']) : ?>
         <div class="upload-container">
             <h3>Upload File (50mb max size)</h3>
@@ -352,5 +392,66 @@ function formatBytes($bytes) {
 <div class="footer">
     &copy; <?php echo date("Y"); ?> FileRise. All rights reserved.
 </div>
+
+<script>
+// Global variables
+var viewMode = 'list';
+window.imageCache = window.imageCache || {};
+
+// File data for the gallery view (current page file names)
+// Since the server-side pagination limits the files per page, gallery view shows the same files.
+var filesData = <?php echo json_encode($filesOnPage); ?>;
+// Define the relative URL for this shared folder's files.
+var filesUrlBase = "uploads/<?php echo htmlspecialchars($folder, ENT_QUOTES, 'UTF-8'); ?>";
+
+// Helper function to cache image URLs.
+function cacheImage(imgElem, key) {
+    window.imageCache[key] = imgElem.src;
+}
+
+// Render gallery view using filesData.
+function renderGalleryView() {
+    var galleryContainer = document.getElementById("galleryViewContainer");
+    var html = '<div class="shared-gallery-container">';
+    filesData.forEach(function(file) {
+        var fileUrl = filesUrlBase + "/" + encodeURIComponent(file);
+        var ext = file.split('.').pop().toLowerCase();
+        var thumbnail = "";
+        if (['jpg','jpeg','png','gif','bmp','webp','svg','ico'].indexOf(ext) >= 0) {
+            var cacheKey = fileUrl;
+            if (window.imageCache[cacheKey]) {
+                thumbnail = '<img src="'+window.imageCache[cacheKey]+'" alt="'+file+'">';
+            } else {
+                var imageUrl = fileUrl + '?t=' + new Date().getTime();
+                thumbnail = '<img src="'+imageUrl+'" onload="cacheImage(this, \''+cacheKey+'\')" alt="'+file+'">';
+            }
+        } else {
+            thumbnail = '<span class="material-icons">insert_drive_file</span>';
+        }
+        html += '<div class="shared-gallery-card">';
+        html += '<div class="gallery-preview" onclick="window.location.href=\''+fileUrl+'\'" style="cursor:pointer;">'+ thumbnail +'</div>';
+        html += '<div class="gallery-info"><span class="gallery-file-name">'+file+'</span></div>';
+        html += '</div>';
+    });
+    html += '</div>';
+    galleryContainer.innerHTML = html;
+}
+
+// Toggle between list and gallery views.
+function toggleViewMode() {
+    if (viewMode === 'list') {
+        viewMode = 'gallery';
+        document.getElementById("listViewContainer").style.display = "none";
+        renderGalleryView();
+        document.getElementById("galleryViewContainer").style.display = "block";
+        document.getElementById("toggleBtn").textContent = "Switch to List View";
+    } else {
+        viewMode = 'list';
+        document.getElementById("galleryViewContainer").style.display = "none";
+        document.getElementById("listViewContainer").style.display = "block";
+        document.getElementById("toggleBtn").textContent = "Switch to Gallery View";
+    }
+}
+</script>
 </body>
 </html>
