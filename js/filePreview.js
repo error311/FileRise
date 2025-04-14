@@ -182,7 +182,7 @@ export function previewFile(fileUrl, fileName) {
     leftTop.style.gap = '4px';
     // Zoom In button.
     const zoomInBtn = document.createElement('button');
-    zoomInBtn.className = 'material-icons';
+    zoomInBtn.className = 'material-icons zoom_in';
     zoomInBtn.title = 'Zoom In';
     zoomInBtn.style.background = 'transparent';
     zoomInBtn.style.border = 'none';
@@ -190,7 +190,7 @@ export function previewFile(fileUrl, fileName) {
     zoomInBtn.textContent = 'zoom_in';
     // Zoom Out button.
     const zoomOutBtn = document.createElement('button');
-    zoomOutBtn.className = 'material-icons';
+    zoomOutBtn.className = 'material-icons zoom_out';
     zoomOutBtn.title = 'Zoom Out';
     zoomOutBtn.style.background = 'transparent';
     zoomOutBtn.style.border = 'none';
@@ -265,7 +265,7 @@ export function previewFile(fileUrl, fileName) {
     rightTop.style.gap = '4px';
     // Rotate Left button.
     const rotateLeftBtn = document.createElement('button');
-    rotateLeftBtn.className = 'material-icons';
+    rotateLeftBtn.className = 'material-icons rotate_left';
     rotateLeftBtn.title = 'Rotate Left';
     rotateLeftBtn.style.background = 'transparent';
     rotateLeftBtn.style.border = 'none';
@@ -273,7 +273,7 @@ export function previewFile(fileUrl, fileName) {
     rotateLeftBtn.textContent = 'rotate_left';
     // Rotate Right button.
     const rotateRightBtn = document.createElement('button');
-    rotateRightBtn.className = 'material-icons';
+    rotateRightBtn.className = 'material-icons rotate_right';
     rotateRightBtn.title = 'Rotate Right';
     rotateRightBtn.style.background = 'transparent';
     rotateRightBtn.style.border = 'none';

@@ -1711,6 +1711,20 @@ body.dark-mode .CodeMirror-matchingbracket {
   border-bottom: 1px solid #ffffff !important;
 }
 
+.zoom_in,
+.zoom_out,
+.rotate_left,
+.rotate_right {
+  background: rgba(80, 80, 80, 0.6) !important;
+  border: none !important;
+  color: white !important;
+  cursor: pointer !important;
+  border-radius: 4px !important;
+  transition: background 0.3s ease, box-shadow 0.3s ease !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  transform: translateY(-10px);
+}
+
 .gallery-nav-btn {
   background: rgba(80, 80, 80, 0.6) !important;
   border: none !important;
@@ -1723,19 +1737,13 @@ body.dark-mode .CodeMirror-matchingbracket {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
-.gallery-nav-btn:hover {
+.gallery-nav-btn:hover,
+.zoom_in:hover,
+.zoom_out:hover,
+.rotate_left:hover,
+.rotate_right:hover {
   background: rgba(80, 80, 80, 0.8) !important;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
-}
-
-.gallery-nav-btn.left {
-  left: 10px;
-  right: auto;
-}
-
-.gallery-nav-btn.right {
-  right: 10px;
-  left: auto;
 }
 
 .drop-hover {
