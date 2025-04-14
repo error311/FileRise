@@ -247,6 +247,7 @@ export function loadFileList(folderParam) {
                 // Render view based on the view mode.
                 if (window.viewMode === "gallery") {
                     renderGalleryView(folder);
+                    updateFileActionButtons();
                 } else {
                     renderFileTable(folder);
                 }
@@ -484,7 +485,7 @@ export function renderGalleryView(folder, container) {
 
     // Re-apply slider constraints for the newly rendered slider.
     updateSliderConstraints();
-
+    createViewToggleButton();
     // Attach share button event listeners.
     document.querySelectorAll(".share-btn").forEach(btn => {
         btn.addEventListener("click", e => {

@@ -3,6 +3,25 @@
 ## Changes 4/14/2025
 
 - Fix Gallery View: medium screen devices get 3 max columns and small screen devices 2 max columns.
+- Ensure gallery view toggle button displays after refresh page.
+
+### filePreview.js Enhancements
+
+**Modal Layout Overhaul:**
+
+- **Left Panel:** Holds zoom in/out controls at the top and the "prev" button at the bottom.
+- **Center Panel:** Always centers the preview image.
+- **Right Panel:** Contains rotate left/right controls at the top and the "next" button at the bottom.
+
+**Consistent Control Presence:**
+
+- Both left and right panels are always included. When there’s only one image, placeholders are inserted in place of missing navigation buttons to ensure the image remains centered and that rotate controls are always visible.
+
+**Improved Transform Behavior:**
+
+- Transformation values (scale and rotation) are reset on each navigation event, ensuring predictable behavior and consistent presentation.
+
+---
 
 ## Changes 4/13/2025 v1.1.3
 

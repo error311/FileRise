@@ -121,12 +121,10 @@ export function previewFile(fileUrl, fileName) {
       mediaElements.forEach(media => {
         media.pause();
         if (media.tagName.toLowerCase() !== 'video') {
-          try {
-            media.currentTime = 0;
-          } catch(e) { }
+          try { media.currentTime = 0; } catch (e) { }
         }
       });
-      modal.style.display = "none";
+      modal.remove();
     }
 
     document.getElementById("closeFileModal").addEventListener("click", closeModal);
@@ -143,24 +141,84 @@ export function previewFile(fileUrl, fileName) {
   const extension = fileName.split('.').pop().toLowerCase();
   const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(fileName);
   if (isImage) {
+    // Create the image element with default transform data.
     const img = document.createElement("img");
     img.src = fileUrl;
     img.className = "image-modal-img";
     img.style.maxWidth = "80vw";
     img.style.maxHeight = "80vh";
-    container.appendChild(img);
+    img.style.transition = "transform 0.3s ease";
+    img.dataset.scale = 1;
+    img.dataset.rotate = 0;
+    img.style.position = 'relative';
+    img.style.zIndex = '1';
 
+    // Filter gallery images for navigation.
     const images = fileData.filter(file => /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name));
-    if (images.length > 1) {
-      modal.galleryImages = images;
-      modal.galleryCurrentIndex = images.findIndex(f => f.name === fileName);
 
+    // Create a flex wrapper to hold left panel, center image, and right panel.
+    const wrapper = document.createElement('div');
+    wrapper.className = 'image-wrapper';
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    wrapper.style.position = 'relative';
+
+    // --- Left Panel: Contains Zoom controls (top) and Prev button (bottom) ---
+    const leftPanel = document.createElement('div');
+    leftPanel.className = 'left-panel';
+    leftPanel.style.display = 'flex';
+    leftPanel.style.flexDirection = 'column';
+    leftPanel.style.justifyContent = 'space-between';
+    leftPanel.style.alignItems = 'center';
+    leftPanel.style.width = '60px';
+    leftPanel.style.height = '100%';
+    leftPanel.style.zIndex = '10';
+
+    // Top container for zoom buttons.
+    const leftTop = document.createElement('div');
+    leftTop.style.display = 'flex';
+    leftTop.style.flexDirection = 'column';
+    leftTop.style.gap = '4px';
+    // Zoom In button.
+    const zoomInBtn = document.createElement('button');
+    zoomInBtn.className = 'material-icons';
+    zoomInBtn.title = 'Zoom In';
+    zoomInBtn.style.background = 'transparent';
+    zoomInBtn.style.border = 'none';
+    zoomInBtn.style.cursor = 'pointer';
+    zoomInBtn.textContent = 'zoom_in';
+    // Zoom Out button.
+    const zoomOutBtn = document.createElement('button');
+    zoomOutBtn.className = 'material-icons';
+    zoomOutBtn.title = 'Zoom Out';
+    zoomOutBtn.style.background = 'transparent';
+    zoomOutBtn.style.border = 'none';
+    zoomOutBtn.style.cursor = 'pointer';
+    zoomOutBtn.textContent = 'zoom_out';
+    leftTop.appendChild(zoomInBtn);
+    leftTop.appendChild(zoomOutBtn);
+    leftPanel.appendChild(leftTop);
+
+    // Bottom container for prev button.
+    const leftBottom = document.createElement('div');
+    leftBottom.style.display = 'flex';
+    leftBottom.style.justifyContent = 'center';
+    leftBottom.style.alignItems = 'center';
+    leftBottom.style.width = '100%';
+    if (images.length > 1) {
       const prevBtn = document.createElement("button");
       prevBtn.textContent = "‹";
       prevBtn.className = "gallery-nav-btn";
-      prevBtn.style.cssText = "position: absolute; top: 50%; left: 10px; transform: translateY(-50%); background: transparent; border: none; color: white; font-size: 48px; cursor: pointer;";
+      prevBtn.style.background = 'transparent';
+      prevBtn.style.border = 'none';
+      prevBtn.style.color = 'white';
+      prevBtn.style.fontSize = '48px';
+      prevBtn.style.cursor = 'pointer';
       prevBtn.addEventListener("click", function (e) {
         e.stopPropagation();
+        // Safety check:
+        if (!modal.galleryImages || modal.galleryImages.length === 0) return;
         modal.galleryCurrentIndex = (modal.galleryCurrentIndex - 1 + modal.galleryImages.length) % modal.galleryImages.length;
         let newFile = modal.galleryImages[modal.galleryCurrentIndex];
         modal.querySelector("h4").textContent = newFile.name;
@@ -168,13 +226,82 @@ export function previewFile(fileUrl, fileName) {
           ? "uploads/"
           : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
           + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+        // Reset transforms.
+        img.dataset.scale = 1;
+        img.dataset.rotate = 0;
+        img.style.transform = 'scale(1) rotate(0deg)';
       });
+      leftBottom.appendChild(prevBtn);
+    } else {
+      // Insert an empty placeholder for consistent layout.
+      leftBottom.innerHTML = '&nbsp;';
+    }
+    leftPanel.appendChild(leftBottom);
+
+    // --- Center Panel: Contains the image ---
+    const centerPanel = document.createElement('div');
+    centerPanel.className = 'center-image-container';
+    centerPanel.style.flexGrow = '1';
+    centerPanel.style.textAlign = 'center';
+    centerPanel.style.position = 'relative';
+    centerPanel.style.zIndex = '1';
+    centerPanel.appendChild(img);
+
+    // --- Right Panel: Contains Rotate controls (top) and Next button (bottom) ---
+    const rightPanel = document.createElement('div');
+    rightPanel.className = 'right-panel';
+    rightPanel.style.display = 'flex';
+    rightPanel.style.flexDirection = 'column';
+    rightPanel.style.justifyContent = 'space-between';
+    rightPanel.style.alignItems = 'center';
+    rightPanel.style.width = '60px';
+    rightPanel.style.height = '100%';
+    rightPanel.style.zIndex = '10';
+
+    // Top container for rotate buttons.
+    const rightTop = document.createElement('div');
+    rightTop.style.display = 'flex';
+    rightTop.style.flexDirection = 'column';
+    rightTop.style.gap = '4px';
+    // Rotate Left button.
+    const rotateLeftBtn = document.createElement('button');
+    rotateLeftBtn.className = 'material-icons';
+    rotateLeftBtn.title = 'Rotate Left';
+    rotateLeftBtn.style.background = 'transparent';
+    rotateLeftBtn.style.border = 'none';
+    rotateLeftBtn.style.cursor = 'pointer';
+    rotateLeftBtn.textContent = 'rotate_left';
+    // Rotate Right button.
+    const rotateRightBtn = document.createElement('button');
+    rotateRightBtn.className = 'material-icons';
+    rotateRightBtn.title = 'Rotate Right';
+    rotateRightBtn.style.background = 'transparent';
+    rotateRightBtn.style.border = 'none';
+    rotateRightBtn.style.cursor = 'pointer';
+    rotateRightBtn.textContent = 'rotate_right';
+    rightTop.appendChild(rotateLeftBtn);
+    rightTop.appendChild(rotateRightBtn);
+    rightPanel.appendChild(rightTop);
+
+    // Bottom container for next button.
+    const rightBottom = document.createElement('div');
+    rightBottom.style.display = 'flex';
+    rightBottom.style.justifyContent = 'center';
+    rightBottom.style.alignItems = 'center';
+    rightBottom.style.width = '100%';
+    if (images.length > 1) {
       const nextBtn = document.createElement("button");
       nextBtn.textContent = "›";
       nextBtn.className = "gallery-nav-btn";
-      nextBtn.style.cssText = "position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: transparent; border: none; color: white; font-size: 48px; cursor: pointer;";
+      nextBtn.style.background = 'transparent';
+      nextBtn.style.border = 'none';
+      nextBtn.style.color = 'white';
+      nextBtn.style.fontSize = '48px';
+      nextBtn.style.cursor = 'pointer';
       nextBtn.addEventListener("click", function (e) {
         e.stopPropagation();
+        // Safety check:
+        if (!modal.galleryImages || modal.galleryImages.length === 0) return;
         modal.galleryCurrentIndex = (modal.galleryCurrentIndex + 1) % modal.galleryImages.length;
         let newFile = modal.galleryImages[modal.galleryCurrentIndex];
         modal.querySelector("h4").textContent = newFile.name;
@@ -182,11 +309,63 @@ export function previewFile(fileUrl, fileName) {
           ? "uploads/"
           : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
           + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+        // Reset transforms.
+        img.dataset.scale = 1;
+        img.dataset.rotate = 0;
+        img.style.transform = 'scale(1) rotate(0deg)';
       });
-      container.appendChild(prevBtn);
-      container.appendChild(nextBtn);
+      rightBottom.appendChild(nextBtn);
+    } else {
+      // Insert a placeholder so that center remains properly aligned.
+      rightBottom.innerHTML = '&nbsp;';
+    }
+    rightPanel.appendChild(rightBottom);
+
+    // Assemble panels into the wrapper.
+    wrapper.appendChild(leftPanel);
+    wrapper.appendChild(centerPanel);
+    wrapper.appendChild(rightPanel);
+    container.appendChild(wrapper);
+
+    // --- Set up zoom controls event listeners ---
+    zoomInBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      let scale = parseFloat(img.dataset.scale) || 1;
+      scale += 0.1;
+      img.dataset.scale = scale;
+      img.style.transform = 'scale(' + scale + ') rotate(' + img.dataset.rotate + 'deg)';
+    });
+    zoomOutBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      let scale = parseFloat(img.dataset.scale) || 1;
+      scale = Math.max(0.1, scale - 0.1);
+      img.dataset.scale = scale;
+      img.style.transform = 'scale(' + scale + ') rotate(' + img.dataset.rotate + 'deg)';
+    });
+
+    // Attach rotation control listeners (always present now).
+    rotateLeftBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      let rotate = parseFloat(img.dataset.rotate) || 0;
+      rotate = (rotate - 90 + 360) % 360;
+      img.dataset.rotate = rotate;
+      img.style.transform = 'scale(' + img.dataset.scale + ') rotate(' + rotate + 'deg)';
+    });
+    rotateRightBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      let rotate = parseFloat(img.dataset.rotate) || 0;
+      rotate = (rotate + 90) % 360;
+      img.dataset.rotate = rotate;
+      img.style.transform = 'scale(' + img.dataset.scale + ') rotate(' + rotate + 'deg)';
+    });
+
+    // Save gallery details if there is more than one image.
+    if (images.length > 1) {
+      modal.galleryImages = images;
+      modal.galleryCurrentIndex = images.findIndex(f => f.name === fileName);
     }
   } else {
+    // Handle non-image file previews.
     if (extension === "pdf") {
       const embed = document.createElement("embed");
       const separator = fileUrl.indexOf('?') === -1 ? '?' : '&';
@@ -201,26 +380,21 @@ export function previewFile(fileUrl, fileName) {
       video.src = fileUrl;
       video.controls = true;
       video.className = "image-modal-img";
-    
+      
       const progressKey = 'videoProgress-' + fileUrl;
-    
       video.addEventListener("loadedmetadata", () => {
         const savedTime = localStorage.getItem(progressKey);
         if (savedTime) {
           video.currentTime = parseFloat(savedTime);
         }
       });
-    
       video.addEventListener("timeupdate", () => {
         localStorage.setItem(progressKey, video.currentTime);
       });
-
       video.addEventListener("ended", () => {
         localStorage.removeItem(progressKey);
       });
-    
       container.appendChild(video);
-
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(fileName)) {
       const audio = document.createElement("audio");
       audio.src = fileUrl;
@@ -235,26 +409,19 @@ export function previewFile(fileUrl, fileName) {
   modal.style.display = "flex";
 }
 
-// Added to preserve the original functionality.
+// Preserve original functionality.
 export function displayFilePreview(file, container) {
   const actualFile = file.file || file;
-  
-  // Validate that actualFile is indeed a File
   if (!(actualFile instanceof File)) {
     console.error("displayFilePreview called with an invalid file object");
     return;
   }
-  
   container.style.display = "inline-block";
-  
-  // Clear the container safely without using innerHTML
   while (container.firstChild) {
     container.removeChild(container.firstChild);
   }
-  
   if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(actualFile.name)) {
     const img = document.createElement("img");
-    // Set the image source using a Blob URL (this is considered safe)
     img.src = URL.createObjectURL(actualFile);
     img.classList.add("file-preview-img");
     container.appendChild(img);
