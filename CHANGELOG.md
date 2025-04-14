@@ -1,5 +1,9 @@
 # Changelog
 
+## Changes 4/14/2025
+
+- Fix Gallery View: medium screen devices get 3 max columns and small screen devices 2 max columns.
+
 ## Changes 4/13/2025 v1.1.3
 
 - Decreased header height some more and clickable logo.

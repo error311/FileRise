@@ -92,8 +92,8 @@ function toggleAdvancedSearch() {
 
 window.imageCache = window.imageCache || {};
 function cacheImage(imgElem, key) {
-  // Save the current src for future renders.
-  window.imageCache[key] = imgElem.src;
+    // Save the current src for future renders.
+    window.imageCache[key] = imgElem.src;
 }
 window.cacheImage = cacheImage;
 
@@ -105,28 +105,28 @@ window.cacheImage = cacheImage;
  */
 function searchFiles(searchTerm) {
     if (!searchTerm) return fileData;
-    
+
     // Define search keys.
     let keys = [
-      { name: 'name', weight: 0.1 },
-      { name: 'uploader', weight: 0.1 },
-      { name: 'tags.name', weight: 0.1 }
+        { name: 'name', weight: 0.1 },
+        { name: 'uploader', weight: 0.1 },
+        { name: 'tags.name', weight: 0.1 }
     ];
     if (window.advancedSearchEnabled) {
-      keys.push({ name: 'content', weight: 0.7 });
+        keys.push({ name: 'content', weight: 0.7 });
     }
-    
+
     const options = {
-      keys: keys,
-      threshold: 0.4,
-      minMatchCharLength: 2,
-      ignoreLocation: true
+        keys: keys,
+        threshold: 0.4,
+        minMatchCharLength: 2,
+        ignoreLocation: true
     };
-    
+
     const fuse = new Fuse(fileData, options);
     let results = fuse.search(searchTerm);
     return results.map(result => result.item);
-  }
+}
 
 /**
  * --- VIEW MODE TOGGLE BUTTON & Helpers ---
@@ -134,43 +134,43 @@ function searchFiles(searchTerm) {
 export function createViewToggleButton() {
     let toggleBtn = document.getElementById("toggleViewBtn");
     if (!toggleBtn) {
-      toggleBtn = document.createElement("button");
-      toggleBtn.id = "toggleViewBtn";
-      toggleBtn.classList.add("btn", "btn-toggleview");
-      
-      // Set initial icon and tooltip based on current view mode.
-      if (window.viewMode === "gallery") {
-        toggleBtn.innerHTML = '<i class="material-icons">view_list</i>';
-        toggleBtn.title =  t("switch_to_table_view");
-      } else {
-        toggleBtn.innerHTML = '<i class="material-icons">view_module</i>';
-        toggleBtn.title = t("switch_to_gallery_view");
-      }
-      
-      // Insert the button before the last button in the header.
-      const headerButtons = document.querySelector(".header-buttons");
-      if (headerButtons && headerButtons.lastElementChild) {
-        headerButtons.insertBefore(toggleBtn, headerButtons.lastElementChild);
-      } else if (headerButtons) {
-        headerButtons.appendChild(toggleBtn);
-      }
+        toggleBtn = document.createElement("button");
+        toggleBtn.id = "toggleViewBtn";
+        toggleBtn.classList.add("btn", "btn-toggleview");
+
+        // Set initial icon and tooltip based on current view mode.
+        if (window.viewMode === "gallery") {
+            toggleBtn.innerHTML = '<i class="material-icons">view_list</i>';
+            toggleBtn.title = t("switch_to_table_view");
+        } else {
+            toggleBtn.innerHTML = '<i class="material-icons">view_module</i>';
+            toggleBtn.title = t("switch_to_gallery_view");
+        }
+
+        // Insert the button before the last button in the header.
+        const headerButtons = document.querySelector(".header-buttons");
+        if (headerButtons && headerButtons.lastElementChild) {
+            headerButtons.insertBefore(toggleBtn, headerButtons.lastElementChild);
+        } else if (headerButtons) {
+            headerButtons.appendChild(toggleBtn);
+        }
     }
-    
+
     toggleBtn.onclick = () => {
-      window.viewMode = window.viewMode === "gallery" ? "table" : "gallery";
-      localStorage.setItem("viewMode", window.viewMode);
-      loadFileList(window.currentFolder);
-      if (window.viewMode === "gallery") {
-        toggleBtn.innerHTML = '<i class="material-icons">view_list</i>';
-        toggleBtn.title =  t("switch_to_table_view");
-      } else {
-        toggleBtn.innerHTML = '<i class="material-icons">view_module</i>';
-        toggleBtn.title = t("switch_to_gallery_view");
-      }
+        window.viewMode = window.viewMode === "gallery" ? "table" : "gallery";
+        localStorage.setItem("viewMode", window.viewMode);
+        loadFileList(window.currentFolder);
+        if (window.viewMode === "gallery") {
+            toggleBtn.innerHTML = '<i class="material-icons">view_list</i>';
+            toggleBtn.title = t("switch_to_table_view");
+        } else {
+            toggleBtn.innerHTML = '<i class="material-icons">view_module</i>';
+            toggleBtn.title = t("switch_to_gallery_view");
+        }
     };
-    
+
     return toggleBtn;
-  }
+}
 
 export function formatFolderName(folder) {
     if (folder === "root") return "(Root)";
@@ -283,7 +283,7 @@ export function renderFileTable(folder, container) {
 
     // Use Fuse.js search via our helper function.
     const filteredFiles = searchFiles(searchTerm);
-    
+
     const totalFiles = filteredFiles.length;
     const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
     if (currentPage > totalPages) {
@@ -302,7 +302,7 @@ export function renderFileTable(folder, container) {
     });
 
     const combinedTopHTML = topControlsHTML;
-    
+
     let headerHTML = buildFileTableHeader(sortOrder);
     const startIndex = (currentPage - 1) * itemsPerPageSetting;
     const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
@@ -392,32 +392,24 @@ export function renderFileTable(folder, container) {
     bindFileListContextMenu();
 }
 
-/**
- * Similarly, update renderGalleryView to accept an optional container.
- */
 // A helper to compute the max image height based on the current column count.
 function getMaxImageHeight() {
-    // Use the slider value (default to 3 if undefined).
     const columns = parseInt(window.galleryColumns || 3, 10);
-    // Simple scaling: fewer columns yield bigger images.
-    // For instance, if columns === 6, max-height is 150px,
-    // and if columns === 1, max-height could be 150 * 6 = 900px.
     return 150 * (7 - columns); // adjust the multiplier as needed.
-  }
-  
-  export function renderGalleryView(folder, container) {
+}
+
+export function renderGalleryView(folder, container) {
     const fileListContent = container || document.getElementById("fileList");
     const searchTerm = (window.currentSearchTerm || "").toLowerCase();
     const filteredFiles = searchFiles(searchTerm);
     const folderPath = folder === "root"
-      ? "uploads/"
-      : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-  
+        ? "uploads/"
+        : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
+
     // Use the current global column value (default to 3).
     const numColumns = window.galleryColumns || 3;
-    
+
     // --- Insert slider controls ---
-    // Build the slider HTML.
     const sliderHTML = `
       <div class="gallery-slider" style="margin: 10px; text-align: center;">
         <label for="galleryColumnsSlider" style="margin-right: 5px;">${t('columns')}:</label>
@@ -425,48 +417,45 @@ function getMaxImageHeight() {
         <span id="galleryColumnsValue">${numColumns}</span>
       </div>
     `;
-    
-    // Set up the grid container using the slider's value.
+
+    // Set up the grid container using the slider's current value.
     const gridStyle = `display: grid; grid-template-columns: repeat(${numColumns}, 1fr); gap: 10px; padding: 10px;`;
-    
-    // Build the gallery container HTML and include the slider above it.
+
+    // Build the gallery container HTML including the slider.
     let galleryHTML = sliderHTML;
     galleryHTML += `<div class="gallery-container" style="${gridStyle}">`;
-    
     filteredFiles.forEach((file) => {
-      let thumbnail;
-      if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
-        const cacheKey = folderPath + encodeURIComponent(file.name);
-        if (window.imageCache && window.imageCache[cacheKey]) {
-          thumbnail = `<img src="${window.imageCache[cacheKey]}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
+        let thumbnail;
+        if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
+            const cacheKey = folderPath + encodeURIComponent(file.name);
+            if (window.imageCache && window.imageCache[cacheKey]) {
+                thumbnail = `<img src="${window.imageCache[cacheKey]}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
+            } else {
+                const imageUrl = folderPath + encodeURIComponent(file.name) + "?t=" + new Date().getTime();
+                thumbnail = `<img src="${imageUrl}" onload="cacheImage(this, '${cacheKey}')" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
+            }
+        } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
+            thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
         } else {
-          const imageUrl = folderPath + encodeURIComponent(file.name) + "?t=" + new Date().getTime();
-          thumbnail = `<img src="${imageUrl}" onload="cacheImage(this, '${cacheKey}')" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
+            thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
         }
-      } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
-        thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
-      } else {
-        thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
-      }
-      
-      let tagBadgesHTML = "";
-      if (file.tags && file.tags.length > 0) {
-        tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
-        file.tags.forEach(tag => {
-          tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
-        });
-        tagBadgesHTML += `</div>`;
-      }
-      
-      galleryHTML += `
+
+        let tagBadgesHTML = "";
+        if (file.tags && file.tags.length > 0) {
+            tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
+            file.tags.forEach(tag => {
+                tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
+            });
+            tagBadgesHTML += `</div>`;
+        }
+
+        galleryHTML += `
         <div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
           <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
             ${thumbnail}
           </div>
           <div class="gallery-info" style="margin-top: 5px;">
-            <span class="gallery-file-name" style="display: block; white-space: normal; overflow-wrap: break-word; word-wrap: break-word;">
-              ${escapeHTML(file.name)}
-            </span>
+            <span class="gallery-file-name" style="display: block; white-space: normal; overflow-wrap: break-word; word-wrap: break-word;">${escapeHTML(file.name)}</span>
             ${tagBadgesHTML}
             <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
               <button type="button" class="btn btn-sm btn-success download-btn" 
@@ -490,47 +479,79 @@ function getMaxImageHeight() {
         </div>`;
     });
     galleryHTML += "</div>"; // End gallery container.
-    
+
     fileListContent.innerHTML = galleryHTML;
-    createViewToggleButton();
-    updateFileActionButtons();
-    
+
+    // Re-apply slider constraints for the newly rendered slider.
+    updateSliderConstraints();
+
     // Attach share button event listeners.
     document.querySelectorAll(".share-btn").forEach(btn => {
-      btn.addEventListener("click", e => {
-        e.stopPropagation();
-        const fileName = btn.getAttribute("data-file");
-        const file = fileData.find(f => f.name === fileName);
-        if (file) {
-          import('./filePreview.js').then(module => {
-            module.openShareModal(file, folder);
-          });
-        }
-      });
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            const fileName = btn.getAttribute("data-file");
+            const file = fileData.find(f => f.name === fileName);
+            if (file) {
+                import('./filePreview.js').then(module => {
+                    module.openShareModal(file, folder);
+                });
+            }
+        });
     });
-    
+
     // --- Slider Event Listener ---
     const slider = document.getElementById("galleryColumnsSlider");
     if (slider) {
-      slider.addEventListener("input", function() {
-        const value = this.value;
-        // Update the slider display.
-        document.getElementById("galleryColumnsValue").textContent = value;
-        // Update global value so new renders use the correct value.
-        window.galleryColumns = value;
-        // Update the grid columns.
-        const galleryContainer = document.querySelector(".gallery-container");
-        if (galleryContainer) {
-          galleryContainer.style.gridTemplateColumns = `repeat(${value}, 1fr)`;
-        }
-        // Compute the new max image height.
-        const newMaxHeight = getMaxImageHeight();
-        document.querySelectorAll(".gallery-thumbnail").forEach(img => {
-          img.style.maxHeight = newMaxHeight + "px";
+        slider.addEventListener("input", function () {
+            const value = this.value;
+            document.getElementById("galleryColumnsValue").textContent = value;
+            window.galleryColumns = value;
+            const galleryContainer = document.querySelector(".gallery-container");
+            if (galleryContainer) {
+                galleryContainer.style.gridTemplateColumns = `repeat(${value}, 1fr)`;
+            }
+            const newMaxHeight = getMaxImageHeight();
+            document.querySelectorAll(".gallery-thumbnail").forEach(img => {
+                img.style.maxHeight = newMaxHeight + "px";
+            });
         });
-      });
     }
-  }
+}
+
+// Responsive slider constraints based on screen size.
+function updateSliderConstraints() {
+    const slider = document.getElementById("galleryColumnsSlider");
+    if (!slider) return;
+
+    const width = window.innerWidth;
+    let min = 1, max = 6; // default for larger screens
+
+    if (width < 600) { // phone
+        max = 2;
+    } else if (width < 1024) { // medium screens
+        max = 3;
+    }
+
+    // Adjust current slider value if it exceeds new max.
+    let currentVal = parseInt(slider.value, 10);
+    if (currentVal > max) {
+        currentVal = max;
+        slider.value = max;
+    }
+
+    slider.min = min;
+    slider.max = max;
+    document.getElementById("galleryColumnsValue").textContent = currentVal;
+
+    // Update grid columns with new slider value.
+    const galleryContainer = document.querySelector(".gallery-container");
+    if (galleryContainer) {
+        galleryContainer.style.gridTemplateColumns = `repeat(${currentVal}, 1fr)`;
+    }
+}
+
+window.addEventListener('load', updateSliderConstraints);
+window.addEventListener('resize', updateSliderConstraints);
 
 export function sortFiles(column, folder) {
     if (sortOrder.column === column) {
