@@ -2,7 +2,7 @@ import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, toggleAllCheckboxes, updateFileActionButtons, showToast } from './domUtils.js';
 import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
-import { initAuth, checkAuthentication } from './auth.js';
+import { initAuth, checkAuthentication, loadAdminConfigFunc } from './auth.js';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
 import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js';
 import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
@@ -60,6 +60,8 @@ window.openDownloadModal = openDownloadModal;
 window.currentFolder = "root";
 
 document.addEventListener("DOMContentLoaded", function () {
+
+  loadAdminConfigFunc(); // Then fetch the latest config and update.
   // Retrieve the saved language from localStorage; default to "en"
   const savedLanguage = localStorage.getItem("language") || "en";
   // Set the locale based on the saved language
@@ -84,6 +86,7 @@ document.addEventListener("DOMContentLoaded", function () {
         initUpload();
         loadFolderTree();
         setupTrashRestoreDelete();
+        loadAdminConfigFunc();
 
         const helpBtn = document.getElementById("folderHelpBtn");
         const helpTooltip = document.getElementById("folderHelpTooltip");

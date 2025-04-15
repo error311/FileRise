@@ -1,5 +1,10 @@
 # Changelog
 
+## Changes 4/15/2025
+
+- Adjust Gallery View max columns based on screen size
+- Adjust headerTitle to update globally
+
 ## Changes 4/14/2025
 
 - Fix Gallery View: medium screen devices get 3 max columns and small screen devices 2 max columns.

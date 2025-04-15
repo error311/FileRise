@@ -525,15 +525,21 @@ function updateSliderConstraints() {
     if (!slider) return;
 
     const width = window.innerWidth;
-    let min = 1, max = 6; // default for larger screens
+    let min = 1;
+    let max;
 
-    if (width < 600) { // phone
+    // Set maximum based on screen size.
+    if (width < 600) {           // small devices (phones)
         max = 2;
-    } else if (width < 1024) { // medium screens
+    } else if (width < 1024) {     // medium devices
         max = 3;
+    } else if (width < 1440) {     // between medium and large devices
+        max = 4;
+    } else {                     // large devices and above
+        max = 6;
     }
 
-    // Adjust current slider value if it exceeds new max.
+    // Adjust the slider's current value if needed
     let currentVal = parseInt(slider.value, 10);
     if (currentVal > max) {
         currentVal = max;
@@ -544,7 +550,7 @@ function updateSliderConstraints() {
     slider.max = max;
     document.getElementById("galleryColumnsValue").textContent = currentVal;
 
-    // Update grid columns with new slider value.
+    // Update the grid layout based on the current slider value.
     const galleryContainer = document.querySelector(".gallery-container");
     if (galleryContainer) {
         galleryContainer.style.gridTemplateColumns = `repeat(${currentVal}, 1fr)`;

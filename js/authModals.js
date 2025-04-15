@@ -1,6 +1,7 @@
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
+import { loadAdminConfigFunc } from './auth.js';
 
 const version = "v1.1.3";
 // Use t() for the admin panel title. (Make sure t("admin_panel") returns "Admin Panel" in English.)
@@ -687,6 +688,7 @@ export function openAdminPanel() {
           openUserPermissionsModal();
         });
         document.getElementById("saveAdminSettings").addEventListener("click", () => {
+          
           const disableFormLoginCheckbox = document.getElementById("disableFormLogin");
           const disableBasicAuthCheckbox = document.getElementById("disableBasicAuth");
           const disableOIDCLoginCheckbox = document.getElementById("disableOIDCLogin");
@@ -705,6 +707,7 @@ export function openAdminPanel() {
             return;
           }
           const newHeaderTitle = document.getElementById("headerTitle").value.trim();
+          
           const newOIDCConfig = {
             providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
             clientId: document.getElementById("oidcClientId").value.trim(),
@@ -735,6 +738,7 @@ export function openAdminPanel() {
                 // Update the captured initial state since the changes have now been saved.
                 captureInitialAdminConfig();
                 closeAdminPanel();
+                loadAdminConfigFunc();
               
               } else {
                 showToast(t("error_updating_settings") + ": " + (response.error || t("unknown_error")));

@@ -93,7 +93,7 @@ function updateLoginOptionsUIFromStorage() {
   });
 }
 
-function loadAdminConfigFunc() {
+export function loadAdminConfigFunc() {
   return fetch("getConfig.php", { credentials: "include" })
     .then(response => response.json())
     .then(config => {
