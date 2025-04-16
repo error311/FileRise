@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 4/16 Refactor API endpoints and modularize controllers and models
+
+- Reorganized project structure to separate API logic into dedicated controllers and models:
+  - Created adminController, userController, fileController, folderController, uploadController, and authController.
+  - Created corresponding models (AdminModel, UserModel, FileModel, FolderModel, UploadModel, AuthModel) for business logic.
+
+- Consolidated API endpoints under the /public/api folder with subfolders for admin, auth, file, folder, and upload endpoints.
+
+- Added inline OpenAPI annotations to document key endpoints (e.g., getConfig.php, updateConfig.php) for improved API documentation.
+
+- Updated configuration retrieval and update logic in AdminModel and AdminController to handle OIDC and login option booleans consistently, fixing issues with basic auth settings not updating on the login page.
+
+- Updated the client-side auth.js to correctly reference API endpoints (adjusted query selectors to reflect new document root) and load admin configuration from the updated API endpoints.
+
+- Minor improvements to CSRF token handling, error logging, and overall code readability.
+
+This refactor improves maintainability, testability, and documentation clarity across all API endpoints.
+
+---
+
 ## Changes 4/15/2025
 
 - Adjust Gallery View max columns based on screen size
