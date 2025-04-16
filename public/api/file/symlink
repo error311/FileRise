@@ -1,0 +1,2 @@
+cd /var/www/public
+ln -s ../uploads uploads

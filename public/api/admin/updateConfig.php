@@ -1,0 +1,8 @@
+<?php
+// public/api/admin/updateConfig.php
+
+require_once __DIR__ . '/../../../config/config.php';
+require_once PROJECT_ROOT . '/src/controllers/adminController.php';
+
+$adminController = new AdminController();
+$adminController->updateConfig();
