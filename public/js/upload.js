@@ -405,7 +405,7 @@ const useResumable = true; // Enable resumable for file picker uploads
 let resumableInstance;
 function initResumableUpload() {
   resumableInstance = new Resumable({
-    target: "api/upload/upload.php",
+    target: "/api/upload/upload.php",
     query: { folder: window.currentFolder || "root", upload_token: window.csrfToken },
     chunkSize: 1.5 * 1024 * 1024, // 1.5 MB chunks
     simultaneousUploads: 3,

@@ -111,7 +111,7 @@ export function confirmSingleDownload() {
   
   // Build the URL for download.php using GET parameters.
   const folder = window.currentFolder || "root";
-  const downloadURL = "api/file/download.php?folder=" + encodeURIComponent(folder) +
+  const downloadURL = "/api/file/download.php?folder=" + encodeURIComponent(folder) +
                       "&file=" + encodeURIComponent(window.singleFileToDownload);
   
   fetch(downloadURL, {

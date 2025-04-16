@@ -25,7 +25,7 @@ const currentOIDCConfig = {
   providerUrl: "https://your-oidc-provider.com",
   clientId: "YOUR_CLIENT_ID",
   clientSecret: "YOUR_CLIENT_SECRET",
-  redirectUri: "https://yourdomain.com/auth.php?oidc=callback",
+  redirectUri: "https://yourdomain.com/api/auth/auth.php?oidc=callback",
   globalOtpauthUrl: ""
 };
 window.currentOIDCConfig = currentOIDCConfig;
@@ -51,7 +51,7 @@ function openTOTPLoginModal() {
   const isFormLogin = Boolean(window.__lastLoginData);
   if (!isFormLogin) {
     // disable Basic‑Auth link
-    const basicLink = document.querySelector("a[href='api/auth/login_basic.php']");
+    const basicLink = document.querySelector("a[href='/api/auth/login_basic.php']");
     if (basicLink) {
       basicLink.style.pointerEvents = 'none';
       basicLink.style.opacity = '0.5';
@@ -80,7 +80,7 @@ function updateLoginOptionsUI({ disableFormLogin, disableBasicAuth, disableOIDCL
   const authForm = document.getElementById("authForm");
 
   if (authForm) authForm.style.display = disableFormLogin ? "none" : "block";
-  const basicAuthLink = document.querySelector("a[href='api/auth/login_basic.php']");
+  const basicAuthLink = document.querySelector("a[href='/api/auth/login_basic.php']");
   if (basicAuthLink) basicAuthLink.style.display = disableBasicAuth ? "none" : "inline-block";
   const oidcLoginBtn = document.getElementById("oidcLoginBtn");
   if (oidcLoginBtn) oidcLoginBtn.style.display = disableOIDCLogin ? "none" : "inline-block";
@@ -480,7 +480,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const oidcLoginBtn = document.getElementById("oidcLoginBtn");
   if (oidcLoginBtn) {
     oidcLoginBtn.addEventListener("click", () => {
-      window.location.href = "api/auth/auth.php?oidc=initiate";
+      window.location.href = "/api/auth/auth.php?oidc=initiate";
     });
   }
 

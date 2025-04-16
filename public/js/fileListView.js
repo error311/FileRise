@@ -197,7 +197,7 @@ export function loadFileList(folderParam) {
         .then(response => {
             if (response.status === 401) {
                 showToast("Session expired. Please log in again.");
-                window.location.href = "logout.php";
+                window.location.href = "/api/auth/logout.php";
                 throw new Error("Unauthorized");
             }
             return response.json();

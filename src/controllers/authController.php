@@ -4,12 +4,14 @@
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/AuthModel.php';
 require_once PROJECT_ROOT . '/vendor/autoload.php';
+require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 use RobThree\Auth\Algorithm;
 use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
 use Jumbojett\OpenIDConnectClient;
 
-class AuthController {
+class AuthController
+{
 
     /**
      * @OA\Post(
@@ -56,7 +58,8 @@ class AuthController {
      *
      * @return void Redirects on success or outputs JSON error.
      */
-    public function auth(): void {
+    public function auth(): void
+    {
         // Global exception handler.
         set_exception_handler(function ($e) {
             error_log("Unhandled exception: " . $e->getMessage());
@@ -64,7 +67,7 @@ class AuthController {
             echo json_encode(["error" => "Internal Server Error"]);
             exit();
         });
-        
+
         header('Content-Type: application/json');
 
         // If OIDC parameters are present, initiate OIDC flow.
@@ -73,20 +76,15 @@ class AuthController {
             $oidcAction = 'callback';
         }
         if ($oidcAction) {
-            // Load admin configuration for OIDC.
-            $adminConfigFile = USERS_DIR . 'adminConfig.json';
-            if (file_exists($adminConfigFile)) {
-                $enc = file_get_contents($adminConfigFile);
-                $dec = decryptData($enc, $encryptionKey);
-                $cfg = ($dec !== false) ? json_decode($dec, true) : [];
-            } else {
-                $cfg = [];
-            }
-            $oidc_provider_url  = $cfg['oidc']['providerUrl']  ?? 'https://your-oidc-provider.com';
-            $oidc_client_id     = $cfg['oidc']['clientId']     ?? 'YOUR_CLIENT_ID';
-            $oidc_client_secret = $cfg['oidc']['clientSecret'] ?? 'YOUR_CLIENT_SECRET';
-            $oidc_redirect_uri  = $cfg['oidc']['redirectUri']  ?? 'https://yourdomain.com/api/auth/auth.php?oidc=callback';
+            // new: delegate to AdminModel
+            $cfg = AdminModel::getConfig();
+            // Optional: log to confirm you loaded the right values
+            error_log("Loaded OIDC config: " . print_r($cfg['oidc'], true));
 
+            $oidc_provider_url  = $cfg['oidc']['providerUrl'];
+            $oidc_client_id     = $cfg['oidc']['clientId'];
+            $oidc_client_secret = $cfg['oidc']['clientSecret'];
+            $oidc_redirect_uri  = $cfg['oidc']['redirectUri'];
             $oidc = new OpenIDConnectClient($oidc_provider_url, $oidc_client_id, $oidc_client_secret);
             $oidc->setRedirectURL($oidc_redirect_uri);
 
@@ -94,7 +92,7 @@ class AuthController {
                 try {
                     $oidc->authenticate();
                     $username = $oidc->requestUserInfo('preferred_username');
-                    
+
                     // Check for TOTP secret.
                     $totp_secret = null;
                     $usersFile = USERS_DIR . USERS_FILE;
@@ -110,17 +108,17 @@ class AuthController {
                     if ($totp_secret) {
                         $_SESSION['pending_login_user'] = $username;
                         $_SESSION['pending_login_secret'] = $totp_secret;
-                        header("Location: index.html?totp_required=1");
+                        header("Location: /index.html?totp_required=1");
                         exit();
                     }
-                    
+
                     // Finalize login (no TOTP)
                     session_regenerate_id(true);
                     $_SESSION["authenticated"] = true;
                     $_SESSION["username"] = $username;
                     $_SESSION["isAdmin"] = (AuthModel::getUserRole($username) === "1");
                     $_SESSION["folderOnly"] = loadUserPermissions($username);
-                    header("Location: index.html");
+                    header("Location: /index.html");
                     exit();
                 } catch (Exception $e) {
                     error_log("OIDC authentication error: " . $e->getMessage());
@@ -141,32 +139,32 @@ class AuthController {
                 }
             }
         }
-        
+
         // Fallback: Form-based Authentication.
         $data = json_decode(file_get_contents("php://input"), true);
         $username = trim($data["username"] ?? "");
         $password = trim($data["password"] ?? "");
         $rememberMe = isset($data["remember_me"]) && $data["remember_me"] === true;
-        
+
         if (!$username || !$password) {
             http_response_code(400);
             echo json_encode(["error" => "Username and password are required"]);
             exit();
         }
-        
+
         if (!preg_match(REGEX_USER, $username)) {
             http_response_code(400);
             echo json_encode(["error" => "Invalid username format. Only letters, numbers, underscores, dashes, and spaces are allowed."]);
             exit();
         }
-        
+
         $ip = $_SERVER['REMOTE_ADDR'];
         $currentTime = time();
         $attemptsFile = USERS_DIR . 'failed_logins.json';
         $failedAttempts = AuthModel::loadFailedAttempts($attemptsFile);
         $maxAttempts = 5;
         $lockoutTime = 30 * 60; // 30 minutes
-        
+
         if (isset($failedAttempts[$ip])) {
             $attemptData = $failedAttempts[$ip];
             if ($attemptData['count'] >= $maxAttempts && ($currentTime - $attemptData['last_attempt']) < $lockoutTime) {
@@ -175,7 +173,7 @@ class AuthController {
                 exit();
             }
         }
-        
+
         $user = AuthModel::authenticate($username, $password);
         if ($user !== false) {
             // Handle TOTP if required.
@@ -203,19 +201,19 @@ class AuthController {
                     }
                 }
             }
-            
+
             // Clear failed attempts.
             if (isset($failedAttempts[$ip])) {
                 unset($failedAttempts[$ip]);
                 AuthModel::saveFailedAttempts($attemptsFile, $failedAttempts);
             }
-            
+
             session_regenerate_id(true);
             $_SESSION["authenticated"] = true;
             $_SESSION["username"] = $username;
             $_SESSION["isAdmin"] = ($user['role'] === "1");
             $_SESSION["folderOnly"] = loadUserPermissions($username);
-            
+
             // Handle "remember me"
             if ($rememberMe) {
                 $persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
@@ -240,7 +238,7 @@ class AuthController {
                 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
                 setcookie('remember_me_token', $tokenPersistent, $expiry, '/', '', $secure, true);
             }
-            
+
             echo json_encode([
                 "status" => "ok",
                 "success" => "Login successful",
@@ -298,7 +296,8 @@ class AuthController {
      *
      * @return void Outputs a JSON response with authentication details.
      */
-    public function checkAuth(): void {
+    public function checkAuth(): void
+    {
         header('Content-Type: application/json');
 
         $usersFile = USERS_DIR . USERS_FILE;
@@ -328,7 +327,7 @@ class AuthController {
                 }
             }
         }
-        
+
         // Determine admin status using AuthModel::getUserRole()
         $userRole = AuthModel::getUserRole($username);
         $isAdmin = ((int)$userRole === 1);
@@ -344,7 +343,7 @@ class AuthController {
         exit;
     }
 
-        /**
+    /**
      * @OA\Get(
      *     path="/api/auth/token.php",
      *     summary="Retrieve CSRF token and share URL",
@@ -366,7 +365,8 @@ class AuthController {
      *
      * @return void Outputs the JSON response.
      */
-    public function getToken(): void {
+    public function getToken(): void
+    {
         header('Content-Type: application/json');
         echo json_encode([
             "csrf_token" => $_SESSION['csrf_token'],
@@ -400,7 +400,8 @@ class AuthController {
      *
      * @return void Redirects on success or sends a 401 header.
      */
-    public function loginBasic(): void {
+    public function loginBasic(): void
+    {
         // Set header for plain-text or JSON as needed.
         header('Content-Type: application/json');
 
@@ -432,7 +433,7 @@ class AuthController {
                 // If TOTP is required, store pending values and redirect to prompt for TOTP.
                 $_SESSION['pending_login_user'] = $username;
                 $_SESSION['pending_login_secret'] = $secret;
-                header("Location: index.html?totp_required=1");
+                header("Location: /index.html?totp_required=1");
                 exit;
             }
             // Finalize login.
@@ -442,7 +443,7 @@ class AuthController {
             $_SESSION["isAdmin"] = (AuthModel::getUserRole($username) === "1");
             $_SESSION["folderOnly"] = AuthModel::loadFolderPermission($username);
 
-            header("Location: index.html");
+            header("Location: /index.html");
             exit;
         }
         // Invalid credentials; prompt again.
@@ -473,16 +474,17 @@ class AuthController {
      *
      * @return void Redirects to index.html with a logout flag.
      */
-    public function logout(): void {
+    public function logout(): void
+    {
         // Retrieve headers and check CSRF token.
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
-        
+
         // Log mismatch but do not prevent logout.
         if (isset($_SESSION['csrf_token']) && $receivedToken !== $_SESSION['csrf_token']) {
             error_log("CSRF token mismatch on logout. Proceeding with logout.");
         }
-        
+
         // Remove the "remember_me_token" from persistent tokens.
         if (isset($_COOKIE['remember_me_token'])) {
             $token = $_COOKIE['remember_me_token'];
@@ -501,24 +503,29 @@ class AuthController {
             $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
             setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
         }
-        
+
         // Clear session data.
         $_SESSION = [];
-        
+
         // Clear the session cookie.
         if (ini_get("session.use_cookies")) {
             $params = session_get_cookie_params();
-            setcookie(session_name(), '', time() - 42000,
-                $params["path"], $params["domain"],
-                $params["secure"], $params["httponly"]
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params["path"],
+                $params["domain"],
+                $params["secure"],
+                $params["httponly"]
             );
         }
-        
+
         // Destroy the session.
         session_destroy();
-        
+
         // Redirect the user to the login page (or index) with a logout flag.
-        header("Location: index.html?logout=1");
+        header("Location: /index.html?logout=1");
         exit;
     }
 }

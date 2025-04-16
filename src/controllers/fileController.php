@@ -935,7 +935,7 @@ class FileController {
             </head>
             <body>
                 <h2>This file is protected by a password.</h2>
-                <form method="get" action="api/file/share.php">
+                <form method="get" action="/api/file/share.php">
                     <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
                     <label for="pass">Password:</label>
                     <input type="password" name="pass" id="pass" required>

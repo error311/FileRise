@@ -18,6 +18,15 @@
 
 This refactor improves maintainability, testability, and documentation clarity across all API endpoints.
 
+### Refactor fixes and adjustments
+
+- Added fallback checks for disableFormLogin / disableBasicAuth / disableOIDCLogin when coming in either at the top level or under loginOptions.
+- Updated auth.js to read and store the nested loginOptions booleans correctly in localStorage, then show/hide the Basic‑Auth and OIDC buttons as configured.
+- Changed the logout controller to header("Location: /index.html?logout=1") so after /api/auth/logout.php it lands on the root index.html, not under /api/auth/.
+- Switched your share modal code to use a leading slash ("/api/file/share.php") so it generates absolute URLs instead of relative /share.php.
+- In the shared‑folder gallery, adjusted the client‑side image path to point at /uploads/... instead of /api/folder/uploads/...
+- Updated both AdminModel defaults and the AuthController to use the exact full path
+
 ---
 
 ## Changes 4/15/2025

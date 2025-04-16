@@ -165,8 +165,8 @@ define('BASE_URL', 'http://yourwebsite/uploads/');
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
     $defaultShareUrl = isset($_SERVER['HTTP_HOST'])
         ? "http://" . $_SERVER['HTTP_HOST'] . "/share.php"
-        : "http://localhost/public/api/file/share.php";
+        : "http://localhost/api/file/share.php";
 } else {
-    $defaultShareUrl = rtrim(BASE_URL, '/') . "api/file/share.php";
+    $defaultShareUrl = rtrim(BASE_URL, '/') . "/api/file/share.php";
 }
 define('SHARE_URL', getenv('SHARE_URL') ? getenv('SHARE_URL') : $defaultShareUrl);

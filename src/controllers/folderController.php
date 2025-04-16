@@ -437,7 +437,7 @@ class FolderController {
             <div class="container">
                 <h2>Folder Protected</h2>
                 <p>This folder is protected by a password. Please enter the password to view its contents.</p>
-                <form method="get" action="api/folder/shareFolder.php">
+                <form method="get" action="/api/folder/shareFolder.php">
                     <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
                     <label for="pass">Password:</label>
                     <input type="password" name="pass" id="pass" required>
@@ -534,7 +534,7 @@ class FolderController {
                             foreach ($files as $file):
                                 $filePath = $data['realFolderPath'] . DIRECTORY_SEPARATOR . $file;
                                 $fileSize = file_exists($filePath) ? formatBytes(filesize($filePath)) : "Unknown";
-                                $downloadLink = "api/folder/downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
+                                $downloadLink = "/api/folder/downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
                             ?>
                             <tr>
                                 <td>
@@ -557,7 +557,7 @@ class FolderController {
             <!-- Pagination Controls -->
             <div class="pagination">
                 <?php if ($currentPage > 1): ?>
-                    <a href="api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
+                    <a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
                 <?php else: ?>
                     <span>Prev</span>
                 <?php endif; ?>
@@ -569,12 +569,12 @@ class FolderController {
                     <?php if ($i == $currentPage): ?>
                         <span class="current"><?php echo $i; ?></span>
                     <?php else: ?>
-                        <a href="api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $i; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>"><?php echo $i; ?></a>
+                        <a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $i; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>"><?php echo $i; ?></a>
                     <?php endif; ?>
                 <?php endfor; ?>
                 
                 <?php if ($currentPage < $totalPages): ?>
-                    <a href="api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
+                    <a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
                 <?php else: ?>
                     <span>Next</span>
                 <?php endif; ?>
@@ -584,7 +584,7 @@ class FolderController {
             <?php if (isset($data['record']['allowUpload']) && $data['record']['allowUpload'] == 1): ?>
                 <div class="upload-container">
                     <h3>Upload File (50mb max size)</h3>
-                    <form action="api/folder/uploadToSharedFolder.php" method="post" enctype="multipart/form-data">
+                    <form action="/api/folder/uploadToSharedFolder.php" method="post" enctype="multipart/form-data">
                         <!-- Pass the share token so the upload endpoint can verify -->
                         <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
                         <input type="file" name="fileToUpload" required>
@@ -613,7 +613,9 @@ class FolderController {
             var galleryContainer = document.getElementById("galleryViewContainer");
             var html = '<div class="shared-gallery-container">';
             filesData.forEach(function(file) {
-                var fileUrl = "uploads/<?php echo htmlspecialchars($folderName, ENT_QUOTES, 'UTF-8'); ?>/" + encodeURIComponent(file);
+                var fileUrl = window.location.origin
+            + "/uploads/<?php echo rawurlencode($folderName); ?>/"
+            + encodeURIComponent(file);
                 var ext = file.split('.').pop().toLowerCase();
                 var thumbnail = "";
                 if (['jpg','jpeg','png','gif','bmp','webp','svg','ico'].indexOf(ext) >= 0) {
@@ -900,7 +902,7 @@ class FolderController {
         $_SESSION['upload_message'] = "File uploaded successfully.";
         
         // Redirect back to the shared folder view.
-        $redirectUrl = "api/folder/shareFolder.php?token=" . urlencode($token);
+        $redirectUrl = "/api/folder/shareFolder.php?token=" . urlencode($token);
         header("Location: " . $redirectUrl);
         exit;
     }

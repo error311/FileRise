@@ -65,9 +65,7 @@ export function openShareModal(file, folder) {
       .then(response => response.json())
       .then(data => {
         if (data.token) {
-          let shareEndpoint = document.querySelector('meta[name="share-url"]')
-            ? document.querySelector('meta[name="share-url"]').getAttribute('content')
-            : (window.SHARE_URL || "api/file/share.php");
+          const shareEndpoint = `${window.location.origin}/api/file/share.php`;
           const shareUrl = `${shareEndpoint}?token=${encodeURIComponent(data.token)}`;
           const displayDiv = document.getElementById("shareLinkDisplay");
           const inputField = document.getElementById("shareLinkInput");

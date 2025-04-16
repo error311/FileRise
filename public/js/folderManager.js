@@ -364,7 +364,7 @@ export async function loadFolderTree(selectedFolder) {
     if (response.status === 401) {
       console.error("Unauthorized: Please log in to view folders.");
       showToast("Session expired. Please log in again.");
-      window.location.href = "logout.php";
+      window.location.href = "/api/auth/logout.php";
       return;
     }
     let folderData = await response.json();

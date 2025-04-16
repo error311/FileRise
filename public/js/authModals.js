@@ -97,7 +97,7 @@ export function openTOTPLoginModal() {
         .then(json => {
           if (json.status === "ok") {
             // recovery succeeded → finalize login
-            window.location.href = "index.html";
+            window.location.href = "/index.html";
           } else {
             showToast(json.message || t("recovery_code_verification_failed"));
           }
@@ -125,7 +125,7 @@ export function openTOTPLoginModal() {
           .then(res => res.json())
           .then(json => {
             if (json.status === "ok") {
-              window.location.href = "index.html";
+              window.location.href = "/index.html";
             } else {
               showToast(json.message || t("totp_verification_failed"));
               this.value = "";

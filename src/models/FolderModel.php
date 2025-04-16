@@ -403,7 +403,7 @@ class FolderModel {
             $baseUrl = $protocol . "://" . $host;
         }
         // The share URL points to the shared folder page.
-        $link = $baseUrl . "api/folder/shareFolder.php?token=" . urlencode($token);
+        $link = $baseUrl . "/api/folder/shareFolder.php?token=" . urlencode($token);
         
         return ["token" => $token, "expires" => $expires, "link" => $link];
     }

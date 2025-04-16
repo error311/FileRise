@@ -104,7 +104,7 @@ class AdminModel
                     'providerUrl'  => 'https://your-oidc-provider.com',
                     'clientId'     => 'YOUR_CLIENT_ID',
                     'clientSecret' => 'YOUR_CLIENT_SECRET',
-                    'redirectUri'  => 'https://yourdomain.com/auth.php?oidc=callback'
+                    'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback'
                 ],
                 'loginOptions' => [
                     'disableFormLogin' => false,
