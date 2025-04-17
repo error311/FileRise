@@ -33,6 +33,8 @@ This refactor improves maintainability, testability, and documentation clarity a
 - Expanded checkAuth.php Response now returns all three flags—folderOnly, readOnly, and disableUpload so client can handle every permission.
 - In auth.js’s updateAuthenticatedUI(), write all three flags into localStorage whenever you land on the app (OIDC, basic or form). That guarantees consistent behavior across page loads.
 - Made sure the OIDC handler reads the live config via AdminModel::getConfig() and pushes you through the TOTP flow if needed, then back to /index.html.
+- Dockerfile, custom-php.ini & start.sh moved into main repo for easier onboarding.
+- filerise-docker changed to dedicated CI/CD pipeline
 
 ---
 
