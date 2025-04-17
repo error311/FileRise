@@ -1,5 +1,12 @@
 # Changelog
 
+## Changes 4/17 
+
+- Generate OpenAPI spec and API HTML docs
+  - Fully auto‑generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
+
+---
+
 ## Changes 4/16 Refactor API endpoints and modularize controllers and models
 
 - Reorganized project structure to separate API logic into dedicated controllers and models:

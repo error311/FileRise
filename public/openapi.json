@@ -1,0 +1,2599 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "FileRise API",
+        "description": "A lightweight self-hosted file manager API",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/api/admin": {},
+        "/api/auth": {},
+        "/api/file": {},
+        "/api/folder": {},
+        "/api/upload": {},
+        "/api": {},
+        "/api/admin/getConfig.php": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Retrieve admin configuration",
+                "description": "Returns the admin configuration settings, decrypting the configuration file and providing default values if not set.",
+                "operationId": "getAdminConfig",
+                "responses": {
+                    "200": {
+                        "description": "Configuration retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "header_title": {
+                                            "type": "string",
+                                            "example": "FileRise"
+                                        },
+                                        "oidc": {
+                                            "properties": {
+                                                "providerUrl": {
+                                                    "type": "string",
+                                                    "example": "https://your-oidc-provider.com"
+                                                },
+                                                "clientId": {
+                                                    "type": "string",
+                                                    "example": "YOUR_CLIENT_ID"
+                                                },
+                                                "clientSecret": {
+                                                    "type": "string",
+                                                    "example": "YOUR_CLIENT_SECRET"
+                                                },
+                                                "redirectUri": {
+                                                    "type": "string",
+                                                    "example": "https://yourdomain.com/auth.php?oidc=callback"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "loginOptions": {
+                                            "properties": {
+                                                "disableFormLogin": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                },
+                                                "disableBasicAuth": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                },
+                                                "disableOIDCLogin": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "globalOtpauthUrl": {
+                                            "type": "string",
+                                            "example": ""
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to decrypt configuration or server error"
+                    }
+                }
+            }
+        },
+        "/api/admin/updateConfig.php": {
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update admin configuration",
+                "description": "Updates the admin configuration settings. Requires admin privileges and a valid CSRF token.",
+                "operationId": "updateAdminConfig",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "header_title",
+                                    "oidc",
+                                    "loginOptions"
+                                ],
+                                "properties": {
+                                    "header_title": {
+                                        "type": "string",
+                                        "example": "FileRise"
+                                    },
+                                    "oidc": {
+                                        "properties": {
+                                            "providerUrl": {
+                                                "type": "string",
+                                                "example": "https://your-oidc-provider.com"
+                                            },
+                                            "clientId": {
+                                                "type": "string",
+                                                "example": "YOUR_CLIENT_ID"
+                                            },
+                                            "clientSecret": {
+                                                "type": "string",
+                                                "example": "YOUR_CLIENT_SECRET"
+                                            },
+                                            "redirectUri": {
+                                                "type": "string",
+                                                "example": "https://yourdomain.com/api/auth/auth.php?oidc=callback"
+                                            }
+                                        },
+                                        "type": "object"
+                                    },
+                                    "loginOptions": {
+                                        "properties": {
+                                            "disableFormLogin": {
+                                                "type": "boolean",
+                                                "example": false
+                                            },
+                                            "disableBasicAuth": {
+                                                "type": "boolean",
+                                                "example": false
+                                            },
+                                            "disableOIDCLogin": {
+                                                "type": "boolean",
+                                                "example": false
+                                            }
+                                        },
+                                        "type": "object"
+                                    },
+                                    "globalOtpauthUrl": {
+                                        "type": "string",
+                                        "example": ""
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Configuration updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Configuration updated successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (e.g., invalid input, incomplete OIDC configuration)"
+                    },
+                    "403": {
+                        "description": "Unauthorized (user not admin or invalid CSRF token)"
+                    },
+                    "500": {
+                        "description": "Server error (failed to write configuration file)"
+                    }
+                }
+            }
+        },
+        "/api/auth/auth.php": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Authenticate user",
+                "description": "Handles user authentication via OIDC or form-based credentials. For OIDC flows, processes callbacks; otherwise, performs standard authentication with optional TOTP verification.",
+                "operationId": "authUser",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "username",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "username": {
+                                        "type": "string",
+                                        "example": "johndoe"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "example": "secretpassword"
+                                    },
+                                    "remember_me": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "totp_code": {
+                                        "type": "string",
+                                        "example": "123456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Login successful; returns user info and status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        },
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Login successful"
+                                        },
+                                        "username": {
+                                            "type": "string",
+                                            "example": "johndoe"
+                                        },
+                                        "isAdmin": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (e.g., missing credentials)"
+                    },
+                    "401": {
+                        "description": "Unauthorized (e.g., invalid credentials, too many attempts)"
+                    },
+                    "429": {
+                        "description": "Too many failed login attempts"
+                    }
+                }
+            }
+        },
+        "/api/auth/checkAuth.php": {
+            "get": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Check authentication status",
+                "description": "Checks if the current session is authenticated. If the users file is missing or empty, returns a setup flag. Also returns information about admin privileges, TOTP status, and folder-only access.",
+                "operationId": "checkAuth",
+                "responses": {
+                    "200": {
+                        "description": "Returns authentication status and user details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "authenticated": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "isAdmin": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "totp_enabled": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "username": {
+                                            "type": "string",
+                                            "example": "johndoe"
+                                        },
+                                        "folderOnly": {
+                                            "type": "boolean",
+                                            "example": false
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/token.php": {
+            "get": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Retrieve CSRF token and share URL",
+                "description": "Returns the current CSRF token along with the configured share URL.",
+                "operationId": "getToken",
+                "responses": {
+                    "200": {
+                        "description": "CSRF token and share URL",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "csrf_token": {
+                                            "type": "string",
+                                            "example": "0123456789abcdef..."
+                                        },
+                                        "share_url": {
+                                            "type": "string",
+                                            "example": "https://yourdomain.com/share.php"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/login_basic.php": {
+            "get": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Authenticate using HTTP Basic Authentication",
+                "description": "Performs HTTP Basic authentication. If credentials are missing, sends a 401 response prompting for Basic auth. On valid credentials, optionally handles TOTP verification and finalizes session login.",
+                "operationId": "loginBasic",
+                "responses": {
+                    "200": {
+                        "description": "Login successful; redirects to index.html",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Login successful"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized due to missing credentials or invalid credentials."
+                    }
+                }
+            }
+        },
+        "/api/auth/logout.php": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Logout user",
+                "description": "Clears the session, removes persistent login tokens, and redirects the user to the login page.",
+                "operationId": "logoutUser",
+                "responses": {
+                    "302": {
+                        "description": "Redirects to the login page with a logout flag."
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                }
+            }
+        },
+        "/api/file/copyFiles.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Copy files between folders",
+                "description": "Copies files from a source folder to a destination folder. It validates folder names, handles file renaming if a conflict exists, and updates metadata accordingly.",
+                "operationId": "copyFiles",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "source",
+                                    "destination",
+                                    "files"
+                                ],
+                                "properties": {
+                                    "source": {
+                                        "type": "string",
+                                        "example": "root"
+                                    },
+                                    "destination": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "example.pdf"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Files copied successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Files copied successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request or input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or read-only permission"
+                    }
+                }
+            }
+        },
+        "/api/file/deleteFiles.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Delete files (move to trash)",
+                "description": "Moves the specified files from the given folder to the trash and updates metadata accordingly.",
+                "operationId": "deleteFiles",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "files"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "example.pdf"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Files moved to Trash successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Files moved to Trash: file1.pdf, file2.doc"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or permission denied"
+                    }
+                }
+            }
+        },
+        "/api/file/moveFiles.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Move files between folders",
+                "description": "Moves files from a source folder to a destination folder, updating metadata accordingly.",
+                "operationId": "moveFiles",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "source",
+                                    "destination",
+                                    "files"
+                                ],
+                                "properties": {
+                                    "source": {
+                                        "type": "string",
+                                        "example": "root"
+                                    },
+                                    "destination": {
+                                        "type": "string",
+                                        "example": "Archives"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "report.pdf"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Files moved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Files moved successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request or input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or permission denied"
+                    }
+                }
+            }
+        },
+        "/api/file/renameFile.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Rename a file",
+                "description": "Renames a file within a specified folder and updates folder metadata. If a file with the new name exists, a unique name is generated.",
+                "operationId": "renameFile",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "oldName",
+                                    "newName"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "oldName": {
+                                        "type": "string",
+                                        "example": "oldfile.pdf"
+                                    },
+                                    "newName": {
+                                        "type": "string",
+                                        "example": "newfile.pdf"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "File renamed successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "File renamed successfully"
+                                        },
+                                        "newName": {
+                                            "type": "string",
+                                            "example": "newfile.pdf"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or permission denied"
+                    }
+                }
+            }
+        },
+        "/api/file/saveFile.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Save a file",
+                "description": "Saves file content to disk in a specified folder and updates metadata accordingly.",
+                "operationId": "saveFile",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "fileName",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "fileName": {
+                                        "type": "string",
+                                        "example": "document.txt"
+                                    },
+                                    "content": {
+                                        "type": "string",
+                                        "example": "File content here"
+                                    },
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "File saved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "File saved successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or read-only permission"
+                    }
+                }
+            }
+        },
+        "/api/file/download.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Download a file",
+                "description": "Downloads a file from a specified folder. The file is served inline for images or as an attachment for other types.",
+                "operationId": "downloadFile",
+                "parameters": [
+                    {
+                        "name": "file",
+                        "in": "query",
+                        "description": "The name of the file to download",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "example.pdf"
+                        }
+                    },
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "description": "The folder in which the file is located. Defaults to root.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "Documents"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File downloaded successfully"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Access forbidden"
+                    },
+                    "404": {
+                        "description": "File not found"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                }
+            }
+        },
+        "/api/file/downloadZip.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Download a ZIP archive of selected files",
+                "description": "Creates a ZIP archive of the specified files in a folder and serves it for download.",
+                "operationId": "downloadZip",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "files"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "example.pdf"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "ZIP archive created and served",
+                        "content": {
+                            "application/zip": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                }
+            }
+        },
+        "/api/file/extractZip.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Extract ZIP files",
+                "description": "Extracts ZIP archives from a specified folder and updates metadata. Returns a list of extracted files.",
+                "operationId": "extractZip",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "files"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "archive.zip"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "ZIP files extracted successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "extractedFiles": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                }
+            }
+        },
+        "/api/file/share.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Access a shared file",
+                "description": "Serves a shared file based on a share token. If the file is password protected and no password is provided, a password entry form is returned.",
+                "operationId": "shareFile",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "description": "The share token",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "pass",
+                        "in": "query",
+                        "description": "The password for the share if required",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File served or password form rendered",
+                        "content": {
+                            "application/octet-stream": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Missing token or invalid request"
+                    },
+                    "403": {
+                        "description": "Link expired, invalid password, or forbidden access"
+                    },
+                    "404": {
+                        "description": "Share link or file not found"
+                    }
+                }
+            }
+        },
+        "/api/file/createShareLink.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Create a share link for a file",
+                "description": "Generates a secure share link token for a specific file with an optional password protection and expiration time.",
+                "operationId": "createShareLink",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "file"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "file": {
+                                        "type": "string",
+                                        "example": "report.pdf"
+                                    },
+                                    "expirationMinutes": {
+                                        "type": "integer",
+                                        "example": 60
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "example": "secret"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Share link created successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "token": {
+                                            "type": "string",
+                                            "example": "a1b2c3d4e5f6..."
+                                        },
+                                        "expires": {
+                                            "type": "integer",
+                                            "example": 1621234567
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Read-only users are not allowed to create share links"
+                    }
+                }
+            }
+        },
+        "/api/file/getTrashItems.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Get trash items",
+                "description": "Retrieves a list of files that have been moved to Trash, enriched with metadata such as who deleted them and when.",
+                "operationId": "getTrashItems",
+                "responses": {
+                    "200": {
+                        "description": "Trash items retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                }
+            }
+        },
+        "/api/file/restoreFiles.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Restore trashed files",
+                "description": "Restores files from Trash based on provided trash file identifiers and updates metadata.",
+                "operationId": "restoreFiles",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "files"
+                                ],
+                                "properties": {
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "trashedFile_1623456789.zip"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Files restored successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Items restored: file1, file2"
+                                        },
+                                        "restored": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                }
+            }
+        },
+        "/api/file/deleteTrashFiles.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Delete trash files",
+                "description": "Deletes trash items based on provided trash file identifiers from the trash metadata and removes the files from disk.",
+                "operationId": "deleteTrashFiles",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "oneOf": [
+                                    {
+                                        "required": [
+                                            "deleteAll"
+                                        ],
+                                        "properties": {
+                                            "deleteAll": {
+                                                "type": "boolean",
+                                                "example": true
+                                            }
+                                        },
+                                        "type": "object"
+                                    },
+                                    {
+                                        "required": [
+                                            "files"
+                                        ],
+                                        "properties": {
+                                            "files": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string",
+                                                    "example": "trashedfile_1234567890"
+                                                }
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Trash items deleted successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "deleted": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                }
+            }
+        },
+        "/api/file/getFileTag.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Retrieve file tags",
+                "description": "Retrieves tags from the createdTags.json metadata file.",
+                "operationId": "getFileTags",
+                "responses": {
+                    "200": {
+                        "description": "File tags retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/file/saveFileTag.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Save file tags",
+                "description": "Saves tag data for a specified file and updates global tag data. For folder-specific tags, saves to the folder's metadata file.",
+                "operationId": "saveFileTag",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "file",
+                                    "tags"
+                                ],
+                                "properties": {
+                                    "file": {
+                                        "type": "string",
+                                        "example": "document.txt"
+                                    },
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "tags": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "Important"
+                                                },
+                                                "color": {
+                                                    "type": "string",
+                                                    "example": "#FF0000"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "deleteGlobal": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "tagToDelete": {
+                                        "type": "string",
+                                        "example": "OldTag"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Tag data saved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Tag data saved successfully."
+                                        },
+                                        "globalTags": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or insufficient permissions"
+                    }
+                }
+            }
+        },
+        "/api/file/getFileList.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Get file list",
+                "description": "Retrieves a list of files from a specified folder along with global tags and metadata.",
+                "operationId": "getFileList",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "description": "Folder name (defaults to 'root')",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "Documents"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File list retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "files": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "globalTags": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    }
+                }
+            }
+        },
+        "/api/folder/createFolder.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Create a new folder",
+                "description": "Creates a new folder in the upload directory (under an optional parent) and creates an associated empty metadata file.",
+                "operationId": "createFolder",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folderName"
+                                ],
+                                "properties": {
+                                    "folderName": {
+                                        "type": "string",
+                                        "example": "NewFolder"
+                                    },
+                                    "parent": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Folder created successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (e.g., invalid folder name)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or permission denied"
+                    }
+                }
+            }
+        },
+        "/api/folder/deleteFolder.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Delete an empty folder",
+                "description": "Deletes a specified folder if it is empty and not the root folder, and also removes its metadata file.",
+                "operationId": "deleteFolder",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents/Subfolder"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Folder deleted successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (e.g., invalid folder name or folder not empty)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or permission denied"
+                    }
+                }
+            }
+        },
+        "/api/folder/renameFolder.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Rename a folder",
+                "description": "Renames an existing folder and updates its associated metadata files.",
+                "operationId": "renameFolder",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "oldFolder",
+                                    "newFolder"
+                                ],
+                                "properties": {
+                                    "oldFolder": {
+                                        "type": "string",
+                                        "example": "Documents/OldFolder"
+                                    },
+                                    "newFolder": {
+                                        "type": "string",
+                                        "example": "Documents/NewFolder"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Folder renamed successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid folder names or folder does not exist"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or permission denied"
+                    }
+                }
+            }
+        },
+        "/api/folder/getFolderList.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Get list of folders",
+                "description": "Retrieves the list of folders in the upload directory, including file counts and metadata file names for each folder.",
+                "operationId": "getFolderList",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "description": "Optional folder name to filter the listing",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "Documents"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Folder list retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "400": {
+                        "description": "Bad request"
+                    }
+                }
+            }
+        },
+        "/api/folder/shareFolder.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Display a shared folder",
+                "description": "Renders an HTML view of a shared folder's contents. Supports password protection, file listing with pagination, and an upload container if uploads are allowed.",
+                "operationId": "shareFolder",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "description": "The share token for the folder",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "pass",
+                        "in": "query",
+                        "description": "The password if the folder is protected",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number for pagination",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Shared folder displayed",
+                        "content": {
+                            "text/html": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request"
+                    },
+                    "403": {
+                        "description": "Access forbidden (expired link or invalid password)"
+                    },
+                    "404": {
+                        "description": "Share folder not found"
+                    }
+                }
+            }
+        },
+        "/api/folder/createShareFolderLink.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Create a share link for a folder",
+                "description": "Generates a secure share link for a folder along with optional password protection and upload settings.",
+                "operationId": "createShareFolderLink",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "Documents"
+                                    },
+                                    "expirationMinutes": {
+                                        "type": "integer",
+                                        "example": 60
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "example": "secret"
+                                    },
+                                    "allowUpload": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Share link created successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "token": {
+                                            "type": "string",
+                                            "example": "a1b2c3d4..."
+                                        },
+                                        "expires": {
+                                            "type": "integer",
+                                            "example": 1623456789
+                                        },
+                                        "link": {
+                                            "type": "string",
+                                            "example": "https://yourdomain.com/api/folder/shareFolder.php?token=..."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Read-only users are not allowed to create share links"
+                    }
+                }
+            }
+        },
+        "/api/folder/downloadSharedFile.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Download a file from a shared folder",
+                "description": "Retrieves and serves a file from a shared folder based on a share token.",
+                "operationId": "downloadSharedFile",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "description": "The share folder token",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "file",
+                        "in": "query",
+                        "description": "The filename to download",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File served successfully",
+                        "content": {
+                            "application/octet-stream": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (missing parameters, invalid file name, etc.)"
+                    },
+                    "403": {
+                        "description": "Access forbidden (e.g., expired share link)"
+                    },
+                    "404": {
+                        "description": "File not found"
+                    }
+                }
+            }
+        },
+        "/api/folder/uploadToSharedFolder.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Upload a file to a shared folder",
+                "description": "Handles file upload to a shared folder using a share token. Validates file size, extension, and uploads the file to the shared folder, updating metadata accordingly.",
+                "operationId": "uploadToSharedFolder",
+                "requestBody": {
+                    "description": "Multipart form data containing the share token and file to upload.",
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "token",
+                                    "fileToUpload"
+                                ],
+                                "properties": {
+                                    "token": {
+                                        "type": "string"
+                                    },
+                                    "fileToUpload": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "302": {
+                        "description": "Redirects to the shared folder page on success."
+                    },
+                    "400": {
+                        "description": "Bad Request (missing token, file upload error, file type/size not allowed)"
+                    },
+                    "403": {
+                        "description": "Forbidden (share link expired or uploads not allowed)"
+                    },
+                    "500": {
+                        "description": "Server error during file move"
+                    }
+                }
+            }
+        },
+        "/api/upload/upload.php": {
+            "post": {
+                "tags": [
+                    "Uploads"
+                ],
+                "summary": "Handle file upload",
+                "description": "Handles file uploads for both chunked and non-chunked (full) uploads. Validates CSRF, user authentication, and permissions, and processes file uploads accordingly. On success, returns a JSON status for chunked uploads or redirects for full uploads.",
+                "operationId": "handleUpload",
+                "requestBody": {
+                    "description": "Multipart form data for file upload. For chunked uploads, include fields like 'resumableChunkNumber', 'resumableTotalChunks', 'resumableIdentifier', 'resumableFilename', etc.",
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "token",
+                                    "fileToUpload"
+                                ],
+                                "properties": {
+                                    "token": {
+                                        "description": "Share token or upload token.",
+                                        "type": "string"
+                                    },
+                                    "fileToUpload": {
+                                        "description": "The file to upload.",
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "resumableChunkNumber": {
+                                        "description": "Chunk number for chunked uploads.",
+                                        "type": "integer"
+                                    },
+                                    "resumableTotalChunks": {
+                                        "description": "Total number of chunks.",
+                                        "type": "integer"
+                                    },
+                                    "resumableFilename": {
+                                        "description": "Original filename.",
+                                        "type": "string"
+                                    },
+                                    "folder": {
+                                        "description": "Target folder (default 'root').",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "File uploaded successfully (or chunk uploaded status).",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "File uploaded successfully"
+                                        },
+                                        "newFilename": {
+                                            "type": "string",
+                                            "example": "5f2d7c123a_example.png"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "chunk uploaded"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "302": {
+                        "description": "Redirection on full upload success."
+                    },
+                    "400": {
+                        "description": "Bad Request (e.g., missing file, invalid parameters)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden (e.g., invalid CSRF token, upload disabled)"
+                    },
+                    "500": {
+                        "description": "Server error during file processing"
+                    }
+                }
+            }
+        },
+        "/api/upload/removeChunks.php": {
+            "post": {
+                "tags": [
+                    "Uploads"
+                ],
+                "summary": "Remove chunked upload temporary directory",
+                "description": "Removes the temporary directory used for chunked uploads, given a folder name matching the expected resumable pattern.",
+                "operationId": "removeChunks",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "resumable_myupload123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Temporary folder removed successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Temporary folder removed."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input (e.g., missing folder or invalid folder name)"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                }
+            }
+        },
+        "/api/getUsers.php": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Retrieve a list of users",
+                "description": "Returns a JSON array of users. Only available to authenticated admin users.",
+                "operationId": "getUsers",
+                "responses": {
+                    "200": {
+                        "description": "Successful response with an array of users",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "properties": {
+                                            "username": {
+                                                "type": "string",
+                                                "example": "johndoe"
+                                            },
+                                            "role": {
+                                                "type": "string",
+                                                "example": "admin"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized: the user is not authenticated or is not an admin"
+                    }
+                }
+            }
+        },
+        "/api/addUser.php": {
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Add a new user",
+                "description": "Adds a new user to the system. In setup mode, the new user is automatically made admin.",
+                "operationId": "addUser",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "username",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "username": {
+                                        "type": "string",
+                                        "example": "johndoe"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "example": "securepassword"
+                                    },
+                                    "isAdmin": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User added successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User added successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                }
+            }
+        },
+        "/api/removeUser.php": {
+            "delete": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Remove a user",
+                "description": "Removes the specified user from the system. Cannot remove the currently logged-in user.",
+                "operationId": "removeUser",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "username"
+                                ],
+                                "properties": {
+                                    "username": {
+                                        "type": "string",
+                                        "example": "johndoe"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User removed successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User removed successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                }
+            }
+        },
+        "/api/getUserPermissions.php": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Retrieve user permissions",
+                "description": "Returns the permissions for the current user, or all permissions if the user is an admin.",
+                "operationId": "getUserPermissions",
+                "responses": {
+                    "200": {
+                        "description": "Successful response with user permissions",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                }
+            }
+        },
+        "/api/updateUserPermissions.php": {
+            "put": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Update user permissions",
+                "description": "Updates permissions for users. Only available to authenticated admin users.",
+                "operationId": "updateUserPermissions",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "permissions"
+                                ],
+                                "properties": {
+                                    "permissions": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "username": {
+                                                    "type": "string",
+                                                    "example": "johndoe"
+                                                },
+                                                "folderOnly": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "readOnly": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                },
+                                                "disableUpload": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User permissions updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User permissions updated successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    }
+                }
+            }
+        },
+        "/api/changePassword.php": {
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Change user password",
+                "description": "Allows an authenticated user to change their password by verifying the old password and updating to a new one.",
+                "operationId": "changePassword",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "oldPassword",
+                                    "newPassword",
+                                    "confirmPassword"
+                                ],
+                                "properties": {
+                                    "oldPassword": {
+                                        "type": "string",
+                                        "example": "oldpass123"
+                                    },
+                                    "newPassword": {
+                                        "type": "string",
+                                        "example": "newpass456"
+                                    },
+                                    "confirmPassword": {
+                                        "type": "string",
+                                        "example": "newpass456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Password updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Password updated successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                }
+            }
+        },
+        "/api/updateUserPanel.php": {
+            "put": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Update user panel settings",
+                "description": "Updates user panel settings by disabling TOTP when not enabled. Accessible to authenticated users.",
+                "operationId": "updateUserPanel",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "totp_enabled"
+                                ],
+                                "properties": {
+                                    "totp_enabled": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User panel updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User panel updated: TOTP disabled"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    }
+                }
+            }
+        },
+        "/api/totp_disable.php": {
+            "put": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Disable TOTP for the authenticated user",
+                "description": "Clears the TOTP secret from the users file for the current user.",
+                "operationId": "disableTOTP",
+                "responses": {
+                    "200": {
+                        "description": "TOTP disabled successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "TOTP disabled successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Not authenticated or invalid CSRF token"
+                    },
+                    "500": {
+                        "description": "Failed to disable TOTP"
+                    }
+                }
+            }
+        },
+        "/api/totp_recover.php": {
+            "post": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Recover TOTP",
+                "description": "Verifies a recovery code to disable TOTP and finalize login.",
+                "operationId": "recoverTOTP",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "recovery_code"
+                                ],
+                                "properties": {
+                                    "recovery_code": {
+                                        "type": "string",
+                                        "example": "ABC123DEF456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Recovery successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input or recovery code"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "429": {
+                        "description": "Too many attempts"
+                    }
+                }
+            }
+        },
+        "/api/totp_saveCode.php": {
+            "post": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Generate and save a new TOTP recovery code",
+                "description": "Generates a new TOTP recovery code for the authenticated user, stores its hash, and returns the plain text recovery code.",
+                "operationId": "totpSaveCode",
+                "responses": {
+                    "200": {
+                        "description": "Recovery code generated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        },
+                                        "recoveryCode": {
+                                            "type": "string",
+                                            "example": "ABC123DEF456"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or unauthorized"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    }
+                }
+            }
+        },
+        "/api/totp_setup.php": {
+            "get": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Set up TOTP and generate a QR code",
+                "description": "Generates (or retrieves) the TOTP secret for the user and builds a QR code image for scanning.",
+                "operationId": "setupTOTP",
+                "responses": {
+                    "200": {
+                        "description": "QR code image for TOTP setup",
+                        "content": {
+                            "image/png": {}
+                        }
+                    },
+                    "403": {
+                        "description": "Unauthorized or invalid CSRF token"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                }
+            }
+        },
+        "/api/totp_verify.php": {
+            "post": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Verify TOTP code",
+                "description": "Verifies a TOTP code and completes login for pending users or validates TOTP for setup verification.",
+                "operationId": "verifyTOTP",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "totp_code"
+                                ],
+                                "properties": {
+                                    "totp_code": {
+                                        "type": "string",
+                                        "example": "123456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "TOTP successfully verified",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Login successful"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (e.g., invalid input)"
+                    },
+                    "403": {
+                        "description": "Not authenticated or invalid CSRF token"
+                    },
+                    "429": {
+                        "description": "Too many attempts. Try again later."
+                    }
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Admin",
+            "description": "Admin"
+        },
+        {
+            "name": "Auth",
+            "description": "Auth"
+        },
+        {
+            "name": "Files",
+            "description": "Files"
+        },
+        {
+            "name": "Folders",
+            "description": "Folders"
+        },
+        {
+            "name": "Uploads",
+            "description": "Uploads"
+        },
+        {
+            "name": "Users",
+            "description": "Users"
+        },
+        {
+            "name": "TOTP",
+            "description": "TOTP"
+        }
+    ]
+}
