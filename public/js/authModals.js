@@ -166,105 +166,112 @@ export function openUserPanel() {
     border-radius: 8px;
     position: fixed;
     overflow-y: auto;
-    max-height: 350px !important;
+    max-height: 400px !important;
     border: ${isDarkMode ? "1px solid #444" : "1px solid #ccc"};
     transform: none;
     transition: none;
   `;
-  // Retrieve the language setting from local storage, default to English ("en")
   const savedLanguage = localStorage.getItem("language") || "en";
+
   if (!userPanelModal) {
     userPanelModal = document.createElement("div");
     userPanelModal.id = "userPanelModal";
     userPanelModal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background-color: ${overlayBackground};
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 3000;
-      `;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: ${overlayBackground};
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 3000;
+    `;
     userPanelModal.innerHTML = `
-        <div class="modal-content user-panel-content" style="${modalContentStyles}">
-          <span id="closeUserPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
-          <h3>${t("user_panel")} (${username})</h3>
-          <button type="button" id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom: 15px;">${t("change_password")}</button>
-          <fieldset style="margin-bottom: 15px;">
-            <legend>${t("totp_settings")}</legend>
-            <div class="form-group">
-              <label for="userTOTPEnabled">${t("enable_totp")}:</label>
-              <input type="checkbox" id="userTOTPEnabled" style="vertical-align: middle;" />
-            </div>
-          </fieldset>
-          <fieldset style="margin-bottom: 15px;">
-            <legend>${t("language")}</legend>
-            <div class="form-group">
-              <label for="languageSelector">${t("select_language")}:</label>
-              <select id="languageSelector">
-                <option value="en">${t("english")}</option>
-                <option value="es">${t("spanish")}</option>
-                <option value="fr">${t("french")}</option>
-                <option value="de">${t("german")}</option>
-              </select>
-            </div>
-          </fieldset>
+      <div class="modal-content user-panel-content" style="${modalContentStyles}">
+        <span id="closeUserPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
+        <h3>${t("user_panel")} (${username})</h3>
+
+        <button type="button" id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom: 15px;">
+          ${t("change_password")}
+        </button>
+
+        <fieldset style="margin-bottom: 15px;">
+          <legend>${t("totp_settings")}</legend>
+          <div class="form-group">
+            <label for="userTOTPEnabled">${t("enable_totp")}:</label>
+            <input type="checkbox" id="userTOTPEnabled" style="vertical-align: middle;" />
+          </div>
+        </fieldset>
+
+        <fieldset style="margin-bottom: 15px;">
+          <legend>${t("language")}</legend>
+          <div class="form-group">
+            <label for="languageSelector">${t("select_language")}:</label>
+            <select id="languageSelector">
+              <option value="en">${t("english")}</option>
+              <option value="es">${t("spanish")}</option>
+              <option value="fr">${t("french")}</option>
+              <option value="de">${t("german")}</option>
+            </select>
+          </div>
+        </fieldset>
+
+        <!-- New API Docs link -->
+        <div style="margin-bottom: 15px;">
+          <a href="api.html" target="_blank" class="btn btn-secondary">
+            ${t("api_docs") || "API Docs"}
+          </a>
         </div>
-      `;
+      </div>
+    `;
     document.body.appendChild(userPanelModal);
-    // Close button handler
+
+    // Handlers…
     document.getElementById("closeUserPanel").addEventListener("click", () => {
       userPanelModal.style.display = "none";
     });
-    // Change Password button
     document.getElementById("openChangePasswordModalBtn").addEventListener("click", () => {
       document.getElementById("changePasswordModal").style.display = "block";
     });
-    // TOTP checkbox behavior
+
+    // TOTP checkbox
     const totpCheckbox = document.getElementById("userTOTPEnabled");
     totpCheckbox.checked = localStorage.getItem("userTOTPEnabled") === "true";
     totpCheckbox.addEventListener("change", function () {
       localStorage.setItem("userTOTPEnabled", this.checked ? "true" : "false");
-      const enabled = this.checked;
       fetch("api/updateUserPanel.php", {
         method: "POST",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": window.csrfToken
-        },
-        body: JSON.stringify({ totp_enabled: enabled })
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+        body: JSON.stringify({ totp_enabled: this.checked })
       })
         .then(r => r.json())
         .then(result => {
-          if (!result.success) {
-            showToast(t("error_updating_totp_setting") + ": " + result.error);
-          } else if (enabled) {
-            openTOTPModal();
-          }
+          if (!result.success) showToast(t("error_updating_totp_setting") + ": " + result.error);
+          else if (this.checked) openTOTPModal();
         })
-        .catch(() => { showToast(t("error_updating_totp_setting")); });
+        .catch(() => showToast(t("error_updating_totp_setting")));
     });
-    // Language dropdown initialization
+
+    // Language selector
     const languageSelector = document.getElementById("languageSelector");
     languageSelector.value = savedLanguage;
     languageSelector.addEventListener("change", function () {
-      const selectedLanguage = this.value;
-      localStorage.setItem("language", selectedLanguage);
-      setLocale(selectedLanguage);
+      localStorage.setItem("language", this.value);
+      setLocale(this.value);
       applyTranslations();
     });
   } else {
-    // If the modal already exists, update its colors
+    // Update colors if already exists
     userPanelModal.style.backgroundColor = overlayBackground;
     const modalContent = userPanelModal.querySelector(".modal-content");
     modalContent.style.background = isDarkMode ? "#2c2c2c" : "#fff";
     modalContent.style.color = isDarkMode ? "#e0e0e0" : "#000";
     modalContent.style.border = isDarkMode ? "1px solid #444" : "1px solid #ccc";
   }
+
   userPanelModal.style.display = "flex";
 }
 
@@ -549,7 +556,7 @@ function showCustomConfirmModal(message) {
       noBtn.removeEventListener("click", onNo);
       modal.style.display = "none";
     }
-    
+
     yesBtn.addEventListener("click", onYes);
     noBtn.addEventListener("click", onNo);
   });
@@ -688,7 +695,7 @@ export function openAdminPanel() {
           openUserPermissionsModal();
         });
         document.getElementById("saveAdminSettings").addEventListener("click", () => {
-          
+
           const disableFormLoginCheckbox = document.getElementById("disableFormLogin");
           const disableBasicAuthCheckbox = document.getElementById("disableBasicAuth");
           const disableOIDCLoginCheckbox = document.getElementById("disableOIDCLogin");
@@ -707,7 +714,7 @@ export function openAdminPanel() {
             return;
           }
           const newHeaderTitle = document.getElementById("headerTitle").value.trim();
-          
+
           const newOIDCConfig = {
             providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
             clientId: document.getElementById("oidcClientId").value.trim(),
@@ -739,7 +746,7 @@ export function openAdminPanel() {
                 captureInitialAdminConfig();
                 closeAdminPanel();
                 loadAdminConfigFunc();
-              
+
               } else {
                 showToast(t("error_updating_settings") + ": " + (response.error || t("unknown_error")));
               }
@@ -764,7 +771,7 @@ export function openAdminPanel() {
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
-        
+
         // Capture initial state after the modal loads.
         captureInitialAdminConfig();
       } else {

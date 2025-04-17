@@ -5,6 +5,7 @@
 - Generate OpenAPI spec and API HTML docs
   - Fully auto‑generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
 - .gitattributes added to mark (`openapi.json`) & (`api.html`) as documentation.
+- User Panel added API Docs link.
 
 ---
 

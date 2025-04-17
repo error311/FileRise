@@ -237,7 +237,8 @@ const translations = {
     "ok": "OK",
     "show": "Show",
     "items_per_page": "items per page",
-    "columns":"Columns"
+    "columns":"Columns",
+    "api_docs": "API Docs"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",
