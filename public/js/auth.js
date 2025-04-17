@@ -149,11 +149,12 @@ function updateAuthenticatedUI(data) {
   if (data.username) {
     localStorage.setItem("username", data.username);
   }
-  /*
-  if (typeof data.folderOnly !== "undefined") {
-    localStorage.setItem("folderOnly", data.folderOnly ? "true" : "false");
+  if (typeof data.folderOnly    !== "undefined") {
+    localStorage.setItem("folderOnly",    data.folderOnly    ? "true" : "false");
+    localStorage.setItem("readOnly",      data.readOnly      ? "true" : "false");
+    localStorage.setItem("disableUpload", data.disableUpload ? "true" : "false");
   }
-*/
+
   const headerButtons = document.querySelector(".header-buttons");
   const firstButton = headerButtons.firstElementChild;
 
@@ -227,6 +228,10 @@ function checkAuthentication(showLoginToast = true) {
       }
       window.setupMode = false;
       if (data.authenticated) {
+        localStorage.setItem("folderOnly",   data.folderOnly   );
+        localStorage.setItem("readOnly",     data.readOnly     );
+        localStorage.setItem("disableUpload",data.disableUpload);
+        updateLoginOptionsUIFromStorage();
         if (typeof data.totp_enabled !== "undefined") {
           localStorage.setItem("userTOTPEnabled", data.totp_enabled ? "true" : "false");
         }
@@ -249,6 +254,7 @@ function checkAuthentication(showLoginToast = true) {
 function submitLogin(data) {
   setLastLoginData(data);
   window.__lastLoginData = data;
+
   sendRequest("api/auth/auth.php", "POST", data, { "X-CSRF-Token": window.csrfToken })
     .then(response => {
       if (response.success || response.status === "ok") {
@@ -263,7 +269,7 @@ function submitLogin(data) {
             }
           })
           .catch(() => {
-            // if fetching permissions fails.
+            // ignore permission‐fetch errors
           })
           .finally(() => {
             window.location.reload();
@@ -272,7 +278,7 @@ function submitLogin(data) {
         openTOTPLoginModal();
       } else if (response.error && response.error.includes("Too many failed login attempts")) {
         showToast(response.error);
-        const loginButton = document.getElementById("authForm").querySelector("button[type='submit']");
+        const loginButton = document.querySelector("#authForm button[type='submit']");
         if (loginButton) {
           loginButton.disabled = true;
           setTimeout(() => {
@@ -284,10 +290,18 @@ function submitLogin(data) {
         showToast("Login failed: " + (response.error || "Unknown error"));
       }
     })
-    .catch(() => {
-      showToast("Login failed: Unknown error");
+    .catch(err => {
+      // err may be an Error object or a string
+      let msg = "Unknown error";
+      if (err && typeof err === "object") {
+        msg = err.error || err.message || msg;
+      } else if (typeof err === "string") {
+        msg = err;
+      }
+      showToast(`Login failed: ${msg}`);
     });
 }
+
 window.submitLogin = submitLogin;
 
 /* ----------------- Other Helpers ----------------- */

@@ -58,209 +58,233 @@ class AuthController
      *
      * @return void Redirects on success or outputs JSON error.
      */
+    // in src/controllers/AuthController.php
+
     public function auth(): void
     {
-        // Global exception handler.
+        header('Content-Type: application/json');
         set_exception_handler(function ($e) {
             error_log("Unhandled exception: " . $e->getMessage());
             http_response_code(500);
-            echo json_encode(["error" => "Internal Server Error"]);
+            echo json_encode(['error' => 'Internal Server Error']);
             exit();
         });
 
-        header('Content-Type: application/json');
+        // Decode any JSON payload
+        $data       = json_decode(file_get_contents('php://input'), true) ?: [];
+        $username   = trim($data['username']   ?? '');
+        $password   = trim($data['password']   ?? '');
+        $totpCode   = trim($data['totp_code']  ?? '');
+        $rememberMe = !empty($data['remember_me']);
 
-        // If OIDC parameters are present, initiate OIDC flow.
+        //
+        // 1) TOTP‑only step: user already passed credentials and we asked for TOTP,
+        //    now they POST just totp_code.
+        //
+        if ($totpCode && isset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret'])) {
+            $username = $_SESSION['pending_login_user'];
+            $secret   = $_SESSION['pending_login_secret'];
+
+            $tfa = new TwoFactorAuth(new GoogleChartsQrCodeProvider(), 'FileRise', 6, 30, Algorithm::Sha1);
+            if (! $tfa->verifyCode($secret, $totpCode)) {
+                echo json_encode(['error' => 'Invalid TOTP code']);
+                exit();
+            }
+            // clear the pending markers
+            unset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret']);
+            // now finish login
+            $this->finalizeLogin($username, $rememberMe);
+        }
+
+        //
+        // 2) OIDC flow
+        //
         $oidcAction = $_GET['oidc'] ?? null;
-        if (!$oidcAction && isset($_GET['code'])) {
+        if (! $oidcAction && isset($_GET['code'])) {
             $oidcAction = 'callback';
         }
         if ($oidcAction) {
-            // new: delegate to AdminModel
             $cfg = AdminModel::getConfig();
-            // Optional: log to confirm you loaded the right values
-            error_log("Loaded OIDC config: " . print_r($cfg['oidc'], true));
-
-            $oidc_provider_url  = $cfg['oidc']['providerUrl'];
-            $oidc_client_id     = $cfg['oidc']['clientId'];
-            $oidc_client_secret = $cfg['oidc']['clientSecret'];
-            $oidc_redirect_uri  = $cfg['oidc']['redirectUri'];
-            $oidc = new OpenIDConnectClient($oidc_provider_url, $oidc_client_id, $oidc_client_secret);
-            $oidc->setRedirectURL($oidc_redirect_uri);
+            $oidc = new OpenIDConnectClient(
+                $cfg['oidc']['providerUrl'],
+                $cfg['oidc']['clientId'],
+                $cfg['oidc']['clientSecret']
+            );
+            $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
 
             if ($oidcAction === 'callback') {
                 try {
                     $oidc->authenticate();
                     $username = $oidc->requestUserInfo('preferred_username');
 
-                    // Check for TOTP secret.
+                    // check if this user has a TOTP secret
                     $totp_secret = null;
                     $usersFile = USERS_DIR . USERS_FILE;
                     if (file_exists($usersFile)) {
                         foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-                            $parts = explode(":", trim($line));
-                            if (count($parts) >= 4 && $parts[0] === $username && !empty($parts[3])) {
-                                $totp_secret = decryptData($parts[3], $encryptionKey);
+                            $parts = explode(':', trim($line));
+                            if (count($parts) >= 4 && $parts[0] === $username && $parts[3] !== '') {
+                                $totp_secret = decryptData($parts[3], $GLOBALS['encryptionKey']);
                                 break;
                             }
                         }
                     }
                     if ($totp_secret) {
-                        $_SESSION['pending_login_user'] = $username;
+                        $_SESSION['pending_login_user']   = $username;
                         $_SESSION['pending_login_secret'] = $totp_secret;
-                        header("Location: /index.html?totp_required=1");
+                        header('Location: /index.html?totp_required=1');
                         exit();
                     }
 
-                    // Finalize login (no TOTP)
-                    session_regenerate_id(true);
-                    $_SESSION["authenticated"] = true;
-                    $_SESSION["username"] = $username;
-                    $_SESSION["isAdmin"] = (AuthModel::getUserRole($username) === "1");
-                    $_SESSION["folderOnly"] = loadUserPermissions($username);
-                    header("Location: /index.html");
-                    exit();
-                } catch (Exception $e) {
-                    error_log("OIDC authentication error: " . $e->getMessage());
+                    // no TOTP → finish immediately
+                    $this->finishBrowserLogin($username);
+                } catch (\Exception $e) {
+                    error_log("OIDC auth error: " . $e->getMessage());
                     http_response_code(401);
-                    echo json_encode(["error" => "Authentication failed."]);
+                    echo json_encode(['error' => 'Authentication failed.']);
                     exit();
                 }
             } else {
-                // Initiate OIDC authentication.
+                // initial OIDC redirect
                 try {
                     $oidc->authenticate();
                     exit();
-                } catch (Exception $e) {
+                } catch (\Exception $e) {
                     error_log("OIDC initiation error: " . $e->getMessage());
                     http_response_code(401);
-                    echo json_encode(["error" => "Authentication initiation failed."]);
+                    echo json_encode(['error' => 'Authentication initiation failed.']);
                     exit();
                 }
             }
         }
 
-        // Fallback: Form-based Authentication.
-        $data = json_decode(file_get_contents("php://input"), true);
-        $username = trim($data["username"] ?? "");
-        $password = trim($data["password"] ?? "");
-        $rememberMe = isset($data["remember_me"]) && $data["remember_me"] === true;
-
-        if (!$username || !$password) {
+        //
+        // 3) Form‑based / AJAX login
+        //
+        if (! $username || ! $password) {
             http_response_code(400);
-            echo json_encode(["error" => "Username and password are required"]);
+            echo json_encode(['error' => 'Username and password are required']);
+            exit();
+        }
+        if (! preg_match(REGEX_USER, $username)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid username format']);
             exit();
         }
 
-        if (!preg_match(REGEX_USER, $username)) {
-            http_response_code(400);
-            echo json_encode(["error" => "Invalid username format. Only letters, numbers, underscores, dashes, and spaces are allowed."]);
-            exit();
-        }
-
-        $ip = $_SERVER['REMOTE_ADDR'];
-        $currentTime = time();
+        // rate‑limit
+        $ip           = $_SERVER['REMOTE_ADDR'];
         $attemptsFile = USERS_DIR . 'failed_logins.json';
-        $failedAttempts = AuthModel::loadFailedAttempts($attemptsFile);
-        $maxAttempts = 5;
-        $lockoutTime = 30 * 60; // 30 minutes
-
-        if (isset($failedAttempts[$ip])) {
-            $attemptData = $failedAttempts[$ip];
-            if ($attemptData['count'] >= $maxAttempts && ($currentTime - $attemptData['last_attempt']) < $lockoutTime) {
-                http_response_code(429);
-                echo json_encode(["error" => "Too many failed login attempts. Please try again later."]);
-                exit();
-            }
+        $failed       = AuthModel::loadFailedAttempts($attemptsFile);
+        if (
+            isset($failed[$ip]) &&
+            $failed[$ip]['count'] >= 5 &&
+            time() - $failed[$ip]['last_attempt'] < 30 * 60
+        ) {
+            http_response_code(429);
+            echo json_encode(['error' => 'Too many failed login attempts. Please try again later.']);
+            exit();
         }
 
         $user = AuthModel::authenticate($username, $password);
-        if ($user !== false) {
-            // Handle TOTP if required.
-            if (!empty($user['totp_secret'])) {
-                if (empty($data['totp_code']) || !preg_match('/^\d{6}$/', $data['totp_code'])) {
-                    $_SESSION['pending_login_user'] = $username;
-                    $_SESSION['pending_login_secret'] = $user['totp_secret'];
-                    echo json_encode([
-                        "totp_required" => true,
-                        "message" => "TOTP code required"
-                    ]);
-                    exit();
-                } else {
-                    $tfa = new \RobThree\Auth\TwoFactorAuth(
-                        new GoogleChartsQrCodeProvider(),
-                        'FileRise',
-                        6,
-                        30,
-                        Algorithm::Sha1
-                    );
-                    $providedCode = trim($data['totp_code']);
-                    if (!$tfa->verifyCode($user['totp_secret'], $providedCode)) {
-                        echo json_encode(["error" => "Invalid TOTP code"]);
-                        exit();
-                    }
-                }
-            }
-
-            // Clear failed attempts.
-            if (isset($failedAttempts[$ip])) {
-                unset($failedAttempts[$ip]);
-                AuthModel::saveFailedAttempts($attemptsFile, $failedAttempts);
-            }
-
-            session_regenerate_id(true);
-            $_SESSION["authenticated"] = true;
-            $_SESSION["username"] = $username;
-            $_SESSION["isAdmin"] = ($user['role'] === "1");
-            $_SESSION["folderOnly"] = loadUserPermissions($username);
-
-            // Handle "remember me"
-            if ($rememberMe) {
-                $persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
-                $tokenPersistent = bin2hex(random_bytes(32));
-                $expiry = time() + (30 * 24 * 60 * 60);
-                $persistentTokens = [];
-                if (file_exists($persistentTokensFile)) {
-                    $encryptedContent = file_get_contents($persistentTokensFile);
-                    $decryptedContent = decryptData($encryptedContent, $GLOBALS['encryptionKey']);
-                    $persistentTokens = json_decode($decryptedContent, true);
-                    if (!is_array($persistentTokens)) {
-                        $persistentTokens = [];
-                    }
-                }
-                $persistentTokens[$tokenPersistent] = [
-                    "username" => $username,
-                    "expiry" => $expiry,
-                    "isAdmin" => ($_SESSION["isAdmin"] === true)
-                ];
-                $encryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']);
-                file_put_contents($persistentTokensFile, $encryptedContent, LOCK_EX);
-                $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-                setcookie('remember_me_token', $tokenPersistent, $expiry, '/', '', $secure, true);
-            }
-
-            echo json_encode([
-                "status" => "ok",
-                "success" => "Login successful",
-                "isAdmin" => $_SESSION["isAdmin"],
-                "folderOnly" => $_SESSION["folderOnly"],
-                "username" => $_SESSION["username"]
-            ]);
-        } else {
-            // Record failed login attempt.
-            if (isset($failedAttempts[$ip])) {
-                $failedAttempts[$ip]['count']++;
-                $failedAttempts[$ip]['last_attempt'] = $currentTime;
-            } else {
-                $failedAttempts[$ip] = ['count' => 1, 'last_attempt' => $currentTime];
-            }
-            AuthModel::saveFailedAttempts($attemptsFile, $failedAttempts);
-            $failedLogFile = USERS_DIR . 'failed_login.log';
-            $logLine = date('Y-m-d H:i:s') . " - Failed login attempt for username: " . $username . " from IP: " . $ip . PHP_EOL;
-            file_put_contents($failedLogFile, $logLine, FILE_APPEND);
+        if ($user === false) {
+            // record failure
+            $failed[$ip] = [
+                'count'        => ($failed[$ip]['count'] ?? 0) + 1,
+                'last_attempt' => time()
+            ];
+            AuthModel::saveFailedAttempts($attemptsFile, $failed);
             http_response_code(401);
-            echo json_encode(["error" => "Invalid credentials"]);
+            echo json_encode(['error' => 'Invalid credentials']);
+            exit();
         }
+
+        // if this account has TOTP, ask for it
+        if (! empty($user['totp_secret'])) {
+            $_SESSION['pending_login_user']   = $username;
+            $_SESSION['pending_login_secret'] = $user['totp_secret'];
+            echo json_encode(['totp_required' => true]);
+            exit();
+        }
+
+        // otherwise clear rate‑limit & finish
+        if (isset($failed[$ip])) {
+            unset($failed[$ip]);
+            AuthModel::saveFailedAttempts($attemptsFile, $failed);
+        }
+        $this->finalizeLogin($username, $rememberMe);
+    }
+
+    /**
+     * Finalize an AJAX‐style login (form/basic/TOTP) by
+     * issuing the session, remember‑me cookie, and JSON payload.
+     */
+    protected function finalizeLogin(string $username, bool $rememberMe): void
+    {
+        session_regenerate_id(true);
+        $_SESSION['authenticated'] = true;
+        $_SESSION['username']      = $username;
+        $_SESSION['isAdmin']       = (AuthModel::getUserRole($username) === '1');
+
+        $perms = loadUserPermissions($username);
+        $_SESSION['folderOnly']    = $perms['folderOnly']    ?? false;
+        $_SESSION['readOnly']      = $perms['readOnly']      ?? false;
+        $_SESSION['disableUpload'] = $perms['disableUpload'] ?? false;
+
+        // remember‑me
+        if ($rememberMe) {
+            $tokFile = USERS_DIR . 'persistent_tokens.json';
+            $token   = bin2hex(random_bytes(32));
+            $expiry  = time() + 30 * 24 * 60 * 60;
+            $all     = [];
+            if (file_exists($tokFile)) {
+                $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
+                $all = json_decode($dec, true) ?: [];
+            }
+            $all[$token] = [
+                'username' => $username,
+                'expiry'  => $expiry,
+                'isAdmin' => $_SESSION['isAdmin']
+            ];
+            file_put_contents(
+                $tokFile,
+                encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
+                LOCK_EX
+            );
+            $secure = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+            setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
+        }
+
+        echo json_encode([
+            'status'        => 'ok',
+            'success'       => 'Login successful',
+            'isAdmin'       => $_SESSION['isAdmin'],
+            'folderOnly'    => $_SESSION['folderOnly'],
+            'readOnly'      => $_SESSION['readOnly'],
+            'disableUpload' => $_SESSION['disableUpload'],
+            'username'      => $username
+        ]);
+        exit();
+    }
+
+    /**
+     * A version of finalizeLogin() that ends in a browser redirect
+     * (used for OIDC non‑AJAX flows).
+     */
+    protected function finishBrowserLogin(string $username): void
+    {
+        session_regenerate_id(true);
+        $_SESSION['authenticated'] = true;
+        $_SESSION['username']      = $username;
+        $_SESSION['isAdmin']       = (AuthModel::getUserRole($username) === '1');
+
+        $perms = loadUserPermissions($username);
+        $_SESSION['folderOnly']    = $perms['folderOnly']    ?? false;
+        $_SESSION['readOnly']      = $perms['readOnly']      ?? false;
+        $_SESSION['disableUpload'] = $perms['disableUpload'] ?? false;
+
+        header('Location: /index.html');
+        exit();
     }
 
     /**
@@ -296,51 +320,45 @@ class AuthController
      *
      * @return void Outputs a JSON response with authentication details.
      */
+
     public function checkAuth(): void
     {
         header('Content-Type: application/json');
-
         $usersFile = USERS_DIR . USERS_FILE;
-        // If the users file does not exist or is empty, signal setup mode.
+
+        // setup mode?
         if (!file_exists($usersFile) || trim(file_get_contents($usersFile)) === '') {
-            error_log("checkAuth: users file not found or empty; entering setup mode.");
-            echo json_encode(["setup" => true]);
-            exit;
+            error_log("checkAuth: setup mode");
+            echo json_encode(['setup' => true]);
+            exit();
+        }
+        if (empty($_SESSION['authenticated'])) {
+            echo json_encode(['authenticated' => false]);
+            exit();
         }
 
-        // If the session is not authenticated, output false.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-            echo json_encode(["authenticated" => false]);
-            exit;
-        }
-
-        // Retrieve the username from the session.
-        $username = $_SESSION['username'] ?? '';
-        // Determine TOTP enabled by checking the users file.
-        $totp_enabled = false;
-        if ($username) {
-            foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-                $parts = explode(':', trim($line));
-                if ($parts[0] === $username && isset($parts[3]) && trim($parts[3]) !== "") {
-                    $totp_enabled = true;
-                    break;
-                }
+        // TOTP enabled?
+        $totp = false;
+        foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            $parts = explode(':', trim($line));
+            if ($parts[0] === $_SESSION['username'] && !empty($parts[3])) {
+                $totp = true;
+                break;
             }
         }
 
-        // Determine admin status using AuthModel::getUserRole()
-        $userRole = AuthModel::getUserRole($username);
-        $isAdmin = ((int)$userRole === 1);
-
-        $response = [
-            "authenticated" => true,
-            "isAdmin"       => $isAdmin,
-            "totp_enabled"  => $totp_enabled,
-            "username"      => $username,
-            "folderOnly"    => $_SESSION["folderOnly"] ?? false
+        $isAdmin = ((int)AuthModel::getUserRole($_SESSION['username']) === 1);
+        $resp = [
+            'authenticated' => true,
+            'isAdmin'      => $isAdmin,
+            'totp_enabled' => $totp,
+            'username'     => $_SESSION['username'],
+            'folderOnly'   => $_SESSION['folderOnly']    ?? false,
+            'readOnly'     => $_SESSION['readOnly']      ?? false,
+            'disableUpload' => $_SESSION['disableUpload'] ?? false
         ];
-        echo json_encode($response);
-        exit;
+        echo json_encode($resp);
+        exit();
     }
 
     /**
@@ -441,7 +459,11 @@ class AuthController
             $_SESSION["authenticated"] = true;
             $_SESSION["username"] = $username;
             $_SESSION["isAdmin"] = (AuthModel::getUserRole($username) === "1");
-            $_SESSION["folderOnly"] = AuthModel::loadFolderPermission($username);
+            // load _all_ the permissions
+            $userPerms = loadUserPermissions($username);
+            $_SESSION["folderOnly"]    = $userPerms["folderOnly"]    ?? false;
+            $_SESSION["readOnly"]      = $userPerms["readOnly"]      ?? false;
+            $_SESSION["disableUpload"] = $userPerms["disableUpload"] ?? false;
 
             header("Location: /index.html");
             exit;

@@ -118,10 +118,10 @@ $cookieParams = [
     'samesite' => 'Lax'
 ];
 // At the very beginning of config.php
-ini_set('session.save_path', __DIR__ . '/../sessions');
+/*ini_set('session.save_path', __DIR__ . '/../sessions');
 if (!is_dir(__DIR__ . '/../sessions')) {
     mkdir(__DIR__ . '/../sessions', 0777, true);
-}
+}*/
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params($cookieParams);
     ini_set('session.gc_maxlifetime', 7200);
@@ -164,7 +164,7 @@ define('BASE_URL', 'http://yourwebsite/uploads/');
 
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
     $defaultShareUrl = isset($_SERVER['HTTP_HOST'])
-        ? "http://" . $_SERVER['HTTP_HOST'] . "/share.php"
+        ? "http://" . $_SERVER['HTTP_HOST'] . "/api/file/share.php"
         : "http://localhost/api/file/share.php";
 } else {
     $defaultShareUrl = rtrim(BASE_URL, '/') . "/api/file/share.php";

@@ -1301,7 +1301,18 @@ class FileController {
         
         // Delegate deletion to the model.
         $result = FileModel::deleteTrashFiles($filesToDelete);
-        echo json_encode($result);
+
+        // Build a human‑friendly success or error message
+        if (!empty($result['deleted'])) {
+            $count = count($result['deleted']);
+            $msg = "Trash item" . ($count===1 ? "" : "s") . " deleted: " . implode(", ", $result['deleted']);
+            echo json_encode(["success" => $msg]);
+        } elseif (!empty($result['error'])) {
+            echo json_encode(["error" => $result['error']]);
+        } else {
+            echo json_encode(["success" => "No items to delete."]);
+        }
+        exit;
     }
 
         /**
