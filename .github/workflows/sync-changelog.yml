@@ -1,0 +1,39 @@
+name: Sync CHANGELOG to Docker Repo
+
+on:
+  push:
+    paths:
+      - 'CHANGELOG.md'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout FileRise
+        uses: actions/checkout@v4
+        with:
+          path: file-rise
+
+      - name: Checkout filerise-docker
+        uses: actions/checkout@v4
+        with:
+          repository: error311/filerise-docker
+          token: ${{ secrets.PAT_TOKEN }}
+          path: docker-repo
+
+      - name: Copy CHANGELOG.md
+        run: |
+          cp file-rise/CHANGELOG.md docker-repo/CHANGELOG.md
+
+      - name: Commit & push
+        working-directory: docker-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add CHANGELOG.md
+            git commit -m "chore: sync CHANGELOG from FileRise"
+            git push origin main
+          fi

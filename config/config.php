@@ -1,73 +1,61 @@
 <?php
 // config.php
+
+// Prevent caching
 header("Cache-Control: no-cache, must-revalidate");
-header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
 header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
 header("Expires: 0");
-header('X-Content-Type-Options: nosniff');
+
 // Security headers
-header("X-Content-Type-Options: nosniff");
+header('X-Content-Type-Options: nosniff');
 header("X-Frame-Options: SAMEORIGIN");
 header("Referrer-Policy: no-referrer-when-downgrade");
-// Only include Strict-Transport-Security if you are using HTTPS
+header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
+header("X-XSS-Protection: 1; mode=block");
 if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
     header("Strict-Transport-Security: max-age=31536000; includeSubDomains; preload");
 }
-header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
-header("X-XSS-Protection: 1; mode=block");
 
-// Define constants.
+// Define constants
 define('PROJECT_ROOT', dirname(__DIR__));
-define('UPLOAD_DIR', '/var/www/uploads/');
-define('USERS_DIR', '/var/www/users/');
-define('USERS_FILE', 'users.txt');
-define('META_DIR', '/var/www/metadata/');
-define('META_FILE', 'file_metadata.json');
-define('TRASH_DIR', UPLOAD_DIR . 'trash/');
-define('TIMEZONE', 'America/New_York');
-define('DATE_TIME_FORMAT', 'm/d/y  h:iA');
-define('TOTAL_UPLOAD_SIZE', '5G');
+define('UPLOAD_DIR',    '/var/www/uploads/');
+define('USERS_DIR',     '/var/www/users/');
+define('USERS_FILE',    'users.txt');
+define('META_DIR',      '/var/www/metadata/');
+define('META_FILE',     'file_metadata.json');
+define('TRASH_DIR',     UPLOAD_DIR . 'trash/');
+define('TIMEZONE',      'America/New_York');
+define('DATE_TIME_FORMAT','m/d/y  h:iA');
+define('TOTAL_UPLOAD_SIZE','5G');
 define('REGEX_FOLDER_NAME', '/^[\p{L}\p{N}_\-\s\/\\\\]+$/u');
-define('PATTERN_FOLDER_NAME', '[\p{L}\p{N}_\-\s\/\\\\]+');
-define('REGEX_FILE_NAME', '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u');
-define('REGEX_USER', '/^[\p{L}\p{N}_\- ]+$/u');
+define('PATTERN_FOLDER_NAME','[\p{L}\p{N}_\-\s\/\\\\]+');
+define('REGEX_FILE_NAME',  '/^[\p{L}\p{N}\p{M}%\-\.\(\) _]+$/u');
+define('REGEX_USER',       '/^[\p{L}\p{N}_\- ]+$/u');
 
 date_default_timezone_set(TIMEZONE);
 
-/**
- * Encrypts data using AES-256-CBC.
- *
- * @param string $data The plaintext.
- * @param string $encryptionKey The encryption key.
- * @return string Base64-encoded string containing IV and ciphertext.
- */
+// Encryption helpers
 function encryptData($data, $encryptionKey)
 {
     $cipher = 'AES-256-CBC';
-    $ivlen = openssl_cipher_iv_length($cipher);
-    $iv = openssl_random_pseudo_bytes($ivlen);
-    $ciphertext = openssl_encrypt($data, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
-    return base64_encode($iv . $ciphertext);
+    $ivlen  = openssl_cipher_iv_length($cipher);
+    $iv     = openssl_random_pseudo_bytes($ivlen);
+    $ct     = openssl_encrypt($data, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
+    return base64_encode($iv . $ct);
 }
 
-/**
- * Decrypts data encrypted with AES-256-CBC.
- *
- * @param string $encryptedData Base64-encoded data containing IV and ciphertext.
- * @param string $encryptionKey The encryption key.
- * @return string|false The decrypted plaintext or false on failure.
- */
 function decryptData($encryptedData, $encryptionKey)
 {
     $cipher = 'AES-256-CBC';
-    $data = base64_decode($encryptedData);
-    $ivlen = openssl_cipher_iv_length($cipher);
-    $iv = substr($data, 0, $ivlen);
-    $ciphertext = substr($data, $ivlen);
-    return openssl_decrypt($ciphertext, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
+    $data   = base64_decode($encryptedData);
+    $ivlen  = openssl_cipher_iv_length($cipher);
+    $iv     = substr($data, 0, $ivlen);
+    $ct     = substr($data, $ivlen);
+    return openssl_decrypt($ct, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
 }
 
-// Load encryption key from environment (override in production).
+// Load encryption key
 $envKey = getenv('PERSISTENT_TOKENS_KEY');
 if ($envKey === false || $envKey === '') {
     $encryptionKey = 'default_please_change_this_key';
@@ -76,97 +64,89 @@ if ($envKey === false || $envKey === '') {
     $encryptionKey = $envKey;
 }
 
+// Helper to load JSON permissions (with optional decryption)
 function loadUserPermissions($username)
 {
     global $encryptionKey;
     $permissionsFile = USERS_DIR . 'userPermissions.json';
-
     if (file_exists($permissionsFile)) {
         $content = file_get_contents($permissionsFile);
-
-        // Try to decrypt the content.
-        $decryptedContent = decryptData($content, $encryptionKey);
-        if ($decryptedContent !== false) {
-            $permissions = json_decode($decryptedContent, true);
-        } else {
-            $permissions = json_decode($content, true);
-        }
-
-        if (is_array($permissions) && array_key_exists($username, $permissions)) {
-            $result = $permissions[$username];
-            return !empty($result) ? $result : false;
+        $decrypted = decryptData($content, $encryptionKey);
+        $json = ($decrypted !== false) ? $decrypted : $content;
+        $perms = json_decode($json, true);
+        if (is_array($perms) && isset($perms[$username])) {
+            return !empty($perms[$username]) ? $perms[$username] : false;
         }
     }
-    // Removed error_log() to prevent flooding logs when file is not found.
-    return false; // Return false if no permissions found.
+    return false;
 }
 
-// Determine whether HTTPS is used.
+// Determine HTTPS usage
 $envSecure = getenv('SECURE');
-if ($envSecure !== false) {
-    $secure = filter_var($envSecure, FILTER_VALIDATE_BOOLEAN);
-} else {
-    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-}
+$secure = ($envSecure !== false)
+    ? filter_var($envSecure, FILTER_VALIDATE_BOOLEAN)
+    : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
 
-$cookieParams = [
-    'lifetime' => 7200,
+// Choose session lifetime based on "remember me" cookie
+$defaultSession = 7200;           // 2 hours
+$persistentDays = 30 * 24 * 60 * 60; // 30 days
+$sessionLifetime = isset($_COOKIE['remember_me_token'])
+    ? $persistentDays
+    : $defaultSession;
+
+// Configure PHP session cookie and GC
+session_set_cookie_params([
+    'lifetime' => $sessionLifetime,
     'path'     => '/',
-    'domain'   => '', // Set your domain as needed.
+    'domain'   => '',      // adjust if you need a specific domain
     'secure'   => $secure,
     'httponly' => true,
     'samesite' => 'Lax'
-];
-// At the very beginning of config.php
-/*ini_set('session.save_path', __DIR__ . '/../sessions');
-if (!is_dir(__DIR__ . '/../sessions')) {
-    mkdir(__DIR__ . '/../sessions', 0777, true);
-}*/
+]);
+ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
+
 if (session_status() === PHP_SESSION_NONE) {
-    session_set_cookie_params($cookieParams);
-    ini_set('session.gc_maxlifetime', 7200);
     session_start();
 }
 
+// CSRF token
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Auto-login via persistent token.
-if (!isset($_SESSION["authenticated"]) && isset($_COOKIE['remember_me_token'])) {
-    $persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
-    $persistentTokens = [];
-    if (file_exists($persistentTokensFile)) {
-        $encryptedContent = file_get_contents($persistentTokensFile);
-        $decryptedContent = decryptData($encryptedContent, $encryptionKey);
-        $persistentTokens = json_decode($decryptedContent, true);
-        if (!is_array($persistentTokens)) {
-            $persistentTokens = [];
-        }
+// Auto‑login via persistent token
+if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) {
+    $tokFile = USERS_DIR . 'persistent_tokens.json';
+    $tokens = [];
+    if (file_exists($tokFile)) {
+        $enc = file_get_contents($tokFile);
+        $dec = decryptData($enc, $encryptionKey);
+        $tokens = json_decode($dec, true) ?: [];
     }
-    if (isset($persistentTokens[$_COOKIE['remember_me_token']])) {
-        $tokenData = $persistentTokens[$_COOKIE['remember_me_token']];
-        if ($tokenData['expiry'] >= time()) {
+    $token = $_COOKIE['remember_me_token'];
+    if (!empty($tokens[$token])) {
+        $data = $tokens[$token];
+        if ($data['expiry'] >= time()) {
             $_SESSION["authenticated"] = true;
-            $_SESSION["username"] = $tokenData["username"];
-            // IMPORTANT: Set the folderOnly flag here for auto-login.
-            $_SESSION["folderOnly"] = loadUserPermissions($tokenData["username"]);
+            $_SESSION["username"]      = $data["username"];
+            $_SESSION["folderOnly"]    = loadUserPermissions($data["username"]);
+            $_SESSION["isAdmin"]       = !empty($data["isAdmin"]);
         } else {
-            unset($persistentTokens[$_COOKIE['remember_me_token']]);
-            $newEncryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $encryptionKey);
-            file_put_contents($persistentTokensFile, $newEncryptedContent, LOCK_EX);
+            // expired — clean up
+            unset($tokens[$token]);
+            file_put_contents($tokFile, encryptData(json_encode($tokens, JSON_PRETTY_PRINT), $encryptionKey), LOCK_EX);
             setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
         }
     }
 }
 
+// Share URL fallback
 define('BASE_URL', 'http://yourwebsite/uploads/');
-
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
-    $defaultShareUrl = isset($_SERVER['HTTP_HOST'])
-        ? "http://" . $_SERVER['HTTP_HOST'] . "/api/file/share.php"
+    $defaultShare = isset($_SERVER['HTTP_HOST'])
+        ? "http://{$_SERVER['HTTP_HOST']}/api/file/share.php"
         : "http://localhost/api/file/share.php";
 } else {
-    $defaultShareUrl = rtrim(BASE_URL, '/') . "/api/file/share.php";
+    $defaultShare = rtrim(BASE_URL, '/') . "/api/file/share.php";
 }
-define('SHARE_URL', getenv('SHARE_URL') ? getenv('SHARE_URL') : $defaultShareUrl);
+define('SHARE_URL', getenv('SHARE_URL') ?: $defaultShare);

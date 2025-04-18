@@ -84,7 +84,7 @@ class AuthController
         if ($totpCode && isset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret'])) {
             $username = $_SESSION['pending_login_user'];
             $secret   = $_SESSION['pending_login_secret'];
-
+            $rememberMe = $_SESSION['pending_login_remember_me'] ?? false;
             $tfa = new TwoFactorAuth(new GoogleChartsQrCodeProvider(), 'FileRise', 6, 30, Algorithm::Sha1);
             if (! $tfa->verifyCode($secret, $totpCode)) {
                 echo json_encode(['error' => 'Invalid TOTP code']);
@@ -203,6 +203,7 @@ class AuthController
         if (! empty($user['totp_secret'])) {
             $_SESSION['pending_login_user']   = $username;
             $_SESSION['pending_login_secret'] = $user['totp_secret'];
+            $_SESSION['pending_login_remember_me'] = $rememberMe;
             echo json_encode(['totp_required' => true]);
             exit();
         }
