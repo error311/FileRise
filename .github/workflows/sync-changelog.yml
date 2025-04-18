@@ -1,4 +1,4 @@
-name: Sync CHANGELOG to Docker Repo
+name: Sync Changelog to Docker Repo
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout FileRise
         uses: actions/checkout@v4
@@ -28,12 +29,12 @@ jobs:
       - name: Commit & push
         working-directory: docker-repo
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git add CHANGELOG.md
-            git commit -m "chore: sync CHANGELOG from FileRise"
+            git commit -m "chore: sync CHANGELOG.md from FileRise"
             git push origin main
           fi
