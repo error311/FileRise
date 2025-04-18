@@ -7,6 +7,7 @@
 - .gitattributes added to mark (`openapi.json`) & (`api.html`) as documentation.
 - User Panel added API Docs link.
 - Adjusted remember_me_token.
+- Test pipeline
 
 ---
 
