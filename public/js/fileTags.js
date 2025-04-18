@@ -5,6 +5,7 @@
 // filtering the file list by tag, and persisting tag data.
 import { escapeHTML } from './domUtils.js';
 import { t } from './i18n.js';
+import { renderFileTable, renderGalleryView } from './fileListView.js';
 
 export function openTagModal(file) {
   // Create the modal element.
@@ -63,6 +64,11 @@ export function openTagModal(file) {
     updateTagModalDisplay(file);
     updateFileRowTagDisplay(file);
     saveFileTags(file);
+    if (window.viewMode === 'gallery') {
+      renderGalleryView(window.currentFolder);
+    } else {
+      renderFileTable(window.currentFolder);
+    }
     document.getElementById('tagNameInput').value = '';
     updateCustomTagDropdown();
   });
@@ -125,6 +131,11 @@ export function openMultiTagModal(files) {
       saveFileTags(file);
     });
     modal.remove();
+    if (window.viewMode === 'gallery') {
+      renderGalleryView(window.currentFolder);
+    } else {
+      renderFileTable(window.currentFolder);
+    }
   });
 }
 

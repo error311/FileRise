@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 4/18/2025
+
+### fileListView.js
+
+- Seed and persist `itemsPerPage` from `localStorage`
+- Use `window.itemsPerPage` for pagination in gallery
+- Enable search input filtering in gallery mode
+- Always re‑render the view‑toggle button on gallery load
+- Restore per‑card action buttons (download, edit, rename, share)
+- Assign real `value` to checkboxes and call `updateFileActionButtons()` on change
+- Update `changePage` and `changeItemsPerPage` to respect `viewMode`
+
+### fileTags.js
+
+- Import `renderFileTable` and `renderGalleryView`
+- Re‑render the list after saving a single‑file tag
+- Re‑render the list after saving multi‑file tags
+
+---
+
 ## Changes 4/17/2025
 
 - Generate OpenAPI spec and API HTML docs

@@ -20,9 +20,12 @@ import { openTagModal, openMultiTagModal } from './fileTags.js';
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
 
-window.itemsPerPage = window.itemsPerPage || 10;
+window.itemsPerPage = parseInt(
+    localStorage.getItem('itemsPerPage') || window.itemsPerPage || '10',
+    10
+);
 window.currentPage = window.currentPage || 1;
-window.viewMode = localStorage.getItem("viewMode") || "table"; // "table" or "gallery"
+window.viewMode = localStorage.getItem("viewMode") || "table";
 
 // Global flag for advanced search mode.
 window.advancedSearchEnabled = false;
@@ -407,33 +410,89 @@ export function renderGalleryView(folder, container) {
         ? "uploads/"
         : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
 
-    // Use the current global column value (default to 3).
-    const numColumns = window.galleryColumns || 3;
+    // pagination settings
+    const itemsPerPage = window.itemsPerPage;
+    let currentPage = window.currentPage || 1;
+    const totalFiles = filteredFiles.length;
+    const totalPages = Math.ceil(totalFiles / itemsPerPage);
+    if (currentPage > totalPages) {
+        currentPage = totalPages || 1;
+        window.currentPage = currentPage;
+    }
 
-    // --- Insert slider controls ---
-    const sliderHTML = `
-      <div class="gallery-slider" style="margin: 10px; text-align: center;">
-        <label for="galleryColumnsSlider" style="margin-right: 5px;">${t('columns')}:</label>
-        <input type="range" id="galleryColumnsSlider" min="1" max="6" value="${numColumns}" style="vertical-align: middle;">
+    // --- Top controls: search + pagination + items-per-page ---
+    let galleryHTML = buildSearchAndPaginationControls({
+        currentPage,
+        totalPages,
+        searchTerm: window.currentSearchTerm || ""
+    });
+
+    // wire up search input just like table view
+    setTimeout(() => {
+        const searchInput = document.getElementById("searchInput");
+        if (searchInput) {
+            searchInput.addEventListener("input", debounce(() => {
+                window.currentSearchTerm = searchInput.value;
+                window.currentPage = 1;
+                renderGalleryView(folder);
+                // keep caret at end
+                setTimeout(() => {
+                    const f = document.getElementById("searchInput");
+                    if (f) {
+                        f.focus();
+                        const len = f.value.length;
+                        f.setSelectionRange(len, len);
+                    }
+                }, 0);
+            }, 300));
+        }
+    }, 0);
+
+    // --- Column slider ---
+    const numColumns = window.galleryColumns || 3;
+    galleryHTML += `
+      <div class="gallery-slider" style="margin:10px; text-align:center;">
+        <label for="galleryColumnsSlider" style="margin-right:5px;">
+          ${t('columns')}:
+        </label>
+        <input type="range" id="galleryColumnsSlider" min="1" max="6"
+               value="${numColumns}" style="vertical-align:middle;">
         <span id="galleryColumnsValue">${numColumns}</span>
       </div>
     `;
 
-    // Set up the grid container using the slider's current value.
-    const gridStyle = `display: grid; grid-template-columns: repeat(${numColumns}, 1fr); gap: 10px; padding: 10px;`;
+    // --- Start gallery grid ---
+    galleryHTML += `
+      <div class="gallery-container"
+           style="display:grid;
+                  grid-template-columns:repeat(${numColumns},1fr);
+                  gap:10px;
+                  padding:10px;">
+    `;
 
-    // Build the gallery container HTML including the slider.
-    let galleryHTML = sliderHTML;
-    galleryHTML += `<div class="gallery-container" style="${gridStyle}">`;
-    filteredFiles.forEach((file) => {
+    // slice current page
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    const pageFiles = filteredFiles.slice(startIdx, startIdx + itemsPerPage);
+
+    pageFiles.forEach((file, idx) => {
+        const idSafe = encodeURIComponent(file.name) + "-" + (startIdx + idx);
+
+        // thumbnail
         let thumbnail;
-        if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
+        if (/\.(jpe?g|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
             const cacheKey = folderPath + encodeURIComponent(file.name);
             if (window.imageCache && window.imageCache[cacheKey]) {
-                thumbnail = `<img src="${window.imageCache[cacheKey]}" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
+                thumbnail = `<img src="${window.imageCache[cacheKey]}"
+                             class="gallery-thumbnail"
+                             alt="${escapeHTML(file.name)}"
+                             style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
             } else {
-                const imageUrl = folderPath + encodeURIComponent(file.name) + "?t=" + new Date().getTime();
-                thumbnail = `<img src="${imageUrl}" onload="cacheImage(this, '${cacheKey}')" class="gallery-thumbnail" alt="${escapeHTML(file.name)}" style="max-width: 100%; max-height: ${getMaxImageHeight()}px; display: block; margin: 0 auto;">`;
+                const imageUrl = folderPath + encodeURIComponent(file.name) + "?t=" + Date.now();
+                thumbnail = `<img src="${imageUrl}"
+                             onload="cacheImage(this,'${cacheKey}')"
+                             class="gallery-thumbnail"
+                             alt="${escapeHTML(file.name)}"
+                             style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
             }
         } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
             thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
@@ -441,82 +500,127 @@ export function renderGalleryView(folder, container) {
             thumbnail = `<span class="material-icons gallery-icon">insert_drive_file</span>`;
         }
 
+        // tag badges
         let tagBadgesHTML = "";
-        if (file.tags && file.tags.length > 0) {
+        if (file.tags && file.tags.length) {
             tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
             file.tags.forEach(tag => {
-                tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
+                tagBadgesHTML += `<span style="background-color:${tag.color};
+                                           color:#fff;
+                                           padding:2px 4px;
+                                           border-radius:3px;
+                                           margin-right:2px;
+                                           font-size:0.8em;">
+                              ${escapeHTML(tag.name)}
+                           </span>`;
             });
             tagBadgesHTML += `</div>`;
         }
 
+        // card with checkbox, preview, info, buttons
         galleryHTML += `
-        <div class="gallery-card" style="border: 1px solid #ccc; padding: 5px; text-align: center;">
-          <div class="gallery-preview" style="cursor: pointer;" onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t=' + new Date().getTime(), '${file.name}')">
+        <div class="gallery-card"
+             style="position:relative; border:1px solid #ccc; padding:5px; text-align:center;">
+          <input type="checkbox"
+                 class="file-checkbox"
+                 id="cb-${idSafe}"
+                 value="${escapeHTML(file.name)}"
+                 style="position:absolute; top:5px; left:5px; z-index:10;">
+          <label for="cb-${idSafe}"
+                 style="position:absolute; top:5px; left:5px; width:16px; height:16px;"></label>
+  
+          <div class="gallery-preview"
+               style="cursor:pointer;"
+               onclick="previewFile('${folderPath + encodeURIComponent(file.name)}?t='+Date.now(), '${file.name}')">
             ${thumbnail}
           </div>
-          <div class="gallery-info" style="margin-top: 5px;">
-            <span class="gallery-file-name" style="display: block; white-space: normal; overflow-wrap: break-word; word-wrap: break-word;">${escapeHTML(file.name)}</span>
+  
+          <div class="gallery-info" style="margin-top:5px;">
+            <span class="gallery-file-name"
+                  style="display:block; white-space:normal; overflow-wrap:break-word;">
+              ${escapeHTML(file.name)}
+            </span>
             ${tagBadgesHTML}
-            <div class="button-wrap" style="display: flex; justify-content: center; gap: 5px;">
-              <button type="button" class="btn btn-sm btn-success download-btn" 
-                  onclick="openDownloadModal('${file.name}', '${file.folder || 'root'}')" 
-                  title="${t('download')}">
-                  <i class="material-icons">file_download</i>
+  
+            <div class="button-wrap" style="display:flex; justify-content:center; gap:5px; margin-top:5px;">
+              <button type="button" class="btn btn-sm btn-success download-btn"
+                      onclick="openDownloadModal('${file.name}', '${file.folder || "root"}')"
+                      title="${t('download')}">
+                <i class="material-icons">file_download</i>
               </button>
               ${file.editable ? `
-                <button class="btn btn-sm edit-btn" onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('Edit')}">
-                  <i class="material-icons">edit</i>
-                </button>
-              ` : ""}
-              <button class="btn btn-sm btn-warning rename-btn" onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})' title="${t('rename')}">
-                 <i class="material-icons">drive_file_rename_outline</i>
+              <button class="btn btn-sm edit-btn"
+                      onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
+                      title="${t('Edit')}">
+                <i class="material-icons">edit</i>
+              </button>` : ""}
+              <button class="btn btn-sm btn-warning rename-btn"
+                      onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
+                      title="${t('rename')}">
+                <i class="material-icons">drive_file_rename_outline</i>
               </button>
-              <button class="btn btn-sm btn-secondary share-btn" data-file="${escapeHTML(file.name)}" title="${t('share')}">
-                 <i class="material-icons">share</i>
+              <button class="btn btn-sm btn-secondary share-btn"
+                      data-file="${escapeHTML(file.name)}"
+                      title="${t('share')}">
+                <i class="material-icons">share</i>
               </button>
             </div>
+  
           </div>
-        </div>`;
+        </div>
+      `;
     });
-    galleryHTML += "</div>"; // End gallery container.
 
+    galleryHTML += `</div>`; // end gallery-container
+
+    // bottom controls
+    galleryHTML += buildBottomControls(itemsPerPage);
+
+    // render
     fileListContent.innerHTML = galleryHTML;
 
-    // Re-apply slider constraints for the newly rendered slider.
-    updateSliderConstraints();
+    // ensure toggle button
     createViewToggleButton();
-    // Attach share button event listeners.
-    document.querySelectorAll(".share-btn").forEach(btn => {
-        btn.addEventListener("click", e => {
-            e.stopPropagation();
-            const fileName = btn.getAttribute("data-file");
-            const file = fileData.find(f => f.name === fileName);
-            if (file) {
-                import('./filePreview.js').then(module => {
-                    module.openShareModal(file, folder);
-                });
-            }
-        });
+
+    // attach listeners
+
+    // checkboxes
+    document.querySelectorAll(".file-checkbox").forEach(cb => {
+        cb.addEventListener("change", () => updateFileActionButtons());
     });
 
-    // --- Slider Event Listener ---
+    // slider
     const slider = document.getElementById("galleryColumnsSlider");
     if (slider) {
-        slider.addEventListener("input", function () {
-            const value = this.value;
-            document.getElementById("galleryColumnsValue").textContent = value;
-            window.galleryColumns = value;
-            const galleryContainer = document.querySelector(".gallery-container");
-            if (galleryContainer) {
-                galleryContainer.style.gridTemplateColumns = `repeat(${value}, 1fr)`;
-            }
-            const newMaxHeight = getMaxImageHeight();
-            document.querySelectorAll(".gallery-thumbnail").forEach(img => {
-                img.style.maxHeight = newMaxHeight + "px";
-            });
+        slider.addEventListener("input", () => {
+            const v = +slider.value;
+            document.getElementById("galleryColumnsValue").textContent = v;
+            window.galleryColumns = v;
+            document.querySelector(".gallery-container")
+                .style.gridTemplateColumns = `repeat(${v},1fr)`;
+            document.querySelectorAll(".gallery-thumbnail")
+                .forEach(img => img.style.maxHeight = getMaxImageHeight() + "px");
         });
     }
+
+    // pagination
+    window.changePage = newPage => {
+        window.currentPage = newPage;
+        if (window.viewMode === "gallery") renderGalleryView(folder);
+        else renderFileTable(folder);
+    };
+
+    // items per page
+    window.changeItemsPerPage = cnt => {
+        window.itemsPerPage = +cnt;
+        localStorage.setItem("itemsPerPage", cnt);
+        window.currentPage = 1;
+        if (window.viewMode === "gallery") renderGalleryView(folder);
+        else renderFileTable(folder);
+    };
+
+    // update toolbar buttons
+    updateFileActionButtons();
 }
 
 // Responsive slider constraints based on screen size.
@@ -638,12 +742,22 @@ export function canEditFile(fileName) {
 // Expose global functions for pagination and preview.
 window.changePage = function (newPage) {
     window.currentPage = newPage;
-    renderFileTable(window.currentFolder);
+    if (window.viewMode === 'gallery') {
+        renderGalleryView(window.currentFolder);
+    } else {
+        renderFileTable(window.currentFolder);
+    }
 };
+
 window.changeItemsPerPage = function (newCount) {
-    window.itemsPerPage = parseInt(newCount);
+    window.itemsPerPage = parseInt(newCount, 10);
+    localStorage.setItem('itemsPerPage', newCount);
     window.currentPage = 1;
-    renderFileTable(window.currentFolder);
+    if (window.viewMode === 'gallery') {
+        renderGalleryView(window.currentFolder);
+    } else {
+        renderFileTable(window.currentFolder);
+    }
 };
 
 // fileListView.js (bottom)
