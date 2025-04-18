@@ -6,6 +6,7 @@
   - Fully auto‑generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
 - .gitattributes added to mark (`openapi.json`) & (`api.html`) as documentation.
 - User Panel added API Docs link.
+- Adjusted remember_me_token.
 
 ---
 
