@@ -14,7 +14,7 @@ import { t, applyTranslations, setLocale } from './i18n.js';
 
 // Remove the retry logic version and just use loadCsrfToken directly:
 function loadCsrfToken() {
-  return fetch('api/auth/token.php', { credentials: 'include' })
+  return fetch('/api/auth/token.php', { credentials: 'include' })
     .then(response => {
       if (!response.ok) {
         throw new Error("Token fetch failed with status: " + response.status);

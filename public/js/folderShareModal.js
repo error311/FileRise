@@ -64,7 +64,7 @@ export function openFolderShareModal(folder) {
       return;
     }
     // Post to the createFolderShareLink endpoint.
-    fetch("api/folder/createShareFolderLink.php", {
+    fetch("/api/folder/createShareFolderLink.php", {
       method: "POST",
       credentials: "include",
       headers: {

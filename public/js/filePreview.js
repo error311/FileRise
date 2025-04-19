@@ -48,7 +48,7 @@ export function openShareModal(file, folder) {
   document.getElementById("generateShareLinkBtn").addEventListener("click", () => {
     const expiration = document.getElementById("shareExpiration").value;
     const password = document.getElementById("sharePassword").value;
-    fetch("api/file/createShareLink.php", {
+    fetch("/api/file/createShareLink.php", {
       method: "POST",
       credentials: "include",
       headers: {

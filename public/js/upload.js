@@ -126,7 +126,7 @@ function removeChunkFolderRepeatedly(identifier, csrfToken, maxAttempts = 3, int
     // Prefix with "resumable_" to match your PHP regex.
     params.append('folder', 'resumable_' + identifier);
     params.append('csrf_token', csrfToken);
-    fetch('api/upload/removeChunks.php', {
+    fetch('/api/upload/removeChunks.php', {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -664,7 +664,7 @@ function submitFiles(allFiles) {
       }
     });
 
-    xhr.open("POST", "api/upload/upload.php", true);
+    xhr.open("POST", "/api/upload/upload.php", true);
     xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
     xhr.send(formData);
   });

@@ -154,7 +154,7 @@ function breadcrumbDropHandler(e) {
   }
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
-  fetch("api/file/moveFiles.php", {
+  fetch("/api/file/moveFiles.php", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -202,7 +202,7 @@ function checkUserFolderPermission() {
     window.currentFolder = username;
     return Promise.resolve(true);
   }
-  return fetch("api/getUserPermissions.php", { credentials: "include" })
+  return fetch("/api/getUserPermissions.php", { credentials: "include" })
     .then(response => response.json())
     .then(permissionsData => {
       console.log("checkUserFolderPermission: permissionsData =", permissionsData);
@@ -302,7 +302,7 @@ function folderDropHandler(event) {
   }
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
-  fetch("api/file/moveFiles.php", {
+  fetch("/api/file/moveFiles.php", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -353,7 +353,7 @@ export async function loadFolderTree(selectedFolder) {
     }
     
     // Build fetch URL.
-    let fetchUrl = 'api/folder/getFolderList.php';
+    let fetchUrl = '/api/folder/getFolderList.php';
     if (window.userFolderOnly) {
       fetchUrl += '?restricted=1';
     }
@@ -547,7 +547,7 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
     showToast("CSRF token not loaded yet! Please try again.");
     return;
   }
-  fetch("api/folder/renameFolder.php", {
+  fetch("/api/folder/renameFolder.php", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -592,7 +592,7 @@ attachEnterKeyListener("deleteFolderModal", "confirmDeleteFolder");
 document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
   const selectedFolder = window.currentFolder || "root";
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-  fetch("api/folder/deleteFolder.php", {
+  fetch("/api/folder/deleteFolder.php", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -639,7 +639,7 @@ document.getElementById("submitCreateFolder").addEventListener("click", function
     fullFolderName = selectedFolder + "/" + folderInput;
   }
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-  fetch("api/folder/createFolder.php", {
+  fetch("/api/folder/createFolder.php", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

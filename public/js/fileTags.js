@@ -272,7 +272,7 @@ function removeGlobalTag(tagName) {
 
 // NEW: Save global tag removal to the server.
 function saveGlobalTagRemoval(tagName) {
-  fetch("api/file/saveFileTag.php", {
+  fetch("/api/file/saveFileTag.php", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -316,7 +316,7 @@ if (localStorage.getItem('globalTags')) {
   
 // New function to load global tags from the server's persistent JSON.
 export function loadGlobalTags() {
-  fetch("api/file/getFileTag.php", { credentials: "include" })
+  fetch("/api/file/getFileTag.php", { credentials: "include" })
     .then(response => {
       if (!response.ok) {
         // If the file doesn't exist, assume there are no global tags.
@@ -449,7 +449,7 @@ export function saveFileTags(file, deleteGlobal = false, tagToDelete = null) {
     payload.deleteGlobal = true;
     payload.tagToDelete = tagToDelete;
   }
-  fetch("api/file/saveFileTag.php", {
+  fetch("/api/file/saveFileTag.php", {
     method: "POST",
     credentials: "include",
     headers: {

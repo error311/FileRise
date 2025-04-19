@@ -96,7 +96,7 @@ export function folderDropHandler(event) {
     return;
   }
   if (!dragData || !dragData.fileName) return;
-  fetch("api/file/moveFiles.php", {
+  fetch("/api/file/moveFiles.php", {
     method: "POST",
     credentials: "include",
     headers: {

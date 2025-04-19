@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 4/19/2025
+
+- **Extended “Remember Me” cookie behavior**  
+  In `AuthController::finalizeLogin()`, after setting `remember_me_token` re‑issued the PHP session cookie with the same 30‑day expiry and called `session_regenerate_id(true)`.
+
+- **Fetch URL fixes**  
+  Changed all front‑end `fetch("api/…")` calls to absolute paths `fetch("/api/…")` to avoid relative‑path 404/403 issues.
+
+- **CSRF token refresh**  
+  Updated `submitLogin()` and both TOTP submission handlers to `async/await` a fresh CSRF token from `/api/auth/token.php` (with `credentials: "include"`) immediately before any POST.
+
+- **submitLogin() overhaul**  
+  Refactored to:
+  1. Fetch CSRF  
+  2. POST credentials to `/api/auth/auth.php`  
+  3. On `totp_required`, re‑fetch CSRF *again* before calling `openTOTPLoginModal()`  
+  4. Handle full logins vs. TOTP flows cleanly.
+
+- **TOTP handlers update**  
+  In both the “Confirm TOTP” button flow and the auto‑submit on 6‑digit input:
+  - Refreshed CSRF token before every `/api/totp_verify.php` call  
+  - Checked `response.ok` before parsing JSON  
+  - Improved `.catch` error handling
+
+- **verifyTOTP() endpoint enhancement**  
+  Inside the **pending‑login** branch of `verifyTOTP()`:
+  - Pulled `$_SESSION['pending_login_remember_me']`  
+  - If true, wrote the persistent token store, set `remember_me_token`, re‑issued the session cookie, and regenerated the session ID  
+  - Cleaned up pending session variables
+
+  ---
+
 ## Changes 4/18/2025
 
 ### fileListView.js

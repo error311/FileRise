@@ -196,7 +196,7 @@ export function loadFileList(folderParam) {
     fileListContainer.style.visibility = "hidden";
     fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
 
-    return fetch("api/file/getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
+    return fetch("/api/file/getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
         .then(response => {
             if (response.status === 401) {
                 showToast("Session expired. Please log in again.");

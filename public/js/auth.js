@@ -95,7 +95,7 @@ function updateLoginOptionsUIFromStorage() {
 }
 
 export function loadAdminConfigFunc() {
-  return fetch("api/admin/getConfig.php", { credentials: "include" })
+  return fetch("/api/admin/getConfig.php", { credentials: "include" })
     .then(response => response.json())
     .then(config => {
       localStorage.setItem("headerTitle", config.header_title || "FileRise");
@@ -105,7 +105,7 @@ export function loadAdminConfigFunc() {
       localStorage.setItem("disableBasicAuth", config.loginOptions.disableBasicAuth);
       localStorage.setItem("disableOIDCLogin", config.loginOptions.disableOIDCLogin);
       localStorage.setItem("globalOtpauthUrl", config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
-      
+
       updateLoginOptionsUIFromStorage();
 
       const headerTitleElem = document.querySelector(".header-title h1");
@@ -149,9 +149,9 @@ function updateAuthenticatedUI(data) {
   if (data.username) {
     localStorage.setItem("username", data.username);
   }
-  if (typeof data.folderOnly    !== "undefined") {
-    localStorage.setItem("folderOnly",    data.folderOnly    ? "true" : "false");
-    localStorage.setItem("readOnly",      data.readOnly      ? "true" : "false");
+  if (typeof data.folderOnly !== "undefined") {
+    localStorage.setItem("folderOnly", data.folderOnly ? "true" : "false");
+    localStorage.setItem("readOnly", data.readOnly ? "true" : "false");
     localStorage.setItem("disableUpload", data.disableUpload ? "true" : "false");
   }
 
@@ -198,11 +198,11 @@ function updateAuthenticatedUI(data) {
       userPanelBtn.classList.add("btn", "btn-user");
       userPanelBtn.setAttribute("data-i18n-title", "user_panel");
       userPanelBtn.innerHTML = '<i class="material-icons">account_circle</i>';
-      
+
       const adminBtn = document.getElementById("adminPanelBtn");
       if (adminBtn) insertAfter(userPanelBtn, adminBtn);
       else if (firstButton) insertAfter(userPanelBtn, firstButton);
-      else headerButtons.appendChild(userPanelBtn); 
+      else headerButtons.appendChild(userPanelBtn);
       userPanelBtn.addEventListener("click", openUserPanel);
     } else {
       userPanelBtn.style.display = "block";
@@ -214,7 +214,7 @@ function updateAuthenticatedUI(data) {
 }
 
 function checkAuthentication(showLoginToast = true) {
-  return sendRequest("api/auth/checkAuth.php")
+  return sendRequest("/api/auth/checkAuth.php")
     .then(data => {
       if (data.setup) {
         window.setupMode = true;
@@ -228,9 +228,9 @@ function checkAuthentication(showLoginToast = true) {
       }
       window.setupMode = false;
       if (data.authenticated) {
-        localStorage.setItem("folderOnly",   data.folderOnly   );
-        localStorage.setItem("readOnly",     data.readOnly     );
-        localStorage.setItem("disableUpload",data.disableUpload);
+        localStorage.setItem("folderOnly", data.folderOnly);
+        localStorage.setItem("readOnly", data.readOnly);
+        localStorage.setItem("disableUpload", data.disableUpload);
         updateLoginOptionsUIFromStorage();
         if (typeof data.totp_enabled !== "undefined") {
           localStorage.setItem("userTOTPEnabled", data.totp_enabled ? "true" : "false");
@@ -251,55 +251,71 @@ function checkAuthentication(showLoginToast = true) {
 }
 
 /* ----------------- Authentication Submission ----------------- */
-function submitLogin(data) {
+async function submitLogin(data) {
   setLastLoginData(data);
   window.__lastLoginData = data;
 
-  sendRequest("api/auth/auth.php", "POST", data, { "X-CSRF-Token": window.csrfToken })
-    .then(response => {
-      if (response.success || response.status === "ok") {
-        sessionStorage.setItem("welcomeMessage", "Welcome back, " + data.username + "!");
-        // Fetch and update permissions, then reload.
-        sendRequest("api/getUserPermissions.php", "GET")
-          .then(permissionData => {
-            if (permissionData && typeof permissionData === "object") {
-              localStorage.setItem("folderOnly", permissionData.folderOnly ? "true" : "false");
-              localStorage.setItem("readOnly", permissionData.readOnly ? "true" : "false");
-              localStorage.setItem("disableUpload", permissionData.disableUpload ? "true" : "false");
-            }
-          })
-          .catch(() => {
-            // ignore permission‐fetch errors
-          })
-          .finally(() => {
-            window.location.reload();
-          });
-      } else if (response.totp_required) {
-        openTOTPLoginModal();
-      } else if (response.error && response.error.includes("Too many failed login attempts")) {
-        showToast(response.error);
-        const loginButton = document.querySelector("#authForm button[type='submit']");
-        if (loginButton) {
-          loginButton.disabled = true;
-          setTimeout(() => {
-            loginButton.disabled = false;
-            showToast("You can now try logging in again.");
-          }, 30 * 60 * 1000);
+  try {
+    // ─── 1) Get CSRF for the initial auth call ───
+    let res = await fetch("/api/auth/token.php", { credentials: "include" });
+    if (!res.ok) throw new Error("Could not fetch CSRF token");
+    window.csrfToken = (await res.json()).csrf_token;
+
+    // ─── 2) Send credentials ───
+    const response = await sendRequest(
+      "/api/auth/auth.php",
+      "POST",
+      data,
+      { "X-CSRF-Token": window.csrfToken }
+    );
+
+    // ─── 3a) Full login (no TOTP) ───
+    if (response.success || response.status === "ok") {
+      sessionStorage.setItem("welcomeMessage", "Welcome back, " + data.username + "!");
+      // … fetch permissions & reload …
+      try {
+        const perm = await sendRequest("/api/getUserPermissions.php", "GET");
+        if (perm && typeof perm === "object") {
+          localStorage.setItem("folderOnly",   perm.folderOnly   ? "true" : "false");
+          localStorage.setItem("readOnly",     perm.readOnly     ? "true" : "false");
+          localStorage.setItem("disableUpload",perm.disableUpload? "true" : "false");
         }
-      } else {
-        showToast("Login failed: " + (response.error || "Unknown error"));
+      } catch {}
+      return window.location.reload();
+    }
+
+    // ─── 3b) TOTP required ───
+    if (response.totp_required) {
+      // **Refresh** CSRF before the TOTP verify call
+      res = await fetch("/api/auth/token.php", { credentials: "include" });
+      if (res.ok) {
+        window.csrfToken = (await res.json()).csrf_token;
       }
-    })
-    .catch(err => {
-      // err may be an Error object or a string
-      let msg = "Unknown error";
-      if (err && typeof err === "object") {
-        msg = err.error || err.message || msg;
-      } else if (typeof err === "string") {
-        msg = err;
+      // now open the modal—any totp_verify fetch from here on will use the new token
+      return openTOTPLoginModal();
+    }
+
+    // ─── 3c) Too many attempts ───
+    if (response.error && response.error.includes("Too many failed login attempts")) {
+      showToast(response.error);
+      const btn = document.querySelector("#authForm button[type='submit']");
+      if (btn) {
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.disabled = false;
+          showToast("You can now try logging in again.");
+        }, 30 * 60 * 1000);
       }
-      showToast(`Login failed: ${msg}`);
-    });
+      return;
+    }
+
+    // ─── 3d) Other failures ───
+    showToast("Login failed: " + (response.error || "Unknown error"));
+
+  } catch (err) {
+    const msg = err.message || err.error || "Unknown error";
+    showToast(`Login failed: ${msg}`);
+  }
 }
 
 window.submitLogin = submitLogin;
@@ -327,7 +343,7 @@ function closeRemoveUserModal() {
 
 function loadUserList() {
   // Updated path: from "getUsers.php" to "api/getUsers.php"
-  fetch("api/getUsers.php", { credentials: "include" })
+  fetch("/api/getUsers.php", { credentials: "include" })
     .then(response => response.json())
     .then(data => {
       // Assuming the endpoint returns an array of users.
@@ -368,7 +384,7 @@ function initAuth() {
     });
   }
   document.getElementById("logoutBtn").addEventListener("click", function () {
-    fetch("api/auth/logout.php", {
+    fetch("/api/auth/logout.php", {
       method: "POST",
       credentials: "include",
       headers: { "X-CSRF-Token": window.csrfToken }
@@ -387,7 +403,7 @@ function initAuth() {
       showToast("Username and password are required!");
       return;
     }
-    let url = "api/addUser.php";
+    let url = "/api/addUser.php";
     if (window.setupMode) url += "?setup=1";
     fetch(url, {
       method: "POST",
@@ -422,7 +438,7 @@ function initAuth() {
     }
     const confirmed = await showCustomConfirmModal("Are you sure you want to delete user " + usernameToRemove + "?");
     if (!confirmed) return;
-    fetch("api/removeUser.php", {
+    fetch("/api/removeUser.php", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
@@ -461,7 +477,7 @@ function initAuth() {
       return;
     }
     const data = { oldPassword, newPassword, confirmPassword };
-    fetch("api/changePassword.php", {
+    fetch("/api/changePassword.php", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },

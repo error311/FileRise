@@ -238,22 +238,39 @@ class AuthController
             $token   = bin2hex(random_bytes(32));
             $expiry  = time() + 30 * 24 * 60 * 60;
             $all     = [];
+        
             if (file_exists($tokFile)) {
                 $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
                 $all = json_decode($dec, true) ?: [];
             }
+        
             $all[$token] = [
                 'username' => $username,
-                'expiry'  => $expiry,
-                'isAdmin' => $_SESSION['isAdmin']
+                'expiry'   => $expiry,
+                'isAdmin'  => $_SESSION['isAdmin']
             ];
+        
             file_put_contents(
                 $tokFile,
                 encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
                 LOCK_EX
             );
-            $secure = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        
+            $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        
             setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
+                    
+            setcookie(
+                session_name(),
+                session_id(),
+                $expiry,
+                '/',
+                '',
+                $secure,
+                true
+            );
+        
+            session_regenerate_id(true);
         }
 
         echo json_encode([

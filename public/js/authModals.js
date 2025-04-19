@@ -3,8 +3,7 @@ import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 import { loadAdminConfigFunc } from './auth.js';
 
-const version = "v1.2.0";
-// Use t() for the admin panel title. (Make sure t("admin_panel") returns "Admin Panel" in English.)
+const version = "v1.2.1"; // Update this version string as needed
 const adminTitle = `${t("admin_panel")} <small style="font-size: 12px; color: gray;">${version}</small>`;
 
 let lastLoginData = null;
@@ -84,7 +83,7 @@ export function openTOTPLoginModal() {
         showToast(t("please_enter_recovery_code"));
         return;
       }
-      fetch("api/totp_recover.php", {
+      fetch("/api/totp_recover.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -110,36 +109,47 @@ export function openTOTPLoginModal() {
     // TOTP submission
     const totpInput = document.getElementById("totpLoginInput");
     totpInput.focus();
-    totpInput.addEventListener("input", function () {
+
+    totpInput.addEventListener("input", async function () {
       const code = this.value.trim();
-      if (code.length === 6) {
-        fetch("api/totp_verify.php", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": window.csrfToken
-          },
-          body: JSON.stringify({ totp_code: code })
-        })
-          .then(res => res.json())
-          .then(json => {
-            if (json.status === "ok") {
-              window.location.href = "/index.html";
-            } else {
-              showToast(json.message || t("totp_verification_failed"));
-              this.value = "";
-              totpLoginModal.style.display = "flex";
-              totpInput.focus();
-            }
-          })
-          .catch(() => {
-            showToast(t("totp_verification_failed"));
-            this.value = "";
-            totpLoginModal.style.display = "flex";
-            totpInput.focus();
-          });
+      if (code.length !== 6) {
+
+        return;
       }
+
+      const tokenRes = await fetch("/api/auth/token.php", {
+        credentials: "include"
+      });
+      if (!tokenRes.ok) {
+        showToast(t("totp_verification_failed"));
+        return;
+      }
+      window.csrfToken = (await tokenRes.json()).csrf_token;
+
+      const res = await fetch("/api/totp_verify.php", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": window.csrfToken
+        },
+        body: JSON.stringify({ totp_code: code })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.status === "ok") {
+          window.location.href = "/index.html";
+          return;
+        }
+        showToast(json.message || t("totp_verification_failed"));
+      } else {
+        showToast(t("totp_verification_failed"));
+      }
+
+      this.value = "";
+      totpLoginModal.style.display = "flex";
+      this.focus();
     });
   } else {
     // Re-open existing modal
@@ -241,7 +251,7 @@ export function openUserPanel() {
     totpCheckbox.checked = localStorage.getItem("userTOTPEnabled") === "true";
     totpCheckbox.addEventListener("change", function () {
       localStorage.setItem("userTOTPEnabled", this.checked ? "true" : "false");
-      fetch("api/updateUserPanel.php", {
+      fetch("/api/updateUserPanel.php", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
@@ -354,13 +364,24 @@ export function openTOTPModal() {
       closeTOTPModal(true);
     });
 
-    document.getElementById("confirmTOTPBtn").addEventListener("click", function () {
+    document.getElementById("confirmTOTPBtn").addEventListener("click", async function () {
       const code = document.getElementById("totpConfirmInput").value.trim();
       if (code.length !== 6) {
         showToast(t("please_enter_valid_code"));
         return;
       }
-      fetch("api/totp_verify.php", {
+
+      const tokenRes = await fetch("/api/auth/token.php", {
+        credentials: "include"
+      });
+      if (!tokenRes.ok) {
+        showToast(t("error_verifying_totp_code"));
+        return;
+      }
+      const { csrf_token } = await tokenRes.json();
+      window.csrfToken = csrf_token;
+
+      const verifyRes = await fetch("/api/totp_verify.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -368,36 +389,40 @@ export function openTOTPModal() {
           "X-CSRF-Token": window.csrfToken
         },
         body: JSON.stringify({ totp_code: code })
-      })
-        .then(r => r.json())
-        .then(result => {
-          if (result.status === 'ok') {
-            showToast(t("totp_enabled_successfully"));
-            // After successful TOTP verification, fetch the recovery code
-            fetch("api/totp_saveCode.php", {
-              method: "POST",
-              credentials: "include",
-              headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-Token": window.csrfToken
-              }
-            })
-              .then(r => r.json())
-              .then(data => {
-                if (data.status === 'ok' && data.recoveryCode) {
-                  // Show the recovery code in a secure modal
-                  showRecoveryCodeModal(data.recoveryCode);
-                } else {
-                  showToast(t("error_generating_recovery_code") + ": " + (data.message || t("unknown_error")));
-                }
-              })
-              .catch(() => { showToast(t("error_generating_recovery_code")); });
-            closeTOTPModal(false);
-          } else {
-            showToast(t("totp_verification_failed") + ": " + (result.message || t("invalid_code")));
-          }
-        })
-        .catch(() => { showToast(t("error_verifying_totp_code")); });
+      });
+
+      if (!verifyRes.ok) {
+        showToast(t("totp_verification_failed"));
+        return;
+      }
+      const result = await verifyRes.json();
+      if (result.status !== "ok") {
+        showToast(result.message || t("totp_verification_failed"));
+        return;
+      }
+
+      showToast(t("totp_enabled_successfully"));
+
+      const saveRes = await fetch("/api/totp_saveCode.php", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "X-CSRF-Token": window.csrfToken
+        }
+      });
+      if (!saveRes.ok) {
+        showToast(t("error_generating_recovery_code"));
+        closeTOTPModal(false);
+        return;
+      }
+      const data = await saveRes.json();
+      if (data.status === "ok" && data.recoveryCode) {
+        showRecoveryCodeModal(data.recoveryCode);
+      } else {
+        showToast(t("error_generating_recovery_code") + ": " + (data.message || t("unknown_error")));
+      }
+
+      closeTOTPModal(false);
     });
 
     // Focus the input and attach enter key listener
@@ -438,7 +463,7 @@ export function openTOTPModal() {
 }
 
 function loadTOTPQRCode() {
-  fetch("api/totp_setup.php", {
+  fetch("/api/totp_setup.php", {
     method: "GET",
     credentials: "include",
     headers: {
@@ -477,7 +502,7 @@ export function closeTOTPModal(disable = true) {
       localStorage.setItem("userTOTPEnabled", "false");
     }
     // Call endpoint to remove the TOTP secret from the user's record
-    fetch("api/totp_disable.php", {
+    fetch("/api/totp_disable.php", {
       method: "POST",
       credentials: "include",
       headers: {
@@ -563,7 +588,7 @@ function showCustomConfirmModal(message) {
 }
 
 export function openAdminPanel() {
-  fetch("api/admin/getConfig.php", { credentials: "include" })
+  fetch("/api/admin/getConfig.php", { credentials: "include" })
     .then(response => response.json())
     .then(config => {
       if (config.header_title) {
@@ -725,7 +750,7 @@ export function openAdminPanel() {
           const disableBasicAuth = disableBasicAuthCheckbox.checked;
           const disableOIDCLogin = disableOIDCLoginCheckbox.checked;
           const globalOtpauthUrl = document.getElementById("globalOtpauthUrl").value.trim();
-          sendRequest("api/admin/updateConfig.php", "POST", {
+          sendRequest("/api/admin/updateConfig.php", "POST", {
             header_title: newHeaderTitle,
             oidc: newOIDCConfig,
             disableFormLogin,
@@ -898,7 +923,7 @@ export function openUserPermissionsModal() {
         });
       });
       // Send the permissionsData to the server.
-      sendRequest("api/updateUserPermissions.php", "POST", { permissions: permissionsData }, { "X-CSRF-Token": window.csrfToken })
+      sendRequest("/api/updateUserPermissions.php", "POST", { permissions: permissionsData }, { "X-CSRF-Token": window.csrfToken })
         .then(response => {
           if (response.success) {
             showToast(t("user_permissions_updated_successfully"));
@@ -924,11 +949,11 @@ function loadUserPermissionsList() {
   listContainer.innerHTML = "";
 
   // First, fetch the current permissions from the server.
-  fetch("api/getUserPermissions.php", { credentials: "include" })
+  fetch("/api/getUserPermissions.php", { credentials: "include" })
     .then(response => response.json())
     .then(permissionsData => {
       // Then, fetch the list of users.
-      return fetch("api/getUsers.php", { credentials: "include" })
+      return fetch("/api/getUsers.php", { credentials: "include" })
         .then(response => response.json())
         .then(usersData => {
           const users = Array.isArray(usersData) ? usersData : (usersData.users || []);

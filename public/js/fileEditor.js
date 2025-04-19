@@ -160,7 +160,7 @@ export function saveFile(fileName, folder) {
     content: editor.getValue(),
     folder: folderUsed
   };
-  fetch("api/file/saveFile.php", {
+  fetch("/api/file/saveFile.php", {
     method: "POST",
     credentials: "include",
     headers: {

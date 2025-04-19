@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const confirmDelete = document.getElementById("confirmDeleteFiles");
   if (confirmDelete) {
     confirmDelete.addEventListener("click", function () {
-      fetch("api/file/deleteFiles.php", {
+      fetch("/api/file/deleteFiles.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -178,7 +178,7 @@ export function handleExtractZipSelected(e) {
   // Show the progress modal.
   document.getElementById("downloadProgressModal").style.display = "block";
   
-  fetch("api/file/extractZip.php", {
+  fetch("/api/file/extractZip.php", {
     method: "POST",
     credentials: "include",
     headers: {
@@ -245,7 +245,7 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log("Download confirmed. Showing progress modal.");
       document.getElementById("downloadProgressModal").style.display = "block";
       const folder = window.currentFolder || "root";
-      fetch("api/file/downloadZip.php", {
+      fetch("/api/file/downloadZip.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -309,7 +309,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
   if (window.userFolderOnly) {
     const username = localStorage.getItem("username") || "root";
     try {
-      const response = await fetch("api/folder/getFolderList.php?restricted=1");
+      const response = await fetch("/api/folder/getFolderList.php?restricted=1");
       let folders = await response.json();
       if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
         folders = folders.map(item => item.folder);
@@ -339,7 +339,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
   }
 
   try {
-    const response = await fetch("api/folder/getFolderList.php");
+    const response = await fetch("/api/folder/getFolderList.php");
     let folders = await response.json();
     if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
       folders = folders.map(item => item.folder);
@@ -397,7 +397,7 @@ document.addEventListener("DOMContentLoaded", function () {
         showToast("Error: Cannot copy files to the same folder.");
         return;
       }
-      fetch("api/file/copyFiles.php", {
+      fetch("/api/file/copyFiles.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -448,7 +448,7 @@ document.addEventListener("DOMContentLoaded", function () {
         showToast("Error: Cannot move files to the same folder.");
         return;
       }
-      fetch("api/file/moveFiles.php", {
+      fetch("/api/file/moveFiles.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -514,7 +514,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       const folderUsed = window.fileFolder;
-      fetch("api/file/renameFile.php", {
+      fetch("/api/file/renameFile.php", {
         method: "POST",
         credentials: "include",
         headers: {

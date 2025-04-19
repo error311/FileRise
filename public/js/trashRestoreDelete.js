@@ -69,7 +69,7 @@ export function setupTrashRestoreDelete() {
                 showToast(t("no_trash_selected"));
                 return;
             }
-            fetch("api/file/restoreFiles.php", {
+            fetch("/api/file/restoreFiles.php", {
                 method: "POST",
                 credentials: "include",
                 headers: {
@@ -109,7 +109,7 @@ export function setupTrashRestoreDelete() {
                 showToast(t("trash_empty"));
                 return;
             }
-            fetch("api/file/restoreFiles.php", {
+            fetch("/api/file/restoreFiles.php", {
                 method: "POST",
                 credentials: "include",
                 headers: {
@@ -151,7 +151,7 @@ export function setupTrashRestoreDelete() {
                 return;
             }
             showConfirm("Are you sure you want to permanently delete the selected trash items?", () => {
-                fetch("api/file/deleteTrashFiles.php", {
+                fetch("/api/file/deleteTrashFiles.php", {
                     method: "POST",
                     credentials: "include",
                     headers: {
@@ -186,7 +186,7 @@ export function setupTrashRestoreDelete() {
     if (deleteAllBtn) {
         deleteAllBtn.addEventListener("click", () => {
             showConfirm("Are you sure you want to permanently delete all trash items? This action cannot be undone.", () => {
-                fetch("api/file/deleteTrashFiles.php", {
+                fetch("/api/file/deleteTrashFiles.php", {
                     method: "POST",
                     credentials: "include",
                     headers: {
@@ -234,7 +234,7 @@ export function setupTrashRestoreDelete() {
  * Loads trash items from the server and updates the restore modal list.
  */
 export function loadTrashItems() {
-    fetch("api/file/getTrashItems.php", { credentials: "include" })
+    fetch("/api/file/getTrashItems.php", { credentials: "include" })
         .then(response => response.json())
         .then(trashItems => {
             const listContainer = document.getElementById("restoreFilesList");
@@ -271,7 +271,7 @@ export function loadTrashItems() {
  * Automatically purges (permanently deletes) trash items older than 3 days.
  */
 function autoPurgeOldTrash() {
-    fetch("api/file/getTrashItems.php", { credentials: "include" })
+    fetch("/api/file/getTrashItems.php", { credentials: "include" })
         .then(response => response.json())
         .then(trashItems => {
             const now = Date.now();
@@ -279,7 +279,7 @@ function autoPurgeOldTrash() {
             const oldItems = trashItems.filter(item => (now - (item.trashedAt * 1000)) > threeDays);
             if (oldItems.length > 0) {
                 const files = oldItems.map(item => item.trashName);
-                fetch("api/file/deleteTrashFiles.php", {
+                fetch("/api/file/deleteTrashFiles.php", {
                     method: "POST",
                     credentials: "include",
                     headers: {
