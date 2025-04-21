@@ -20,7 +20,7 @@ Upload, organize, and share files through a sleek web interface. **FileRise** is
 
 - 🗃️ **Folder Sharing & File Sharing:** Easily share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items per page) with navigation controls, and file sizes are displayed in MB for clarity. Share files with others using one-time or expiring public links (with password protection if desired) – convenient for sending individual files without exposing the whole app.
 
-- 🔌 **WebDAV Support:** Mount FileRise as a network drive or connect via any WebDAV client. Supports standard file operations (upload/download/rename/delete) and direct `curl`/CLI access for scripting and automation. FolderOnly users are restricted to their personal folder, while admins and unrestricted users have full access. Compatible with Cyberduck, WinSCP, native OS drive mounts, and more.
+- 🔌 **WebDAV Support:** Mount FileRise as a network drive **or use it head‑less from the CLI**. Standard WebDAV operations (upload / download / rename / delete) work in Cyberduck, WinSCP, GNOME Files, Finder, etc., and you can also script against it with `curl` – see the [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV) + [curl](https://github.com/error311/FileRise/wiki/Accessing-FileRise-via-curl%C2%A0(WebDAV)) quick‑start for examples. Folder‑Only users are restricted to their personal directory, while admins and unrestricted users have full access.
 
 - 📚 **API Documentation:** Fully auto‑generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
 
@@ -232,7 +232,7 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 - **[phpseclib/phpseclib](https://github.com/phpseclib/phpseclib)** (v~3.0.7)
 - **[robthree/twofactorauth](https://github.com/RobThree/TwoFactorAuth)** (v^3.0)
 - **[endroid/qr-code](https://github.com/endroid/qr-code)** (v^5.0)
-- **[sabre/dav"](https://github.com/sabre-io/dav)** (^4.4)
+- **[sabre/dav](https://github.com/sabre-io/dav)** (^4.4)
 
 ### Client-Side Libraries
 
