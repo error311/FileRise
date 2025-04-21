@@ -1,6 +1,31 @@
 # Changelog
 
-## Changes 4/19/2025
+## Changes 4/21/2025 v1.2.2
+
+### Added
+
+- **`src/webdav/CurrentUser.php`**  
+  – Introduces a `CurrentUser` singleton to capture and expose the authenticated WebDAV username for use in other components.
+
+### Changed
+
+- **`src/webdav/FileRiseDirectory.php`**  
+  – Constructor now takes three parameters (`$path`, `$user`, `$folderOnly`).  
+  – Implements “folder‑only” mode: non‑admin users only see their own subfolder under the uploads root.  
+  – Passes the current user through to `FileRiseFile` so that uploads/deletions are attributed correctly.
+
+- **`src/webdav/FileRiseFile.php`**  
+  – Uses `CurrentUser::get()` when writing metadata to populate the `uploader` field.  
+  – Metadata helper (`updateMetadata`) now records both upload and modified timestamps along with the actual username.  
+
+- **`public/webdav.php`**  
+  – Adds a header‐shim at the top to pull Basic‑Auth credentials out of `Authorization` for all HTTP methods.  
+  – In the auth callback, sets the `CurrentUser` for the rest of the request.  
+  - Admins & unrestricted users see the full `/uploads` directory.  
+  - “Folder‑only” users are scoped to `/uploads/{username}`.  
+  – Configures SabreDAV with the new `FileRiseDirectory($rootPath, $user, $folderOnly)` signature and sets the base URI to `/webdav.php/`.  
+
+## Changes 4/19/2025 v1.2.1
 
 - **Extended “Remember Me” cookie behavior**  
   In `AuthController::finalizeLogin()`, after setting `remember_me_token` re‑issued the PHP session cookie with the same 30‑day expiry and called `session_regenerate_id(true)`.

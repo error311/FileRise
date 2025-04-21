@@ -634,7 +634,7 @@ function updateSliderConstraints() {
 
     // Set maximum based on screen size.
     if (width < 600) {           // small devices (phones)
-        max = 2;
+        max = 1;
     } else if (width < 1024) {     // medium devices
         max = 3;
     } else if (width < 1440) {     // between medium and large devices

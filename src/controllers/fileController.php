@@ -450,56 +450,57 @@ class FileController {
         header('Content-Type: application/json');
         
         // --- CSRF Protection ---
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
+        $headersArr   = array_change_key_case(getallheaders(), CASE_LOWER);
+        $receivedToken = $headersArr['x-csrf-token'] ?? '';
         if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
             http_response_code(403);
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
         
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+        // --- Authentication Check ---
+        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
         
-        // Check if the user is allowed to save files (not read-only).
         $username = $_SESSION['username'] ?? '';
+        // --- Read‑only check ---
         $userPermissions = loadUserPermissions($username);
-        if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        if ($username && !empty($userPermissions['readOnly'])) {
             echo json_encode(["error" => "Read-only users are not allowed to save files."]);
             exit;
         }
         
-        // Get JSON input.
+        // --- Input parsing ---
         $data = json_decode(file_get_contents("php://input"), true);
-        
-        if (!$data) {
-            echo json_encode(["error" => "No data received"]);
-            exit;
-        }
-        
-        if (!isset($data["fileName"]) || !isset($data["content"])) {
+        if (empty($data) || !isset($data["fileName"], $data["content"])) {
+            http_response_code(400);
             echo json_encode(["error" => "Invalid request data", "received" => $data]);
             exit;
         }
         
         $fileName = basename($data["fileName"]);
-        // Determine the folder. Default to "root" if not provided.
-        $folder = isset($data["folder"]) ? trim($data["folder"]) : "root";
+        $folder   = isset($data["folder"]) ? trim($data["folder"]) : "root";
         
-        // Validate folder if not root.
+        // --- Folder validation ---
         if (strtolower($folder) !== "root" && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             echo json_encode(["error" => "Invalid folder name"]);
             exit;
         }
-        
         $folder = trim($folder, "/\\ ");
         
-        // Delegate to the model.
-        $result = FileModel::saveFile($folder, $fileName, $data["content"]);
+        // --- Delegate to model, passing the uploader ---
+        // Make sure FileModel::saveFile signature is:
+        // saveFile(string $folder, string $fileName, $content, ?string $uploader = null)
+        $result = FileModel::saveFile(
+            $folder,
+            $fileName,
+            $data["content"],
+            $username     // ← pass the real uploader here
+        );
+        
         echo json_encode($result);
     }
 

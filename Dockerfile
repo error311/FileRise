@@ -50,8 +50,18 @@ ARG PGID=100
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
-      apache2 php php-json php-curl php-zip php-mbstring php-gd \
-      ca-certificates curl git openssl && \
+      apache2 \
+      php \
+      php-json \
+      php-curl \
+      php-zip \
+      php-mbstring \
+      php-gd \
+      php-xml \
+      ca-certificates \
+      curl \
+      git \
+      openssl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

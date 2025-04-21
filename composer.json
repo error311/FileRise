@@ -6,6 +6,7 @@
       "jumbojett/openid-connect-php": "^1.0.0",
       "phpseclib/phpseclib": "~3.0.7",
       "robthree/twofactorauth": "^3.0",
-      "endroid/qr-code": "^5.0"
+      "endroid/qr-code": "^5.0",
+      "sabre/dav": "^4.4"
     }
   }

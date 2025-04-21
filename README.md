@@ -20,6 +20,8 @@ Upload, organize, and share files through a sleek web interface. **FileRise** is
 
 - 🗃️ **Folder Sharing & File Sharing:** Easily share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items per page) with navigation controls, and file sizes are displayed in MB for clarity. Share files with others using one-time or expiring public links (with password protection if desired) – convenient for sending individual files without exposing the whole app.
 
+- 🔌 **WebDAV Support:** Mount FileRise as a network drive via WebDAV. Standard file operations (upload/download/rename/delete) work from any WebDAV‑compatible client. Per‑user scoping ensures folderOnly users see only their own folder, while others have full access.
+
 - 📚 **API Documentation:** Fully auto‑generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
 
 - 📝 **Built-in Editor & Preview:** View images, videos, audio, and PDFs inline with a preview modal – no need to download just to see them. Edit text/code files right in your browser with a CodeMirror-based editor featuring syntax highlighting and line numbers. Great for config files or notes – tweak and save changes without leaving FileRise.
@@ -34,7 +36,7 @@ Upload, organize, and share files through a sleek web interface. **FileRise** is
 
 - 🗑️ **Trash & File Recovery:** Mistakenly deleted files? No worries – deleted items go to the Trash instead of immediate removal. Admins can restore files from Trash or empty it to free space. FileRise auto-purges old trash entries (default 3 days) to keep your storage tidy.
 
-- ⚙️ **Lightweight & Self-Contained:** FileRise runs on PHP 8.1+ with no external database required – data is stored in files (users, metadata) for simplicity. It’s a single-folder web app you can drop into any Apache/PHP server or run as a container. Docker & Unraid ready: use our pre-built image for a hassle-free setup. Memory and CPU footprint is minimal, yet the app scales to thousands of files with pagination and sorting features.
+- ⚙️ **Lightweight & Self‑Contained:** FileRise runs on PHP 8.1+ with no external database required – data is stored in files (users, metadata) for simplicity. It’s a single‑folder web app you can drop into any Apache/PHP server or run as a container. Docker & Unraid ready: use our pre‑built image for a hassle‑free setup. Memory and CPU footprint is minimal, yet the app scales to thousands of files with pagination and sorting features.
 
 (For a full list of features and detailed changelogs, see the [Wiki](https://github.com/error311/FileRise/wiki), [changelog](https://github.com/error311/FileRise/blob/master/CHANGELOG.md) or the [releases](https://github.com/error311/FileRise/releases) pages.)
 
@@ -145,6 +147,51 @@ Now navigate to the FileRise URL in your browser. On first load, you’ll be pro
 
 ---
 
+## Quick‑start: Mount via WebDAV
+
+Once FileRise is running, you can mount it like any other network drive:
+
+```bash
+# Linux (GVFS/GIO)
+gio mount dav://demo@your-host/webdav.php/
+
+# macOS (Finder → Go → Connect to Server…)
+dav://demo@your-host/webdav.php/
+
+```
+
+### Windows (File Explorer)
+
+- Open **File Explorer** → Right-click **This PC** → **Map network drive…**
+- Choose a drive letter (e.g., `Z:`).
+- In **Folder**, enter:
+
+  ```text
+  https://your-host/webdav.php/
+  ```
+
+- Check **Connect using different credentials**, and enter your FileRise username and password.
+- Click **Finish**. The drive will now appear under **This PC**.
+
+> **Important:**  
+> Windows requires HTTPS (SSL) for WebDAV connections by default.  
+> If your server uses plain HTTP, you must adjust a registry setting:
+>
+> 1. Open **Registry Editor** (`regedit.exe`).
+> 2. Navigate to:
+>
+>    ```text
+>    HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WebClient\Parameters
+>    ```
+>
+> 3. Find or create a `DWORD` value named **BasicAuthLevel**.
+> 4. Set its value to `2`.
+> 5. Restart the **WebClient** service or reboot your computer.
+
+📖 For a full guide (including SSL setup, HTTP workaround, and troubleshooting), see the [WebDAV Usage Wiki](https://github.com/error311/FileRise/wiki/WebDAV).
+
+---
+
 ## FAQ / Troubleshooting
 
 - **“Upload failed” or large files not uploading:** Make sure `TOTAL_UPLOAD_SIZE` in config and PHP’s `post_max_size` / `upload_max_filesize` are all set high enough. For extremely large files, you might also need to increase max_execution_time in PHP or rely on the resumable upload feature in smaller chunks.
@@ -185,6 +232,7 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 - **[phpseclib/phpseclib](https://github.com/phpseclib/phpseclib)** (v~3.0.7)
 - **[robthree/twofactorauth](https://github.com/RobThree/TwoFactorAuth)** (v^3.0)
 - **[endroid/qr-code](https://github.com/endroid/qr-code)** (v^5.0)
+- **[sabre/dav"](https://github.com/sabre-io/dav)** (^4.4)
 
 ### Client-Side Libraries
 

@@ -383,87 +383,94 @@ class FileModel {
         }
     }
 
-        /**
-     * Saves file content to disk and updates folder metadata.
-     *
-     * @param string $folder The target folder where the file is to be saved (e.g. "root" or a subfolder).
-     * @param string $fileName The name of the file.
-     * @param string $content The file content.
-     * @return array Returns an associative array with either a "success" key or an "error" key.
-     */
-    public static function saveFile($folder, $fileName, $content) {
-        // Sanitize and determine the folder name.
-        $folder = trim($folder) ?: 'root';
-        $fileName = basename(trim($fileName));
+/*
+ * Save a file’s contents *and* record its metadata, including who uploaded it.
+ *
+ * @param string                $folder    Folder key (e.g. "root" or "invoices/2025")
+ * @param string                $fileName  Basename of the file
+ * @param resource|string       $content   File contents (stream or string)
+ * @param string|null           $uploader  Username of uploader (if null, falls back to session)
+ * @return array                          ["success"=>"…"] or ["error"=>"…"]
+ */
+public static function saveFile(string $folder, string $fileName, $content, ?string $uploader = null): array {
+    // Sanitize inputs
+    $folder   = trim($folder) ?: 'root';
+    $fileName = basename(trim($fileName));
 
-        // Validate folder: if not "root", must match REGEX_FOLDER_NAME.
-        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-            return ["error" => "Invalid folder name"];
+    // Validate folder name
+    if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+        return ["error" => "Invalid folder name"];
+    }
+
+    // Determine target directory
+    $baseDir = rtrim(UPLOAD_DIR, '/\\');
+    $targetDir = strtolower($folder) === 'root'
+        ? $baseDir . DIRECTORY_SEPARATOR
+        : $baseDir . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
+
+    // Security check
+    if (strpos(realpath($targetDir), realpath($baseDir)) !== 0) {
+        return ["error" => "Invalid folder path"];
+    }
+
+    // Ensure directory exists
+    if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
+        return ["error" => "Failed to create destination folder"];
+    }
+
+    $filePath = $targetDir . $fileName;
+
+    // ——— STREAM TO DISK ———
+    if (is_resource($content)) {
+        $out = fopen($filePath, 'wb');
+        if ($out === false) {
+            return ["error" => "Unable to open file for writing"];
         }
-
-        // Determine base upload directory.
-        $baseDir = rtrim(UPLOAD_DIR, '/\\');
-        if (strtolower($folder) === 'root' || $folder === "") {
-            $targetDir = $baseDir . DIRECTORY_SEPARATOR;
-        } else {
-            $targetDir = $baseDir . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
-        }
-
-        // (Optional security check to ensure targetDir is within baseDir.)
-        if (strpos(realpath($targetDir), realpath($baseDir)) !== 0) {
-            return ["error" => "Invalid folder path"];
-        }
-
-        // Create target directory if it doesn't exist.
-        if (!is_dir($targetDir)) {
-            if (!mkdir($targetDir, 0775, true)) {
-                return ["error" => "Failed to create destination folder"];
-            }
-        }
-
-        $filePath = $targetDir . $fileName;
-        // Attempt to save the file.
-        if (file_put_contents($filePath, $content) === false) {
+        stream_copy_to_stream($content, $out);
+        fclose($out);
+    } else {
+        if (file_put_contents($filePath, (string)$content) === false) {
             return ["error" => "Error saving file"];
         }
-        
-        // Update metadata.
-        // Build metadata file path for the folder.
-        $metadataKey = (strtolower($folder) === "root" || $folder === "") ? "root" : $folder;
-        $metadataFileName = str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
-        $metadataFilePath = META_DIR . $metadataFileName;
-        
-        if (file_exists($metadataFilePath)) {
-            $metadata = json_decode(file_get_contents($metadataFilePath), true);
-        } else {
-            $metadata = [];
-        }
-        if (!is_array($metadata)) {
-            $metadata = [];
-        }
-        
-        $currentTime = date(DATE_TIME_FORMAT);
-        $uploader = $_SESSION['username'] ?? "Unknown";
-        
-        // Update metadata for the file. If already exists, update its "modified" timestamp.
-        if (isset($metadata[$fileName])) {
-            $metadata[$fileName]['modified'] = $currentTime;
-            $metadata[$fileName]['uploader'] = $uploader; // optional: update uploader if desired.
-        } else {
-            $metadata[$fileName] = [
-                "uploaded" => $currentTime,
-                "modified" => $currentTime,
-                "uploader" => $uploader
-            ];
-        }
-        
-        // Write updated metadata.
-        if (file_put_contents($metadataFilePath, json_encode($metadata, JSON_PRETTY_PRINT)) === false) {
-            return ["error" => "Failed to update metadata"];
-        }
-        
-        return ["success" => "File saved successfully"];
     }
+
+    // ——— UPDATE METADATA ———
+    $metadataKey      = strtolower($folder) === "root" ? "root" : $folder;
+    $metadataFileName = str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
+    $metadataFilePath = META_DIR . $metadataFileName;
+
+    // Load existing metadata
+    $metadata = [];
+    if (file_exists($metadataFilePath)) {
+        $existing = @json_decode(file_get_contents($metadataFilePath), true);
+        if (is_array($existing)) {
+            $metadata = $existing;
+        }
+    }
+
+    $currentTime = date(DATE_TIME_FORMAT);
+    // Use passed-in uploader, or fall back to session
+    if ($uploader === null) {
+        $uploader = $_SESSION['username'] ?? "Unknown";
+    }
+
+    if (isset($metadata[$fileName])) {
+        $metadata[$fileName]['modified'] = $currentTime;
+        $metadata[$fileName]['uploader'] = $uploader;
+    } else {
+        $metadata[$fileName] = [
+            "uploaded" => $currentTime,
+            "modified" => $currentTime,
+            "uploader" => $uploader
+        ];
+    }
+
+    if (file_put_contents($metadataFilePath, json_encode($metadata, JSON_PRETTY_PRINT)) === false) {
+        return ["error" => "Failed to update metadata"];
+    }
+
+    return ["success" => "File saved successfully"];
+}
 
         /**
      * Validates and retrieves information needed to download a file.
