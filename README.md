@@ -20,7 +20,7 @@ Upload, organize, and share files through a sleek web interface. **FileRise** is
 
 - 🗃️ **Folder Sharing & File Sharing:** Easily share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items per page) with navigation controls, and file sizes are displayed in MB for clarity. Share files with others using one-time or expiring public links (with password protection if desired) – convenient for sending individual files without exposing the whole app.
 
-- 🔌 **WebDAV Support:** Mount FileRise as a network drive via WebDAV. Standard file operations (upload/download/rename/delete) work from any WebDAV‑compatible client. Per‑user scoping ensures folderOnly users see only their own folder, while others have full access.
+- 🔌 **WebDAV Support:** Mount FileRise as a network drive or connect via any WebDAV client. Supports standard file operations (upload/download/rename/delete) and direct `curl`/CLI access for scripting and automation. FolderOnly users are restricted to their personal folder, while admins and unrestricted users have full access. Compatible with Cyberduck, WinSCP, native OS drive mounts, and more.
 
 - 📚 **API Documentation:** Fully auto‑generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
 
