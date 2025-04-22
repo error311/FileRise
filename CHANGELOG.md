@@ -9,6 +9,7 @@
   - `www‑data` user is remapped at build‑time to the supplied `PUID:PGID`, then Apache drops privileges to that user  
 - Unraid template: removed recommendation to use `--user`; replaced with `PUID`, `PGID`, and `Container Port` variables
 - “Permission denied” errors when forcing `--user 99:100` on Unraid by ensuring startup runs as root
+- Silence group issue
 
 ---
 

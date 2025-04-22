@@ -66,8 +66,15 @@ RUN apt-get update && \
 
 # Remap www-data to the PUID/PGID provided
 RUN set -eux; \
-    if [ "$(id -u www-data)" != "${PUID}" ]; then usermod -u "${PUID}" www-data; fi; \
-    if [ "$(id -g www-data)" != "${PGID}" ]; then groupmod -g "${PGID}" www-data; fi; \
+    # only change the UID if it’s not already correct
+    if [ "$(id -u www-data)" != "${PUID}" ]; then \
+      usermod -u "${PUID}" www-data; \
+    fi; \
+    # attempt to change the GID, but ignore “already exists” errors
+    if [ "$(id -g www-data)" != "${PGID}" ]; then \
+      groupmod -g "${PGID}" www-data 2>/dev/null || true; \
+    fi; \
+    # finally set www-data’s primary group to PGID (will succeed if the group exists)
     usermod -g "${PGID}" www-data
 
 # Copy application tuning and code
