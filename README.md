@@ -245,6 +245,12 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 
 ---
 
+## Acknowledgments
+
+- Based on [uploader](https://github.com/sensboston/uploader) by @sensboston.
+
+---
+
 ## License
 
 This project is open-source under the MIT License. That means you’re free to use, modify, and distribute **FileRise**, with attribution. We hope you find it useful and contribute back!
