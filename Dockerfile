@@ -31,7 +31,7 @@ FROM ubuntu:24.04
 
 LABEL by=error311
 
-# Set basic environment variables
+# Set basic environment variables (these can be overridden via the Unraid template)
 ENV DEBIAN_FRONTEND=noninteractive \
     HOME=/root \
     LC_ALL=C.UTF-8 \
@@ -41,10 +41,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UPLOAD_MAX_FILESIZE=5G \
     POST_MAX_SIZE=5G \
     TOTAL_UPLOAD_SIZE=5G \
-    PERSISTENT_TOKENS_KEY=default_please_change_this_key
-
-ARG PUID=99
-ARG PGID=100
+    PERSISTENT_TOKENS_KEY=default_please_change_this_key \
+    PUID=99 \
+    PGID=100
 
 # Install Apache, PHP, and required extensions
 RUN apt-get update && \
@@ -65,18 +64,18 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Fix www-data UID/GID
+# Remap www-data to the PUID/PGID provided
 RUN set -eux; \
-    if [ "$(id -u www-data)" != "${PUID}" ]; then usermod -u ${PUID} www-data || true; fi; \
-    if [ "$(id -g www-data)" != "${PGID}" ]; then groupmod -g ${PGID} www-data || true; fi; \
-    usermod -g ${PGID} www-data
+    if [ "$(id -u www-data)" != "${PUID}" ]; then usermod -u "${PUID}" www-data; fi; \
+    if [ "$(id -g www-data)" != "${PGID}" ]; then groupmod -g "${PGID}" www-data; fi; \
+    usermod -g "${PGID}" www-data
 
-# Copy application code and vendor directory
+# Copy application tuning and code
 COPY custom-php.ini /etc/php/8.3/apache2/conf.d/99-app-tuning.ini
 COPY --from=appsource /var/www /var/www
 COPY --from=composer  /app/vendor /var/www/vendor
 
-# Fix ownership & permissions
+# Ensure the webroot is owned by the remapped www-data user
 RUN chown -R www-data:www-data /var/www && chmod -R 775 /var/www
 
 # Create a symlink for uploads folder in public directory.
@@ -100,7 +99,7 @@ EOF
 # Enable the rewrite and headers modules
 RUN a2enmod rewrite headers
 
-# Expose ports and set up start script
+# Expose ports and set up the startup script
 EXPOSE 80 443
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh

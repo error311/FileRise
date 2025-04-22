@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 4/22/2025
+
+- Support for custom PUID/PGID via `PUID`/`PGID` environment variables, replacing the need to run the container with `--user`  
+- New `PUID` and `PGID` config options in the Unraid Community Apps template
+- Dockerfile:  
+  - startup (`start.sh`) now runs as root to write `/etc/php` & `/etc/apache2` configs  
+  - `www‑data` user is remapped at build‑time to the supplied `PUID:PGID`, then Apache drops privileges to that user  
+- Unraid template: removed recommendation to use `--user`; replaced with `PUID`, `PGID`, and `Container Port` variables
+- “Permission denied” errors when forcing `--user 99:100` on Unraid by ensuring startup runs as root
+
+---
+
 ## Changes 4/21/2025 v1.2.2
 
 ### Added
