@@ -21,6 +21,7 @@
   - `getConfig` and `updateConfig` endpoints now include `enableWebDAV` and `sharedMaxUploadSize`  
 - Updated `AdminModel` & `AdminController` to persist and validate new settings  
 - Enhanced `shareFolder()` view to pull from admin config and format the max‑upload‑size label
+- Restored the MIT license copyright line that was inadvertently removed.
 
 ---
 

@@ -117,7 +117,7 @@ git clone https://github.com/error311/FileRise.git
 
 Place the files into your web server’s directory (e.g., `/var/www/html/filerise`). It can be in a subfolder (just adjust the `BASE_URL` in config as below).
 
-- **Composer Dependencies:** If you plan to use OIDC (SSO login), install Composer and run `composer install` in the FileRise directory. (This pulls in a couple of PHP libraries like jumbojett/openid-connect for OAuth support.) If you skip this, FileRise will still work, but OIDC login won’t be available.
+- **Composer Dependencies:** If you plan to use OIDC (SSO login), install Composer and run `composer install` in the FileRise directory. (This pulls in a couple of PHP libraries like jumbojett/openid-connect for OAuth support.)
 
 - **Folder Permissions:** Ensure the server can write to the following directories (create them if they don’t exist):
 
@@ -149,7 +149,7 @@ Now navigate to the FileRise URL in your browser. On first load, you’ll be pro
 
 ## Quick‑start: Mount via WebDAV
 
-Once FileRise is running, you can mount it like any other network drive:
+Once FileRise is running, you must enable WebDAV in admin panel to access it.
 
 ```bash
 # Linux (GVFS/GIO)
