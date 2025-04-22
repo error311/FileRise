@@ -152,8 +152,8 @@ find /var/www -type f -exec chmod 664 {} \;
 find /var/www -type d -exec chmod 775 {} \;
 chown -R ${PUID:-99}:${PGID:-100} /var/www
 
-echo "🔥 Final PHP configuration (90-custom.ini):"
-cat /etc/php/8.3/apache2/conf.d/90-custom.ini
+echo "🔥 Final PHP configuration (99-custom.ini):"
+cat /etc/php/8.3/apache2/conf.d/99-custom.ini
 
 echo "🔥 Final Apache configuration (limit_request_body.conf):"
 cat /etc/apache2/conf-enabled/limit_request_body.conf

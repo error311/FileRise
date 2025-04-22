@@ -35,7 +35,9 @@ class AdminController
      *                 @OA\Property(property="disableBasicAuth", type="boolean", example=false),
      *                 @OA\Property(property="disableOIDCLogin", type="boolean", example=false)
      *             ),
-     *             @OA\Property(property="globalOtpauthUrl", type="string", example="")
+     *             @OA\Property(property="globalOtpauthUrl", type="string", example=""),
+     *             @OA\Property(property="enableWebDAV", type="boolean", example=false),
+     *             @OA\Property(property="sharedMaxUploadSize", type="integer", example=52428800)
      *         )
      *     ),
      *     @OA\Response(
@@ -88,7 +90,9 @@ class AdminController
      *                 @OA\Property(property="disableBasicAuth", type="boolean", example=false),
      *                 @OA\Property(property="disableOIDCLogin", type="boolean", example=false)
      *             ),
-     *             @OA\Property(property="globalOtpauthUrl", type="string", example="")
+     *             @OA\Property(property="globalOtpauthUrl", type="string", example=""),
+     *             @OA\Property(property="enableWebDAV", type="boolean", example=false),
+     *             @OA\Property(property="sharedMaxUploadSize", type="integer", example=52428800)
      *         )
      *     ),
      *     @OA\Response(
@@ -149,7 +153,7 @@ class AdminController
             exit;
         }
 
-        // Prepare configuration array.
+        // Prepare existing settings
         $headerTitle = isset($data['header_title']) ? trim($data['header_title']) : "";
         $oidc = isset($data['oidc']) ? $data['oidc'] : [];
         $oidcProviderUrl = isset($oidc['providerUrl']) ? filter_var($oidc['providerUrl'], FILTER_SANITIZE_URL) : '';
@@ -183,20 +187,38 @@ class AdminController
         }
         $globalOtpauthUrl = isset($data['globalOtpauthUrl']) ? trim($data['globalOtpauthUrl']) : "";
 
+        // ── NEW: enableWebDAV flag ──────────────────────────────────────
+        $enableWebDAV = false;
+        if (array_key_exists('enableWebDAV', $data)) {
+            $enableWebDAV = filter_var($data['enableWebDAV'], FILTER_VALIDATE_BOOLEAN);
+        } elseif (isset($data['features']['enableWebDAV'])) {
+            $enableWebDAV = filter_var($data['features']['enableWebDAV'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        // ── NEW: sharedMaxUploadSize ──────────────────────────────────────
+        $sharedMaxUploadSize = null;
+        if (array_key_exists('sharedMaxUploadSize', $data)) {
+            $sharedMaxUploadSize = filter_var($data['sharedMaxUploadSize'], FILTER_VALIDATE_INT);
+        } elseif (isset($data['features']['sharedMaxUploadSize'])) {
+            $sharedMaxUploadSize = filter_var($data['features']['sharedMaxUploadSize'], FILTER_VALIDATE_INT);
+        }
+
         $configUpdate = [
-            'header_title' => $headerTitle,
-            'oidc' => [
-                'providerUrl'  => $oidcProviderUrl,
-                'clientId'     => $oidcClientId,
-                'clientSecret' => $oidcClientSecret,
-                'redirectUri'  => $oidcRedirectUri,
+            'header_title'         => $headerTitle,
+            'oidc'                 => [
+                'providerUrl'      => $oidcProviderUrl,
+                'clientId'         => $oidcClientId,
+                'clientSecret'     => $oidcClientSecret,
+                'redirectUri'      => $oidcRedirectUri,
             ],
-            'loginOptions' => [
+            'loginOptions'         => [
                 'disableFormLogin' => $disableFormLogin,
                 'disableBasicAuth' => $disableBasicAuth,
                 'disableOIDCLogin' => $disableOIDCLogin,
             ],
-            'globalOtpauthUrl' => $globalOtpauthUrl
+            'globalOtpauthUrl'     => $globalOtpauthUrl,
+            'enableWebDAV'         => $enableWebDAV,          
+            'sharedMaxUploadSize'  => $sharedMaxUploadSize   // ← NEW
         ];
 
         // Delegate to the model.

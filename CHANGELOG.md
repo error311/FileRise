@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 4/22/2025
+## Changes 4/22/2025 v1.2.3
 
 - Support for custom PUID/PGID via `PUID`/`PGID` environment variables, replacing the need to run the container with `--user`  
 - New `PUID` and `PGID` config options in the Unraid Community Apps template
@@ -9,7 +9,18 @@
   - `www‑data` user is remapped at build‑time to the supplied `PUID:PGID`, then Apache drops privileges to that user  
 - Unraid template: removed recommendation to use `--user`; replaced with `PUID`, `PGID`, and `Container Port` variables
 - “Permission denied” errors when forcing `--user 99:100` on Unraid by ensuring startup runs as root
-- Silence group issue
+- Dockerfile silence group issue
+- `enableWebDAV` toggle in Admin Panel (default: disabled)
+- **Admin Panel enhancements**  
+  - New `enableWebDAV` boolean setting  
+  - New `sharedMaxUploadSize` numeric setting (bytes)  
+- **Shared Folder upload size**  
+  - `sharedMaxUploadSize` is now enforced in `FolderModel::uploadToSharedFolder`  
+  - Upload form header on shared‑folder page dynamically shows “(X MB max size)”  
+- **API updates**  
+  - `getConfig` and `updateConfig` endpoints now include `enableWebDAV` and `sharedMaxUploadSize`  
+- Updated `AdminModel` & `AdminController` to persist and validate new settings  
+- Enhanced `shareFolder()` view to pull from admin config and format the max‑upload‑size label
 
 ---
 

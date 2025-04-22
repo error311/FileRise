@@ -3,7 +3,7 @@ import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 import { loadAdminConfigFunc } from './auth.js';
 
-const version = "v1.2.2"; // Update this version string as needed
+const version = "v1.2.3"; // Update this version string as needed
 const adminTitle = `${t("admin_panel")} <small style="font-size: 12px; color: gray;">${version}</small>`;
 
 let lastLoginData = null;
@@ -597,6 +597,7 @@ export function openAdminPanel() {
       }
       if (config.oidc) Object.assign(window.currentOIDCConfig, config.oidc);
       if (config.globalOtpauthUrl) window.currentOIDCConfig.globalOtpauthUrl = config.globalOtpauthUrl;
+
       const isDarkMode = document.body.classList.contains("dark-mode");
       const overlayBackground = isDarkMode ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
       const modalContentStyles = `
@@ -611,6 +612,7 @@ export function openAdminPanel() {
           max-height: 90vh;
           border: ${isDarkMode ? "1px solid #444" : "1px solid #ccc"};
         `;
+
       let adminModal = document.getElementById("adminPanelModal");
 
       if (!adminModal) {
@@ -663,6 +665,28 @@ export function openAdminPanel() {
                   <label for="disableOIDCLogin">${t("disable_oidc_login")}</label>
                 </div>
               </fieldset>
+
+              <!-- New WebDAV setting -->
+              <fieldset style="margin-bottom: 15px;">
+                <legend>WebDAV Access</legend>
+                <div class="form-group">
+                  <input type="checkbox" id="enableWebDAV" />
+                  <label for="enableWebDAV">Enable WebDAV</label>
+                </div>
+              </fieldset>
+              <!-- End WebDAV setting -->
+
+              <!-- New Shared Max Upload Size setting -->
+              <fieldset style="margin-bottom: 15px;">
+                <legend>Shared Max Upload Size (bytes)</legend>
+                <div class="form-group">
+                  <input type="number" id="sharedMaxUploadSize" class="form-control" 
+                         placeholder="e.g. 52428800" />
+                  <small>Enter maximum bytes allowed for shared-folder uploads</small>
+                </div>
+              </fieldset>
+              <!-- End Shared Max Upload Size setting -->
+
               <fieldset style="margin-bottom: 15px;">
                 <legend>${t("oidc_configuration")}</legend>
                 <div class="form-group">
@@ -698,33 +722,34 @@ export function openAdminPanel() {
         `;
         document.body.appendChild(adminModal);
 
-        // Bind closing events that will use our enhanced close function.
+        // Bind closing
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
-        adminModal.addEventListener("click", (e) => {
-          if (e.target === adminModal) closeAdminPanel();
-        });
+        adminModal.addEventListener("click", e => { if (e.target === adminModal) closeAdminPanel(); });
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
 
-        // Bind other buttons.
+        // Bind other buttons
         document.getElementById("adminOpenAddUser").addEventListener("click", () => {
           toggleVisibility("addUserModal", true);
           document.getElementById("newUsername").focus();
         });
         document.getElementById("adminOpenRemoveUser").addEventListener("click", () => {
-          if (typeof window.loadUserList === "function") {
-            window.loadUserList();
-          }
+          if (typeof window.loadUserList === "function") window.loadUserList();
           toggleVisibility("removeUserModal", true);
         });
         document.getElementById("adminOpenUserPermissions").addEventListener("click", () => {
           openUserPermissionsModal();
         });
-        document.getElementById("saveAdminSettings").addEventListener("click", () => {
 
+        // Save handler
+        document.getElementById("saveAdminSettings").addEventListener("click", () => {
           const disableFormLoginCheckbox = document.getElementById("disableFormLogin");
           const disableBasicAuthCheckbox = document.getElementById("disableBasicAuth");
           const disableOIDCLoginCheckbox = document.getElementById("disableOIDCLogin");
-          const totalDisabled = [disableFormLoginCheckbox, disableBasicAuthCheckbox, disableOIDCLoginCheckbox].filter(cb => cb.checked).length;
+          const enableWebDAVCheckbox = document.getElementById("enableWebDAV");
+          const sharedMaxUploadSizeInput = document.getElementById("sharedMaxUploadSize");
+
+          const totalDisabled = [disableFormLoginCheckbox, disableBasicAuthCheckbox, disableOIDCLoginCheckbox]
+            .filter(cb => cb.checked).length;
           if (totalDisabled === 3) {
             showToast(t("at_least_one_login_method"));
             disableOIDCLoginCheckbox.checked = false;
@@ -738,8 +763,8 @@ export function openAdminPanel() {
             }
             return;
           }
-          const newHeaderTitle = document.getElementById("headerTitle").value.trim();
 
+          const newHeaderTitle = document.getElementById("headerTitle").value.trim();
           const newOIDCConfig = {
             providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
             clientId: document.getElementById("oidcClientId").value.trim(),
@@ -749,13 +774,18 @@ export function openAdminPanel() {
           const disableFormLogin = disableFormLoginCheckbox.checked;
           const disableBasicAuth = disableBasicAuthCheckbox.checked;
           const disableOIDCLogin = disableOIDCLoginCheckbox.checked;
+          const enableWebDAV = enableWebDAVCheckbox.checked;
+          const sharedMaxUploadSize = parseInt(sharedMaxUploadSizeInput.value, 10) || 0;
           const globalOtpauthUrl = document.getElementById("globalOtpauthUrl").value.trim();
+
           sendRequest("/api/admin/updateConfig.php", "POST", {
             header_title: newHeaderTitle,
             oidc: newOIDCConfig,
             disableFormLogin,
             disableBasicAuth,
             disableOIDCLogin,
+            enableWebDAV,
+            sharedMaxUploadSize,
             globalOtpauthUrl
           }, { "X-CSRF-Token": window.csrfToken })
             .then(response => {
@@ -764,26 +794,32 @@ export function openAdminPanel() {
                 localStorage.setItem("disableFormLogin", disableFormLogin);
                 localStorage.setItem("disableBasicAuth", disableBasicAuth);
                 localStorage.setItem("disableOIDCLogin", disableOIDCLogin);
+                localStorage.setItem("enableWebDAV", enableWebDAV);
+                localStorage.setItem("sharedMaxUploadSize", sharedMaxUploadSize);
                 if (typeof window.updateLoginOptionsUI === "function") {
-                  window.updateLoginOptionsUI({ disableFormLogin, disableBasicAuth, disableOIDCLogin });
+                  window.updateLoginOptionsUI({
+                    disableFormLogin,
+                    disableBasicAuth,
+                    disableOIDCLogin
+                  });
                 }
-                // Update the captured initial state since the changes have now been saved.
                 captureInitialAdminConfig();
                 closeAdminPanel();
                 loadAdminConfigFunc();
-
               } else {
                 showToast(t("error_updating_settings") + ": " + (response.error || t("unknown_error")));
               }
             })
             .catch(() => { });
         });
+
         // Enforce login option constraints.
         const disableFormLoginCheckbox = document.getElementById("disableFormLogin");
         const disableBasicAuthCheckbox = document.getElementById("disableBasicAuth");
         const disableOIDCLoginCheckbox = document.getElementById("disableOIDCLogin");
         function enforceLoginOptionConstraint(changedCheckbox) {
-          const totalDisabled = [disableFormLoginCheckbox, disableBasicAuthCheckbox, disableOIDCLoginCheckbox].filter(cb => cb.checked).length;
+          const totalDisabled = [disableFormLoginCheckbox, disableBasicAuthCheckbox, disableOIDCLoginCheckbox]
+            .filter(cb => cb.checked).length;
           if (changedCheckbox.checked && totalDisabled === 3) {
             showToast(t("at_least_one_login_method"));
             changedCheckbox.checked = false;
@@ -793,13 +829,17 @@ export function openAdminPanel() {
         disableBasicAuthCheckbox.addEventListener("change", function () { enforceLoginOptionConstraint(this); });
         disableOIDCLoginCheckbox.addEventListener("change", function () { enforceLoginOptionConstraint(this); });
 
+        // Initial checkbox and input states
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
+        document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
+        document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
 
-        // Capture initial state after the modal loads.
         captureInitialAdminConfig();
+
       } else {
+        // Update existing modal and show
         adminModal.style.backgroundColor = overlayBackground;
         const modalContent = adminModal.querySelector(".modal-content");
         if (modalContent) {
@@ -815,6 +855,8 @@ export function openAdminPanel() {
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
+        document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
+        document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         adminModal.style.display = "flex";
         captureInitialAdminConfig();
       }
@@ -837,6 +879,8 @@ export function openAdminPanel() {
         document.getElementById("disableFormLogin").checked = localStorage.getItem("disableFormLogin") === "true";
         document.getElementById("disableBasicAuth").checked = localStorage.getItem("disableBasicAuth") === "true";
         document.getElementById("disableOIDCLogin").checked = localStorage.getItem("disableOIDCLogin") === "true";
+        document.getElementById("enableWebDAV").checked = localStorage.getItem("enableWebDAV") === "true";
+        document.getElementById("sharedMaxUploadSize").value = localStorage.getItem("sharedMaxUploadSize") || "";
         adminModal.style.display = "flex";
         captureInitialAdminConfig();
       } else {

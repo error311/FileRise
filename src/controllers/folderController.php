@@ -401,6 +401,20 @@ class FolderController
      *
      * @return void Outputs HTML content.
      */
+
+     function formatBytes($bytes)
+     {
+         if ($bytes < 1024) {
+             return $bytes . " B";
+         } elseif ($bytes < 1024 * 1024) {
+             return round($bytes / 1024, 2) . " KB";
+         } elseif ($bytes < 1024 * 1024 * 1024) {
+             return round($bytes / (1024 * 1024), 2) . " MB";
+         } else {
+             return round($bytes / (1024 * 1024 * 1024), 2) . " GB";
+         }
+     }
+     
     public function shareFolder(): void
     {
         // Retrieve GET parameters.
@@ -495,12 +509,14 @@ class FolderController
             exit;
         }
 
-        // Extract data for the HTML view.
-        $folderName = $data['folder'];
-        $files = $data['files'];
-        $currentPage = $data['currentPage'];
-        $totalPages = $data['totalPages'];
+        // Load admin config so we can pull the sharedMaxUploadSize
+        require_once PROJECT_ROOT . '/src/models/AdminModel.php';
+        $adminConfig        = AdminModel::getConfig();
+        $sharedMaxUploadSize = isset($adminConfig['sharedMaxUploadSize']) && is_numeric($adminConfig['sharedMaxUploadSize'])
+            ? (int)$adminConfig['sharedMaxUploadSize']
+            : null;
 
+        // For human‐readable formatting
         function formatBytes($bytes)
         {
             if ($bytes < 1024) {
@@ -513,6 +529,12 @@ class FolderController
                 return round($bytes / (1024 * 1024 * 1024), 2) . " GB";
             }
         }
+
+        // Extract data for the HTML view.
+        $folderName = $data['folder'];
+        $files = $data['files'];
+        $currentPage = $data['currentPage'];
+        $totalPages = $data['totalPages'];
 
         // Build the HTML view.
         header("Content-Type: text/html; charset=utf-8");
@@ -717,7 +739,11 @@ class FolderController
                 <!-- Upload Container (if uploads are allowed by the share record) -->
                 <?php if (isset($data['record']['allowUpload']) && $data['record']['allowUpload'] == 1): ?>
                     <div class="upload-container">
-                        <h3>Upload File (50mb max size)</h3>
+                        <h3>Upload File
+                            <?php if ($sharedMaxUploadSize !== null): ?>
+                                (<?php echo formatBytes($sharedMaxUploadSize); ?> max size)
+                            <?php endif; ?>
+                        </h3>
                         <form action="/api/folder/uploadToSharedFolder.php" method="post" enctype="multipart/form-data">
                             <!-- Pass the share token so the upload endpoint can verify -->
                             <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
