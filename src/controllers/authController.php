@@ -238,28 +238,28 @@ class AuthController
             $token   = bin2hex(random_bytes(32));
             $expiry  = time() + 30 * 24 * 60 * 60;
             $all     = [];
-        
+
             if (file_exists($tokFile)) {
                 $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
                 $all = json_decode($dec, true) ?: [];
             }
-        
+
             $all[$token] = [
                 'username' => $username,
                 'expiry'   => $expiry,
                 'isAdmin'  => $_SESSION['isAdmin']
             ];
-        
+
             file_put_contents(
                 $tokFile,
                 encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
                 LOCK_EX
             );
-        
+
             $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-        
+
             setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
-                    
+
             setcookie(
                 session_name(),
                 session_id(),
@@ -269,7 +269,7 @@ class AuthController
                 $secure,
                 true
             );
-        
+
             session_regenerate_id(true);
         }
 
@@ -341,40 +341,83 @@ class AuthController
 
     public function checkAuth(): void
     {
-        header('Content-Type: application/json');
+
+    // 1) Remember-me re-login
+    if (empty($_SESSION['authenticated']) && !empty($_COOKIE['remember_me_token'])) {
+        $payload = AuthModel::validateRememberToken($_COOKIE['remember_me_token']);
+        if ($payload) {
+            session_regenerate_id(true);
+            $_SESSION['authenticated']  = true;
+            $_SESSION['username']       = $payload['username'];
+            $_SESSION['isAdmin']        = !empty($payload['isAdmin']);
+            $_SESSION['folderOnly']     = $payload['folderOnly']    ?? false;
+            $_SESSION['readOnly']       = $payload['readOnly']      ?? false;
+            $_SESSION['disableUpload']  = $payload['disableUpload'] ?? false;
+            // regenerate CSRF if you use one
+            $_SESSION['csrf_token']     = bin2hex(random_bytes(32));
+
+            // TOTP enabled? (same logic as below)
+            $usersFile = USERS_DIR . USERS_FILE;
+            $totp = false;
+            if (file_exists($usersFile)) {
+                foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                    $parts = explode(':', trim($line));
+                    if ($parts[0] === $_SESSION['username'] && !empty($parts[3])) {
+                        $totp = true;
+                        break;
+                    }
+                }
+            }
+
+            echo json_encode([
+                'authenticated' => true,
+                'isAdmin'       => $_SESSION['isAdmin'],
+                'totp_enabled'  => $totp,
+                'username'      => $_SESSION['username'],
+                'folderOnly'    => $_SESSION['folderOnly'],
+                'readOnly'      => $_SESSION['readOnly'],
+                'disableUpload' => $_SESSION['disableUpload']
+            ]);
+            exit();
+        }
+    }
+
         $usersFile = USERS_DIR . USERS_FILE;
 
-        // setup mode?
+        // 2) Setup mode?
         if (!file_exists($usersFile) || trim(file_get_contents($usersFile)) === '') {
             error_log("checkAuth: setup mode");
             echo json_encode(['setup' => true]);
             exit();
         }
+
+        // 3) Session-based auth
         if (empty($_SESSION['authenticated'])) {
             echo json_encode(['authenticated' => false]);
             exit();
         }
 
-        // TOTP enabled?
+        // 4) TOTP enabled?
         $totp = false;
         foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
             $parts = explode(':', trim($line));
-            if ($parts[0] === $_SESSION['username'] && !empty($parts[3])) {
+            if ($parts[0] === ($_SESSION['username'] ?? '') && !empty($parts[3])) {
                 $totp = true;
                 break;
             }
         }
 
-        $isAdmin = ((int)AuthModel::getUserRole($_SESSION['username']) === 1);
+        // 5) Final response
         $resp = [
             'authenticated' => true,
-            'isAdmin'      => $isAdmin,
-            'totp_enabled' => $totp,
-            'username'     => $_SESSION['username'],
-            'folderOnly'   => $_SESSION['folderOnly']    ?? false,
-            'readOnly'     => $_SESSION['readOnly']      ?? false,
+            'isAdmin'       => !empty($_SESSION['isAdmin']),
+            'totp_enabled'  => $totp,
+            'username'      => $_SESSION['username'],
+            'folderOnly'    => $_SESSION['folderOnly']    ?? false,
+            'readOnly'      => $_SESSION['readOnly']      ?? false,
             'disableUpload' => $_SESSION['disableUpload'] ?? false
         ];
+
         echo json_encode($resp);
         exit();
     }

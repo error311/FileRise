@@ -1,5 +1,21 @@
 # Changelog
 
+## Changes 4/23/2025
+
+**AuthModel**  
+
+- **Added** `validateRememberToken(string $token): ?array`  
+  - Reads and decrypts `persistent_tokens.json`  
+  - Verifies token exists and hasn’t expired  
+  - Returns stored payload (`username`, `expiry`, `isAdmin`, etc.) or `null` if invalid
+
+**authController (checkAuth)**  
+
+- **Enhanced** “remember-me” re-login path at top of `checkAuth()`  
+  - Calls `AuthModel::validateRememberToken()` when session is missing but `remember_me_token` cookie present  
+  - Repopulates `$_SESSION['authenticated']`, `username`, `isAdmin`, `folderOnly`, `readOnly`, `disableUpload` from payload  
+  - Regenerates session ID and CSRF token, then immediately returns JSON and exits  
+
 ## Changes 4/22/2025 v1.2.3
 
 - Support for custom PUID/PGID via `PUID`/`PGID` environment variables, replacing the need to run the container with `--user`  

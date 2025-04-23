@@ -228,6 +228,7 @@ function checkAuthentication(showLoginToast = true) {
       }
       window.setupMode = false;
       if (data.authenticated) {
+        localStorage.setItem('isAdmin', data.isAdmin ? 'true' : 'false');
         localStorage.setItem("folderOnly", data.folderOnly);
         localStorage.setItem("readOnly", data.readOnly);
         localStorage.setItem("disableUpload", data.disableUpload);

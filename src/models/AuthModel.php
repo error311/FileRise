@@ -3,7 +3,8 @@
 
 require_once PROJECT_ROOT . '/config/config.php';
 
-class AuthModel {
+class AuthModel
+{
 
     /**
      * Retrieves the user's role from the users file.
@@ -11,7 +12,8 @@ class AuthModel {
      * @param string $username
      * @return string|null The role string (e.g. "1" for admin) or null if not found.
      */
-    public static function getUserRole(string $username): ?string {
+    public static function getUserRole(string $username): ?string
+    {
         $usersFile = USERS_DIR . USERS_FILE;
         if (file_exists($usersFile)) {
             foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
@@ -23,7 +25,7 @@ class AuthModel {
         }
         return null;
     }
-    
+
     /**
      * Authenticates the user using form-based credentials.
      *
@@ -31,7 +33,8 @@ class AuthModel {
      * @param string $password
      * @return array|false Returns an associative array with user data (role, totp_secret) on success or false on failure.
      */
-    public static function authenticate(string $username, string $password) {
+    public static function authenticate(string $username, string $password)
+    {
         $usersFile = USERS_DIR . USERS_FILE;
         if (!file_exists($usersFile)) {
             return false;
@@ -51,14 +54,15 @@ class AuthModel {
         }
         return false;
     }
-    
+
     /**
      * Loads failed login attempts from a file.
      *
      * @param string $file
      * @return array
      */
-    public static function loadFailedAttempts(string $file): array {
+    public static function loadFailedAttempts(string $file): array
+    {
         if (file_exists($file)) {
             $data = json_decode(file_get_contents($file), true);
             if (is_array($data)) {
@@ -67,7 +71,7 @@ class AuthModel {
         }
         return [];
     }
-    
+
     /**
      * Saves failed login attempts into a file.
      *
@@ -75,17 +79,19 @@ class AuthModel {
      * @param array $data
      * @return void
      */
-    public static function saveFailedAttempts(string $file, array $data): void {
+    public static function saveFailedAttempts(string $file, array $data): void
+    {
         file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT), LOCK_EX);
     }
-    
+
     /**
      * Retrieves a user's TOTP secret from the users file.
      *
      * @param string $username
      * @return string|null Returns the decrypted TOTP secret or null if not set.
      */
-    public static function getUserTOTPSecret(string $username): ?string {
+    public static function getUserTOTPSecret(string $username): ?string
+    {
         $usersFile = USERS_DIR . USERS_FILE;
         if (!file_exists($usersFile)) {
             return null;
@@ -98,14 +104,15 @@ class AuthModel {
         }
         return null;
     }
-    
+
     /**
      * Loads the folder-only permission for a given user.
      *
      * @param string $username
      * @return bool
      */
-    public static function loadFolderPermission(string $username): bool {
+    public static function loadFolderPermission(string $username): bool
+    {
         $permissionsFile = USERS_DIR . 'userPermissions.json';
         if (file_exists($permissionsFile)) {
             $content = file_get_contents($permissionsFile);
@@ -120,5 +127,32 @@ class AuthModel {
             }
         }
         return false;
+    }
+
+    /**
+     * Validate a remember-me token and return its stored payload.
+     *
+     * @param string $token
+     * @return array|null  Returns ['username'=>…, 'expiry'=>…, 'isAdmin'=>…] or null if invalid/expired.
+     */
+    public static function validateRememberToken(string $token): ?array
+    {
+        $tokFile = USERS_DIR . 'persistent_tokens.json';
+        if (! file_exists($tokFile)) {
+            return null;
+        }
+
+        // Decrypt and decode the full token store
+        $encrypted = file_get_contents($tokFile);
+        $json      = decryptData($encrypted, $GLOBALS['encryptionKey']);
+        $all       = json_decode($json, true) ?: [];
+
+        // Lookup and expiry check
+        if (empty($all[$token]) || !isset($all[$token]['expiry']) || $all[$token]['expiry'] < time()) {
+            return null;
+        }
+
+        // Valid token—return its payload
+        return $all[$token];
     }
 }
