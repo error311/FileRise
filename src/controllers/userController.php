@@ -87,63 +87,83 @@ class UserController
 
     public function addUser()
     {
+        // 1) Ensure JSON output and session
         header('Content-Type: application/json');
 
-        $usersFile = USERS_DIR . USERS_FILE;
+        // 1a) Initialize CSRF token if missing
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
 
-        // Determine if we're in setup mode.
-        // Setup mode means the "setup" query parameter is passed
-        // and users.txt is missing, empty, or contains only whitespace.
-        $isSetup = (isset($_GET['setup']) && $_GET['setup'] === '1');
-        if ($isSetup && (!file_exists($usersFile) || filesize($usersFile) == 0 || trim(file_get_contents($usersFile)) === '')) {
-            // Allow initial admin creation without session or CSRF checks.
+        // 2) Determine setup mode (first-ever admin creation)
+        $usersFile = USERS_DIR . USERS_FILE;
+        $isSetup   = (isset($_GET['setup']) && $_GET['setup'] === '1');
+        $setupMode = false;
+        if (
+            $isSetup && (! file_exists($usersFile)
+                || filesize($usersFile) === 0
+                || trim(file_get_contents($usersFile)) === ''
+            )
+        ) {
             $setupMode = true;
         } else {
-            $setupMode = false;
-            // In non-setup mode, perform CSRF token and authentication checks.
-            $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-            $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
-            if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
-                http_response_code(403);
-                echo json_encode(["error" => "Invalid CSRF token"]);
+            // 3) In non-setup, enforce CSRF + auth checks
+            $headersArr    = array_change_key_case(getallheaders(), CASE_LOWER);
+            $receivedToken = trim($headersArr['x-csrf-token'] ?? '');
+
+            // 3a) Soft-fail CSRF: on mismatch, regenerate and return new token
+            if ($receivedToken !== $_SESSION['csrf_token']) {
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                header('X-CSRF-Token: ' . $_SESSION['csrf_token']);
+                echo json_encode([
+                    'csrf_expired' => true,
+                    'csrf_token'   => $_SESSION['csrf_token']
+                ]);
                 exit;
             }
+
+            // 3b) Must be logged in as admin
             if (
-                !isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
-                !isset($_SESSION['isAdmin']) || $_SESSION['isAdmin'] !== true
+                empty($_SESSION['authenticated'])
+                || $_SESSION['authenticated'] !== true
+                || empty($_SESSION['isAdmin'])
+                || $_SESSION['isAdmin'] !== true
             ) {
                 echo json_encode(["error" => "Unauthorized"]);
                 exit;
             }
         }
 
-        // Get the JSON input data.
-        $data = json_decode(file_get_contents("php://input"), true);
-        $newUsername = trim($data["username"] ?? "");
-        $newPassword = trim($data["password"] ?? "");
+        // 4) Parse input
+        $data        = json_decode(file_get_contents('php://input'), true) ?: [];
+        $newUsername = trim($data['username'] ?? '');
+        $newPassword = trim($data['password'] ?? '');
 
-        // In setup mode, force the new user to be an admin.
+        // 5) Determine admin flag
         if ($setupMode) {
-            $isAdmin = "1";
+            $isAdmin = '1';
         } else {
-            $isAdmin = !empty($data["isAdmin"]) ? "1" : "0";
+            $isAdmin = !empty($data['isAdmin']) ? '1' : '0';
         }
 
-        // Validate that a username and password are provided.
-        if (!$newUsername || !$newPassword) {
+        // 6) Validate fields
+        if ($newUsername === '' || $newPassword === '') {
             echo json_encode(["error" => "Username and password required"]);
             exit;
         }
-
-        // Validate username format.
         if (!preg_match(REGEX_USER, $newUsername)) {
-            echo json_encode(["error" => "Invalid username. Only letters, numbers, underscores, dashes, and spaces are allowed."]);
+            echo json_encode([
+                "error" => "Invalid username. Only letters, numbers, underscores, dashes, and spaces are allowed."
+            ]);
             exit;
         }
 
-        // Delegate the business logic to the model.
+        // 7) Delegate to model
         $result = userModel::addUser($newUsername, $newPassword, $isAdmin, $setupMode);
+
+        // 8) Return model result
         echo json_encode($result);
+        exit;
     }
 
     /**
@@ -847,148 +867,151 @@ class UserController
      * )
      */
 
-     public function verifyTOTP()
-     {
-         header('Content-Type: application/json');
-         header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';");
-     
-         // Rate‑limit
-         if (!isset($_SESSION['totp_failures'])) {
-             $_SESSION['totp_failures'] = 0;
-         }
-         if ($_SESSION['totp_failures'] >= 5) {
-             http_response_code(429);
-             echo json_encode(['status' => 'error', 'message' => 'Too many TOTP attempts. Please try again later.']);
-             exit;
-         }
-     
-         // Must be authenticated OR pending login
-         if (!((!empty($_SESSION['authenticated'])) || isset($_SESSION['pending_login_user']))) {
-             http_response_code(403);
-             echo json_encode(['status' => 'error', 'message' => 'Not authenticated']);
-             exit;
-         }
-     
-         // CSRF check
-         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-         $csrfHeader = $headersArr['x-csrf-token'] ?? '';
-         if (empty($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
-             http_response_code(403);
-             echo json_encode(['status' => 'error', 'message' => 'Invalid CSRF token']);
-             exit;
-         }
-     
-         // Parse and validate input
-         $inputData = json_decode(file_get_contents("php://input"), true);
-         $code = trim($inputData['totp_code'] ?? '');
-         if (!preg_match('/^\d{6}$/', $code)) {
-             http_response_code(400);
-             echo json_encode(['status' => 'error', 'message' => 'A valid 6-digit TOTP code is required']);
-             exit;
-         }
-     
-         // TFA helper
-         $tfa = new \RobThree\Auth\TwoFactorAuth(
-             new \RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider(),
-             'FileRise', 6, 30, \RobThree\Auth\Algorithm::Sha1
-         );
-     
-         // Pending‑login flow (first password step passed)
-         if (isset($_SESSION['pending_login_user'])) {
-             $username       = $_SESSION['pending_login_user'];
-             $pendingSecret  = $_SESSION['pending_login_secret'] ?? null;
-             $rememberMe     = $_SESSION['pending_login_remember_me'] ?? false;
-     
-             if (!$pendingSecret || !$tfa->verifyCode($pendingSecret, $code)) {
-                 $_SESSION['totp_failures']++;
-                 http_response_code(400);
-                 echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
-                 exit;
-             }
-     
-             // === Issue “remember me” token if requested ===
-             if ($rememberMe) {
-                 $tokFile = USERS_DIR . 'persistent_tokens.json';
-                 $token   = bin2hex(random_bytes(32));
-                 $expiry  = time() + 30 * 24 * 60 * 60;
-                 $all     = [];
-     
-                 if (file_exists($tokFile)) {
-                     $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
-                     $all = json_decode($dec, true) ?: [];
-                 }
-                 $isAdmin = ((int)userModel::getUserRole($username) === 1);
-                 $all[$token] = [
-                     'username' => $username,
-                     'expiry'   => $expiry,
-                     'isAdmin'  => $isAdmin
-                 ];
-                 file_put_contents(
-                     $tokFile,
-                     encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
-                     LOCK_EX
-                 );
-     
-                 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-     
-                 // Persistent cookie
-                 setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
-     
-                 // Re‑issue PHP session cookie
-                 setcookie(
-                     session_name(),
-                     session_id(),
-                     $expiry,
-                     '/',
-                     '',
-                     $secure,
-                     true
-                 );
-             }
-     
-             // Finalize login
-             session_regenerate_id(true);
-             $_SESSION['authenticated'] = true;
-             $_SESSION['username']      = $username;
-             $_SESSION['isAdmin']       = $isAdmin;
-             $_SESSION['folderOnly']    = loadUserPermissions($username);
-     
-             // Clean up
-             unset(
-                 $_SESSION['pending_login_user'],
-                 $_SESSION['pending_login_secret'],
-                 $_SESSION['pending_login_remember_me'],
-                 $_SESSION['totp_failures']
-             );
-     
-             echo json_encode(['status' => 'ok', 'message' => 'Login successful']);
-             exit;
-         }
-     
-         // Setup/verification flow (not pending)
-         $username = $_SESSION['username'] ?? '';
-         if (!$username) {
-             http_response_code(400);
-             echo json_encode(['status' => 'error', 'message' => 'Username not found in session']);
-             exit;
-         }
-     
-         $totpSecret = userModel::getTOTPSecret($username);
-         if (!$totpSecret) {
-             http_response_code(500);
-             echo json_encode(['status' => 'error', 'message' => 'TOTP secret not found. Please set up TOTP again.']);
-             exit;
-         }
-     
-         if (!$tfa->verifyCode($totpSecret, $code)) {
-             $_SESSION['totp_failures']++;
-             http_response_code(400);
-             echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
-             exit;
-         }
-     
-         // Successful setup/verification
-         unset($_SESSION['totp_failures']);
-         echo json_encode(['status' => 'ok', 'message' => 'TOTP successfully verified']);
-     }
+    public function verifyTOTP()
+    {
+        header('Content-Type: application/json');
+        header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';");
+
+        // Rate‑limit
+        if (!isset($_SESSION['totp_failures'])) {
+            $_SESSION['totp_failures'] = 0;
+        }
+        if ($_SESSION['totp_failures'] >= 5) {
+            http_response_code(429);
+            echo json_encode(['status' => 'error', 'message' => 'Too many TOTP attempts. Please try again later.']);
+            exit;
+        }
+
+        // Must be authenticated OR pending login
+        if (!((!empty($_SESSION['authenticated'])) || isset($_SESSION['pending_login_user']))) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Not authenticated']);
+            exit;
+        }
+
+        // CSRF check
+        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
+        $csrfHeader = $headersArr['x-csrf-token'] ?? '';
+        if (empty($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Invalid CSRF token']);
+            exit;
+        }
+
+        // Parse and validate input
+        $inputData = json_decode(file_get_contents("php://input"), true);
+        $code = trim($inputData['totp_code'] ?? '');
+        if (!preg_match('/^\d{6}$/', $code)) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'A valid 6-digit TOTP code is required']);
+            exit;
+        }
+
+        // TFA helper
+        $tfa = new \RobThree\Auth\TwoFactorAuth(
+            new \RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider(),
+            'FileRise',
+            6,
+            30,
+            \RobThree\Auth\Algorithm::Sha1
+        );
+
+        // Pending‑login flow (first password step passed)
+        if (isset($_SESSION['pending_login_user'])) {
+            $username       = $_SESSION['pending_login_user'];
+            $pendingSecret  = $_SESSION['pending_login_secret'] ?? null;
+            $rememberMe     = $_SESSION['pending_login_remember_me'] ?? false;
+
+            if (!$pendingSecret || !$tfa->verifyCode($pendingSecret, $code)) {
+                $_SESSION['totp_failures']++;
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
+                exit;
+            }
+
+            // === Issue “remember me” token if requested ===
+            if ($rememberMe) {
+                $tokFile = USERS_DIR . 'persistent_tokens.json';
+                $token   = bin2hex(random_bytes(32));
+                $expiry  = time() + 30 * 24 * 60 * 60;
+                $all     = [];
+
+                if (file_exists($tokFile)) {
+                    $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
+                    $all = json_decode($dec, true) ?: [];
+                }
+                $isAdmin = ((int)userModel::getUserRole($username) === 1);
+                $all[$token] = [
+                    'username' => $username,
+                    'expiry'   => $expiry,
+                    'isAdmin'  => $isAdmin
+                ];
+                file_put_contents(
+                    $tokFile,
+                    encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
+                    LOCK_EX
+                );
+
+                $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+
+                // Persistent cookie
+                setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
+
+                // Re‑issue PHP session cookie
+                setcookie(
+                    session_name(),
+                    session_id(),
+                    $expiry,
+                    '/',
+                    '',
+                    $secure,
+                    true
+                );
+            }
+
+            // Finalize login
+            session_regenerate_id(true);
+            $_SESSION['authenticated'] = true;
+            $_SESSION['username']      = $username;
+            $_SESSION['isAdmin']       = $isAdmin;
+            $_SESSION['folderOnly']    = loadUserPermissions($username);
+
+            // Clean up
+            unset(
+                $_SESSION['pending_login_user'],
+                $_SESSION['pending_login_secret'],
+                $_SESSION['pending_login_remember_me'],
+                $_SESSION['totp_failures']
+            );
+
+            echo json_encode(['status' => 'ok', 'message' => 'Login successful']);
+            exit;
+        }
+
+        // Setup/verification flow (not pending)
+        $username = $_SESSION['username'] ?? '';
+        if (!$username) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'Username not found in session']);
+            exit;
+        }
+
+        $totpSecret = userModel::getTOTPSecret($username);
+        if (!$totpSecret) {
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => 'TOTP secret not found. Please set up TOTP again.']);
+            exit;
+        }
+
+        if (!$tfa->verifyCode($totpSecret, $code)) {
+            $_SESSION['totp_failures']++;
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
+            exit;
+        }
+
+        // Successful setup/verification
+        unset($_SESSION['totp_failures']);
+        echo json_encode(['status' => 'ok', 'message' => 'TOTP successfully verified']);
+    }
 }

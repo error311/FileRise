@@ -25,6 +25,10 @@ mkdir -p /var/www/metadata/log
 chown www-data:www-data    /var/www/metadata/log
 chmod 775                  /var/www/metadata/log
 
+mkdir -p /var/www/sessions
+chown www-data:www-data /var/www/sessions
+chmod 700 /var/www/sessions
+
 # 2.2) Prepare other dynamic dirs
 for d in uploads users metadata; do
   tgt="/var/www/${d}"

@@ -412,7 +412,12 @@ function initResumableUpload() {
     forceChunkSize: true,
     testChunks: false,
     throttleProgressCallbacks: 1,
-    headers: { "X-CSRF-Token": window.csrfToken }
+    withCredentials: true,
+    headers: { 'X-CSRF-Token': window.csrfToken },
+    query: {
+      folder: window.currentFolder || "root",
+      upload_token: window.csrfToken   // still as a fallback
+    }
   });
 
   const fileInput = document.getElementById("file");
@@ -496,26 +501,40 @@ function initResumableUpload() {
   });
   
   resumableInstance.on("fileSuccess", function(file, message) {
-    const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
+    // Try to parse JSON response
+    let data;
+    try {
+      data = JSON.parse(message);
+    } catch (e) {
+      data = null;
+    }
+  
+    // 1) Soft‐fail CSRF? then update token & retry this file
+    if (data && data.csrf_expired) {
+      // Update global and Resumable headers
+      window.csrfToken = data.csrf_token;
+      resumableInstance.opts.headers['X-CSRF-Token'] = data.csrf_token;
+      resumableInstance.opts.query.upload_token        = data.csrf_token;
+      // Retry this chunk/file
+      file.retry();
+      return; 
+    }
+  
+    // 2) Otherwise treat as real success:
+    const li = document.querySelector(
+      `li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`
+    );
     if (li && li.progressBar) {
       li.progressBar.style.width = "100%";
       li.progressBar.innerText = "Done";
-      // Hide pause/resume and remove buttons for successful files.
+      // remove action buttons
       const pauseResumeBtn = li.querySelector(".pause-resume-btn");
-      if (pauseResumeBtn) {
-        pauseResumeBtn.style.display = "none";
-      }
+      if (pauseResumeBtn) pauseResumeBtn.style.display = "none";
       const removeBtn = li.querySelector(".remove-file-btn");
-      if (removeBtn) {
-        removeBtn.style.display = "none";
-      }
-      // Schedule removal of the file entry after 5 seconds.
-      setTimeout(() => {
-        li.remove();
-        window.selectedFiles = window.selectedFiles.filter(f => f.uniqueIdentifier !== file.uniqueIdentifier);
-        updateFileInfoCount();
-      }, 5000);
+      if (removeBtn)   removeBtn.style.display = "none";
+      setTimeout(() => li.remove(), 5000);
     }
+  
     loadFileList(window.currentFolder);
   });
   
@@ -618,8 +637,25 @@ function submitFiles(allFiles) {
       } catch (e) {
         jsonResponse = null;
       }
+    
+      // ─── Soft-fail CSRF: retry this upload ───────────────────────
+      if (jsonResponse && jsonResponse.csrf_expired) {
+        console.warn("CSRF expired during upload, retrying chunk", file.uploadIndex);
+        // 1) update global token + header
+        window.csrfToken = jsonResponse.csrf_token;
+        xhr.open("POST", "/api/upload/upload.php", true);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
+        // 2) re-send the same formData
+        xhr.send(formData);
+        return;  // skip the "finishedCount++" and error/success logic for now
+      }
+    
+      // ─── Normal success/error handling ────────────────────────────  
       const li = progressElements[file.uploadIndex];
+    
       if (xhr.status >= 200 && xhr.status < 300 && (!jsonResponse || !jsonResponse.error)) {
+        // real success
         if (li) {
           li.progressBar.style.width = "100%";
           li.progressBar.innerText = "Done";
@@ -627,11 +663,14 @@ function submitFiles(allFiles) {
         }
         uploadResults[file.uploadIndex] = true;
       } else {
+        // real failure
         if (li) {
           li.progressBar.innerText = "Error";
         }
         allSucceeded = false;
       }
+    
+      // ─── Only now count this chunk as finished ───────────────────
       finishedCount++;
       if (finishedCount === allFiles.length) {
         refreshFileList(allFiles, uploadResults, progressElements);
@@ -665,6 +704,7 @@ function submitFiles(allFiles) {
     });
 
     xhr.open("POST", "/api/upload/upload.php", true);
+    xhr.withCredentials = true;
     xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
     xhr.send(formData);
   });

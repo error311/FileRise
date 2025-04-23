@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 4/23/2025
+## Changes 4/23/2025 1.2.4
 
 **AuthModel**  
 
@@ -16,8 +16,19 @@
   - Repopulates `$_SESSION['authenticated']`, `username`, `isAdmin`, `folderOnly`, `readOnly`, `disableUpload` from payload  
   - Regenerates session ID and CSRF token, then immediately returns JSON and exits
   
-  - **Updated** `userController.php`
-    - Fixed totp isAdmin when session is missing but `remember_me_token` cookie present
+- **Updated** `userController.php`
+  - Fixed totp isAdmin when session is missing but `remember_me_token` cookie present
+
+- **loadCsrfToken()**  
+  - Now reads `X-CSRF-Token` response header first, falls back to JSON `csrf_token` if header absent  
+  - Updates `window.csrfToken`, `window.SHARE_URL`, and `<meta>` tags with the new values  
+- **fetchWithCsrf(url, options)**  
+  - Sends `credentials: 'include'` and current `X-CSRF-Token` on every request  
+  - Handles “soft-failure” JSON (`{ csrf_expired: true, csrf_token }`): updates token and retries once without a 403 in DevTools  
+  - On HTTP 403 fallback: reads new token from header or `/api/auth/token.php`, updates token, and retries once  
+
+- **start.sh**
+- Session directory setup
 
 ## Changes 4/22/2025 v1.2.3
 

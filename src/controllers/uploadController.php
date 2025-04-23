@@ -72,34 +72,56 @@ class UploadController {
      */
     public function handleUpload(): void {
         header('Content-Type: application/json');
-
-        // CSRF Protection.
+  
+        //
+        // 1) CSRF – pull from header or POST fields
+        //
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = $headersArr['x-csrf-token'] ?? '';
-        if (!isset($_SESSION['csrf_token']) || trim($receivedToken) !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(["error" => "Invalid CSRF token"]);
+        $received = '';
+        if (!empty($headersArr['x-csrf-token'])) {
+            $received = trim($headersArr['x-csrf-token']);
+        } elseif (!empty($_POST['csrf_token'])) {
+            $received = trim($_POST['csrf_token']);
+        } elseif (!empty($_POST['upload_token'])) {
+            $received = trim($_POST['upload_token']);
+        }
+    
+        // 1a) If it doesn’t match, soft-fail: send new token and let client retry
+        if (!isset($_SESSION['csrf_token']) || $received !== $_SESSION['csrf_token']) {
+            // regenerate
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            // tell client “please retry with this new token”
+            http_response_code(200);
+            echo json_encode([
+              'csrf_expired' => true,
+              'csrf_token'   => $_SESSION['csrf_token']
+            ]);
             exit;
         }
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+    
+        //
+        // 2) Auth checks
+        //
+        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        // Check user permissions.
-        $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if ($username && !empty($userPermissions['disableUpload'])) {
+        $userPerms = loadUserPermissions($_SESSION['username']);
+        if (!empty($userPerms['disableUpload'])) {
             http_response_code(403);
             echo json_encode(["error" => "Upload disabled for this user."]);
             exit;
         }
-        
-        // Delegate to the model.
+    
+        //
+        // 3) Delegate the actual file handling
+        //
         $result = UploadModel::handleUpload($_POST, $_FILES);
-        
-        // For chunked uploads, output JSON (e.g., "chunk uploaded" status).
+    
+        //
+        // 4) Respond
+        //
         if (isset($result['error'])) {
             http_response_code(400);
             echo json_encode($result);
@@ -109,8 +131,8 @@ class UploadController {
             echo json_encode($result);
             exit;
         }
-        
-        // Otherwise, for full upload success, set a flash message and redirect.
+    
+        // full‐upload redirect
         $_SESSION['upload_message'] = "File uploaded successfully.";
         exit;
     }

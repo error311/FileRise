@@ -346,7 +346,9 @@ class AuthController
     if (empty($_SESSION['authenticated']) && !empty($_COOKIE['remember_me_token'])) {
         $payload = AuthModel::validateRememberToken($_COOKIE['remember_me_token']);
         if ($payload) {
+            $old = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
             session_regenerate_id(true);
+            $_SESSION['csrf_token'] = $old;
             $_SESSION['authenticated']  = true;
             $_SESSION['username']       = $payload['username'];
             $_SESSION['isAdmin']        = !empty($payload['isAdmin']);
@@ -354,7 +356,7 @@ class AuthController
             $_SESSION['readOnly']       = $payload['readOnly']      ?? false;
             $_SESSION['disableUpload']  = $payload['disableUpload'] ?? false;
             // regenerate CSRF if you use one
-            $_SESSION['csrf_token']     = bin2hex(random_bytes(32));
+            
 
             // TOTP enabled? (same logic as below)
             $usersFile = USERS_DIR . USERS_FILE;
@@ -371,6 +373,7 @@ class AuthController
 
             echo json_encode([
                 'authenticated' => true,
+                'csrf_token'    => $_SESSION['csrf_token'],
                 'isAdmin'       => $_SESSION['isAdmin'],
                 'totp_enabled'  => $totp,
                 'username'      => $_SESSION['username'],
@@ -446,10 +449,19 @@ class AuthController
      */
     public function getToken(): void
     {
+        // 1) Ensure session and CSRF token exist
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+    
+        // 2) Emit headers
         header('Content-Type: application/json');
+        header('X-CSRF-Token: ' . $_SESSION['csrf_token']);
+    
+        // 3) Return JSON payload
         echo json_encode([
-            "csrf_token" => $_SESSION['csrf_token'],
-            "share_url"  => SHARE_URL
+            'csrf_token' => $_SESSION['csrf_token'],
+            'share_url'  => SHARE_URL
         ]);
         exit;
     }

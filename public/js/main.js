@@ -1,8 +1,10 @@
 import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, toggleAllCheckboxes, updateFileActionButtons, showToast } from './domUtils.js';
-import { loadFolderTree } from './folderManager.js';
 import { initUpload } from './upload.js';
-import { initAuth, checkAuthentication, loadAdminConfigFunc } from './auth.js';
+import { initAuth, fetchWithCsrf, checkAuthentication, loadAdminConfigFunc } from './auth.js';
+const _originalFetch = window.fetch;
+window.fetch = fetchWithCsrf;
+import { loadFolderTree } from './folderManager.js';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
 import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js';
 import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
@@ -13,35 +15,53 @@ import { editFile, saveFile } from './fileEditor.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
 // Remove the retry logic version and just use loadCsrfToken directly:
-function loadCsrfToken() {
-  return fetch('/api/auth/token.php', { credentials: 'include' })
+/**
+ * Fetches the current CSRF token (and share URL), updates window globals
+ * and <meta> tags, and returns the data.
+ *
+ * @returns {Promise<{csrf_token: string, share_url: string}>}
+ */
+export function loadCsrfToken() {
+  return fetch('/api/auth/token.php', {
+    method: 'GET',
+    credentials: 'include'
+  })
     .then(response => {
       if (!response.ok) {
-        throw new Error("Token fetch failed with status: " + response.status);
+        throw new Error(`Token fetch failed with status: ${response.status}`);
       }
-      return response.json();
+      // Prefer header if set, otherwise fall back to body
+      const headerToken = response.headers.get('X-CSRF-Token');
+      return response.json()
+        .then(body => ({
+          csrf_token: headerToken || body.csrf_token,
+          share_url: body.share_url
+        }));
     })
-    .then(data => {
-      window.csrfToken = data.csrf_token;
-      window.SHARE_URL = data.share_url;
-      
-      let metaCSRF = document.querySelector('meta[name="csrf-token"]');
-      if (!metaCSRF) {
-        metaCSRF = document.createElement('meta');
-        metaCSRF.name = 'csrf-token';
-        document.head.appendChild(metaCSRF);
-      }
-      metaCSRF.setAttribute('content', data.csrf_token);
+    .then(({ csrf_token, share_url }) => {
+      // Update globals
+      window.csrfToken = csrf_token;
+      window.SHARE_URL = share_url;
 
-      let metaShare = document.querySelector('meta[name="share-url"]');
-      if (!metaShare) {
-        metaShare = document.createElement('meta');
-        metaShare.name = 'share-url';
-        document.head.appendChild(metaShare);
+      // Sync <meta name="csrf-token">
+      let meta = document.querySelector('meta[name="csrf-token"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'csrf-token';
+        document.head.appendChild(meta);
       }
-      metaShare.setAttribute('content', data.share_url);
+      meta.content = csrf_token;
 
-      return data;
+      // Sync <meta name="share-url">
+      let shareMeta = document.querySelector('meta[name="share-url"]');
+      if (!shareMeta) {
+        shareMeta = document.createElement('meta');
+        shareMeta.name = 'share-url';
+        document.head.appendChild(shareMeta);
+      }
+      shareMeta.content = share_url;
+
+      return { csrf_token, share_url };
     });
 }
 

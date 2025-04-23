@@ -44,6 +44,55 @@ function showToast(msgKey) {
 }
 window.showToast = showToast;
 
+const originalFetch = window.fetch;
+
+/*
+ * @param {string} url
+ * @param {object} options
+ * @returns {Promise<Response>}
+ */
+export async function fetchWithCsrf(url, options = {}) {
+  options = { credentials: 'include', headers: {}, ...options };
+  options.headers['X-CSRF-Token'] = window.csrfToken;
+
+  // 1) First attempt using the original fetch
+  let res = await originalFetch(url, options);
+
+  // 2) Soft‐failure JSON check (200 + {csrf_expired})
+  if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+    const clone = res.clone();
+    const data = await clone.json();
+    if (data.csrf_expired) {
+      const newToken = data.csrf_token;
+      window.csrfToken = newToken;
+      document.querySelector('meta[name="csrf-token"]').content = newToken;
+      options.headers['X-CSRF-Token'] = newToken;
+      return originalFetch(url, options);
+    }
+  }
+
+  // 3) HTTP 403 fallback
+  if (res.status === 403) {
+    let newToken = res.headers.get('X-CSRF-Token');
+    if (!newToken) {
+      const tokRes = await originalFetch('/api/auth/token.php', { credentials: 'include' });
+      if (tokRes.ok) {
+        const body = await tokRes.json();
+        newToken = body.csrf_token;
+      }
+    }
+    if (newToken) {
+      window.csrfToken = newToken;
+      document.querySelector('meta[name="csrf-token"]').content = newToken;
+      options.headers['X-CSRF-Token'] = newToken;
+      res = await originalFetch(url, options);
+    }
+  }
+
+  return res;
+}
+
+
 // wrap the TOTP modal opener to disable other login buttons only for Basic/OIDC flows
 function openTOTPLoginModal() {
   originalOpenTOTPLoginModal();
@@ -236,6 +285,10 @@ function checkAuthentication(showLoginToast = true) {
         if (typeof data.totp_enabled !== "undefined") {
           localStorage.setItem("userTOTPEnabled", data.totp_enabled ? "true" : "false");
         }
+        if (data.csrf_token) {
+          window.csrfToken = data.csrf_token;
+          document.querySelector('meta[name="csrf-token"]').content = data.csrf_token;
+        }
         updateAuthenticatedUI(data);
         return data;
       } else {
@@ -277,11 +330,11 @@ async function submitLogin(data) {
       try {
         const perm = await sendRequest("/api/getUserPermissions.php", "GET");
         if (perm && typeof perm === "object") {
-          localStorage.setItem("folderOnly",   perm.folderOnly   ? "true" : "false");
-          localStorage.setItem("readOnly",     perm.readOnly     ? "true" : "false");
-          localStorage.setItem("disableUpload",perm.disableUpload? "true" : "false");
+          localStorage.setItem("folderOnly", perm.folderOnly ? "true" : "false");
+          localStorage.setItem("readOnly", perm.readOnly ? "true" : "false");
+          localStorage.setItem("disableUpload", perm.disableUpload ? "true" : "false");
         }
-      } catch {}
+      } catch { }
       return window.location.reload();
     }
 
@@ -406,10 +459,10 @@ function initAuth() {
     }
     let url = "/api/addUser.php";
     if (window.setupMode) url += "?setup=1";
-    fetch(url, {
+    fetchWithCsrf(url, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
     })
       .then(response => response.json())
@@ -439,10 +492,10 @@ function initAuth() {
     }
     const confirmed = await showCustomConfirmModal("Are you sure you want to delete user " + usernameToRemove + "?");
     if (!confirmed) return;
-    fetch("/api/removeUser.php", {
+    fetchWithCsrf("/api/removeUser.php", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: usernameToRemove })
     })
       .then(response => response.json())
@@ -478,10 +531,10 @@ function initAuth() {
       return;
     }
     const data = { oldPassword, newPassword, confirmPassword };
-    fetch("/api/changePassword.php", {
+    fetchWithCsrf("/api/changePassword.php", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data)
     })
       .then(response => response.json())
