@@ -30,6 +30,15 @@
 - **start.sh**
 - Session directory setup
 
+- Always sends `credentials: 'include'` and `X-CSRF-Token: window.csrfToken` s
+- On HTTP 403, automatically fetches a fresh CSRF token (from the response header or `/api/auth/token.php`) and retries the request once  
+- Always returns the real `Response` object (no more “clone.json” on every 200)
+- Now calls `fetchWithCsrf('/api/auth/token.php')` to guarantee a fresh token  
+- Checks `res.ok`, then parses JSON to extract `csrf_token` and `share_url`  
+- Updates both `window.csrfToken` and the `<meta name="csrf-token">` & `<meta name="share-url">` tags  
+- Removed Old CSRF logic that cloned every successful response and parsed its JSON body  
+- Removed Any “soft-failure” JSON peek on non-403 responses
+
 ## Changes 4/22/2025 v1.2.3
 
 - Support for custom PUID/PGID via `PUID`/`PGID` environment variables, replacing the need to run the container with `--user`  

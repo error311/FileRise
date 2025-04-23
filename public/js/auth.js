@@ -52,28 +52,24 @@ const originalFetch = window.fetch;
  * @returns {Promise<Response>}
  */
 export async function fetchWithCsrf(url, options = {}) {
-  options = { credentials: 'include', headers: {}, ...options };
-  options.headers['X-CSRF-Token'] = window.csrfToken;
+  // 1) Merge in credentials + header
+  options = {
+    credentials: 'include',
+    ...options,
+  };
+  options.headers = {
+    ...(options.headers || {}),
+    'X-CSRF-Token': window.csrfToken,
+  };
 
-  // 1) First attempt using the original fetch
+  // 2) First attempt
   let res = await originalFetch(url, options);
 
-  // 2) Soft‐failure JSON check (200 + {csrf_expired})
-  if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
-    const clone = res.clone();
-    const data = await clone.json();
-    if (data.csrf_expired) {
-      const newToken = data.csrf_token;
-      window.csrfToken = newToken;
-      document.querySelector('meta[name="csrf-token"]').content = newToken;
-      options.headers['X-CSRF-Token'] = newToken;
-      return originalFetch(url, options);
-    }
-  }
-
-  // 3) HTTP 403 fallback
+  // 3) If we got a 403, try to refresh token & retry
   if (res.status === 403) {
+    // 3a) See if the server gave us a new token header
     let newToken = res.headers.get('X-CSRF-Token');
+    // 3b) Otherwise fall back to the /api/auth/token endpoint
     if (!newToken) {
       const tokRes = await originalFetch('/api/auth/token.php', { credentials: 'include' });
       if (tokRes.ok) {
@@ -82,16 +78,20 @@ export async function fetchWithCsrf(url, options = {}) {
       }
     }
     if (newToken) {
+      // 3c) Update global + meta
       window.csrfToken = newToken;
-      document.querySelector('meta[name="csrf-token"]').content = newToken;
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta) meta.content = newToken;
+
+      // 3d) Retry the original request with the new token
       options.headers['X-CSRF-Token'] = newToken;
       res = await originalFetch(url, options);
     }
   }
 
+  // 4) Return the real Response—no body peeking here!
   return res;
 }
-
 
 // wrap the TOTP modal opener to disable other login buttons only for Basic/OIDC flows
 function openTOTPLoginModal() {

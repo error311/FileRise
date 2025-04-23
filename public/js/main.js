@@ -14,36 +14,20 @@ import { initFileActions, renameFile, openDownloadModal, confirmSingleDownload }
 import { editFile, saveFile } from './fileEditor.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
-// Remove the retry logic version and just use loadCsrfToken directly:
-/**
- * Fetches the current CSRF token (and share URL), updates window globals
- * and <meta> tags, and returns the data.
- *
- * @returns {Promise<{csrf_token: string, share_url: string}>}
- */
+
 export function loadCsrfToken() {
-  return fetch('/api/auth/token.php', {
-    method: 'GET',
-    credentials: 'include'
+  return fetchWithCsrf('/api/auth/token.php', {
+    method: 'GET'
   })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`Token fetch failed with status: ${response.status}`);
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`Token fetch failed with status ${res.status}`);
       }
-      // Prefer header if set, otherwise fall back to body
-      const headerToken = response.headers.get('X-CSRF-Token');
-      return response.json()
-        .then(body => ({
-          csrf_token: headerToken || body.csrf_token,
-          share_url: body.share_url
-        }));
+      return res.json();
     })
     .then(({ csrf_token, share_url }) => {
-      // Update globals
+      // Update global and <meta>
       window.csrfToken = csrf_token;
-      window.SHARE_URL = share_url;
-
-      // Sync <meta name="csrf-token">
       let meta = document.querySelector('meta[name="csrf-token"]');
       if (!meta) {
         meta = document.createElement('meta');
@@ -52,7 +36,6 @@ export function loadCsrfToken() {
       }
       meta.content = csrf_token;
 
-      // Sync <meta name="share-url">
       let shareMeta = document.querySelector('meta[name="share-url"]');
       if (!shareMeta) {
         shareMeta = document.createElement('meta');
