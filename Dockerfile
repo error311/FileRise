@@ -59,14 +59,17 @@ RUN chown -R root:www-data /var/www && \
     chown -R www-data:www-data /var/www/public/uploads /var/www/users /var/www/metadata && \
     chmod -R 775 /var/www/public/uploads /var/www/users /var/www/metadata  # writable upload areas
 
-# Preserve your uploads symlink
-RUN cd /var/www/public && ln -s ../uploads uploads
-
 # Apache site configuration
 RUN cat <<'EOF' > /etc/apache2/sites-available/000-default.conf
 <VirtualHost *:80>
     ServerAdmin webmaster@localhost
     DocumentRoot /var/www/public
+    Alias /uploads/ /var/www/uploads/
+    <Directory "/var/www/uploads/">
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
     <Directory "/var/www/public">
         AllowOverride All
         Require all granted

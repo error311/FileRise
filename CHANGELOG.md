@@ -30,6 +30,7 @@
   - Creates and secures `metadata/log` for Apache logs  
   - Dynamically creates and sets permissions on `uploads`, `users`, and `metadata` directories at startup  
 - Apache VirtualHost updated to redirect `ErrorLog` and `CustomLog` into `/var/www/metadata/log`
+- docker: remove symlink add alias for uploads folder
 
 ---
 
