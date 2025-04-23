@@ -917,10 +917,11 @@ class UserController
                      $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
                      $all = json_decode($dec, true) ?: [];
                  }
+                 $isAdmin = ((int)userModel::getUserRole($username) === 1);
                  $all[$token] = [
                      'username' => $username,
                      'expiry'   => $expiry,
-                     'isAdmin'  => $_SESSION['isAdmin']
+                     'isAdmin'  => $isAdmin
                  ];
                  file_put_contents(
                      $tokFile,
@@ -949,7 +950,7 @@ class UserController
              session_regenerate_id(true);
              $_SESSION['authenticated'] = true;
              $_SESSION['username']      = $username;
-             $_SESSION['isAdmin']       = (userModel::getUserRole($username) === "1");
+             $_SESSION['isAdmin']       = $isAdmin;
              $_SESSION['folderOnly']    = loadUserPermissions($username);
      
              // Clean up

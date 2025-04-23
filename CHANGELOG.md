@@ -14,7 +14,10 @@
 - **Enhanced** “remember-me” re-login path at top of `checkAuth()`  
   - Calls `AuthModel::validateRememberToken()` when session is missing but `remember_me_token` cookie present  
   - Repopulates `$_SESSION['authenticated']`, `username`, `isAdmin`, `folderOnly`, `readOnly`, `disableUpload` from payload  
-  - Regenerates session ID and CSRF token, then immediately returns JSON and exits  
+  - Regenerates session ID and CSRF token, then immediately returns JSON and exits
+  
+  - **Updated** `userController.php`
+    - Fixed totp isAdmin when session is missing but `remember_me_token` cookie present
 
 ## Changes 4/22/2025 v1.2.3
 
