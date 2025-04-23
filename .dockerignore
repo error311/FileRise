@@ -1,0 +1,21 @@
+# Source control
+.git
+.gitignore
+.github
+.github/**
+Dockerfile*
+resources/
+
+# Node dependencies
+node_modules/
+
+# Logs and temp files
+*.log
+tmp/
+
+# Local env settings
+.env
+
+# IDE/project files
+.vscode/
+.DS_Store

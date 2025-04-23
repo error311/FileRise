@@ -1,162 +1,108 @@
 #!/bin/bash
-
+set -euo pipefail
 echo "🚀 Running start.sh..."
 
-# Warn if default persistent tokens key is in use
-if [ "$PERSISTENT_TOKENS_KEY" = "default_please_change_this_key" ]; then
-  echo "⚠️ WARNING: Using default persistent tokens key. Please override PERSISTENT_TOKENS_KEY for production."
+# 1) Token‐key warning
+if [ "${PERSISTENT_TOKENS_KEY}" = "default_please_change_this_key" ]; then
+  echo "⚠️ WARNING: Using default persistent tokens key—override for production."
 fi
 
-# Update config.php based on environment variables
+# 2) Update config.php based on environment variables
 CONFIG_FILE="/var/www/config/config.php"
-if [ -f "$CONFIG_FILE" ]; then
-  echo "🔄 Updating config.php based on environment variables..."
-  if [ -n "$TIMEZONE" ]; then
-    echo "   Setting TIMEZONE to $TIMEZONE"
-    sed -i "s|define('TIMEZONE',[[:space:]]*'[^']*');|define('TIMEZONE', '$TIMEZONE');|" "$CONFIG_FILE"
+if [ -f "${CONFIG_FILE}" ]; then
+  echo "🔄 Updating config.php from env vars..."
+  [ -n "${TIMEZONE:-}" ]       && sed -i "s|define('TIMEZONE',[[:space:]]*'[^']*');|define('TIMEZONE', '${TIMEZONE}');|" "${CONFIG_FILE}"
+  [ -n "${DATE_TIME_FORMAT:-}" ] && sed -i "s|define('DATE_TIME_FORMAT',[[:space:]]*'[^']*');|define('DATE_TIME_FORMAT', '${DATE_TIME_FORMAT}');|" "${CONFIG_FILE}"
+  if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
+    sed -i "s|define('TOTAL_UPLOAD_SIZE',[[:space:]]*'[^']*');|define('TOTAL_UPLOAD_SIZE', '${TOTAL_UPLOAD_SIZE}');|" "${CONFIG_FILE}"
   fi
-  if [ -n "$DATE_TIME_FORMAT" ]; then
-    echo "🔄 Setting DATE_TIME_FORMAT to $DATE_TIME_FORMAT"
-    sed -i "s|define('DATE_TIME_FORMAT',[[:space:]]*'[^']*');|define('DATE_TIME_FORMAT', '$DATE_TIME_FORMAT');|" "$CONFIG_FILE"
-  fi
-  if [ -n "$TOTAL_UPLOAD_SIZE" ]; then
-    echo "🔄 Setting TOTAL_UPLOAD_SIZE to $TOTAL_UPLOAD_SIZE"
-    sed -i "s|define('TOTAL_UPLOAD_SIZE',[[:space:]]*'[^']*');|define('TOTAL_UPLOAD_SIZE', '$TOTAL_UPLOAD_SIZE');|" "$CONFIG_FILE"
-  fi
-  if [ -n "$SECURE" ]; then
-  echo "🔄 Setting SECURE to $SECURE"
-  sed -i "s|\$envSecure = getenv('SECURE');|\$envSecure = '$SECURE';|" "$CONFIG_FILE"
-  fi
-  if [ -n "$SHARE_URL" ]; then
-  echo "🔄 Setting SHARE_URL to $SHARE_URL"
-  sed -i "s|define('SHARE_URL',[[:space:]]*'[^']*');|define('SHARE_URL', '$SHARE_URL');|" "$CONFIG_FILE"
-  fi
+  [ -n "${SECURE:-}" ]         && sed -i "s|\$envSecure = getenv('SECURE');|\$envSecure = '${SECURE}';|" "${CONFIG_FILE}"
+  [ -n "${SHARE_URL:-}" ]      && sed -i "s|define('SHARE_URL',[[:space:]]*'[^']*');|define('SHARE_URL', '${SHARE_URL}');|" "${CONFIG_FILE}"
 fi
 
-# Ensure the PHP configuration directory exists
+# 2.1) Prepare metadata/log for Apache logs
+mkdir -p /var/www/metadata/log
+chown www-data:www-data    /var/www/metadata/log
+chmod 775                  /var/www/metadata/log
+
+# 2.2) Prepare other dynamic dirs
+for d in uploads users metadata; do
+  tgt="/var/www/${d}"
+  mkdir -p "${tgt}"
+  chown www-data:www-data "${tgt}"
+  chmod 775 "${tgt}"
+done
+
+# 3) Ensure PHP config dir & set upload limits
 mkdir -p /etc/php/8.3/apache2/conf.d
-
-# Update PHP upload limits at runtime if TOTAL_UPLOAD_SIZE is set.
-if [ -n "$TOTAL_UPLOAD_SIZE" ]; then
-  echo "🔄 Updating PHP upload limits with TOTAL_UPLOAD_SIZE=$TOTAL_UPLOAD_SIZE"
-  echo "upload_max_filesize = $TOTAL_UPLOAD_SIZE" > /etc/php/8.3/apache2/conf.d/99-custom.ini
-  echo "post_max_size = $TOTAL_UPLOAD_SIZE" >> /etc/php/8.3/apache2/conf.d/99-custom.ini
+if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
+  echo "🔄 Setting PHP upload limits to ${TOTAL_UPLOAD_SIZE}"
+  cat > /etc/php/8.3/apache2/conf.d/99-custom.ini <<EOF
+upload_max_filesize = ${TOTAL_UPLOAD_SIZE}
+post_max_size = ${TOTAL_UPLOAD_SIZE}
+EOF
 fi
 
-# Update Apache LimitRequestBody based on TOTAL_UPLOAD_SIZE if set.
-if [ -n "$TOTAL_UPLOAD_SIZE" ]; then
-  size_str=$(echo "$TOTAL_UPLOAD_SIZE" | tr '[:upper:]' '[:lower:]')
-  factor=1
+# 4) Adjust Apache LimitRequestBody
+if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
+  # convert to bytes
+  size_str=$(echo "${TOTAL_UPLOAD_SIZE}" | tr '[:upper:]' '[:lower:]')
   case "${size_str: -1}" in
-    g)
-      factor=$((1024*1024*1024))
-      size_num=${size_str%g}
-      ;;
-    m)
-      factor=$((1024*1024))
-      size_num=${size_str%m}
-      ;;
-    k)
-      factor=1024
-      size_num=${size_str%k}
-      ;;
-    *)
-      size_num=$size_str
-      ;;
+    g) factor=$((1024*1024*1024)); num=${size_str%g} ;;
+    m) factor=$((1024*1024));       num=${size_str%m} ;;
+    k) factor=1024;                 num=${size_str%k} ;;
+    *) factor=1;                    num=${size_str}   ;;
   esac
-  LIMIT_REQUEST_BODY=$((size_num * factor))
-  echo "🔄 Setting Apache LimitRequestBody to $LIMIT_REQUEST_BODY bytes (from TOTAL_UPLOAD_SIZE=$TOTAL_UPLOAD_SIZE)"
-  cat <<EOF > /etc/apache2/conf-enabled/limit_request_body.conf
+  LIMIT_REQUEST_BODY=$(( num * factor ))
+  echo "🔄 Setting Apache LimitRequestBody to ${LIMIT_REQUEST_BODY} bytes"
+  cat > /etc/apache2/conf-enabled/limit_request_body.conf <<EOF
 <Directory "/var/www/public">
-    LimitRequestBody $LIMIT_REQUEST_BODY
+    LimitRequestBody ${LIMIT_REQUEST_BODY}
 </Directory>
 EOF
 fi
 
-# Set Apache Timeout (default is 300 seconds)
-echo "🔄 Setting Apache Timeout to 600 seconds"
-cat <<EOF > /etc/apache2/conf-enabled/timeout.conf
+# 5) Configure Apache timeout (600s)
+cat > /etc/apache2/conf-enabled/timeout.conf <<EOF
 Timeout 600
 EOF
 
-echo "🔥 Final Apache Timeout configuration:"
-cat /etc/apache2/conf-enabled/timeout.conf
-
-# Update Apache ports if environment variables are provided
-if [ -n "$HTTP_PORT" ]; then
-  echo "🔄 Setting Apache HTTP port to $HTTP_PORT"
-  sed -i "s/^Listen 80$/Listen $HTTP_PORT/" /etc/apache2/ports.conf
-  sed -i "s/<VirtualHost \*:80>/<VirtualHost *:$HTTP_PORT>/" /etc/apache2/sites-available/000-default.conf
+# 6) Override ports if provided
+if [ -n "${HTTP_PORT:-}" ]; then
+  sed -i "s/^Listen 80$/Listen ${HTTP_PORT}/" /etc/apache2/ports.conf
+  sed -i "s/<VirtualHost \*:80>/<VirtualHost *:${HTTP_PORT}>/" /etc/apache2/sites-available/000-default.conf
+fi
+if [ -n "${HTTPS_PORT:-}" ]; then
+  sed -i "s/^Listen 443$/Listen ${HTTPS_PORT}/" /etc/apache2/ports.conf
 fi
 
-if [ -n "$HTTPS_PORT" ]; then
-  echo "🔄 Setting Apache HTTPS port to $HTTPS_PORT"
-  sed -i "s/^Listen 443$/Listen $HTTPS_PORT/" /etc/apache2/ports.conf
-fi
-
-# Update Apache ServerName if environment variable is provided
-if [ -n "$SERVER_NAME" ]; then
-  echo "🔄 Setting Apache ServerName to $SERVER_NAME"
-  echo "ServerName $SERVER_NAME" >> /etc/apache2/apache2.conf
+# 7) Set ServerName
+if [ -n "${SERVER_NAME:-}" ]; then
+  echo "ServerName ${SERVER_NAME}" >> /etc/apache2/apache2.conf
 else
-  echo "🔄 Setting Apache ServerName to default: FileRise"
   echo "ServerName FileRise" >> /etc/apache2/apache2.conf
 fi
 
-echo "Final /etc/apache2/ports.conf content:"
-cat /etc/apache2/ports.conf
+# 8) Prepare dynamic data directories with least privilege
+for d in uploads users metadata; do
+  tgt="/var/www/${d}"
+  mkdir -p "${tgt}"
+  chown www-data:www-data "${tgt}"
+  chmod 775 "${tgt}"
+done
 
-echo "📁 Web app is served from /var/www/public."
-
-# Ensure the uploads folder exists in /var/www
-mkdir -p /var/www/uploads
-echo "🔑 Fixing permissions for /var/www/uploads..."
-chown -R ${PUID:-99}:${PGID:-100} /var/www/uploads
-chmod -R 775 /var/www/uploads
-
-# Ensure the users folder exists in /var/www
-mkdir -p /var/www/users
-echo "🔑 Fixing permissions for /var/www/users..."
-chown -R ${PUID:-99}:${PGID:-100} /var/www/users
-chmod -R 775 /var/www/users
-
-# Ensure the metadata folder exists in /var/www
-mkdir -p /var/www/metadata
-echo "🔑 Fixing permissions for /var/www/metadata..."
-chown -R ${PUID:-99}:${PGID:-100} /var/www/metadata
-chmod -R 775 /var/www/metadata
-
-# Create users.txt only if it doesn't already exist (preserving persistent data)
+# 9) Initialize persistent files if absent
 if [ ! -f /var/www/users/users.txt ]; then
-  echo "ℹ️ users.txt not found in persistent storage; creating new file..."
   echo "" > /var/www/users/users.txt
-  chown ${PUID:-99}:${PGID:-100} /var/www/users/users.txt
+  chown www-data:www-data /var/www/users/users.txt
   chmod 664 /var/www/users/users.txt
-else
-  echo "ℹ️ users.txt already exists; preserving persistent data."
 fi
 
-# Create createdTags.json only if it doesn't already exist (preserving persistent data)
 if [ ! -f /var/www/metadata/createdTags.json ]; then
-  echo "ℹ️ createdTags.json not found in persistent storage; creating new file..."
   echo "[]" > /var/www/metadata/createdTags.json
-  chown ${PUID:-99}:${PGID:-100} /var/www/metadata/createdTags.json
+  chown www-data:www-data /var/www/metadata/createdTags.json
   chmod 664 /var/www/metadata/createdTags.json
-else
-  echo "ℹ️ createdTags.json already exists; preserving persistent data."
 fi
-
-# Optionally, fix permissions for the rest of /var/www
-echo "🔑 Fixing permissions for /var/www..."
-find /var/www -type f -exec chmod 664 {} \;
-find /var/www -type d -exec chmod 775 {} \;
-chown -R ${PUID:-99}:${PGID:-100} /var/www
-
-echo "🔥 Final PHP configuration (99-custom.ini):"
-cat /etc/php/8.3/apache2/conf.d/99-custom.ini
-
-echo "🔥 Final Apache configuration (limit_request_body.conf):"
-cat /etc/apache2/conf-enabled/limit_request_body.conf
 
 echo "🔥 Starting Apache..."
 exec apachectl -D FOREGROUND

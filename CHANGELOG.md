@@ -22,6 +22,14 @@
 - Updated `AdminModel` & `AdminController` to persist and validate new settings  
 - Enhanced `shareFolder()` view to pull from admin config and format the max‑upload‑size label
 - Restored the MIT license copyright line that was inadvertently removed.
+- Move .htaccess to public folder this was mistake since API refactor.
+- gitattributes to ignore resources/ & .github/ on export
+- Hardened `Dockerfile` permissions: all code files owned by `root:www-data` (dirs `755`, files `644`), only `uploads/`, `users/` and `metadata/` are writable by `www-data` (`775`)
+- `.dockerignore` entry to exclude the `.github` directory from build context  
+- `start.sh`:
+  - Creates and secures `metadata/log` for Apache logs  
+  - Dynamically creates and sets permissions on `uploads`, `users`, and `metadata` directories at startup  
+- Apache VirtualHost updated to redirect `ErrorLog` and `CustomLog` into `/var/www/metadata/log`
 
 ---
 

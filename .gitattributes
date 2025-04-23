@@ -1,2 +1,4 @@
 public/api.html linguist-documentation
 public/openapi.json linguist-documentation
+resources/ export-ignore
+.github/ export-ignore
