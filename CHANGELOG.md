@@ -1,5 +1,18 @@
 # Changelog
 
+## Changes 4/24/2025
+
+- Enhance README and wiki with expanded installation instructions
+- Adjusted Dockerfile’s Apache vhost to:
+  - Alias `/uploads/` to `/var/www/uploads/` with PHP engine disabled and directory indexes off  
+  - Disable HTTP TRACE and tune keep-alive (On, max 100 requests, 5s timeout) and server Timeout (60s)  
+  - Add security headers (`X-Frame-Options`, `X-Content-Type-Options`, `X-XSS-Protection`, `Referrer-Policy`)  
+  - Enable `mod_deflate` compression for HTML, plain text, CSS, JS and JSON  
+  - Configure `mod_expires` caching for images (1 month), CSS (1 week) and JS (3 hour)  
+  - Deny access to hidden files (dot-files)
+- Add access control in public/.htaccess for api.html & openapi.json; update Nginx example in wiki
+- Remove obsolete folders from repo root
+
 ## Changes 4/23/2025 1.2.4
 
 **AuthModel**  

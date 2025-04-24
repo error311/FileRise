@@ -1,7 +1,7 @@
 # FileRise
 
 **Elevate your File Management** – A modern, self-hosted web file manager.
-Upload, organize, and share files through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, **FileRise** makes file management on your server a breeze.
+Upload, organize, and share files or folders through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, **FileRise** makes file management on your server a breeze.
 
 **4/3/2025 Video demo:**
 
@@ -115,7 +115,7 @@ If you prefer to run FileRise on a traditional web server (LAMP stack or similar
 git clone https://github.com/error311/FileRise.git  
 ```
 
-Place the files into your web server’s directory (e.g., `/var/www/html/filerise`). It can be in a subfolder (just adjust the `BASE_URL` in config as below).
+Place the files into your web server’s directory (e.g., `/var/www/public`). It can be in a subfolder (just adjust the `BASE_URL` in config as below).
 
 - **Composer Dependencies:** If you plan to use OIDC (SSO login), install Composer and run `composer install` in the FileRise directory. (This pulls in a couple of PHP libraries like jumbojett/openid-connect for OAuth support.)
 

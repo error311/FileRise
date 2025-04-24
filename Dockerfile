@@ -62,19 +62,64 @@ RUN chown -R root:www-data /var/www && \
 # Apache site configuration
 RUN cat <<'EOF' > /etc/apache2/sites-available/000-default.conf
 <VirtualHost *:80>
+    # Global settings
+    TraceEnable off
+    KeepAlive On
+    MaxKeepAliveRequests 100
+    KeepAliveTimeout 5
+    Timeout 60
+
     ServerAdmin webmaster@localhost
     DocumentRoot /var/www/public
+
+    # Security headers for all responses
+    <IfModule mod_headers.c>
+      Header always set X-Frame-Options "SAMEORIGIN"
+      Header always set X-Content-Type-Options "nosniff"
+      Header always set X-XSS-Protection "1; mode=block"
+      Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    </IfModule>
+
+    # Compression
+    <IfModule mod_deflate.c>
+      AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json
+    </IfModule>
+
+    # Cache static assets
+    <IfModule mod_expires.c>
+      ExpiresActive on
+      ExpiresByType image/jpeg      "access plus 1 month"
+      ExpiresByType image/png       "access plus 1 month"
+      ExpiresByType text/css        "access plus 1 week"
+      ExpiresByType application/javascript "access plus 3 hour"
+    </IfModule>
+
+    # Protect uploads directory
     Alias /uploads/ /var/www/uploads/
     <Directory "/var/www/uploads/">
         Options -Indexes
         AllowOverride None
+        <IfModule mod_php7.c>
+           php_flag engine off
+        </IfModule>
+        <IfModule mod_php.c>
+           php_flag engine off
+        </IfModule>
         Require all granted
     </Directory>
+
+    # Public directory
     <Directory "/var/www/public">
         AllowOverride All
         Require all granted
-        DirectoryIndex index.html
+        DirectoryIndex index.html index.php
     </Directory>
+
+    # Deny access to hidden files
+    <FilesMatch "^\.">
+      Require all denied
+    </FilesMatch>
+
     ErrorLog /var/www/metadata/log/error.log
     CustomLog /var/www/metadata/log/access.log combined
 </VirtualHost>
