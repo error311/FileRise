@@ -38,6 +38,7 @@
 - Updates both `window.csrfToken` and the `<meta name="csrf-token">` & `<meta name="share-url">` tags  
 - Removed Old CSRF logic that cloned every successful response and parsed its JSON body  
 - Removed Any “soft-failure” JSON peek on non-403 responses
+- Add missing permissions in `UserModel.php` for TOTP login.
 
 ## Changes 4/22/2025 v1.2.3
 
