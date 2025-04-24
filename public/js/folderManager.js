@@ -104,24 +104,26 @@ export function setupBreadcrumbDelegation() {
 
 // Click handler via delegation
 function breadcrumbClickHandler(e) {
+  // find the nearest .breadcrumb-link
   const link = e.target.closest(".breadcrumb-link");
   if (!link) return;
+
   e.stopPropagation();
   e.preventDefault();
 
-  const folder = link.getAttribute("data-folder");
+  const folder = link.dataset.folder;
   window.currentFolder = folder;
   localStorage.setItem("lastOpenedFolder", folder);
 
-  // Update the container with sanitized breadcrumbs.
-  const container = document.getElementById("fileListTitle");
-  const sanitizedBreadcrumb = DOMPurify.sanitize(renderBreadcrumb(folder));
-  container.innerHTML = t("files_in") + " (" + sanitizedBreadcrumb + ")";
-
+  // rebuild the title safely
+  updateBreadcrumbTitle(folder);
   expandTreePath(folder);
-  document.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
-  const targetOption = document.querySelector(`.folder-option[data-folder="${folder}"]`);
-  if (targetOption) targetOption.classList.add("selected");
+  document.querySelectorAll(".folder-option").forEach(el =>
+    el.classList.remove("selected")
+  );
+  const target = document.querySelector(`.folder-option[data-folder="${folder}"]`);
+  if (target) target.classList.add("selected");
+
   loadFileList(folder);
 }
 
@@ -332,6 +334,48 @@ function folderDropHandler(event) {
     });
 }
 
+function renderBreadcrumbFragment(folderPath) {
+  const frag = document.createDocumentFragment();
+  const parts = folderPath.split("/");
+  let acc = "";
+
+  parts.forEach((part, idx) => {
+    acc = idx === 0 ? part : acc + "/" + part;
+
+    const span = document.createElement("span");
+    span.classList.add("breadcrumb-link");
+    span.dataset.folder = acc;
+    span.textContent = part;
+    frag.appendChild(span);
+
+    if (idx < parts.length - 1) {
+      frag.appendChild(document.createTextNode(" / "));
+    }
+  });
+
+  return frag;
+}
+
+function updateBreadcrumbTitle(folder) {
+  const container = document.getElementById("fileListTitle");
+  container.textContent = "";  // clear old
+
+  // prefix
+  container.appendChild(
+    document.createTextNode(`${t("files_in")} (`)
+  );
+
+  // the actual crumbs
+  container.appendChild(
+    renderBreadcrumbFragment(folder)
+  );
+
+  // closing paren
+  container.appendChild(
+    document.createTextNode(")")
+  );
+}
+
 /* ----------------------
    Main Folder Tree Rendering and Event Binding
 ----------------------*/
@@ -421,7 +465,16 @@ export async function loadFolderTree(selectedFolder) {
     localStorage.setItem("lastOpenedFolder", window.currentFolder);
 
     const titleEl = document.getElementById("fileListTitle");
-    titleEl.innerHTML = t("files_in") + " (" + renderBreadcrumb(window.currentFolder) + ")";
+    titleEl.textContent = "";
+
+    titleEl.appendChild(
+      document.createTextNode(t("files_in") + " (")
+    );
+
+    const breadcrumbFragment = renderBreadcrumbFragment(window.currentFolder);
+    titleEl.appendChild(breadcrumbFragment);
+
+    titleEl.appendChild(document.createTextNode(")"));
     setupBreadcrumbDelegation();
     loadFileList(window.currentFolder);
 

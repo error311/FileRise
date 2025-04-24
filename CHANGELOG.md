@@ -39,6 +39,11 @@
 - Removed Old CSRF logic that cloned every successful response and parsed its JSON body  
 - Removed Any “soft-failure” JSON peek on non-403 responses
 - Add missing permissions in `UserModel.php` for TOTP login.
+- **Prevent XSS in breadcrumbs**  
+  - Replaced `innerHTML` calls in `fileListTitle` with a new `updateBreadcrumbTitle()` helper that uses `textContent` + `DocumentFragment`.  
+  - Introduced `renderBreadcrumbFragment()` to build each breadcrumb segment as a `<span class="breadcrumb-link" data-folder="…">` node.  
+  - Added `setupBreadcrumbDelegation()` to handle clicks via event delegation on the container, eliminating per-element listeners.  
+  - Removed any raw HTML concatenation to satisfy CodeQL and ensure all breadcrumb text is safely escaped.
 
 ## Changes 4/22/2025 v1.2.3
 
