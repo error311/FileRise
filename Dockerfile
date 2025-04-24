@@ -126,7 +126,7 @@ RUN cat <<'EOF' > /etc/apache2/sites-available/000-default.conf
 EOF
 
 # Enable required modules
-RUN a2enmod rewrite headers
+RUN a2enmod rewrite headers proxy proxy_fcgi expires deflate
 
 EXPOSE 80 443
 COPY start.sh /usr/local/bin/start.sh

@@ -10,12 +10,26 @@
   - Enable `mod_deflate` compression for HTML, plain text, CSS, JS and JSON  
   - Configure `mod_expires` caching for images (1 month), CSS (1 week) and JS (3 hour)  
   - Deny access to hidden files (dot-files)
-- Add access control in public/.htaccess for api.html & openapi.json; update Nginx example in wiki
+~~- Add access control in public/.htaccess for api.html & openapi.json; update Nginx example in wiki~~
 - Remove obsolete folders from repo root
-- Embed API documentation (`api.html`) directly in the FileRise UI as a full-screen modal  
+- Embed API documentation (`api.php`) directly in the FileRise UI as a full-screen modal  
   - Introduced `openApiModalBtn` in the user panel to launch the API modal  
-  - Added `#apiModal` container with a same-origin `<iframe src="api.html">` so session cookies authenticate automatically  
+  - Added `#apiModal` container with a same-origin `<iframe src="api.php">` so session cookies authenticate automatically  
   - Close control uses the existing `.editor-close-btn` for consistent styling and hover effects
+
+- public/api.html has been replaced by the new api.php wrapper
+- **`public/api.php`**  
+  - Single PHP endpoint for both UI and spec  
+  - Enforces `$_SESSION['authenticated']`  
+  - Renders the Redoc API docs when accessed normally  
+  - Streams the JSON spec from `openapi.json.dist` when called as `api.php?spec=1`  
+  - Redirects unauthenticated users to `index.html?redirect=/api.php`
+- **Moved** `public/openapi.json` → `openapi.json.dist` (moved outside of `public/`) to prevent direct static access  
+- **Dockerfile**: enabled required Apache modules for rewrite, security headers, proxying, caching and compression:
+
+  ```dockerfile
+  RUN a2enmod rewrite headers proxy proxy_fcgi expires deflate
+  ```
 
 ## Changes 4/23/2025 1.2.4
 

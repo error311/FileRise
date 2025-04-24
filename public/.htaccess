@@ -15,10 +15,6 @@ DirectoryIndex index.html
   Require all denied
 </FilesMatch>
 
-<FilesMatch "^(api\.html|openapi\.json)$">
-  Require valid-user
-</FilesMatch>
-
 # -----------------------------
 # Enforce HTTPS (optional)
 # -----------------------------

@@ -245,12 +245,15 @@ export function openUserPanel() {
   background: rgba(0,0,0,0.8); z-index: 4000; display:none;
   align-items: center; justify-content: center;
 `;
+
+// api.php
 apiModal.innerHTML = `
   <div style="position:relative; width:90vw; height:90vh; background:#fff; border-radius:8px; overflow:hidden;">
     <div class="editor-close-btn" id="closeApiModal">&times;</div>
-    <iframe src="api.html" style="width:100%;height:100%;border:none;"></iframe>
+    <iframe src="api.php" style="width:100%;height:100%;border:none;"></iframe>
   </div>
 `;
+
     document.body.appendChild(apiModal);
 
     document.getElementById("openApiModalBtn").addEventListener("click", () => {
