@@ -867,126 +867,123 @@ class UserController
      * )
      */
 
-    public function verifyTOTP()
-    {
-        header('Content-Type: application/json');
-        header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';");
-
-        // Rate‑limit
-        if (!isset($_SESSION['totp_failures'])) {
-            $_SESSION['totp_failures'] = 0;
-        }
-        if ($_SESSION['totp_failures'] >= 5) {
-            http_response_code(429);
-            echo json_encode(['status' => 'error', 'message' => 'Too many TOTP attempts. Please try again later.']);
-            exit;
-        }
-
-        // Must be authenticated OR pending login
-        if (!((!empty($_SESSION['authenticated'])) || isset($_SESSION['pending_login_user']))) {
-            http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Not authenticated']);
-            exit;
-        }
-
-        // CSRF check
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $csrfHeader = $headersArr['x-csrf-token'] ?? '';
-        if (empty($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Invalid CSRF token']);
-            exit;
-        }
-
-        // Parse and validate input
-        $inputData = json_decode(file_get_contents("php://input"), true);
-        $code = trim($inputData['totp_code'] ?? '');
-        if (!preg_match('/^\d{6}$/', $code)) {
-            http_response_code(400);
-            echo json_encode(['status' => 'error', 'message' => 'A valid 6-digit TOTP code is required']);
-            exit;
-        }
-
-        // TFA helper
-        $tfa = new \RobThree\Auth\TwoFactorAuth(
-            new \RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider(),
-            'FileRise',
-            6,
-            30,
-            \RobThree\Auth\Algorithm::Sha1
-        );
-
-        // Pending‑login flow (first password step passed)
-        if (isset($_SESSION['pending_login_user'])) {
-            $username       = $_SESSION['pending_login_user'];
-            $pendingSecret  = $_SESSION['pending_login_secret'] ?? null;
-            $rememberMe     = $_SESSION['pending_login_remember_me'] ?? false;
-
-            if (!$pendingSecret || !$tfa->verifyCode($pendingSecret, $code)) {
-                $_SESSION['totp_failures']++;
-                http_response_code(400);
-                echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
-                exit;
-            }
-
-            // === Issue “remember me” token if requested ===
-            if ($rememberMe) {
-                $tokFile = USERS_DIR . 'persistent_tokens.json';
-                $token   = bin2hex(random_bytes(32));
-                $expiry  = time() + 30 * 24 * 60 * 60;
-                $all     = [];
-
-                if (file_exists($tokFile)) {
-                    $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
-                    $all = json_decode($dec, true) ?: [];
-                }
-                $isAdmin = ((int)userModel::getUserRole($username) === 1);
-                $all[$token] = [
-                    'username' => $username,
-                    'expiry'   => $expiry,
-                    'isAdmin'  => $isAdmin
-                ];
-                file_put_contents(
-                    $tokFile,
-                    encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
-                    LOCK_EX
-                );
-
-                $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-
-                // Persistent cookie
-                setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
-
-                // Re‑issue PHP session cookie
-                setcookie(
-                    session_name(),
-                    session_id(),
-                    $expiry,
-                    '/',
-                    '',
-                    $secure,
-                    true
-                );
-            }
-
-            // Finalize login
-            session_regenerate_id(true);
-            $_SESSION['authenticated'] = true;
-            $_SESSION['username']      = $username;
-            $_SESSION['isAdmin']       = $isAdmin;
-            $_SESSION['folderOnly']    = loadUserPermissions($username);
-
-            // Clean up
-            unset(
-                $_SESSION['pending_login_user'],
-                $_SESSION['pending_login_secret'],
-                $_SESSION['pending_login_remember_me'],
-                $_SESSION['totp_failures']
-            );
-
-            echo json_encode(['status' => 'ok', 'message' => 'Login successful']);
-            exit;
-        }
+     public function verifyTOTP()
+     {
+         header('Content-Type: application/json');
+         header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';");
+     
+         // Rate-limit
+         if (!isset($_SESSION['totp_failures'])) {
+             $_SESSION['totp_failures'] = 0;
+         }
+         if ($_SESSION['totp_failures'] >= 5) {
+             http_response_code(429);
+             echo json_encode(['status' => 'error', 'message' => 'Too many TOTP attempts. Please try again later.']);
+             exit;
+         }
+     
+         // Must be authenticated OR pending login
+         if (empty($_SESSION['authenticated']) && !isset($_SESSION['pending_login_user'])) {
+             http_response_code(403);
+             echo json_encode(['status' => 'error', 'message' => 'Not authenticated']);
+             exit;
+         }
+     
+         // CSRF check
+         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
+         $csrfHeader = $headersArr['x-csrf-token'] ?? '';
+         if (empty($_SESSION['csrf_token']) || $csrfHeader !== $_SESSION['csrf_token']) {
+             http_response_code(403);
+             echo json_encode(['status' => 'error', 'message' => 'Invalid CSRF token']);
+             exit;
+         }
+     
+         // Parse & validate input
+         $inputData = json_decode(file_get_contents("php://input"), true);
+         $code = trim($inputData['totp_code'] ?? '');
+         if (!preg_match('/^\d{6}$/', $code)) {
+             http_response_code(400);
+             echo json_encode(['status' => 'error', 'message' => 'A valid 6-digit TOTP code is required']);
+             exit;
+         }
+     
+         // TFA helper
+         $tfa = new \RobThree\Auth\TwoFactorAuth(
+             new \RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider(),
+             'FileRise', 6, 30, \RobThree\Auth\Algorithm::Sha1
+         );
+     
+         // === Pending-login flow (we just came from auth and need to finish login) ===
+         if (isset($_SESSION['pending_login_user'])) {
+             $username    = $_SESSION['pending_login_user'];
+             $pendingSecret = $_SESSION['pending_login_secret'] ?? null;
+             $rememberMe  = $_SESSION['pending_login_remember_me'] ?? false;
+     
+             if (!$pendingSecret || !$tfa->verifyCode($pendingSecret, $code)) {
+                 $_SESSION['totp_failures']++;
+                 http_response_code(400);
+                 echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
+                 exit;
+             }
+     
+             // Issue “remember me” token if requested
+             if ($rememberMe) {
+                 $tokFile = USERS_DIR . 'persistent_tokens.json';
+                 $token = bin2hex(random_bytes(32));
+                 $expiry = time() + 30 * 24 * 60 * 60;
+                 $all = [];
+                 if (file_exists($tokFile)) {
+                     $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
+                     $all = json_decode($dec, true) ?: [];
+                 }
+                 $all[$token] = [
+                     'username'     => $username,
+                     'expiry'       => $expiry,
+                     'isAdmin'      => ((int)userModel::getUserRole($username) === 1),
+                     'folderOnly'   => loadUserPermissions($username)['folderOnly']   ?? false,
+                     'readOnly'     => loadUserPermissions($username)['readOnly']     ?? false,
+                     'disableUpload'=> loadUserPermissions($username)['disableUpload']?? false
+                 ];
+                 file_put_contents(
+                     $tokFile,
+                     encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
+                     LOCK_EX
+                 );
+                 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+                 setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
+                 setcookie(session_name(), session_id(), $expiry, '/', '', $secure, true);
+             }
+     
+             // === Finalize login into session exactly as finalizeLogin() would ===
+             session_regenerate_id(true);
+             $_SESSION['authenticated']   = true;
+             $_SESSION['username']        = $username;
+             $_SESSION['isAdmin']         = ((int)userModel::getUserRole($username) === 1);
+             $perms = loadUserPermissions($username);
+             $_SESSION['folderOnly']      = $perms['folderOnly']    ?? false;
+             $_SESSION['readOnly']        = $perms['readOnly']      ?? false;
+             $_SESSION['disableUpload']   = $perms['disableUpload'] ?? false;
+     
+             // Clean up pending markers
+             unset(
+                 $_SESSION['pending_login_user'],
+                 $_SESSION['pending_login_secret'],
+                 $_SESSION['pending_login_remember_me'],
+                 $_SESSION['totp_failures']
+             );
+     
+             // Send back full login payload
+             echo json_encode([
+                 'status'        => 'ok',
+                 'success'       => 'Login successful',
+                 'isAdmin'       => $_SESSION['isAdmin'],
+                 'folderOnly'    => $_SESSION['folderOnly'],
+                 'readOnly'      => $_SESSION['readOnly'],
+                 'disableUpload' => $_SESSION['disableUpload'],
+                 'username'      => $_SESSION['username']
+             ]);
+             exit;
+         }
 
         // Setup/verification flow (not pending)
         $username = $_SESSION['username'] ?? '';
