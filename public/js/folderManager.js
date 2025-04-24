@@ -334,6 +334,10 @@ function folderDropHandler(event) {
     });
 }
 
+/* ----------------------
+   Main Folder Tree Rendering and Event Binding
+----------------------*/
+// --- Helpers for safe breadcrumb rendering ---
 function renderBreadcrumbFragment(folderPath) {
   const frag = document.createDocumentFragment();
   const parts = folderPath.split("/");
@@ -357,28 +361,14 @@ function renderBreadcrumbFragment(folderPath) {
 }
 
 function updateBreadcrumbTitle(folder) {
-  const container = document.getElementById("fileListTitle");
-  container.textContent = "";  // clear old
-
-  // prefix
-  container.appendChild(
-    document.createTextNode(`${t("files_in")} (`)
-  );
-
-  // the actual crumbs
-  container.appendChild(
-    renderBreadcrumbFragment(folder)
-  );
-
-  // closing paren
-  container.appendChild(
-    document.createTextNode(")")
-  );
+  const titleEl = document.getElementById("fileListTitle");
+  titleEl.textContent = "";
+  titleEl.appendChild(document.createTextNode(t("files_in") + " ("));
+  titleEl.appendChild(renderBreadcrumbFragment(folder));
+  titleEl.appendChild(document.createTextNode(")"));
+  setupBreadcrumbDelegation();
 }
 
-/* ----------------------
-   Main Folder Tree Rendering and Event Binding
-----------------------*/
 export async function loadFolderTree(selectedFolder) {
   try {
     // Check if the user has folder-only permission.
@@ -464,18 +454,8 @@ export async function loadFolderTree(selectedFolder) {
     }
     localStorage.setItem("lastOpenedFolder", window.currentFolder);
 
-    const titleEl = document.getElementById("fileListTitle");
-    titleEl.textContent = "";
-
-    titleEl.appendChild(
-      document.createTextNode(t("files_in") + " (")
-    );
-
-    const breadcrumbFragment = renderBreadcrumbFragment(window.currentFolder);
-    titleEl.appendChild(breadcrumbFragment);
-
-    titleEl.appendChild(document.createTextNode(")"));
-    setupBreadcrumbDelegation();
+    // Initial breadcrumb update
+    updateBreadcrumbTitle(window.currentFolder);
     loadFileList(window.currentFolder);
 
     const folderState = loadFolderTreeState();
@@ -489,6 +469,7 @@ export async function loadFolderTree(selectedFolder) {
       selectedEl.classList.add("selected");
     }
 
+    // Folder-option click: update selection, breadcrumbs, and file list
     container.querySelectorAll(".folder-option").forEach(el => {
       el.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -497,13 +478,14 @@ export async function loadFolderTree(selectedFolder) {
         const selected = this.getAttribute("data-folder");
         window.currentFolder = selected;
         localStorage.setItem("lastOpenedFolder", selected);
-        const titleEl = document.getElementById("fileListTitle");
-        titleEl.innerHTML = t("files_in") + " (" + renderBreadcrumb(selected) + ")";
-        setupBreadcrumbDelegation();
+
+        // Safe breadcrumb update
+        updateBreadcrumbTitle(selected);
         loadFileList(selected);
       });
     });
 
+    // Root toggle handler
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
       rootToggle.addEventListener("click", function (e) {
@@ -527,6 +509,7 @@ export async function loadFolderTree(selectedFolder) {
       });
     }
 
+    // Other folder-toggle handlers
     container.querySelectorAll(".folder-toggle").forEach(toggle => {
       toggle.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -554,6 +537,7 @@ export async function loadFolderTree(selectedFolder) {
     console.error("Error loading folder tree:", error);
   }
 }
+
 
 // For backward compatibility.
 export function loadFolderList(selectedFolder) {
