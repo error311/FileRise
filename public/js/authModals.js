@@ -3,7 +3,7 @@ import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 import { loadAdminConfigFunc } from './auth.js';
 
-const version = "v1.2.4"; // Update this version string as needed
+const version = "v1.2.5"; // Update this version string as needed
 const adminTitle = `${t("admin_panel")} <small style="font-size: 12px; color: gray;">${version}</small>`;
 
 let lastLoginData = null;
@@ -230,13 +230,35 @@ export function openUserPanel() {
 
         <!-- New API Docs link -->
         <div style="margin-bottom: 15px;">
-          <a href="api.html" target="_blank" class="btn btn-secondary">
-            ${t("api_docs") || "API Docs"}
-          </a>
+          <button type="button" id="openApiModalBtn" class="btn btn-secondary">
+              ${t("api_docs") || "API Docs"}
+          </button>
         </div>
       </div>
     `;
     document.body.appendChild(userPanelModal);
+
+    const apiModal = document.createElement("div");
+    apiModal.id = "apiModal";
+    apiModal.style.cssText = `
+  position: fixed; top:0; left:0; width:100vw; height:100vh;
+  background: rgba(0,0,0,0.8); z-index: 4000; display:none;
+  align-items: center; justify-content: center;
+`;
+apiModal.innerHTML = `
+  <div style="position:relative; width:90vw; height:90vh; background:#fff; border-radius:8px; overflow:hidden;">
+    <div class="editor-close-btn" id="closeApiModal">&times;</div>
+    <iframe src="api.html" style="width:100%;height:100%;border:none;"></iframe>
+  </div>
+`;
+    document.body.appendChild(apiModal);
+
+    document.getElementById("openApiModalBtn").addEventListener("click", () => {
+      apiModal.style.display = "flex";
+    });
+    document.getElementById("closeApiModal").addEventListener("click", () => {
+      apiModal.style.display = "none";
+    });
 
     // Handlers…
     document.getElementById("closeUserPanel").addEventListener("click", () => {
@@ -245,6 +267,7 @@ export function openUserPanel() {
     document.getElementById("openChangePasswordModalBtn").addEventListener("click", () => {
       document.getElementById("changePasswordModal").style.display = "block";
     });
+
 
     // TOTP checkbox
     const totpCheckbox = document.getElementById("userTOTPEnabled");

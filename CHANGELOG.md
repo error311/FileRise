@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 4/24/2025
+## Changes 4/24/2025 1.2.5
 
 - Enhance README and wiki with expanded installation instructions
 - Adjusted Dockerfile’s Apache vhost to:
@@ -12,6 +12,10 @@
   - Deny access to hidden files (dot-files)
 - Add access control in public/.htaccess for api.html & openapi.json; update Nginx example in wiki
 - Remove obsolete folders from repo root
+- Embed API documentation (`api.html`) directly in the FileRise UI as a full-screen modal  
+  - Introduced `openApiModalBtn` in the user panel to launch the API modal  
+  - Added `#apiModal` container with a same-origin `<iframe src="api.html">` so session cookies authenticate automatically  
+  - Close control uses the existing `.editor-close-btn` for consistent styling and hover effects
 
 ## Changes 4/23/2025 1.2.4
 
