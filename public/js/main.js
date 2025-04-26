@@ -48,6 +48,27 @@ export function loadCsrfToken() {
     });
 }
 
+// 1) Immediately clear “?logout=1” flag
+const params = new URLSearchParams(window.location.search);
+if (params.get('logout') === '1') {
+  localStorage.removeItem("username");
+  localStorage.removeItem("userTOTPEnabled");
+}
+
+// 2) Wire up logoutBtn right away
+const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", () => {
+    fetch("/api/auth/logout.php", {
+      method: "POST",
+      credentials: "include",
+      headers: { "X-CSRF-Token": window.csrfToken }
+    })
+      .then(() => window.location.reload(true))
+      .catch(() => {});
+  });
+}
+
 
 // Expose functions for inline handlers.
 window.sendRequest = sendRequest;
