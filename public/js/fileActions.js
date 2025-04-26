@@ -193,10 +193,10 @@ export function handleExtractZipSelected(e) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  const zipNameModal   = document.getElementById("downloadZipModal");
-  const progressModal  = document.getElementById("downloadProgressModal");
-  const cancelZipBtn   = document.getElementById("cancelDownloadZip");
-  const confirmZipBtn  = document.getElementById("confirmDownloadZip");
+  const zipNameModal = document.getElementById("downloadZipModal");
+  const progressModal = document.getElementById("downloadProgressModal");
+  const cancelZipBtn = document.getElementById("cancelDownloadZip");
+  const confirmZipBtn = document.getElementById("confirmDownloadZip");
 
   // 1) Cancel button hides the name modal
   if (cancelZipBtn) {
@@ -219,8 +219,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // b) Hide the name‐input modal, show the spinner modal
-      zipNameModal.style.display      = "none";
-      progressModal.style.display     = "block";
+      zipNameModal.style.display = "none";
+      progressModal.style.display = "block";
 
       // c) (Optional) update the “Preparing…” text if you gave it an ID
       const titleEl = document.getElementById("downloadProgressTitle");
@@ -233,11 +233,11 @@ document.addEventListener("DOMContentLoaded", () => {
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            "X-CSRF-Token":  window.csrfToken
+            "X-CSRF-Token": window.csrfToken
           },
           body: JSON.stringify({
             folder: window.currentFolder || "root",
-            files:  window.filesToDownload
+            files: window.filesToDownload
           })
         });
         if (!res.ok) {
@@ -252,8 +252,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // e) Hand off to the browser’s download manager
         const url = URL.createObjectURL(blob);
-        const a   = document.createElement("a");
-        a.href     = url;
+        const a = document.createElement("a");
+        a.href = url;
         a.download = zipName;
         document.body.appendChild(a);
         a.click();
@@ -554,5 +554,23 @@ export function initFileActions() {
     document.getElementById("extractZipBtn").addEventListener("click", handleExtractZipSelected);
   }
 }
+
+// Hook up the single‐file download modal buttons
+document.addEventListener("DOMContentLoaded", () => {
+  const cancelDownloadFileBtn = document.getElementById("cancelDownloadFile");
+  if (cancelDownloadFileBtn) {
+    cancelDownloadFileBtn.addEventListener("click", () => {
+      document.getElementById("downloadFileModal").style.display = "none";
+    });
+  }
+
+  const confirmSingleDownloadBtn = document.getElementById("confirmSingleDownloadButton");
+  if (confirmSingleDownloadBtn) {
+    confirmSingleDownloadBtn.addEventListener("click", confirmSingleDownload);
+  }
+
+  // Make Enter also confirm the download
+  attachEnterKeyListener("downloadFileModal", "confirmSingleDownloadButton");
+});
 
 window.renameFile = renameFile;

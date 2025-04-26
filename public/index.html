@@ -5,13 +5,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title data-i18n-key="title">FileRise</title>
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('logout') === '1') {
-      localStorage.removeItem("username");
-      localStorage.removeItem("userTOTPEnabled");
-    }
-  </script>
   <link rel="icon" type="image/png" href="/assets/logo.png">
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
   <meta name="csrf-token" content="">
@@ -20,9 +13,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
   <!-- Bootstrap CSS -->
-  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/material-darker.min.css">
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+    integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css"
+    integrity="sha384-zaeBlB/vwYsDRSlFajnDd7OydJ0cWk+c2OWybl3eSUf6hW2EbhlCsQPqKr3gkznT" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/material-darker.min.css"
+    integrity="sha384-eZTPTN0EvJdn23s24UDYJmUM2T7C2ZFa3qFLypeBruJv8mZeTusKUAO/j5zPAQ6l" crossorigin="anonymous">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"
     integrity="sha384-UXbkZAbZYZ/KCAslc6UO4d6UHNKsOxZ/sqROSQaPTZCuEIKhfbhmffQ64uXFOcma"
     crossorigin="anonymous"></script>
@@ -396,27 +392,23 @@
     </div> <!-- end mainColumn -->
   </div> <!-- end main-wrapper -->
 
-<!-- Download Progress Modal -->
-<div id="downloadProgressModal" class="modal" style="display: none;">
-  <div class="modal-content" style="text-align: center; padding: 20px;">
-    <h4 id="downloadProgressTitle" data-i18n-key="preparing_download">
-      Preparing your download...
-    </h4>
+  <!-- Download Progress Modal -->
+  <div id="downloadProgressModal" class="modal" style="display: none;">
+    <div class="modal-content" style="text-align: center; padding: 20px;">
+      <h4 id="downloadProgressTitle" data-i18n-key="preparing_download">
+        Preparing your download...
+      </h4>
 
-    <!-- spinner -->
-    <span class="material-icons download-spinner">autorenew</span>
+      <!-- spinner -->
+      <span class="material-icons download-spinner">autorenew</span>
 
-    <!-- these were missing -->
-    <progress
-      id="downloadProgressBar"
-      value="0" max="100"
-      style="width:100%; height:1.5em; display:none;"
-    ></progress>
-    <p>
-      <span id="downloadProgressPercent" style="display:none;">0%</span>
-    </p>
+      <!-- these were missing -->
+      <progress id="downloadProgressBar" value="0" max="100" style="width:100%; height:1.5em; display:none;"></progress>
+      <p>
+        <span id="downloadProgressPercent" style="display:none;">0%</span>
+      </p>
+    </div>
   </div>
-</div>
 
   <!-- Single File Download Modal -->
   <div id="downloadFileModal" class="modal" style="display: none;">
@@ -426,11 +418,8 @@
       <input type="text" id="downloadFileNameInput" class="form-control" data-i18n-placeholder="filename"
         placeholder="Filename" />
       <div style="margin-top: 15px; text-align: right;">
-        <button id="cancelDownloadFile" class="btn btn-secondary"
-          onclick="document.getElementById('downloadFileModal').style.display = 'none';"
-          data-i18n-key="cancel">Cancel</button>
-        <button id="confirmSingleDownloadButton" class="btn btn-primary" onclick="confirmSingleDownload()"
-          data-i18n-key="download">Download</button>
+        <button id="cancelDownloadFile" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
+        <button id="confirmSingleDownloadButton" class="btn btn-primary" data-i18n-key="download">Download</button>
       </div>
     </div>
   </div>

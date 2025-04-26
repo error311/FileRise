@@ -437,12 +437,26 @@ function initAuth() {
       submitLogin(formData);
     });
   }
-  document.getElementById("logoutBtn").addEventListener("click", function () {
-    fetch("/api/auth/logout.php", {
-      method: "POST",
-      credentials: "include",
-      headers: { "X-CSRF-Token": window.csrfToken }
-    }).then(() => window.location.reload(true)).catch(() => { });
+  // handle ?logout=1 query
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('logout') === '1') {
+    localStorage.removeItem("username");
+    localStorage.removeItem("userTOTPEnabled");
+  }
+  
+  // attach logout button listener
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('logoutBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      fetch('/api/auth/logout.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'X-CSRF-Token': window.csrfToken }
+      })
+        .then(() => window.location.reload(true))
+        .catch(() => { });
+    });
   });
   document.getElementById("addUserBtn").addEventListener("click", function () {
     resetUserForm();

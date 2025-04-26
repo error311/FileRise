@@ -1,5 +1,31 @@
 # Changelog
 
+## Changes 4/26/2025
+
+### 1. Apache / Dockerfile (CSP)
+
+- Enabled Apache’s `mod_headers` in the Dockerfile (`a2enmod headers ssl deflate expires proxy proxy_fcgi rewrite`)  
+- Added a strong `Content-Security-Policy` header in the vhost configs to lock down allowed sources for scripts, styles, fonts, images, and connections  
+
+### 2. index.html & CDN Includes
+
+- Applied Subresource Integrity (`integrity` + `crossorigin="anonymous"`) to all static CDN assets (Bootstrap CSS, CodeMirror CSS/JS, Resumable.js, DOMPurify, Fuse.js)  
+- Omitted SRI on Google Fonts & Material Icons links (dynamic per-browser CSS)  
+- Removed all inline `<script>` and `onclick` attributes; now all behaviors live in external JS modules  
+
+### 3. auth.js (Logout Handling)
+
+- Moved the logout-on-`?logout=1` snippet from inline HTML into `auth.js`  
+- In `DOMContentLoaded`, attached a `click` listener to `#logoutBtn` that POSTs to `/api/auth/logout.php` and reloads  
+
+### 4. fileActions.js (Modal Button Handlers)
+
+- Externalized the cancel/download buttons for single-file and ZIP-download modals by adding `click` listeners in `fileActions.js`  
+- Removed the inline `onclick` attributes from `#cancelDownloadFile` and `#confirmSingleDownloadButton` in the HTML  
+- Ensured all file-action modals (delete, download, extract, copy, move, rename) now use JS event handlers instead of inline code  
+
+---
+
 ## Changes 4/25/2025
 
 - Switch single‐file download to native `<a>` link (no JS buffering)
