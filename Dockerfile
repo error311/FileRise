@@ -120,6 +120,10 @@ RUN cat <<'EOF' > /etc/apache2/sites-available/000-default.conf
     <FilesMatch "^\.">
       Require all denied
     </FilesMatch>
+    
+    <Files "api.php">
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.redoc.ly; style-src 'self' 'unsafe-inline'; worker-src 'self' https://cdn.redoc.ly blob:; connect-src 'self'; img-src 'self' data: blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
+    </Files>
 
     ErrorLog /var/www/metadata/log/error.log
     CustomLog /var/www/metadata/log/access.log combined
@@ -127,7 +131,7 @@ RUN cat <<'EOF' > /etc/apache2/sites-available/000-default.conf
 EOF
 
 # Enable required modules
-RUN a2enmod rewrite headers proxy proxy_fcgi expires deflate
+RUN a2enmod rewrite headers proxy proxy_fcgi expires deflate ssl
 
 EXPOSE 80 443
 COPY start.sh /usr/local/bin/start.sh

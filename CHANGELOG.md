@@ -49,6 +49,8 @@
 - **Controller**: Updated `FolderController::shareFolder()` (folderController) to include the gallery-view toggle script block intact, ensuring the “Switch to Gallery View” button works when sharing folders.  
 - **UI (fileListView.js)**: Refactored `renderGalleryView` to remove all inline `onclick=` handlers; switched to using data-attributes and `addEventListener()` for preview, download, edit and rename buttons, fully CSP-compliant.
 - Moved logout button handler out of inline `<script>` in `index.html` and into the `DOMContentLoaded` init in **main.js** (via `auth.js`), so it now attaches reliably after the CSRF token is loaded and DOM is ready.
+- Added Content-Security-Policy for `<Files "api.php">` block to allow embedding the ReDoc iframe.
+- Extracted inline ReDoc init into `public/js/redoc-init.js` and updated `public/api.php` to use deferred `<script>` tags.
 
 ---
 
