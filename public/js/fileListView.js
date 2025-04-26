@@ -518,23 +518,26 @@ export function renderGalleryView(folder, container) {
 
     pageFiles.forEach((file, idx) => {
         const idSafe = encodeURIComponent(file.name) + "-" + (startIdx + idx);
+        const cacheKey = folderPath + encodeURIComponent(file.name);
 
         // thumbnail
         let thumbnail;
         if (/\.(jpe?g|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
-            const cacheKey = folderPath + encodeURIComponent(file.name);
             if (window.imageCache && window.imageCache[cacheKey]) {
-                thumbnail = `<img src="${window.imageCache[cacheKey]}"
-                             class="gallery-thumbnail"
-                             alt="${escapeHTML(file.name)}"
-                             style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
+                thumbnail = `<img
+                    src="${window.imageCache[cacheKey]}"
+                    class="gallery-thumbnail"
+                    data-cache-key="${cacheKey}"
+                    alt="${escapeHTML(file.name)}"
+                    style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
             } else {
                 const imageUrl = folderPath + encodeURIComponent(file.name) + "?t=" + Date.now();
-                thumbnail = `<img src="${imageUrl}"
-                             onload="cacheImage(this,'${cacheKey}')"
-                             class="gallery-thumbnail"
-                             alt="${escapeHTML(file.name)}"
-                             style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
+                thumbnail = `<img
+                    src="${imageUrl}"
+                    class="gallery-thumbnail"
+                    data-cache-key="${cacheKey}"
+                    alt="${escapeHTML(file.name)}"
+                    style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
             }
         } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
             thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
@@ -572,8 +575,8 @@ export function renderGalleryView(folder, container) {
                  style="position:absolute; top:5px; left:5px; width:16px; height:16px;"></label>
   
           <div class="gallery-preview" style="cursor:pointer;"
-            data-preview-url="${folderPath+encodeURIComponent(file.name)}?t=${Date.now()}"
-            data-preview-name="${file.name}">
+               data-preview-url="${folderPath+encodeURIComponent(file.name)}?t=${Date.now()}"
+               data-preview-name="${file.name}">
             ${thumbnail}
           </div>
   
@@ -585,24 +588,26 @@ export function renderGalleryView(folder, container) {
             ${tagBadgesHTML}
   
             <div class="button-wrap" style="display:flex; justify-content:center; gap:5px; margin-top:5px;">
-               <button … class="download-btn"
-                      data-download-name="${file.name}"
-                      data-download-folder="${file.folder||"root"}">
+              <button type="button" class="btn btn-sm btn-success download-btn"
+                      data-download-name="${escapeHTML(file.name)}"
+                      data-download-folder="${file.folder||"root"}"
                       title="${t('download')}">
                 <i class="material-icons">file_download</i>
               </button>
               ${file.editable ? `
-              <button … class="edit-btn"
-                data-edit-name="${file.name}"
-                data-edit-folder="${file.folder||"root"}">
+              <button type="button" class="btn btn-sm edit-btn"
+                      data-edit-name="${escapeHTML(file.name)}"
+                      data-edit-folder="${file.folder||"root"}"
+                      title="${t('edit')}">
                 <i class="material-icons">edit</i>
               </button>` : ""}
-             <button … class="rename-btn"
-                data-rename-name="${file.name}"
-                data-rename-folder="${file.folder||"root"}">
+              <button type="button" class="btn btn-sm btn-warning rename-btn"
+                      data-rename-name="${escapeHTML(file.name)}"
+                      data-rename-folder="${file.folder||"root"}"
+                      title="${t('rename')}">
                 <i class="material-icons">drive_file_rename_outline</i>
               </button>
-              <button class="btn btn-sm btn-secondary share-btn"
+              <button type="button" class="btn btn-sm btn-secondary share-btn"
                       data-file="${escapeHTML(file.name)}"
                       title="${t('share')}">
                 <i class="material-icons">share</i>
@@ -621,47 +626,60 @@ export function renderGalleryView(folder, container) {
 
     // render
     fileListContent.innerHTML = galleryHTML;
-    
-    // Preview clicks
-    document.querySelectorAll(".gallery-preview").forEach(el => {
-    el.addEventListener("click", () => {
-      const url  = el.dataset.previewUrl;
-      const name = el.dataset.previewName;
-      previewFile(url, name);
-    });
-  });
-  
-  // Download clicks
-  document.querySelectorAll(".download-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      openDownloadModal(btn.dataset.downloadName, btn.dataset.downloadFolder);
-    });
-  });
-  
-  // Edit clicks
-  document.querySelectorAll(".edit-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      editFile(btn.dataset.editName, btn.dataset.editFolder);
-    });
-  });
-  
-  // Rename clicks
-  document.querySelectorAll(".rename-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      renameFile(btn.dataset.renameName, btn.dataset.renameFolder);
-    });
-  });
 
-    // ensure toggle button
-    createViewToggleButton();
+    // --- Now wire up all behaviors without inline handlers ---
 
-    // attach listeners
+    // cache images on load
+    fileListContent.querySelectorAll('.gallery-thumbnail').forEach(img => {
+        const key = img.dataset.cacheKey;
+        img.addEventListener('load', () => cacheImage(img, key));
+    });
+
+    // preview clicks
+    fileListContent.querySelectorAll(".gallery-preview").forEach(el => {
+        el.addEventListener("click", () => {
+            previewFile(el.dataset.previewUrl, el.dataset.previewName);
+        });
+    });
+
+    // download clicks
+    fileListContent.querySelectorAll(".download-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            openDownloadModal(btn.dataset.downloadName, btn.dataset.downloadFolder);
+        });
+    });
+
+    // edit clicks
+    fileListContent.querySelectorAll(".edit-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            editFile(btn.dataset.editName, btn.dataset.editFolder);
+        });
+    });
+
+    // rename clicks
+    fileListContent.querySelectorAll(".rename-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            renameFile(btn.dataset.renameName, btn.dataset.renameFolder);
+        });
+    });
+
+    // share clicks
+    fileListContent.querySelectorAll(".share-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            const fileName = btn.dataset.file;
+            const fileObj = fileData.find(f => f.name === fileName);
+            if (fileObj) {
+                import('./filePreview.js').then(m => m.openShareModal(fileObj, folder));
+            }
+        });
+    });
 
     // checkboxes
-    document.querySelectorAll(".file-checkbox").forEach(cb => {
+    fileListContent.querySelectorAll(".file-checkbox").forEach(cb => {
         cb.addEventListener("change", () => updateFileActionButtons());
     });
 
@@ -679,14 +697,13 @@ export function renderGalleryView(folder, container) {
         });
     }
 
-    // pagination
+    // pagination functions
     window.changePage = newPage => {
         window.currentPage = newPage;
         if (window.viewMode === "gallery") renderGalleryView(folder);
         else renderFileTable(folder);
     };
 
-    // items per page
     window.changeItemsPerPage = cnt => {
         window.itemsPerPage = +cnt;
         localStorage.setItem("itemsPerPage", cnt);
@@ -695,8 +712,9 @@ export function renderGalleryView(folder, container) {
         else renderFileTable(folder);
     };
 
-    // update toolbar buttons
+    // update toolbar and toggle button
     updateFileActionButtons();
+    createViewToggleButton();
 }
 
 // Responsive slider constraints based on screen size.

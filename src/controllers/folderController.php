@@ -402,19 +402,19 @@ class FolderController
      * @return void Outputs HTML content.
      */
 
-     function formatBytes($bytes)
-     {
-         if ($bytes < 1024) {
-             return $bytes . " B";
-         } elseif ($bytes < 1024 * 1024) {
-             return round($bytes / 1024, 2) . " KB";
-         } elseif ($bytes < 1024 * 1024 * 1024) {
-             return round($bytes / (1024 * 1024), 2) . " MB";
-         } else {
-             return round($bytes / (1024 * 1024 * 1024), 2) . " GB";
-         }
-     }
-     
+    function formatBytes($bytes)
+    {
+        if ($bytes < 1024) {
+            return $bytes . " B";
+        } elseif ($bytes < 1024 * 1024) {
+            return round($bytes / 1024, 2) . " KB";
+        } elseif ($bytes < 1024 * 1024 * 1024) {
+            return round($bytes / (1024 * 1024), 2) . " MB";
+        } else {
+            return round($bytes / (1024 * 1024 * 1024), 2) . " GB";
+        }
+    }
+
     public function shareFolder(): void
     {
         // Retrieve GET parameters.
@@ -759,72 +759,83 @@ class FolderController
             </div>
 
             <script>
-                // (Optional) JavaScript for toggling view modes (list/gallery).
-                var viewMode = 'list';
-                window.imageCache = window.imageCache || {};
-                var filesData = <?php echo json_encode($files); ?>;
+                document.addEventListener('DOMContentLoaded', function() {
+                    // JavaScript for toggling view modes (list/gallery) and wiring up gallery clicks
+                    var viewMode = 'list';
+                    var token = '<?php echo addslashes($token); ?>';
+                    var filesData = <?php echo json_encode($files); ?>;
 
-                // Use the shared‑folder relative path (from your model), not realFolderPath
-                // $data['folder'] should be something like "eafwef/testfolder2/test/new folder two"
-                var rawRelPath = "<?php echo addslashes($data['folder']); ?>";
-                // Split into segments, encode each segment, then re-join
-                var folderSegments = rawRelPath
-                    .split('/')
-                    .map(encodeURIComponent)
-                    .join('/');
+                    // Build the download URL base
+                    var downloadBase = window.location.origin +
+                        '/api/folder/downloadSharedFile.php?token=' +
+                        encodeURIComponent(token) +
+                        '&file=';
 
-                function renderGalleryView() {
-                    var galleryContainer = document.getElementById("galleryViewContainer");
-                    var html = '<div class="shared-gallery-container">';
-                    filesData.forEach(function(file) {
-                        // Encode the filename too
-                        var fileName = encodeURIComponent(file);
-                        var fileUrl = window.location.origin +
-                            '/uploads/' +
-                            folderSegments +
-                            '/' +
-                            fileName +
-                            '?t=' +
-                            Date.now();
+                    function toggleViewMode() {
+                        var listEl = document.getElementById('listViewContainer');
+                        var galleryEl = document.getElementById('galleryViewContainer');
+                        var btn = document.getElementById('toggleBtn');
 
-                        var ext = file.split('.').pop().toLowerCase();
-                        var thumbnail;
-                        if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].indexOf(ext) >= 0) {
-                            thumbnail = '<img src="' + fileUrl + '" alt="' + file + '">';
+                        if (viewMode === 'list') {
+                            viewMode = 'gallery';
+                            listEl.style.display = 'none';
+                            renderGalleryView();
+                            galleryEl.style.display = 'block';
+                            btn.textContent = 'Switch to List View';
                         } else {
-                            thumbnail = '<span class="material-icons">insert_drive_file</span>';
+                            viewMode = 'list';
+                            galleryEl.style.display = 'none';
+                            listEl.style.display = 'block';
+                            btn.textContent = 'Switch to Gallery View';
                         }
-
-                        html +=
-                            '<div class="shared-gallery-card">' +
-                            '<div class="gallery-preview" ' +
-                            'onclick="window.location.href=\'' + fileUrl + '\'" ' +
-                            'style="cursor:pointer;">' +
-                            thumbnail +
-                            '</div>' +
-                            '<div class="gallery-info">' +
-                            '<span class="gallery-file-name">' + file + '</span>' +
-                            '</div>' +
-                            '</div>';
-                    });
-                    html += '</div>';
-                    galleryContainer.innerHTML = html;
-                }
-
-                function toggleViewMode() {
-                    if (viewMode === 'list') {
-                        viewMode = 'gallery';
-                        document.getElementById("listViewContainer").style.display = "none";
-                        renderGalleryView();
-                        document.getElementById("galleryViewContainer").style.display = "block";
-                        document.getElementById("toggleBtn").textContent = "Switch to List View";
-                    } else {
-                        viewMode = 'list';
-                        document.getElementById("galleryViewContainer").style.display = "none";
-                        document.getElementById("listViewContainer").style.display = "block";
-                        document.getElementById("toggleBtn").textContent = "Switch to Gallery View";
                     }
-                }
+
+                    // Wire up the toggle button
+                    document.getElementById('toggleBtn')
+                        .addEventListener('click', toggleViewMode);
+
+                    function renderGalleryView() {
+                        var galleryContainer = document.getElementById('galleryViewContainer');
+                        var html = '<div class="shared-gallery-container">';
+
+                        filesData.forEach(function(file) {
+                            var encodedName = encodeURIComponent(file);
+                            var fileUrl = downloadBase + encodedName;
+                            var ext = file.split('.').pop().toLowerCase();
+                            var thumb;
+
+                            if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].indexOf(ext) >= 0) {
+                                thumb = '<img src="' + fileUrl + '" alt="' + file + '">';
+                            } else {
+                                thumb = '<span class="material-icons">insert_drive_file</span>';
+                            }
+
+                            html +=
+                                '<div class="shared-gallery-card">' +
+                                '<div class="gallery-preview" data-url="' + fileUrl + '" style="cursor:pointer;">' +
+                                thumb +
+                                '</div>' +
+                                '<div class="gallery-info">' +
+                                '<span class="gallery-file-name">' + file + '</span>' +
+                                '</div>' +
+                                '</div>';
+                        });
+
+                        html += '</div>';
+                        galleryContainer.innerHTML = html;
+
+                        // Wire up each thumbnail click
+                        galleryContainer.querySelectorAll('.gallery-preview')
+                            .forEach(function(el) {
+                                el.addEventListener('click', function() {
+                                    window.location.href = el.dataset.url;
+                                });
+                            });
+                    }
+
+                    // Expose for manual invocation if needed
+                    window.renderGalleryView = renderGalleryView;
+                });
             </script>
         </body>
 

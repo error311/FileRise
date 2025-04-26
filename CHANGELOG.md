@@ -1,30 +1,30 @@
 # Changelog
 
-## Changes 4/26/2025
+## Changes 4/26/2025 1.2.6
 
-### 1. Apache / Dockerfile (CSP)
+**Apache / Dockerfile (CSP)**  
 
 - Enabled Apache’s `mod_headers` in the Dockerfile (`a2enmod headers ssl deflate expires proxy proxy_fcgi rewrite`)  
 - Added a strong `Content-Security-Policy` header in the vhost configs to lock down allowed sources for scripts, styles, fonts, images, and connections  
 
-### 2. index.html & CDN Includes
+**index.html & CDN Includes**  
 
 - Applied Subresource Integrity (`integrity` + `crossorigin="anonymous"`) to all static CDN assets (Bootstrap CSS, CodeMirror CSS/JS, Resumable.js, DOMPurify, Fuse.js)  
 - Omitted SRI on Google Fonts & Material Icons links (dynamic per-browser CSS)  
 - Removed all inline `<script>` and `onclick` attributes; now all behaviors live in external JS modules  
 
-### 3. auth.js (Logout Handling)
+**auth.js (Logout Handling)**  
 
 - Moved the logout-on-`?logout=1` snippet from inline HTML into `auth.js`  
 - In `DOMContentLoaded`, attached a `click` listener to `#logoutBtn` that POSTs to `/api/auth/logout.php` and reloads  
 
-### 4. fileActions.js (Modal Button Handlers)
+**fileActions.js (Modal Button Handlers)**  
 
 - Externalized the cancel/download buttons for single-file and ZIP-download modals by adding `click` listeners in `fileActions.js`  
 - Removed the inline `onclick` attributes from `#cancelDownloadFile` and `#confirmSingleDownloadButton` in the HTML  
 - Ensured all file-action modals (delete, download, extract, copy, move, rename) now use JS event handlers instead of inline code  
 
-### 5. domUtils.js
+**domUtils.js**  
 
 - **Removed** all inline `onclick` and `onchange` attributes from:
   - `buildSearchAndPaginationControls` (advanced search toggle, prev/next buttons, items-per-page selector)
@@ -32,7 +32,7 @@
   - `buildFileTableRow` (download, edit, preview, rename buttons)
 - **Retained** all original logic (file-type icon detection, shift-select, debounce, custom confirm modal, etc.)
 
-### 6. fileListView.js
+**fileListView.js**  
 
 - **Stopped** generating inline `onclick` handlers in both table and gallery views.
 - **Added** `data-` attributes on actionable elements:
@@ -42,6 +42,12 @@
   - `data-preview-url`, `data-preview-name`
   - IDs on controls: `#advancedSearchToggle`, `#searchInput`, `#prevPageBtn`, `#nextPageBtn`, `#selectAll`, `#itemsPerPageSelect`
 - **Introduced** `attachListControlListeners()` to bind all events via `addEventListener` immediately after rendering, preserving every interaction without inline code.
+
+**Additional changes**  
+
+- **Security**: Added `frame-src 'self'` to the Content-Security-Policy header so that the embedded API docs iframe can load from our own origin without relaxing JS restrictions.  
+- **Controller**: Updated `FolderController::shareFolder()` (folderController) to include the gallery-view toggle script block intact, ensuring the “Switch to Gallery View” button works when sharing folders.  
+- **UI (fileListView.js)**: Refactored `renderGalleryView` to remove all inline `onclick=` handlers; switched to using data-attributes and `addEventListener()` for preview, download, edit and rename buttons, fully CSP-compliant.
 
 ---
 
