@@ -24,6 +24,25 @@
 - Removed the inline `onclick` attributes from `#cancelDownloadFile` and `#confirmSingleDownloadButton` in the HTML  
 - Ensured all file-action modals (delete, download, extract, copy, move, rename) now use JS event handlers instead of inline code  
 
+### 5. domUtils.js
+
+- **Removed** all inline `onclick` and `onchange` attributes from:
+  - `buildSearchAndPaginationControls` (advanced search toggle, prev/next buttons, items-per-page selector)
+  - `buildFileTableHeader` (select-all checkbox)
+  - `buildFileTableRow` (download, edit, preview, rename buttons)
+- **Retained** all original logic (file-type icon detection, shift-select, debounce, custom confirm modal, etc.)
+
+### 6. fileListView.js
+
+- **Stopped** generating inline `onclick` handlers in both table and gallery views.
+- **Added** `data-` attributes on actionable elements:
+  - `data-download-name`, `data-download-folder`
+  - `data-edit-name`, `data-edit-folder`
+  - `data-rename-name`, `data-rename-folder`
+  - `data-preview-url`, `data-preview-name`
+  - IDs on controls: `#advancedSearchToggle`, `#searchInput`, `#prevPageBtn`, `#nextPageBtn`, `#selectAll`, `#itemsPerPageSelect`
+- **Introduced** `attachListControlListeners()` to bind all events via `addEventListener` immediately after rendering, preserving every interaction without inline code.
+
 ---
 
 ## Changes 4/25/2025

@@ -91,7 +91,7 @@ export function showToast(message, duration = 3000) {
 export function buildSearchAndPaginationControls({ currentPage, totalPages, searchTerm }) {
   const safeSearchTerm = escapeHTML(searchTerm);
   // Choose the placeholder text based on advanced search mode
-  const placeholderText = window.advancedSearchEnabled 
+  const placeholderText = window.advancedSearchEnabled
     ? t("search_placeholder_advanced")
     : t("search_placeholder");
 
@@ -101,7 +101,7 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
         <div class="input-group">
           <!-- Advanced Search Toggle Button -->
           <div class="input-group-prepend">
-            <button id="advancedSearchToggle" class="btn btn-outline-secondary btn-icon" onclick="toggleAdvancedSearch()" title="${window.advancedSearchEnabled ? t("basic_search_tooltip") : t("advanced_search_tooltip")}">
+            <button id="advancedSearchToggle" class="btn btn-outline-secondary btn-icon" title="${window.advancedSearchEnabled ? t("basic_search_tooltip") : t("advanced_search_tooltip")}">
               <i class="material-icons">${window.advancedSearchEnabled ? "filter_alt_off" : "filter_alt"}</i>
             </button>
           </div>
@@ -117,9 +117,9 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
       </div>
       <div class="col-12 col-md-4 text-left">
         <div class="d-flex justify-content-center justify-content-md-start align-items-center">
-          <button class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""} onclick="changePage(${currentPage - 1})">${t("prev")}</button>
+          <button id="prevPageBtn" class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""}>${t("prev")}</button>
           <span class="page-indicator">${t("page")} ${currentPage} ${t("of")} ${totalPages || 1}</span>
-          <button class="custom-prev-next-btn" ${currentPage === totalPages ? "disabled" : ""} onclick="changePage(${currentPage + 1})">${t("next")}</button>
+          <button id="nextPageBtn" class="custom-prev-next-btn" ${currentPage === totalPages ? "disabled" : ""}>${t("next")}</button>
         </div>
       </div>
     </div>
@@ -131,7 +131,7 @@ export function buildFileTableHeader(sortOrder) {
     <table class="table">
       <thead>
         <tr>
-          <th class="checkbox-col"><input type="checkbox" id="selectAll" onclick="toggleAllCheckboxes(this)"></th>
+          <th class="checkbox-col"><input type="checkbox" id="selectAll"></th>
           <th data-column="name" class="sortable-col">${t("file_name")} ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="modified" class="hide-small sortable-col">${t("date_modified")} ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="uploaded" class="hide-small hide-medium sortable-col">${t("upload_date")} ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
@@ -162,15 +162,15 @@ export function buildFileTableRow(file, folderPath) {
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">audiotrack</i>`;
     }
-    previewButton = `<button class="btn btn-sm btn-info preview-btn" onclick="event.stopPropagation(); previewFile('${folderPath + encodeURIComponent(file.name)}', '${safeFileName}')">
+    previewButton = `<button class="btn btn-sm btn-info preview-btn" data-preview-url="${folderPath + encodeURIComponent(file.name)}?t=${Date.now()}" data-preview-name="${safeFileName}">
                  ${previewIcon}
                </button>`;
   }
 
   return `
-  <tr onclick="toggleRowSelection(event, '${safeFileName}')" class="clickable-row">
+  <tr class="clickable-row">
     <td>
-      <input type="checkbox" class="file-checkbox" value="${safeFileName}" onclick="event.stopPropagation(); updateRowHighlight(this);">
+      <input type="checkbox" class="file-checkbox" value="${safeFileName}">
     </td>
     <td class="file-name-cell">${safeFileName}</td>
     <td class="hide-small nowrap">${safeModified}</td>
@@ -179,22 +179,16 @@ export function buildFileTableRow(file, folderPath) {
     <td class="hide-small hide-medium nowrap">${safeUploader}</td>
     <td>
       <div class="button-wrap" style="display: flex; justify-content: left; gap: 5px;">
-        <button type="button" class="btn btn-sm btn-success download-btn" 
-          onclick="openDownloadModal('${file.name}', '${file.folder || 'root'}')" 
-          title="${t('download')}">
+        <button type="button" class="btn btn-sm btn-success download-btn" data-download-name="${file.name}" data-download-folder="${file.folder || 'root'}" title="${t('download')}">
           <i class="material-icons">file_download</i>
         </button>
         ${file.editable ? `
-          <button class="btn btn-sm edit-btn" 
-                  onclick='editFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
-                  title="${t('edit')}">
+          <button class="btn btn-sm edit-btn" data-edit-name="${file.name}" data-edit-folder="${file.folder || 'root'}" title="${t('edit')}">
             <i class="material-icons">edit</i>
           </button>
         ` : ""}
         ${previewButton}
-        <button class="btn btn-sm btn-warning rename-btn" 
-                onclick='renameFile(${JSON.stringify(file.name)}, ${JSON.stringify(file.folder || "root")})'
-                title="${t('rename')}">
+        <button class="btn btn-sm btn-warning rename-btn" data-rename-name="${file.name}" data-rename-folder="${file.folder || 'root'}" title="${t('rename')}">
           <i class="material-icons">drive_file_rename_outline</i>
         </button>
       </div>
@@ -207,10 +201,10 @@ export function buildBottomControls(itemsPerPageSetting) {
   return `
     <div class="d-flex align-items-center mt-3 bottom-controls">
       <label class="label-inline mr-2 mb-0">${t("show")}</label>
-      <select class="form-control bottom-select" onchange="changeItemsPerPage(this.value)">
+      <select class="form-control bottom-select" id="itemsPerPageSelect">
         ${[10, 20, 50, 100]
-          .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
-          .join("")}
+      .map(num => `<option value="${num}" ${num === itemsPerPageSetting ? "selected" : ""}>${num}</option>`)
+      .join("")}
       </select>
       <span class="items-per-page-text ml-2 mb-0">${t("items_per_page")}</span>
     </div>
@@ -346,3 +340,6 @@ export function showCustomConfirmModal(message) {
     noBtn.addEventListener("click", onNo);
   });
 }
+
+window.toggleRowSelection = toggleRowSelection;
+window.updateRowHighlight = updateRowHighlight;
