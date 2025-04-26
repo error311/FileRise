@@ -118,48 +118,55 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // --- Dark Mode Persistence ---
     const darkModeToggle = document.getElementById("darkModeToggle");
-    const storedDarkMode = localStorage.getItem("darkMode");
+    const darkModeIcon = document.getElementById("darkModeIcon");
 
-    if (storedDarkMode === "true") {
-      document.body.classList.add("dark-mode");
-    } else if (storedDarkMode === "false") {
-      document.body.classList.remove("dark-mode");
-    } else {
-      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        document.body.classList.add("dark-mode");
-      } else {
-        document.body.classList.remove("dark-mode");
+    if (darkModeToggle && darkModeIcon) {
+      // 1) Load stored preference (or null)
+      let stored = localStorage.getItem("darkMode");
+      const hasStored = stored !== null;
+
+      // 2) Determine initial mode
+      const isDark = hasStored
+        ? (stored === "true")
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+      document.body.classList.toggle("dark-mode", isDark);
+      darkModeToggle.classList.toggle("active", isDark);
+
+      // 3) Helper to update icon & aria-label
+      function updateIcon() {
+        const dark = document.body.classList.contains("dark-mode");
+        darkModeIcon.textContent = dark ? "light_mode" : "dark_mode";
+        darkModeToggle.setAttribute(
+          "aria-label",
+          dark ? t("light_mode") : t("dark_mode")
+        );
+        darkModeToggle.setAttribute(
+          "title",
+          dark
+            ? t("switch_to_light_mode")
+            : t("switch_to_dark_mode")
+        );
       }
-    }
 
-    if (darkModeToggle) {
-      darkModeToggle.textContent = document.body.classList.contains("dark-mode")
-        ? t("light_mode")
-        : t("dark_mode");
+      updateIcon();
 
-      darkModeToggle.addEventListener("click", function () {
-        if (document.body.classList.contains("dark-mode")) {
-          document.body.classList.remove("dark-mode");
-          localStorage.setItem("darkMode", "false");
-          darkModeToggle.textContent = t("dark_mode");
-        } else {
-          document.body.classList.add("dark-mode");
-          localStorage.setItem("darkMode", "true");
-          darkModeToggle.textContent = t("light_mode");
-        }
+      // 4) Click handler: always override and store preference
+      darkModeToggle.addEventListener("click", () => {
+        const nowDark = document.body.classList.toggle("dark-mode");
+        localStorage.setItem("darkMode", nowDark ? "true" : "false");
+        updateIcon();
       });
-    }
 
-    if (localStorage.getItem("darkMode") === null && window.matchMedia) {
-      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
-        if (event.matches) {
-          document.body.classList.add("dark-mode");
-          if (darkModeToggle) darkModeToggle.textContent = t("light_mode");
-        } else {
-          document.body.classList.remove("dark-mode");
-          if (darkModeToggle) darkModeToggle.textContent = t("dark_mode");
-        }
-      });
+      // 5) OS‐level change: only if no stored pref at load
+      if (!hasStored && window.matchMedia) {
+        window
+          .matchMedia("(prefers-color-scheme: dark)")
+          .addEventListener("change", e => {
+            document.body.classList.toggle("dark-mode", e.matches);
+            updateIcon();
+          });
+      }
     }
     // --- End Dark Mode Persistence ---
 

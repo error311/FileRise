@@ -41,9 +41,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"
     integrity="sha384-Tsl3d5pUAO7a13enIvSsL3O0/95nsthPJiPto5NtLuY8w3+LbZOpr3Fl2MNmrh1E"
     crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2/dist/fuse.min.js"
-     integrity="sha384-zPE55eyESN+FxCWGEnlNxGyAPJud6IZ6TtJmXb56OFRGhxZPN4akj9rjA3gw5Qqa" 
-     crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2/dist/fuse.min.js"
+    integrity="sha384-zPE55eyESN+FxCWGEnlNxGyAPJud6IZ6TtJmXb56OFRGhxZPN4akj9rjA3gw5Qqa"
+    crossorigin="anonymous"></script>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 
@@ -78,16 +78,16 @@
                 stroke: white;
                 stroke-width: 2;
               }
-      
+
               .divider {
                 stroke: #1565C0;
                 stroke-width: 1.5;
               }
-      
+
               .drawer {
                 fill: #FFFFFF;
               }
-      
+
               .handle {
                 fill: #1565C0;
               }
@@ -159,7 +159,11 @@
           <button id="removeUserBtn" data-i18n-title="remove_user" style="display: none;">
             <i class="material-icons">person_remove</i>
           </button>
-          <button id="darkModeToggle" class="dark-mode-toggle" data-i18n-key="dark_mode_toggle">Dark Mode</button>
+          <button id="darkModeToggle" class="btn-icon" aria-label="Toggle dark mode">
+            <span class="material-icons" id="darkModeIcon">
+              dark_mode
+            </span>
+          </button>
         </div>
       </div>
     </div>
@@ -200,7 +204,8 @@
             </div>
             <!-- Basic HTTP Login Option -->
             <div class="text-center mt-3">
-              <a href="/api/auth/login_basic.php" class="btn btn-secondary" data-i18n-key="basic_http_login">Use Basic HTTP
+              <a href="/api/auth/login_basic.php" class="btn btn-secondary" data-i18n-key="basic_http_login">Use Basic
+                HTTP
                 Login</a>
             </div>
           </div>
@@ -284,10 +289,10 @@
                           </div>
                         </div>
                       </div>
-                    
+
                       <button id="shareFolderBtn" class="btn btn-secondary ml-2" data-i18n-title="share_folder">
                         <i class="material-icons">share</i>
-                     </button>
+                      </button>
                       <button id="deleteFolderBtn" class="btn btn-danger ml-2" data-i18n-title="delete_folder">
                         <i class="material-icons">delete</i>
                       </button>
@@ -394,33 +399,47 @@
 <!-- Download Progress Modal -->
 <div id="downloadProgressModal" class="modal" style="display: none;">
   <div class="modal-content" style="text-align: center; padding: 20px;">
-    <!-- Material icon spinner with a dedicated class -->
+    <h4 id="downloadProgressTitle" data-i18n-key="preparing_download">
+      Preparing your download...
+    </h4>
+
+    <!-- spinner -->
     <span class="material-icons download-spinner">autorenew</span>
-    <p data-i18n-key="preparing_download">Preparing your download...</p>
+
+    <!-- these were missing -->
+    <progress
+      id="downloadProgressBar"
+      value="0" max="100"
+      style="width:100%; height:1.5em; display:none;"
+    ></progress>
+    <p>
+      <span id="downloadProgressPercent" style="display:none;">0%</span>
+    </p>
   </div>
 </div>
 
-<!-- Single File Download Modal -->
-<div id="downloadFileModal" class="modal" style="display: none;">
-  <div class="modal-content" style="text-align: center; padding: 20px;">
-    <h4 data-i18n-key="download_file">Download File</h4>
-    <p data-i18n-key="confirm_or_change_filename">Confirm or change the download file name:</p>
-    <input type="text" id="downloadFileNameInput" class="form-control" data-i18n-placeholder="filename" placeholder="Filename" />
-    <div style="margin-top: 15px; text-align: right;">
-      <button id="cancelDownloadFile" class="btn btn-secondary"
-              onclick="document.getElementById('downloadFileModal').style.display = 'none';"
-              data-i18n-key="cancel">Cancel</button>
-      <button id="confirmSingleDownloadButton" class="btn btn-primary"
-              onclick="confirmSingleDownload()"
-              data-i18n-key="download">Download</button>
+  <!-- Single File Download Modal -->
+  <div id="downloadFileModal" class="modal" style="display: none;">
+    <div class="modal-content" style="text-align: center; padding: 20px;">
+      <h4 data-i18n-key="download_file">Download File</h4>
+      <p data-i18n-key="confirm_or_change_filename">Confirm or change the download file name:</p>
+      <input type="text" id="downloadFileNameInput" class="form-control" data-i18n-placeholder="filename"
+        placeholder="Filename" />
+      <div style="margin-top: 15px; text-align: right;">
+        <button id="cancelDownloadFile" class="btn btn-secondary"
+          onclick="document.getElementById('downloadFileModal').style.display = 'none';"
+          data-i18n-key="cancel">Cancel</button>
+        <button id="confirmSingleDownloadButton" class="btn btn-primary" onclick="confirmSingleDownload()"
+          data-i18n-key="download">Download</button>
+      </div>
     </div>
   </div>
-</div>
 
   <!-- Change Password, Add User, Remove User, Rename File, and Custom Confirm Modals (unchanged) -->
   <div id="changePasswordModal" class="modal" style="display:none;">
     <div class="modal-content" style="max-width:400px; margin:auto;">
-      <span id="closeChangePasswordModal" style="position:absolute; top:10px; right:10px; cursor:pointer; font-size:24px;">&times;</span>
+      <span id="closeChangePasswordModal"
+        style="position:absolute; top:10px; right:10px; cursor:pointer; font-size:24px;">&times;</span>
       <h3 data-i18n-key="change_password_title">Change Password</h3>
       <input type="password" id="oldPassword" class="form-control" data-i18n-placeholder="old_password"
         placeholder="Old Password" style="width:100%; margin: 5px 0;" />

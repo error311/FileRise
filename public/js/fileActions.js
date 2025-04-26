@@ -80,16 +80,16 @@ export function openDownloadModal(fileName, folder) {
   // Store file details globally for the download confirmation function.
   window.singleFileToDownload = fileName;
   window.currentFolder = folder || "root";
-  
+
   // Optionally pre-fill the file name input in the modal.
   const input = document.getElementById("downloadFileNameInput");
   if (input) {
     input.value = fileName; // Use file name as-is (or modify if desired)
   }
-  
+
   // Show the single file download modal (a new modal element).
   document.getElementById("downloadFileModal").style.display = "block";
-  
+
   // Optionally focus the input after a short delay.
   setTimeout(() => {
     if (input) input.focus();
@@ -97,58 +97,34 @@ export function openDownloadModal(fileName, folder) {
 }
 
 export function confirmSingleDownload() {
-  // Get the file name from the modal. Users can change it if desired.
-  let fileName = document.getElementById("downloadFileNameInput").value.trim();
+  // 1) Get and validate the filename
+  const input = document.getElementById("downloadFileNameInput");
+  const fileName = input.value.trim();
   if (!fileName) {
     showToast("Please enter a name for the file.");
     return;
   }
-  
-  // Hide the download modal.
+
+  // 2) Hide the download-name modal
   document.getElementById("downloadFileModal").style.display = "none";
-  // Show the progress modal (same as in your ZIP download flow).
-  document.getElementById("downloadProgressModal").style.display = "block";
-  
-  // Build the URL for download.php using GET parameters.
+
+  // 3) Build the direct download URL
   const folder = window.currentFolder || "root";
-  const downloadURL = "/api/file/download.php?folder=" + encodeURIComponent(folder) +
-                      "&file=" + encodeURIComponent(window.singleFileToDownload);
-  
-  fetch(downloadURL, {
-    method: "GET",
-    credentials: "include"
-  })
-    .then(response => {
-      if (!response.ok) {
-        return response.text().then(text => {
-          throw new Error("Failed to download file: " + text);
-        });
-      }
-      return response.blob();
-    })
-    .then(blob => {
-      if (!blob || blob.size === 0) {
-        throw new Error("Received empty file.");
-      }
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.style.display = "none";
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
-      // Hide the progress modal.
-      document.getElementById("downloadProgressModal").style.display = "none";
-      showToast("Download started.");
-    })
-    .catch(error => {
-      // Hide progress modal and show error.
-      document.getElementById("downloadProgressModal").style.display = "none";
-      console.error("Error downloading file:", error);
-      showToast("Error downloading file: " + error.message);
-    });
+  const downloadURL = "/api/file/download.php"
+    + "?folder=" + encodeURIComponent(folder)
+    + "&file=" + encodeURIComponent(window.singleFileToDownload);
+
+  // 4) Trigger native browser download
+  const a = document.createElement("a");
+  a.href = downloadURL;
+  a.download = fileName;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // 5) Notify the user
+  showToast("Download started. Check your browser’s download manager.");
 }
 
 export function handleExtractZipSelected(e) {
@@ -168,16 +144,21 @@ export function handleExtractZipSelected(e) {
     showToast("No zip files selected.");
     return;
   }
-  
-  // Change progress modal text to "Extracting files..."
-  const progressText = document.querySelector("#downloadProgressModal p");
-  if (progressText) {
-    progressText.textContent = "Extracting files...";
-  }
-  
-  // Show the progress modal.
-  document.getElementById("downloadProgressModal").style.display = "block";
-  
+
+  // Prepare and show the spinner-only modal
+  const modal = document.getElementById("downloadProgressModal");
+  const titleEl = document.getElementById("downloadProgressTitle");
+  const spinner = modal.querySelector(".download-spinner");
+  const progressBar = document.getElementById("downloadProgressBar");
+  const progressPct = document.getElementById("downloadProgressPercent");
+
+  if (titleEl) titleEl.textContent = "Extracting files…";
+  if (spinner) spinner.style.display = "inline-block";
+  if (progressBar) progressBar.style.display = "none";
+  if (progressPct) progressPct.style.display = "none";
+
+  modal.style.display = "block";
+
   fetch("/api/file/extractZip.php", {
     method: "POST",
     credentials: "include",
@@ -192,45 +173,42 @@ export function handleExtractZipSelected(e) {
   })
     .then(response => response.json())
     .then(data => {
-      // Hide the progress modal once the request has completed.
-      document.getElementById("downloadProgressModal").style.display = "none";
+      modal.style.display = "none";
       if (data.success) {
-        let toastMessage = "Zip file(s) extracted successfully!";
-        if (data.extractedFiles && Array.isArray(data.extractedFiles) && data.extractedFiles.length) {
-          toastMessage = "Extracted: " + data.extractedFiles.join(", ");
+        let msg = "Zip file(s) extracted successfully!";
+        if (Array.isArray(data.extractedFiles) && data.extractedFiles.length) {
+          msg = "Extracted: " + data.extractedFiles.join(", ");
         }
-        showToast(toastMessage);
+        showToast(msg);
         loadFileList(window.currentFolder);
       } else {
         showToast("Error extracting zip: " + (data.error || "Unknown error"));
       }
     })
     .catch(error => {
-      // Hide the progress modal on error.
-      document.getElementById("downloadProgressModal").style.display = "none";
+      modal.style.display = "none";
       console.error("Error extracting zip files:", error);
       showToast("Error extracting zip files.");
     });
 }
 
-const extractZipBtn = document.getElementById("extractZipBtn");
-if (extractZipBtn) {
-  extractZipBtn.replaceWith(extractZipBtn.cloneNode(true));
-  document.getElementById("extractZipBtn").addEventListener("click", handleExtractZipSelected);
-}
+document.addEventListener("DOMContentLoaded", () => {
+  const zipNameModal   = document.getElementById("downloadZipModal");
+  const progressModal  = document.getElementById("downloadProgressModal");
+  const cancelZipBtn   = document.getElementById("cancelDownloadZip");
+  const confirmZipBtn  = document.getElementById("confirmDownloadZip");
 
-document.addEventListener("DOMContentLoaded", function () {
-  const cancelDownloadZip = document.getElementById("cancelDownloadZip");
-  if (cancelDownloadZip) {
-    cancelDownloadZip.addEventListener("click", function () {
-      document.getElementById("downloadZipModal").style.display = "none";
+  // 1) Cancel button hides the name modal
+  if (cancelZipBtn) {
+    cancelZipBtn.addEventListener("click", () => {
+      zipNameModal.style.display = "none";
     });
   }
 
-  // This part remains in your confirmDownloadZip event handler:
-  const confirmDownloadZip = document.getElementById("confirmDownloadZip");
-  if (confirmDownloadZip) {
-    confirmDownloadZip.addEventListener("click", function () {
+  // 2) Confirm button kicks off the zip+download
+  if (confirmZipBtn) {
+    confirmZipBtn.addEventListener("click", async () => {
+      // a) Validate ZIP filename
       let zipName = document.getElementById("zipFileNameInput").value.trim();
       if (!zipName) {
         showToast("Please enter a name for the zip file.");
@@ -239,52 +217,56 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!zipName.toLowerCase().endsWith(".zip")) {
         zipName += ".zip";
       }
-      // Hide the ZIP name input modal
-      document.getElementById("downloadZipModal").style.display = "none";
-      // Show the progress modal here only on confirm
-      console.log("Download confirmed. Showing progress modal.");
-      document.getElementById("downloadProgressModal").style.display = "block";
-      const folder = window.currentFolder || "root";
-      fetch("/api/file/downloadZip.php", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": window.csrfToken
-        },
-        body: JSON.stringify({ folder: folder, files: window.filesToDownload })
-      })
-        .then(response => {
-          if (!response.ok) {
-            return response.text().then(text => {
-              throw new Error("Failed to create zip file: " + text);
-            });
-          }
-          return response.blob();
-        })
-        .then(blob => {
-          if (!blob || blob.size === 0) {
-            throw new Error("Received empty zip file.");
-          }
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.style.display = "none";
-          a.href = url;
-          a.download = zipName;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          a.remove();
-          // Hide the progress modal after download starts
-          document.getElementById("downloadProgressModal").style.display = "none";
-          showToast("Download started.");
-        })
-        .catch(error => {
-          // Hide the progress modal on error
-          document.getElementById("downloadProgressModal").style.display = "none";
-          console.error("Error downloading zip:", error);
-          showToast("Error downloading selected files as zip: " + error.message);
+
+      // b) Hide the name‐input modal, show the spinner modal
+      zipNameModal.style.display      = "none";
+      progressModal.style.display     = "block";
+
+      // c) (Optional) update the “Preparing…” text if you gave it an ID
+      const titleEl = document.getElementById("downloadProgressTitle");
+      if (titleEl) titleEl.textContent = `Preparing ${zipName}…`;
+
+      try {
+        // d) POST and await the ZIP blob
+        const res = await fetch("/api/file/downloadZip.php", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token":  window.csrfToken
+          },
+          body: JSON.stringify({
+            folder: window.currentFolder || "root",
+            files:  window.filesToDownload
+          })
         });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || `Status ${res.status}`);
+        }
+
+        const blob = await res.blob();
+        if (!blob || blob.size === 0) {
+          throw new Error("Received empty ZIP file.");
+        }
+
+        // e) Hand off to the browser’s download manager
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement("a");
+        a.href     = url;
+        a.download = zipName;
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(url);
+        a.remove();
+
+      } catch (err) {
+        console.error("Error downloading ZIP:", err);
+        showToast("Error: " + err.message);
+      } finally {
+        // f) Always hide spinner modal
+        progressModal.style.display = "none";
+      }
     });
   }
 });

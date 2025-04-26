@@ -80,6 +80,9 @@ body.dark-mode .header-container {
   background-color: #1f1f1f;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
 }
+#darkModeIcon {
+  color: #fff;
+}
 
 .header-logo {
   max-height: 50px;

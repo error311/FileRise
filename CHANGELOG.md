@@ -1,5 +1,11 @@
 # Changelog
 
+## Changes 4/25/2025
+
+- Switch single‐file download to native `<a>` link (no JS buffering)
+- Keep spinner modal during ZIP creation and download blob on POST response
+- Replace text toggle with a single button showing sun/moon icons and hover tooltip
+
 ## Changes 4/24/2025 1.2.5
 
 - Enhance README and wiki with expanded installation instructions

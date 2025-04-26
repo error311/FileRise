@@ -176,6 +176,8 @@ const translations = {
     // Dark Mode Toggle
     "dark_mode_toggle": "Dark Mode",
     "light_mode_toggle": "Light Mode",
+    "switch_to_light_mode": "Switch to light mode",
+    "switch_to_dark_mode": "Switch to dark mode",
 
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:
     "admin_panel": "Admin Panel",
