@@ -340,6 +340,32 @@ export function renderFileTable(folder, container) {
 
     fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
+    // pagination clicks
+    const prevBtn = document.getElementById("prevPageBtn");
+    if (prevBtn) prevBtn.addEventListener("click", () => {
+        if (window.currentPage > 1) {
+            window.currentPage--;
+            renderFileTable(folder, container);
+        }
+    });
+    const nextBtn = document.getElementById("nextPageBtn");
+    if (nextBtn) nextBtn.addEventListener("click", () => {
+        // totalPages is computed above in this scope
+        if (window.currentPage < totalPages) {
+            window.currentPage++;
+            renderFileTable(folder, container);
+        }
+    });
+
+    // items-per-page selector
+    const itemsSelect = document.getElementById("itemsPerPageSelect");
+    if (itemsSelect) itemsSelect.addEventListener("change", e => {
+        window.itemsPerPage = parseInt(e.target.value, 10);
+        localStorage.setItem("itemsPerPage", window.itemsPerPage);
+        window.currentPage = 1;
+        renderFileTable(folder, container);
+    });
+
     // hook up the master checkbox
     const selectAll = document.getElementById("selectAll");
     if (selectAll) {
@@ -636,6 +662,31 @@ export function renderGalleryView(folder, container) {
     fileListContent.innerHTML = galleryHTML;
 
     // --- Now wire up all behaviors without inline handlers ---
+
+    //  ADD: pagination buttons for gallery
+    const prevBtn = document.getElementById("prevPageBtn");
+    if (prevBtn) prevBtn.addEventListener("click", () => {
+        if (window.currentPage > 1) {
+            window.currentPage--;
+            renderGalleryView(folder, container);
+        }
+    });
+    const nextBtn = document.getElementById("nextPageBtn");
+    if (nextBtn) nextBtn.addEventListener("click", () => {
+        if (window.currentPage < totalPages) {
+            window.currentPage++;
+            renderGalleryView(folder, container);
+        }
+    });
+
+    // ADD: items-per-page selector for gallery
+    const itemsSelect = document.getElementById("itemsPerPageSelect");
+    if (itemsSelect) itemsSelect.addEventListener("change", e => {
+        window.itemsPerPage = parseInt(e.target.value, 10);
+        localStorage.setItem("itemsPerPage", window.itemsPerPage);
+        window.currentPage = 1;
+        renderGalleryView(folder, container);
+    });
 
     // cache images on load
     fileListContent.querySelectorAll('.gallery-thumbnail').forEach(img => {
