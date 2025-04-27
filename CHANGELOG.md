@@ -7,6 +7,7 @@
 - **Master checkbox sync** in toolbar  
   - Enhanced `updateFileActionButtons()` to set the header checkbox to checked, unchecked, or indeterminate based on how many files are selected
 - Fixed Pagination controls & Items-per-page dropdown
+- Fixed `#advancedSearchToggle` in both `renderFileTable()` and `renderGalleryView()`
 
 ---
 

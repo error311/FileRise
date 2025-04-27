@@ -357,6 +357,12 @@ export function renderFileTable(folder, container) {
         }
     });
 
+    // ADD: advanced search toggle
+    const advToggle = document.getElementById("advancedSearchToggle");
+    if (advToggle) advToggle.addEventListener("click", () => {
+        toggleAdvancedSearch();
+    });
+
     // items-per-page selector
     const itemsSelect = document.getElementById("itemsPerPageSelect");
     if (itemsSelect) itemsSelect.addEventListener("change", e => {
@@ -678,6 +684,15 @@ export function renderGalleryView(folder, container) {
             renderGalleryView(folder, container);
         }
     });
+
+    // ←— ADD: advanced search toggle
+    const advToggle = document.getElementById("advancedSearchToggle");
+    if (advToggle) advToggle.addEventListener("click", () => {
+        toggleAdvancedSearch();
+    });
+
+    // ←— ADD: wire up context-menu in gallery
+    bindFileListContextMenu();
 
     // ADD: items-per-page selector for gallery
     const itemsSelect = document.getElementById("itemsPerPageSelect");
