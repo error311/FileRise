@@ -2,19 +2,17 @@
 document.addEventListener('DOMContentLoaded', function() {
     let viewMode = 'list';
     const payload = JSON.parse(
-        document.getElementById('shared-data').textContent
-      );
-      const token     = payload.token;
-      const filesData = payload.files;
+      document.getElementById('shared-data').textContent
+    );
+    const token     = payload.token;
+    const filesData = payload.files;
     const downloadBase = `${window.location.origin}/api/folder/downloadSharedFile.php?token=${encodeURIComponent(token)}&file=`;
+    const btn = document.getElementById('toggleBtn');
+    if (btn) btn.classList.add('toggle-btn');
   
     function toggleViewMode() {
       const listEl    = document.getElementById('listViewContainer');
       const galleryEl = document.getElementById('galleryViewContainer');
-      const btn       = document.getElementById('toggleBtn');
-      if (btn) {
-        btn.classList.add('toggle-btn');
-      }
   
       if (viewMode === 'list') {
         viewMode = 'gallery';
@@ -30,30 +28,62 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   
-    document.getElementById('toggleBtn').addEventListener('click', toggleViewMode);
+    btn.addEventListener('click', toggleViewMode);
   
     function renderGalleryView() {
-      const galleryContainer = document.getElementById('galleryViewContainer');
-      let html = '<div class="shared-gallery-container">';
+      const container = document.getElementById('galleryViewContainer');
+      // clear previous
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      const grid = document.createElement('div');
+      grid.className = 'shared-gallery-container';
+  
       filesData.forEach(file => {
         const url = downloadBase + encodeURIComponent(file);
         const ext = file.split('.').pop().toLowerCase();
-        const thumb = /^(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/.test(ext)
-          ? `<img src="${url}" alt="${file}">`
-          : `<span class="material-icons">insert_drive_file</span>`;
-        html += `
-          <div class="shared-gallery-card">
-            <div class="gallery-preview" data-url="${url}" style="cursor:pointer;">${thumb}</div>
-            <div class="gallery-info"><span class="gallery-file-name">${file}</span></div>
-          </div>`;
-      });
-      html += '</div>';
-      galleryContainer.innerHTML = html;
+        const isImg = /^(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/.test(ext);
   
-      galleryContainer.querySelectorAll('.gallery-preview')
-        .forEach(el => el.addEventListener('click', () => {
-          window.location.href = el.dataset.url;
-        }));
+        // card
+        const card = document.createElement('div');
+        card.className = 'shared-gallery-card';
+  
+        // preview
+        const preview = document.createElement('div');
+        preview.className = 'gallery-preview';
+        preview.style.cursor = 'pointer';
+        preview.dataset.url = url;
+  
+        if (isImg) {
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = file;            // safe, file is not HTML
+          preview.appendChild(img);
+        } else {
+          const icon = document.createElement('span');
+          icon.className = 'material-icons';
+          icon.textContent = 'insert_drive_file';
+          preview.appendChild(icon);
+        }
+        card.appendChild(preview);
+  
+        // info
+        const info = document.createElement('div');
+        info.className = 'gallery-info';
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'gallery-file-name';
+        nameSpan.textContent = file; // textContent escapes any HTML
+        info.appendChild(nameSpan);
+        card.appendChild(info);
+  
+        grid.appendChild(card);
+  
+        preview.addEventListener('click', () => {
+          window.location.href = preview.dataset.url;
+        });
+      });
+  
+      container.appendChild(grid);
     }
   
     window.renderGalleryView = renderGalleryView;

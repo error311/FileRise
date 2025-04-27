@@ -19,6 +19,7 @@
   - Added `.toggle-btn` CSS for blue header-style toggle button and applied it in JS  
   - Added `.pagination a:hover { background-color: #0056b3; }` to match button hover  
   - Tweaked `body` padding and `header h1` margins to reduce whitespace above header  
+  - Refactored `sharedFolderView.js:renderGalleryView()` to eliminate `innerHTML` usage; now uses `document.createElement` and `textContent` so filenames and URLs are fully escaped and CSP-safe
 
 ---
 
