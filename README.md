@@ -108,16 +108,16 @@ FileRise will be accessible at `http://localhost:8080` (or your server’s IP). 
 
 If you prefer to run FileRise on a traditional web server (LAMP stack or similar):
 
-- **Requirements:** PHP 8.1 or higher, Apache (with mod_php) or another web server configured for PHP. Ensure PHP extensions json, curl, and zip are enabled. No database needed.
+- **Requirements:** PHP 8.3 or higher, Apache (with mod_php) or another web server configured for PHP. Ensure PHP extensions json, curl, and zip are enabled. No database needed.
 - **Download Files:** Clone this repo or download the [latest release archive](https://github.com/error311/FileRise/releases).
 
 ``` bash
 git clone https://github.com/error311/FileRise.git  
 ```
 
-Place the files into your web server’s directory (e.g., `/var/www/public`). It can be in a subfolder (just adjust the `BASE_URL` in config as below).
+Place the files into your web server’s directory (e.g., `/var/www/`). It can be in a subfolder (just adjust the `BASE_URL` in config as below).
 
-- **Composer Dependencies:** If you plan to use OIDC (SSO login), install Composer and run `composer install` in the FileRise directory. (This pulls in a couple of PHP libraries like jumbojett/openid-connect for OAuth support.)
+- **Composer Dependencies:** Install Composer and run `composer install` in the FileRise directory. (This pulls in a couple of PHP libraries like jumbojett/openid-connect for OAuth support.)
 
 - **Folder Permissions:** Ensure the server can write to the following directories (create them if they don’t exist):
 
