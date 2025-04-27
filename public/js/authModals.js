@@ -3,7 +3,7 @@ import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 import { loadAdminConfigFunc } from './auth.js';
 
-const version = "v1.2.6"; // Update this version string as needed
+const version = "v1.2.7"; // Update this version string as needed
 const adminTitle = `${t("admin_panel")} <small style="font-size: 12px; color: gray;">${version}</small>`;
 
 let lastLoginData = null;

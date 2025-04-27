@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 4/27/2025
+## Changes 4/27/2025 1.2.7
 
 - **Select-All** checkbox now correctly toggles all `.file-checkbox` inputs  
   - Updated `toggleAllCheckboxes(masterCheckbox)` to call `updateRowHighlight()` on each row so selections get the `.row-selected` highlight
@@ -8,6 +8,17 @@
   - Enhanced `updateFileActionButtons()` to set the header checkbox to checked, unchecked, or indeterminate based on how many files are selected
 - Fixed Pagination controls & Items-per-page dropdown
 - Fixed `#advancedSearchToggle` in both `renderFileTable()` and `renderGalleryView()`
+- **Shared folder gallery view logic**  
+  - Introduced new `public/js/sharedFolderView.js` containing all DOMContentLoaded wiring, `toggleViewMode()`, gallery rendering, and event listeners  
+  - Embedded a non-executing JSON payload in `shareFolder.php`
+- **`FolderController::shareFolder()` / `shareFolder.php`**  
+  - Removed all inline `onclick="…"` attributes and inline `<script>` blocks  
+  - Added `<script type="application/json" id="shared-data">…</script>` to export `$token` and `$files`  
+  - Added `<script src="/js/sharedFolderView.js" defer></script>` to load the external view logic
+- **Styling updates**  
+  - Added `.toggle-btn` CSS for blue header-style toggle button and applied it in JS  
+  - Added `.pagination a:hover { background-color: #0056b3; }` to match button hover  
+  - Tweaked `body` padding and `header h1` margins to reduce whitespace above header  
 
 ---
 

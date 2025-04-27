@@ -550,13 +550,18 @@ class FolderController
                 body {
                     background: #f2f2f2;
                     font-family: Arial, sans-serif;
-                    padding: 20px;
+                    padding: 0px 20px 20px 20px;
                     color: #333;
                 }
 
                 .header {
                     text-align: center;
                     margin-bottom: 30px;
+                    margin-top: 0;
+                }
+
+                .header h1 {
+                margin-top: 0;
                 }
 
                 .container {
@@ -661,6 +666,28 @@ class FolderController
                     font-size: 0.9rem;
                     color: #777;
                 }
+
+                .toggle-btn {
+                    background-color: #007BFF;
+                    color: #fff;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-size: 1rem;
+                    cursor: pointer;
+                }
+
+                .toggle-btn:hover {
+                    background-color: #0056b3;
+                }
+
+                .pagination a:hover {
+                    background-color: #0056b3;
+                }
+
+                .pagination span {
+                    cursor: default;
+                }
             </style>
         </head>
 
@@ -670,7 +697,7 @@ class FolderController
             </div>
             <div class="container">
                 <!-- Toggle Button -->
-                <button id="toggleBtn" class="toggle-btn" onclick="toggleViewMode()">Switch to Gallery View</button>
+                <button id="toggleBtn" class="toggle-btn">Switch to Gallery View</button>
 
                 <!-- List View Container -->
                 <div id="listViewContainer">
@@ -757,86 +784,14 @@ class FolderController
             <div class="footer">
                 &copy; <?php echo date("Y"); ?> FileRise. All rights reserved.
             </div>
-
-            <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                    // JavaScript for toggling view modes (list/gallery) and wiring up gallery clicks
-                    var viewMode = 'list';
-                    var token = '<?php echo addslashes($token); ?>';
-                    var filesData = <?php echo json_encode($files); ?>;
-
-                    // Build the download URL base
-                    var downloadBase = window.location.origin +
-                        '/api/folder/downloadSharedFile.php?token=' +
-                        encodeURIComponent(token) +
-                        '&file=';
-
-                    function toggleViewMode() {
-                        var listEl = document.getElementById('listViewContainer');
-                        var galleryEl = document.getElementById('galleryViewContainer');
-                        var btn = document.getElementById('toggleBtn');
-
-                        if (viewMode === 'list') {
-                            viewMode = 'gallery';
-                            listEl.style.display = 'none';
-                            renderGalleryView();
-                            galleryEl.style.display = 'block';
-                            btn.textContent = 'Switch to List View';
-                        } else {
-                            viewMode = 'list';
-                            galleryEl.style.display = 'none';
-                            listEl.style.display = 'block';
-                            btn.textContent = 'Switch to Gallery View';
-                        }
-                    }
-
-                    // Wire up the toggle button
-                    document.getElementById('toggleBtn')
-                        .addEventListener('click', toggleViewMode);
-
-                    function renderGalleryView() {
-                        var galleryContainer = document.getElementById('galleryViewContainer');
-                        var html = '<div class="shared-gallery-container">';
-
-                        filesData.forEach(function(file) {
-                            var encodedName = encodeURIComponent(file);
-                            var fileUrl = downloadBase + encodedName;
-                            var ext = file.split('.').pop().toLowerCase();
-                            var thumb;
-
-                            if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].indexOf(ext) >= 0) {
-                                thumb = '<img src="' + fileUrl + '" alt="' + file + '">';
-                            } else {
-                                thumb = '<span class="material-icons">insert_drive_file</span>';
-                            }
-
-                            html +=
-                                '<div class="shared-gallery-card">' +
-                                '<div class="gallery-preview" data-url="' + fileUrl + '" style="cursor:pointer;">' +
-                                thumb +
-                                '</div>' +
-                                '<div class="gallery-info">' +
-                                '<span class="gallery-file-name">' + file + '</span>' +
-                                '</div>' +
-                                '</div>';
-                        });
-
-                        html += '</div>';
-                        galleryContainer.innerHTML = html;
-
-                        // Wire up each thumbnail click
-                        galleryContainer.querySelectorAll('.gallery-preview')
-                            .forEach(function(el) {
-                                el.addEventListener('click', function() {
-                                    window.location.href = el.dataset.url;
-                                });
-                            });
-                    }
-
-                    // Expose for manual invocation if needed
-                    window.renderGalleryView = renderGalleryView;
-                });
+            <!-- non-executing JSON payload, never blocked by CSP -->
+            <script type="application/json" id="shared-data">
+                {
+                    "token": <?php echo json_encode($token, JSON_HEX_TAG); ?>,
+                    "files": <?php echo json_encode($files, JSON_HEX_TAG); ?>
+                }
             </script>
+            <script src="/js/sharedFolderView.js" defer></script>
         </body>
 
         </html>
