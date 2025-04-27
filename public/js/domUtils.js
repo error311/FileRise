@@ -25,8 +25,9 @@ export function toggleAllCheckboxes(masterCheckbox) {
   const checkboxes = document.querySelectorAll(".file-checkbox");
   checkboxes.forEach(chk => {
     chk.checked = masterCheckbox.checked;
+    updateRowHighlight(chk);
   });
-  updateFileActionButtons(); // update buttons based on current selection
+  updateFileActionButtons();
 }
 
 export function updateFileActionButtons() {
@@ -37,6 +38,21 @@ export function updateFileActionButtons() {
   const deleteBtn = document.getElementById("deleteSelectedBtn");
   const zipBtn = document.getElementById("downloadZipBtn");
   const extractZipBtn = document.getElementById("extractZipBtn");
+
+   // keep the “select all” in sync ——
+   const master = document.getElementById("selectAll");
+   if (master) {
+     if (selectedCheckboxes.length === fileCheckboxes.length) {
+       master.checked = true;
+       master.indeterminate = false;
+     } else if (selectedCheckboxes.length === 0) {
+       master.checked = false;
+       master.indeterminate = false;
+     } else {
+       master.checked = false;
+       master.indeterminate = true;
+     }
+   }
 
   if (fileCheckboxes.length === 0) {
     if (copyBtn) copyBtn.style.display = "none";
@@ -271,8 +287,6 @@ export function toggleRowSelection(event, fileName) {
     const start = Math.min(currentIndex, lastIndex);
     const end = Math.max(currentIndex, lastIndex);
 
-    // If neither CTRL nor Meta is pressed, you might choose
-    // to clear existing selections. For this example we leave existing selections intact.
     for (let i = start; i <= end; i++) {
       const cb = allRows[i].querySelector(".file-checkbox");
       if (cb) {

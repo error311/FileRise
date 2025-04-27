@@ -340,47 +340,55 @@ export function renderFileTable(folder, container) {
 
     fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
+    // hook up the master checkbox
+    const selectAll = document.getElementById("selectAll");
+    if (selectAll) {
+        selectAll.addEventListener("change", () => {
+            toggleAllCheckboxes(selectAll);
+        });
+    }
+
     // 1) Row-click selects the row
-fileListContent.querySelectorAll("tbody tr").forEach(row => {
-    row.addEventListener("click", e => {
-      // grab the underlying checkbox value
-      const cb = row.querySelector(".file-checkbox");
-      if (!cb) return;
-      toggleRowSelection(e, cb.value);
+    fileListContent.querySelectorAll("tbody tr").forEach(row => {
+        row.addEventListener("click", e => {
+            // grab the underlying checkbox value
+            const cb = row.querySelector(".file-checkbox");
+            if (!cb) return;
+            toggleRowSelection(e, cb.value);
+        });
     });
-  });
-  
-  // 2) Download buttons
-  fileListContent.querySelectorAll(".download-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      openDownloadModal(btn.dataset.downloadName, btn.dataset.downloadFolder);
+
+    // 2) Download buttons
+    fileListContent.querySelectorAll(".download-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            openDownloadModal(btn.dataset.downloadName, btn.dataset.downloadFolder);
+        });
     });
-  });
-  
-  // 3) Edit buttons
-  fileListContent.querySelectorAll(".edit-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      editFile(btn.dataset.editName, btn.dataset.editFolder);
+
+    // 3) Edit buttons
+    fileListContent.querySelectorAll(".edit-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            editFile(btn.dataset.editName, btn.dataset.editFolder);
+        });
     });
-  });
-  
-  // 4) Rename buttons
-  fileListContent.querySelectorAll(".rename-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      renameFile(btn.dataset.renameName, btn.dataset.renameFolder);
+
+    // 4) Rename buttons
+    fileListContent.querySelectorAll(".rename-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            renameFile(btn.dataset.renameName, btn.dataset.renameFolder);
+        });
     });
-  });
-  
-  // 5) Preview buttons (if you still have a .preview-btn)
-  fileListContent.querySelectorAll(".preview-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      previewFile(btn.dataset.previewUrl, btn.dataset.previewName);
+
+    // 5) Preview buttons (if you still have a .preview-btn)
+    fileListContent.querySelectorAll(".preview-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            previewFile(btn.dataset.previewUrl, btn.dataset.previewName);
+        });
     });
-  });
 
     createViewToggleButton();
 
@@ -575,7 +583,7 @@ export function renderGalleryView(folder, container) {
                  style="position:absolute; top:5px; left:5px; width:16px; height:16px;"></label>
   
           <div class="gallery-preview" style="cursor:pointer;"
-               data-preview-url="${folderPath+encodeURIComponent(file.name)}?t=${Date.now()}"
+               data-preview-url="${folderPath + encodeURIComponent(file.name)}?t=${Date.now()}"
                data-preview-name="${file.name}">
             ${thumbnail}
           </div>
@@ -590,20 +598,20 @@ export function renderGalleryView(folder, container) {
             <div class="button-wrap" style="display:flex; justify-content:center; gap:5px; margin-top:5px;">
               <button type="button" class="btn btn-sm btn-success download-btn"
                       data-download-name="${escapeHTML(file.name)}"
-                      data-download-folder="${file.folder||"root"}"
+                      data-download-folder="${file.folder || "root"}"
                       title="${t('download')}">
                 <i class="material-icons">file_download</i>
               </button>
               ${file.editable ? `
               <button type="button" class="btn btn-sm edit-btn"
                       data-edit-name="${escapeHTML(file.name)}"
-                      data-edit-folder="${file.folder||"root"}"
+                      data-edit-folder="${file.folder || "root"}"
                       title="${t('edit')}">
                 <i class="material-icons">edit</i>
               </button>` : ""}
               <button type="button" class="btn btn-sm btn-warning rename-btn"
                       data-rename-name="${escapeHTML(file.name)}"
-                      data-rename-folder="${file.folder||"root"}"
+                      data-rename-folder="${file.folder || "root"}"
                       title="${t('rename')}">
                 <i class="material-icons">drive_file_rename_outline</i>
               </button>

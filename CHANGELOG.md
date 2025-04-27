@@ -1,5 +1,14 @@
 # Changelog
 
+## Changes 4/27/2025
+
+- **Select-All** checkbox now correctly toggles all `.file-checkbox` inputs  
+  - Updated `toggleAllCheckboxes(masterCheckbox)` to call `updateRowHighlight()` on each row so selections get the `.row-selected` highlight
+- **Master checkbox sync** in toolbar  
+  - Enhanced `updateFileActionButtons()` to set the header checkbox to checked, unchecked, or indeterminate based on how many files are selected
+
+---
+
 ## Changes 4/26/2025 1.2.6
 
 **Apache / Dockerfile (CSP)**  
@@ -210,7 +219,7 @@
   Refactored to:
   1. Fetch CSRF  
   2. POST credentials to `/api/auth/auth.php`  
-  3. On `totp_required`, re‑fetch CSRF *again* before calling `openTOTPLoginModal()`  
+  3. On `totp_required`, re‑fetch CSRF again before calling `openTOTPLoginModal()`  
   4. Handle full logins vs. TOTP flows cleanly.
 
 - **TOTP handlers update**  
@@ -1156,7 +1165,7 @@ The enhancements extend the existing drag-and-drop functionality by adding a hea
   - Adjusted file preview and icon styling for better alignment.
   - Centered the header and optimized the layout for a clean, modern appearance.
   
-*This changelog and feature summary reflect the improvements made during the refactor from a monolithic utils file to modular ES6 components, along with enhancements in UI responsiveness, sorting, file uploads, and file management operations.*
+This changelog and feature summary reflect the improvements made during the refactor from a monolithic utils file to modular ES6 components, along with enhancements in UI responsiveness, sorting, file uploads, and file management operations.
 
 ---
 
