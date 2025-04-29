@@ -561,7 +561,7 @@ class FolderController
                 }
 
                 .header h1 {
-                margin-top: 0;
+                    margin-top: 0;
                 }
 
                 .container {
@@ -847,38 +847,63 @@ class FolderController
     {
         header('Content-Type: application/json');
 
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+        // Auth check
+        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
 
-        // Check that the user is not read-only.
+        // Read-only check
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        $perms    = loadUserPermissions($username);
+        if ($username && !empty($perms['readOnly'])) {
             http_response_code(403);
             echo json_encode(["error" => "Read-only users are not allowed to create share folders."]);
             exit;
         }
 
-        // Retrieve and decode POST input.
-        $input = json_decode(file_get_contents("php://input"), true);
-        if (!$input || !isset($input['folder'])) {
+        // Input
+        $in = json_decode(file_get_contents("php://input"), true);
+        if (!$in || !isset($in['folder'])) {
             http_response_code(400);
             echo json_encode(["error" => "Invalid input."]);
             exit;
         }
 
-        $folder = trim($input['folder']);
-        $expirationMinutes = isset($input['expirationMinutes']) ? intval($input['expirationMinutes']) : 60;
-        $password = isset($input['password']) ? $input['password'] : "";
-        $allowUpload = isset($input['allowUpload']) ? intval($input['allowUpload']) : 0;
+        $folder = trim($in['folder']);
+        $value  = isset($in['expirationValue']) ? intval($in['expirationValue']) : 60;
+        $unit   = $in['expirationUnit'] ?? 'minutes';
+        $password    = $in['password']    ?? '';
+        $allowUpload = intval($in['allowUpload'] ?? 0);
 
-        // Delegate to the model.
-        $result = FolderModel::createShareFolderLink($folder, $expirationMinutes, $password, $allowUpload);
-        echo json_encode($result);
+        // Folder name validation
+        if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            http_response_code(400);
+            echo json_encode(["error" => "Invalid folder name."]);
+            exit;
+        }
+
+        // Convert to seconds
+        switch ($unit) {
+            case 'seconds':
+                $seconds = $value;
+                break;
+            case 'hours':
+                $seconds = $value * 3600;
+                break;
+            case 'days':
+                $seconds = $value * 86400;
+                break;
+            case 'minutes':
+            default:
+                $seconds = $value * 60;
+                break;
+        }
+
+        // Delegate
+        $res = FolderModel::createShareFolderLink($folder, $seconds, $password, $allowUpload);
+        echo json_encode($res);
         exit;
     }
 

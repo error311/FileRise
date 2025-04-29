@@ -4,7 +4,8 @@
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/FileModel.php';
 
-class FileController {
+class FileController
+{
     /**
      * @OA\Post(
      *     path="/api/file/copyFiles.php",
@@ -50,9 +51,10 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function copyFiles() {
+    public function copyFiles()
+    {
         header('Content-Type: application/json');
-        
+
         // --- CSRF Protection ---
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -61,14 +63,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Check user permissions (assuming loadUserPermissions() is available).
         $username = $_SESSION['username'] ?? '';
         $userPermissions = loadUserPermissions($username);
@@ -76,7 +78,7 @@ class FileController {
             echo json_encode(["error" => "Read-only users are not allowed to copy files."]);
             exit;
         }
-        
+
         // Get JSON input data.
         $data = json_decode(file_get_contents("php://input"), true);
         if (
@@ -89,11 +91,11 @@ class FileController {
             echo json_encode(["error" => "Invalid request"]);
             exit;
         }
-        
+
         $sourceFolder = trim($data['source']);
         $destinationFolder = trim($data['destination']);
         $files = $data['files'];
-        
+
         // Validate folder names.
         if ($sourceFolder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $sourceFolder)) {
             echo json_encode(["error" => "Invalid source folder name."]);
@@ -103,7 +105,7 @@ class FileController {
             echo json_encode(["error" => "Invalid destination folder name."]);
             exit;
         }
-        
+
         // Delegate to the model.
         $result = FileModel::copyFiles($sourceFolder, $destinationFolder, $files);
         echo json_encode($result);
@@ -153,9 +155,10 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function deleteFiles() {
+    public function deleteFiles()
+    {
         header('Content-Type: application/json');
-        
+
         // --- CSRF Protection ---
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -164,14 +167,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Load user's permissions.
         $username = $_SESSION['username'] ?? '';
         $userPermissions = loadUserPermissions($username);
@@ -179,7 +182,7 @@ class FileController {
             echo json_encode(["error" => "Read-only users are not allowed to delete files."]);
             exit;
         }
-        
+
         // Get JSON input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (!isset($data['files']) || !is_array($data['files'])) {
@@ -187,7 +190,7 @@ class FileController {
             echo json_encode(["error" => "No file names provided"]);
             exit;
         }
-        
+
         // Determine folder; default to 'root'.
         $folder = isset($data['folder']) ? trim($data['folder']) : 'root';
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
@@ -195,13 +198,13 @@ class FileController {
             exit;
         }
         $folder = trim($folder, "/\\ ");
-        
+
         // Delegate to the FileModel.
         $result = FileModel::deleteFiles($folder, $data['files']);
         echo json_encode($result);
     }
 
-        /**
+    /**
      * @OA\Post(
      *     path="/api/file/moveFiles.php",
      *     summary="Move files between folders",
@@ -246,9 +249,10 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function moveFiles() {
+    public function moveFiles()
+    {
         header('Content-Type: application/json');
-        
+
         // --- CSRF Protection ---
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -257,14 +261,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Verify that the user is not read-only.
         $username = $_SESSION['username'] ?? '';
         $userPermissions = loadUserPermissions($username);
@@ -272,7 +276,7 @@ class FileController {
             echo json_encode(["error" => "Read-only users are not allowed to move files."]);
             exit;
         }
-        
+
         // Get JSON input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (
@@ -285,10 +289,10 @@ class FileController {
             echo json_encode(["error" => "Invalid request"]);
             exit;
         }
-        
+
         $sourceFolder = trim($data['source']) ?: 'root';
         $destinationFolder = trim($data['destination']) ?: 'root';
-        
+
         // Validate folder names.
         if ($sourceFolder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $sourceFolder)) {
             echo json_encode(["error" => "Invalid source folder name."]);
@@ -298,13 +302,13 @@ class FileController {
             echo json_encode(["error" => "Invalid destination folder name."]);
             exit;
         }
-        
+
         // Delegate to the model.
         $result = FileModel::moveFiles($sourceFolder, $destinationFolder, $data['files']);
         echo json_encode($result);
     }
 
-        /**
+    /**
      * @OA\Post(
      *     path="/api/file/renameFile.php",
      *     summary="Rename a file",
@@ -346,12 +350,13 @@ class FileController {
      *
      * @return void Outputs a JSON response.
      */
-    public function renameFile() {
+    public function renameFile()
+    {
         header('Content-Type: application/json');
         header("Cache-Control: no-cache, no-store, must-revalidate");
         header("Pragma: no-cache");
         header("Expires: 0");
-        
+
         // --- CSRF Protection ---
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -360,14 +365,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Verify user permissions.
         $username = $_SESSION['username'] ?? '';
         $userPermissions = loadUserPermissions($username);
@@ -375,7 +380,7 @@ class FileController {
             echo json_encode(["error" => "Read-only users are not allowed to rename files."]);
             exit;
         }
-        
+
         // Get JSON input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (!$data || !isset($data['folder']) || !isset($data['oldName']) || !isset($data['newName'])) {
@@ -383,29 +388,29 @@ class FileController {
             echo json_encode(["error" => "Invalid input"]);
             exit;
         }
-        
+
         $folder = trim($data['folder']) ?: 'root';
         // Validate folder: allow letters, numbers, underscores, dashes, spaces, and forward slashes.
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             echo json_encode(["error" => "Invalid folder name"]);
             exit;
         }
-        
+
         $oldName = basename(trim($data['oldName']));
         $newName = basename(trim($data['newName']));
-        
+
         // Validate file names.
         if (!preg_match(REGEX_FILE_NAME, $oldName) || !preg_match(REGEX_FILE_NAME, $newName)) {
             echo json_encode(["error" => "Invalid file name."]);
             exit;
         }
-        
+
         // Delegate the renaming operation to the model.
         $result = FileModel::renameFile($folder, $oldName, $newName);
         echo json_encode($result);
     }
 
-        /**
+    /**
      * @OA\Post(
      *     path="/api/file/saveFile.php",
      *     summary="Save a file",
@@ -446,9 +451,10 @@ class FileController {
      *
      * @return void Outputs a JSON response.
      */
-    public function saveFile() {
+    public function saveFile()
+    {
         header('Content-Type: application/json');
-        
+
         // --- CSRF Protection ---
         $headersArr   = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = $headersArr['x-csrf-token'] ?? '';
@@ -457,14 +463,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // --- Authentication Check ---
         if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         $username = $_SESSION['username'] ?? '';
         // --- Read‑only check ---
         $userPermissions = loadUserPermissions($username);
@@ -472,7 +478,7 @@ class FileController {
             echo json_encode(["error" => "Read-only users are not allowed to save files."]);
             exit;
         }
-        
+
         // --- Input parsing ---
         $data = json_decode(file_get_contents("php://input"), true);
         if (empty($data) || !isset($data["fileName"], $data["content"])) {
@@ -480,17 +486,17 @@ class FileController {
             echo json_encode(["error" => "Invalid request data", "received" => $data]);
             exit;
         }
-        
+
         $fileName = basename($data["fileName"]);
         $folder   = isset($data["folder"]) ? trim($data["folder"]) : "root";
-        
+
         // --- Folder validation ---
         if (strtolower($folder) !== "root" && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             echo json_encode(["error" => "Invalid folder name"]);
             exit;
         }
         $folder = trim($folder, "/\\ ");
-        
+
         // --- Delegate to model, passing the uploader ---
         // Make sure FileModel::saveFile signature is:
         // saveFile(string $folder, string $fileName, $content, ?string $uploader = null)
@@ -500,7 +506,7 @@ class FileController {
             $data["content"],
             $username     // ← pass the real uploader here
         );
-        
+
         echo json_encode($result);
     }
 
@@ -555,7 +561,8 @@ class FileController {
      *
      * @return void Outputs file content with appropriate headers.
      */
-    public function downloadFile() {
+    public function downloadFile()
+    {
         // Check if the user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
@@ -563,31 +570,31 @@ class FileController {
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Get GET parameters.
         $file = isset($_GET['file']) ? basename($_GET['file']) : '';
         $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
-        
+
         // Validate the file name using REGEX_FILE_NAME.
         if (!preg_match(REGEX_FILE_NAME, $file)) {
             http_response_code(400);
             echo json_encode(["error" => "Invalid file name."]);
             exit;
         }
-        
+
         // Retrieve download info from the model.
         $downloadInfo = FileModel::getDownloadInfo($folder, $file);
         if (isset($downloadInfo['error'])) {
-            http_response_code( (in_array($downloadInfo['error'], ["File not found.", "Access forbidden."])) ? 404 : 400 );
+            http_response_code((in_array($downloadInfo['error'], ["File not found.", "Access forbidden."])) ? 404 : 400);
             echo json_encode(["error" => $downloadInfo['error']]);
             exit;
         }
-        
+
         // Serve the file.
         $realFilePath = $downloadInfo['filePath'];
         $mimeType = $downloadInfo['mimeType'];
         header("Content-Type: " . $mimeType);
-        
+
         // For images, serve inline; for others, force download.
         $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
         $inlineImageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'];
@@ -601,7 +608,7 @@ class FileController {
         exit;
     }
 
-        /**
+    /**
      * @OA\Post(
      *     path="/api/file/downloadZip.php",
      *     summary="Download a ZIP archive of selected files",
@@ -649,7 +656,8 @@ class FileController {
      *
      * @return void Outputs the ZIP file for download.
      */
-    public function downloadZip() {
+    public function downloadZip()
+    {
         // --- CSRF Protection ---
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -659,7 +667,7 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
@@ -667,7 +675,7 @@ class FileController {
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Read and decode JSON input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (!is_array($data) || !isset($data['folder']) || !isset($data['files']) || !is_array($data['files'])) {
@@ -676,10 +684,10 @@ class FileController {
             echo json_encode(["error" => "Invalid input."]);
             exit;
         }
-        
+
         $folder = $data['folder'];
         $files = $data['files'];
-        
+
         // Validate folder: if not "root", split and validate each segment.
         if ($folder !== "root") {
             $parts = explode('/', $folder);
@@ -692,7 +700,7 @@ class FileController {
                 }
             }
         }
-        
+
         // Create ZIP archive using FileModel.
         $result = FileModel::createZipArchive($folder, $files);
         if (isset($result['error'])) {
@@ -701,7 +709,7 @@ class FileController {
             echo json_encode(["error" => $result['error']]);
             exit;
         }
-        
+
         $zipPath = $result['zipPath'];
         if (!file_exists($zipPath)) {
             http_response_code(500);
@@ -709,21 +717,21 @@ class FileController {
             echo json_encode(["error" => "ZIP archive not found."]);
             exit;
         }
-        
+
         // Send headers to force download.
         header('Content-Type: application/zip');
         header('Content-Disposition: attachment; filename="files.zip"');
         header('Content-Length: ' . filesize($zipPath));
         header('Cache-Control: no-store, no-cache, must-revalidate');
         header('Pragma: no-cache');
-        
+
         // Output the ZIP file.
         readfile($zipPath);
         unlink($zipPath);
         exit;
     }
 
-     /**
+    /**
      * @OA\Post(
      *     path="/api/file/extractZip.php",
      *     summary="Extract ZIP files",
@@ -768,9 +776,10 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function extractZip() {
+    public function extractZip()
+    {
         header('Content-Type: application/json');
-        
+
         // --- CSRF Protection ---
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -779,14 +788,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Read and decode JSON input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (!is_array($data) || !isset($data['folder']) || !isset($data['files']) || !is_array($data['files'])) {
@@ -794,10 +803,10 @@ class FileController {
             echo json_encode(["error" => "Invalid input."]);
             exit;
         }
-        
+
         $folder = $data['folder'];
         $files = $data['files'];
-        
+
         // Validate folder name.
         if ($folder !== "root") {
             $parts = explode('/', trim($folder));
@@ -809,13 +818,13 @@ class FileController {
                 }
             }
         }
-        
+
         // Delegate to the model.
         $result = FileModel::extractZipArchive($folder, $files);
         echo json_encode($result);
     }
 
-        /**
+    /**
      * @OA\Get(
      *     path="/api/file/share.php",
      *     summary="Access a shared file",
@@ -860,18 +869,19 @@ class FileController {
      *
      * @return void Outputs either HTML (password form) or serves the file.
      */
-    public function shareFile() {
+    public function shareFile()
+    {
         // Retrieve and sanitize GET parameters.
         $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
         $providedPass = filter_input(INPUT_GET, 'pass', FILTER_SANITIZE_STRING);
-        
+
         if (empty($token)) {
             http_response_code(400);
             header('Content-Type: application/json');
             echo json_encode(["error" => "Missing token."]);
             exit;
         }
-        
+
         // Get share record from the model.
         $record = FileModel::getShareRecord($token);
         if (!$record) {
@@ -880,7 +890,7 @@ class FileController {
             echo json_encode(["error" => "Share link not found."]);
             exit;
         }
-        
+
         // Check expiration.
         if (time() > $record['expires']) {
             http_response_code(403);
@@ -888,13 +898,14 @@ class FileController {
             echo json_encode(["error" => "This link has expired."]);
             exit;
         }
-        
+
         // If a password is required and not provided, show an HTML form.
         if (!empty($record['password']) && empty($providedPass)) {
             header("Content-Type: text/html; charset=utf-8");
-            ?>
+?>
             <!DOCTYPE html>
             <html>
+
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -906,14 +917,16 @@ class FileController {
                         background-color: #f4f4f4;
                         color: #333;
                     }
+
                     form {
                         max-width: 400px;
                         margin: 40px auto;
                         background: #fff;
                         padding: 20px;
                         border-radius: 8px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                     }
+
                     input[type="password"] {
                         width: 100%;
                         padding: 10px;
@@ -921,6 +934,7 @@ class FileController {
                         border: 1px solid #ccc;
                         border-radius: 4px;
                     }
+
                     button {
                         padding: 10px 20px;
                         background: #007BFF;
@@ -929,11 +943,13 @@ class FileController {
                         color: #fff;
                         cursor: pointer;
                     }
+
                     button:hover {
                         background: #0056b3;
                     }
                 </style>
             </head>
+
             <body>
                 <h2>This file is protected by a password.</h2>
                 <form method="get" action="/api/file/share.php">
@@ -943,11 +959,12 @@ class FileController {
                     <button type="submit">Submit</button>
                 </form>
             </body>
+
             </html>
-            <?php
+<?php
             exit;
         }
-        
+
         // If a password is required, validate the provided password.
         if (!empty($record['password'])) {
             if (!password_verify($providedPass, $record['password'])) {
@@ -957,7 +974,7 @@ class FileController {
                 exit;
             }
         }
-        
+
         // Build file path securely.
         $folder = trim($record['folder'], "/\\ ");
         $file = $record['file'];
@@ -966,7 +983,7 @@ class FileController {
             $filePath .= $folder . DIRECTORY_SEPARATOR;
         }
         $filePath .= $file;
-        
+
         $realFilePath = realpath($filePath);
         $uploadDirReal = realpath(UPLOAD_DIR);
         if ($realFilePath === false || strpos($realFilePath, $uploadDirReal) !== 0) {
@@ -981,12 +998,12 @@ class FileController {
             echo json_encode(["error" => "File not found."]);
             exit;
         }
-        
+
         // Serve the file.
         $mimeType = mime_content_type($realFilePath);
         header("Content-Type: " . $mimeType);
         $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
-        if (in_array($ext, ['jpg','jpeg','png','gif','bmp','webp','svg','ico'])) {
+        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'])) {
             header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
         } else {
             header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
@@ -994,25 +1011,31 @@ class FileController {
         header("Cache-Control: no-store, no-cache, must-revalidate");
         header("Pragma: no-cache");
         header('Content-Length: ' . filesize($realFilePath));
-        
+
         readfile($realFilePath);
         exit;
     }
 
-        /**
+    /**
      * @OA\Post(
      *     path="/api/file/createShareLink.php",
      *     summary="Create a share link for a file",
-     *     description="Generates a secure share link token for a specific file with an optional password protection and expiration time.",
+     *     description="Generates a secure share link token for a specific file with optional password protection and a custom expiration time.",
      *     operationId="createShareLink",
      *     tags={"Files"},
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
-     *             required={"folder", "file"},
+     *             required={"folder", "file", "expirationValue", "expirationUnit"},
      *             @OA\Property(property="folder", type="string", example="Documents"),
      *             @OA\Property(property="file", type="string", example="report.pdf"),
-     *             @OA\Property(property="expirationMinutes", type="integer", example=60),
+     *             @OA\Property(property="expirationValue", type="integer", example=1),
+     *             @OA\Property(
+     *                 property="expirationUnit",
+     *                 type="string",
+     *                 enum={"seconds","minutes","hours","days"},
+     *                 example="minutes"
+     *             ),
      *             @OA\Property(property="password", type="string", example="secret")
      *         )
      *     ),
@@ -1042,25 +1065,26 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function createShareLink() {
+    public function createShareLink()
+    {
         header('Content-Type: application/json');
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Check user permissions.
         $username = $_SESSION['username'] ?? '';
         $userPermissions = loadUserPermissions($username);
-        if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
+        if ($username && !empty($userPermissions['readOnly'])) {
             http_response_code(403);
             echo json_encode(["error" => "Read-only users are not allowed to create share links."]);
             exit;
         }
-        
+
         // Parse POST JSON input.
         $input = json_decode(file_get_contents("php://input"), true);
         if (!$input) {
@@ -1068,26 +1092,45 @@ class FileController {
             echo json_encode(["error" => "Invalid input."]);
             exit;
         }
-        
+
         // Extract parameters.
         $folder = isset($input['folder']) ? trim($input['folder']) : "";
-        $file = isset($input['file']) ? basename($input['file']) : "";
-        $expirationMinutes = isset($input['expirationMinutes']) ? intval($input['expirationMinutes']) : 60;
+        $file   = isset($input['file'])   ? basename($input['file'])   : "";
+        $value  = isset($input['expirationValue']) ? intval($input['expirationValue']) : 60;
+        $unit   = isset($input['expirationUnit'])  ? $input['expirationUnit']          : 'minutes';
         $password = isset($input['password']) ? $input['password'] : "";
-        
-        // Validate folder.
+
+        // Validate folder name.
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             http_response_code(400);
             echo json_encode(["error" => "Invalid folder name."]);
             exit;
         }
-        
+
+        // Convert the provided value+unit into seconds
+        switch ($unit) {
+            case 'seconds':
+                $expirationSeconds = $value;
+                break;
+            case 'hours':
+                $expirationSeconds = $value * 3600;
+                break;
+            case 'days':
+                $expirationSeconds = $value * 86400;
+                break;
+            case 'minutes':
+            default:
+                $expirationSeconds = $value * 60;
+                break;
+        }
+
         // Delegate share link creation to the model.
-        $result = FileModel::createShareLink($folder, $file, $expirationMinutes, $password);
+        $result = FileModel::createShareLink($folder, $file, $expirationSeconds, $password);
+
         echo json_encode($result);
     }
 
-        /**
+    /**
      * @OA\Get(
      *     path="/api/file/getTrashItems.php",
      *     summary="Get trash items",
@@ -1109,16 +1152,17 @@ class FileController {
      *
      * @return void Outputs JSON response with trash items.
      */
-    public function getTrashItems() {
+    public function getTrashItems()
+    {
         header('Content-Type: application/json');
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Delegate to the model.
         $trashItems = FileModel::getTrashItems();
         echo json_encode($trashItems);
@@ -1164,9 +1208,10 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function restoreFiles() {
+    public function restoreFiles()
+    {
         header('Content-Type: application/json');
-        
+
         // CSRF Protection.
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -1175,14 +1220,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Read POST input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (!isset($data['files']) || !is_array($data['files'])) {
@@ -1190,13 +1235,13 @@ class FileController {
             echo json_encode(["error" => "No file or folder identifiers provided"]);
             exit;
         }
-        
+
         // Delegate restoration to the model.
         $result = FileModel::restoreFiles($data['files']);
         echo json_encode($result);
     }
 
-        /**
+    /**
      * @OA\Post(
      *     path="/api/file/deleteTrashFiles.php",
      *     summary="Delete trash files",
@@ -1247,9 +1292,10 @@ class FileController {
      *
      * @return void Outputs a JSON response.
      */
-    public function deleteTrashFiles() {
+    public function deleteTrashFiles()
+    {
         header('Content-Type: application/json');
-        
+
         // CSRF Protection.
         $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
         $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
@@ -1258,14 +1304,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Read and decode JSON input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (!$data) {
@@ -1273,7 +1319,7 @@ class FileController {
             echo json_encode(["error" => "Invalid input"]);
             exit;
         }
-        
+
         // Determine deletion mode.
         $filesToDelete = [];
         if (isset($data['deleteAll']) && $data['deleteAll'] === true) {
@@ -1299,14 +1345,14 @@ class FileController {
             echo json_encode(["error" => "No trash file identifiers provided"]);
             exit;
         }
-        
+
         // Delegate deletion to the model.
         $result = FileModel::deleteTrashFiles($filesToDelete);
 
         // Build a human‑friendly success or error message
         if (!empty($result['deleted'])) {
             $count = count($result['deleted']);
-            $msg = "Trash item" . ($count===1 ? "" : "s") . " deleted: " . implode(", ", $result['deleted']);
+            $msg = "Trash item" . ($count === 1 ? "" : "s") . " deleted: " . implode(", ", $result['deleted']);
             echo json_encode(["success" => $msg]);
         } elseif (!empty($result['error'])) {
             echo json_encode(["error" => $result['error']]);
@@ -1316,7 +1362,7 @@ class FileController {
         exit;
     }
 
-        /**
+    /**
      * @OA\Get(
      *     path="/api/file/getFileTag.php",
      *     summary="Retrieve file tags",
@@ -1337,15 +1383,16 @@ class FileController {
      *
      * @return void Outputs JSON response with file tags.
      */
-    public function getFileTags(): void {
+    public function getFileTags(): void
+    {
         header('Content-Type: application/json; charset=utf-8');
-        
+
         $tags = FileModel::getFileTags();
         echo json_encode($tags);
         exit;
     }
 
-        /**
+    /**
      * @OA\Post(
      *     path="/api/file/saveFileTag.php",
      *     summary="Save file tags",
@@ -1397,7 +1444,8 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function saveFileTag(): void {
+    public function saveFileTag(): void
+    {
         header("Cache-Control: no-cache, no-store, must-revalidate");
         header("Pragma: no-cache");
         header("Expires: 0");
@@ -1411,14 +1459,14 @@ class FileController {
             echo json_encode(["error" => "Invalid CSRF token"]);
             exit;
         }
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Check that the user is not read-only.
         $username = $_SESSION['username'] ?? '';
         $userPermissions = loadUserPermissions($username);
@@ -1426,7 +1474,7 @@ class FileController {
             echo json_encode(["error" => "Read-only users are not allowed to file tags"]);
             exit;
         }
-        
+
         // Retrieve and sanitize input.
         $data = json_decode(file_get_contents('php://input'), true);
         if (!$data) {
@@ -1434,26 +1482,26 @@ class FileController {
             echo json_encode(["error" => "No data received"]);
             exit;
         }
-        
+
         $file = isset($data['file']) ? trim($data['file']) : '';
         $folder = isset($data['folder']) ? trim($data['folder']) : 'root';
         $tags = $data['tags'] ?? [];
         $deleteGlobal = isset($data['deleteGlobal']) ? (bool)$data['deleteGlobal'] : false;
         $tagToDelete = isset($data['tagToDelete']) ? trim($data['tagToDelete']) : null;
-        
+
         if ($file === '') {
             http_response_code(400);
             echo json_encode(["error" => "No file specified."]);
             exit;
         }
-        
+
         // Validate folder name.
         if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             http_response_code(400);
             echo json_encode(["error" => "Invalid folder name."]);
             exit;
         }
-        
+
         // Delegate to the model.
         $result = FileModel::saveFileTag($folder, $file, $tags, $deleteGlobal, $tagToDelete);
         echo json_encode($result);
@@ -1496,16 +1544,17 @@ class FileController {
      *
      * @return void Outputs JSON response.
      */
-    public function getFileList(): void {
+    public function getFileList(): void
+    {
         header('Content-Type: application/json');
-        
+
         // Ensure user is authenticated.
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
-        
+
         // Retrieve the folder from GET; default to "root".
         $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
@@ -1513,7 +1562,7 @@ class FileController {
             echo json_encode(["error" => "Invalid folder name."]);
             exit;
         }
-        
+
         // Delegate to the model.
         $result = FileModel::getFileList($folder);
         if (isset($result['error'])) {

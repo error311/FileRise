@@ -736,7 +736,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
      * @return array Returns an associative array with keys "token" and "expires" on success,
      *               or "error" on failure.
      */
-    public static function createShareLink($folder, $file, $expirationMinutes = 60, $password = "") {
+    public static function createShareLink($folder, $file, $expirationSeconds = 3600, $password = "") {
         // Validate folder if necessary (this can also be done in the controller).
         if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             return ["error" => "Invalid folder name."];
@@ -746,7 +746,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         $token = bin2hex(random_bytes(16));
         
         // Calculate expiration (Unix timestamp).
-        $expires = time() + ($expirationMinutes * 60);
+        $expires = time() + $expirationSeconds;
         
         // Hash the password if provided.
         $hashedPassword = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : "";

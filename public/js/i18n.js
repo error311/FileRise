@@ -150,6 +150,13 @@ const translations = {
     "allow_uploads": "Allow Uploads",
     "share_link_generated": "Share Link Generated",
     "error_generating_share_link": "Error Generating Share Link",
+    "custom": "Custom",
+    "duration": "Duration",
+    "seconds": "Seconds",
+    "minutes": "Minutes",
+    "hours": "Hours",
+    "days": "Days",
+    "custom_duration_warning": "⚠️ Using a long expiration may pose security risks. Use with caution.",
 
     // Folder
     "folder_share": "Share Folder",
@@ -166,12 +173,8 @@ const translations = {
     "user": "User:",
     "unknown_error": "Unknown Error",
     "link_copied": "Link Copied to Clipboard",
-    "minutes": "minutes",
-    "hours": "hours",
-    "days": "days",
     "weeks": "weeks",
     "months": "months",
-    "seconds": "seconds",
 
     // Dark Mode Toggle
     "dark_mode_toggle": "Dark Mode",
@@ -239,7 +242,7 @@ const translations = {
     "ok": "OK",
     "show": "Show",
     "items_per_page": "items per page",
-    "columns":"Columns",
+    "columns": "Columns",
     "api_docs": "API Docs"
   },
   es: {
@@ -806,7 +809,7 @@ const translations = {
     "prev": "Zurück",
     "next": "Weiter",
     "page": "Seite",
-    "of": "von",    
+    "of": "von",
 
     // Login Form keys:
     "login": "Anmelden",

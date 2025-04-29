@@ -1,5 +1,33 @@
 # Changelog
 
+## Changes 4/28/2025
+
+**Added**  
+
+- **Custom expiration** option to File Share modal  
+  - Users can specify a value + unit (seconds, minutes, hours, days)  
+  - Displays a warning when a custom duration is selected  
+- **Custom expiration** option to Folder Share modal (same value+unit picker and warning)
+
+**Changed**  
+
+- **API parameters** for both endpoints:  
+  - Replaced `expirationMinutes` with `expirationValue` + `expirationUnit`  
+  - Front-end now sends `{ expirationValue, expirationUnit }`  
+  - Back-end converts those into total seconds before saving
+- **UI**  
+  - FileShare and FolderShare modals updated to handle “Custom…” selection  
+
+**Updated Models & Controllers**  
+
+- **FileModel::createShareLink** now accepts expiration in seconds  
+- **FolderModel::createShareFolderLink** now accepts expiration in seconds  
+- **createShareLink.php** & **createShareFolderLink.php** updated to parse and convert new parameters
+
+**Documentation**  
+
+- OpenAPI annotations for both endpoints updated to require `expirationValue` + `expirationUnit` (enum: seconds, minutes, hours, days)  
+
 ## Changes 4/27/2025 1.2.7
 
 - **Select-All** checkbox now correctly toggles all `.file-checkbox` inputs  
