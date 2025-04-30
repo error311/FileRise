@@ -125,10 +125,17 @@ function updateItemsPerPageSelect() {
   }
 }
 
+
 function updateLoginOptionsUI({ disableFormLogin, disableBasicAuth, disableOIDCLogin }) {
   const authForm = document.getElementById("authForm");
-
-  if (authForm) authForm.style.display = disableFormLogin ? "none" : "block";
+  if 
+    (authForm) {
+      authForm.style.display = disableFormLogin ? "none" : "block";
+      setTimeout(() => {
+        const loginInput = document.getElementById('loginUsername');
+        if (loginInput) loginInput.focus();
+      }, 0);      
+  }
   const basicAuthLink = document.querySelector("a[href='/api/auth/login_basic.php']");
   if (basicAuthLink) basicAuthLink.style.display = disableBasicAuth ? "none" : "inline-block";
   const oidcLoginBtn = document.getElementById("oidcLoginBtn");
@@ -187,7 +194,7 @@ function updateAuthenticatedUI(data) {
   toggleVisibility("mainOperations", true);
   toggleVisibility("uploadFileForm", true);
   toggleVisibility("fileListContainer", true);
-  attachEnterKeyListener("addUserModal", "saveUserBtn");
+  //attachEnterKeyListener("addUserModal", "saveUserBtn");
   attachEnterKeyListener("removeUserModal", "deleteUserBtn");
   attachEnterKeyListener("changePasswordModal", "saveNewPasswordBtn");
   document.querySelector(".header-buttons").style.visibility = "visible";
@@ -443,34 +450,46 @@ function initAuth() {
     toggleVisibility("addUserModal", true);
     document.getElementById("newUsername").focus();
   });
-  document.getElementById("saveUserBtn").addEventListener("click", function () {
-    const newUsername = document.getElementById("newUsername").value.trim();
-    const newPassword = document.getElementById("addUserPassword").value.trim();
-    const isAdmin = document.getElementById("isAdmin").checked;
-    if (!newUsername || !newPassword) {
-      showToast("Username and password are required!");
-      return;
-    }
-    let url = "/api/addUser.php";
-    if (window.setupMode) url += "?setup=1";
-    fetchWithCsrf(url, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
+  
+// remove your old saveUserBtn click-handler…
+
+// instead:
+const addUserForm = document.getElementById("addUserForm");
+addUserForm.addEventListener("submit", function (e) {
+  e.preventDefault();   // stop the browser from reloading the page
+
+  const newUsername = document.getElementById("newUsername").value.trim();
+  const newPassword = document.getElementById("addUserPassword").value.trim();
+  const isAdmin     = document.getElementById("isAdmin").checked;
+
+  if (!newUsername || !newPassword) {
+    showToast("Username and password are required!");
+    return;
+  }
+
+  let url = "/api/addUser.php";
+  if (window.setupMode) url += "?setup=1";
+
+  fetchWithCsrf(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        showToast("User added successfully!");
+        closeAddUserModal();
+        checkAuthentication(false);
+      } else {
+        showToast("Error: " + (data.error || "Could not add user"));
+      }
     })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          showToast("User added successfully!");
-          closeAddUserModal();
-          checkAuthentication(false);
-        } else {
-          showToast("Error: " + (data.error || "Could not add user"));
-        }
-      })
-      .catch(() => { });
-  });
+    .catch(() => {
+      showToast("Error: Could not add user");
+    });
+});
   document.getElementById("cancelUserBtn").addEventListener("click", closeAddUserModal);
 
   document.getElementById("removeUserBtn").addEventListener("click", function () {

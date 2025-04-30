@@ -1,5 +1,15 @@
 # Changelog
 
+## Changes 4/30/2025 v1.2.8
+
+- **Added** PDF preview in `filePreview.js` (the `extension === "pdf"` block): replaced in-modal `<embed>` with `window.open(urlWithTs, "_blank")` and closed the modal to avoid CSP `frame-ancestors 'none'` restrictions.
+- **Added** `autofocus` attribute to the login form’s username input (`#loginUsername`) so the cursor is ready for typing on page load.
+- **Enhanced** login initialization with a `DOMContentLoaded` fallback that calls `loginUsername.focus()` (via `setTimeout`) if needed.
+- **Set** focus to the “New Username” field (`#newUsername`) when entering setup mode, hiding the login form and showing the Add-User modal.
+- **Implemented** Enter-key support in setup mode by attaching `attachEnterKeyListener("addUserModal", "saveUserBtn")`, allowing users to press Enter to submit the Add-User form.
+
+---
+
 ## Changes 4/28/2025
 
 **Added**  
@@ -28,7 +38,7 @@
 
 - OpenAPI annotations for both endpoints updated to require `expirationValue` + `expirationUnit` (enum: seconds, minutes, hours, days)  
 
-## Changes 4/27/2025 1.2.7
+## Changes 4/27/2025 v1.2.7
 
 - **Select-All** checkbox now correctly toggles all `.file-checkbox` inputs  
   - Updated `toggleAllCheckboxes(masterCheckbox)` to call `updateRowHighlight()` on each row so selections get the `.row-selected` highlight

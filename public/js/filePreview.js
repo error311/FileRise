@@ -416,16 +416,21 @@ export function previewFile(fileUrl, fileName) {
     }
   } else {
     // Handle non-image file previews.
-    if (extension === "pdf") {
-      const embed = document.createElement("embed");
-      const separator = fileUrl.indexOf('?') === -1 ? '?' : '&';
-      embed.src = fileUrl + separator + 't=' + new Date().getTime();
-      embed.type = "application/pdf";
-      embed.style.width = "80vw";
-      embed.style.height = "80vh";
-      embed.style.border = "none";
-      container.appendChild(embed);
-    } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(fileName)) {
+  if (extension === "pdf") {
+    // build a cache‐busted URL
+    const separator = fileUrl.includes('?') ? '&' : '?';
+    const urlWithTs = fileUrl + separator + 't=' + Date.now();
+  
+    // open in a new tab (avoids CSP frame-ancestors)
+    window.open(urlWithTs, "_blank");
+  
+    // tear down the just-created modal
+    const modal = document.getElementById("filePreviewModal");
+    if (modal) modal.remove();
+  
+    // stop further preview logic
+    return;
+  } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(fileName)) {
       const video = document.createElement("video");
       video.src = fileUrl;
       video.controls = true;

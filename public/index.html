@@ -182,7 +182,7 @@
             <form id="authForm" method="post">
               <div class="form-group">
                 <label for="loginUsername" data-i18n-key="user">User:</label>
-                <input type="text" class="form-control" id="loginUsername" name="username" required />
+                <input type="text" class="form-control" id="loginUsername" name="username" required autofocus />
               </div>
               <div class="form-group">
                 <label for="loginPassword" data-i18n-key="password">Password:</label>
@@ -442,18 +442,30 @@
   <div id="addUserModal" class="modal">
     <div class="modal-content">
       <h3 data-i18n-key="create_new_user_title">Create New User</h3>
-      <label for="newUsername" data-i18n-key="username">Username:</label>
-      <input type="text" id="newUsername" class="form-control" />
-      <label for="addUserPassword" data-i18n-key="password">Password:</label>
-      <input type="password" id="addUserPassword" class="form-control" />
-      <div id="adminCheckboxContainer">
-        <input type="checkbox" id="isAdmin" />
-        <label for="isAdmin" data-i18n-key="grant_admin">Grant Admin Access</label>
-      </div>
-      <div class="button-container">
-        <button id="cancelUserBtn" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-        <button id="saveUserBtn" class="btn btn-primary" data-i18n-key="save_user">Save User</button>
-      </div>
+      <!-- 1) Add a form around these fields -->
+      <form id="addUserForm">
+        <label for="newUsername" data-i18n-key="username">Username:</label>
+        <input type="text" id="newUsername" class="form-control" required />
+  
+        <label for="addUserPassword" data-i18n-key="password">Password:</label>
+        <input type="password" id="addUserPassword" class="form-control" required />
+  
+        <div id="adminCheckboxContainer">
+          <input type="checkbox" id="isAdmin" />
+          <label for="isAdmin" data-i18n-key="grant_admin">Grant Admin Access</label>
+        </div>
+  
+        <div class="button-container">
+          <!-- Cancel stays type="button" -->
+          <button type="button" id="cancelUserBtn" class="btn btn-secondary" data-i18n-key="cancel">
+            Cancel
+          </button>
+          <!-- Save becomes type="submit" -->
+          <button type="submit" id="saveUserBtn" class="btn btn-primary" data-i18n-key="save_user">
+            Save User
+          </button>
+        </div>
+      </form>
     </div>
   </div>
   <div id="removeUserModal" class="modal">
