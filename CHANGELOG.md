@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 5/4/2025
+
+### Modals
+
+- **Added** a shared `.editor-close-btn` component for all modals:
+  - File Tags
+  - User Panel
+  - TOTP Login & Setup
+  - Change Password
+- **Truncated** long filenames in the File Tags modal header using CSS `text-overflow: ellipsis`.
+- **Resized** File Tags modal from 400px → 450px wide (with `max-width: 90vw` fallback).
+- **Capped** User Panel height at 381px and hidden scrollbars to eliminate layout jumps on hover.
+
+---
+
 ## Changes 5/3/2025 v1.3.0
 
 **Admin Panel Refactor & Enhancements**  

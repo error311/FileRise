@@ -13,10 +13,19 @@ export function openTagModal(file) {
   modal.id = 'tagModal';
   modal.className = 'modal';
   modal.innerHTML = `
-    <div class="modal-content" style="width: 400px; max-width:90vw;">
+    <div class="modal-content" style="width: 450px; max-width:90vw;">
       <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0;">${t("tag_file")}: ${file.name}</h3>
-        <span id="closeTagModal" style="cursor:pointer; font-size:24px;">&times;</span>
+        <h3 style="
+            margin:0;
+            display:inline-block;
+            max-width: calc(100% - 40px);
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+          ">
+          ${t("tag_file")}: ${escapeHTML(file.name)}
+        </h3>
+        <span id="closeTagModal" class="editor-close-btn">&times;</span>
       </div>
       <div class="modal-body" style="margin-top:10px;">
         <label for="tagNameInput">${t("tag_name")}</label>
@@ -83,10 +92,10 @@ export function openMultiTagModal(files) {
   modal.id = 'multiTagModal';
   modal.className = 'modal';
   modal.innerHTML = `
-    <div class="modal-content" style="width: 400px; max-width:90vw;">
+    <div class="modal-content" style="width: 450px; max-width:90vw;">
       <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
         <h3 style="margin:0;">Tag Selected Files (${files.length})</h3>
-        <span id="closeMultiTagModal" style="cursor:pointer; font-size:24px;">&times;</span>
+        <span id="closeMultiTagModal" class="editor-close-btn">&times;</span>
       </div>
       <div class="modal-body" style="margin-top:10px;">
         <label for="multiTagNameInput">Tag Name:</label>

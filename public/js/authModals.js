@@ -30,7 +30,7 @@ export function openTOTPLoginModal() {
     `;
     totpLoginModal.innerHTML = `
       <div style="background: ${modalBg}; padding:20px; border-radius:8px; text-align:center; position:relative; color:${textColor};">
-        <span id="closeTOTPLoginModal" style="position:absolute; top:10px; right:10px; cursor:pointer; font-size:24px;">&times;</span>
+        <span id="closeTOTPLoginModal" class="editor-close-btn">&times;</span>
         <div id="totpSection">
           <h3>${t("enter_totp_code")}</h3>
           <input type="text" id="totpLoginInput" maxlength="6"
@@ -172,11 +172,13 @@ export function openUserPanel() {
     max-width: 600px;
     width: 90%;
     border-radius: 8px;
-    position: fixed;
     overflow-y: auto;
-    max-height: 400px !important;
+    overflow-x: hidden;
+    max-height: 381px !important;
+    flex-shrink: 0 !important;
+    scrollbar-gutter: stable both-edges;
     border: ${isDarkMode ? "1px solid #444" : "1px solid #ccc"};
-    transform: none;
+    box-sizing: border-box;
     transition: none;
   `;
   const savedLanguage = localStorage.getItem("language") || "en";
@@ -186,19 +188,17 @@ export function openUserPanel() {
     userPanelModal.id = "userPanelModal";
     userPanelModal.style.cssText = `
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      top: 0; right: 0; bottom: 0; left: 0;
       background-color: ${overlayBackground};
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 3000;
+      z-index: 1000;
+      overflow: hidden;
     `;
     userPanelModal.innerHTML = `
-      <div class="modal-content user-panel-content" style="${modalContentStyles}">
-        <span id="closeUserPanel" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
+        <div class="modal-content user-panel-content" style="${modalContentStyles}">
+        <span id="closeUserPanel" class="editor-close-btn">&times;</span>
         <h3>${t("user_panel")} (${username})</h3>
 
         <button type="button" id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom: 15px;">
@@ -369,7 +369,7 @@ export function openTOTPModal() {
     `;
     totpModal.innerHTML = `
     <div class="modal-content" style="${modalContentStyles}">
-      <span id="closeTOTPModal" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
+      <span id="closeTOTPModal" class="editor-close-btn">&times;</span>
       <h3>${t("totp_setup")}</h3>
       <p>${t("scan_qr_code")}</p>
       <!-- Create an image placeholder without the CSRF token in the src -->
