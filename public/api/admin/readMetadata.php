@@ -3,42 +3,61 @@
 
 require_once __DIR__ . '/../../../config/config.php';
 
-// Simple auth‐check: only admins may read these
+// Only admins may read these
 if (empty($_SESSION['isAdmin']) || $_SESSION['isAdmin'] !== true) {
     http_response_code(403);
-    echo json_encode(['error'=>'Forbidden']);
+    echo json_encode(['error' => 'Forbidden']);
     exit;
 }
 
-// Expect a ?file=share_links.json or share_folder_links.json
+// Must supply ?file=share_links.json or share_folder_links.json
 if (empty($_GET['file'])) {
     http_response_code(400);
-    echo json_encode(['error'=>'Missing `file` parameter']);
+    echo json_encode(['error' => 'Missing `file` parameter']);
     exit;
 }
 
 $file = basename($_GET['file']);
-$allowed = ['share_links.json','share_folder_links.json'];
+$allowed = ['share_links.json', 'share_folder_links.json'];
 if (!in_array($file, $allowed, true)) {
     http_response_code(403);
-    echo json_encode(['error'=>'Invalid file requested']);
+    echo json_encode(['error' => 'Invalid file requested']);
     exit;
 }
 
 $path = META_DIR . $file;
 if (!file_exists($path)) {
-    http_response_code(404);
-    echo json_encode((object)[]);  // return empty object
+    // Return empty object so JS sees `{}` not an error
+    http_response_code(200);
+    header('Content-Type: application/json');
+    echo json_encode((object)[]);
     exit;
 }
 
-$data = file_get_contents($path);
-$json = json_decode($data, true);
-if (json_last_error() !== JSON_ERROR_NONE) {
+$jsonData = file_get_contents($path);
+$data = json_decode($jsonData, true);
+if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
     http_response_code(500);
-    echo json_encode(['error'=>'Corrupted JSON']);
+    echo json_encode(['error' => 'Corrupted JSON']);
     exit;
 }
 
+// ——— Clean up expired entries ———
+$now = time();
+$changed = false;
+foreach ($data as $token => $entry) {
+    if (!empty($entry['expires']) && $entry['expires'] < $now) {
+        unset($data[$token]);
+        $changed = true;
+    }
+}
+if ($changed) {
+    // overwrite file with cleaned data
+    file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
+}
+
+// ——— Send cleaned data back ———
+http_response_code(200);
 header('Content-Type: application/json');
-echo json_encode($json);
+echo json_encode($data);
+exit;

@@ -184,49 +184,63 @@ function loadShareLinksSection() {
   const container = document.getElementById("shareLinksContent");
   container.textContent = t("loading") + "...";
 
-  // Helper to fetch a metadata file or return {} on any error
-  const fetchMeta = file =>
-    fetch(`/api/admin/readMetadata.php?file=${file}`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : {})   // non-2xx → treat as empty
-      .catch(() => ({}));
+  // helper: fetch one metadata file, but never throw —
+  // on non-2xx (including 404) or network error, resolve to {}
+  function fetchMeta(fileName) {
+    return fetch(`/api/admin/readMetadata.php?file=${encodeURIComponent(fileName)}`, {
+        credentials: "include"
+      })
+      .then(resp => {
+        if (!resp.ok) {
+          // 404 or any other non-OK → treat as empty
+          return {};
+        }
+        return resp.json();
+      })
+      .catch(() => {
+        // network failure, parse error, etc → also empty
+        return {};
+      });
+  }
 
   Promise.all([
-    fetchMeta("share_folder_links.json"),
-    fetchMeta("share_links.json")
-  ])
+      fetchMeta("share_folder_links.json"),
+      fetchMeta("share_links.json")
+    ])
     .then(([folders, files]) => {
-      // If nothing at all, show a friendly message
-      if (Object.keys(folders).length === 0 && Object.keys(files).length === 0) {
-        container.textContent = t("no_shared_links_available");
+      // if *both* are empty, show "no shared links"
+      const hasAny = Object.keys(folders).length || Object.keys(files).length;
+      if (!hasAny) {
+        container.innerHTML = `<p>${t("no_shared_links_available")}</p>`;
         return;
       }
 
       let html = `<h5>${t("folder_shares")}</h5><ul>`;
       Object.entries(folders).forEach(([token, o]) => {
-        const lock = o.password ? `🔒 ` : "";
+        const lock = o.password ? "🔒 " : "";
         html += `
-        <li>
-          ${lock}<strong>${o.folder}</strong>
-          <small>(${new Date(o.expires * 1000).toLocaleString()})</small>
-          <button type="button"
-                  data-key="${token}"
-                  data-type="folder"
-                  class="btn btn-sm btn-link delete-share">🗑️</button>
-        </li>`;
+          <li>
+            ${lock}<strong>${o.folder}</strong>
+            <small>(${new Date(o.expires * 1000).toLocaleString()})</small>
+            <button type="button"
+                    data-key="${token}"
+                    data-type="folder"
+                    class="btn btn-sm btn-link delete-share">🗑️</button>
+          </li>`;
       });
 
       html += `</ul><h5 style="margin-top:1em;">${t("file_shares")}</h5><ul>`;
       Object.entries(files).forEach(([token, o]) => {
-        const lock = o.password ? `🔒 ` : "";
+        const lock = o.password ? "🔒 " : "";
         html += `
-        <li>
-          ${lock}<strong>${o.folder}/${o.file}</strong>
-          <small>(${new Date(o.expires * 1000).toLocaleString()})</small>
-          <button type="button"
-                  data-key="${token}"
-                  data-type="file"
-                  class="btn btn-sm btn-link delete-share">🗑️</button>
-        </li>`;
+          <li>
+            ${lock}<strong>${o.folder}/${o.file}</strong>
+            <small>(${new Date(o.expires * 1000).toLocaleString()})</small>
+            <button type="button"
+                    data-key="${token}"
+                    data-type="file"
+                    class="btn btn-sm btn-link delete-share">🗑️</button>
+          </li>`;
       });
       html += `</ul>`;
 
@@ -243,11 +257,11 @@ function loadShareLinksSection() {
             : "/api/file/deleteShareLink.php";
 
           fetch(endpoint, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({ token })
-          })
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({ token })
+            })
             .then(res => {
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               return res.json();

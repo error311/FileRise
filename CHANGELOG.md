@@ -48,6 +48,10 @@
 - Adjusted endpoint paths to match controller filenames
 - Fix FolderController readOnly create folder permission
 
+### Additional changes
+
+- Extend clean up expired shared entries
+
 ---
 
 ## Changes 4/30/2025 v1.2.8

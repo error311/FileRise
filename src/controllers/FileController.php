@@ -1582,6 +1582,31 @@ class FileController
         echo json_encode($shareFile, JSON_PRETTY_PRINT);
     }
 
+    public function getAllShareLinks(): void
+    {
+        header('Content-Type: application/json');
+        $shareFile = META_DIR . 'share_links.json';
+        $links     = file_exists($shareFile)
+                   ? json_decode(file_get_contents($shareFile), true) ?? []
+                   : [];
+        $now       = time();
+        $cleaned   = [];
+    
+        // remove expired
+        foreach ($links as $token => $record) {
+            if (!empty($record['expires']) && $record['expires'] < $now) {
+                continue;
+            }
+            $cleaned[$token] = $record;
+        }
+    
+        if (count($cleaned) !== count($links)) {
+            file_put_contents($shareFile, json_encode($cleaned, JSON_PRETTY_PRINT));
+        }
+    
+        echo json_encode($cleaned);
+    }
+
     /**
      * POST /api/file/deleteShareLink.php
      */

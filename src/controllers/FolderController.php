@@ -1082,11 +1082,30 @@ class FolderController
     /**
      * GET /api/folder/getShareFolderLinks.php
      */
-    public function getShareFolderLinks()
+    public function getAllShareFolderLinks(): void
     {
         header('Content-Type: application/json');
-        $links = FolderModel::getAllShareFolderLinks();
-        echo json_encode($links, JSON_PRETTY_PRINT);
+        $shareFile = META_DIR . 'share_folder_links.json';
+        $links     = file_exists($shareFile)
+                   ? json_decode(file_get_contents($shareFile), true) ?? []
+                   : [];
+        $now       = time();
+        $cleaned   = [];
+    
+        // 1) Remove expired
+        foreach ($links as $token => $record) {
+            if (!empty($record['expires']) && $record['expires'] < $now) {
+                continue;
+            }
+            $cleaned[$token] = $record;
+        }
+    
+        // 2) Persist back if anything was pruned
+        if (count($cleaned) !== count($links)) {
+            file_put_contents($shareFile, json_encode($cleaned, JSON_PRETTY_PRINT));
+        }
+    
+        echo json_encode($cleaned);
     }
 
     /**
