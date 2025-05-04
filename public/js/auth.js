@@ -15,10 +15,9 @@ import {
   openUserPanel,
   openTOTPModal,
   closeTOTPModal,
-  openAdminPanel,
-  closeAdminPanel,
   setLastLoginData
 } from './authModals.js';
+import { openAdminPanel } from './adminPanel.js';
 
 // Production OIDC configuration (override via API as needed)
 const currentOIDCConfig = {

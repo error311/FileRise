@@ -570,4 +570,29 @@ class FolderModel
 
         return ["success" => "File uploaded successfully.", "newFilename" => $newFilename];
     }
+
+    public static function getAllShareFolderLinks(): array
+    {
+        $shareFile = META_DIR . "share_folder_links.json";
+        if (!file_exists($shareFile)) {
+            return [];
+        }
+        $links = json_decode(file_get_contents($shareFile), true);
+        return is_array($links) ? $links : [];
+    }
+
+    public static function deleteShareFolderLink(string $token): bool
+    {
+        $shareFile = META_DIR . "share_folder_links.json";
+        if (!file_exists($shareFile)) {
+            return false;
+        }
+        $links = json_decode(file_get_contents($shareFile), true);
+        if (!is_array($links) || !isset($links[$token])) {
+            return false;
+        }
+        unset($links[$token]);
+        file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT));
+        return true;
+    }
 }

@@ -182,6 +182,20 @@ const translations = {
     "switch_to_light_mode": "Switch to light mode",
     "switch_to_dark_mode": "Switch to dark mode",
 
+    // Admin Panel
+    "header_settings": "Header Settings",
+    "shared_max_upload_size_bytes": "Shared Max Upload Size (bytes)",
+    "max_bytes_shared_uploads_note": "Enter maximum bytes allowed for shared-folder uploads",
+    "manage_shared_links": "Manage Shared Links",
+    "folder_shares": "Folder Shares",
+    "file_shares": "File Shares",
+    "loading": "Loading…",
+    "error_loading_share_links": "Error loading share links",
+    "share_deleted_successfully": "Share deleted successfully",
+    "error_deleting_share": "Error deleting share",
+    "password_protected": "Password protected",
+
+
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:
     "admin_panel": "Admin Panel",
     "user_panel": "User Panel",
