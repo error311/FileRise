@@ -184,6 +184,7 @@ const translations = {
 
     // Admin Panel
     "header_settings": "Header Settings",
+    "shared_max_upload_size_bytes_title": "Shared Max Upload Size",
     "shared_max_upload_size_bytes": "Shared Max Upload Size (bytes)",
     "max_bytes_shared_uploads_note": "Enter maximum bytes allowed for shared-folder uploads",
     "manage_shared_links": "Manage Shared Links",
@@ -194,6 +195,7 @@ const translations = {
     "share_deleted_successfully": "Share deleted successfully",
     "error_deleting_share": "Error deleting share",
     "password_protected": "Password protected",
+    "no_shared_links_available": "No shared links available",
 
 
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:

@@ -1,5 +1,54 @@
 # Changelog
 
+## Changes 5/3/2025 v1.3.0
+
+**Admin Panel Refactor & Enhancements**  
+
+### Moved from `authModals.js` to `adminPanel.js`
+
+- Extracted all admin-related UI and logic out of `authModals.js`
+- Created a standalone `adminPanel.js` module  
+- Initialized `openAdminPanel()` and `closeAdminPanel()` exports
+
+### Responsive, Collapsible Sections
+
+- Injected new CSS via JS (`adminPanelStyles`)  
+  - Default modal width: 50%  
+  - Small-screen override (`@media (max-width: 600px)`) to 90% width  
+- Introduced `.section-header` / `.section-content` pattern  
+  - Click header to expand/collapse its content  
+  - Animated arrow via Material Icons  
+  - Indented and padded expanded content  
+
+### “Manage Shared Links” Feature
+
+- Added new **Manage Shared Links** section to Admin Panel  
+- Endpoint **GET** `/api/admin/readMetadata.php?file=…`  
+  - Reads `share_folder_links.json` & `share_links.json` under `META_DIR`  
+- Endpoint **POST**  
+  - `/api/folder/deleteShareFolderLink.php`  
+  - `/api/file/deleteShareLink.php`  
+- `loadShareLinksSection()` AJAX loader  
+  - Displays folder & file shares, expiry dates, upload-allowed, and 🔒 if password-protected  
+  - “🗑️” delete buttons refresh the list on success  
+
+### Dark-Mode & Theming Fixes
+
+- Dark-mode CSS overrides for:
+  - Modal border  
+  - `.btn-primary`, `.btn-secondary`  
+  - `.form-control` backgrounds & placeholders  
+  - Section headers & icons  
+- Close button restyled to use shared **.editor-close-btn** look
+
+### API and Controller changes
+
+- Updated all endpoints to use correct controller casing  
+- Renamed controller files to PascalCase (e.g. `adminController.php` to `AdminController.php`, `fileController.php` to `FileController.php`, `folderController.php` to `FolderController.php`)  
+- Adjusted endpoint paths to match controller filenames
+
+---
+
 ## Changes 4/30/2025 v1.2.8
 
 - **Added** PDF preview in `filePreview.js` (the `extension === "pdf"` block): replaced in-modal `<embed>` with `window.open(urlWithTs, "_blank")` and closed the modal to avoid CSP `frame-ancestors 'none'` restrictions.
