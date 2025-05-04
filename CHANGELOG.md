@@ -46,6 +46,7 @@
 - Updated all endpoints to use correct controller casing  
 - Renamed controller files to PascalCase (e.g. `adminController.php` to `AdminController.php`, `fileController.php` to `FileController.php`, `folderController.php` to `FolderController.php`)  
 - Adjusted endpoint paths to match controller filenames
+- Fix FolderController readOnly create folder permission
 
 ---
 

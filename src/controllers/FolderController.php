@@ -76,7 +76,11 @@ class FolderController
         $username = $_SESSION['username'] ?? '';
         $userPermissions = loadUserPermissions($username);
         if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
-            echo json_encode(["error" => "Read-only users are not allowed to create folders."]);
+            http_response_code(403);
+            echo json_encode([
+                "success" => false,
+                "error"   => "Read-only users are not allowed to create folders."
+            ]);
             exit;
         }
 
@@ -1074,7 +1078,7 @@ class FolderController
         header("Location: " . $redirectUrl);
         exit;
     }
-    
+
     /**
      * GET /api/folder/getShareFolderLinks.php
      */
