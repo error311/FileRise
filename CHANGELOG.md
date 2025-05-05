@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 5/4/2025
+## Changes 5/4/2025 v1.3.1
 
 ### Modals
 
@@ -10,8 +10,46 @@
   - TOTP Login & Setup
   - Change Password
 - **Truncated** long filenames in the File Tags modal header using CSS `text-overflow: ellipsis`.
-- **Resized** File Tags modal from 400px → 450px wide (with `max-width: 90vw` fallback).
+- **Resized** File Tags modal from 400px to 450px wide (with `max-width: 90vw` fallback).
 - **Capped** User Panel height at 381px and hidden scrollbars to eliminate layout jumps on hover.
+
+### HTML
+
+- **Moved** `<div id="loginForm">…</div>` out of `.main-wrapper` so the login form can show independently of the app shell.
+- **Added** `<div id="loadingOverlay"></div>` immediately inside `<body>` to cover the UI during auth checks.
+- **Inserted** inline `<style>` in `<head>` to:
+  - Hide `.main-wrapper` by default.
+  - Style `#loadingOverlay` as a full-viewport white overlay.
+  
+- **Added** `addUserModal`, `removeUserModal` & `renameFileModal` modals to `style="display:none;"`
+
+### `main.js`
+
+- **Extracted** `initializeApp()` helper to centralize post-auth startup (tag search, file list, drag-and-drop, folder tree, upload, trash/restore, admin config).
+- **Updated** DOMContentLoaded `checkAuthentication()` flow to call `initializeApp()` when already authenticated.
+- **Extended** `updateAuthenticatedUI()` to call `initializeApp()` after a fresh login so all UI modules re-hydrate.
+- **Enhanced** setup-mode in `checkAuthentication()`:
+  - Show `#addUserModal` as a flex overlay (`style.display = 'flex'`).
+  - Keep `.main-wrapper` hidden until setup completes.
+- **Added** post-setup handler in the Add-User modal’s save button:
+  - Hide setup modal.
+  - Show login form.
+  - Keep app shell hidden.
+  - Pre-fill and focus the new username in the login inputs.
+
+### `auth.js` / Auth Logic
+
+- **Refactored** `checkAuthentication()` to handle three states:
+  1. **`data.setup`** remove overlay, hide main UI, show setup modal.  
+  2. **`data.authenticated`** remove overlay, call `updateAuthenticatedUI()`.  
+  3. **not authenticated** remove overlay, show login form, keep main UI hidden.
+- **Refined** `updateAuthenticatedUI()` to:
+  - Remove loading overlay.
+  - Show `.main-wrapper` and main operations.
+  - Hide `#loginForm`.
+  - Reveal header buttons.
+  - Initialize dynamic header buttons (restore, admin, user-panel).
+  - Call `initializeApp()` to load all modules after login.
 
 ---
 

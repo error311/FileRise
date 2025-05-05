@@ -55,6 +55,7 @@ const translations = {
     // Additional keys for HTML translations:
     "title": "FileRise",
     "header_title": "FileRise",
+    "header_title_text": "Header Title",
     "logout": "Logout",
     "change_password": "Change Password",
     "restore_text": "Restore or",
@@ -316,6 +317,7 @@ const translations = {
     // Additional keys for HTML translations:
     "title": "FileRise",
     "header_title": "FileRise",
+    "header_title_text": "Header Title",
     "logout": "Cerrar sesión",
     "change_password": "Cambiar contraseña",
     "restore_text": "Restaurar o",

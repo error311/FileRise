@@ -9,6 +9,21 @@
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
   <meta name="csrf-token" content="">
   <meta name="share-url" content="">
+  <style>
+    /* hide the app shell until JS says otherwise */
+    .main-wrapper { display: none; }
+
+    /* full-screen white overlay while we check auth */
+    #loadingOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--bg-color,#fff);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
   <!-- Google Fonts and Material Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -165,9 +180,41 @@
     </div>
   </header>
 
+  <div id="loadingOverlay"></div>
+
   <!-- Custom Toast Container -->
   <div id="customToast"></div>
   <div id="hiddenCardsContainer" style="display:none;"></div>
+
+  <div class="row mt-4" id="loginForm">
+    <div class="col-12">
+      <form id="authForm" method="post">
+        <div class="form-group">
+          <label for="loginUsername" data-i18n-key="user">User:</label>
+          <input type="text" class="form-control" id="loginUsername" name="username" required autofocus />
+        </div>
+        <div class="form-group">
+          <label for="loginPassword" data-i18n-key="password">Password:</label>
+          <input type="password" class="form-control" id="loginPassword" name="password" required />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-login" data-i18n-key="login">Login</button>
+        <div class="form-group remember-me-container">
+          <input type="checkbox" id="rememberMeCheckbox" name="remember_me" />
+          <label for="rememberMeCheckbox" data-i18n-key="remember_me">Remember me</label>
+        </div>
+      </form>
+      <!-- OIDC Login Option -->
+      <div class="text-center mt-3">
+        <button id="oidcLoginBtn" class="btn btn-secondary" data-i18n-key="login_oidc">Login with OIDC</button>
+      </div>
+      <!-- Basic HTTP Login Option -->
+      <div class="text-center mt-3">
+        <a href="/api/auth/login_basic.php" class="btn btn-secondary" data-i18n-key="basic_http_login">Use Basic
+          HTTP
+          Login</a>
+      </div>
+    </div>
+  </div>
 
   <!-- Main Wrapper: Hidden by default; remove "display: none;" after login -->
   <div class="main-wrapper">
@@ -176,37 +223,6 @@
     <!-- Main Column -->
     <div id="mainColumn" class="main-column">
       <div class="container-fluid">
-        <!-- Login Form (unchanged) -->
-        <div class="row" id="loginForm">
-          <div class="col-12">
-            <form id="authForm" method="post">
-              <div class="form-group">
-                <label for="loginUsername" data-i18n-key="user">User:</label>
-                <input type="text" class="form-control" id="loginUsername" name="username" required autofocus />
-              </div>
-              <div class="form-group">
-                <label for="loginPassword" data-i18n-key="password">Password:</label>
-                <input type="password" class="form-control" id="loginPassword" name="password" required />
-              </div>
-              <button type="submit" class="btn btn-primary btn-block btn-login" data-i18n-key="login">Login</button>
-              <div class="form-group remember-me-container">
-                <input type="checkbox" id="rememberMeCheckbox" name="remember_me" />
-                <label for="rememberMeCheckbox" data-i18n-key="remember_me">Remember me</label>
-              </div>
-            </form>
-            <!-- OIDC Login Option -->
-            <div class="text-center mt-3">
-              <button id="oidcLoginBtn" class="btn btn-secondary" data-i18n-key="login_oidc">Login with OIDC</button>
-            </div>
-            <!-- Basic HTTP Login Option -->
-            <div class="text-center mt-3">
-              <a href="/api/auth/login_basic.php" class="btn btn-secondary" data-i18n-key="basic_http_login">Use Basic
-                HTTP
-                Login</a>
-            </div>
-          </div>
-        </div>
-
         <!-- Main Operations: Upload and Folder Management -->
         <div id="mainOperations">
           <div class="container" style="max-width: 1400px; margin: 0 auto;">
@@ -439,7 +455,7 @@
       <button id="saveNewPasswordBtn" class="btn btn-primary" data-i18n-key="save" style="width:100%;">Save</button>
     </div>
   </div>
-  <div id="addUserModal" class="modal">
+  <div id="addUserModal" class="modal" style="display:none;">
     <div class="modal-content">
       <h3 data-i18n-key="create_new_user_title">Create New User</h3>
       <!-- 1) Add a form around these fields -->
@@ -468,7 +484,7 @@
       </form>
     </div>
   </div>
-  <div id="removeUserModal" class="modal">
+  <div id="removeUserModal" class="modal" style="display:none;">
     <div class="modal-content">
       <h3 data-i18n-key="remove_user_title">Remove User</h3>
       <label for="removeUsernameSelect" data-i18n-key="select_user_remove">Select a user to remove:</label>
@@ -479,7 +495,7 @@
       </div>
     </div>
   </div>
-  <div id="renameFileModal" class="modal">
+  <div id="renameFileModal" class="modal" style="display:none;">
     <div class="modal-content">
       <h4 data-i18n-key="rename_file_title">Rename File</h4>
       <input type="text" id="newFileName" class="form-control" data-i18n-placeholder="rename_file_placeholder"

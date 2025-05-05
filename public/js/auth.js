@@ -18,6 +18,7 @@ import {
   setLastLoginData
 } from './authModals.js';
 import { openAdminPanel } from './adminPanel.js';
+import { initializeApp } from './main.js';
 
 // Production OIDC configuration (override via API as needed)
 const currentOIDCConfig = {
@@ -127,13 +128,13 @@ function updateItemsPerPageSelect() {
 
 function updateLoginOptionsUI({ disableFormLogin, disableBasicAuth, disableOIDCLogin }) {
   const authForm = document.getElementById("authForm");
-  if 
+  if
     (authForm) {
-      authForm.style.display = disableFormLogin ? "none" : "block";
-      setTimeout(() => {
-        const loginInput = document.getElementById('loginUsername');
-        if (loginInput) loginInput.focus();
-      }, 0);      
+    authForm.style.display = disableFormLogin ? "none" : "block";
+    setTimeout(() => {
+      const loginInput = document.getElementById('loginUsername');
+      if (loginInput) loginInput.focus();
+    }, 0);
   }
   const basicAuthLink = document.querySelector("a[href='/api/auth/login_basic.php']");
   if (basicAuthLink) basicAuthLink.style.display = disableBasicAuth ? "none" : "inline-block";
@@ -189,6 +190,11 @@ function insertAfter(newNode, referenceNode) {
 }
 
 function updateAuthenticatedUI(data) {
+  document.getElementById('loadingOverlay').remove();
+
+  // show the wrapper (so the login form can be visible)
+  document.querySelector('.main-wrapper').style.display = '';
+  document.getElementById('loginForm').style.display = 'none';
   toggleVisibility("loginForm", false);
   toggleVisibility("mainOperations", true);
   toggleVisibility("uploadFileForm", true);
@@ -263,6 +269,7 @@ function updateAuthenticatedUI(data) {
       userPanelBtn.style.display = "block";
     }
   }
+  initializeApp();
   applyTranslations();
   updateItemsPerPageSelect();
   updateLoginOptionsUIFromStorage();
@@ -272,6 +279,11 @@ function checkAuthentication(showLoginToast = true) {
   return sendRequest("/api/auth/checkAuth.php")
     .then(data => {
       if (data.setup) {
+        document.getElementById('loadingOverlay').remove();
+
+        // show the wrapper (so the login form can be visible)
+        document.querySelector('.main-wrapper').style.display = '';
+        document.getElementById('loginForm').style.display = 'none';
         window.setupMode = true;
         if (showLoginToast) showToast("Setup mode: No users found. Please add an admin user.");
         toggleVisibility("loginForm", false);
@@ -283,6 +295,7 @@ function checkAuthentication(showLoginToast = true) {
       }
       window.setupMode = false;
       if (data.authenticated) {
+
         localStorage.setItem('isAdmin', data.isAdmin ? 'true' : 'false');
         localStorage.setItem("folderOnly", data.folderOnly);
         localStorage.setItem("readOnly", data.readOnly);
@@ -298,6 +311,11 @@ function checkAuthentication(showLoginToast = true) {
         updateAuthenticatedUI(data);
         return data;
       } else {
+        document.getElementById('loadingOverlay').remove();
+
+        // show the wrapper (so the login form can be visible)
+        document.querySelector('.main-wrapper').style.display = '';
+        document.getElementById('loginForm').style.display = '';
         if (showLoginToast) showToast("Please log in to continue.");
         toggleVisibility("loginForm", true);
         toggleVisibility("mainOperations", false);
@@ -443,52 +461,55 @@ function initAuth() {
       submitLogin(formData);
     });
   }
-  
+
   document.getElementById("addUserBtn").addEventListener("click", function () {
     resetUserForm();
     toggleVisibility("addUserModal", true);
     document.getElementById("newUsername").focus();
   });
-  
-// remove your old saveUserBtn click-handler…
 
-// instead:
-const addUserForm = document.getElementById("addUserForm");
-addUserForm.addEventListener("submit", function (e) {
-  e.preventDefault();   // stop the browser from reloading the page
+  // remove your old saveUserBtn click-handler…
 
-  const newUsername = document.getElementById("newUsername").value.trim();
-  const newPassword = document.getElementById("addUserPassword").value.trim();
-  const isAdmin     = document.getElementById("isAdmin").checked;
+  // instead:
+  const addUserForm = document.getElementById("addUserForm");
+  addUserForm.addEventListener("submit", function (e) {
+    e.preventDefault();   // stop the browser from reloading the page
 
-  if (!newUsername || !newPassword) {
-    showToast("Username and password are required!");
-    return;
-  }
+    const newUsername = document.getElementById("newUsername").value.trim();
+    const newPassword = document.getElementById("addUserPassword").value.trim();
+    const isAdmin = document.getElementById("isAdmin").checked;
 
-  let url = "/api/addUser.php";
-  if (window.setupMode) url += "?setup=1";
+    if (!newUsername || !newPassword) {
+      showToast("Username and password are required!");
+      return;
+    }
 
-  fetchWithCsrf(url, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
-  })
-    .then(r => r.json())
-    .then(data => {
-      if (data.success) {
-        showToast("User added successfully!");
-        closeAddUserModal();
-        checkAuthentication(false);
-      } else {
-        showToast("Error: " + (data.error || "Could not add user"));
-      }
+    let url = "/api/addUser.php";
+    if (window.setupMode) url += "?setup=1";
+
+    fetchWithCsrf(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: newUsername, password: newPassword, isAdmin })
     })
-    .catch(() => {
-      showToast("Error: Could not add user");
-    });
-});
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          showToast("User added successfully!");
+          closeAddUserModal();
+          checkAuthentication(false);
+          if (window.setupMode) {
+            toggleVisibility("loginForm", true);
+          }
+        } else {
+          showToast("Error: " + (data.error || "Could not add user"));
+        }
+      })
+      .catch(() => {
+        showToast("Error: Could not add user");
+      });
+  });
   document.getElementById("cancelUserBtn").addEventListener("click", closeAddUserModal);
 
   document.getElementById("removeUserBtn").addEventListener("click", function () {

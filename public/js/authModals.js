@@ -174,7 +174,7 @@ export function openUserPanel() {
     border-radius: 8px;
     overflow-y: auto;
     overflow-x: hidden;
-    max-height: 381px !important;
+    max-height: 383px !important;
     flex-shrink: 0 !important;
     scrollbar-gutter: stable both-edges;
     border: ${isDarkMode ? "1px solid #444" : "1px solid #ccc"};

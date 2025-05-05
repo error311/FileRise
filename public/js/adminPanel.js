@@ -3,7 +3,7 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.3.0";
+const version = "v1.3.1";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
 
 // ————— Inject updated styles —————
@@ -389,7 +389,7 @@ export function openAdminPanel() {
         // — Header Settings —
         document.getElementById("headerSettingsContent").innerHTML = `
           <div class="form-group">
-            <label for="headerTitle">${t("header_title")}:</label>
+            <label for="headerTitle">${t("header_title_text")}:</label>
             <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle}" />
           </div>
         `;
@@ -548,7 +548,7 @@ export function openUserPermissionsModal() {
         `;
     userPermissionsModal.innerHTML = `
           <div class="modal-content" style="${modalContentStyles}">
-            <span id="closeUserPermissionsModal" style="position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 24px;">&times;</span>
+            <span id="closeUserPermissionsModal" class="editor-close-btn">&times;</span>
             <h3>${t("user_permissions")}</h3>
             <div id="userPermissionsList" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;">
               <!-- User rows will be loaded here -->

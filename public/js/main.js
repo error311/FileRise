@@ -14,6 +14,28 @@ import { initFileActions, renameFile, openDownloadModal, confirmSingleDownload }
 import { editFile, saveFile } from './fileEditor.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
+export function initializeApp() {
+  window.currentFolder = "root";
+  initTagSearch();
+  loadFileList(window.currentFolder);
+  initDragAndDrop();
+  loadSidebarOrder();
+  loadHeaderOrder();
+  initFileActions();
+  initUpload();
+  loadFolderTree();
+  setupTrashRestoreDelete();
+  loadAdminConfigFunc();
+
+    const helpBtn     = document.getElementById("folderHelpBtn");
+    const helpTooltip = document.getElementById("folderHelpTooltip");
+    if (helpBtn && helpTooltip) {
+      helpBtn.addEventListener("click", () => {
+        helpTooltip.style.display =
+          helpTooltip.style.display === "block" ? "none" : "block";
+      });
+    }
+}
 
 export function loadCsrfToken() {
   return fetchWithCsrf('/api/auth/token.php', {
@@ -100,31 +122,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // Continue with initializations that rely on a valid CSRF token:
     checkAuthentication().then(authenticated => {
       if (authenticated) {
-        window.currentFolder = "root";
-        initTagSearch();
-        loadFileList(window.currentFolder);
-        initDragAndDrop();
-        loadSidebarOrder();
-        loadHeaderOrder();
-        initFileActions();
-        initUpload();
-        loadFolderTree();
-        setupTrashRestoreDelete();
-        loadAdminConfigFunc();
-
-        const helpBtn = document.getElementById("folderHelpBtn");
-        const helpTooltip = document.getElementById("folderHelpTooltip");
-        helpBtn.addEventListener("click", function () {
-          // Toggle display of the tooltip.
-          if (helpTooltip.style.display === "none" || helpTooltip.style.display === "") {
-            helpTooltip.style.display = "block";
-          } else {
-            helpTooltip.style.display = "none";
-          }
-        });
-      } else {
-        console.warn("User not authenticated. Data loading deferred.");
-      }
+        document.getElementById('loadingOverlay').remove();
+        initializeApp();
+      } 
     });
 
     // Other DOM initialization that can happen after CSRF is ready.
