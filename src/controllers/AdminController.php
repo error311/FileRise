@@ -54,23 +54,27 @@ class AdminController
     {
         header('Content-Type: application/json');
         $config = AdminModel::getConfig();
-    
         if (isset($config['error'])) {
             http_response_code(500);
+            echo json_encode(['error' => $config['error']]);
+            exit;
         }
     
-        if (!isset($config['loginOptions']) || !is_array($config['loginOptions'])) {
-            $config['loginOptions'] = [];
-        }
-        if (!array_key_exists('authBypass', $config['loginOptions'])) {
-            $config['loginOptions']['authBypass'] = false;
-        }
-        if (!array_key_exists('authHeaderName', $config['loginOptions'])) {
-            $config['loginOptions']['authHeaderName'] = 'X-Remote-User';
-        }
-        // ← END INSERT
+        // Build a safe subset for the front-end
+        $safe = [
+          'header_title'        => $config['header_title'],
+          'loginOptions'        => $config['loginOptions'],
+          'globalOtpauthUrl'    => $config['globalOtpauthUrl'],
+          'enableWebDAV'        => $config['enableWebDAV'],
+          'sharedMaxUploadSize' => $config['sharedMaxUploadSize'],
+          'oidc' => [
+            'providerUrl' => $config['oidc']['providerUrl'],
+            'redirectUri' => $config['oidc']['redirectUri'],
+            // clientSecret and clientId never exposed here
+          ],
+        ];
     
-        echo json_encode($config);
+        echo json_encode($safe);
         exit;
     }
 
@@ -133,119 +137,106 @@ class AdminController
      * @return void Outputs a JSON response indicating success or failure.
      */
     public function updateConfig(): void
-    {
-        header('Content-Type: application/json');
+{
+    header('Content-Type: application/json');
 
-        // Ensure the user is authenticated and is an admin.
-        if (
-            !isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
-            !isset($_SESSION['isAdmin']) || !$_SESSION['isAdmin']
-        ) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Unauthorized access.']);
-            exit;
-        }
-
-        // Validate CSRF token.
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
-        if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Invalid CSRF token.']);
-            exit;
-        }
-
-        // Retrieve and decode JSON input.
-        $input = file_get_contents('php://input');
-        $data = json_decode($input, true);
-        if (!is_array($data)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid input.']);
-            exit;
-        }
-
-        // Prepare existing settings
-        $headerTitle = isset($data['header_title']) ? trim($data['header_title']) : "";
-        $oidc = isset($data['oidc']) ? $data['oidc'] : [];
-        $oidcProviderUrl = isset($oidc['providerUrl']) ? filter_var($oidc['providerUrl'], FILTER_SANITIZE_URL) : '';
-        $oidcClientId    = isset($oidc['clientId']) ? trim($oidc['clientId']) : '';
-        $oidcClientSecret = isset($oidc['clientSecret']) ? trim($oidc['clientSecret']) : '';
-        $oidcRedirectUri = isset($oidc['redirectUri']) ? filter_var($oidc['redirectUri'], FILTER_SANITIZE_URL) : '';
-        if (!$oidcProviderUrl || !$oidcClientId || !$oidcClientSecret || !$oidcRedirectUri) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Incomplete OIDC configuration.']);
-            exit;
-        }
-
-        $disableFormLogin = false;
-        if (isset($data['loginOptions']['disableFormLogin'])) {
-            $disableFormLogin = filter_var($data['loginOptions']['disableFormLogin'], FILTER_VALIDATE_BOOLEAN);
-        } elseif (isset($data['disableFormLogin'])) {
-            $disableFormLogin = filter_var($data['disableFormLogin'], FILTER_VALIDATE_BOOLEAN);
-        }
-        $disableBasicAuth = false;
-        if (isset($data['loginOptions']['disableBasicAuth'])) {
-            $disableBasicAuth = filter_var($data['loginOptions']['disableBasicAuth'], FILTER_VALIDATE_BOOLEAN);
-        } elseif (isset($data['disableBasicAuth'])) {
-            $disableBasicAuth = filter_var($data['disableBasicAuth'], FILTER_VALIDATE_BOOLEAN);
-        }
-
-        $disableOIDCLogin = false;
-        if (isset($data['loginOptions']['disableOIDCLogin'])) {
-            $disableOIDCLogin = filter_var($data['loginOptions']['disableOIDCLogin'], FILTER_VALIDATE_BOOLEAN);
-        } elseif (isset($data['disableOIDCLogin'])) {
-            $disableOIDCLogin = filter_var($data['disableOIDCLogin'], FILTER_VALIDATE_BOOLEAN);
-        }
-        $globalOtpauthUrl = isset($data['globalOtpauthUrl']) ? trim($data['globalOtpauthUrl']) : "";
-
-        // ── NEW: enableWebDAV flag ──────────────────────────────────────
-        $enableWebDAV = false;
-        if (array_key_exists('enableWebDAV', $data)) {
-            $enableWebDAV = filter_var($data['enableWebDAV'], FILTER_VALIDATE_BOOLEAN);
-        } elseif (isset($data['features']['enableWebDAV'])) {
-            $enableWebDAV = filter_var($data['features']['enableWebDAV'], FILTER_VALIDATE_BOOLEAN);
-        }
-
-        // ── NEW: sharedMaxUploadSize ──────────────────────────────────────
-        $sharedMaxUploadSize = null;
-        if (array_key_exists('sharedMaxUploadSize', $data)) {
-            $sharedMaxUploadSize = filter_var($data['sharedMaxUploadSize'], FILTER_VALIDATE_INT);
-        } elseif (isset($data['features']['sharedMaxUploadSize'])) {
-            $sharedMaxUploadSize = filter_var($data['features']['sharedMaxUploadSize'], FILTER_VALIDATE_INT);
-        }
-
-        $authBypass     = filter_var(
-            $data['loginOptions']['authBypass'] ?? false,
-            FILTER_VALIDATE_BOOLEAN
-        );
-        $authHeaderName = trim($data['loginOptions']['authHeaderName'] ?? '') ?: 'X-Remote-User';
-
-        $configUpdate = [
-            'header_title'         => $headerTitle,
-            'oidc'                 => [
-                'providerUrl'      => $oidcProviderUrl,
-                'clientId'         => $oidcClientId,
-                'clientSecret'     => $oidcClientSecret,
-                'redirectUri'      => $oidcRedirectUri,
-            ],
-            'loginOptions'         => [
-                'disableFormLogin' => $disableFormLogin,
-                'disableBasicAuth' => $disableBasicAuth,
-                'disableOIDCLogin' => $disableOIDCLogin,
-                'authBypass'       => $authBypass,
-                'authHeaderName'   => $authHeaderName,
-            ],
-            'globalOtpauthUrl'     => $globalOtpauthUrl,
-            'enableWebDAV'         => $enableWebDAV,          
-            'sharedMaxUploadSize'  => $sharedMaxUploadSize   // ← NEW
-        ];
-
-        // Delegate to the model.
-        $result = AdminModel::updateConfig($configUpdate);
-        if (isset($result['error'])) {
-            http_response_code(500);
-        }
-        echo json_encode($result);
+    // —– auth & CSRF checks —–
+    if (
+        !isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
+        !isset($_SESSION['isAdmin'])      || !$_SESSION['isAdmin']
+    ) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Unauthorized access.']);
         exit;
     }
+    $headersArr    = array_change_key_case(getallheaders(), CASE_LOWER);
+    $receivedToken = trim($headersArr['x-csrf-token'] ?? '');
+    if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Invalid CSRF token.']);
+        exit;
+    }
+
+    // —– fetch payload —–
+    $data = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($data)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid input.']);
+        exit;
+    }
+
+    // —– load existing on-disk config —–
+    $existing = AdminModel::getConfig();
+
+    // —– start merge with existing as base —–
+    $merged = $existing;
+
+    // header_title
+    if (array_key_exists('header_title', $data)) {
+        $merged['header_title'] = trim($data['header_title']);
+    }
+
+    // loginOptions: inherit existing then override if provided
+    $merged['loginOptions'] = $existing['loginOptions'] ?? [
+      'disableFormLogin' => false,
+      'disableBasicAuth' => false,
+      'disableOIDCLogin'=> false,
+      'authBypass'      => false,
+      'authHeaderName'  => 'X-Remote-User'
+    ];
+    foreach (['disableFormLogin','disableBasicAuth','disableOIDCLogin','authBypass'] as $flag) {
+        if (isset($data['loginOptions'][$flag])) {
+            $merged['loginOptions'][$flag] = filter_var(
+                $data['loginOptions'][$flag],
+                FILTER_VALIDATE_BOOLEAN
+            );
+        }
+    }
+    if (isset($data['loginOptions']['authHeaderName'])) {
+        $hdr = trim($data['loginOptions']['authHeaderName']);
+        if ($hdr !== '') {
+            $merged['loginOptions']['authHeaderName'] = $hdr;
+        }
+    }
+
+    // globalOtpauthUrl
+    if (array_key_exists('globalOtpauthUrl', $data)) {
+        $merged['globalOtpauthUrl'] = trim($data['globalOtpauthUrl']);
+    }
+
+    // enableWebDAV
+    if (array_key_exists('enableWebDAV', $data)) {
+        $merged['enableWebDAV'] = filter_var($data['enableWebDAV'], FILTER_VALIDATE_BOOLEAN);
+    }
+
+    // sharedMaxUploadSize
+    if (array_key_exists('sharedMaxUploadSize', $data)) {
+        $sms = filter_var($data['sharedMaxUploadSize'], FILTER_VALIDATE_INT);
+        if ($sms !== false) {
+            $merged['sharedMaxUploadSize'] = $sms;
+        }
+    }
+
+    // oidc: only overwrite non-empty inputs
+    $merged['oidc'] = $existing['oidc'] ?? [
+      'providerUrl'=>'','clientId'=>'','clientSecret'=>'','redirectUri'=>''
+    ];
+    foreach (['providerUrl','clientId','clientSecret','redirectUri'] as $f) {
+        if (!empty($data['oidc'][$f])) {
+            $val = trim($data['oidc'][$f]);
+            if ($f === 'providerUrl' || $f === 'redirectUri') {
+                $val = filter_var($val, FILTER_SANITIZE_URL);
+            }
+            $merged['oidc'][$f] = $val;
+        }
+    }
+
+    // —– persist merged config —–
+    $result = AdminModel::updateConfig($merged);
+    if (isset($result['error'])) {
+        http_response_code(500);
+    }
+    echo json_encode($result);
+    exit;
+}
 }

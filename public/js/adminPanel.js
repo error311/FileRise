@@ -3,7 +3,7 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.3.2";
+const version = "v1.3.3";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
 
 // ————— Inject updated styles —————
@@ -425,6 +425,9 @@ export function openAdminPanel() {
 
         // — OIDC & TOTP —
         document.getElementById("oidcContent").innerHTML = `
+          <div class="form-text text-muted" style="margin-top:8px;">
+            <small>Note: OIDC credentials (Client ID/Secret) will show blank here after saving, but remain unchanged until you explicitly edit and save them.</small>
+          </div>
           <div class="form-group"><label for="oidcProviderUrl">${t("oidc_provider_url")}:</label><input type="text" id="oidcProviderUrl" class="form-control" value="${window.currentOIDCConfig.providerUrl}" /></div>
           <div class="form-group"><label for="oidcClientId">${t("oidc_client_id")}:</label><input type="text" id="oidcClientId" class="form-control" value="${window.currentOIDCConfig.clientId}" /></div>
           <div class="form-group"><label for="oidcClientSecret">${t("oidc_client_secret")}:</label><input type="text" id="oidcClientSecret" class="form-control" value="${window.currentOIDCConfig.clientSecret}" /></div>

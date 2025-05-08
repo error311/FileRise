@@ -23,8 +23,8 @@ import { initializeApp } from './main.js';
 // Production OIDC configuration (override via API as needed)
 const currentOIDCConfig = {
   providerUrl: "https://your-oidc-provider.com",
-  clientId: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET",
+  clientId: "",
+  clientSecret: "",
   redirectUri: "https://yourdomain.com/api/auth/auth.php?oidc=callback",
   globalOtpauthUrl: ""
 };

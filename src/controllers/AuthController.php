@@ -111,6 +111,8 @@ class AuthController
                 $cfg['oidc']['clientSecret']
             );
             $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
+            $oidc->addScope(['openid','profile','email']);
+
 
             if ($oidcAction === 'callback') {
                 try {

@@ -1,5 +1,24 @@
 # Changelog
 
+## Changes 5/8/2025 v1.3.3
+
+### Enhancements
+
+- **Admin API** (`updateConfig.php`):  
+  - Now merges incoming payload onto existing on-disk settings instead of overwriting blanks.  
+  - Preserves `clientId`, `clientSecret`, `providerUrl` and `redirectUri` when those fields are omitted or empty in the request.
+
+- **Admin API** (`getConfig.php`):  
+  - Returns only a safe subset of admin settings (omits `clientSecret`) to prevent accidental exposure of sensitive data.
+
+- **Frontend** (`auth.js`):  
+  - Update UI based on merged loginOptions from the server, ensuring blank or missing fields no longer revert your existing config.
+
+- **Auth API** (`auth.php`):  
+  - Added `$oidc->addScope(['openid','profile','email']);` to OIDC flow. (This should resolve authentik issue)
+
+---
+
 ## Changes 5/8/2025 v1.3.2
 
 ### config/config.php
@@ -49,6 +68,10 @@
   - After a successful login check, called a new helper (`applyProxyBypassUI()`) which reads `localStorage.authBypass` and conditionally hides the entire login form/UI.
   - In the “not authenticated” branch, only shows the login form if `authBypass` is false.
 - No other core fetch/token logic changed; all existing flows remain intact.
+
+### Security
+
+- **Admin API**: `getConfig.php` now returns only a safe subset of admin settings (omits `clientSecret`) to prevent accidental exposure of sensitive data.
 
 ---
 

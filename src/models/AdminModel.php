@@ -186,8 +186,8 @@ class AdminModel
                 'header_title'          => "FileRise",
                 'oidc'                  => [
                     'providerUrl'  => 'https://your-oidc-provider.com',
-                    'clientId'     => 'YOUR_CLIENT_ID',
-                    'clientSecret' => 'YOUR_CLIENT_SECRET',
+                    'clientId'     => '',
+                    'clientSecret' => '',
                     'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback'
                 ],
                 'loginOptions'          => [
