@@ -1,5 +1,13 @@
 # Changelog
 
+## Changes 5/8/2025
+
+### Docker 🐳
+
+- Ensure `/var/www/config` exists and is owned by `www-data` (chmod 750) so that `start.sh`’s `sed -i` updates to `config.php` work reliably
+
+---
+
 ## Changes 5/8/2025 v1.3.3
 
 ### Enhancements

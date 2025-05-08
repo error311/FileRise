@@ -51,6 +51,11 @@ COPY custom-php.ini /etc/php/8.3/apache2/conf.d/99-app-tuning.ini
 COPY --from=appsource /var/www /var/www
 COPY --from=composer /app/vendor /var/www/vendor
 
+# ── ensure config/ is writable by www-data so sed -i can work ──
+RUN mkdir -p /var/www/config \
+    && chown -R www-data:www-data /var/www/config \
+    && chmod 750 /var/www/config
+
 # Secure permissions: code read-only, only data dirs writable
 RUN chown -R root:www-data /var/www && \
     find /var/www -type d -exec chmod 755 {} \; && \
