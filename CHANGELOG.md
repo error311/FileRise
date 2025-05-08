@@ -10,6 +10,7 @@
   - Defined `AUTH_HEADER` (normalized, e.g. `"X_REMOTE_USER"`) based on `loginOptions.authHeaderName`.
 - Inserted a **proxy-only auto-login** block *before* the usual session/auth checks:  
   If `AUTH_BYPASS` is true and the trusted header (`$_SERVER['HTTP_' . AUTH_HEADER]`) is present, bump the session, mark the user authenticated/admin, load their permissions, and skip straight to JSON output.
+- Relax filename validation regex to allow broader Unicode and special chars
 
 ### src/controllers/AdminController.php
 
