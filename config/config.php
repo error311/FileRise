@@ -35,6 +35,7 @@ define('REGEX_USER',       '/^[\p{L}\p{N}_\- ]+$/u');
 
 date_default_timezone_set(TIMEZONE);
 
+
 // Encryption helpers
 function encryptData($data, $encryptionKey)
 {
@@ -114,6 +115,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+
 // Auto‑login via persistent token
 if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) {
     $tokFile = USERS_DIR . 'persistent_tokens.json';
@@ -140,6 +142,60 @@ if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) 
     }
 }
 
+$adminConfigFile = USERS_DIR . 'adminConfig.json';
+
+// sane defaults:
+$cfgAuthBypass = false;
+$cfgAuthHeader = 'X_REMOTE_USER';
+
+if (file_exists($adminConfigFile)) {
+    $encrypted = file_get_contents($adminConfigFile);
+    $decrypted = decryptData($encrypted, $encryptionKey);
+    $adminCfg  = json_decode($decrypted, true) ?: [];
+
+    $loginOpts = $adminCfg['loginOptions'] ?? [];
+
+    // proxy-only bypass flag
+    $cfgAuthBypass = ! empty($loginOpts['authBypass']);
+
+    // header name (e.g. “X-Remote-User” → HTTP_X_REMOTE_USER)
+    $hdr = trim($loginOpts['authHeaderName'] ?? '');
+    if ($hdr === '') {
+        $hdr = 'X-Remote-User';
+    }
+    // normalize to PHP’s $_SERVER key format:
+    $cfgAuthHeader = 'HTTP_' . strtoupper(str_replace('-', '_', $hdr));
+}
+
+define('AUTH_BYPASS',  $cfgAuthBypass);
+define('AUTH_HEADER',  $cfgAuthHeader);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROXY-ONLY AUTO–LOGIN now uses those constants:
+if (AUTH_BYPASS) {
+    $hdrKey = AUTH_HEADER;   // e.g. "HTTP_X_REMOTE_USER"
+    if (!empty($_SERVER[$hdrKey])) {
+        // regenerate once per session
+        if (empty($_SESSION['authenticated'])) {
+            session_regenerate_id(true);
+        }
+
+        $username = $_SERVER[$hdrKey];
+        $_SESSION['authenticated'] = true;
+        $_SESSION['username']      = $username;
+
+        // ◾ lookup actual role instead of forcing admin
+        require_once PROJECT_ROOT . '/src/models/AuthModel.php';
+        $role = AuthModel::getUserRole($username);
+        $_SESSION['isAdmin'] = ($role === '1');
+
+        // carry over any folder/read/upload perms
+        $perms = loadUserPermissions($username) ?: [];
+        $_SESSION['folderOnly']    = $perms['folderOnly']    ?? false;
+        $_SESSION['readOnly']      = $perms['readOnly']      ?? false;
+        $_SESSION['disableUpload'] = $perms['disableUpload'] ?? false;
+    }
+}
 // Share URL fallback
 define('BASE_URL', 'http://yourwebsite/uploads/');
 if (strpos(BASE_URL, 'yourwebsite') !== false) {

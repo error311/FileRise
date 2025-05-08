@@ -342,48 +342,48 @@ class AuthController
     public function checkAuth(): void
     {
 
-    // 1) Remember-me re-login
-    if (empty($_SESSION['authenticated']) && !empty($_COOKIE['remember_me_token'])) {
-        $payload = AuthModel::validateRememberToken($_COOKIE['remember_me_token']);
-        if ($payload) {
-            $old = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
-            session_regenerate_id(true);
-            $_SESSION['csrf_token'] = $old;
-            $_SESSION['authenticated']  = true;
-            $_SESSION['username']       = $payload['username'];
-            $_SESSION['isAdmin']        = !empty($payload['isAdmin']);
-            $_SESSION['folderOnly']     = $payload['folderOnly']    ?? false;
-            $_SESSION['readOnly']       = $payload['readOnly']      ?? false;
-            $_SESSION['disableUpload']  = $payload['disableUpload'] ?? false;
-            // regenerate CSRF if you use one
-            
+        // 1) Remember-me re-login
+        if (empty($_SESSION['authenticated']) && !empty($_COOKIE['remember_me_token'])) {
+            $payload = AuthModel::validateRememberToken($_COOKIE['remember_me_token']);
+            if ($payload) {
+                $old = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
+                session_regenerate_id(true);
+                $_SESSION['csrf_token'] = $old;
+                $_SESSION['authenticated']  = true;
+                $_SESSION['username']       = $payload['username'];
+                $_SESSION['isAdmin']        = !empty($payload['isAdmin']);
+                $_SESSION['folderOnly']     = $payload['folderOnly']    ?? false;
+                $_SESSION['readOnly']       = $payload['readOnly']      ?? false;
+                $_SESSION['disableUpload']  = $payload['disableUpload'] ?? false;
+                // regenerate CSRF if you use one
 
-            // TOTP enabled? (same logic as below)
-            $usersFile = USERS_DIR . USERS_FILE;
-            $totp = false;
-            if (file_exists($usersFile)) {
-                foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-                    $parts = explode(':', trim($line));
-                    if ($parts[0] === $_SESSION['username'] && !empty($parts[3])) {
-                        $totp = true;
-                        break;
+
+                // TOTP enabled? (same logic as below)
+                $usersFile = USERS_DIR . USERS_FILE;
+                $totp = false;
+                if (file_exists($usersFile)) {
+                    foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                        $parts = explode(':', trim($line));
+                        if ($parts[0] === $_SESSION['username'] && !empty($parts[3])) {
+                            $totp = true;
+                            break;
+                        }
                     }
                 }
-            }
 
-            echo json_encode([
-                'authenticated' => true,
-                'csrf_token'    => $_SESSION['csrf_token'],
-                'isAdmin'       => $_SESSION['isAdmin'],
-                'totp_enabled'  => $totp,
-                'username'      => $_SESSION['username'],
-                'folderOnly'    => $_SESSION['folderOnly'],
-                'readOnly'      => $_SESSION['readOnly'],
-                'disableUpload' => $_SESSION['disableUpload']
-            ]);
-            exit();
+                echo json_encode([
+                    'authenticated' => true,
+                    'csrf_token'    => $_SESSION['csrf_token'],
+                    'isAdmin'       => $_SESSION['isAdmin'],
+                    'totp_enabled'  => $totp,
+                    'username'      => $_SESSION['username'],
+                    'folderOnly'    => $_SESSION['folderOnly'],
+                    'readOnly'      => $_SESSION['readOnly'],
+                    'disableUpload' => $_SESSION['disableUpload']
+                ]);
+                exit();
+            }
         }
-    }
 
         $usersFile = USERS_DIR . USERS_FILE;
 
@@ -453,11 +453,11 @@ class AuthController
         if (empty($_SESSION['csrf_token'])) {
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         }
-    
+
         // 2) Emit headers
         header('Content-Type: application/json');
         header('X-CSRF-Token: ' . $_SESSION['csrf_token']);
-    
+
         // 3) Return JSON payload
         echo json_encode([
             'csrf_token' => $_SESSION['csrf_token'],

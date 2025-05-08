@@ -1,5 +1,56 @@
 # Changelog
 
+## Changes 5/8/2025 v1.3.2
+
+### config/config.php
+
+- Added a default `define('AUTH_BYPASS', false)` at the top so the constant always exists.
+- Removed the static `AUTH_HEADER` fallback; instead read the adminConfig.json at the end of the file and:
+  - Overwrote `AUTH_BYPASS` with the `loginOptions.authBypass` setting from disk.
+  - Defined `AUTH_HEADER` (normalized, e.g. `"X_REMOTE_USER"`) based on `loginOptions.authHeaderName`.
+- Inserted a **proxy-only auto-login** block *before* the usual session/auth checks:  
+  If `AUTH_BYPASS` is true and the trusted header (`$_SERVER['HTTP_' . AUTH_HEADER]`) is present, bump the session, mark the user authenticated/admin, load their permissions, and skip straight to JSON output.
+
+### src/controllers/AdminController.php
+
+- Ensured the returned `loginOptions` object always contains:
+  - `authBypass` (boolean, default false)
+  - `authHeaderName` (string, default `"X-Remote-User"`)
+- Read `authBypass` and `authHeaderName` from the nested `loginOptions` in the request payload.
+- Validated them (`authBypass` → bool; `authHeaderName` → non-empty string, fallback to `"X-Remote-User"`).
+- Included them when building the `$configUpdate` array to pass to the model.
+
+### src/models/AdminModel.php
+
+- Normalized `loginOptions.authBypass` to a boolean (default false).
+- Validated/truncated `loginOptions.authHeaderName` to a non-empty trimmed string (default `"X-Remote-User"`).
+- JSON-encoded and encrypted the full config, now including the two new fields.
+- After decrypting & decoding, normalized the loaded `loginOptions` to always include:
+  - `authBypass` (bool)
+  - `authHeaderName` (string, default `"X-Remote-User"`)
+- Left all existing defaults & validations for the original flags intact.
+
+### public/js/adminPanel.js
+
+- **Login Options** section:
+  - Added a checkbox for **Disable All Built-in Logins (proxy only)** (`authBypass`).
+  - Added a text input for **Auth Header Name** (`authHeaderName`).
+- In `handleSave()`:
+  - Included the new `authBypass` and `authHeaderName` values in the payload sent to `updateConfig.php`.
+- In `openAdminPanel()`:
+  - Initialized those inputs from `config.loginOptions.authBypass` and `config.loginOptions.authHeaderName`.
+
+### public/js/auth.js
+
+- In `loadAdminConfigFunc()`:
+  - Stored `authBypass` and `authHeaderName` in `localStorage`.
+- In `checkAuthentication()`:
+  - After a successful login check, called a new helper (`applyProxyBypassUI()`) which reads `localStorage.authBypass` and conditionally hides the entire login form/UI.
+  - In the “not authenticated” branch, only shows the login form if `authBypass` is false.
+- No other core fetch/token logic changed; all existing flows remain intact.
+
+---
+
 ## Changes 5/4/2025 v1.3.1
 
 ### Modals
@@ -20,7 +71,7 @@
 - **Inserted** inline `<style>` in `<head>` to:
   - Hide `.main-wrapper` by default.
   - Style `#loadingOverlay` as a full-viewport white overlay.
-  
+
 - **Added** `addUserModal`, `removeUserModal` & `renameFileModal` modals to `style="display:none;"`
 
 ### `main.js`

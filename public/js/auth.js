@@ -125,6 +125,13 @@ function updateItemsPerPageSelect() {
   }
 }
 
+function applyProxyBypassUI() {
+  const bypass = localStorage.getItem("authBypass") === "true";
+  const loginContainer = document.getElementById("loginForm");
+  if (loginContainer) {
+    loginContainer.style.display = bypass ? "none" : "";
+  }
+}
 
 function updateLoginOptionsUI({ disableFormLogin, disableBasicAuth, disableOIDCLogin }) {
   const authForm = document.getElementById("authForm");
@@ -146,7 +153,8 @@ function updateLoginOptionsUIFromStorage() {
   updateLoginOptionsUI({
     disableFormLogin: localStorage.getItem("disableFormLogin") === "true",
     disableBasicAuth: localStorage.getItem("disableBasicAuth") === "true",
-    disableOIDCLogin: localStorage.getItem("disableOIDCLogin") === "true"
+    disableOIDCLogin: localStorage.getItem("disableOIDCLogin") === "true",
+    authBypass:      localStorage.getItem("authBypass") === "true"
   });
 }
 
@@ -161,6 +169,8 @@ export function loadAdminConfigFunc() {
       localStorage.setItem("disableBasicAuth", config.loginOptions.disableBasicAuth);
       localStorage.setItem("disableOIDCLogin", config.loginOptions.disableOIDCLogin);
       localStorage.setItem("globalOtpauthUrl", config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
+      localStorage.setItem("authBypass", String(!!config.loginOptions.authBypass));
+      localStorage.setItem("authHeaderName", config.loginOptions.authHeaderName || "X-Remote-User");
 
       updateLoginOptionsUIFromStorage();
 
@@ -301,6 +311,7 @@ function checkAuthentication(showLoginToast = true) {
         localStorage.setItem("readOnly", data.readOnly);
         localStorage.setItem("disableUpload", data.disableUpload);
         updateLoginOptionsUIFromStorage();
+        applyProxyBypassUI();
         if (typeof data.totp_enabled !== "undefined") {
           localStorage.setItem("userTOTPEnabled", data.totp_enabled ? "true" : "false");
         }
@@ -317,7 +328,7 @@ function checkAuthentication(showLoginToast = true) {
         document.querySelector('.main-wrapper').style.display = '';
         document.getElementById('loginForm').style.display = '';
         if (showLoginToast) showToast("Please log in to continue.");
-        toggleVisibility("loginForm", true);
+        toggleVisibility("loginForm", ! (localStorage.getItem("authBypass")==="true"));
         toggleVisibility("mainOperations", false);
         toggleVisibility("uploadFileForm", false);
         toggleVisibility("fileListContainer", false);

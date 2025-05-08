@@ -54,11 +54,22 @@ class AdminController
     {
         header('Content-Type: application/json');
         $config = AdminModel::getConfig();
-
-        // If an error was encountered, send a 500 status.
+    
         if (isset($config['error'])) {
             http_response_code(500);
         }
+    
+        if (!isset($config['loginOptions']) || !is_array($config['loginOptions'])) {
+            $config['loginOptions'] = [];
+        }
+        if (!array_key_exists('authBypass', $config['loginOptions'])) {
+            $config['loginOptions']['authBypass'] = false;
+        }
+        if (!array_key_exists('authHeaderName', $config['loginOptions'])) {
+            $config['loginOptions']['authHeaderName'] = 'X-Remote-User';
+        }
+        // ← END INSERT
+    
         echo json_encode($config);
         exit;
     }
@@ -203,6 +214,12 @@ class AdminController
             $sharedMaxUploadSize = filter_var($data['features']['sharedMaxUploadSize'], FILTER_VALIDATE_INT);
         }
 
+        $authBypass     = filter_var(
+            $data['loginOptions']['authBypass'] ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+        $authHeaderName = trim($data['loginOptions']['authHeaderName'] ?? '') ?: 'X-Remote-User';
+
         $configUpdate = [
             'header_title'         => $headerTitle,
             'oidc'                 => [
@@ -215,6 +232,8 @@ class AdminController
                 'disableFormLogin' => $disableFormLogin,
                 'disableBasicAuth' => $disableBasicAuth,
                 'disableOIDCLogin' => $disableOIDCLogin,
+                'authBypass'       => $authBypass,
+                'authHeaderName'   => $authHeaderName,
             ],
             'globalOtpauthUrl'     => $globalOtpauthUrl,
             'enableWebDAV'         => $enableWebDAV,          

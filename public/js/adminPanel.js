@@ -3,7 +3,7 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.3.1";
+const version = "v1.3.2";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
 
 // ————— Inject updated styles —————
@@ -188,8 +188,8 @@ function loadShareLinksSection() {
   // on non-2xx (including 404) or network error, resolve to {}
   function fetchMeta(fileName) {
     return fetch(`/api/admin/readMetadata.php?file=${encodeURIComponent(fileName)}`, {
-        credentials: "include"
-      })
+      credentials: "include"
+    })
       .then(resp => {
         if (!resp.ok) {
           // 404 or any other non-OK → treat as empty
@@ -204,9 +204,9 @@ function loadShareLinksSection() {
   }
 
   Promise.all([
-      fetchMeta("share_folder_links.json"),
-      fetchMeta("share_links.json")
-    ])
+    fetchMeta("share_folder_links.json"),
+    fetchMeta("share_links.json")
+  ])
     .then(([folders, files]) => {
       // if *both* are empty, show "no shared links"
       const hasAny = Object.keys(folders).length || Object.keys(files).length;
@@ -257,11 +257,11 @@ function loadShareLinksSection() {
             : "/api/file/deleteShareLink.php";
 
           fetch(endpoint, {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ token })
-            })
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ token })
+          })
             .then(res => {
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               return res.json();
@@ -399,6 +399,14 @@ export function openAdminPanel() {
           <div class="form-group"><input type="checkbox" id="disableFormLogin" /> <label for="disableFormLogin">${t("disable_login_form")}</label></div>
           <div class="form-group"><input type="checkbox" id="disableBasicAuth" /> <label for="disableBasicAuth">${t("disable_basic_http_auth")}</label></div>
           <div class="form-group"><input type="checkbox" id="disableOIDCLogin" /> <label for="disableOIDCLogin">${t("disable_oidc_login")}</label></div>
+          <div class="form-group">
+            <input type="checkbox" id="authBypass" />
+            <label for="authBypass">Disable all built-in logins (proxy only)</label>
+          </div>
+          <div class="form-group">
+            <label for="authHeaderName">Auth header name:</label>
+            <input type="text" id="authHeaderName" class="form-control" placeholder="e.g. X-Remote-User" />
+          </div>
         `;
 
         // — WebDAV —
@@ -441,11 +449,20 @@ export function openAdminPanel() {
               }
             });
         });
+        // If authBypass is checked, clear the other three
+        document.getElementById("authBypass").addEventListener("change", e => {
+          if (e.target.checked) {
+            ["disableFormLogin", "disableBasicAuth", "disableOIDCLogin"]
+              .forEach(i => document.getElementById(i).checked = false);
+          }
+        });
 
         // Initialize inputs from config + capture
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
+        document.getElementById("authBypass").checked = !!config.loginOptions.authBypass;
+        document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         captureInitialAdminConfig();
@@ -457,6 +474,8 @@ export function openAdminPanel() {
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
+        document.getElementById("authBypass").checked = !!config.loginOptions.authBypass;
+        document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig.providerUrl;
@@ -471,19 +490,21 @@ export function openAdminPanel() {
 }
 
 function handleSave() {
-  const dFL = document.getElementById("disableFormLogin").checked;
-  const dBA = document.getElementById("disableBasicAuth").checked;
-  const dOIDC = document.getElementById("disableOIDCLogin").checked;
-  const eWD = document.getElementById("enableWebDAV").checked;
-  const sMax = parseInt(document.getElementById("sharedMaxUploadSize").value, 10) || 0;
-  const nHT = document.getElementById("headerTitle").value.trim();
-  const nOIDC = {
+  const dFL    = document.getElementById("disableFormLogin").checked;
+  const dBA    = document.getElementById("disableBasicAuth").checked;
+  const dOIDC  = document.getElementById("disableOIDCLogin").checked;
+  const aBypass= document.getElementById("authBypass").checked;
+  const aHeader= document.getElementById("authHeaderName").value.trim() || "X-Remote-User";
+  const eWD    = document.getElementById("enableWebDAV").checked;
+  const sMax   = parseInt(document.getElementById("sharedMaxUploadSize").value, 10) || 0;
+  const nHT    = document.getElementById("headerTitle").value.trim();
+  const nOIDC  = {
     providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
-    clientId: document.getElementById("oidcClientId").value.trim(),
-    clientSecret: document.getElementById("oidcClientSecret").value.trim(),
+    clientId:    document.getElementById("oidcClientId").value.trim(),
+    clientSecret:document.getElementById("oidcClientSecret").value.trim(),
     redirectUri: document.getElementById("oidcRedirectUri").value.trim()
   };
-  const gURL = document.getElementById("globalOtpauthUrl").value.trim();
+  const gURL   = document.getElementById("globalOtpauthUrl").value.trim();
 
   if ([dFL, dBA, dOIDC].filter(x => x).length === 3) {
     showToast(t("at_least_one_login_method"));
@@ -491,12 +512,22 @@ function handleSave() {
   }
 
   sendRequest("/api/admin/updateConfig.php", "POST", {
-    header_title: nHT, oidc: nOIDC,
-    disableFormLogin: dFL, disableBasicAuth: dBA, disableOIDCLogin: dOIDC,
-    enableWebDAV: eWD, sharedMaxUploadSize: sMax, globalOtpauthUrl: gURL
+    header_title: nHT,
+    oidc: nOIDC,
+    loginOptions: {
+      disableFormLogin: dFL,
+      disableBasicAuth: dBA,
+      disableOIDCLogin: dOIDC,
+      authBypass:       aBypass,
+      authHeaderName:   aHeader
+    },
+    enableWebDAV:         eWD,
+    sharedMaxUploadSize:  sMax,
+    globalOtpauthUrl:     gURL
   }, {
     "X-CSRF-Token": window.csrfToken
-  }).then(res => {
+  })
+  .then(res => {
     if (res.success) {
       showToast(t("settings_updated_successfully"), "success");
       captureInitialAdminConfig();
@@ -505,7 +536,7 @@ function handleSave() {
     } else {
       showToast(t("error_updating_settings") + ": " + (res.error || t("unknown_error")), "error");
     }
-  }).catch(() => {/*noop*/ });
+  }).catch(() => {/*noop*/});
 }
 
 export async function closeAdminPanel() {
