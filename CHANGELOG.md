@@ -101,6 +101,8 @@
 
 ### 10. setAttribute + encodeURI to avoid “DOM text reinterpreted as HTML” alerts
 
+### 11. Fix duplicated Upload & Folder cards if they were added to header and page was refreshed
+
 ---
 
 ## Changes 5/8/2025

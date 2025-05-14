@@ -32,23 +32,33 @@ export function loadSidebarOrder() {
     updateSidebarVisibility();
   }
   
-  // NEW: Load header order from localStorage.
+
   export function loadHeaderOrder() {
     const headerDropArea = document.getElementById('headerDropArea');
     if (!headerDropArea) return;
-    const orderStr = localStorage.getItem('headerOrder');
-    if (orderStr) {
-      const order = JSON.parse(orderStr);
-      if (order.length > 0) {
-        order.forEach(id => {
-          const card = document.getElementById(id);
-          // Only load if card is not already in header drop zone.
-          if (card && card.parentNode.id !== 'headerDropArea') {
-            insertCardInHeader(card, null);
-          }
-        });
-      }
+  
+    // 1) Clear out any icons that might already be in the drop area
+    headerDropArea.innerHTML = '';
+  
+    // 2) Read the saved array (or empty array if invalid/missing)
+    let stored;
+    try {
+      stored = JSON.parse(localStorage.getItem('headerOrder') || '[]');
+    } catch {
+      stored = [];
     }
+  
+    // 3) Deduplicate IDs
+    const uniqueIds = Array.from(new Set(stored));
+  
+    // 4) Re-insert exactly one icon per saved card ID
+    uniqueIds.forEach(id => {
+      const card = document.getElementById(id);
+      if (card) insertCardInHeader(card, null);
+    });
+  
+    // 5) Persist the cleaned, deduped list back to storage
+    localStorage.setItem('headerOrder', JSON.stringify(uniqueIds));
   }
   
   // Internal helper: update sidebar visibility based on its content.
