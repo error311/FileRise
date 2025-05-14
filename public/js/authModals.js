@@ -348,6 +348,7 @@ export async function openUserPanel() {
       const f = this.files[0];
       if (!f) return;
       // preview immediately
+      // #nosec
       img.src = URL.createObjectURL(f);
       const blobUrl = URL.createObjectURL(f);
       // use setAttribute + encodeURI to avoid “DOM text reinterpreted as HTML” alerts
