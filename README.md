@@ -218,7 +218,7 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 
 ## Community and Support
 
-- **Reddit:** [r/selfhosted: FileRise Discussion](https://www.reddit.com/r/selfhosted/comments/1jl01pi/introducing_filerise_a_modern_selfhosted_file/) – (Announcement and user feedback thread).
+- **Reddit:** [r/selfhosted: FileRise Discussion](https://www.reddit.com/r/selfhosted/comments/1kfxo9y/filerise_v131_major_updates_sneak_peek_at_whats/) – (Announcement and user feedback thread).
 - **Unraid Forums:** [FileRise Support Thread](https://forums.unraid.net/topic/187337-support-filerise/) – for Unraid-specific support or issues.
 - **GitHub Discussions:** Use the Q&A category for any setup questions, and the Ideas category to suggest enhancements.
 
