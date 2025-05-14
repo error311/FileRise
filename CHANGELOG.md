@@ -77,6 +77,28 @@
   - `#viewSliderContainer` uses `inline-flex` and `align-items: center` so that label, slider, and value text are vertically aligned with the other toolbar elements.
   - Reset margins/padding on the label and value span within `#viewSliderContainer` to eliminate any vertical misalignment.
 
+### 9. Fixed new issues with Undefined username in header on profile pic change & TOTP Enabled not checked
+
+**openUserPanel**  
+
+- **Rewritten entirely with DOM APIs** instead of `innerHTML` for any user-supplied text to eliminates “DOM text reinterpreted as HTML” warnings.
+- **Default avatar fallback**: now uses `'/assets/default-avatar.png'` whenever `profile_picture` is empty.
+- **TOTP checkbox initial state** is now set from the `totp_enabled` value returned by the server.
+- **Modal title sync** on reopen now updates the `(username)` correctly (no more “undefined” until refresh).
+- **Re-sync on reopen**: background color, avatar, TOTP checkbox and language selector all update when reopen the panel.
+
+**updateAuthenticatedUI**  
+
+- **Username fix**: dropdown toggle now always uses `data.username` so the name never becomes `undefined` after uploading a picture.
+- **Profile URL update** via `fetchProfilePicture()` always writes into `localStorage` before rebuilding the header, ensuring avatar+name stay in sync instantly.
+- **Dropdown rebuild logic** tweaked to update the toggle’s innerHTML with both avatar and username on every call.
+
+**UserModel::getUser**  
+
+- Switched to `explode(':', $line, 4)` to the fourth “profile_picture” field without clobbering the TOTP secret.
+- **Strip trailing colons** from the stored URL (`rtrim($parts[3], ':')`) so we never send `…png:` back to the client.
+- Returns an array with both `'username'` and `'profile_picture'`, matching what `getCurrentUser.php` needs.
+
 ---
 
 ## Changes 5/8/2025

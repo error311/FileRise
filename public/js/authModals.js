@@ -184,105 +184,128 @@ function normalizePicUrl(raw) {
 export async function openUserPanel() {
   // 1) load data
   const { username = 'User', profile_picture = '', totp_enabled = false } = await fetchCurrentUser();
-  const raw = profile_picture;
-  const picUrl = normalizePicUrl(raw);
+  const raw     = profile_picture;
+  const picUrl  = normalizePicUrl(raw) || '/assets/default-avatar.png';
 
   // 2) dark‐mode helpers
-  const isDark = document.body.classList.contains('dark-mode');
+  const isDark    = document.body.classList.contains('dark-mode');
   const overlayBg = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
-  const contentCss = `
-  background: ${isDark ? '#2c2c2c' : '#fff'};
-  color:      ${isDark ? '#e0e0e0' : '#000'};
-  padding: 20px;
-  max-width: 600px;
-  width: 90%;
-  border-radius: 8px;
-  overflow-y: auto;
-  max-height: 415px;
-  border: ${isDark ? '1px solid #444' : '1px solid #ccc'};
-  box-sizing: border-box;
+  const contentStyle = `
+    background: ${isDark ? '#2c2c2c' : '#fff'};
+    color:      ${isDark ? '#e0e0e0' : '#000'};
+    padding: 20px;
+    max-width: 600px; width:90%;
+    border-radius: 8px;
+    overflow-y: auto; max-height: 415px;
+    border: ${isDark ? '1px solid #444' : '1px solid #ccc'};
+    box-sizing: border-box;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  `;
 
-  /* hide scrollbar in Firefox */
-  scrollbar-width: none;
-  /* hide scrollbar in IE 10+ */
-  -ms-overflow-style: none;
-`;
-
-  // 3) build or re-use modal
+  // 3) create or reuse modal
   let modal = document.getElementById('userPanelModal');
   if (!modal) {
+    // overlay
     modal = document.createElement('div');
     modal.id = 'userPanelModal';
-    modal.style.cssText = `
-      position:fixed; top:0; left:0; right:0; bottom:0;
-      background:${overlayBg};
-      display:flex; align-items:center; justify-content:center;
-      z-index:1000;
+    Object.assign(modal.style, {
+      position:   'fixed',
+      top:        '0',
+      left:       '0',
+      right:      '0',
+      bottom:     '0',
+      background: overlayBg,
+      display:    'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex:     '1000',
+    });
+
+    // content container
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    content.style.cssText = contentStyle;
+
+    // close button
+    const closeBtn = document.createElement('span');
+    closeBtn.id = 'closeUserPanel';
+    closeBtn.className = 'editor-close-btn';
+    closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => modal.style.display = 'none');
+    content.appendChild(closeBtn);
+
+    // avatar + picker
+    const avatarWrapper = document.createElement('div');
+    avatarWrapper.style.cssText = 'text-align:center; margin-bottom:20px;';
+    const avatarInner = document.createElement('div');
+    avatarInner.style.cssText = 'position:relative; width:80px; height:80px; margin:0 auto;';
+    const img = document.createElement('img');
+    img.id = 'profilePicPreview';
+    img.src = picUrl;
+    img.alt = 'Profile Picture';
+    img.style.cssText = 'width:100%; height:100%; border-radius:50%; object-fit:cover;';
+    avatarInner.appendChild(img);
+    const label = document.createElement('label');
+    label.htmlFor = 'profilePicInput';
+    label.style.cssText = `
+      position:absolute; bottom:0; right:0;
+      width:24px; height:24px;
+      background:rgba(0,0,0,0.6);
+      border-radius:50%; display:flex;
+      align-items:center; justify-content:center;
+      cursor:pointer;
     `;
+    const editIcon = document.createElement('i');
+    editIcon.className = 'material-icons';
+    editIcon.style.cssText = 'color:#fff; font-size:16px;';
+    editIcon.textContent = 'edit';
+    label.appendChild(editIcon);
+    avatarInner.appendChild(label);
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id   = 'profilePicInput';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    avatarInner.appendChild(fileInput);
+    avatarWrapper.appendChild(avatarInner);
+    content.appendChild(avatarWrapper);
 
-    modal.innerHTML = `
-      <div class="modal-content" style="${contentCss}">
-        <span id="closeUserPanel" class="editor-close-btn">&times;</span>
-        <div style="text-align:center; margin-bottom:20px;">
-          <div style="position:relative; width:80px; height:80px; margin:0 auto;">
-            <img id="profilePicPreview"
-                 src="${picUrl || '/assets/default-avatar.png'}"
-                 style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
-            <label for="profilePicInput"
-                   style="
-                     position:absolute; bottom:0; right:0;
-                     width:24px; height:24px; background:rgba(0,0,0,0.6);
-                     border-radius:50%; display:flex; align-items:center;
-                     justify-content:center; cursor:pointer;">
-              <i class="material-icons" style="color:#fff; font-size:16px;">edit</i>
-            </label>
-            <input type="file" id="profilePicInput" accept="image/*" style="display:none">
-          </div>
-        </div>
-        <h3 style="text-align:center; margin-bottom:20px;">
-          ${t('user_panel')} (${username})
-        </h3>
-        <button id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom:15px;">
-          ${t('change_password')}
-        </button>
-        <fieldset style="margin-bottom:15px;">
-          <legend>${t('totp_settings')}</legend>
-          <label style="cursor:pointer;">
-            <input type="checkbox" id="userTOTPEnabled" style="vertical-align:middle;">
-            ${t('enable_totp')}
-          </label>
-        </fieldset>
-        <fieldset style="margin-bottom:15px;">
-          <legend>${t('language')}</legend>
-          <select id="languageSelector" class="form-select">
-            <option value="en">${t('english')}</option>
-            <option value="es">${t('spanish')}</option>
-            <option value="fr">${t('french')}</option>
-            <option value="de">${t('german')}</option>
-          </select>
-        </fieldset>
-      </div>
-    `;
-    document.body.appendChild(modal);
+    // title
+    const title = document.createElement('h3');
+    title.style.cssText = 'text-align:center; margin-bottom:20px;';
+    title.textContent = `${t('user_panel')} (${username})`;
+    content.appendChild(title);
 
-    // --- wire up handlers ---
+    // change password btn
+    const pwdBtn = document.createElement('button');
+    pwdBtn.id = 'openChangePasswordModalBtn';
+    pwdBtn.className = 'btn btn-primary';
+    pwdBtn.style.marginBottom = '15px';
+    pwdBtn.textContent = t('change_password');
+    pwdBtn.addEventListener('click', () => {
+      document.getElementById('changePasswordModal').style.display = 'block';
+    });
+    content.appendChild(pwdBtn);
 
-    modal.querySelector('#closeUserPanel')
-      .addEventListener('click', () => modal.style.display = 'none');
-
-    modal.querySelector('#openChangePasswordModalBtn')
-      .addEventListener('click', () => {
-        document.getElementById('changePasswordModal').style.display = 'block';
-      });
-
-    // TOTP
-    const totpCb = modal.querySelector('#userTOTPEnabled');
-    totpCb.addEventListener('change', async function () {
+    // TOTP fieldset
+    const totpFs = document.createElement('fieldset');
+    totpFs.style.marginBottom = '15px';
+    const totpLegend = document.createElement('legend');
+    totpLegend.textContent = t('totp_settings');
+    totpFs.appendChild(totpLegend);
+    const totpLabel = document.createElement('label');
+    totpLabel.style.cursor = 'pointer';
+    const totpCb = document.createElement('input');
+    totpCb.type = 'checkbox';
+    totpCb.id = 'userTOTPEnabled';
+    totpCb.style.verticalAlign = 'middle';
+    totpCb.checked = totp_enabled;
+    totpCb.addEventListener('change', async function() {
       const resp = await fetch('/api/updateUserPanel.php', {
-        method: 'POST',
-        credentials: 'include',
+        method: 'POST', credentials: 'include',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type':'application/json',
           'X-CSRF-Token': window.csrfToken
         },
         body: JSON.stringify({ totp_enabled: this.checked })
@@ -291,37 +314,52 @@ export async function openUserPanel() {
       if (!js.success) showToast(js.error || t('error_updating_totp_setting'));
       else if (this.checked) openTOTPModal();
     });
+    totpLabel.appendChild(totpCb);
+    totpLabel.append(` ${t('enable_totp')}`);
+    totpFs.appendChild(totpLabel);
+    content.appendChild(totpFs);
 
-    // Language
-    const langSel = modal.querySelector('#languageSelector');
-    langSel.addEventListener('change', function () {
+    // language fieldset
+    const langFs = document.createElement('fieldset');
+    langFs.style.marginBottom = '15px';
+    const langLegend = document.createElement('legend');
+    langLegend.textContent = t('language');
+    langFs.appendChild(langLegend);
+    const langSel = document.createElement('select');
+    langSel.id = 'languageSelector';
+    langSel.className = 'form-select';
+    ['en','es','fr','de'].forEach(code => {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = t(code === 'en'? 'english' : code === 'es'? 'spanish' : code === 'fr'? 'french' : 'german');
+      langSel.appendChild(opt);
+    });
+    langSel.value = localStorage.getItem('language') || 'en';
+    langSel.addEventListener('change', function() {
       localStorage.setItem('language', this.value);
       setLocale(this.value);
       applyTranslations();
     });
+    langFs.appendChild(langSel);
+    content.appendChild(langFs);
 
-    // Auto‐upload on file select
-    const fileInput = modal.querySelector('#profilePicInput');
-    fileInput.addEventListener('change', async function () {
-      const file = this.files[0];
-      if (!file) return;
-
+    // wire up image‐input change
+    fileInput.addEventListener('change', async function() {
+      const f = this.files[0];
+      if (!f) return;
       // preview immediately
-      const img = modal.querySelector('#profilePicPreview');
-      img.src = URL.createObjectURL(file);
-
+      img.src = URL.createObjectURL(f);
       // upload
       const fd = new FormData();
-      fd.append('profile_picture', file);
+      fd.append('profile_picture', f);
       try {
-        const res = await fetch('/api/profile/uploadPicture.php', {
-          method: 'POST',
-          credentials: 'include',
+        const res  = await fetch('/api/profile/uploadPicture.php', {
+          method: 'POST', credentials: 'include',
           headers: { 'X-CSRF-Token': window.csrfToken },
           body: fd
         });
         const text = await res.text();
-        const js = JSON.parse(text || '{}');
+        const js   = JSON.parse(text || '{}');
         if (!res.ok) {
           showToast(js.error || t('error_updating_picture'));
           return;
@@ -329,7 +367,6 @@ export async function openUserPanel() {
         const newUrl = normalizePicUrl(js.url);
         img.src = newUrl;
         localStorage.setItem('profilePicUrl', newUrl);
-        // refresh the header immediately
         updateAuthenticatedUI(window.__lastAuthData || {});
         showToast(t('profile_picture_updated'));
       } catch (e) {
@@ -338,15 +375,18 @@ export async function openUserPanel() {
       }
     });
 
+    // finalize
+    modal.appendChild(content);
+    document.body.appendChild(modal);
   } else {
-
-    modal.style.background = overlayBg;
-    const contentEl = modal.querySelector('.modal-content');
-    contentEl.style.cssText = contentCss;
-    // re-open: sync current values
-    modal.querySelector('#profilePicPreview').src = picUrl || '/images/default-avatar.png';
-    modal.querySelector('#userTOTPEnabled').checked = totp_enabled;
-    modal.querySelector('#languageSelector').value = localStorage.getItem('language') || 'en';
+    // reuse on reopen
+    Object.assign(modal.style, { background: overlayBg });
+    const content = modal.querySelector('.modal-content');
+    content.style.cssText = contentStyle;
+    modal.querySelector('#profilePicPreview').src           = picUrl || '/assets/default-avatar.png';
+    modal.querySelector('#userTOTPEnabled').checked         = totp_enabled;
+    modal.querySelector('#languageSelector').value          = localStorage.getItem('language') || 'en';
+    modal.querySelector('h3').textContent = `${t('user_panel')} (${username})`;
   }
 
   // show

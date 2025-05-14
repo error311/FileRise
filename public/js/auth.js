@@ -223,6 +223,9 @@ async function fetchProfilePicture() {
 }
 
 export async function updateAuthenticatedUI(data) {
+  // Save latest auth data for later reuse
+  window.__lastAuthData = data;
+
   // 1) Remove loading overlay safely
   const loading = document.getElementById('loadingOverlay');
   if (loading) loading.remove();
@@ -304,6 +307,11 @@ export async function updateAuthenticatedUI(data) {
       ? `<img src="${profilePicUrl}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;">`
       : `<i class="material-icons">account_circle</i>`;
 
+    // fallback username if missing
+    const usernameText = data.username 
+      || localStorage.getItem("username") 
+      || "";
+
     if (!dd) {
       dd = document.createElement("div");
       dd.id    = "userDropdown";
@@ -314,7 +322,11 @@ export async function updateAuthenticatedUI(data) {
       toggle.id    = "userDropdownToggle";
       toggle.classList.add("btn","btn-user");
       toggle.setAttribute("title", t("user_settings"));
-      toggle.innerHTML = `${avatarHTML}<span class="dropdown-username">${data.username}</span><span class="dropdown-caret"></span>`;
+      toggle.innerHTML = `
+        ${avatarHTML}
+        <span class="dropdown-username">${usernameText}</span>
+        <span class="dropdown-caret"></span>
+      `;
       dd.append(toggle);
 
       // menu
@@ -375,9 +387,13 @@ export async function updateAuthenticatedUI(data) {
         });
 
     } else {
-      // update avatar only
+      // update avatar & username only
       const tog = dd.querySelector("#userDropdownToggle");
-      tog.innerHTML = `${avatarHTML}<span class="dropdown-username">${data.username}</span><span class="dropdown-caret"></span>`;
+      tog.innerHTML = `
+        ${avatarHTML}
+        <span class="dropdown-username">${usernameText}</span>
+        <span class="dropdown-caret"></span>
+      `;
       dd.style.display = "inline-block";
     }
   }

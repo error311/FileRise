@@ -676,22 +676,29 @@ class userModel
         if (! file_exists($usersFile)) {
             return [];
         }
-
+    
         foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-            // explode into at most 4 parts: [0]=username, [1]=hash, [2]=isAdmin, [3]=profileUrl (might include a trailing colon)
-            $parts = explode(':', $line, 4);
+            // split *all* the fields
+            $parts = explode(':', $line);
+    
             if ($parts[0] !== $username) {
                 continue;
             }
-            // strip any trailing colon(s) from the URL field
-            $pic = isset($parts[3]) ? rtrim($parts[3], ':') : '';
-
+    
+            // determine admin & totp
+            $isAdmin     = (isset($parts[2]) && $parts[2] === '1');
+            $totpEnabled = !empty($parts[3]);
+            // profile_picture is the 5th field if present
+            $pic         = isset($parts[4]) ? $parts[4] : '';
+    
             return [
                 'username'        => $parts[0],
+                'isAdmin'         => $isAdmin,
+                'totp_enabled'    => $totpEnabled,
                 'profile_picture' => $pic,
             ];
         }
-
+    
         return [];  // user not found
     }
 
