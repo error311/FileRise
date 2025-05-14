@@ -236,7 +236,8 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
   const state = loadFolderTreeState();
   let html = `<ul class="folder-tree ${defaultDisplay === 'none' ? 'collapsed' : 'expanded'}">`;
   for (const folder in tree) {
-    if (folder.toLowerCase() === "trash") continue;
+    const name = folder.toLowerCase();
+    if (name === "trash" || name === "profile_pics") continue;
     const fullPath = parentPath ? parentPath + "/" + folder : folder;
     const hasChildren = Object.keys(tree[folder]).length > 0;
     const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;

@@ -15,6 +15,8 @@ import { editFile, saveFile } from './fileEditor.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
 export function initializeApp() {
+  const saved = parseInt(localStorage.getItem('rowHeight') || '48', 10);
+  document.documentElement.style.setProperty('--file-row-height', saved + 'px');
   window.currentFolder = "root";
   initTagSearch();
   loadFileList(window.currentFolder);
@@ -77,18 +79,14 @@ if (params.get('logout') === '1') {
   localStorage.removeItem("userTOTPEnabled");
 }
 
-// 2) Wire up logoutBtn right away
-const logoutBtn = document.getElementById("logoutBtn");
-if (logoutBtn) {
-  logoutBtn.addEventListener("click", () => {
-    fetch("/api/auth/logout.php", {
-      method: "POST",
-      credentials: "include",
-      headers: { "X-CSRF-Token": window.csrfToken }
-    })
-      .then(() => window.location.reload(true))
-      .catch(() => {});
-  });
+export function triggerLogout() {
+  fetch("/api/auth/logout.php", {
+    method: "POST",
+    credentials: "include",
+    headers: { "X-CSRF-Token": window.csrfToken }
+  })
+  .then(() => window.location.reload(true))
+  .catch(()=>{});
 }
 
 
@@ -122,7 +120,8 @@ document.addEventListener("DOMContentLoaded", function () {
     // Continue with initializations that rely on a valid CSRF token:
     checkAuthentication().then(authenticated => {
       if (authenticated) {
-        document.getElementById('loadingOverlay').remove();
+         const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.remove();
         initializeApp();
       } 
     });
@@ -201,7 +200,6 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // --- Auto-scroll During Drag ---
-  // Adjust these values as needed:
   const SCROLL_THRESHOLD = 50; // pixels from edge to start scrolling
   const SCROLL_SPEED = 20;     // pixels to scroll per event
 

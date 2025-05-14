@@ -3,7 +3,7 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.3.3";
+const version = "v1.3.4";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
 
 // ————— Inject updated styles —————

@@ -178,9 +178,14 @@ export function buildFileTableRow(file, folderPath) {
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">audiotrack</i>`;
     }
-    previewButton = `<button class="btn btn-sm btn-info preview-btn" data-preview-url="${folderPath + encodeURIComponent(file.name)}?t=${Date.now()}" data-preview-name="${safeFileName}">
-                 ${previewIcon}
-               </button>`;
+    previewButton = `<button 
+                        type="button"
+                        class="btn btn-sm btn-info preview-btn" 
+                        data-preview-url="${folderPath + encodeURIComponent(file.name)}?t=${Date.now()}" 
+                        data-preview-name="${safeFileName}" 
+                        title="${t('preview')}">
+                       ${previewIcon}
+                     </button>`;
   }
 
   return `
@@ -194,19 +199,44 @@ export function buildFileTableRow(file, folderPath) {
     <td class="hide-small nowrap">${safeSize}</td>
     <td class="hide-small hide-medium nowrap">${safeUploader}</td>
     <td>
-      <div class="button-wrap" style="display: flex; justify-content: left; gap: 5px;">
-        <button type="button" class="btn btn-sm btn-success download-btn" data-download-name="${file.name}" data-download-folder="${file.folder || 'root'}" title="${t('download')}">
+      <div class="btn-group btn-group-sm" role="group" aria-label="File actions">
+        <button 
+          type="button" 
+          class="btn btn-sm btn-success download-btn" 
+          data-download-name="${file.name}" 
+          data-download-folder="${file.folder || 'root'}" 
+          title="${t('download')}">
           <i class="material-icons">file_download</i>
         </button>
+
         ${file.editable ? `
-          <button class="btn btn-sm edit-btn" data-edit-name="${file.name}" data-edit-folder="${file.folder || 'root'}" title="${t('edit')}">
-            <i class="material-icons">edit</i>
-          </button>
-        ` : ""}
+        <button 
+          type="button" 
+          class="btn btn-sm btn-secondary edit-btn" 
+          data-edit-name="${file.name}" 
+          data-edit-folder="${file.folder || 'root'}" 
+          title="${t('edit')}">
+          <i class="material-icons">edit</i>
+        </button>` : ""}
+
         ${previewButton}
-        <button class="btn btn-sm btn-warning rename-btn" data-rename-name="${file.name}" data-rename-folder="${file.folder || 'root'}" title="${t('rename')}">
+
+        <button 
+          type="button" 
+          class="btn btn-sm btn-warning rename-btn" 
+          data-rename-name="${file.name}" 
+          data-rename-folder="${file.folder || 'root'}" 
+          title="${t('rename')}">
           <i class="material-icons">drive_file_rename_outline</i>
         </button>
+        <!-- share -->
+       <button 
+         type="button"
+         class="btn btn-secondary btn-sm share-btn ms-1"
+         data-file="${safeFileName}"
+         title="${t('share')}">
+         <i class="material-icons">share</i>
+       </button>
       </div>
     </td>
   </tr>

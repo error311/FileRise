@@ -134,16 +134,26 @@ body.dark-mode header {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 9px;
-  border-radius: 50%;
   color: #fff;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.header-buttons button:not(#userDropdownToggle) {
+  border-radius: 50%;
+  padding: 9px;
+}
+
+#userDropdownToggle {
+  border-radius: 4px !important;
+  padding: 6px 10px !important;
 }
 
 .header-buttons button:hover {
   background-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: #fff;
 }
+
 
 @media (max-width: 600px) {
   header {
@@ -955,6 +965,23 @@ body.dark-mode #fileList table tr {
   padding: 8px 10px !important;
 }
 
+:root {
+  --file-row-height: 48px; /* default, will be overwritten by your slider */
+}
+
+/* Force each <tr> to be exactly the var() height */
+#fileList table.table tbody tr {
+  height: var(--file-row-height) !important;
+}
+
+/* And force each <td> to match, with no extra padding or line-height */
+#fileList table.table tbody td {
+  height: var(--file-row-height) !important;
+  line-height: var(--file-row-height) !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  vertical-align: middle;
+}
 
 /* ===========================================================
    HEADINGS & FORM LABELS
@@ -1326,26 +1353,6 @@ body.dark-mode .folder-option:hover {
 body.dark-mode .image-preview-modal-content {
   background: #2c2c2c;
   border-color: #444;
-}
-
-.preview-btn,
-.download-btn,
-.rename-btn,
-.share-btn,
-.edit-btn {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  justify-content: center;
-}
-
-.share-btn {
-  border: none;
-  color: white;
-  padding: 8px 12px;
-  cursor: pointer;
-  margin-left: 0px;
-  transition: background 0.3s;
 }
 
 .image-modal-img {
@@ -2102,11 +2109,21 @@ body.dark-mode .header-drop-zone.drag-active {
   color: black;
 }
 @media only screen and (max-width: 600px) {
-  #fileSummary {
-      float: none !important;
-      margin: 0 auto !important;
-      text-align: center !important;
+  #fileSummary,
+  #rowHeightSliderContainer,
+  #viewSliderContainer {
+    float: none !important;
+    margin: 0 auto !important;
+    text-align: center !important;
+    display: block !important;
   }
+}
+
+#viewSliderContainer label,
+#viewSliderContainer span {
+  line-height: 1;
+  margin: 0;
+  padding: 0;
 }
 
 body.dark-mode #fileSummary {
@@ -2165,4 +2182,64 @@ body.dark-mode #searchIcon .material-icons {
 body.dark-mode .btn-icon:hover,
 body.dark-mode .btn-icon:focus {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.user-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.user-dropdown .user-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  margin-top: 0.25rem;
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  min-width: 150px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  z-index: 1000;
+}
+
+.user-dropdown .user-menu.show {
+  display: block;
+}
+
+.user-dropdown .user-menu .item {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.user-dropdown .user-menu .item:hover {
+  background: #f5f5f5;
+}
+
+.user-dropdown .dropdown-caret {
+  border-top: 5px solid currentColor;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+}
+
+body.dark-mode .user-dropdown .user-menu {
+  background: #2c2c2c;
+  border-color: #444;
+}
+
+body.dark-mode .user-dropdown .user-menu .item {
+  color: #e0e0e0;
+}
+
+body.dark-mode .user-dropdown .user-menu .item:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.user-dropdown .dropdown-username {
+  margin: 0 8px;
+  font-weight: 500;
+  vertical-align: middle;
+  white-space: nowrap;
 }

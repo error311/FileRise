@@ -186,9 +186,6 @@ export function formatFolderName(folder) {
 window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
-/**
- * --- FILE LIST & VIEW RENDERING ---
- */
 export function loadFileList(folderParam) {
     const folder = folderParam || "root";
     const fileListContainer = document.getElementById("fileList");
@@ -196,77 +193,151 @@ export function loadFileList(folderParam) {
     fileListContainer.style.visibility = "hidden";
     fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
 
-    return fetch("/api/file/getFileList.php?folder=" + encodeURIComponent(folder) + "&recursive=1&t=" + new Date().getTime())
-        .then(response => {
-            if (response.status === 401) {
-                showToast("Session expired. Please log in again.");
-                window.location.href = "/api/auth/logout.php";
-                throw new Error("Unauthorized");
-            }
-            return response.json();
-        })
-        .then(data => {
-            fileListContainer.innerHTML = ""; // Clear loading message.
-            if (data.files && Object.keys(data.files).length > 0) {
-                // If the returned "files" is an object instead of an array, transform it.
-                if (!Array.isArray(data.files)) {
-                    data.files = Object.entries(data.files).map(([name, meta]) => {
-                        meta.name = name;
-                        return meta;
-                    });
-                }
-                // Process each file – add computed properties.
-                data.files = data.files.map(file => {
-                    file.fullName = (file.path || file.name).trim().toLowerCase();
-                    file.editable = canEditFile(file.name);
-                    file.folder = folder;
-                    if (!file.type && /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
-                        file.type = "image";
-                    }
-                    // OPTIONAL: For text documents, preload content (if available from backend)
-                    // Example: if (/\.txt|html|md|js|css|json|xml$/i.test(file.name)) { file.content = file.content || ""; }
-                    return file;
-                });
-                fileData = data.files;
+    return fetch(
+        "/api/file/getFileList.php?folder=" +
+        encodeURIComponent(folder) +
+        "&recursive=1&t=" +
+        Date.now()
+    )
+        .then((res) =>
+            res.status === 401
+                ? (window.location.href = "/api/auth/logout.php" && Promise.reject("Unauthorized"))
+                : res.json()
+        )
+        .then((data) => {
+            fileListContainer.innerHTML = "";
 
-                // Update file summary.
-                const actionsContainer = document.getElementById("fileListActions");
-                if (actionsContainer) {
-                    let summaryElem = document.getElementById("fileSummary");
-                    if (!summaryElem) {
-                        summaryElem = document.createElement("div");
-                        summaryElem.id = "fileSummary";
-                        summaryElem.style.float = "right";
-                        summaryElem.style.marginLeft = "auto";
-                        summaryElem.style.marginRight = "60px";
-                        summaryElem.style.fontSize = "0.9em";
-                        actionsContainer.appendChild(summaryElem);
-                    } else {
-                        summaryElem.style.display = "block";
-                    }
-                    summaryElem.innerHTML = buildFolderSummary(fileData);
-                }
-
-                // Render view based on the view mode.
-                if (window.viewMode === "gallery") {
-                    renderGalleryView(folder);
-                    updateFileActionButtons();
-                } else {
-                    renderFileTable(folder);
-                }
-            } else {
+            // No files case
+            if (!data.files || Object.keys(data.files).length === 0) {
                 fileListContainer.textContent = t("no_files_found");
+
+                // hide summary
                 const summaryElem = document.getElementById("fileSummary");
-                if (summaryElem) {
-                    summaryElem.style.display = "none";
-                }
+                if (summaryElem) summaryElem.style.display = "none";
+
+                // hide slider
+                const sliderContainer = document.getElementById("viewSliderContainer");
+                if (sliderContainer) sliderContainer.style.display = "none";
+
                 updateFileActionButtons();
+                return [];
             }
-            return data.files || [];
+
+            // Normalize to array
+            if (!Array.isArray(data.files)) {
+                data.files = Object.entries(data.files).map(([name, meta]) => {
+                    meta.name = name;
+                    return meta;
+                });
+            }
+            // Enrich each file
+            data.files = data.files.map((f) => {
+                f.fullName = (f.path || f.name).trim().toLowerCase();
+                f.editable = canEditFile(f.name);
+                f.folder = folder;
+                return f;
+            });
+            fileData = data.files;
+
+            // --- folder summary + slider injection ---
+            const actionsContainer = document.getElementById("fileListActions");
+            if (actionsContainer) {
+                // 1) summary
+                let summaryElem = document.getElementById("fileSummary");
+                if (!summaryElem) {
+                    summaryElem = document.createElement("div");
+                    summaryElem.id = "fileSummary";
+                    summaryElem.style.cssText = "float:right; margin:0 60px 0 auto; font-size:0.9em;";
+                    actionsContainer.appendChild(summaryElem);
+                }
+                summaryElem.style.display = "block";
+                summaryElem.innerHTML = buildFolderSummary(fileData);
+
+                // 2) view‐mode slider
+                const viewMode = window.viewMode || "table";
+                let sliderContainer = document.getElementById("viewSliderContainer");
+                if (!sliderContainer) {
+                    sliderContainer = document.createElement("div");
+                    sliderContainer.id = "viewSliderContainer";
+                    sliderContainer.style.cssText = "display: inline-flex; align-items: center; vertical-align: middle; margin-right: auto; font-size: 0.9em;";
+                    actionsContainer.insertBefore(sliderContainer, summaryElem);
+                } else {
+                    sliderContainer.style.display = "inline-flex";
+                }
+
+                if (viewMode === "gallery") {
+                    // determine responsive caps:
+                    const w = window.innerWidth;
+                    let maxCols;
+                    if (w < 600) maxCols = 1;
+                    else if (w < 900) maxCols = 2;
+                    else if (w < 1200) maxCols = 4;
+                    else maxCols = 6;
+
+                    const currentCols = Math.min(
+                        parseInt(localStorage.getItem("galleryColumns") || "3", 10),
+                        maxCols
+                    );
+
+                    sliderContainer.innerHTML = `
+                        <label for="galleryColumnsSlider" style="margin-right:8px; white-space:nowrap; line-height:1;">
+                          ${t("columns")}:
+                        </label>
+                        <input
+                          type="range"
+                          id="galleryColumnsSlider"
+                          min="1"
+                          max="${maxCols}"
+                          value="${currentCols}"
+                          style="vertical-align:middle;"
+                        >
+                        <span id="galleryColumnsValue" style="margin-left:6px; line-height:1;">${currentCols}</span>
+                    `;
+                    // hookup gallery slider
+                    const gallerySlider = document.getElementById("galleryColumnsSlider");
+                    const galleryValue = document.getElementById("galleryColumnsValue");
+                    gallerySlider.oninput = (e) => {
+                        const v = +e.target.value;
+                        localStorage.setItem("galleryColumns", v);
+                        galleryValue.textContent = v;
+                        // update grid if already rendered
+                        const grid = document.querySelector(".gallery-container");
+                        if (grid) grid.style.gridTemplateColumns = `repeat(${v},1fr)`;
+                    };
+                } else {
+                    const currentHeight = parseInt(localStorage.getItem("rowHeight") ?? "48", 10);
+                    sliderContainer.innerHTML = `
+                        <label for="rowHeightSlider" style="margin-right:8px; white-space:nowrap; line-height:1;">
+                          ${t("row_height")}:
+                        </label>
+                        <input type="range" id="rowHeightSlider" min="31" max="60" value="${currentHeight}" style="vertical-align:middle;">
+                        <span id="rowHeightValue" style="margin-left:6px; line-height:1;">${currentHeight}px</span>
+                    `;
+                    // hookup row‐height slider
+                    const rowSlider = document.getElementById("rowHeightSlider");
+                    const rowValue = document.getElementById("rowHeightValue");
+                    rowSlider.oninput = (e) => {
+                        const v = e.target.value;
+                        document.documentElement.style.setProperty("--file-row-height", v + "px");
+                        localStorage.setItem("rowHeight", v);
+                        rowValue.textContent = v + "px";
+                    };
+                }
+            }
+
+            // 3) Render based on viewMode
+            if (window.viewMode === "gallery") {
+                renderGalleryView(folder);
+            } else {
+                renderFileTable(folder);
+            }
+
+            updateFileActionButtons();
+            return data.files;
         })
-        .catch(error => {
-            console.error("Error loading file list:", error);
-            if (error.message !== "Unauthorized") {
+        .catch((err) => {
+            console.error("Error loading file list:", err);
+            if (err !== "Unauthorized") {
                 fileListContainer.textContent = "Error loading files.";
             }
             return [];
@@ -327,9 +398,6 @@ export function renderFileTable(folder, container) {
             rowHTML = rowHTML.replace(/(<td class="file-name-cell">)(.*?)(<\/td>)/, (match, p1, p2, p3) => {
                 return p1 + p2 + tagBadgesHTML + p3;
             });
-            rowHTML = rowHTML.replace(/(<\/div>\s*<\/td>\s*<\/tr>)/, `<button class="share-btn btn btn-sm btn-secondary" data-file="${escapeHTML(file.name)}" title="${t('share')}">
-                <i class="material-icons">share</i>
-              </button>$1`);
             rowsHTML += rowHTML;
         });
     } else {
@@ -414,7 +482,7 @@ export function renderFileTable(folder, container) {
         });
     });
 
-    // 5) Preview buttons (if you still have a .preview-btn)
+    // 5) Preview buttons 
     fileListContent.querySelectorAll(".preview-btn").forEach(btn => {
         btn.addEventListener("click", e => {
             e.stopPropagation();
@@ -441,6 +509,17 @@ export function renderFileTable(folder, container) {
             }, 0);
         }, 300));
     }
+    const slider = document.getElementById('rowHeightSlider');
+    const valueDisplay = document.getElementById('rowHeightValue');
+    if (slider) {
+        slider.addEventListener('input', e => {
+            const v = +e.target.value;  // slider value in px
+            document.documentElement.style.setProperty('--file-row-height', v + 'px');
+            localStorage.setItem('rowHeight', v);
+            valueDisplay.textContent = v + 'px';
+        });
+    }
+
     document.querySelectorAll("table.table thead th[data-column]").forEach(cell => {
         cell.addEventListener("click", function () {
             const column = this.getAttribute("data-column");
@@ -530,18 +609,17 @@ export function renderGalleryView(folder, container) {
         }
     }, 0);
 
-    // --- Column slider ---
+    // --- Column slider with responsive max ---
     const numColumns = window.galleryColumns || 3;
-    galleryHTML += `
-      <div class="gallery-slider" style="margin:10px; text-align:center;">
-        <label for="galleryColumnsSlider" style="margin-right:5px;">
-          ${t('columns')}:
-        </label>
-        <input type="range" id="galleryColumnsSlider" min="1" max="6"
-               value="${numColumns}" style="vertical-align:middle;">
-        <span id="galleryColumnsValue">${numColumns}</span>
-      </div>
-    `;
+    // clamp slider max to 1 on small (<600px), 2 on medium (<900px), else up to 6
+    const w = window.innerWidth;
+    let maxCols = 6;
+    if (w < 600) maxCols = 1;
+    else if (w < 900) maxCols = 2;
+
+    // ensure current value doesn’t exceed the new max
+    const startCols = Math.min(numColumns, maxCols);
+    window.galleryColumns = startCols;
 
     // --- Start gallery grid ---
     galleryHTML += `
@@ -627,32 +705,52 @@ export function renderGalleryView(folder, container) {
             </span>
             ${tagBadgesHTML}
   
-            <div class="button-wrap" style="display:flex; justify-content:center; gap:5px; margin-top:5px;">
-              <button type="button" class="btn btn-sm btn-success download-btn"
-                      data-download-name="${escapeHTML(file.name)}"
-                      data-download-folder="${file.folder || "root"}"
-                      title="${t('download')}">
-                <i class="material-icons">file_download</i>
-              </button>
-              ${file.editable ? `
-              <button type="button" class="btn btn-sm edit-btn"
-                      data-edit-name="${escapeHTML(file.name)}"
-                      data-edit-folder="${file.folder || "root"}"
-                      title="${t('edit')}">
-                <i class="material-icons">edit</i>
-              </button>` : ""}
-              <button type="button" class="btn btn-sm btn-warning rename-btn"
-                      data-rename-name="${escapeHTML(file.name)}"
-                      data-rename-folder="${file.folder || "root"}"
-                      title="${t('rename')}">
-                <i class="material-icons">drive_file_rename_outline</i>
-              </button>
-              <button type="button" class="btn btn-sm btn-secondary share-btn"
-                      data-file="${escapeHTML(file.name)}"
-                      title="${t('share')}">
-                <i class="material-icons">share</i>
-              </button>
-            </div>
+            <div 
+  class="btn-group btn-group-sm btn-group-hover" 
+  role="group" 
+  aria-label="File actions" 
+  style="margin-top:5px;"
+>
+  <button 
+    type="button" 
+    class="btn btn-success py-1 download-btn" 
+    data-download-name="${escapeHTML(file.name)}" 
+    data-download-folder="${file.folder || "root"}" 
+    title="${t('download')}"
+  >
+    <i class="material-icons">file_download</i>
+  </button>
+
+  ${file.editable ? `
+  <button 
+    type="button" 
+    class="btn btn-secondary py-1 edit-btn" 
+    data-edit-name="${escapeHTML(file.name)}" 
+    data-edit-folder="${file.folder || "root"}" 
+    title="${t('edit')}"
+  >
+    <i class="material-icons">edit</i>
+  </button>` : ""}
+
+  <button 
+    type="button" 
+    class="btn btn-warning py-1 rename-btn" 
+    data-rename-name="${escapeHTML(file.name)}" 
+    data-rename-folder="${file.folder || "root"}" 
+    title="${t('rename')}"
+  >
+    <i class="material-icons">drive_file_rename_outline</i>
+  </button>
+
+  <button 
+    type="button" 
+    class="btn btn-secondary py-1 share-btn" 
+    data-file="${escapeHTML(file.name)}" 
+    title="${t('share')}"
+  >
+    <i class="material-icons">share</i>
+  </button>
+</div>
   
           </div>
         </div>

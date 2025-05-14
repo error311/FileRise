@@ -15,10 +15,11 @@ import {
   openUserPanel,
   openTOTPModal,
   closeTOTPModal,
-  setLastLoginData
+  setLastLoginData,
+  openApiModal
 } from './authModals.js';
 import { openAdminPanel } from './adminPanel.js';
-import { initializeApp } from './main.js';
+import { initializeApp, triggerLogout } from './main.js';
 
 // Production OIDC configuration (override via API as needed)
 const currentOIDCConfig = {
@@ -154,7 +155,7 @@ function updateLoginOptionsUIFromStorage() {
     disableFormLogin: localStorage.getItem("disableFormLogin") === "true",
     disableBasicAuth: localStorage.getItem("disableBasicAuth") === "true",
     disableOIDCLogin: localStorage.getItem("disableOIDCLogin") === "true",
-    authBypass:      localStorage.getItem("authBypass") === "true"
+    authBypass: localStorage.getItem("authBypass") === "true"
   });
 }
 
@@ -199,21 +200,45 @@ function insertAfter(newNode, referenceNode) {
   referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling);
 }
 
-function updateAuthenticatedUI(data) {
-  document.getElementById('loadingOverlay').remove();
+async function fetchProfilePicture() {
+  try {
+    const res = await fetch('/api/profile/getCurrentUser.php', {
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const info = await res.json();
+    let pic = info.profile_picture || '';
+    // --- take only what's after the *last* colon ---
+    const parts = pic.split(':');
+    pic = parts[parts.length - 1] || '';
+    // strip any stray leading colons
+    pic = pic.replace(/^:+/, '');
+    // ensure exactly one leading slash
+    if (pic && !pic.startsWith('/')) pic = '/' + pic;
+    return pic;
+  } catch (e) {
+    console.warn('fetchProfilePicture failed:', e);
+    return '';
+  }
+}
 
-  // show the wrapper (so the login form can be visible)
-  document.querySelector('.main-wrapper').style.display = '';
-  document.getElementById('loginForm').style.display = 'none';
+export async function updateAuthenticatedUI(data) {
+  // 1) Remove loading overlay safely
+  const loading = document.getElementById('loadingOverlay');
+  if (loading) loading.remove();
+
+  // 2) Show main UI
+  document.querySelector('.main-wrapper').style.display    = '';
+  document.getElementById('loginForm').style.display       = 'none';
   toggleVisibility("loginForm", false);
   toggleVisibility("mainOperations", true);
   toggleVisibility("uploadFileForm", true);
   toggleVisibility("fileListContainer", true);
-  //attachEnterKeyListener("addUserModal", "saveUserBtn");
-  attachEnterKeyListener("removeUserModal", "deleteUserBtn");
-  attachEnterKeyListener("changePasswordModal", "saveNewPasswordBtn");
+  attachEnterKeyListener("removeUserModal",   "deleteUserBtn");
+  attachEnterKeyListener("changePasswordModal","saveNewPasswordBtn");
   document.querySelector(".header-buttons").style.visibility = "visible";
 
+  // 3) Persist auth flags (unchanged)
   if (typeof data.totp_enabled !== "undefined") {
     localStorage.setItem("userTOTPEnabled", data.totp_enabled ? "true" : "false");
   }
@@ -221,64 +246,143 @@ function updateAuthenticatedUI(data) {
     localStorage.setItem("username", data.username);
   }
   if (typeof data.folderOnly !== "undefined") {
-    localStorage.setItem("folderOnly", data.folderOnly ? "true" : "false");
-    localStorage.setItem("readOnly", data.readOnly ? "true" : "false");
-    localStorage.setItem("disableUpload", data.disableUpload ? "true" : "false");
+    localStorage.setItem("folderOnly",   data.folderOnly   ? "true" : "false");
+    localStorage.setItem("readOnly",     data.readOnly     ? "true" : "false");
+    localStorage.setItem("disableUpload",data.disableUpload? "true" : "false");
   }
 
+  // 4) Fetch up-to-date profile picture — ALWAYS overwrite localStorage
+  const profilePicUrl = await fetchProfilePicture();
+  localStorage.setItem("profilePicUrl", profilePicUrl);
+
+  // 5) Build / update header buttons
   const headerButtons = document.querySelector(".header-buttons");
-  const firstButton = headerButtons.firstElementChild;
+  const firstButton   = headerButtons.firstElementChild;
 
+  // a) restore-from-trash for admins
   if (data.isAdmin) {
-    let restoreBtn = document.getElementById("restoreFilesBtn");
-    if (!restoreBtn) {
-      restoreBtn = document.createElement("button");
-      restoreBtn.id = "restoreFilesBtn";
-      restoreBtn.classList.add("btn", "btn-warning");
-      restoreBtn.setAttribute("data-i18n-title", "trash_restore_delete");
-      restoreBtn.innerHTML = '<i class="material-icons">restore_from_trash</i>';
-      if (firstButton) insertAfter(restoreBtn, firstButton);
-      else headerButtons.appendChild(restoreBtn);
+    let r = document.getElementById("restoreFilesBtn");
+    if (!r) {
+      r = document.createElement("button");
+      r.id = "restoreFilesBtn";
+      r.classList.add("btn","btn-warning");
+      r.setAttribute("data-i18n-title","trash_restore_delete");
+      r.innerHTML = '<i class="material-icons">restore_from_trash</i>';
+      if (firstButton) insertAfter(r, firstButton);
+      else headerButtons.appendChild(r);
     }
-    restoreBtn.style.display = "block";
-
-    let adminPanelBtn = document.getElementById("adminPanelBtn");
-    if (!adminPanelBtn) {
-      adminPanelBtn = document.createElement("button");
-      adminPanelBtn.id = "adminPanelBtn";
-      adminPanelBtn.classList.add("btn", "btn-info");
-      adminPanelBtn.setAttribute("data-i18n-title", "admin_panel");
-      adminPanelBtn.innerHTML = '<i class="material-icons">admin_panel_settings</i>';
-      insertAfter(adminPanelBtn, restoreBtn);
-      adminPanelBtn.addEventListener("click", openAdminPanel);
-    } else {
-      adminPanelBtn.style.display = "block";
-    }
+    r.style.display = "block";
   } else {
-    const restoreBtn = document.getElementById("restoreFilesBtn");
-    if (restoreBtn) restoreBtn.style.display = "none";
-    const adminPanelBtn = document.getElementById("adminPanelBtn");
-    if (adminPanelBtn) adminPanelBtn.style.display = "none";
+    const r = document.getElementById("restoreFilesBtn");
+    if (r) r.style.display = "none";
   }
 
-  if (window.location.hostname !== "demo.filerise.net") {
-    let userPanelBtn = document.getElementById("userPanelBtn");
-    if (!userPanelBtn) {
-      userPanelBtn = document.createElement("button");
-      userPanelBtn.id = "userPanelBtn";
-      userPanelBtn.classList.add("btn", "btn-user");
-      userPanelBtn.setAttribute("data-i18n-title", "user_panel");
-      userPanelBtn.innerHTML = '<i class="material-icons">account_circle</i>';
+  // b) admin panel button only on demo.filerise.net
+  if (data.isAdmin && window.location.hostname === "demo.filerise.net") {
+    let a = document.getElementById("adminPanelBtn");
+    if (!a) {
+      a = document.createElement("button");
+      a.id = "adminPanelBtn";
+      a.classList.add("btn","btn-info");
+      a.setAttribute("data-i18n-title","admin_panel");
+      a.innerHTML = '<i class="material-icons">admin_panel_settings</i>';
+      insertAfter(a, document.getElementById("restoreFilesBtn"));
+      a.addEventListener("click", openAdminPanel);
+    }
+    a.style.display = "block";
+  } else {
+    const a = document.getElementById("adminPanelBtn");
+    if (a) a.style.display = "none";
+  }
 
-      const adminBtn = document.getElementById("adminPanelBtn");
-      if (adminBtn) insertAfter(userPanelBtn, adminBtn);
-      else if (firstButton) insertAfter(userPanelBtn, firstButton);
-      else headerButtons.appendChild(userPanelBtn);
-      userPanelBtn.addEventListener("click", openUserPanel);
+  // c) user dropdown on non-demo
+  if (window.location.hostname !== "demo.filerise.net") {
+    let dd = document.getElementById("userDropdown");
+
+    // choose icon *or* img
+    const avatarHTML = profilePicUrl
+      ? `<img src="${profilePicUrl}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;">`
+      : `<i class="material-icons">account_circle</i>`;
+
+    if (!dd) {
+      dd = document.createElement("div");
+      dd.id    = "userDropdown";
+      dd.classList.add("user-dropdown");
+
+      // toggle button
+      const toggle = document.createElement("button");
+      toggle.id    = "userDropdownToggle";
+      toggle.classList.add("btn","btn-user");
+      toggle.setAttribute("title", t("user_settings"));
+      toggle.innerHTML = `${avatarHTML}<span class="dropdown-username">${data.username}</span><span class="dropdown-caret"></span>`;
+      dd.append(toggle);
+
+      // menu
+      const menu = document.createElement("div");
+      menu.classList.add("user-menu");
+      menu.innerHTML = `
+        <div class="item" id="menuUserPanel">
+          <i class="material-icons folder-icon">person</i> ${t("user_panel")}
+        </div>
+        ${data.isAdmin ? `
+        <div class="item" id="menuAdminPanel">
+          <i class="material-icons folder-icon">admin_panel_settings</i> ${t("admin_panel")}
+        </div>` : ''}
+        <div class="item" id="menuApiDocs">
+          <i class="material-icons folder-icon">description</i> ${t("api_docs")}
+        </div>
+        <div class="item" id="menuLogout">
+          <i class="material-icons folder-icon">logout</i> ${t("logout")}
+        </div>
+      `;
+      dd.append(menu);
+
+      // insert
+      const dm = document.getElementById("darkModeToggle");
+      if (dm) insertAfter(dd, dm);
+      else if (firstButton) insertAfter(dd, firstButton);
+      else headerButtons.appendChild(dd);
+
+      // open/close
+      toggle.addEventListener("click", e => {
+        e.stopPropagation();
+        menu.classList.toggle("show");
+      });
+      document.addEventListener("click", () => menu.classList.remove("show"));
+
+      // actions
+      document.getElementById("menuUserPanel")
+        .addEventListener("click", () => {
+          menu.classList.remove("show");
+          openUserPanel();
+        });
+      if (data.isAdmin) {
+        document.getElementById("menuAdminPanel")
+          .addEventListener("click", () => {
+            menu.classList.remove("show");
+            openAdminPanel();
+          });
+      }
+      document.getElementById("menuApiDocs")
+        .addEventListener("click", () => {
+          menu.classList.remove("show");
+          openApiModal();
+        });
+      document.getElementById("menuLogout")
+        .addEventListener("click", () => {
+          menu.classList.remove("show");
+          triggerLogout();
+        });
+
     } else {
-      userPanelBtn.style.display = "block";
+      // update avatar only
+      const tog = dd.querySelector("#userDropdownToggle");
+      tog.innerHTML = `${avatarHTML}<span class="dropdown-username">${data.username}</span><span class="dropdown-caret"></span>`;
+      dd.style.display = "inline-block";
     }
   }
+
+  // 6) Finalize
   initializeApp();
   applyTranslations();
   updateItemsPerPageSelect();
@@ -289,7 +393,8 @@ function checkAuthentication(showLoginToast = true) {
   return sendRequest("/api/auth/checkAuth.php")
     .then(data => {
       if (data.setup) {
-        document.getElementById('loadingOverlay').remove();
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.remove();
 
         // show the wrapper (so the login form can be visible)
         document.querySelector('.main-wrapper').style.display = '';
@@ -322,13 +427,14 @@ function checkAuthentication(showLoginToast = true) {
         updateAuthenticatedUI(data);
         return data;
       } else {
-        document.getElementById('loadingOverlay').remove();
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.remove();
 
         // show the wrapper (so the login form can be visible)
         document.querySelector('.main-wrapper').style.display = '';
         document.getElementById('loginForm').style.display = '';
         if (showLoginToast) showToast("Please log in to continue.");
-        toggleVisibility("loginForm", ! (localStorage.getItem("authBypass")==="true"));
+        toggleVisibility("loginForm", !(localStorage.getItem("authBypass") === "true"));
         toggleVisibility("mainOperations", false);
         toggleVisibility("uploadFileForm", false);
         toggleVisibility("fileListContainer", false);

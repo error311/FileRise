@@ -1,5 +1,84 @@
 # Changelog
 
+## Changes 5/14/2025 v1.3.4
+
+### 1. Button Grouping (Bootstrap)
+
+- Converted individual action buttons (`download`, `edit`, `rename`, `share`) in both **table view** and **gallery view** into a single Bootstrap button group for a cleaner, more compact UI.
+- Applied `btn-group` and `btn-sm` classes for consistent sizing and spacing.
+
+### 2. Header Dropdown Replacement
+
+- Replaced the standalone “User Panel” icon button with a **dropdown wrapper** (`.user-dropdown`) in the header.
+- Dropdown toggle now shows:
+  - **Profile picture** (if set) or the Material “account_circle” icon
+  - **Username** text (between avatar and caret)
+  - Down-arrow caret span.
+
+### 3. Menu Items Moved to Dropdown
+
+- Moved previously standalone header buttons into the dropdown menu:
+  - **User Panel** opens the modal
+  - **Admin Panel** only shown when `data.isAdmin` *and* on `demo.filerise.net`
+  - **API Docs** calls `openApiModal()`
+  - **Logout** calls `triggerLogout()`
+- Each menu item now has a matching Material icon (e.g. `person`, `admin_panel_settings`, `description`, `logout`).
+
+### 4. Profile Picture Support
+
+- Added a new `/api/profile/uploadPicture.php` endpoint + `UserController::uploadPicture()` + corresponding `UserModel::setProfilePicture()`.
+- On **Open User Panel**, display:
+  - Default avatar if none set
+  - Current profile picture if available
+- In the **User Panel** modal:
+  - Stylish “edit” overlay icon on the avatar to launch file picker
+  - Auto-upload on file selection (no “Save” button click needed)
+  - Preview updates immediately and header avatar refreshes live
+  - Persisted in `users.txt` and re-fetched via `getCurrentUser.php`
+
+### 5. API Docs & Logout Relocation
+
+- Removed API Docs from User Panel
+- Removed “Logout” buttons from the header toolbar.
+- Both are now menu entries in the **User Dropdown**.
+
+### 6. Admin Panel Conditional
+
+- The **Admin Panel** button was:
+  - Kept in the dropdown only when `data.isAdmin`
+  - Removed entirely elsewhere.
+
+### 7. Utility & Styling Tweaks
+
+- Introduced a small `normalizePicUrl()` helper to strip stray colons and ensure a leading slash.
+- Hidden the scrollbar in the User Panel modal via:
+  - Inline CSS (`scrollbar-width: none; -ms-overflow-style: none;`)  
+  - Global/WebKit rule for `::-webkit-scrollbar { display: none; }`
+- Made the User Panel modal fully responsive and vertically centered, with smooth dark-mode support.
+
+### 8. File/List View & Gallery View Sliders
+
+- **Unified “View‐Mode” Slider**  
+  Added a single slider panel (`#viewSliderContainer`) in the file‐list actions toolbar that switches behavior based on the current view mode:
+  - **Table View**: shows a **Row Height** slider (min 31px, max 60px).  
+    - Adjusts the CSS variable `--file-row-height` to resize all `<tr>` heights.  
+    - Persists the chosen height in `localStorage`.
+  - **Gallery View**: shows a **Columns** slider (min 1, max 6).  
+    - Updates the grid’s `grid-template-columns: repeat(N, 1fr)`.  
+    - Persists the chosen column count in `localStorage`.
+
+- **Injection Point**  
+  The slider container is dynamically inserted (or updated) just before the folder summary (`#fileSummary`) in `loadFileList()`, ensuring a consistent position across both view modes.
+
+- **Live Updates**  
+  Moving the slider thumb immediately updates the visible table row heights or gallery column layout without a full re‐render.
+
+- **Styling & Alignment**  
+  - `#viewSliderContainer` uses `inline-flex` and `align-items: center` so that label, slider, and value text are vertically aligned with the other toolbar elements.
+  - Reset margins/padding on the label and value span within `#viewSliderContainer` to eliminate any vertical misalignment.
+
+---
+
 ## Changes 5/8/2025
 
 ### Docker 🐳

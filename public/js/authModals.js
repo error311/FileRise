@@ -1,8 +1,7 @@
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
-import { loadAdminConfigFunc } from './auth.js';
-
+import { loadAdminConfigFunc, updateAuthenticatedUI } from './auth.js';
 
 let lastLoginData = null;
 export function setLastLoginData(data) {
@@ -60,14 +59,11 @@ export function openTOTPLoginModal() {
       const totpSection = document.getElementById("totpSection");
       const recoverySection = document.getElementById("recoverySection");
       const toggleLink = this;
-
       if (recoverySection.style.display === "none") {
-        // Switch to recovery
         totpSection.style.display = "none";
         recoverySection.style.display = "block";
         toggleLink.textContent = t("use_totp_code_instead");
       } else {
-        // Switch back to TOTP
         recoverySection.style.display = "none";
         totpSection.style.display = "block";
         toggleLink.textContent = t("use_recovery_code_instead");
@@ -93,7 +89,6 @@ export function openTOTPLoginModal() {
         .then(res => res.json())
         .then(json => {
           if (json.status === "ok") {
-            // recovery succeeded → finalize login
             window.location.href = "/index.html";
           } else {
             showToast(json.message || t("recovery_code_verification_failed"));
@@ -107,17 +102,11 @@ export function openTOTPLoginModal() {
     // TOTP submission
     const totpInput = document.getElementById("totpLoginInput");
     totpInput.focus();
-
     totpInput.addEventListener("input", async function () {
       const code = this.value.trim();
-      if (code.length !== 6) {
+      if (code.length !== 6) return;
 
-        return;
-      }
-
-      const tokenRes = await fetch("/api/auth/token.php", {
-        credentials: "include"
-      });
+      const tokenRes = await fetch("/api/auth/token.php", { credentials: "include" });
       if (!tokenRes.ok) {
         showToast(t("totp_verification_failed"));
         return;
@@ -144,7 +133,6 @@ export function openTOTPLoginModal() {
       } else {
         showToast(t("totp_verification_failed"));
       }
-
       this.value = "";
       totpLoginModal.style.display = "flex";
       this.focus();
@@ -160,153 +148,209 @@ export function openTOTPLoginModal() {
   }
 }
 
-export function openUserPanel() {
-  const username = localStorage.getItem("username") || "User";
-  let userPanelModal = document.getElementById("userPanelModal");
-  const isDarkMode = document.body.classList.contains("dark-mode");
-  const overlayBackground = isDarkMode ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
-  const modalContentStyles = `
-    background: ${isDarkMode ? "#2c2c2c" : "#fff"};
-    color: ${isDarkMode ? "#e0e0e0" : "#000"};
-    padding: 20px;
-    max-width: 600px;
-    width: 90%;
-    border-radius: 8px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    max-height: 383px !important;
-    flex-shrink: 0 !important;
-    scrollbar-gutter: stable both-edges;
-    border: ${isDarkMode ? "1px solid #444" : "1px solid #ccc"};
-    box-sizing: border-box;
-    transition: none;
-  `;
-  const savedLanguage = localStorage.getItem("language") || "en";
+/**
+ * Fetch current user info (username, profile_picture, totp_enabled)
+ */
+async function fetchCurrentUser() {
+  try {
+    const res = await fetch('/api/profile/getCurrentUser.php', {
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    console.warn('fetchCurrentUser failed:', e);
+    return {};
+  }
+}
 
-  if (!userPanelModal) {
-    userPanelModal = document.createElement("div");
-    userPanelModal.id = "userPanelModal";
-    userPanelModal.style.cssText = `
-      position: fixed;
-      top: 0; right: 0; bottom: 0; left: 0;
-      background-color: ${overlayBackground};
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-      overflow: hidden;
+/**
+ * Normalize any profile‐picture URL:
+ *  - strip leading colons
+ *  - ensure exactly one leading slash
+ */
+function normalizePicUrl(raw) {
+  if (!raw) return '';
+  // take only what's after the last colon
+  const parts = raw.split(':');
+  let pic = parts[parts.length - 1];
+  // strip any stray colons
+  pic = pic.replace(/^:+/, '');
+  // ensure leading slash
+  if (pic && !pic.startsWith('/')) pic = '/' + pic;
+  return pic;
+}
+
+export async function openUserPanel() {
+  // 1) load data
+  const { username = 'User', profile_picture = '', totp_enabled = false } = await fetchCurrentUser();
+  const raw = profile_picture;
+  const picUrl = normalizePicUrl(raw);
+
+  // 2) dark‐mode helpers
+  const isDark = document.body.classList.contains('dark-mode');
+  const overlayBg = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
+  const contentCss = `
+  background: ${isDark ? '#2c2c2c' : '#fff'};
+  color:      ${isDark ? '#e0e0e0' : '#000'};
+  padding: 20px;
+  max-width: 600px;
+  width: 90%;
+  border-radius: 8px;
+  overflow-y: auto;
+  max-height: 415px;
+  border: ${isDark ? '1px solid #444' : '1px solid #ccc'};
+  box-sizing: border-box;
+
+  /* hide scrollbar in Firefox */
+  scrollbar-width: none;
+  /* hide scrollbar in IE 10+ */
+  -ms-overflow-style: none;
+`;
+
+  // 3) build or re-use modal
+  let modal = document.getElementById('userPanelModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'userPanelModal';
+    modal.style.cssText = `
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:${overlayBg};
+      display:flex; align-items:center; justify-content:center;
+      z-index:1000;
     `;
-    userPanelModal.innerHTML = `
-        <div class="modal-content user-panel-content" style="${modalContentStyles}">
+
+    modal.innerHTML = `
+      <div class="modal-content" style="${contentCss}">
         <span id="closeUserPanel" class="editor-close-btn">&times;</span>
-        <h3>${t("user_panel")} (${username})</h3>
-
-        <button type="button" id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom: 15px;">
-          ${t("change_password")}
-        </button>
-
-        <fieldset style="margin-bottom: 15px;">
-          <legend>${t("totp_settings")}</legend>
-          <div class="form-group">
-            <label for="userTOTPEnabled">${t("enable_totp")}:</label>
-            <input type="checkbox" id="userTOTPEnabled" style="vertical-align: middle;" />
+        <div style="text-align:center; margin-bottom:20px;">
+          <div style="position:relative; width:80px; height:80px; margin:0 auto;">
+            <img id="profilePicPreview"
+                 src="${picUrl || '/assets/default-avatar.png'}"
+                 style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+            <label for="profilePicInput"
+                   style="
+                     position:absolute; bottom:0; right:0;
+                     width:24px; height:24px; background:rgba(0,0,0,0.6);
+                     border-radius:50%; display:flex; align-items:center;
+                     justify-content:center; cursor:pointer;">
+              <i class="material-icons" style="color:#fff; font-size:16px;">edit</i>
+            </label>
+            <input type="file" id="profilePicInput" accept="image/*" style="display:none">
           </div>
-        </fieldset>
-
-        <fieldset style="margin-bottom: 15px;">
-          <legend>${t("language")}</legend>
-          <div class="form-group">
-            <label for="languageSelector">${t("select_language")}:</label>
-            <select id="languageSelector">
-              <option value="en">${t("english")}</option>
-              <option value="es">${t("spanish")}</option>
-              <option value="fr">${t("french")}</option>
-              <option value="de">${t("german")}</option>
-            </select>
-          </div>
-        </fieldset>
-
-        <!-- New API Docs link -->
-        <div style="margin-bottom: 15px;">
-          <button type="button" id="openApiModalBtn" class="btn btn-secondary">
-              ${t("api_docs") || "API Docs"}
-          </button>
         </div>
+        <h3 style="text-align:center; margin-bottom:20px;">
+          ${t('user_panel')} (${username})
+        </h3>
+        <button id="openChangePasswordModalBtn" class="btn btn-primary" style="margin-bottom:15px;">
+          ${t('change_password')}
+        </button>
+        <fieldset style="margin-bottom:15px;">
+          <legend>${t('totp_settings')}</legend>
+          <label style="cursor:pointer;">
+            <input type="checkbox" id="userTOTPEnabled" style="vertical-align:middle;">
+            ${t('enable_totp')}
+          </label>
+        </fieldset>
+        <fieldset style="margin-bottom:15px;">
+          <legend>${t('language')}</legend>
+          <select id="languageSelector" class="form-select">
+            <option value="en">${t('english')}</option>
+            <option value="es">${t('spanish')}</option>
+            <option value="fr">${t('french')}</option>
+            <option value="de">${t('german')}</option>
+          </select>
+        </fieldset>
       </div>
     `;
-    document.body.appendChild(userPanelModal);
+    document.body.appendChild(modal);
 
-    const apiModal = document.createElement("div");
-    apiModal.id = "apiModal";
-    apiModal.style.cssText = `
-  position: fixed; top:0; left:0; width:100vw; height:100vh;
-  background: rgba(0,0,0,0.8); z-index: 4000; display:none;
-  align-items: center; justify-content: center;
-`;
+    // --- wire up handlers ---
 
-// api.php
-apiModal.innerHTML = `
-  <div style="position:relative; width:90vw; height:90vh; background:#fff; border-radius:8px; overflow:hidden;">
-    <div class="editor-close-btn" id="closeApiModal">&times;</div>
-    <iframe src="api.php" style="width:100%;height:100%;border:none;"></iframe>
-  </div>
-`;
+    modal.querySelector('#closeUserPanel')
+      .addEventListener('click', () => modal.style.display = 'none');
 
-    document.body.appendChild(apiModal);
+    modal.querySelector('#openChangePasswordModalBtn')
+      .addEventListener('click', () => {
+        document.getElementById('changePasswordModal').style.display = 'block';
+      });
 
-    document.getElementById("openApiModalBtn").addEventListener("click", () => {
-      apiModal.style.display = "flex";
-    });
-    document.getElementById("closeApiModal").addEventListener("click", () => {
-      apiModal.style.display = "none";
-    });
-
-    // Handlers…
-    document.getElementById("closeUserPanel").addEventListener("click", () => {
-      userPanelModal.style.display = "none";
-    });
-    document.getElementById("openChangePasswordModalBtn").addEventListener("click", () => {
-      document.getElementById("changePasswordModal").style.display = "block";
-    });
-
-
-    // TOTP checkbox
-    const totpCheckbox = document.getElementById("userTOTPEnabled");
-    totpCheckbox.checked = localStorage.getItem("userTOTPEnabled") === "true";
-    totpCheckbox.addEventListener("change", function () {
-      localStorage.setItem("userTOTPEnabled", this.checked ? "true" : "false");
-      fetch("/api/updateUserPanel.php", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+    // TOTP
+    const totpCb = modal.querySelector('#userTOTPEnabled');
+    totpCb.addEventListener('change', async function () {
+      const resp = await fetch('/api/updateUserPanel.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.csrfToken
+        },
         body: JSON.stringify({ totp_enabled: this.checked })
-      })
-        .then(r => r.json())
-        .then(result => {
-          if (!result.success) showToast(t("error_updating_totp_setting") + ": " + result.error);
-          else if (this.checked) openTOTPModal();
-        })
-        .catch(() => showToast(t("error_updating_totp_setting")));
+      });
+      const js = await resp.json();
+      if (!js.success) showToast(js.error || t('error_updating_totp_setting'));
+      else if (this.checked) openTOTPModal();
     });
 
-    // Language selector
-    const languageSelector = document.getElementById("languageSelector");
-    languageSelector.value = savedLanguage;
-    languageSelector.addEventListener("change", function () {
-      localStorage.setItem("language", this.value);
+    // Language
+    const langSel = modal.querySelector('#languageSelector');
+    langSel.addEventListener('change', function () {
+      localStorage.setItem('language', this.value);
       setLocale(this.value);
       applyTranslations();
     });
+
+    // Auto‐upload on file select
+    const fileInput = modal.querySelector('#profilePicInput');
+    fileInput.addEventListener('change', async function () {
+      const file = this.files[0];
+      if (!file) return;
+
+      // preview immediately
+      const img = modal.querySelector('#profilePicPreview');
+      img.src = URL.createObjectURL(file);
+
+      // upload
+      const fd = new FormData();
+      fd.append('profile_picture', file);
+      try {
+        const res = await fetch('/api/profile/uploadPicture.php', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'X-CSRF-Token': window.csrfToken },
+          body: fd
+        });
+        const text = await res.text();
+        const js = JSON.parse(text || '{}');
+        if (!res.ok) {
+          showToast(js.error || t('error_updating_picture'));
+          return;
+        }
+        const newUrl = normalizePicUrl(js.url);
+        img.src = newUrl;
+        localStorage.setItem('profilePicUrl', newUrl);
+        // refresh the header immediately
+        updateAuthenticatedUI(window.__lastAuthData || {});
+        showToast(t('profile_picture_updated'));
+      } catch (e) {
+        console.error(e);
+        showToast(t('error_updating_picture'));
+      }
+    });
+
   } else {
-    // Update colors if already exists
-    userPanelModal.style.backgroundColor = overlayBackground;
-    const modalContent = userPanelModal.querySelector(".modal-content");
-    modalContent.style.background = isDarkMode ? "#2c2c2c" : "#fff";
-    modalContent.style.color = isDarkMode ? "#e0e0e0" : "#000";
-    modalContent.style.border = isDarkMode ? "1px solid #444" : "1px solid #ccc";
+
+    modal.style.background = overlayBg;
+    const contentEl = modal.querySelector('.modal-content');
+    contentEl.style.cssText = contentCss;
+    // re-open: sync current values
+    modal.querySelector('#profilePicPreview').src = picUrl || '/images/default-avatar.png';
+    modal.querySelector('#userTOTPEnabled').checked = totp_enabled;
+    modal.querySelector('#languageSelector').value = localStorage.getItem('language') || 'en';
   }
 
-  userPanelModal.style.display = "flex";
+  // show
+  modal.style.display = 'flex';
 }
 
 function showRecoveryCodeModal(recoveryCode) {
@@ -314,26 +358,21 @@ function showRecoveryCodeModal(recoveryCode) {
   recoveryModal.id = "recoveryModal";
   recoveryModal.style.cssText = `
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
     background-color: rgba(0,0,0,0.3);
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: flex; justify-content: center; align-items: center;
     z-index: 3200;
   `;
   recoveryModal.innerHTML = `
-    <div style="background: #fff; color: #000; padding: 20px; max-width: 400px; width: 90%; border-radius: 8px; text-align: center;">
+    <div style="background:#fff; color:#000; padding:20px; max-width:400px; width:90%; border-radius:8px; text-align:center;">
       <h3>${t("your_recovery_code")}</h3>
       <p>${t("please_save_recovery_code")}</p>
-      <code style="display: block; margin: 10px 0; font-size: 20px;">${recoveryCode}</code>
+      <code style="display:block; margin:10px 0; font-size:20px;">${recoveryCode}</code>
       <button type="button" id="closeRecoveryModal" class="btn btn-primary">${t("ok")}</button>
     </div>
   `;
   document.body.appendChild(recoveryModal);
-
   document.getElementById("closeRecoveryModal").addEventListener("click", () => {
     recoveryModal.remove();
   });
@@ -346,109 +385,57 @@ export function openTOTPModal() {
   const modalContentStyles = `
     background: ${isDarkMode ? "#2c2c2c" : "#fff"};
     color: ${isDarkMode ? "#e0e0e0" : "#000"};
-    padding: 20px;
-    max-width: 400px;
-    width: 90%;
-    border-radius: 8px;
-    position: relative;
+    padding: 20px; max-width:400px; width:90%; border-radius:8px; position:relative;
   `;
   if (!totpModal) {
     totpModal = document.createElement("div");
     totpModal.id = "totpModal";
     totpModal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background-color: ${overlayBackground};
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 3100;
+      position: fixed; top:0; left:0; width:100vw; height:100vh;
+      background-color:${overlayBackground}; display:flex; justify-content:center; align-items:center;
+      z-index:3100;
     `;
     totpModal.innerHTML = `
-    <div class="modal-content" style="${modalContentStyles}">
-      <span id="closeTOTPModal" class="editor-close-btn">&times;</span>
-      <h3>${t("totp_setup")}</h3>
-      <p>${t("scan_qr_code")}</p>
-      <!-- Create an image placeholder without the CSRF token in the src -->
-      <img id="totpQRCodeImage" src="" alt="TOTP QR Code" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
-      <br/>
-      <p>${t("enter_totp_confirmation")}</p>
-      <input type="text" id="totpConfirmInput" maxlength="6" style="font-size:24px; text-align:center; width:100%; padding:10px;" placeholder="6-digit code" />
-      <br/><br/>
-      <button type="button" id="confirmTOTPBtn" class="btn btn-primary">${t("confirm")}</button>
-    </div>
-  `;
+      <div class="modal-content" style="${modalContentStyles}">
+        <span id="closeTOTPModal" class="editor-close-btn">&times;</span>
+        <h3>${t("totp_setup")}</h3>
+        <p>${t("scan_qr_code")}</p>
+        <img id="totpQRCodeImage" src="" alt="TOTP QR Code" style="max-width:100%; height:auto; display:block; margin:0 auto;" />
+        <br/>
+        <p>${t("enter_totp_confirmation")}</p>
+        <input type="text" id="totpConfirmInput" maxlength="6" style="font-size:24px; text-align:center; width:100%; padding:10px;" placeholder="6-digit code" />
+        <br/><br/>
+        <button type="button" id="confirmTOTPBtn" class="btn btn-primary">${t("confirm")}</button>
+      </div>
+    `;
     document.body.appendChild(totpModal);
     loadTOTPQRCode();
-
-    document.getElementById("closeTOTPModal").addEventListener("click", () => {
-      closeTOTPModal(true);
-    });
-
+    document.getElementById("closeTOTPModal").addEventListener("click", () => closeTOTPModal(true));
     document.getElementById("confirmTOTPBtn").addEventListener("click", async function () {
       const code = document.getElementById("totpConfirmInput").value.trim();
-      if (code.length !== 6) {
-        showToast(t("please_enter_valid_code"));
-        return;
-      }
-
-      const tokenRes = await fetch("/api/auth/token.php", {
-        credentials: "include"
-      });
-      if (!tokenRes.ok) {
-        showToast(t("error_verifying_totp_code"));
-        return;
-      }
-      const { csrf_token } = await tokenRes.json();
-      window.csrfToken = csrf_token;
-
+      if (code.length !== 6) { showToast(t("please_enter_valid_code")); return; }
+      const tokenRes = await fetch("/api/auth/token.php", { credentials: "include" });
+      if (!tokenRes.ok) { showToast(t("error_verifying_totp_code")); return; }
+      window.csrfToken = (await tokenRes.json()).csrf_token;
       const verifyRes = await fetch("/api/totp_verify.php", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": window.csrfToken
-        },
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
         body: JSON.stringify({ totp_code: code })
       });
-
-      if (!verifyRes.ok) {
-        showToast(t("totp_verification_failed"));
-        return;
-      }
+      if (!verifyRes.ok) { showToast(t("totp_verification_failed")); return; }
       const result = await verifyRes.json();
-      if (result.status !== "ok") {
-        showToast(result.message || t("totp_verification_failed"));
-        return;
-      }
-
+      if (result.status !== "ok") { showToast(result.message || t("totp_verification_failed")); return; }
       showToast(t("totp_enabled_successfully"));
-
       const saveRes = await fetch("/api/totp_saveCode.php", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "X-CSRF-Token": window.csrfToken
-        }
+        method: "POST", credentials: "include", headers: { "X-CSRF-Token": window.csrfToken }
       });
-      if (!saveRes.ok) {
-        showToast(t("error_generating_recovery_code"));
-        closeTOTPModal(false);
-        return;
-      }
+      if (!saveRes.ok) { showToast(t("error_generating_recovery_code")); closeTOTPModal(false); return; }
       const data = await saveRes.json();
-      if (data.status === "ok" && data.recoveryCode) {
-        showRecoveryCodeModal(data.recoveryCode);
-      } else {
-        showToast(t("error_generating_recovery_code") + ": " + (data.message || t("unknown_error")));
-      }
-
+      if (data.status === "ok" && data.recoveryCode) showRecoveryCodeModal(data.recoveryCode);
+      else showToast(t("error_generating_recovery_code") + ": " + (data.message || t("unknown_error")));
       closeTOTPModal(false);
     });
-
+    
     // Focus the input and attach enter key listener
     const totpConfirmInput = document.getElementById("totpConfirmInput");
     if (totpConfirmInput) {
@@ -458,29 +445,18 @@ export function openTOTPModal() {
       }, 100);
     }
     attachEnterKeyListener("totpModal", "confirmTOTPBtn");
-
   } else {
     totpModal.style.display = "flex";
     totpModal.style.backgroundColor = overlayBackground;
     const modalContent = totpModal.querySelector(".modal-content");
     modalContent.style.background = isDarkMode ? "#2c2c2c" : "#fff";
     modalContent.style.color = isDarkMode ? "#e0e0e0" : "#000";
-
-    // Clear any previous QR code src if needed and then load it:
-    const qrImg = document.getElementById("totpQRCodeImage");
-    if (qrImg) {
-      qrImg.src = "";
-    }
+    modalContent.style.border = isDarkMode ? "1px solid #444" : "1px solid #ccc";
     loadTOTPQRCode();
-
-    // Focus the input and attach enter key listener
-    const totpConfirmInput = document.getElementById("totpConfirmInput");
-    if (totpConfirmInput) {
-      totpConfirmInput.value = "";
-      setTimeout(() => {
-        const totpConfirmInput = document.getElementById("totpConfirmInput");
-        if (totpConfirmInput) totpConfirmInput.focus();
-      }, 100);
+    const totpInput = document.getElementById("totpConfirmInput");
+    if (totpInput) {
+      totpInput.value = "";
+      setTimeout(() => totpInput.focus(), 100);
     }
     attachEnterKeyListener("totpModal", "confirmTOTPBtn");
   }
@@ -490,42 +466,31 @@ function loadTOTPQRCode() {
   fetch("/api/totp_setup.php", {
     method: "GET",
     credentials: "include",
-    headers: {
-      "X-CSRF-Token": window.csrfToken  // Send your CSRF token here
-    }
+    headers: { "X-CSRF-Token": window.csrfToken }
   })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error("Failed to fetch QR code. Status: " + response.status);
-      }
-      return response.blob();
+    .then(res => {
+      if (!res.ok) throw new Error("Failed to fetch QR code: " + res.status);
+      return res.blob();
     })
     .then(blob => {
-      const imageURL = URL.createObjectURL(blob);
-      const qrImg = document.getElementById("totpQRCodeImage");
-      if (qrImg) {
-        qrImg.src = imageURL;
-      }
+      const url = URL.createObjectURL(blob);
+      document.getElementById("totpQRCodeImage").src = url;
     })
-    .catch(error => {
-      console.error("Error loading TOTP QR code:", error);
+    .catch(err => {
+      console.error(err);
       showToast(t("error_loading_qr_code"));
     });
 }
 
-// Updated closeTOTPModal function with a disable parameter
 export function closeTOTPModal(disable = true) {
   const totpModal = document.getElementById("totpModal");
   if (totpModal) totpModal.style.display = "none";
-
   if (disable) {
-    // Uncheck the Enable TOTP checkbox
     const totpCheckbox = document.getElementById("userTOTPEnabled");
     if (totpCheckbox) {
       totpCheckbox.checked = false;
       localStorage.setItem("userTOTPEnabled", "false");
     }
-    // Call endpoint to remove the TOTP secret from the user's record
     fetch("/api/totp_disable.php", {
       method: "POST",
       credentials: "include",
@@ -536,10 +501,36 @@ export function closeTOTPModal(disable = true) {
     })
       .then(r => r.json())
       .then(result => {
-        if (!result.success) {
-          showToast(t("error_disabling_totp_setting") + ": " + result.error);
-        }
+        if (!result.success) showToast(t("error_disabling_totp_setting") + ": " + result.error);
       })
-      .catch(() => { showToast(t("error_disabling_totp_setting")); });
+      .catch(() => showToast(t("error_disabling_totp_setting")));
   }
+}
+
+export function openApiModal() {
+  let apiModal = document.getElementById("apiModal");
+  if (!apiModal) {
+    // create the container exactly as you do now inside openUserPanel
+    apiModal = document.createElement("div");
+    apiModal.id = "apiModal";
+    apiModal.style.cssText = `
+      position: fixed; top:0; left:0; width:100vw; height:100vh;
+      background: rgba(0,0,0,0.8); z-index: 4000; display:none;
+      align-items: center; justify-content: center;
+    `;
+    apiModal.innerHTML = `
+      <div style="position:relative; width:90vw; height:90vh; background:#fff; border-radius:8px; overflow:hidden;">
+        <div class="editor-close-btn" id="closeApiModal">&times;</div>
+        <iframe src="api.php" style="width:100%;height:100%;border:none;"></iframe>
+      </div>
+    `;
+    document.body.appendChild(apiModal);
+
+    // wire up its close button
+    document.getElementById("closeApiModal").addEventListener("click", () => {
+      apiModal.style.display = "none";
+    });
+  }
+  // finally, show it
+  apiModal.style.display = "flex";
 }

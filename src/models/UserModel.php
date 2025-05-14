@@ -3,13 +3,15 @@
 
 require_once PROJECT_ROOT . '/config/config.php';
 
-class userModel {
+class userModel
+{
     /**
      * Retrieves all users from the users file.
      *
      * @return array Returns an array of users.
      */
-    public static function getAllUsers() {
+    public static function getAllUsers()
+    {
         $usersFile = USERS_DIR . USERS_FILE;
         $users = [];
         if (file_exists($usersFile)) {
@@ -26,7 +28,7 @@ class userModel {
         }
         return $users;
     }
-    
+
     /**
      * Adds a new user.
      *
@@ -36,14 +38,15 @@ class userModel {
      * @param bool   $setupMode If true, overwrite the users file.
      * @return array Response containing either an error or a success message.
      */
-    public static function addUser($username, $password, $isAdmin, $setupMode) {
+    public static function addUser($username, $password, $isAdmin, $setupMode)
+    {
         $usersFile = USERS_DIR . USERS_FILE;
 
         // Ensure users.txt exists.
         if (!file_exists($usersFile)) {
             file_put_contents($usersFile, '');
         }
-        
+
         // Check if username already exists.
         $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($existingUsers as $line) {
@@ -52,40 +55,41 @@ class userModel {
                 return ["error" => "User already exists"];
             }
         }
-    
+
         // Hash the password.
         $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
-    
+
         // Prepare the new line.
         $newUserLine = $username . ":" . $hashedPassword . ":" . $isAdmin . PHP_EOL;
-    
+
         // If setup mode, overwrite the file; otherwise, append.
         if ($setupMode) {
             file_put_contents($usersFile, $newUserLine);
         } else {
             file_put_contents($usersFile, $newUserLine, FILE_APPEND);
         }
-    
+
         return ["success" => "User added successfully"];
     }
 
-        /**
+    /**
      * Removes the specified user from the users file and updates the userPermissions file.
      *
      * @param string $usernameToRemove The username to remove.
      * @return array An array with either an error message or a success message.
      */
-    public static function removeUser($usernameToRemove) {
+    public static function removeUser($usernameToRemove)
+    {
         $usersFile = USERS_DIR . USERS_FILE;
-        
+
         if (!file_exists($usersFile)) {
             return ["error" => "Users file not found"];
         }
-        
+
         $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $newUsers = [];
         $userFound = false;
-        
+
         // Loop through users; skip (remove) the specified user.
         foreach ($existingUsers as $line) {
             $parts = explode(':', trim($line));
@@ -98,14 +102,14 @@ class userModel {
             }
             $newUsers[] = $line;
         }
-        
+
         if (!$userFound) {
             return ["error" => "User not found"];
         }
-        
+
         // Write the updated user list back to the file.
         file_put_contents($usersFile, implode(PHP_EOL, $newUsers) . PHP_EOL);
-        
+
         // Update the userPermissions.json file.
         $permissionsFile = USERS_DIR . "userPermissions.json";
         if (file_exists($permissionsFile)) {
@@ -116,18 +120,19 @@ class userModel {
                 file_put_contents($permissionsFile, json_encode($permissionsArray, JSON_PRETTY_PRINT));
             }
         }
-        
+
         return ["success" => "User removed successfully"];
     }
 
-        /**
+    /**
      * Retrieves permissions from the userPermissions.json file.
      * If the current user is an admin, returns all permissions.
      * Otherwise, returns only the permissions for the current user.
      *
      * @return array|object Returns an associative array of permissions or an empty object if none are found.
      */
-    public static function getUserPermissions() {
+    public static function getUserPermissions()
+    {
         global $encryptionKey;
         $permissionsFile = USERS_DIR . "userPermissions.json";
         $permissionsArray = [];
@@ -165,13 +170,14 @@ class userModel {
         return new stdClass();
     }
 
-        /**
+    /**
      * Updates user permissions in the userPermissions.json file.
      *
      * @param array $permissions An array of permission updates.
      * @return array An associative array with a success or error message.
      */
-    public static function updateUserPermissions($permissions) {
+    public static function updateUserPermissions($permissions)
+    {
         global $encryptionKey;
         $permissionsFile = USERS_DIR . "userPermissions.json";
         $existingPermissions = [];
@@ -185,7 +191,7 @@ class userModel {
                 $existingPermissions = [];
             }
         }
-        
+
         // Load user roles from the users file.
         $usersFile = USERS_DIR . USERS_FILE;
         $userRoles = [];
@@ -199,7 +205,7 @@ class userModel {
                 }
             }
         }
-        
+
         // Process each permission update.
         foreach ($permissions as $perm) {
             if (!isset($perm['username'])) {
@@ -208,12 +214,12 @@ class userModel {
             $username = $perm['username'];
             // Look up the user's role.
             $role = isset($userRoles[strtolower($username)]) ? $userRoles[strtolower($username)] : null;
-            
+
             // Skip updating permissions for admin users.
             if ($role === "1") {
                 continue;
             }
-            
+
             // Update permissions: default any missing value to false.
             $existingPermissions[strtolower($username)] = [
                 'folderOnly'    => isset($perm['folderOnly']) ? (bool)$perm['folderOnly'] : false,
@@ -221,7 +227,7 @@ class userModel {
                 'disableUpload' => isset($perm['disableUpload']) ? (bool)$perm['disableUpload'] : false
             ];
         }
-        
+
         // Convert the updated permissions array to JSON.
         $plainText = json_encode($existingPermissions, JSON_PRETTY_PRINT);
         // Encrypt the JSON.
@@ -231,11 +237,11 @@ class userModel {
         if ($result === false) {
             return ["error" => "Failed to save user permissions."];
         }
-        
+
         return ["success" => "User permissions updated successfully."];
     }
 
-        /**
+    /**
      * Changes the password for the given user.
      *
      * @param string $username The username whose password is to be changed.
@@ -243,17 +249,18 @@ class userModel {
      * @param string $newPassword The new password.
      * @return array An array with either a success or error message.
      */
-    public static function changePassword($username, $oldPassword, $newPassword) {
+    public static function changePassword($username, $oldPassword, $newPassword)
+    {
         $usersFile = USERS_DIR . USERS_FILE;
-        
+
         if (!file_exists($usersFile)) {
             return ["error" => "Users file not found"];
         }
-        
+
         $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $userFound = false;
         $newLines = [];
-        
+
         foreach ($lines as $line) {
             $parts = explode(':', trim($line));
             // Expect at least 3 parts: username, hashed password, and role.
@@ -266,7 +273,7 @@ class userModel {
             $storedRole = $parts[2];
             // Preserve TOTP secret if it exists.
             $totpSecret = (count($parts) >= 4) ? $parts[3] : "";
-            
+
             if ($storedUser === $username) {
                 $userFound = true;
                 // Verify the old password.
@@ -275,7 +282,7 @@ class userModel {
                 }
                 // Hash the new password.
                 $newHashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
-                
+
                 // Rebuild the line, preserving TOTP secret if it exists.
                 if ($totpSecret !== "") {
                     $newLines[] = $username . ":" . $newHashedPassword . ":" . $storedRole . ":" . $totpSecret;
@@ -286,11 +293,11 @@ class userModel {
                 $newLines[] = $line;
             }
         }
-        
+
         if (!$userFound) {
             return ["error" => "User not found."];
         }
-        
+
         // Save the updated users file.
         if (file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL)) {
             return ["success" => "Password updated successfully."];
@@ -299,25 +306,26 @@ class userModel {
         }
     }
 
-        /**
+    /**
      * Updates the user panel settings by disabling the TOTP secret if TOTP is not enabled.
      *
      * @param string $username The username whose panel settings are being updated.
      * @param bool $totp_enabled Whether TOTP is enabled.
      * @return array An array indicating success or failure.
      */
-    public static function updateUserPanel($username, $totp_enabled) {
+    public static function updateUserPanel($username, $totp_enabled)
+    {
         $usersFile = USERS_DIR . USERS_FILE;
-        
+
         if (!file_exists($usersFile)) {
             return ["error" => "Users file not found"];
         }
-        
+
         // If TOTP is disabled, update the file to clear the TOTP secret.
         if (!$totp_enabled) {
             $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
             $newLines = [];
-            
+
             foreach ($lines as $line) {
                 $parts = explode(':', trim($line));
                 // Leave lines with fewer than three parts unchanged.
@@ -325,7 +333,7 @@ class userModel {
                     $newLines[] = $line;
                     continue;
                 }
-                
+
                 if ($parts[0] === $username) {
                     // If a fourth field (TOTP secret) exists, clear it; otherwise, append an empty field.
                     if (count($parts) >= 4) {
@@ -338,25 +346,26 @@ class userModel {
                     $newLines[] = $line;
                 }
             }
-            
+
             $result = file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL, LOCK_EX);
             if ($result === false) {
                 return ["error" => "Failed to disable TOTP secret"];
             }
             return ["success" => "User panel updated: TOTP disabled"];
         }
-        
+
         // If TOTP is enabled, do nothing.
         return ["success" => "User panel updated: TOTP remains enabled"];
     }
 
-        /**
+    /**
      * Disables the TOTP secret for the specified user.
      *
      * @param string $username The user for whom TOTP should be disabled.
      * @return bool True if the secret was cleared; false otherwise.
      */
-    public static function disableTOTPSecret($username) {
+    public static function disableTOTPSecret($username)
+    {
         global $encryptionKey; // In case it's used in this model context.
         $usersFile = USERS_DIR . USERS_FILE;
         if (!file_exists($usersFile)) {
@@ -391,14 +400,15 @@ class userModel {
         return $modified;
     }
 
-        /**
+    /**
      * Attempts to recover TOTP for a user using the supplied recovery code.
      *
      * @param string $userId The user identifier.
      * @param string $recoveryCode The recovery code provided by the user.
      * @return array An associative array with keys 'status' and 'message'.
      */
-    public static function recoverTOTP($userId, $recoveryCode) {
+    public static function recoverTOTP($userId, $recoveryCode)
+    {
         // --- Rate‑limit recovery attempts ---
         $attemptsFile = rtrim(USERS_DIR, '/\\') . '/recovery_attempts.json';
         $attempts = is_file($attemptsFile) ? json_decode(file_get_contents($attemptsFile), true) : [];
@@ -406,36 +416,36 @@ class userModel {
         $now = time();
         if (isset($attempts[$key])) {
             // Prune attempts older than 15 minutes.
-            $attempts[$key] = array_filter($attempts[$key], function($ts) use ($now) {
+            $attempts[$key] = array_filter($attempts[$key], function ($ts) use ($now) {
                 return $ts > $now - 900;
             });
         }
         if (count($attempts[$key] ?? []) >= 5) {
             return ['status' => 'error', 'message' => 'Too many attempts. Try again later.'];
         }
-        
+
         // --- Load user metadata file ---
         $userFile = rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR . $userId . '.json';
         if (!file_exists($userFile)) {
             return ['status' => 'error', 'message' => 'User not found'];
         }
-        
+
         // --- Open and lock file ---
         $fp = fopen($userFile, 'c+');
         if (!$fp || !flock($fp, LOCK_EX)) {
             return ['status' => 'error', 'message' => 'Server error'];
         }
-        
+
         $fileContents = stream_get_contents($fp);
         $data = json_decode($fileContents, true) ?: [];
-        
+
         // --- Check recovery code ---
         if (empty($recoveryCode)) {
             flock($fp, LOCK_UN);
             fclose($fp);
             return ['status' => 'error', 'message' => 'Recovery code required'];
         }
-        
+
         $storedHash = $data['totp_recovery_code'] ?? null;
         if (!$storedHash || !password_verify($recoveryCode, $storedHash)) {
             // Record failed attempt.
@@ -445,7 +455,7 @@ class userModel {
             fclose($fp);
             return ['status' => 'error', 'message' => 'Invalid recovery code'];
         }
-        
+
         // --- Invalidate recovery code ---
         $data['totp_recovery_code'] = null;
         rewind($fp);
@@ -454,17 +464,18 @@ class userModel {
         fflush($fp);
         flock($fp, LOCK_UN);
         fclose($fp);
-        
+
         return ['status' => 'ok'];
     }
 
-        /**
+    /**
      * Generates a random recovery code.
      *
      * @param int $length Length of the recovery code.
      * @return string
      */
-    private static function generateRecoveryCode($length = 12) {
+    private static function generateRecoveryCode($length = 12)
+    {
         $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         $max   = strlen($chars) - 1;
         $code  = '';
@@ -480,10 +491,11 @@ class userModel {
      * @param string $userId The username of the user.
      * @return array An associative array with the status and recovery code (if successful).
      */
-    public static function saveTOTPRecoveryCode($userId) {
+    public static function saveTOTPRecoveryCode($userId)
+    {
         // Determine the user file path.
         $userFile = rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR . $userId . '.json';
-        
+
         // Ensure the file exists; if not, create it with default data.
         if (!file_exists($userFile)) {
             $defaultData = [];
@@ -491,24 +503,24 @@ class userModel {
                 return ['status' => 'error', 'message' => 'Server error: could not create user file'];
             }
         }
-        
+
         // Generate a new recovery code.
         $recoveryCode = self::generateRecoveryCode();
         $recoveryHash = password_hash($recoveryCode, PASSWORD_DEFAULT);
-        
+
         // Open the file, lock it, and update the totp_recovery_code field.
         $fp = fopen($userFile, 'c+');
         if (!$fp || !flock($fp, LOCK_EX)) {
             return ['status' => 'error', 'message' => 'Server error: could not lock user file'];
         }
-        
+
         // Read and decode the existing JSON.
         $contents = stream_get_contents($fp);
         $data = json_decode($contents, true) ?: [];
-        
+
         // Update the totp_recovery_code field.
         $data['totp_recovery_code'] = $recoveryHash;
-        
+
         // Write the new data.
         rewind($fp);
         ftruncate($fp, 0);
@@ -516,25 +528,26 @@ class userModel {
         fflush($fp);
         flock($fp, LOCK_UN);
         fclose($fp);
-        
+
         return ['status' => 'ok', 'recoveryCode' => $recoveryCode];
     }
 
-        /**
+    /**
      * Sets up TOTP for the specified user by retrieving or generating a TOTP secret,
      * then builds and returns a QR code image for the OTPAuth URL.
      *
      * @param string $username The username for which to set up TOTP.
      * @return array An associative array with keys 'imageData' and 'mimeType', or 'error'.
      */
-    public static function setupTOTP($username) {
+    public static function setupTOTP($username)
+    {
         global $encryptionKey;
         $usersFile = USERS_DIR . USERS_FILE;
-        
+
         if (!file_exists($usersFile)) {
             return ['error' => 'Users file not found'];
         }
-        
+
         // Look for an existing TOTP secret.
         $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $totpSecret = null;
@@ -545,7 +558,7 @@ class userModel {
                 break;
             }
         }
-        
+
         // Use the TwoFactorAuth library to create a new secret if none found.
         $tfa = new \RobThree\Auth\TwoFactorAuth(
             new \RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider(), // QR code provider
@@ -557,7 +570,7 @@ class userModel {
         if (!$totpSecret) {
             $totpSecret = $tfa->createSecret();
             $encryptedSecret = encryptData($totpSecret, $encryptionKey);
-            
+
             // Update the user’s line with the new encrypted secret.
             $newLines = [];
             foreach ($lines as $line) {
@@ -575,7 +588,7 @@ class userModel {
             }
             file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL, LOCK_EX);
         }
-        
+
         // Determine the OTPAuth URL.
         // Try to load a global OTPAuth URL template from admin configuration.
         $adminConfigFile = USERS_DIR . 'adminConfig.json';
@@ -590,7 +603,7 @@ class userModel {
                 }
             }
         }
-        
+
         if (!empty($globalOtpauthUrl)) {
             $label = "FileRise:" . $username;
             $otpauthUrl = str_replace(["{label}", "{secret}"], [urlencode($label), $totpSecret], $globalOtpauthUrl);
@@ -599,26 +612,27 @@ class userModel {
             $issuer = urlencode("FileRise");
             $otpauthUrl = "otpauth://totp/{$label}?secret={$totpSecret}&issuer={$issuer}";
         }
-        
+
         // Build the QR code image using the Endroid QR Code Builder.
         $result = \Endroid\QrCode\Builder\Builder::create()
             ->writer(new \Endroid\QrCode\Writer\PngWriter())
             ->data($otpauthUrl)
             ->build();
-        
+
         return [
             'imageData' => $result->getString(),
             'mimeType'  => $result->getMimeType()
         ];
     }
 
-        /**
+    /**
      * Retrieves the decrypted TOTP secret for a given user.
      *
      * @param string $username
      * @return string|null Returns the TOTP secret if found, or null if not.
      */
-    public static function getTOTPSecret($username) {
+    public static function getTOTPSecret($username)
+    {
         global $encryptionKey;
         $usersFile = USERS_DIR . USERS_FILE;
         if (!file_exists($usersFile)) {
@@ -634,14 +648,15 @@ class userModel {
         }
         return null;
     }
-    
+
     /**
      * Helper to get a user's role from users.txt.
      *
      * @param string $username
      * @return string|null
      */
-    public static function getUserRole($username) {
+    public static function getUserRole($username)
+    {
         $usersFile = USERS_DIR . USERS_FILE;
         if (!file_exists($usersFile)) {
             return null;
@@ -653,5 +668,80 @@ class userModel {
             }
         }
         return null;
+    }
+
+    public static function getUser(string $username): array
+    {
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (! file_exists($usersFile)) {
+            return [];
+        }
+
+        foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            // explode into at most 4 parts: [0]=username, [1]=hash, [2]=isAdmin, [3]=profileUrl (might include a trailing colon)
+            $parts = explode(':', $line, 4);
+            if ($parts[0] !== $username) {
+                continue;
+            }
+            // strip any trailing colon(s) from the URL field
+            $pic = isset($parts[3]) ? rtrim($parts[3], ':') : '';
+
+            return [
+                'username'        => $parts[0],
+                'profile_picture' => $pic,
+            ];
+        }
+
+        return [];  // user not found
+    }
+
+    /**
+     * Persistently set the profile picture URL for a given user,
+     * storing it in the 5th field so we leave the 4th (TOTP secret) untouched.
+     *
+     * users.txt format:
+     *   username:hash:isAdmin:totp_secret:profile_picture
+     *
+     * @param string $username
+     * @param string $url       The public URL (e.g. "/uploads/profile_pics/…")
+     * @return array            ['success'=>true] or ['success'=>false,'error'=>'…']
+     */
+    public static function setProfilePicture(string $username, string $url): array
+    {
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (! file_exists($usersFile)) {
+            return ['success' => false, 'error' => 'Users file not found'];
+        }
+
+        $lines = file($usersFile, FILE_IGNORE_NEW_LINES);
+        $out   = [];
+        $found = false;
+
+        foreach ($lines as $line) {
+            $parts = explode(':', $line);
+            if ($parts[0] === $username) {
+                $found = true;
+                // Ensure we have at least 5 fields
+                while (count($parts) < 5) {
+                    $parts[] = '';
+                }
+                // Write profile_picture into the 5th field (index 4)
+                $parts[4] = ltrim($url, '/'); // or $url if leading slash is desired
+                // Re-assemble (this preserves parts[3] completely)
+                $line = implode(':', $parts);
+            }
+            $out[] = $line;
+        }
+
+        if (! $found) {
+            return ['success' => false, 'error' => 'User not found'];
+        }
+
+        $newContent = implode(PHP_EOL, $out) . PHP_EOL;
+        if (file_put_contents($usersFile, $newContent, LOCK_EX) === false) {
+            return ['success' => false, 'error' => 'Failed to write users file'];
+        }
+
+        return ['success' => true];
     }
 }

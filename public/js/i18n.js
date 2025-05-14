@@ -202,6 +202,11 @@ const translations = {
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:
     "admin_panel": "Admin Panel",
     "user_panel": "User Panel",
+    "user_settings": "User Settings",
+    "save_profile_picture": "Save Profile Picture",
+    "please_select_picture": "Please select a picture",
+    "profile_picture_updated": "Profile picture updated",
+    "error_updating_picture": "Error updating profile picture",
     "trash_restore_delete": "Trash Restore/Delete",
     "totp_settings": "TOTP Settings",
     "enable_totp": "Enable TOTP",
@@ -260,6 +265,7 @@ const translations = {
     "show": "Show",
     "items_per_page": "items per page",
     "columns": "Columns",
+    "row_height": "Row Height",
     "api_docs": "API Docs"
   },
   es: {
