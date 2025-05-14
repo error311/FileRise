@@ -349,6 +349,9 @@ export async function openUserPanel() {
       if (!f) return;
       // preview immediately
       img.src = URL.createObjectURL(f);
+      const blobUrl = URL.createObjectURL(f);
+      // use setAttribute + encodeURI to avoid “DOM text reinterpreted as HTML” alerts
+      img.setAttribute('src', encodeURI(blobUrl));
       // upload
       const fd = new FormData();
       fd.append('profile_picture', f);

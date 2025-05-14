@@ -99,6 +99,8 @@
 - **Strip trailing colons** from the stored URL (`rtrim($parts[3], ':')`) so we never send `…png:` back to the client.
 - Returns an array with both `'username'` and `'profile_picture'`, matching what `getCurrentUser.php` needs.
 
+### 10. setAttribute + encodeURI to avoid “DOM text reinterpreted as HTML” alerts
+
 ---
 
 ## Changes 5/8/2025
