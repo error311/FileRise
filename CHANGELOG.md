@@ -1,5 +1,16 @@
 # Changelog
 
+## Changees 5/15/2025
+
+### Drag‐and‐Drop Upload extended to File List
+
+- **Forward file‐list drops**  
+  Dropping files onto the file‐list area (`#fileListContainer`) now re‐dispatches the same `drop` event to the upload card’s drop zone (`#uploadDropArea`)
+- **Visual feedback**  
+  Added a `.drop-hover` class on `#fileListContainer` during drag‐over for a dashed‐border + light‐background hover state to indicate it accepts file drops.
+
+---
+
 ## Changes 5/14/2025 v1.3.4
 
 ### 1. Button Grouping (Bootstrap)

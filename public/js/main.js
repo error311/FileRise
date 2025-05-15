@@ -20,6 +20,29 @@ export function initializeApp() {
   window.currentFolder = "root";
   initTagSearch();
   loadFileList(window.currentFolder);
+
+  const fileListArea = document.getElementById('fileListContainer');
+  const uploadArea = document.getElementById('uploadDropArea');
+  if (fileListArea && uploadArea) {
+    fileListArea.addEventListener('dragover', e => {
+      e.preventDefault();
+      fileListArea.classList.add('drop-hover');
+    });
+    fileListArea.addEventListener('dragleave', () => {
+      fileListArea.classList.remove('drop-hover');
+    });
+    fileListArea.addEventListener('drop', e => {
+      e.preventDefault();
+      fileListArea.classList.remove('drop-hover');
+      // re-dispatch the same drop into the real upload card
+      uploadArea.dispatchEvent(new DragEvent('drop', {
+        dataTransfer: e.dataTransfer,
+        bubbles: true,
+        cancelable: true
+      }));
+    });
+  }
+  
   initDragAndDrop();
   loadSidebarOrder();
   loadHeaderOrder();
@@ -29,14 +52,14 @@ export function initializeApp() {
   setupTrashRestoreDelete();
   loadAdminConfigFunc();
 
-    const helpBtn     = document.getElementById("folderHelpBtn");
-    const helpTooltip = document.getElementById("folderHelpTooltip");
-    if (helpBtn && helpTooltip) {
-      helpBtn.addEventListener("click", () => {
-        helpTooltip.style.display =
-          helpTooltip.style.display === "block" ? "none" : "block";
-      });
-    }
+  const helpBtn = document.getElementById("folderHelpBtn");
+  const helpTooltip = document.getElementById("folderHelpTooltip");
+  if (helpBtn && helpTooltip) {
+    helpBtn.addEventListener("click", () => {
+      helpTooltip.style.display =
+        helpTooltip.style.display === "block" ? "none" : "block";
+    });
+  }
 }
 
 export function loadCsrfToken() {
@@ -85,8 +108,8 @@ export function triggerLogout() {
     credentials: "include",
     headers: { "X-CSRF-Token": window.csrfToken }
   })
-  .then(() => window.location.reload(true))
-  .catch(()=>{});
+    .then(() => window.location.reload(true))
+    .catch(() => { });
 }
 
 
@@ -120,10 +143,10 @@ document.addEventListener("DOMContentLoaded", function () {
     // Continue with initializations that rely on a valid CSRF token:
     checkAuthentication().then(authenticated => {
       if (authenticated) {
-         const overlay = document.getElementById('loadingOverlay');
+        const overlay = document.getElementById('loadingOverlay');
         if (overlay) overlay.remove();
         initializeApp();
-      } 
+      }
     });
 
     // Other DOM initialization that can happen after CSRF is ready.
