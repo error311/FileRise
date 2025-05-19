@@ -56,7 +56,7 @@ function saveFolderTreeState(state) {
 }
 
 // Helper for getting the parent folder.
-function getParentFolder(folder) {
+export function getParentFolder(folder) {
   if (folder === "root") return "root";
   const lastSlash = folder.lastIndexOf("/");
   return lastSlash === -1 ? "root" : folder.substring(0, lastSlash);
@@ -361,7 +361,7 @@ function renderBreadcrumbFragment(folderPath) {
   return frag;
 }
 
-function updateBreadcrumbTitle(folder) {
+export function updateBreadcrumbTitle(folder) {
   const titleEl = document.getElementById("fileListTitle");
   titleEl.textContent = "";
   titleEl.appendChild(document.createTextNode(t("files_in") + " ("));

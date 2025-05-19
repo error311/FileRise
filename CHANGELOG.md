@@ -1,5 +1,29 @@
 # Changelog
 
+## Changes 5/19/2025
+
+### Added Folder strip & Create File
+
+- **Folder strip in file list**  
+  - `loadFileList` now fetches sub-folders in parallel from `/api/folder/getFolderList.php`.  
+  - Filters to only *direct* children of the current folder, hiding `profile_pics` and `trash`.  
+  - Injects a new `.folder-strip-container` just below the Files In above (summary + slider).  
+  - Clicking a folder in the strip updates:
+    - the breadcrumb (via `updateBreadcrumbTitle`)
+    - the tree selection highlight
+    - reloads `loadFileList` for the chosen folder.
+
+- **Create File feature**  
+  - New “Create New File” button added to the file-actions toolbar and context menu.  
+  - New endpoint `public/api/file/createFile.php` (handled by `FileController`/`FileModel`):
+    - Creates an empty file if it doesn’t already exist.
+    - Appends an entry to `<folder>_metadata.json` with `uploaded` timestamp and `uploader`.  
+  - `fileActions.js`:
+    - Implemented `handleCreateFile()` to show a modal, POST to the new endpoint, and refresh the list.  
+    - Added translations for `create_new_file` and `newfile_placeholder`.
+
+---
+
 ## Changees 5/15/2025
 
 ### Drag‐and‐Drop Upload extended to File List

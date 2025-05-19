@@ -1278,4 +1278,64 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT));
         return true;
     }
+
+    /**
+     * Create an empty file plus metadata entry.
+     *
+     * @param string $folder
+     * @param string $filename
+     * @param string $uploader
+     * @return array ['success'=>bool, 'error'=>string, 'code'=>int]
+     */
+    public static function createFile(string $folder, string $filename, string $uploader): array
+    {
+        // 1) basic validation
+        if (!preg_match('/^[\w\-. ]+$/', $filename)) {
+            return ['success'=>false,'error'=>'Invalid filename','code'=>400];
+        }
+
+        // 2) build target path
+        $base = UPLOAD_DIR;
+        if ($folder !== 'root') {
+            $base = rtrim(UPLOAD_DIR, '/\\')
+                  . DIRECTORY_SEPARATOR . $folder
+                  . DIRECTORY_SEPARATOR;
+        }
+        if (!is_dir($base) && !mkdir($base, 0775, true)) {
+            return ['success'=>false,'error'=>'Cannot create folder','code'=>500];
+        }
+        $path = $base . $filename;
+
+        // 3) no overwrite
+        if (file_exists($path)) {
+            return ['success'=>false,'error'=>'File already exists','code'=>400];
+        }
+
+        // 4) touch the file
+        if (false === @file_put_contents($path, '')) {
+            return ['success'=>false,'error'=>'Could not create file','code'=>500];
+        }
+
+        // 5) write metadata
+        $metaKey  = ($folder === 'root') ? 'root' : $folder;
+        $metaName = str_replace(['/', '\\', ' '], '-', $metaKey) . '_metadata.json';
+        $metaPath = META_DIR . $metaName;
+
+        $collection = [];
+        if (file_exists($metaPath)) {
+            $json = file_get_contents($metaPath);
+            $collection = json_decode($json, true) ?: [];
+        }
+
+        $collection[$filename] = [
+          'uploaded' => date(DATE_TIME_FORMAT),
+          'uploader' => $uploader
+        ];
+
+        if (false === file_put_contents($metaPath, json_encode($collection, JSON_PRETTY_PRINT))) {
+            return ['success'=>false,'error'=>'Failed to update metadata','code'=>500];
+        }
+
+        return ['success'=>true];
+    }
 }

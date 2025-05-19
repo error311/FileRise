@@ -76,6 +76,72 @@ export function handleDownloadZipSelected(e) {
   }, 100);
 };
 
+export function handleCreateFileSelected(e) {
+  e.preventDefault(); e.stopImmediatePropagation();
+  const modal = document.getElementById('createFileModal');
+  modal.style.display = 'block';
+  setTimeout(() => {
+    const inp = document.getElementById('newFileCreateName');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+/**
+ * Open the “New File” modal
+ */
+export function openCreateFileModal() {
+  const modal = document.getElementById('createFileModal');
+  const input = document.getElementById('createFileNameInput');
+  if (!modal || !input) {
+    console.error('Create-file modal or input not found');
+    return;
+  }
+  input.value = '';
+  modal.style.display = 'block';
+  setTimeout(() => input.focus(), 0);
+}
+
+
+export async function handleCreateFile(e) {
+  e.preventDefault();
+  const input = document.getElementById('createFileNameInput');
+  if (!input) return console.error('Create-file input missing');
+  const name = input.value.trim();
+  if (!name) {
+    showToast(t('newfile_placeholder'));  // or a more explicit error
+    return;
+  }
+
+  const folder = window.currentFolder || 'root';
+  try {
+    const res = await fetch('/api/file/createFile.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type':'application/json',
+        'X-CSRF-Token': window.csrfToken
+      },
+      // ⚠️ must send `name`, not `filename`
+      body: JSON.stringify({ folder, name })
+    });
+    const js = await res.json();
+    if (!js.success) throw new Error(js.error);
+    showToast(t('file_created'));
+    loadFileList(folder);
+  } catch (err) {
+    showToast(err.message || t('error_creating_file'));
+  } finally {
+    document.getElementById('createFileModal').style.display = 'none';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const cancel = document.getElementById('cancelCreateFile');
+  const confirm = document.getElementById('confirmCreateFile');
+  if (cancel)  cancel.addEventListener('click', () => document.getElementById('createFileModal').style.display = 'none');
+  if (confirm) confirm.addEventListener('click', handleCreateFile);
+});
+
 export function openDownloadModal(fileName, folder) {
   // Store file details globally for the download confirmation function.
   window.singleFileToDownload = fileName;
@@ -197,6 +263,49 @@ document.addEventListener("DOMContentLoaded", () => {
   const progressModal = document.getElementById("downloadProgressModal");
   const cancelZipBtn = document.getElementById("cancelDownloadZip");
   const confirmZipBtn = document.getElementById("confirmDownloadZip");
+  const cancelCreate = document.getElementById('cancelCreateFile');
+  
+  if (cancelCreate) {
+    cancelCreate.addEventListener('click', () => {
+      document.getElementById('createFileModal').style.display = 'none';
+    });
+  }
+
+  const confirmCreate = document.getElementById('confirmCreateFile');
+  if (confirmCreate) {
+    confirmCreate.addEventListener('click', async () => {
+      const name = document.getElementById('newFileCreateName').value.trim();
+      if (!name) {
+        showToast(t('please_enter_filename'));
+        return;
+      }
+      document.getElementById('createFileModal').style.display = 'none';
+      try {
+        const res = await fetch('/api/file/createFile.php', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': window.csrfToken
+          },
+          body: JSON.stringify({
+            folder: window.currentFolder || 'root',
+            filename: name
+          })
+        });
+        const js = await res.json();
+        if (!res.ok || !js.success) {
+          throw new Error(js.error || t('error_creating_file'));
+        }
+        showToast(t('file_created_successfully'));
+        loadFileList(window.currentFolder);
+      } catch (err) {
+        console.error(err);
+        showToast(err.message || t('error_creating_file'));
+      }
+    });
+    attachEnterKeyListener('createFileModal','confirmCreateFile');
+  }
 
   // 1) Cancel button hides the name modal
   if (cancelZipBtn) {
@@ -553,7 +662,13 @@ export function initFileActions() {
     extractZipBtn.replaceWith(extractZipBtn.cloneNode(true));
     document.getElementById("extractZipBtn").addEventListener("click", handleExtractZipSelected);
   }
+  const createBtn = document.getElementById('createFileBtn');
+  if (createBtn) {
+    createBtn.replaceWith(createBtn.cloneNode(true));
+    document.getElementById('createFileBtn').addEventListener('click', openCreateFileModal);
+  }
 }
+
 
 // Hook up the single‐file download modal buttons
 document.addEventListener("DOMContentLoaded", () => {

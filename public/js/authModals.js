@@ -184,11 +184,11 @@ function normalizePicUrl(raw) {
 export async function openUserPanel() {
   // 1) load data
   const { username = 'User', profile_picture = '', totp_enabled = false } = await fetchCurrentUser();
-  const raw     = profile_picture;
-  const picUrl  = normalizePicUrl(raw) || '/assets/default-avatar.png';
+  const raw = profile_picture;
+  const picUrl = normalizePicUrl(raw) || '/assets/default-avatar.png';
 
   // 2) dark‐mode helpers
-  const isDark    = document.body.classList.contains('dark-mode');
+  const isDark = document.body.classList.contains('dark-mode');
   const overlayBg = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
   const contentStyle = `
     background: ${isDark ? '#2c2c2c' : '#fff'};
@@ -196,7 +196,7 @@ export async function openUserPanel() {
     padding: 20px;
     max-width: 600px; width:90%;
     border-radius: 8px;
-    overflow-y: auto; max-height: 415px;
+    overflow-y: auto; max-height: 500px;
     border: ${isDark ? '1px solid #444' : '1px solid #ccc'};
     box-sizing: border-box;
     scrollbar-width: none;
@@ -210,16 +210,16 @@ export async function openUserPanel() {
     modal = document.createElement('div');
     modal.id = 'userPanelModal';
     Object.assign(modal.style, {
-      position:   'fixed',
-      top:        '0',
-      left:       '0',
-      right:      '0',
-      bottom:     '0',
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      right: '0',
+      bottom: '0',
       background: overlayBg,
-      display:    'flex',
+      display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex:     '1000',
+      zIndex: '1000',
     });
 
     // content container
@@ -264,7 +264,7 @@ export async function openUserPanel() {
     avatarInner.appendChild(label);
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.id   = 'profilePicInput';
+    fileInput.id = 'profilePicInput';
     fileInput.accept = 'image/*';
     fileInput.style.display = 'none';
     avatarInner.appendChild(fileInput);
@@ -301,11 +301,11 @@ export async function openUserPanel() {
     totpCb.id = 'userTOTPEnabled';
     totpCb.style.verticalAlign = 'middle';
     totpCb.checked = totp_enabled;
-    totpCb.addEventListener('change', async function() {
+    totpCb.addEventListener('change', async function () {
       const resp = await fetch('/api/updateUserPanel.php', {
         method: 'POST', credentials: 'include',
         headers: {
-          'Content-Type':'application/json',
+          'Content-Type': 'application/json',
           'X-CSRF-Token': window.csrfToken
         },
         body: JSON.stringify({ totp_enabled: this.checked })
@@ -328,14 +328,14 @@ export async function openUserPanel() {
     const langSel = document.createElement('select');
     langSel.id = 'languageSelector';
     langSel.className = 'form-select';
-    ['en','es','fr','de'].forEach(code => {
+    ['en', 'es', 'fr', 'de'].forEach(code => {
       const opt = document.createElement('option');
       opt.value = code;
-      opt.textContent = t(code === 'en'? 'english' : code === 'es'? 'spanish' : code === 'fr'? 'french' : 'german');
+      opt.textContent = t(code === 'en' ? 'english' : code === 'es' ? 'spanish' : code === 'fr' ? 'french' : 'german');
       langSel.appendChild(opt);
     });
     langSel.value = localStorage.getItem('language') || 'en';
-    langSel.addEventListener('change', function() {
+    langSel.addEventListener('change', function () {
       localStorage.setItem('language', this.value);
       setLocale(this.value);
       applyTranslations();
@@ -343,8 +343,34 @@ export async function openUserPanel() {
     langFs.appendChild(langSel);
     content.appendChild(langFs);
 
+    // --- Display fieldset: “Show folders above files” ---
+    const dispFs = document.createElement('fieldset');
+    dispFs.style.marginBottom = '15px';
+    const dispLegend = document.createElement('legend');
+    dispLegend.textContent = t('display');
+    dispFs.appendChild(dispLegend);
+    const dispLabel = document.createElement('label');
+    dispLabel.style.cursor = 'pointer';
+    const dispCb = document.createElement('input');
+    dispCb.type = 'checkbox';
+    dispCb.id = 'showFoldersInList';
+    dispCb.style.verticalAlign = 'middle';
+    const stored = localStorage.getItem('showFoldersInList');
+    dispCb.checked = stored === null ? true : stored === 'true';
+    dispLabel.appendChild(dispCb);
+    dispLabel.append(` ${t('show_folders_above_files')}`);
+    dispFs.appendChild(dispLabel);
+    content.appendChild(dispFs);
+
+    dispCb.addEventListener('change', () => {
+      window.showFoldersInList = dispCb.checked;
+      localStorage.setItem('showFoldersInList', dispCb.checked);
+      // re‐load the entire file list (and strip) in one go:
+      loadFileList(window.currentFolder);
+    });
+
     // wire up image‐input change
-    fileInput.addEventListener('change', async function() {
+    fileInput.addEventListener('change', async function () {
       const f = this.files[0];
       if (!f) return;
       // preview immediately
@@ -357,13 +383,13 @@ export async function openUserPanel() {
       const fd = new FormData();
       fd.append('profile_picture', f);
       try {
-        const res  = await fetch('/api/profile/uploadPicture.php', {
+        const res = await fetch('/api/profile/uploadPicture.php', {
           method: 'POST', credentials: 'include',
           headers: { 'X-CSRF-Token': window.csrfToken },
           body: fd
         });
         const text = await res.text();
-        const js   = JSON.parse(text || '{}');
+        const js = JSON.parse(text || '{}');
         if (!res.ok) {
           showToast(js.error || t('error_updating_picture'));
           return;
@@ -387,9 +413,9 @@ export async function openUserPanel() {
     Object.assign(modal.style, { background: overlayBg });
     const content = modal.querySelector('.modal-content');
     content.style.cssText = contentStyle;
-    modal.querySelector('#profilePicPreview').src           = picUrl || '/assets/default-avatar.png';
-    modal.querySelector('#userTOTPEnabled').checked         = totp_enabled;
-    modal.querySelector('#languageSelector').value          = localStorage.getItem('language') || 'en';
+    modal.querySelector('#profilePicPreview').src = picUrl || '/assets/default-avatar.png';
+    modal.querySelector('#userTOTPEnabled').checked = totp_enabled;
+    modal.querySelector('#languageSelector').value = localStorage.getItem('language') || 'en';
     modal.querySelector('h3').textContent = `${t('user_panel')} (${username})`;
   }
 
@@ -479,7 +505,7 @@ export function openTOTPModal() {
       else showToast(t("error_generating_recovery_code") + ": " + (data.message || t("unknown_error")));
       closeTOTPModal(false);
     });
-    
+
     // Focus the input and attach enter key listener
     const totpConfirmInput = document.getElementById("totpConfirmInput");
     if (totpConfirmInput) {

@@ -1,6 +1,6 @@
 // fileMenu.js
 import { updateRowHighlight, showToast } from './domUtils.js';
-import { handleDeleteSelected, handleCopySelected, handleMoveSelected, handleDownloadZipSelected, handleExtractZipSelected, renameFile } from './fileActions.js';
+import { handleDeleteSelected, handleCopySelected, handleMoveSelected, handleDownloadZipSelected, handleExtractZipSelected, renameFile, openCreateFileModal } from './fileActions.js';
 import { previewFile } from './filePreview.js';
 import { editFile } from './fileEditor.js';
 import { canEditFile, fileData } from './fileListView.js';
@@ -75,6 +75,7 @@ export function fileListContextMenuHandler(e) {
   const selected = Array.from(document.querySelectorAll("#fileList .file-checkbox:checked")).map(chk => chk.value);
   
   let menuItems = [
+    { label: t("create_file"), action: () => openCreateFileModal() },
     { label: t("delete_selected"), action: () => { handleDeleteSelected(new Event("click")); } },
     { label: t("copy_selected"), action: () => { handleCopySelected(new Event("click")); } },
     { label: t("move_selected"), action: () => { handleMoveSelected(new Event("click")); } },

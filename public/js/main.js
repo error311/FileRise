@@ -20,7 +20,8 @@ export function initializeApp() {
   window.currentFolder = "root";
   initTagSearch();
   loadFileList(window.currentFolder);
-
+  const stored = localStorage.getItem('showFoldersInList');
+  window.showFoldersInList = stored === null ? true : stored === 'true';
   const fileListArea = document.getElementById('fileListContainer');
   const uploadArea = document.getElementById('uploadDropArea');
   if (fileListArea && uploadArea) {
@@ -42,7 +43,7 @@ export function initializeApp() {
       }));
     });
   }
-  
+
   initDragAndDrop();
   loadSidebarOrder();
   loadHeaderOrder();

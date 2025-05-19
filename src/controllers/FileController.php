@@ -1626,4 +1626,31 @@ class FileController
             echo json_encode(['success' => false, 'error' => 'Not found']);
         }
     }
+
+    /**
+     * POST /api/file/createFile.php
+     */
+    public function createFile(): void
+    {
+
+        // Check user permissions (assuming loadUserPermissions() is available).
+        $username = $_SESSION['username'] ?? '';
+        $userPermissions = loadUserPermissions($username);
+        if (!empty($userPermissions['readOnly'])) {
+            echo json_encode(["error" => "Read-only users are not allowed to create files."]);
+            exit;
+        }
+        $body = json_decode(file_get_contents('php://input'), true);
+        $folder   = $body['folder']   ?? 'root';
+        $filename = $body['name']     ?? '';
+
+        $result = FileModel::createFile($folder, $filename, $_SESSION['username'] ?? 'Unknown');
+
+        if (!$result['success']) {
+            http_response_code($result['code'] ?? 400);
+            echo json_encode(['success'=>false,'error'=>$result['error']]);
+        } else {
+            echo json_encode(['success'=>true]);
+        }
+    }
 }

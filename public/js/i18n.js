@@ -266,7 +266,16 @@ const translations = {
     "items_per_page": "items per page",
     "columns": "Columns",
     "row_height": "Row Height",
-    "api_docs": "API Docs"
+    "api_docs": "API Docs",
+    "show_folders_above_files": "Show folders above files",
+    "display": "Display",
+    "create_file": "Create File",
+    "create_new_file": "Create New File",
+    "enter_file_name": "Enter file name",
+    "newfile_placeholder": "New file name",
+    "file_created_successfully": "File created successfully!",
+    "error_creating_file": "Error creating file",
+    "file_created":          "File created successfully!"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

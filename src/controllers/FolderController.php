@@ -340,16 +340,14 @@ class FolderController
     public function getFolderList(): void
     {
         header('Content-Type: application/json');
-
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+        if (empty($_SESSION['authenticated'])) {
             http_response_code(401);
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
 
-        // Optionally, you might add further input validation if necessary.
-        $folderList = FolderModel::getFolderList();
+        $parent = $_GET['folder'] ?? null;
+        $folderList = FolderModel::getFolderList($parent);
         echo json_encode($folderList);
         exit;
     }
@@ -1087,11 +1085,11 @@ class FolderController
         header('Content-Type: application/json');
         $shareFile = META_DIR . 'share_folder_links.json';
         $links     = file_exists($shareFile)
-                   ? json_decode(file_get_contents($shareFile), true) ?? []
-                   : [];
+            ? json_decode(file_get_contents($shareFile), true) ?? []
+            : [];
         $now       = time();
         $cleaned   = [];
-    
+
         // 1) Remove expired
         foreach ($links as $token => $record) {
             if (!empty($record['expires']) && $record['expires'] < $now) {
@@ -1099,12 +1097,12 @@ class FolderController
             }
             $cleaned[$token] = $record;
         }
-    
+
         // 2) Persist back if anything was pruned
         if (count($cleaned) !== count($links)) {
             file_put_contents($shareFile, json_encode($cleaned, JSON_PRETTY_PRINT));
         }
-    
+
         echo json_encode($cleaned);
     }
 

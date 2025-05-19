@@ -16,6 +16,7 @@ import { t } from './i18n.js';
 import { bindFileListContextMenu } from './fileMenu.js';
 import { openDownloadModal } from './fileActions.js';
 import { openTagModal, openMultiTagModal } from './fileTags.js';
+import { getParentFolder, updateBreadcrumbTitle, setupBreadcrumbDelegation } from './folderManager.js';
 
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
@@ -186,171 +187,226 @@ export function formatFolderName(folder) {
 window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
-export function loadFileList(folderParam) {
+export async function loadFileList(folderParam) {
     const folder = folderParam || "root";
     const fileListContainer = document.getElementById("fileList");
+    const actionsContainer   = document.getElementById("fileListActions");
 
+    // 1) show loader
     fileListContainer.style.visibility = "hidden";
     fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
 
-    return fetch(
-        "/api/file/getFileList.php?folder=" +
-        encodeURIComponent(folder) +
-        "&recursive=1&t=" +
-        Date.now()
-    )
-        .then((res) =>
-            res.status === 401
-                ? (window.location.href = "/api/auth/logout.php" && Promise.reject("Unauthorized"))
-                : res.json()
-        )
-        .then((data) => {
-            fileListContainer.innerHTML = "";
+    try {
+        // 2) fetch files + folders in parallel
+        const [filesRes, foldersRes] = await Promise.all([
+            fetch(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=1&t=${Date.now()}`),
+            fetch(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`)
+        ]);
 
-            // No files case
-            if (!data.files || Object.keys(data.files).length === 0) {
-                fileListContainer.textContent = t("no_files_found");
+        if (filesRes.status === 401) {
+            window.location.href = "/api/auth/logout.php";
+            throw new Error("Unauthorized");
+        }
+        const data      = await filesRes.json();
+        const folderRaw = await foldersRes.json();
 
-                // hide summary
-                const summaryElem = document.getElementById("fileSummary");
-                if (summaryElem) summaryElem.style.display = "none";
+        // --- build ONLY the *direct* children of current folder ---
+        let subfolders = [];
+        const hidden = new Set([ "profile_pics", "trash" ]);
+        if (Array.isArray(folderRaw)) {
+            const allPaths = folderRaw.map(item => item.folder ?? item);
+            const depth    = folder === "root" ? 1 : folder.split("/").length + 1;
+            subfolders = allPaths
+                .filter(p => {
+                    if (folder === "root") {
+                        return p.indexOf("/") === -1;
+                    }
+                    if (!p.startsWith(folder + "/")) return false;
+                    return p.split("/").length === depth;
+                })
+                .map(p => ({ name: p.split("/").pop(), full: p }));
+        }
+        subfolders = subfolders.filter(sf => !hidden.has(sf.name));
 
-                // hide slider
-                const sliderContainer = document.getElementById("viewSliderContainer");
-                if (sliderContainer) sliderContainer.style.display = "none";
+        // 3) clear loader
+        fileListContainer.innerHTML = "";
 
-                updateFileActionButtons();
-                return [];
-            }
+        // 4) handle “no files” case
+        if (!data.files || Object.keys(data.files).length === 0) {
+            fileListContainer.textContent = t("no_files_found");
 
-            // Normalize to array
-            if (!Array.isArray(data.files)) {
-                data.files = Object.entries(data.files).map(([name, meta]) => {
-                    meta.name = name;
-                    return meta;
-                });
-            }
-            // Enrich each file
-            data.files = data.files.map((f) => {
-                f.fullName = (f.path || f.name).trim().toLowerCase();
-                f.editable = canEditFile(f.name);
-                f.folder = folder;
-                return f;
-            });
-            fileData = data.files;
+            // hide summary
+            const summaryElem = document.getElementById("fileSummary");
+            if (summaryElem) summaryElem.style.display = "none";
 
-            // --- folder summary + slider injection ---
-            const actionsContainer = document.getElementById("fileListActions");
-            if (actionsContainer) {
-                // 1) summary
-                let summaryElem = document.getElementById("fileSummary");
-                if (!summaryElem) {
-                    summaryElem = document.createElement("div");
-                    summaryElem.id = "fileSummary";
-                    summaryElem.style.cssText = "float:right; margin:0 60px 0 auto; font-size:0.9em;";
-                    actionsContainer.appendChild(summaryElem);
-                }
-                summaryElem.style.display = "block";
-                summaryElem.innerHTML = buildFolderSummary(fileData);
+            // hide slider
+            const sliderContainer = document.getElementById("viewSliderContainer");
+            if (sliderContainer) sliderContainer.style.display = "none";
 
-                // 2) view‐mode slider
-                const viewMode = window.viewMode || "table";
-                let sliderContainer = document.getElementById("viewSliderContainer");
-                if (!sliderContainer) {
-                    sliderContainer = document.createElement("div");
-                    sliderContainer.id = "viewSliderContainer";
-                    sliderContainer.style.cssText = "display: inline-flex; align-items: center; vertical-align: middle; margin-right: auto; font-size: 0.9em;";
-                    actionsContainer.insertBefore(sliderContainer, summaryElem);
-                } else {
-                    sliderContainer.style.display = "inline-flex";
-                }
-
-                if (viewMode === "gallery") {
-                    // determine responsive caps:
-                    const w = window.innerWidth;
-                    let maxCols;
-                    if (w < 600) maxCols = 1;
-                    else if (w < 900) maxCols = 2;
-                    else if (w < 1200) maxCols = 4;
-                    else maxCols = 6;
-
-                    const currentCols = Math.min(
-                        parseInt(localStorage.getItem("galleryColumns") || "3", 10),
-                        maxCols
-                    );
-
-                    sliderContainer.innerHTML = `
-                        <label for="galleryColumnsSlider" style="margin-right:8px; white-space:nowrap; line-height:1;">
-                          ${t("columns")}:
-                        </label>
-                        <input
-                          type="range"
-                          id="galleryColumnsSlider"
-                          min="1"
-                          max="${maxCols}"
-                          value="${currentCols}"
-                          style="vertical-align:middle;"
-                        >
-                        <span id="galleryColumnsValue" style="margin-left:6px; line-height:1;">${currentCols}</span>
-                    `;
-                    // hookup gallery slider
-                    const gallerySlider = document.getElementById("galleryColumnsSlider");
-                    const galleryValue = document.getElementById("galleryColumnsValue");
-                    gallerySlider.oninput = (e) => {
-                        const v = +e.target.value;
-                        localStorage.setItem("galleryColumns", v);
-                        galleryValue.textContent = v;
-                        // update grid if already rendered
-                        const grid = document.querySelector(".gallery-container");
-                        if (grid) grid.style.gridTemplateColumns = `repeat(${v},1fr)`;
-                    };
-                } else {
-                    const currentHeight = parseInt(localStorage.getItem("rowHeight") ?? "48", 10);
-                    sliderContainer.innerHTML = `
-                        <label for="rowHeightSlider" style="margin-right:8px; white-space:nowrap; line-height:1;">
-                          ${t("row_height")}:
-                        </label>
-                        <input type="range" id="rowHeightSlider" min="31" max="60" value="${currentHeight}" style="vertical-align:middle;">
-                        <span id="rowHeightValue" style="margin-left:6px; line-height:1;">${currentHeight}px</span>
-                    `;
-                    // hookup row‐height slider
-                    const rowSlider = document.getElementById("rowHeightSlider");
-                    const rowValue = document.getElementById("rowHeightValue");
-                    rowSlider.oninput = (e) => {
-                        const v = e.target.value;
-                        document.documentElement.style.setProperty("--file-row-height", v + "px");
-                        localStorage.setItem("rowHeight", v);
-                        rowValue.textContent = v + "px";
-                    };
-                }
-            }
-
-            // 3) Render based on viewMode
-            if (window.viewMode === "gallery") {
-                renderGalleryView(folder);
-            } else {
-                renderFileTable(folder);
-            }
+            // hide folder strip
+            const strip = document.getElementById("folderStripContainer");
+            if (strip) strip.style.display = "none";
 
             updateFileActionButtons();
-            return data.files;
-        })
-        .catch((err) => {
-            console.error("Error loading file list:", err);
-            if (err !== "Unauthorized") {
-                fileListContainer.textContent = "Error loading files.";
-            }
             return [];
-        })
-        .finally(() => {
-            fileListContainer.style.visibility = "visible";
+        }
+
+        // 5) normalize files array
+        if (!Array.isArray(data.files)) {
+            data.files = Object.entries(data.files).map(([name, meta]) => {
+                meta.name = name;
+                return meta;
+            });
+        }
+        data.files = data.files.map(f => {
+            f.fullName = (f.path || f.name).trim().toLowerCase();
+            f.editable = canEditFile(f.name);
+            f.folder   = folder;
+            return f;
         });
+        fileData = data.files;
+
+        // 6) inject summary + slider
+        if (actionsContainer) {
+            // a) summary
+            let summaryElem = document.getElementById("fileSummary");
+            if (!summaryElem) {
+                summaryElem = document.createElement("div");
+                summaryElem.id = "fileSummary";
+                summaryElem.style.cssText = "float:right; margin:0 60px 0 auto; font-size:0.9em;";
+                actionsContainer.appendChild(summaryElem);
+            }
+            summaryElem.style.display = "block";
+            summaryElem.innerHTML = buildFolderSummary(fileData);
+
+            // b) slider
+            const viewMode = window.viewMode || "table";
+            let sliderContainer = document.getElementById("viewSliderContainer");
+            if (!sliderContainer) {
+                sliderContainer = document.createElement("div");
+                sliderContainer.id = "viewSliderContainer";
+                sliderContainer.style.cssText = "display:inline-flex; align-items:center; margin-right:auto; font-size:0.9em;";
+                actionsContainer.insertBefore(sliderContainer, summaryElem);
+            } else {
+                sliderContainer.style.display = "inline-flex";
+            }
+
+            if (viewMode === "gallery") {
+                const w = window.innerWidth;
+                let maxCols;
+                if   (w < 600)   maxCols = 1;
+                else if (w < 900)  maxCols = 2;
+                else if (w < 1200) maxCols = 4;
+                else               maxCols = 6;
+
+                const currentCols = Math.min(
+                    parseInt(localStorage.getItem("galleryColumns")||"3",10),
+                    maxCols
+                );
+
+                sliderContainer.innerHTML = `
+              <label for="galleryColumnsSlider" style="margin-right:8px;line-height:1;">
+                ${t("columns")}:
+              </label>
+              <input
+                type="range"
+                id="galleryColumnsSlider"
+                min="1"
+                max="${maxCols}"
+                value="${currentCols}"
+                style="vertical-align:middle;"
+              >
+              <span id="galleryColumnsValue" style="margin-left:6px;line-height:1;">${currentCols}</span>
+            `;
+                const gallerySlider = document.getElementById("galleryColumnsSlider");
+                const galleryValue  = document.getElementById("galleryColumnsValue");
+                gallerySlider.oninput = e => {
+                    const v = +e.target.value;
+                    localStorage.setItem("galleryColumns", v);
+                    galleryValue.textContent = v;
+                    document.querySelector(".gallery-container")
+                        ?.style.setProperty("grid-template-columns", `repeat(${v},1fr)`);
+                };
+            } else {
+                const currentHeight = parseInt(localStorage.getItem("rowHeight")||"48",10);
+                sliderContainer.innerHTML = `
+              <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
+                ${t("row_height")}:
+              </label>
+              <input type="range" id="rowHeightSlider" min="31" max="60" value="${currentHeight}" style="vertical-align:middle;">
+              <span id="rowHeightValue" style="margin-left:6px;line-height:1;">${currentHeight}px</span>
+            `;
+                const rowSlider = document.getElementById("rowHeightSlider");
+                const rowValue  = document.getElementById("rowHeightValue");
+                rowSlider.oninput = e => {
+                    const v = e.target.value;
+                    document.documentElement.style.setProperty("--file-row-height", v + "px");
+                    localStorage.setItem("rowHeight", v);
+                    rowValue.textContent = v + "px";
+                };
+            }
+        }
+
+        // 7) inject folder strip below actions, above file list
+        let strip = document.getElementById("folderStripContainer");
+        if (!strip) {
+            strip = document.createElement("div");
+            strip.id = "folderStripContainer";
+            strip.className = "folder-strip-container";
+            actionsContainer.parentNode.insertBefore(strip, actionsContainer);
+        }
+        if (window.showFoldersInList && subfolders.length) {
+            strip.innerHTML = subfolders.map(sf => `
+                <div class="folder-item" data-folder="${sf.full}">
+                  <i class="material-icons">folder</i>
+                  <div class="folder-name">${escapeHTML(sf.name)}</div>
+                </div>
+            `).join("");
+            strip.style.display = "flex";
+            strip.querySelectorAll(".folder-item").forEach(el => {
+                el.addEventListener("click", () => {
+                    const dest = el.dataset.folder;
+                    window.currentFolder = dest;
+                    localStorage.setItem("lastOpenedFolder", dest);
+                    // sync breadcrumb & tree
+                    updateBreadcrumbTitle(dest);
+                    document.querySelectorAll(".folder-option.selected")
+                        .forEach(o => o.classList.remove("selected"));
+                    document.querySelector(`.folder-option[data-folder="${dest}"]`)
+                        ?.classList.add("selected");
+                    // reload
+                    loadFileList(dest);
+                });
+            });
+        } else {
+            strip.style.display = "none";
+        }
+
+        // 8) render files
+        if (window.viewMode === "gallery") {
+            renderGalleryView(folder);
+        } else {
+            renderFileTable(folder);
+        }
+
+        updateFileActionButtons();
+        return data.files;
+
+    } catch (err) {
+        console.error("Error loading file list:", err);
+        if (err.message !== "Unauthorized") {
+            fileListContainer.textContent = "Error loading files.";
+        }
+        return [];
+    } finally {
+        fileListContainer.style.visibility = "visible";
+    }
 }
 
 /**
  * Update renderFileTable so it writes its content into the provided container.
  */
-export function renderFileTable(folder, container) {
+export function renderFileTable(folder, container, subfolders) {
     const fileListContent = container || document.getElementById("fileList");
     const searchTerm = (window.currentSearchTerm || "").toLowerCase();
     const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "10", 10);
@@ -407,6 +463,10 @@ export function renderFileTable(folder, container) {
     const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
 
     fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
+
+    fileListContent.querySelectorAll('.folder-item').forEach(el => {
+        el.addEventListener('click', () => loadFileList(el.dataset.folder));
+    });
 
     // pagination clicks
     const prevBtn = document.getElementById("prevPageBtn");

@@ -11,13 +11,18 @@
   <meta name="share-url" content="">
   <style>
     /* hide the app shell until JS says otherwise */
-    .main-wrapper { display: none; }
+    .main-wrapper {
+      display: none;
+    }
 
     /* full-screen white overlay while we check auth */
     #loadingOverlay {
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: var(--bg-color,#fff);
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--bg-color, #fff);
       z-index: 9999;
       display: flex;
       align-items: center;
@@ -386,6 +391,26 @@
               data-i18n-key="download_zip">Download ZIP</button>
             <button id="extractZipBtn" class="btn btn-sm btn-info" data-i18n-title="extract_zip"
               data-i18n-key="extract_zip_button">Extract Zip</button>
+            <button id="createFileBtn" class="btn action-btn" data-i18n-key="create_file">
+              ${t('create_file')}
+            </button>
+            <!-- Create File Modal -->
+            <div id="createFileModal" class="modal" style="display:none;">
+              <div class="modal-content">
+                <h4 data-i18n-key="create_new_file">Create New File</h4>
+                <input
+                  type="text"
+                  id="createFileNameInput"
+                  class="form-control"
+                  placeholder="Enter filename…"
+                  data-i18n-placeholder="newfile_placeholder"
+                />
+                <div class="modal-footer" style="margin-top:1rem; text-align:right;">
+                  <button id="cancelCreateFile" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
+                  <button id="confirmCreateFile" class="btn btn-primary" data-i18n-key="create">Create</button>
+                </div>
+              </div>
+            </div>
             <div id="downloadZipModal" class="modal" style="display:none;">
               <div class="modal-content">
                 <h4 data-i18n-key="download_zip_title">Download Selected Files as Zip</h4>
@@ -440,8 +465,7 @@
   <!-- Change Password, Add User, Remove User, Rename File, and Custom Confirm Modals (unchanged) -->
   <div id="changePasswordModal" class="modal" style="display:none;">
     <div class="modal-content" style="max-width:400px; margin:auto;">
-      <span id="closeChangePasswordModal"
-        class="editor-close-btn">&times;</span>
+      <span id="closeChangePasswordModal" class="editor-close-btn">&times;</span>
       <h3 data-i18n-key="change_password_title">Change Password</h3>
       <input type="password" id="oldPassword" class="form-control" data-i18n-placeholder="old_password"
         placeholder="Old Password" style="width:100%; margin: 5px 0;" />
@@ -459,15 +483,15 @@
       <form id="addUserForm">
         <label for="newUsername" data-i18n-key="username">Username:</label>
         <input type="text" id="newUsername" class="form-control" required />
-  
+
         <label for="addUserPassword" data-i18n-key="password">Password:</label>
         <input type="password" id="addUserPassword" class="form-control" required />
-  
+
         <div id="adminCheckboxContainer">
           <input type="checkbox" id="isAdmin" />
           <label for="isAdmin" data-i18n-key="grant_admin">Grant Admin Access</label>
         </div>
-  
+
         <div class="button-container">
           <!-- Cancel stays type="button" -->
           <button type="button" id="cancelUserBtn" class="btn btn-secondary" data-i18n-key="cancel">
