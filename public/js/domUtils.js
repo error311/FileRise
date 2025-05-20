@@ -33,54 +33,66 @@ export function toggleAllCheckboxes(masterCheckbox) {
 export function updateFileActionButtons() {
   const fileCheckboxes = document.querySelectorAll("#fileList .file-checkbox");
   const selectedCheckboxes = document.querySelectorAll("#fileList .file-checkbox:checked");
+
+  const deleteBtn = document.getElementById("deleteSelectedBtn");
   const copyBtn = document.getElementById("copySelectedBtn");
   const moveBtn = document.getElementById("moveSelectedBtn");
-  const deleteBtn = document.getElementById("deleteSelectedBtn");
   const zipBtn = document.getElementById("downloadZipBtn");
   const extractZipBtn = document.getElementById("extractZipBtn");
+  const createBtn = document.getElementById("createFileBtn");
 
-   // keep the “select all” in sync ——
-   const master = document.getElementById("selectAll");
-   if (master) {
-     if (selectedCheckboxes.length === fileCheckboxes.length) {
-       master.checked = true;
-       master.indeterminate = false;
-     } else if (selectedCheckboxes.length === 0) {
-       master.checked = false;
-       master.indeterminate = false;
-     } else {
-       master.checked = false;
-       master.indeterminate = true;
-     }
-   }
+  const anyFiles = fileCheckboxes.length > 0;
+  const anySelected = selectedCheckboxes.length > 0;
+  const anyZip = Array.from(selectedCheckboxes)
+    .some(cb => cb.value.toLowerCase().endsWith(".zip"));
 
-  if (fileCheckboxes.length === 0) {
-    if (copyBtn) copyBtn.style.display = "none";
-    if (moveBtn) moveBtn.style.display = "none";
-    if (deleteBtn) deleteBtn.style.display = "none";
-    if (zipBtn) zipBtn.style.display = "none";
-    if (extractZipBtn) extractZipBtn.style.display = "none";
-  } else {
-    if (copyBtn) copyBtn.style.display = "inline-block";
-    if (moveBtn) moveBtn.style.display = "inline-block";
-    if (deleteBtn) deleteBtn.style.display = "inline-block";
-    if (zipBtn) zipBtn.style.display = "inline-block";
-    if (extractZipBtn) extractZipBtn.style.display = "inline-block";
-
-    const anySelected = selectedCheckboxes.length > 0;
-    if (copyBtn) copyBtn.disabled = !anySelected;
-    if (moveBtn) moveBtn.disabled = !anySelected;
-    if (deleteBtn) deleteBtn.disabled = !anySelected;
-    if (zipBtn) zipBtn.disabled = !anySelected;
-
-    if (extractZipBtn) {
-      // Enable only if at least one selected file ends with .zip (case-insensitive).
-      const anyZipSelected = Array.from(selectedCheckboxes).some(chk =>
-        chk.value.toLowerCase().endsWith(".zip")
-      );
-      extractZipBtn.disabled = !anyZipSelected;
+  // — Select All checkbox sync (unchanged) —
+  const master = document.getElementById("selectAll");
+  if (master) {
+    if (selectedCheckboxes.length === fileCheckboxes.length) {
+      master.checked = true;
+      master.indeterminate = false;
+    } else if (selectedCheckboxes.length === 0) {
+      master.checked = false;
+      master.indeterminate = false;
+    } else {
+      master.checked = false;
+      master.indeterminate = true;
     }
   }
+
+  // Delete / Copy / Move: only show when something is selected
+  if (deleteBtn) {
+    deleteBtn.style.display = anySelected ? "" : "none";
+  }
+  if (copyBtn) {
+    copyBtn.style.display = anySelected ? "" : "none";
+  }
+  if (moveBtn) {
+    moveBtn.style.display = anySelected ? "" : "none";
+  }
+
+  // Download ZIP: only show when something is selected
+  if (zipBtn) {
+    zipBtn.style.display = anySelected ? "" : "none";
+  }
+
+  // Extract ZIP: only show when a selected file is a .zip
+  if (extractZipBtn) {
+    extractZipBtn.style.display = anyZip ? "" : "none";
+  }
+
+  // Create File: only show when nothing is selected
+  if (createBtn) {
+    createBtn.style.display = anySelected ? "none" : "";
+  }
+
+  // Finally disable the ones that are shown but shouldn’t be clickable
+  if (deleteBtn) deleteBtn.disabled = !anySelected;
+  if (copyBtn) copyBtn.disabled = !anySelected;
+  if (moveBtn) moveBtn.disabled = !anySelected;
+  if (zipBtn) zipBtn.disabled = !anySelected;
+  if (extractZipBtn) extractZipBtn.disabled = !anyZip;
 }
 
 export function showToast(message, duration = 3000) {

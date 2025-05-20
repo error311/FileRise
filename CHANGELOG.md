@@ -1,6 +1,16 @@
 # Changelog
 
-## Changes 5/19/2025
+## Changes 5/20/2025 1.3.6
+
+- **domUtils.js**
+  - `updateFileActionButtons`
+    - Hide selection buttons (`Delete Files`, `Copy Files`, `Move Files` & `Download ZIP`) until file is selected.
+    - Hides `Extract ZIP` until selecting zip files
+    - Hide `Create File` button when file list items are selected.
+
+---
+
+## Changes 5/19/2025 1.3.5
 
 ### Added Folder strip & Create File
 
