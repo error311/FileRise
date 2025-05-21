@@ -17,6 +17,11 @@ import { bindFileListContextMenu } from './fileMenu.js';
 import { openDownloadModal } from './fileActions.js';
 import { openTagModal, openMultiTagModal } from './fileTags.js';
 import { getParentFolder, updateBreadcrumbTitle, setupBreadcrumbDelegation } from './folderManager.js';
+import {
+    folderDragOverHandler,
+    folderDragLeaveHandler,
+    folderDropHandler
+} from './fileDragDrop.js';
 
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
@@ -190,7 +195,7 @@ window.updateRowHighlight = updateRowHighlight;
 export async function loadFileList(folderParam) {
     const folder = folderParam || "root";
     const fileListContainer = document.getElementById("fileList");
-    const actionsContainer   = document.getElementById("fileListActions");
+    const actionsContainer = document.getElementById("fileListActions");
 
     // 1) show loader
     fileListContainer.style.visibility = "hidden";
@@ -207,15 +212,15 @@ export async function loadFileList(folderParam) {
             window.location.href = "/api/auth/logout.php";
             throw new Error("Unauthorized");
         }
-        const data      = await filesRes.json();
+        const data = await filesRes.json();
         const folderRaw = await foldersRes.json();
 
         // --- build ONLY the *direct* children of current folder ---
         let subfolders = [];
-        const hidden = new Set([ "profile_pics", "trash" ]);
+        const hidden = new Set(["profile_pics", "trash"]);
         if (Array.isArray(folderRaw)) {
             const allPaths = folderRaw.map(item => item.folder ?? item);
-            const depth    = folder === "root" ? 1 : folder.split("/").length + 1;
+            const depth = folder === "root" ? 1 : folder.split("/").length + 1;
             subfolders = allPaths
                 .filter(p => {
                     if (folder === "root") {
@@ -261,7 +266,7 @@ export async function loadFileList(folderParam) {
         data.files = data.files.map(f => {
             f.fullName = (f.path || f.name).trim().toLowerCase();
             f.editable = canEditFile(f.name);
-            f.folder   = folder;
+            f.folder = folder;
             return f;
         });
         fileData = data.files;
@@ -294,13 +299,13 @@ export async function loadFileList(folderParam) {
             if (viewMode === "gallery") {
                 const w = window.innerWidth;
                 let maxCols;
-                if   (w < 600)   maxCols = 1;
-                else if (w < 900)  maxCols = 2;
+                if (w < 600) maxCols = 1;
+                else if (w < 900) maxCols = 2;
                 else if (w < 1200) maxCols = 4;
-                else               maxCols = 6;
+                else maxCols = 6;
 
                 const currentCols = Math.min(
-                    parseInt(localStorage.getItem("galleryColumns")||"3",10),
+                    parseInt(localStorage.getItem("galleryColumns") || "3", 10),
                     maxCols
                 );
 
@@ -319,7 +324,7 @@ export async function loadFileList(folderParam) {
               <span id="galleryColumnsValue" style="margin-left:6px;line-height:1;">${currentCols}</span>
             `;
                 const gallerySlider = document.getElementById("galleryColumnsSlider");
-                const galleryValue  = document.getElementById("galleryColumnsValue");
+                const galleryValue = document.getElementById("galleryColumnsValue");
                 gallerySlider.oninput = e => {
                     const v = +e.target.value;
                     localStorage.setItem("galleryColumns", v);
@@ -328,7 +333,7 @@ export async function loadFileList(folderParam) {
                         ?.style.setProperty("grid-template-columns", `repeat(${v},1fr)`);
                 };
             } else {
-                const currentHeight = parseInt(localStorage.getItem("rowHeight")||"48",10);
+                const currentHeight = parseInt(localStorage.getItem("rowHeight") || "48", 10);
                 sliderContainer.innerHTML = `
               <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
                 ${t("row_height")}:
@@ -337,7 +342,7 @@ export async function loadFileList(folderParam) {
               <span id="rowHeightValue" style="margin-left:6px;line-height:1;">${currentHeight}px</span>
             `;
                 const rowSlider = document.getElementById("rowHeightSlider");
-                const rowValue  = document.getElementById("rowHeightValue");
+                const rowValue = document.getElementById("rowHeightValue");
                 rowSlider.oninput = e => {
                     const v = e.target.value;
                     document.documentElement.style.setProperty("--file-row-height", v + "px");
@@ -357,26 +362,31 @@ export async function loadFileList(folderParam) {
         }
         if (window.showFoldersInList && subfolders.length) {
             strip.innerHTML = subfolders.map(sf => `
-                <div class="folder-item" data-folder="${sf.full}">
-                  <i class="material-icons">folder</i>
-                  <div class="folder-name">${escapeHTML(sf.name)}</div>
-                </div>
+              <div class="folder-item" data-folder="${sf.full}" draggable="true">
+                <i class="material-icons">folder</i>
+                <div class="folder-name">${escapeHTML(sf.name)}</div>
+              </div>
             `).join("");
             strip.style.display = "flex";
+
             strip.querySelectorAll(".folder-item").forEach(el => {
+                // click‐to‐navigate
                 el.addEventListener("click", () => {
                     const dest = el.dataset.folder;
                     window.currentFolder = dest;
                     localStorage.setItem("lastOpenedFolder", dest);
-                    // sync breadcrumb & tree
                     updateBreadcrumbTitle(dest);
                     document.querySelectorAll(".folder-option.selected")
                         .forEach(o => o.classList.remove("selected"));
                     document.querySelector(`.folder-option[data-folder="${dest}"]`)
                         ?.classList.add("selected");
-                    // reload
                     loadFileList(dest);
                 });
+
+                // drag & drop handlers
+                el.addEventListener("dragover", folderDragOverHandler);
+                el.addEventListener("dragleave", folderDragLeaveHandler);
+                el.addEventListener("drop", folderDropHandler);
             });
         } else {
             strip.style.display = "none";

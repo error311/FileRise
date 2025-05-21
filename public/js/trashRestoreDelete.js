@@ -79,15 +79,16 @@ export function setupTrashRestoreDelete() {
                 body: JSON.stringify({ files })
             })
                 .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast(data.success);
-                        toggleVisibility("restoreFilesModal", false);
-                        loadFileList(window.currentFolder);
-                        loadFolderTree(window.currentFolder);
+                .then(() => {
+                    // Always report what we actually restored
+                    if (files.length === 1) {
+                        showToast(`Restored file: ${files[0]}`);
                     } else {
-                        showToast(data.error);
+                        showToast(`Restored files: ${files.join(", ")}`);
                     }
+                    toggleVisibility("restoreFilesModal", false);
+                    loadFileList(window.currentFolder);
+                    loadFolderTree(window.currentFolder);
                 })
                 .catch(err => {
                     console.error("Error restoring files:", err);
@@ -119,16 +120,15 @@ export function setupTrashRestoreDelete() {
                 body: JSON.stringify({ files })
             })
                 .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast(data.success);
-                        toggleVisibility("restoreFilesModal", false);
-                        loadFileList(window.currentFolder);
-                        loadFolderTree(window.currentFolder);
-
+                .then(() => {
+                    if (files.length === 1) {
+                        showToast(`Restored file: ${files[0]}`);
                     } else {
-                        showToast(data.error);
+                        showToast(`Restored files: ${files.join(", ")}`);
                     }
+                    toggleVisibility("restoreFilesModal", false);
+                    loadFileList(window.currentFolder);
+                    loadFolderTree(window.currentFolder);
                 })
                 .catch(err => {
                     console.error("Error restoring files:", err);

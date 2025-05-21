@@ -1,16 +1,29 @@
 # Changelog
 
-## Changes 5/20/2025 1.3.6
+## Changes 5/21/2025
+
+- **Drag & Drop to Folder Strip**  
+  - Enabled dragging files from the file list directly onto the folder-strip items.  
+  - Hooked up `folderDragOverHandler`, `folderDragLeaveHandler`, and `folderDropHandler` to `.folder-strip-container .folder-item`.  
+  - On drop, files are moved via `/api/file/moveFiles.php` and the file list is refreshed.
+
+- **Restore files from trash Toast Message**  
+  - Changed the restore handlers so that the toast always reports the actual file(s) restored (e.g. “Restored file: foo.txt”) instead of “No trash record found.”  
+  - Removed reliance on backend message payload and now generate the confirmation text client-side based on selected items.  
+
+---
+
+## Changes 5/20/2025 v1.3.6
 
 - **domUtils.js**
   - `updateFileActionButtons`
     - Hide selection buttons (`Delete Files`, `Copy Files`, `Move Files` & `Download ZIP`) until file is selected.
-    - Hides `Extract ZIP` until selecting zip files
+    - Hide `Extract ZIP` until selecting zip files
     - Hide `Create File` button when file list items are selected.
 
 ---
 
-## Changes 5/19/2025 1.3.5
+## Changes 5/19/2025 v1.3.5
 
 ### Added Folder strip & Create File
 
