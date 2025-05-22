@@ -971,21 +971,27 @@ body.dark-mode #fileList table tr {
 }
 
 :root {
-  --file-row-height: 48px; /* default, will be overwritten by your slider */
+  --file-row-height: 48px;
 }
 
-/* Force each <tr> to be exactly the var() height */
 #fileList table.table tbody tr {
-  height: var(--file-row-height) !important;
+  height: auto !important;
+  min-height: var(--file-row-height) !important;
 }
 
-/* And force each <td> to match, with no extra padding or line-height */
-#fileList table.table tbody td {
+#fileList table.table tbody td:not(.file-name-cell) {
   height: var(--file-row-height) !important;
   line-height: var(--file-row-height) !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   vertical-align: middle;
+}
+
+#fileList table.table tbody td.file-name-cell {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2em !important;
+  height: auto !important;
 }
 
 /* ===========================================================
@@ -2261,12 +2267,19 @@ body.dark-mode .user-dropdown .user-menu .item:hover {
   align-items: center;
   cursor: pointer;
   width: 80px;
-  color: inherit; /* icon will pick up text color */
+  color: inherit;
   font-size: 0.85em;
 }
 .folder-strip-container .folder-item i.material-icons {
   font-size: 28px;
   margin-bottom: 4px;
+}
+.folder-strip-container .folder-name {
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 80px;
+  margin-top: 4px;
 }
 
 .folder-strip-container .folder-item i.material-icons {

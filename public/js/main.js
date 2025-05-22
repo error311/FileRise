@@ -64,35 +64,26 @@ export function initializeApp() {
 }
 
 export function loadCsrfToken() {
-  return fetchWithCsrf('/api/auth/token.php', {
-    method: 'GET'
-  })
+  return fetchWithCsrf('/api/auth/token.php', { method: 'GET' })
     .then(res => {
-      if (!res.ok) {
-        throw new Error(`Token fetch failed with status ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Token fetch failed with status ${res.status}`);
       return res.json();
     })
     .then(({ csrf_token, share_url }) => {
-      // Update global and <meta>
       window.csrfToken = csrf_token;
-      let meta = document.querySelector('meta[name="csrf-token"]');
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = 'csrf-token';
-        document.head.appendChild(meta);
-      }
+
+      // update CSRF meta
+      let meta = document.querySelector('meta[name="csrf-token"]') ||
+        Object.assign(document.head.appendChild(document.createElement('meta')), { name: 'csrf-token' });
       meta.content = csrf_token;
 
-      let shareMeta = document.querySelector('meta[name="share-url"]');
-      if (!shareMeta) {
-        shareMeta = document.createElement('meta');
-        shareMeta.name = 'share-url';
-        document.head.appendChild(shareMeta);
-      }
-      shareMeta.content = share_url;
+      // force share_url to match wherever we're browsing
+      const actualShare = window.location.origin;
+      let shareMeta = document.querySelector('meta[name="share-url"]') ||
+        Object.assign(document.head.appendChild(document.createElement('meta')), { name: 'share-url' });
+      shareMeta.content = actualShare;
 
-      return { csrf_token, share_url };
+      return { csrf_token, share_url: actualShare };
     });
 }
 

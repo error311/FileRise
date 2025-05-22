@@ -338,7 +338,7 @@ export async function loadFileList(folderParam) {
               <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
                 ${t("row_height")}:
               </label>
-              <input type="range" id="rowHeightSlider" min="31" max="60" value="${currentHeight}" style="vertical-align:middle;">
+              <input type="range" id="rowHeightSlider" min="30" max="60" value="${currentHeight}" style="vertical-align:middle;">
               <span id="rowHeightValue" style="margin-left:6px;line-height:1;">${currentHeight}px</span>
             `;
                 const rowSlider = document.getElementById("rowHeightSlider");

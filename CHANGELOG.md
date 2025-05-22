@@ -1,5 +1,13 @@
 # Changelog
 
+## Changes 5/22/2025 v1.3.7
+
+- `.folder-strip-container .folder-name` css added to center text below folder material icon.
+- Override file share_url to always use current origin
+- Update `fileList` css to keep file name wrapping tight.
+
+---
+
 ## Changes 5/21/2025
 
 - **Drag & Drop to Folder Strip**  
