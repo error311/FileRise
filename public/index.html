@@ -391,9 +391,36 @@
               data-i18n-key="download_zip">Download ZIP</button>
             <button id="extractZipBtn" class="btn action-btn btn-sm btn-info" data-i18n-title="extract_zip"
               data-i18n-key="extract_zip_button">Extract Zip</button>
-            <button id="createFileBtn" class="btn action-btn" data-i18n-key="create_file">
-              ${t('create_file')}
-            </button>
+              <div id="createDropdown" class="dropdown-container" style="position:relative; display:inline-block;">
+                <button id="createBtn"  class="btn action-btn" data-i18n-key="create">
+                  ${t('create')} <span class="material-icons" style="font-size:16px;vertical-align:middle;">arrow_drop_down</span>
+                </button>
+                <ul
+                  id="createMenu"
+                  class="dropdown-menu"
+                  style="
+                    display: none;
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    margin: 4px 0 0;
+                    padding: 0;
+                    list-style: none;
+                    background: #fff;
+                    border: 1px solid #ccc;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                    z-index: 1000;
+                    min-width: 140px;
+                  "
+                >
+                  <li id="createFileOption" class="dropdown-item" data-i18n-key="create_file" style="padding:8px 12px; cursor:pointer;">
+                    ${t('create_file')}
+                  </li>
+                  <li id="createFolderOption" class="dropdown-item" data-i18n-key="create_folder" style="padding:8px 12px; cursor:pointer;">
+                    ${t('create_folder')}
+                  </li>
+                </ul>
+              </div>
             <!-- Create File Modal -->
             <div id="createFileModal" class="modal" style="display:none;">
               <div class="modal-content">

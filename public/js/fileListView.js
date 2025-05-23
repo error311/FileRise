@@ -16,7 +16,16 @@ import { t } from './i18n.js';
 import { bindFileListContextMenu } from './fileMenu.js';
 import { openDownloadModal } from './fileActions.js';
 import { openTagModal, openMultiTagModal } from './fileTags.js';
-import { getParentFolder, updateBreadcrumbTitle, setupBreadcrumbDelegation } from './folderManager.js';
+import {
+    getParentFolder,
+    updateBreadcrumbTitle,
+    setupBreadcrumbDelegation,
+    showFolderManagerContextMenu,
+    hideFolderManagerContextMenu,
+    openRenameFolderModal,
+    openDeleteFolderModal
+} from './folderManager.js';
+import { openFolderShareModal } from './folderShareModal.js';
 import {
     folderDragOverHandler,
     folderDragLeaveHandler,
@@ -240,17 +249,40 @@ export async function loadFileList(folderParam) {
         if (!data.files || Object.keys(data.files).length === 0) {
             fileListContainer.textContent = t("no_files_found");
 
-            // hide summary
+            // hide summary + slider
             const summaryElem = document.getElementById("fileSummary");
             if (summaryElem) summaryElem.style.display = "none";
-
-            // hide slider
             const sliderContainer = document.getElementById("viewSliderContainer");
             if (sliderContainer) sliderContainer.style.display = "none";
 
-            // hide folder strip
-            const strip = document.getElementById("folderStripContainer");
-            if (strip) strip.style.display = "none";
+            // show/hide folder strip *even when there are no files*
+            let strip = document.getElementById("folderStripContainer");
+            if (!strip) {
+                strip = document.createElement("div");
+                strip.id = "folderStripContainer";
+                strip.className = "folder-strip-container";
+                actionsContainer.parentNode.insertBefore(strip, fileListContainer);
+            }
+            if (window.showFoldersInList && subfolders.length) {
+                strip.innerHTML = subfolders.map(sf => `
+        <div class="folder-item" data-folder="${sf.full}">
+          <i class="material-icons">folder</i>
+          <div class="folder-name">${escapeHTML(sf.name)}</div>
+        </div>
+      `).join("");
+                strip.style.display = "flex";
+                strip.querySelectorAll(".folder-item").forEach(el => {
+                    el.addEventListener("click", () => {
+                        const dest = el.dataset.folder;
+                        window.currentFolder = dest;
+                        localStorage.setItem("lastOpenedFolder", dest);
+                        updateBreadcrumbTitle(dest);
+                        loadFileList(dest);
+                    });
+                });
+            } else {
+                strip.style.display = "none";
+            }
 
             updateFileActionButtons();
             return [];
@@ -360,34 +392,73 @@ export async function loadFileList(folderParam) {
             strip.className = "folder-strip-container";
             actionsContainer.parentNode.insertBefore(strip, actionsContainer);
         }
+
         if (window.showFoldersInList && subfolders.length) {
             strip.innerHTML = subfolders.map(sf => `
-              <div class="folder-item" data-folder="${sf.full}" draggable="true">
-                <i class="material-icons">folder</i>
-                <div class="folder-name">${escapeHTML(sf.name)}</div>
-              </div>
-            `).join("");
+    <div class="folder-item" data-folder="${sf.full}" draggable="true">
+      <i class="material-icons">folder</i>
+      <div class="folder-name">${escapeHTML(sf.name)}</div>
+    </div>
+  `).join("");
             strip.style.display = "flex";
 
+            // wire up each folder‐tile
             strip.querySelectorAll(".folder-item").forEach(el => {
-                // click‐to‐navigate
+                // 1) click to navigate
                 el.addEventListener("click", () => {
                     const dest = el.dataset.folder;
                     window.currentFolder = dest;
                     localStorage.setItem("lastOpenedFolder", dest);
                     updateBreadcrumbTitle(dest);
-                    document.querySelectorAll(".folder-option.selected")
-                        .forEach(o => o.classList.remove("selected"));
-                    document.querySelector(`.folder-option[data-folder="${dest}"]`)
-                        ?.classList.add("selected");
+                    document.querySelectorAll(".folder-option.selected").forEach(o => o.classList.remove("selected"));
+                    document.querySelector(`.folder-option[data-folder="${dest}"]`)?.classList.add("selected");
                     loadFileList(dest);
                 });
 
-                // drag & drop handlers
+                // 2) drag & drop
                 el.addEventListener("dragover", folderDragOverHandler);
                 el.addEventListener("dragleave", folderDragLeaveHandler);
                 el.addEventListener("drop", folderDropHandler);
+
+                // 3) right-click context menu
+                el.addEventListener("contextmenu", e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const dest = el.dataset.folder;
+                    window.currentFolder = dest;
+                    localStorage.setItem("lastOpenedFolder", dest);
+
+                    // highlight the strip tile
+                    strip.querySelectorAll(".folder-item.selected").forEach(i => i.classList.remove("selected"));
+                    el.classList.add("selected");
+
+                    // reuse folderManager menu
+                    const menuItems = [
+                        {
+                            label: t("create_folder"),
+                            action: () => document.getElementById("createFolderModal").style.display = "block"
+                        },
+                        {
+                            label: t("rename_folder"),
+                            action: () => openRenameFolderModal()
+                        },
+                        {
+                            label: t("folder_share"),
+                            action: () => openFolderShareModal(dest)
+                        },
+                        {
+                            label: t("delete_folder"),
+                            action: () => openDeleteFolderModal()
+                        }
+                    ];
+                    showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+                });
             });
+
+            // one global click to hide any open context menu
+            document.addEventListener("click", hideFolderManagerContextMenu);
+
         } else {
             strip.style.display = "none";
         }

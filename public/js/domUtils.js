@@ -39,7 +39,7 @@ export function updateFileActionButtons() {
   const moveBtn = document.getElementById("moveSelectedBtn");
   const zipBtn = document.getElementById("downloadZipBtn");
   const extractZipBtn = document.getElementById("extractZipBtn");
-  const createBtn = document.getElementById("createFileBtn");
+  const createBtn = document.getElementById("createBtn");
 
   const anyFiles = fileCheckboxes.length > 0;
   const anySelected = selectedCheckboxes.length > 0;

@@ -848,9 +848,25 @@ body:not(.dark-mode) .material-icons.pauseResumeBtn:hover {
   background-color: #00796B;
 }
 
-#createFileBtn {
+#createBtn {
   background-color: #007bff;
   color: white;
+}
+
+body.dark-mode .dropdown-menu {
+  background-color: #2c2c2c !important;
+  border-color:   #444    !important;
+  color:          #e0e0e0!important;
+}
+body.dark-mode .dropdown-menu .dropdown-item {
+  color: #e0e0e0 !important;
+}
+
+.dropdown-item:hover {
+  background-color: rgba(0,0,0,0.05);
+}
+body.dark-mode .dropdown-item:hover {
+  background-color: rgba(255,255,255,0.1);
 }
 
 #fileList button.edit-btn {

@@ -688,4 +688,35 @@ document.addEventListener("DOMContentLoaded", () => {
   attachEnterKeyListener("downloadFileModal", "confirmSingleDownloadButton");
 });
 
+document.addEventListener('DOMContentLoaded', () => {
+  const btn      = document.getElementById('createBtn');
+  const menu     = document.getElementById('createMenu');
+  const fileOpt  = document.getElementById('createFileOption');
+  const folderOpt= document.getElementById('createFolderOption');
+
+  // Toggle dropdown on click
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+  });
+
+  // Create File
+  fileOpt.addEventListener('click', () => {
+    menu.style.display = 'none';
+    openCreateFileModal();  // your existing function
+  });
+
+  // Create Folder
+  folderOpt.addEventListener('click', () => {
+    menu.style.display = 'none';
+    document.getElementById('createFolderModal').style.display = 'block';
+    document.getElementById('newFolderName').focus();
+  });
+
+  // Close if you click anywhere else
+  document.addEventListener('click', () => {
+    menu.style.display = 'none';
+  });
+});
+
 window.renameFile = renameFile;

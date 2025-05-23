@@ -551,7 +551,7 @@ export function loadFolderList(selectedFolder) {
 document.getElementById("renameFolderBtn").addEventListener("click", openRenameFolderModal);
 document.getElementById("deleteFolderBtn").addEventListener("click", openDeleteFolderModal);
 
-function openRenameFolderModal() {
+export function openRenameFolderModal() {
   const selectedFolder = window.currentFolder || "root";
   if (!selectedFolder || selectedFolder === "root") {
     showToast("Please select a valid folder to rename.");
@@ -614,7 +614,7 @@ document.getElementById("submitRenameFolder").addEventListener("click", function
     });
 });
 
-function openDeleteFolderModal() {
+export function openDeleteFolderModal() {
   const selectedFolder = window.currentFolder || "root";
   if (!selectedFolder || selectedFolder === "root") {
     showToast("Please select a valid folder to delete.");
@@ -718,7 +718,7 @@ document.getElementById("submitCreateFolder").addEventListener("click", async ()
 });
 
 // ---------- CONTEXT MENU SUPPORT FOR FOLDER MANAGER ----------
-function showFolderManagerContextMenu(x, y, menuItems) {
+export function showFolderManagerContextMenu(x, y, menuItems) {
   let menu = document.getElementById("folderManagerContextMenu");
   if (!menu) {
     menu = document.createElement("div");
@@ -765,7 +765,7 @@ function showFolderManagerContextMenu(x, y, menuItems) {
   menu.style.display = "block";
 }
 
-function hideFolderManagerContextMenu() {
+export function hideFolderManagerContextMenu() {
   const menu = document.getElementById("folderManagerContextMenu");
   if (menu) {
     menu.style.display = "none";
@@ -796,7 +796,7 @@ function folderManagerContextMenuHandler(e) {
     },
     {
       label: t("folder_share"),
-      action: () => { openFolderShareModal(); }
+      action: () => { openFolderShareModal(folder); }
     },
     {
       label: t("delete_folder"),

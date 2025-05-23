@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 5/23/2025 v1.3.8
+
+- **Folder-strip context menu**  
+  - Enabled right-click on items in the new folder strip (above file list) to open the same “Create / Rename / Share / Delete Folder” menu as in the main folder tree.  
+  - Bound `contextmenu` event on each `.folder-item` in `loadFileList` to:
+    - Prevent the default browser menu  
+    - Highlight the clicked folder-strip item  
+    - Invoke `showFolderManagerContextMenu` with menu entries:
+      - Create Folder  
+      - Rename Folder  
+      - Share Folder (passes the strip’s `data-folder` value)  
+      - Delete Folder  
+  - Ensured menu actions are wrapped in arrow functions (`() => …`) so they fire only on menu-item click, not on render.
+
+- Refactored folder-strip injection in `fileListView.js` to:
+  - Mark each strip item as `draggable="true"` (for drag-and-drop)  
+  - Add `el.addEventListener("contextmenu", …)` alongside existing click/drag handlers  
+  - Clean up global click listener for hiding the context menu
+
+- Prevented premature invocation of `openFolderShareModal` by switching to `action: () => openFolderShareModal(dest)` instead of calling it directly.
+
+- **Create File/Folder dropdown**  
+  - Replaced standalone “Create File” button with a combined dropdown button in the actions toolbar.  
+  - New markup
+  - Wired up JS handlers in `fileActions.js`:
+    - `#createFileOption` → `openCreateFileModal()`  
+    - `#createFolderOption` → `document.getElementById('createFolderModal').style.display = 'block'`  
+    - Toggled `.dropdown-menu` visibility on button click, and closed on outside click.  
+  - Applied dark-mode support: dropdown background and text colors switch with `.dark-mode` class.  
+
+---
+
 ## Changes 5/22/2025 v1.3.7
 
 - `.folder-strip-container .folder-name` css added to center text below folder material icon.
