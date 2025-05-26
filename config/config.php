@@ -28,7 +28,7 @@ define('TRASH_DIR',     UPLOAD_DIR . 'trash/');
 define('TIMEZONE',      'America/New_York');
 define('DATE_TIME_FORMAT','m/d/y  h:iA');
 define('TOTAL_UPLOAD_SIZE','5G');
-define('REGEX_FOLDER_NAME', '/^[\p{L}\p{N}_\-\s\/\\\\]+$/u');
+define('REGEX_FOLDER_NAME','/^(?!^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$)(?!.*[. ]$)(?:[^<>:"\/\\\\|?*\x00-\x1F]{1,255})(?:[\/\\\\][^<>:"\/\\\\|?*\x00-\x1F]{1,255})*$/xu');
 define('PATTERN_FOLDER_NAME','[\p{L}\p{N}_\-\s\/\\\\]+');
 define('REGEX_FILE_NAME', '/^[^\x00-\x1F\/\\\\]{1,255}$/u');
 define('REGEX_USER',       '/^[\p{L}\p{N}_\- ]+$/u');

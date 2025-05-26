@@ -96,12 +96,14 @@ class FolderController
 
         // Basic sanitation for folderName.
         if (!preg_match(REGEX_FOLDER_NAME, $folderName)) {
+            http_response_code(400);
             echo json_encode(['error' => 'Invalid folder name.']);
             exit;
         }
 
         // Optionally sanitize the parent.
         if ($parent && !preg_match(REGEX_FOLDER_NAME, $parent)) {
+            http_response_code(400);
             echo json_encode(['error' => 'Invalid parent folder name.']);
             exit;
         }

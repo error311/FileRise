@@ -1,5 +1,15 @@
 # Changelog
 
+## Changes 5/26/2025
+
+- Updated `REGEX_FOLDER_NAME` in `config.php` to forbids < > : " | ? * characters in folder names.
+  - Ensures the whole name can’t end in a space or period.
+  - Blocks Windows device names.
+
+- Updated `FolderController.php` when `createFolder` issues invalid folder name to return `http_response_code(400);`
+
+---
+
 ## Changes 5/23/2025 v1.3.8
 
 - **Folder-strip context menu**  
