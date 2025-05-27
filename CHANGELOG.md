@@ -1,5 +1,14 @@
 # Changelog
 
+## Changes 5/27/2025
+
+- Support for mounting CIFS (SMB) network shares via Docker volumes
+- New `scripts/scan_uploads.php` script to generate metadata for imported files and folders
+- `SCAN_ON_START` environment variable to trigger automatic scanning on container startup
+- Documentation for configuring CIFS share mounting and scanning
+
+---
+
 ## Changes 5/26/2025
 
 - Updated `REGEX_FOLDER_NAME` in `config.php` to forbids < > : " | ? * characters in folder names.

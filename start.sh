@@ -110,3 +110,8 @@ fi
 
 echo "🔥 Starting Apache..."
 exec apachectl -D FOREGROUND
+
+if [ "$SCAN_ON_START" = "true" ]; then
+  echo "Scanning uploads directory to generate metadata..."
+  php /var/www/scripts/scan_uploads.php
+fi
