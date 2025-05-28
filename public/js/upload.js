@@ -669,6 +669,18 @@ function submitFiles(allFiles) {
         }
         allSucceeded = false;
       }
+      if (file.isClipboard) {
+        setTimeout(() => {
+          window.selectedFiles = [];
+          updateFileInfoCount();
+          const progressContainer = document.getElementById("uploadProgressContainer");
+          if (progressContainer) progressContainer.innerHTML = "";
+          const fileInfoContainer = document.getElementById("fileInfoContainer");
+          if (fileInfoContainer) {
+            fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
+          }
+        }, 5000);
+      }
     
       // ─── Only now count this chunk as finished ───────────────────
       finishedCount++;
@@ -848,3 +860,38 @@ function initUpload() {
 }
 
 export { initUpload };
+
+// -------------------------
+// Clipboard Paste Handler (Mimics Drag-and-Drop)
+// -------------------------
+document.addEventListener('paste', function handlePasteUpload(e) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  const files = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.kind === 'file') {
+      const file = item.getAsFile();
+      if (file) {
+        const ext = file.name.split('.').pop() || 'png';
+        const renamedFile = new File([file], `image${Date.now()}.${ext}`, { type: file.type });
+        renamedFile.isClipboard = true;
+
+        Object.defineProperty(renamedFile, 'customRelativePath', {
+          value: renamedFile.name,
+          writable: true,
+          configurable: true
+        });
+
+        files.push(renamedFile);
+      }
+    }
+  }
+
+  if (files.length > 0) {
+    processFiles(files);
+    showToast('Pasted file added to upload list.', 'success');
+  }
+});

@@ -1,11 +1,16 @@
 # Changelog
 
-## Changes 5/27/2025
+## Changes 5/27/2025 v1.3.9
 
 - Support for mounting CIFS (SMB) network shares via Docker volumes
 - New `scripts/scan_uploads.php` script to generate metadata for imported files and folders
 - `SCAN_ON_START` environment variable to trigger automatic scanning on container startup
 - Documentation for configuring CIFS share mounting and scanning
+
+- Clipboard Paste Upload Support (single image):
+  - Users can now paste images directly into the FileRise web interface.
+  - Pasted images are renamed to `image<TIMESTAMP>.png` and added to the upload queue using the existing drag-and-drop logic.
+  - Implemented using a `.isClipboard` flag and a delayed UI cleanup inside `xhr.addEventListener("load", ...)`.
 
 ---
 
