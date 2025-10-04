@@ -52,38 +52,61 @@ Curious about the UI? **Check out the live demo:** <https://demo.filerise.net> (
 
 You can deploy FileRise either by running the **Docker container** (quickest way) or by a **manual installation** on a PHP web server. Both methods are outlined below.
 
-### 1. Running with Docker (Recommended)
+---
 
-If you have Docker installed, you can get FileRise up and running in minutes:
+### 1) Running with Docker (Recommended)
 
-- **Pull the image from Docker Hub:**
+#### Pull the image
 
-``` bash
+```bash
 docker pull error311/filerise-docker:latest
 ```
 
-- **Run a container:**
+#### Run a container
 
-``` bash
+```bash
 docker run -d \
+  --name filerise \
   -p 8080:80 \
   -e TIMEZONE="America/New_York" \
+  -e DATE_TIME_FORMAT="m/d/y  h:iA" \
   -e TOTAL_UPLOAD_SIZE="5G" \
   -e SECURE="false" \
+  -e PERSISTENT_TOKENS_KEY="please_change_this_@@" \
+  -e PUID="1000" \
+  -e PGID="1000" \
+  -e CHOWN_ON_START="true" \
+  -e SCAN_ON_START="true" \
+  -e SHARE_URL="" \
   -v ~/filerise/uploads:/var/www/uploads \
   -v ~/filerise/users:/var/www/users \
   -v ~/filerise/metadata:/var/www/metadata \
-  --name filerise \
   error311/filerise-docker:latest
-  ```
+```
 
-  This will start FileRise on port 8080. Visit `http://your-server-ip:8080` to access it. Environment variables shown above are optional – for instance, set `SECURE="true"` to enforce HTTPS (assuming you have SSL at proxy level) and adjust `TIMEZONE` as needed. The volume mounts ensure your files and user data persist outside the container.
+This starts FileRise on port **8080** → visit `http://your-server-ip:8080`.
 
-- **Using Docker Compose:**
-Alternatively, use **docker-compose**. Save the snippet below as docker-compose.yml and run `docker-compose up -d`:
+**Notes**  
 
-``` yaml
-version: '3'
+- **Do not use** Docker `--user`. Use **PUID/PGID** to map on-disk ownership (e.g., `1000:1000`; on Unraid typically `99:100`).
+- `CHOWN_ON_START=true` is recommended on **first run** to normalize ownership of existing trees. Set to **false** later for faster restarts.
+- `SCAN_ON_START=true` runs a one-time index of files added outside the UI so their metadata appears.
+- `SHARE_URL` is optional; leave blank to auto-detect from the current host/scheme. You can set it to your site root (e.g., `https://files.example.com`) or directly to the full endpoint.
+- Set `SECURE="true"` if you serve via HTTPS at your proxy layer.
+
+**Verify ownership mapping (optional)**  
+
+```bash
+docker exec -it filerise id www-data
+# expect: uid=1000 gid=1000   (or 99/100 on Unraid)
+```
+
+#### Using Docker Compose
+
+Save as `docker-compose.yml`, then `docker-compose up -d`:
+
+```yaml
+version: "3"
 services:
   filerise:
     image: error311/filerise-docker:latest
@@ -91,61 +114,88 @@ services:
       - "8080:80"
     environment:
       TIMEZONE: "UTC"
+      DATE_TIME_FORMAT: "m/d/y  h:iA"
       TOTAL_UPLOAD_SIZE: "10G"
       SECURE: "false"
       PERSISTENT_TOKENS_KEY: "please_change_this_@@"
-      SCAN_ON_START: "true"
-      CHOWN_ON_START: "true"
+      # Ownership & indexing
+      PUID: "1000"              # Unraid users often use 99
+      PGID: "1000"              # Unraid users often use 100
+      CHOWN_ON_START: "true"    # first run; set to "false" afterwards
+      SCAN_ON_START: "true"     # index files added outside the UI at boot
+      # Sharing URL (optional): leave blank to auto-detect from host/scheme
+      SHARE_URL: ""
     volumes:
       - ./uploads:/var/www/uploads
       - ./users:/var/www/users
       - ./metadata:/var/www/metadata
 ```
 
-FileRise will be accessible at `http://localhost:8080` (or your server’s IP). The above example also sets a custom `PERSISTENT_TOKENS_KEY` (used to encrypt “remember me” tokens) – be sure to change it to a random string for security.
+FileRise will be accessible at `http://localhost:8080` (or your server’s IP).  
+The example also sets a custom `PERSISTENT_TOKENS_KEY` (used to encrypt “Remember Me” tokens)—change it to a strong random string.
 
-**First-time Setup:** On first launch, FileRise will detect no users and prompt you to create an **Admin account**. Choose your admin username & password, and you’re in! You can then head to the **User Management** section to add additional users if needed.
+**First-time Setup**  
+On first launch, if no users exist, you’ll be prompted to create an **Admin account**. After logging in, use **User Management** to add more users.
 
-### 2. Manual Installation (PHP/Apache)
+---
+
+### 2) Manual Installation (PHP/Apache)
 
 If you prefer to run FileRise on a traditional web server (LAMP stack or similar):
 
-- **Requirements:** PHP 8.3 or higher, Apache (with mod_php) or another web server configured for PHP. Ensure PHP extensions json, curl, and zip are enabled. No database needed.
-- **Download Files:** Clone this repo or download the [latest release archive](https://github.com/error311/FileRise/releases).
+**Requirements**  
 
-``` bash
-git clone https://github.com/error311/FileRise.git  
+- PHP **8.3+**
+- Apache (mod_php) or another web server configured for PHP
+- PHP extensions: `json`, `curl`, `zip` (and typical defaults). No database required.
+
+**Download Files**  
+
+```bash
+git clone https://github.com/error311/FileRise.git
 ```
 
-Place the files into your web server’s directory (e.g., `/var/www/`). It can be in a subfolder (just adjust the `BASE_URL` in config as below).
+Place the files in your web root (e.g., `/var/www/`). Subfolder installs are fine.
 
-- **Composer Dependencies:** Install Composer and run `composer install` in the FileRise directory. (This pulls in a couple of PHP libraries like jumbojett/openid-connect for OAuth support.)
+**Composer (if applicable)**
+If you use optional features requiring Composer libraries, run:
 
-- **Folder Permissions:** Ensure the server can write to the following directories (create them if they don’t exist):
+```bash
+composer install
+```
 
-``` bash
+**Folders & Permissions**  
+
+```bash
 mkdir -p uploads users metadata
-chown -R www-data:www-data uploads users metadata   # www-data is Apache user; use appropriate user
+chown -R www-data:www-data uploads users metadata   # use your web user
 chmod -R 775 uploads users metadata
 ```
 
-The uploads/ folder is where files go, users/ stores the user credentials file, and metadata/ holds metadata like tags and share links.
+- `uploads/`: actual files  
+- `users/`: credentials & token storage  
+- `metadata/`: file metadata (tags, share links, etc.)
 
-- **Configuration:** Open the `config.php` file in a text editor. You may want to adjust:
+**Configuration**  
 
-  - `BASE_URL` – the URL where you will access FileRise (e.g., `“https://files.mydomain.com/”`). This is used for generating share links.
-  
-  - `TIMEZONE` and `DATE_TIME_FORMAT` – match your locale (for correct timestamps).
-  
-  - `TOTAL_UPLOAD_SIZE` – max aggregate upload size (default 5G). Also adjust PHP’s `upload_max_filesize` and `post_max_size` to at least this value (the Docker start script auto-adjusts PHP limits).
-  
-  - `PERSISTENT_TOKENS_KEY` – set a unique secret if you use “Remember Me” logins, to encrypt the tokens.
-  
-  - Other settings like `UPLOAD_DIR`, `USERS_FILE` etc. generally don’t need changes unless you move those folders. Defaults are set for the directories mentioned above.
+Open `config.php` and consider:
 
-- **Web Server Config:** If using Apache, ensure `.htaccess` files are allowed or manually add the rules from `.htaccess` to your Apache config – these disable directory listings and prevent access to certain files. For Nginx or others, you’ll need to replicate those protections (see Wiki: [Nginx Setup for examples](https://github.com/error311/FileRise/wiki/Nginx-Setup)). Also enable mod_rewrite if not already, as FileRise may use pretty URLs for share links.
+- `TIMEZONE`, `DATE_TIME_FORMAT` for your locale.
+- `TOTAL_UPLOAD_SIZE` (also ensure your PHP `upload_max_filesize` & `post_max_size` meet/exceed this).
+- `PERSISTENT_TOKENS_KEY` set to a unique secret if using “Remember Me”.
 
-Now navigate to the FileRise URL in your browser. On first load, you’ll be prompted to create the Admin user (same as Docker setup). After that, the application is ready to use!
+**Share links base URL**  
+
+- You can set **`SHARE_URL`** via your web server environment variables (preferred),  
+  **or** keep using `BASE_URL` in `config.php` as a fallback for manual installs.
+- If neither is set, FileRise auto-detects from the current host/scheme.
+
+**Web Server Config**  
+
+- Apache: allow `.htaccess` or merge its rules; ensure `mod_rewrite` is enabled.
+- Nginx/other: replicate the basic protections (no directory listing, deny sensitive files). See Wiki for examples.
+
+Now browse to your FileRise URL; you’ll be prompted to create the Admin user on first load.
 
 ---
 

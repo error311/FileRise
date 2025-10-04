@@ -1,5 +1,13 @@
 # Changelog
 
+## Changes 10/4/2025 v1.3.12
+
+Fix: robust PUID/PGID handling; optional ownership normalization (closes #43)
+
+- Remap www-data to PUID/PGID when running as root; skip with helpful log if non-root
+- Added CHOWN_ON_START env to control recursive chown (default true; turn off after first run)
+- SCAN_ON_START unchanged, with non-root fallback
+
 ## Changes 10/4/2025 v1.3.11
 
 Chore: keep BASE_URL fallback, prefer env SHARE_URL; fix HTTPS auto-detect

@@ -3,21 +3,37 @@ set -euo pipefail
 umask 002
 echo "🚀 Running start.sh..."
 
-# Remap www-data to match provided PUID/PGID (e.g., Unraid 99:100)
-if [ -n "${PGID:-}" ]; then
-  current_gid="$(getent group www-data | cut -d: -f3 || true)"
-  if [ "${current_gid}" != "${PGID}" ]; then
-    groupmod -o -g "${PGID}" www-data || true
+# ──────────────────────────────────────────────────────────────
+# 0) If NOT root, we can't remap/chown. Log a hint and skip those parts.
+#    If root, remap www-data to PUID/PGID and (optionally) chown data dirs.
+if [ "$(id -u)" -ne 0 ]; then
+  echo "[startup] Running as non-root. Skipping PUID/PGID remap and chown."
+  echo "[startup] Tip: remove '--user' and set PUID/PGID env vars instead."
+else
+  # Remap www-data to match provided PUID/PGID (e.g., Unraid 99:100 or 1000:1000)
+  if [ -n "${PGID:-}" ]; then
+    current_gid="$(getent group www-data | cut -d: -f3 || true)"
+    if [ "${current_gid}" != "${PGID}" ]; then
+      groupmod -o -g "${PGID}" www-data || true
+    fi
   fi
-fi
-if [ -n "${PUID:-}" ]; then
-  current_uid="$(id -u www-data 2>/dev/null || echo '')"
-  target_gid="${PGID:-$(getent group www-data | cut -d: -f3)}"
-  if [ "${current_uid}" != "${PUID}" ]; then
-    usermod -o -u "${PUID}" -g "${target_gid}" www-data || true
+  if [ -n "${PUID:-}" ]; then
+    current_uid="$(id -u www-data 2>/dev/null || echo '')"
+    target_gid="${PGID:-$(getent group www-data | cut -d: -f3)}"
+    if [ "${current_uid}" != "${PUID}" ]; then
+      usermod -o -u "${PUID}" -g "${target_gid}" www-data || true
+    fi
+  fi
+
+  # Optional: normalize ownership on data dirs (good for first run on existing shares)
+  if [ "${CHOWN_ON_START:-true}" = "true" ]; then
+    echo "[startup] Normalizing ownership on uploads/metadata..."
+    chown -R www-data:www-data /var/www/metadata /var/www/uploads || echo "[startup] chown failed (continuing)"
+    chmod -R u+rwX /var/www/metadata /var/www/uploads || echo "[startup] chmod failed (continuing)"
   fi
 fi
 
+# ──────────────────────────────────────────────────────────────
 # 1) Token‐key warning (guarded for -u)
 if [ "${PERSISTENT_TOKENS_KEY:-}" = "default_please_change_this_key" ] || [ -z "${PERSISTENT_TOKENS_KEY:-}" ]; then
   echo "⚠️ WARNING: Using default/empty persistent tokens key—override for production."
@@ -27,12 +43,13 @@ fi
 CONFIG_FILE="/var/www/config/config.php"
 if [ -f "${CONFIG_FILE}" ]; then
   echo "🔄 Updating config.php from env vars..."
-  [ -n "${TIMEZONE:-}" ]          && sed -i "s|define('TIMEZONE',[[:space:]]*'[^']*');|define('TIMEZONE', '${TIMEZONE}');|" "${CONFIG_FILE}"
-  [ -n "${DATE_TIME_FORMAT:-}" ]  && sed -i "s|define('DATE_TIME_FORMAT',[[:space:]]*'[^']*');|define('DATE_TIME_FORMAT', '${DATE_TIME_FORMAT}');|" "${CONFIG_FILE}"
+  [ -n "${TIMEZONE:-}" ]         && sed -i "s|define('TIMEZONE',[[:space:]]*'[^']*');|define('TIMEZONE', '${TIMEZONE}');|" "${CONFIG_FILE}"
+  [ -n "${DATE_TIME_FORMAT:-}" ] && sed -i "s|define('DATE_TIME_FORMAT',[[:space:]]*'[^']*');|define('DATE_TIME_FORMAT', '${DATE_TIME_FORMAT}');|" "${CONFIG_FILE}"
   if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
     sed -i "s|define('TOTAL_UPLOAD_SIZE',[[:space:]]*'[^']*');|define('TOTAL_UPLOAD_SIZE', '${TOTAL_UPLOAD_SIZE}');|" "${CONFIG_FILE}"
   fi
-  [ -n "${SECURE:-}" ]            && sed -i "s|\$envSecure = getenv('SECURE');|\$envSecure = '${SECURE}';|" "${CONFIG_FILE}"
+  [ -n "${SECURE:-}" ]           && sed -i "s|\$envSecure = getenv('SECURE');|\$envSecure = '${SECURE}';|" "${CONFIG_FILE}"
+  # NOTE: SHARE_URL is read from getenv in PHP; no sed needed.
 fi
 
 # 2.1) Prepare metadata/log & sessions
@@ -64,7 +81,7 @@ fi
 
 # 4) Adjust Apache LimitRequestBody
 if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
-  size_str=$(echo "${TOTAL_UPLOAD_SIZE}" | tr '[:upper:]' '[:lower:]')
+  size_str="$(echo "${TOTAL_UPLOAD_SIZE}" | tr '[:upper:]' '[:lower:]')"
   case "${size_str: -1}" in
     g) factor=$((1024*1024*1024)); num=${size_str%g} ;;
     m) factor=$((1024*1024));       num=${size_str%m} ;;
@@ -115,8 +132,8 @@ if [ ! -f /var/www/metadata/createdTags.json ]; then
   chmod 664 /var/www/metadata/createdTags.json
 fi
 
-# 8.5) Harden scan script perms (before running it)
-if [ -f /var/www/scripts/scan_uploads.php ]; then
+# 8.5) Harden scan script perms (only if root)
+if [ -f /var/www/scripts/scan_uploads.php ] && [ "$(id -u)" -eq 0 ]; then
   chown root:root /var/www/scripts/scan_uploads.php
   chmod 0644 /var/www/scripts/scan_uploads.php
 fi
@@ -124,18 +141,16 @@ fi
 # 9) One-shot scan when the container starts (opt-in via SCAN_ON_START)
 if [ "${SCAN_ON_START:-}" = "true" ]; then
   echo "[startup] Scanning uploads directory to build metadata..."
-  if command -v runuser >/dev/null 2>&1; then
-    runuser -u www-data -- /usr/bin/php /var/www/scripts/scan_uploads.php || echo "[startup] Scan failed (continuing)"
+  if [ "$(id -u)" -eq 0 ]; then
+    if command -v runuser >/dev/null 2>&1; then
+      runuser -u www-data -- /usr/bin/php /var/www/scripts/scan_uploads.php || echo "[startup] Scan failed (continuing)"
+    else
+      su -s /bin/sh -c "/usr/bin/php /var/www/scripts/scan_uploads.php" www-data || echo "[startup] Scan failed (continuing)"
+    fi
   else
-    su -s /bin/sh -c "/usr/bin/php /var/www/scripts/scan_uploads.php" www-data || echo "[startup] Scan failed (continuing)"
+    # Non-root fallback: run as current user (permissions may limit writes)
+    /usr/bin/php /var/www/scripts/scan_uploads.php || echo "[startup] Scan failed (continuing)"
   fi
-fi
-
-# 10) Final ownership sanity for data dirs (optional; default true)
-if [ "${CHOWN_ON_START:-true}" = "true" ]; then
-  echo "[startup] Normalizing ownership on uploads/metadata..."
-  chown -R www-data:www-data /var/www/metadata /var/www/uploads
-  chmod -R u+rwX /var/www/metadata /var/www/uploads
 fi
 
 echo "🔥 Starting Apache..."
