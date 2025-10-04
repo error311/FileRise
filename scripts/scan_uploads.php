@@ -58,8 +58,9 @@ function list_all_folders(string $root): array {
             // relative key like "foo/bar"
             $rel = ltrim(str_replace(['\\'], '/', substr($path, strlen($root) + 1)), '/');
             if ($rel === '') continue;
-            // skip trash subtree
-            if (strpos($rel, 'trash/') === 0 || $rel === 'trash') continue;
+            // skip trash and profile_pics subtrees
+            if ($rel === 'trash' || strpos($rel, 'trash/') === 0) continue;
+            if ($rel === 'profile_pics' || strpos($rel, 'profile_pics/') === 0) continue;
             // obey the app’s folder-name regex to stay consistent
             if (preg_match(REGEX_FOLDER_NAME, basename($rel))) {
                 $folders[] = $rel;

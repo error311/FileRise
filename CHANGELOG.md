@@ -4,6 +4,7 @@
 
 fix(scanner): resolve dirs via CLI/env/constants; write per-item JSON; skip trash
 fix(scanner): rebuild per-folder metadata to match File/Folder models
+chore(scanner): skip profile_pics subtree during scans
 
 - scan_uploads.php now falls back to UPLOAD_DIR/META_DIR from config.php
 - prevents double slashes in metadata paths; respects app timezone
@@ -14,6 +15,8 @@ fix(scanner): rebuild per-folder metadata to match File/Folder models
 - Skips uploads/trash and symlinks
 - Resolves paths from CLI flags, env vars, or config constants (UPLOAD_DIR/META_DIR)
 - Idempotent; safe to run at startup via SCAN_ON_START
+- Avoids indexing internal avatar images (folder already hidden in UI)
+- Reduces scan noise and metadata churn; keeps firmware/other content indexed
 
 ## Changes 10/4/2025 v1.3.12
 
