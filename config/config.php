@@ -196,13 +196,21 @@ if (AUTH_BYPASS) {
         $_SESSION['disableUpload'] = $perms['disableUpload'] ?? false;
     }
 }
-// Share URL fallback
+
+// Share URL fallback (keep BASE_URL behavior)
 define('BASE_URL', 'http://yourwebsite/uploads/');
+
+// Detect scheme correctly (works behind proxies too)
+$proto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? (
+           (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http'
+         );
+$host  = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
-    $defaultShare = isset($_SERVER['HTTP_HOST'])
-        ? "http://{$_SERVER['HTTP_HOST']}/api/file/share.php"
-        : "http://localhost/api/file/share.php";
+    $defaultShare = "{$proto}://{$host}/api/file/share.php";
 } else {
     $defaultShare = rtrim(BASE_URL, '/') . "/api/file/share.php";
 }
+
+// Final: env var wins, else fallback
 define('SHARE_URL', getenv('SHARE_URL') ?: $defaultShare);

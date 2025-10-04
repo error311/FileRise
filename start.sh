@@ -3,6 +3,21 @@ set -euo pipefail
 umask 002
 echo "🚀 Running start.sh..."
 
+# Remap www-data to match provided PUID/PGID (e.g., Unraid 99:100)
+if [ -n "${PGID:-}" ]; then
+  current_gid="$(getent group www-data | cut -d: -f3 || true)"
+  if [ "${current_gid}" != "${PGID}" ]; then
+    groupmod -o -g "${PGID}" www-data || true
+  fi
+fi
+if [ -n "${PUID:-}" ]; then
+  current_uid="$(id -u www-data 2>/dev/null || echo '')"
+  target_gid="${PGID:-$(getent group www-data | cut -d: -f3)}"
+  if [ "${current_uid}" != "${PUID}" ]; then
+    usermod -o -u "${PUID}" -g "${target_gid}" www-data || true
+  fi
+fi
+
 # 1) Token‐key warning (guarded for -u)
 if [ "${PERSISTENT_TOKENS_KEY:-}" = "default_please_change_this_key" ] || [ -z "${PERSISTENT_TOKENS_KEY:-}" ]; then
   echo "⚠️ WARNING: Using default/empty persistent tokens key—override for production."
@@ -18,7 +33,6 @@ if [ -f "${CONFIG_FILE}" ]; then
     sed -i "s|define('TOTAL_UPLOAD_SIZE',[[:space:]]*'[^']*');|define('TOTAL_UPLOAD_SIZE', '${TOTAL_UPLOAD_SIZE}');|" "${CONFIG_FILE}"
   fi
   [ -n "${SECURE:-}" ]            && sed -i "s|\$envSecure = getenv('SECURE');|\$envSecure = '${SECURE}';|" "${CONFIG_FILE}"
-  [ -n "${SHARE_URL:-}" ]         && sed -i "s|define('SHARE_URL',[[:space:]]*'[^']*');|define('SHARE_URL', '${SHARE_URL}');|" "${CONFIG_FILE}"
 fi
 
 # 2.1) Prepare metadata/log & sessions
@@ -117,9 +131,12 @@ if [ "${SCAN_ON_START:-}" = "true" ]; then
   fi
 fi
 
-# 10) Final ownership sanity for data dirs
-chown -R www-data:www-data /var/www/metadata /var/www/uploads
-chmod -R u+rwX /var/www/metadata /var/www/uploads
+# 10) Final ownership sanity for data dirs (optional; default true)
+if [ "${CHOWN_ON_START:-true}" = "true" ]; then
+  echo "[startup] Normalizing ownership on uploads/metadata..."
+  chown -R www-data:www-data /var/www/metadata /var/www/uploads
+  chmod -R u+rwX /var/www/metadata /var/www/uploads
+fi
 
 echo "🔥 Starting Apache..."
 exec apachectl -D FOREGROUND

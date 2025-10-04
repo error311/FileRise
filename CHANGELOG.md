@@ -1,5 +1,12 @@
 # Changelog
 
+## Changes 10/4/2025 v1.3.11
+
+Chore: keep BASE_URL fallback, prefer env SHARE_URL; fix HTTPS auto-detect
+
+- Remove no-op sed of SHARE_URL from start.sh (env already used)
+- Build default share link with correct scheme (http/https, proxy-aware)
+
 ## Changes 10/4/2025 v1.3.10
 
 Fix: index externally added files on startup; harden start.sh (#46)
