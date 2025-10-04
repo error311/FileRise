@@ -3,11 +3,17 @@
 ## Changes 10/4/2025 v1.3.13
 
 fix(scanner): resolve dirs via CLI/env/constants; write per-item JSON; skip trash
+fix(scanner): rebuild per-folder metadata to match File/Folder models
 
 - scan_uploads.php now falls back to UPLOAD_DIR/META_DIR from config.php
 - prevents double slashes in metadata paths; respects app timezone
-- skips trash/profile_pics and symlinks; writes JSON only when missing
 - unblocks SCAN_ON_START so externally added files are indexed at boot
+- Writes per-folder metadata files (root_metadata.json / folder_metadata.json) using the same naming rule as the models
+- Adds missing entries for files (uploaded, modified using DATE_TIME_FORMAT, uploader=Imported)
+- Prunes stale entries for files that no longer exist
+- Skips uploads/trash and symlinks
+- Resolves paths from CLI flags, env vars, or config constants (UPLOAD_DIR/META_DIR)
+- Idempotent; safe to run at startup via SCAN_ON_START
 
 ## Changes 10/4/2025 v1.3.12
 
