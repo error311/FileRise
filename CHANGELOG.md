@@ -1,5 +1,14 @@
 # Changelog
 
+## Changes 10/4/2025 v1.3.13
+
+fix(scanner): resolve dirs via CLI/env/constants; write per-item JSON; skip trash
+
+- scan_uploads.php now falls back to UPLOAD_DIR/META_DIR from config.php
+- prevents double slashes in metadata paths; respects app timezone
+- skips trash/profile_pics and symlinks; writes JSON only when missing
+- unblocks SCAN_ON_START so externally added files are indexed at boot
+
 ## Changes 10/4/2025 v1.3.12
 
 Fix: robust PUID/PGID handling; optional ownership normalization (closes #43)
