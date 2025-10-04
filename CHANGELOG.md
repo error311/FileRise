@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 10/4/2025 v1.3.10
+
+Fix: index externally added files on startup; harden start.sh (#46)
+
+- Run metadata scan before Apache when SCAN_ON_START=true (was unreachable after exec)
+- Execute scan as www-data; continue on failure so startup isn’t blocked
+- Guard env reads for set -u; add umask 002 for consistent 775/664
+- Make ServerName idempotent; avoid duplicate entries
+- Ensure sessions/metadata/log dirs exist with correct ownership and perms
+
+No behavior change unless SCAN_ON_START=true.
+
 ## Changes 5/27/2025 v1.3.9
 
 - Support for mounting CIFS (SMB) network shares via Docker volumes

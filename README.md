@@ -94,6 +94,7 @@ services:
       TOTAL_UPLOAD_SIZE: "10G"
       SECURE: "false"
       PERSISTENT_TOKENS_KEY: "please_change_this_@@"
+      SCAN_ON_START: "true"
     volumes:
       - ./uploads:/var/www/uploads
       - ./users:/var/www/users

@@ -1,35 +1,36 @@
 #!/bin/bash
 set -euo pipefail
+umask 002
 echo "🚀 Running start.sh..."
 
-# 1) Token‐key warning
-if [ "${PERSISTENT_TOKENS_KEY}" = "default_please_change_this_key" ]; then
-  echo "⚠️ WARNING: Using default persistent tokens key—override for production."
+# 1) Token‐key warning (guarded for -u)
+if [ "${PERSISTENT_TOKENS_KEY:-}" = "default_please_change_this_key" ] || [ -z "${PERSISTENT_TOKENS_KEY:-}" ]; then
+  echo "⚠️ WARNING: Using default/empty persistent tokens key—override for production."
 fi
 
 # 2) Update config.php based on environment variables
 CONFIG_FILE="/var/www/config/config.php"
 if [ -f "${CONFIG_FILE}" ]; then
   echo "🔄 Updating config.php from env vars..."
-  [ -n "${TIMEZONE:-}" ]       && sed -i "s|define('TIMEZONE',[[:space:]]*'[^']*');|define('TIMEZONE', '${TIMEZONE}');|" "${CONFIG_FILE}"
-  [ -n "${DATE_TIME_FORMAT:-}" ] && sed -i "s|define('DATE_TIME_FORMAT',[[:space:]]*'[^']*');|define('DATE_TIME_FORMAT', '${DATE_TIME_FORMAT}');|" "${CONFIG_FILE}"
+  [ -n "${TIMEZONE:-}" ]          && sed -i "s|define('TIMEZONE',[[:space:]]*'[^']*');|define('TIMEZONE', '${TIMEZONE}');|" "${CONFIG_FILE}"
+  [ -n "${DATE_TIME_FORMAT:-}" ]  && sed -i "s|define('DATE_TIME_FORMAT',[[:space:]]*'[^']*');|define('DATE_TIME_FORMAT', '${DATE_TIME_FORMAT}');|" "${CONFIG_FILE}"
   if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
     sed -i "s|define('TOTAL_UPLOAD_SIZE',[[:space:]]*'[^']*');|define('TOTAL_UPLOAD_SIZE', '${TOTAL_UPLOAD_SIZE}');|" "${CONFIG_FILE}"
   fi
-  [ -n "${SECURE:-}" ]         && sed -i "s|\$envSecure = getenv('SECURE');|\$envSecure = '${SECURE}';|" "${CONFIG_FILE}"
-  [ -n "${SHARE_URL:-}" ]      && sed -i "s|define('SHARE_URL',[[:space:]]*'[^']*');|define('SHARE_URL', '${SHARE_URL}');|" "${CONFIG_FILE}"
+  [ -n "${SECURE:-}" ]            && sed -i "s|\$envSecure = getenv('SECURE');|\$envSecure = '${SECURE}';|" "${CONFIG_FILE}"
+  [ -n "${SHARE_URL:-}" ]         && sed -i "s|define('SHARE_URL',[[:space:]]*'[^']*');|define('SHARE_URL', '${SHARE_URL}');|" "${CONFIG_FILE}"
 fi
 
-# 2.1) Prepare metadata/log for Apache logs
+# 2.1) Prepare metadata/log & sessions
 mkdir -p /var/www/metadata/log
-chown www-data:www-data    /var/www/metadata/log
-chmod 775                  /var/www/metadata/log
+chown www-data:www-data /var/www/metadata/log
+chmod 775 /var/www/metadata/log
 
 mkdir -p /var/www/sessions
 chown www-data:www-data /var/www/sessions
 chmod 700 /var/www/sessions
 
-# 2.2) Prepare other dynamic dirs
+# 2.2) Prepare dynamic dirs (uploads/users/metadata)
 for d in uploads users metadata; do
   tgt="/var/www/${d}"
   mkdir -p "${tgt}"
@@ -37,7 +38,7 @@ for d in uploads users metadata; do
   chmod 775 "${tgt}"
 done
 
-# 3) Ensure PHP config dir & set upload limits
+# 3) Ensure PHP conf dir & set upload limits
 mkdir -p /etc/php/8.3/apache2/conf.d
 if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
   echo "🔄 Setting PHP upload limits to ${TOTAL_UPLOAD_SIZE}"
@@ -49,7 +50,6 @@ fi
 
 # 4) Adjust Apache LimitRequestBody
 if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
-  # convert to bytes
   size_str=$(echo "${TOTAL_UPLOAD_SIZE}" | tr '[:upper:]' '[:lower:]')
   case "${size_str: -1}" in
     g) factor=$((1024*1024*1024)); num=${size_str%g} ;;
@@ -73,29 +73,22 @@ EOF
 
 # 6) Override ports if provided
 if [ -n "${HTTP_PORT:-}" ]; then
-  sed -i "s/^Listen 80$/Listen ${HTTP_PORT}/" /etc/apache2/ports.conf
-  sed -i "s/<VirtualHost \*:80>/<VirtualHost *:${HTTP_PORT}>/" /etc/apache2/sites-available/000-default.conf
+  sed -i "s/^Listen 80$/Listen ${HTTP_PORT}/" /etc/apache2/ports.conf || true
+  sed -i "s/<VirtualHost \*:80>/<VirtualHost *:${HTTP_PORT}>/" /etc/apache2/sites-available/000-default.conf || true
 fi
 if [ -n "${HTTPS_PORT:-}" ]; then
-  sed -i "s/^Listen 443$/Listen ${HTTPS_PORT}/" /etc/apache2/ports.conf
+  sed -i "s/^Listen 443$/Listen ${HTTPS_PORT}/" /etc/apache2/ports.conf || true
 fi
 
-# 7) Set ServerName
-if [ -n "${SERVER_NAME:-}" ]; then
-  echo "ServerName ${SERVER_NAME}" >> /etc/apache2/apache2.conf
+# 7) Set ServerName (idempotent)
+SN="${SERVER_NAME:-FileRise}"
+if grep -qE '^ServerName\s' /etc/apache2/apache2.conf; then
+  sed -i "s|^ServerName .*|ServerName ${SN}|" /etc/apache2/apache2.conf
 else
-  echo "ServerName FileRise" >> /etc/apache2/apache2.conf
+  echo "ServerName ${SN}" >> /etc/apache2/apache2.conf
 fi
 
-# 8) Prepare dynamic data directories with least privilege
-for d in uploads users metadata; do
-  tgt="/var/www/${d}"
-  mkdir -p "${tgt}"
-  chown www-data:www-data "${tgt}"
-  chmod 775 "${tgt}"
-done
-
-# 9) Initialize persistent files if absent
+# 8) Initialize persistent files if absent
 if [ ! -f /var/www/users/users.txt ]; then
   echo "" > /var/www/users/users.txt
   chown www-data:www-data /var/www/users/users.txt
@@ -108,10 +101,25 @@ if [ ! -f /var/www/metadata/createdTags.json ]; then
   chmod 664 /var/www/metadata/createdTags.json
 fi
 
+# 8.5) Harden scan script perms (before running it)
+if [ -f /var/www/scripts/scan_uploads.php ]; then
+  chown root:root /var/www/scripts/scan_uploads.php
+  chmod 0644 /var/www/scripts/scan_uploads.php
+fi
+
+# 9) One-shot scan when the container starts (opt-in via SCAN_ON_START)
+if [ "${SCAN_ON_START:-}" = "true" ]; then
+  echo "[startup] Scanning uploads directory to build metadata..."
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u www-data -- /usr/bin/php /var/www/scripts/scan_uploads.php || echo "[startup] Scan failed (continuing)"
+  else
+    su -s /bin/sh -c "/usr/bin/php /var/www/scripts/scan_uploads.php" www-data || echo "[startup] Scan failed (continuing)"
+  fi
+fi
+
+# 10) Final ownership sanity for data dirs
+chown -R www-data:www-data /var/www/metadata /var/www/uploads
+chmod -R u+rwX /var/www/metadata /var/www/uploads
+
 echo "🔥 Starting Apache..."
 exec apachectl -D FOREGROUND
-
-if [ "$SCAN_ON_START" = "true" ]; then
-  echo "Scanning uploads directory to generate metadata..."
-  php /var/www/scripts/scan_uploads.php
-fi
