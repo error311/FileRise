@@ -35,14 +35,19 @@ class AdminModel
      */
     public static function updateConfig(array $configUpdate): array
     {
-        // Validate required OIDC configuration keys.
-        if (
-            empty($configUpdate['oidc']['providerUrl']) ||
-            empty($configUpdate['oidc']['clientId']) ||
-            empty($configUpdate['oidc']['clientSecret']) ||
-            empty($configUpdate['oidc']['redirectUri'])
-        ) {
-            return ["error" => "Incomplete OIDC configuration."];
+        // New: only enforce OIDC fields when OIDC is enabled
+        $oidcDisabled = isset($configUpdate['loginOptions']['disableOIDCLogin'])
+        ? (bool)$configUpdate['loginOptions']['disableOIDCLogin']
+        : true; // default to disabled when not present
+
+        if (!$oidcDisabled) {
+        $oidc = $configUpdate['oidc'] ?? [];
+        $required = ['providerUrl','clientId','clientSecret','redirectUri'];
+        foreach ($required as $k) {
+            if (empty($oidc[$k]) || !is_string($oidc[$k])) {
+                return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, clientSecret, redirectUri)."];
+                }
+            }
         }
 
         // Ensure enableWebDAV flag is boolean (default to false if missing)
@@ -111,6 +116,8 @@ class AdminModel
                 return ["error" => "Failed to update configuration even after cleanup."];
             }
         }
+        // Best-effort normalize perms for host visibility (user rw, group rw)
+        @chmod($configFile, 0664);
 
         return ["success" => "Configuration updated successfully."];
     }
@@ -137,17 +144,34 @@ class AdminModel
 
             // Normalize login options if missing
             if (!isset($config['loginOptions'])) {
+                // migrate legacy top-level flags; default OIDC to true (disabled)
                 $config['loginOptions'] = [
                     'disableFormLogin' => isset($config['disableFormLogin']) ? (bool)$config['disableFormLogin'] : false,
                     'disableBasicAuth' => isset($config['disableBasicAuth']) ? (bool)$config['disableBasicAuth'] : false,
-                    'disableOIDCLogin' => isset($config['disableOIDCLogin']) ? (bool)$config['disableOIDCLogin'] : false,
+                    'disableOIDCLogin' => isset($config['disableOIDCLogin']) ? (bool)$config['disableOIDCLogin'] : true,
                 ];
                 unset($config['disableFormLogin'], $config['disableBasicAuth'], $config['disableOIDCLogin']);
             } else {
-                // Ensure proper boolean types
-                $config['loginOptions']['disableFormLogin'] = (bool)$config['loginOptions']['disableFormLogin'];
-                $config['loginOptions']['disableBasicAuth'] = (bool)$config['loginOptions']['disableBasicAuth'];
-                $config['loginOptions']['disableOIDCLogin'] = (bool)$config['loginOptions']['disableOIDCLogin'];
+                // normalize booleans; default OIDC to true (disabled) if missing
+                $lo = &$config['loginOptions'];
+                $lo['disableFormLogin'] = isset($lo['disableFormLogin']) ? (bool)$lo['disableFormLogin'] : false;
+                $lo['disableBasicAuth'] = isset($lo['disableBasicAuth']) ? (bool)$lo['disableBasicAuth'] : false;
+                $lo['disableOIDCLogin'] = isset($lo['disableOIDCLogin']) ? (bool)$lo['disableOIDCLogin'] : true;
+            }
+
+            if (!isset($config['oidc']) || !is_array($config['oidc'])) {
+                $config['oidc'] = [
+                    'providerUrl'  => '',
+                    'clientId'     => '',
+                    'clientSecret' => '',
+                    'redirectUri'  => '',
+                ];
+            } else {
+                foreach (['providerUrl','clientId','clientSecret','redirectUri'] as $k) {
+                    if (!isset($config['oidc'][$k]) || !is_string($config['oidc'][$k])) {
+                        $config['oidc'][$k] = '';
+                    }
+                }
             }
 
             if (!array_key_exists('authBypass', $config['loginOptions'])) {
@@ -193,7 +217,7 @@ class AdminModel
                 'loginOptions'          => [
                     'disableFormLogin' => false,
                     'disableBasicAuth' => false,
-                    'disableOIDCLogin' => false
+                    'disableOIDCLogin' => true
                 ],
                 'globalOtpauthUrl'      => "",
                 'enableWebDAV'          => false,

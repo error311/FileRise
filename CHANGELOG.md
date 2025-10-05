@@ -1,5 +1,14 @@
 # Changelog
 
+## Changes 10/5/2025 v1.3.14
+
+fix(admin): OIDC optional by default; validate only when enabled (fixes #44)
+
+- AdminModel::updateConfig now enforces OIDC fields only if disableOIDCLogin=false
+- AdminModel::getConfig defaults disableOIDCLogin=true and guarantees OIDC keys
+- AdminController default loginOptions sets disableOIDCLogin=true; CSRF via header or body
+- Normalize file perms to 0664 after write
+
 ## Changes 10/4/2025 v1.3.13
 
 fix(scanner): resolve dirs via CLI/env/constants; write per-item JSON; skip trash

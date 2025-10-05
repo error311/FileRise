@@ -150,7 +150,7 @@ class AdminController
         exit;
     }
     $headersArr    = array_change_key_case(getallheaders(), CASE_LOWER);
-    $receivedToken = trim($headersArr['x-csrf-token'] ?? '');
+    $receivedToken = trim($headersArr['x-csrf-token'] ?? ($_POST['csrfToken'] ?? ''));
     if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
         http_response_code(403);
         echo json_encode(['error' => 'Invalid CSRF token.']);
@@ -180,7 +180,7 @@ class AdminController
     $merged['loginOptions'] = $existing['loginOptions'] ?? [
       'disableFormLogin' => false,
       'disableBasicAuth' => false,
-      'disableOIDCLogin'=> false,
+      'disableOIDCLogin'=> true,
       'authBypass'      => false,
       'authHeaderName'  => 'X-Remote-User'
     ];
