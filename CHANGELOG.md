@@ -1,5 +1,16 @@
 # Changelog
 
+## Changes 10/6/2025 v1.3.15
+
+feat/perf: large-file handling, faster file list, richer CodeMirror modes (fixes #48)
+
+- fileEditor.js: block ≥10 MB; plain-text fallback >5 MB; lighter CM settings for big files.
+- fileListView.js: latest-call-wins; compute editable via ext + sizeBytes (no blink).
+- FileModel.php: add sizeBytes; cap inline content to ≤5 MB (INDEX_TEXT_BYTES_MAX).
+- HTML: load extra CM modes: htmlmixed, php, clike, python, yaml, markdown, shell, sql, vb, ruby, perl, properties, nginx.
+
+---
+
 ## Changes 10/5/2025 v1.3.14
 
 fix(admin): OIDC optional by default; validate only when enabled (fixes #44)
@@ -8,6 +19,8 @@ fix(admin): OIDC optional by default; validate only when enabled (fixes #44)
 - AdminModel::getConfig defaults disableOIDCLogin=true and guarantees OIDC keys
 - AdminController default loginOptions sets disableOIDCLogin=true; CSRF via header or body
 - Normalize file perms to 0664 after write
+
+---
 
 ## Changes 10/4/2025 v1.3.13
 
@@ -27,6 +40,8 @@ chore(scanner): skip profile_pics subtree during scans
 - Avoids indexing internal avatar images (folder already hidden in UI)
 - Reduces scan noise and metadata churn; keeps firmware/other content indexed
 
+---
+
 ## Changes 10/4/2025 v1.3.12
 
 Fix: robust PUID/PGID handling; optional ownership normalization (closes #43)
@@ -35,12 +50,16 @@ Fix: robust PUID/PGID handling; optional ownership normalization (closes #43)
 - Added CHOWN_ON_START env to control recursive chown (default true; turn off after first run)
 - SCAN_ON_START unchanged, with non-root fallback
 
+---
+
 ## Changes 10/4/2025 v1.3.11
 
 Chore: keep BASE_URL fallback, prefer env SHARE_URL; fix HTTPS auto-detect
 
 - Remove no-op sed of SHARE_URL from start.sh (env already used)
 - Build default share link with correct scheme (http/https, proxy-aware)
+
+---
 
 ## Changes 10/4/2025 v1.3.10
 
@@ -53,6 +72,8 @@ Fix: index externally added files on startup; harden start.sh (#46)
 - Ensure sessions/metadata/log dirs exist with correct ownership and perms
 
 No behavior change unless SCAN_ON_START=true.
+
+---
 
 ## Changes 5/27/2025 v1.3.9
 

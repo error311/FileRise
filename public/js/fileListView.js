@@ -35,6 +35,12 @@ import {
 export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
 
+// Hide "Edit" for files >10 MiB
+const MAX_EDIT_BYTES = 10 * 1024 * 1024;
+
+// Latest-response-wins guard (prevents double render/flicker if loadFileList gets called twice)
+let __fileListReqSeq = 0;
+
 window.itemsPerPage = parseInt(
     localStorage.getItem('itemsPerPage') || window.itemsPerPage || '10',
     10
@@ -202,51 +208,39 @@ window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
 export async function loadFileList(folderParam) {
+    const reqId = ++__fileListReqSeq; // latest call wins
     const folder = folderParam || "root";
     const fileListContainer = document.getElementById("fileList");
     const actionsContainer = document.getElementById("fileListActions");
 
-    // 1) show loader
+    // 1) show loader (only this request is allowed to render)
     fileListContainer.style.visibility = "hidden";
     fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
 
     try {
-        // 2) fetch files + folders in parallel
-        const [filesRes, foldersRes] = await Promise.all([
-            fetch(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=1&t=${Date.now()}`),
-            fetch(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`)
-        ]);
+        // Kick off both in parallel, but we'll render as soon as FILES are ready
+        const filesPromise = fetch(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=1&t=${Date.now()}`);
+        const foldersPromise = fetch(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`);
+
+        // ----- FILES FIRST -----
+        const filesRes = await filesPromise;
 
         if (filesRes.status === 401) {
             window.location.href = "/api/auth/logout.php";
             throw new Error("Unauthorized");
         }
+
         const data = await filesRes.json();
-        const folderRaw = await foldersRes.json();
 
-        // --- build ONLY the *direct* children of current folder ---
-        let subfolders = [];
-        const hidden = new Set(["profile_pics", "trash"]);
-        if (Array.isArray(folderRaw)) {
-            const allPaths = folderRaw.map(item => item.folder ?? item);
-            const depth = folder === "root" ? 1 : folder.split("/").length + 1;
-            subfolders = allPaths
-                .filter(p => {
-                    if (folder === "root") {
-                        return p.indexOf("/") === -1;
-                    }
-                    if (!p.startsWith(folder + "/")) return false;
-                    return p.split("/").length === depth;
-                })
-                .map(p => ({ name: p.split("/").pop(), full: p }));
-        }
-        subfolders = subfolders.filter(sf => !hidden.has(sf.name));
+        // If another loadFileList ran after this one, bail before touching the DOM
+        if (reqId !== __fileListReqSeq) return [];
 
-        // 3) clear loader
+        // 3) clear loader (still only if this request is the latest)
         fileListContainer.innerHTML = "";
 
         // 4) handle “no files” case
         if (!data.files || Object.keys(data.files).length === 0) {
+            if (reqId !== __fileListReqSeq) return [];
             fileListContainer.textContent = t("no_files_found");
 
             // hide summary + slider
@@ -255,36 +249,12 @@ export async function loadFileList(folderParam) {
             const sliderContainer = document.getElementById("viewSliderContainer");
             if (sliderContainer) sliderContainer.style.display = "none";
 
-            // show/hide folder strip *even when there are no files*
-            let strip = document.getElementById("folderStripContainer");
-            if (!strip) {
-                strip = document.createElement("div");
-                strip.id = "folderStripContainer";
-                strip.className = "folder-strip-container";
-                actionsContainer.parentNode.insertBefore(strip, fileListContainer);
-            }
-            if (window.showFoldersInList && subfolders.length) {
-                strip.innerHTML = subfolders.map(sf => `
-        <div class="folder-item" data-folder="${sf.full}">
-          <i class="material-icons">folder</i>
-          <div class="folder-name">${escapeHTML(sf.name)}</div>
-        </div>
-      `).join("");
-                strip.style.display = "flex";
-                strip.querySelectorAll(".folder-item").forEach(el => {
-                    el.addEventListener("click", () => {
-                        const dest = el.dataset.folder;
-                        window.currentFolder = dest;
-                        localStorage.setItem("lastOpenedFolder", dest);
-                        updateBreadcrumbTitle(dest);
-                        loadFileList(dest);
-                    });
-                });
-            } else {
-                strip.style.display = "none";
-            }
+            // hide folder strip for now; we’ll re-show it after folders load (below)
+            const strip = document.getElementById("folderStripContainer");
+            if (strip) strip.style.display = "none";
 
             updateFileActionButtons();
+            fileListContainer.style.visibility = "visible";
             return [];
         }
 
@@ -295,13 +265,48 @@ export async function loadFileList(folderParam) {
                 return meta;
             });
         }
+
         data.files = data.files.map(f => {
             f.fullName = (f.path || f.name).trim().toLowerCase();
-            f.editable = canEditFile(f.name);
+
+            // Prefer numeric size if your API provides it; otherwise parse the "1.2 MB" string
+            let bytes = Number.isFinite(f.sizeBytes)
+                ? f.sizeBytes
+                : parseSizeToBytes(String(f.size || ""));
+
+            if (!Number.isFinite(bytes)) bytes = Infinity;
+
+            // extension policy + size policy
+            f.editable = canEditFile(f.name) && (bytes <= MAX_EDIT_BYTES);
+
             f.folder = folder;
             return f;
         });
         fileData = data.files;
+
+        // Decide editability BEFORE render to avoid any post-render “blink”
+        data.files = data.files.map(f => {
+            f.fullName = (f.path || f.name).trim().toLowerCase();
+
+            // extension policy
+            const extOk = canEditFile(f.name);
+
+            // prefer numeric byte size if API provides it; otherwise parse "12.3 MB" strings
+            let bytes = Infinity;
+            if (Number.isFinite(f.sizeBytes)) {
+                bytes = f.sizeBytes;
+            } else if (f.size != null && String(f.size).trim() !== "") {
+                bytes = parseSizeToBytes(String(f.size));
+            }
+
+            f.editable = extOk && (bytes <= MAX_EDIT_BYTES);
+            f.folder = folder;
+            return f;
+        });
+        fileData = data.files;
+
+        // If stale, stop before any DOM updates
+        if (reqId !== __fileListReqSeq) return [];
 
         // 6) inject summary + slider
         if (actionsContainer) {
@@ -342,19 +347,19 @@ export async function loadFileList(folderParam) {
                 );
 
                 sliderContainer.innerHTML = `
-              <label for="galleryColumnsSlider" style="margin-right:8px;line-height:1;">
-                ${t("columns")}:
-              </label>
-              <input
-                type="range"
-                id="galleryColumnsSlider"
-                min="1"
-                max="${maxCols}"
-                value="${currentCols}"
-                style="vertical-align:middle;"
-              >
-              <span id="galleryColumnsValue" style="margin-left:6px;line-height:1;">${currentCols}</span>
-            `;
+                  <label for="galleryColumnsSlider" style="margin-right:8px;line-height:1;">
+                    ${t("columns")}:
+                  </label>
+                  <input
+                    type="range"
+                    id="galleryColumnsSlider"
+                    min="1"
+                    max="${maxCols}"
+                    value="${currentCols}"
+                    style="vertical-align:middle;"
+                  >
+                  <span id="galleryColumnsValue" style="margin-left:6px;line-height:1;">${currentCols}</span>
+                `;
                 const gallerySlider = document.getElementById("galleryColumnsSlider");
                 const galleryValue = document.getElementById("galleryColumnsValue");
                 gallerySlider.oninput = e => {
@@ -367,12 +372,12 @@ export async function loadFileList(folderParam) {
             } else {
                 const currentHeight = parseInt(localStorage.getItem("rowHeight") || "48", 10);
                 sliderContainer.innerHTML = `
-              <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
-                ${t("row_height")}:
-              </label>
-              <input type="range" id="rowHeightSlider" min="30" max="60" value="${currentHeight}" style="vertical-align:middle;">
-              <span id="rowHeightValue" style="margin-left:6px;line-height:1;">${currentHeight}px</span>
-            `;
+                  <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
+                    ${t("row_height")}:
+                  </label>
+                  <input type="range" id="rowHeightSlider" min="30" max="60" value="${currentHeight}" style="vertical-align:middle;">
+                  <span id="rowHeightValue" style="margin-left:6px;line-height:1;">${currentHeight}px</span>
+                `;
                 const rowSlider = document.getElementById("rowHeightSlider");
                 const rowValue = document.getElementById("rowHeightValue");
                 rowSlider.oninput = e => {
@@ -384,93 +389,121 @@ export async function loadFileList(folderParam) {
             }
         }
 
-        // 7) inject folder strip below actions, above file list
-        let strip = document.getElementById("folderStripContainer");
-        if (!strip) {
-            strip = document.createElement("div");
-            strip.id = "folderStripContainer";
-            strip.className = "folder-strip-container";
-            actionsContainer.parentNode.insertBefore(strip, actionsContainer);
-        }
+        // 7) render files (only if still latest)
+        if (reqId !== __fileListReqSeq) return [];
 
-        if (window.showFoldersInList && subfolders.length) {
-            strip.innerHTML = subfolders.map(sf => `
-    <div class="folder-item" data-folder="${sf.full}" draggable="true">
-      <i class="material-icons">folder</i>
-      <div class="folder-name">${escapeHTML(sf.name)}</div>
-    </div>
-  `).join("");
-            strip.style.display = "flex";
-
-            // wire up each folder‐tile
-            strip.querySelectorAll(".folder-item").forEach(el => {
-                // 1) click to navigate
-                el.addEventListener("click", () => {
-                    const dest = el.dataset.folder;
-                    window.currentFolder = dest;
-                    localStorage.setItem("lastOpenedFolder", dest);
-                    updateBreadcrumbTitle(dest);
-                    document.querySelectorAll(".folder-option.selected").forEach(o => o.classList.remove("selected"));
-                    document.querySelector(`.folder-option[data-folder="${dest}"]`)?.classList.add("selected");
-                    loadFileList(dest);
-                });
-
-                // 2) drag & drop
-                el.addEventListener("dragover", folderDragOverHandler);
-                el.addEventListener("dragleave", folderDragLeaveHandler);
-                el.addEventListener("drop", folderDropHandler);
-
-                // 3) right-click context menu
-                el.addEventListener("contextmenu", e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const dest = el.dataset.folder;
-                    window.currentFolder = dest;
-                    localStorage.setItem("lastOpenedFolder", dest);
-
-                    // highlight the strip tile
-                    strip.querySelectorAll(".folder-item.selected").forEach(i => i.classList.remove("selected"));
-                    el.classList.add("selected");
-
-                    // reuse folderManager menu
-                    const menuItems = [
-                        {
-                            label: t("create_folder"),
-                            action: () => document.getElementById("createFolderModal").style.display = "block"
-                        },
-                        {
-                            label: t("rename_folder"),
-                            action: () => openRenameFolderModal()
-                        },
-                        {
-                            label: t("folder_share"),
-                            action: () => openFolderShareModal(dest)
-                        },
-                        {
-                            label: t("delete_folder"),
-                            action: () => openDeleteFolderModal()
-                        }
-                    ];
-                    showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
-                });
-            });
-
-            // one global click to hide any open context menu
-            document.addEventListener("click", hideFolderManagerContextMenu);
-
-        } else {
-            strip.style.display = "none";
-        }
-
-        // 8) render files
         if (window.viewMode === "gallery") {
             renderGalleryView(folder);
         } else {
             renderFileTable(folder);
         }
-
         updateFileActionButtons();
+        fileListContainer.style.visibility = "visible";
+
+        // ----- FOLDERS NEXT (populate strip when ready; doesn't block rows) -----
+        try {
+            const foldersRes = await foldersPromise;
+            const folderRaw = await foldersRes.json();
+            if (reqId !== __fileListReqSeq) return data.files;
+
+            // --- build ONLY the *direct* children of current folder ---
+            let subfolders = [];
+            const hidden = new Set(["profile_pics", "trash"]);
+            if (Array.isArray(folderRaw)) {
+                const allPaths = folderRaw.map(item => item.folder ?? item);
+                const depth = folder === "root" ? 1 : folder.split("/").length + 1;
+                subfolders = allPaths
+                    .filter(p => {
+                        if (folder === "root") return p.indexOf("/") === -1;
+                        if (!p.startsWith(folder + "/")) return false;
+                        return p.split("/").length === depth;
+                    })
+                    .map(p => ({ name: p.split("/").pop(), full: p }));
+            }
+            subfolders = subfolders.filter(sf => !hidden.has(sf.name));
+
+            // inject folder strip below actions, above file list
+            let strip = document.getElementById("folderStripContainer");
+            if (!strip) {
+                strip = document.createElement("div");
+                strip.id = "folderStripContainer";
+                strip.className = "folder-strip-container";
+                actionsContainer.parentNode.insertBefore(strip, actionsContainer);
+            }
+
+            if (window.showFoldersInList && subfolders.length) {
+                strip.innerHTML = subfolders.map(sf => `
+                  <div class="folder-item" data-folder="${sf.full}" draggable="true">
+                    <i class="material-icons">folder</i>
+                    <div class="folder-name">${escapeHTML(sf.name)}</div>
+                  </div>
+                `).join("");
+                strip.style.display = "flex";
+
+                // wire up each folder‐tile
+                strip.querySelectorAll(".folder-item").forEach(el => {
+                    // 1) click to navigate
+                    el.addEventListener("click", () => {
+                        const dest = el.dataset.folder;
+                        window.currentFolder = dest;
+                        localStorage.setItem("lastOpenedFolder", dest);
+                        updateBreadcrumbTitle(dest);
+                        document.querySelectorAll(".folder-option.selected").forEach(o => o.classList.remove("selected"));
+                        document.querySelector(`.folder-option[data-folder="${dest}"]`)?.classList.add("selected");
+                        loadFileList(dest);
+                    });
+
+                    // 2) drag & drop
+                    el.addEventListener("dragover", folderDragOverHandler);
+                    el.addEventListener("dragleave", folderDragLeaveHandler);
+                    el.addEventListener("drop", folderDropHandler);
+
+                    // 3) right-click context menu
+                    el.addEventListener("contextmenu", e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        const dest = el.dataset.folder;
+                        window.currentFolder = dest;
+                        localStorage.setItem("lastOpenedFolder", dest);
+
+                        // highlight the strip tile
+                        strip.querySelectorAll(".folder-item.selected").forEach(i => i.classList.remove("selected"));
+                        el.classList.add("selected");
+
+                        // reuse folderManager menu
+                        const menuItems = [
+                            {
+                                label: t("create_folder"),
+                                action: () => document.getElementById("createFolderModal").style.display = "block"
+                            },
+                            {
+                                label: t("rename_folder"),
+                                action: () => openRenameFolderModal()
+                            },
+                            {
+                                label: t("folder_share"),
+                                action: () => openFolderShareModal(dest)
+                            },
+                            {
+                                label: t("delete_folder"),
+                                action: () => openDeleteFolderModal()
+                            }
+                        ];
+                        showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+                    });
+                });
+
+                // one global click to hide any open context menu
+                document.addEventListener("click", hideFolderManagerContextMenu);
+
+            } else {
+                strip.style.display = "none";
+            }
+        } catch {
+            // ignore folder errors; rows already rendered
+        }
+
         return data.files;
 
     } catch (err) {
@@ -480,7 +513,10 @@ export async function loadFileList(folderParam) {
         }
         return [];
     } finally {
-        fileListContainer.style.visibility = "visible";
+        // Only the latest call should restore visibility
+        if (reqId === __fileListReqSeq) {
+            fileListContainer.style.visibility = "visible";
+        }
     }
 }
 
@@ -1137,12 +1173,64 @@ function parseCustomDate(dateStr) {
 }
 
 export function canEditFile(fileName) {
+    if (!fileName || typeof fileName !== "string") return false;
+    const dot = fileName.lastIndexOf(".");
+    if (dot < 0) return false;
+
+    const ext = fileName.slice(dot + 1).toLowerCase();
+
+    // Text/code-only. Intentionally exclude php/phtml/phar/etc.
     const allowedExtensions = [
-        "txt", "html", "htm", "css", "js", "json", "xml",
-        "md", "py", "ini", "csv", "log", "conf", "config", "bat",
-        "rtf", "doc", "docx"
+        // Plain text & docs (text)
+        "txt", "text", "md", "markdown", "rst",
+
+        // Web
+        "html", "htm", "xhtml", "shtml",
+        "css", "scss", "sass", "less",
+
+        // JS/TS
+        "js", "mjs", "cjs", "jsx",
+        "ts", "tsx",
+
+        // Data & config formats
+        "json", "jsonc", "ndjson",
+        "yml", "yaml", "toml", "xml", "plist",
+        "ini", "conf", "config", "cfg", "cnf", "properties", "props", "rc",
+        "env", "dotenv",
+        "csv", "tsv", "tab",
+        "log",
+
+        // Shell / scripts
+        "sh", "bash", "zsh", "ksh", "fish",
+        "bat", "cmd",
+        "ps1", "psm1", "psd1",
+
+        // Languages
+        "py", "pyw",        // Python
+        "rb",              // Ruby
+        "pl", "pm",         // Perl
+        "go",              // Go
+        "rs",              // Rust
+        "java",            // Java
+        "kt", "kts",        // Kotlin
+        "scala", "sc",      // Scala
+        "groovy", "gradle", // Groovy/Gradle
+        "c", "h", "cpp", "cxx", "cc", "hpp", "hh", "hxx", // C/C++
+        "m", "mm",          // Obj-C / Obj-C++
+        "swift",           // Swift
+        "cs", "fs", "fsx",   // C#, F#
+        "dart",
+        "lua",
+        "r", "rmd",
+
+        // SQL
+        "sql",
+
+        // Front-end SFC/templates
+        "vue", "svelte",
+        "twig", "mustache", "hbs", "handlebars", "ejs", "pug", "jade"
     ];
-    const ext = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase();
+
     return allowedExtensions.includes(ext);
 }
 

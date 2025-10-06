@@ -1167,19 +1167,24 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
      * @return array Returns an associative array with keys "files" and "globalTags".
      */
     public static function getFileList(string $folder): array {
+        // --- caps for safe inlining ---
+        if (!defined('LISTING_CONTENT_BYTES_MAX')) define('LISTING_CONTENT_BYTES_MAX', 8192);          // 8 KB snippet
+        if (!defined('INDEX_TEXT_BYTES_MAX'))    define('INDEX_TEXT_BYTES_MAX', 5 * 1024 * 1024);     // only sample files ≤ 5 MB
+    
         $folder = trim($folder) ?: 'root';
+    
         // Determine the target directory.
         if (strtolower($folder) !== 'root') {
             $directory = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
         } else {
             $directory = UPLOAD_DIR;
         }
-        
+    
         // Validate folder.
         if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             return ["error" => "Invalid folder name."];
         }
-        
+    
         // Helper: Build the metadata file path.
         $getMetadataFilePath = function(string $folder): string {
             if (strtolower($folder) === 'root' || trim($folder) === '') {
@@ -1188,23 +1193,26 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             return META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
         };
         $metadataFile = $getMetadataFilePath($folder);
-        $metadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
-        
+        $metadata = file_exists($metadataFile) ? (json_decode(file_get_contents($metadataFile), true) ?: []) : [];
+    
         if (!is_dir($directory)) {
             return ["error" => "Directory not found."];
         }
-        
+    
         $allFiles = array_values(array_diff(scandir($directory), array('.', '..')));
         $fileList = [];
-        
+    
         // Define a safe file name pattern.
         $safeFileNamePattern = REGEX_FILE_NAME;
-        
+    
+        // Prepare finfo (if available) for MIME sniffing.
+        $finfo = function_exists('finfo_open') ? @finfo_open(FILEINFO_MIME_TYPE) : false;
+    
         foreach ($allFiles as $file) {
-            if (substr($file, 0, 1) === '.') {
-                continue; // Skip hidden files.
+            if ($file === '' || $file[0] === '.') {
+                continue; // Skip hidden/invalid entries.
             }
-            
+    
             $filePath = $directory . DIRECTORY_SEPARATOR . $file;
             if (!is_file($filePath)) {
                 continue; // Only process files.
@@ -1212,13 +1220,17 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             if (!preg_match($safeFileNamePattern, $file)) {
                 continue;
             }
-            
-            $fileDateModified = filemtime($filePath) ? date(DATE_TIME_FORMAT, filemtime($filePath)) : "Unknown";
+    
+            // Meta
+            $mtime = @filemtime($filePath);
+            $fileDateModified = $mtime ? date(DATE_TIME_FORMAT, $mtime) : "Unknown";
             $metaKey = $file;
             $fileUploadedDate = isset($metadata[$metaKey]["uploaded"]) ? $metadata[$metaKey]["uploaded"] : "Unknown";
             $fileUploader = isset($metadata[$metaKey]["uploader"]) ? $metadata[$metaKey]["uploader"] : "Unknown";
-            
-            $fileSizeBytes = filesize($filePath);
+    
+            // Size
+            $fileSizeBytes = @filesize($filePath);
+            if (!is_int($fileSizeBytes)) $fileSizeBytes = 0;
             if ($fileSizeBytes >= 1073741824) {
                 $fileSizeFormatted = sprintf("%.1f GB", $fileSizeBytes / 1073741824);
             } elseif ($fileSizeBytes >= 1048576) {
@@ -1228,29 +1240,65 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             } else {
                 $fileSizeFormatted = sprintf("%s bytes", number_format($fileSizeBytes));
             }
-            
-            $fileEntry = [
-                'name' => $file,
-                'modified' => $fileDateModified,
-                'uploaded' => $fileUploadedDate,
-                'size' => $fileSizeFormatted,
-                'uploader' => $fileUploader,
-                'tags' => isset($metadata[$metaKey]['tags']) ? $metadata[$metaKey]['tags'] : []
-            ];
-            
-            // Optionally include file content for text-based files.
-            if (preg_match('/\.(txt|html|htm|md|js|css|json|xml|php|py|ini|conf|log)$/i', $file)) {
-                $content = file_get_contents($filePath);
-                $fileEntry['content'] = $content;
+    
+            // MIME + text detection (fallback to extension)
+            $mime = 'application/octet-stream';
+            if ($finfo) {
+                $det = @finfo_file($finfo, $filePath);
+                if (is_string($det) && $det !== '') $mime = $det;
             }
-            
+            $isTextByMime = (strpos((string)$mime, 'text/') === 0) || $mime === 'application/json' || $mime === 'application/xml';
+            $isTextByExt  = (bool)preg_match('/\.(txt|md|csv|json|xml|html?|css|js|log|ini|conf|config|yml|yaml|php|py|rb|sh|bat|ps1|ts|tsx|c|cpp|h|hpp|java|go|rs)$/i', $file);
+            $isText = $isTextByMime || $isTextByExt;
+    
+            // Build entry
+            $fileEntry = [
+                'name'      => $file,
+                'modified'  => $fileDateModified,
+                'uploaded'  => $fileUploadedDate,
+                'size'      => $fileSizeFormatted,
+                'sizeBytes' => $fileSizeBytes,            // ← numeric size for frontend logic
+                'uploader'  => $fileUploader,
+                'tags'      => isset($metadata[$metaKey]['tags']) ? $metadata[$metaKey]['tags'] : [],
+                'mime'      => $mime,
+            ];
+    
+            // Small, safe snippet for text files only (never full content)
+            $fileEntry['content']          = '';
+            $fileEntry['contentTruncated'] = false;
+    
+            if ($isText && $fileSizeBytes > 0) {
+                if ($fileSizeBytes <= INDEX_TEXT_BYTES_MAX) {
+                    $fh = @fopen($filePath, 'rb');
+                    if ($fh) {
+                        $snippet = @fread($fh, LISTING_CONTENT_BYTES_MAX);
+                        @fclose($fh);
+                        if ($snippet !== false) {
+                            // ensure UTF-8 for JSON
+                            if (function_exists('mb_check_encoding') && !mb_check_encoding($snippet, 'UTF-8')) {
+                                if (function_exists('mb_convert_encoding')) {
+                                    $snippet = @mb_convert_encoding($snippet, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+                                }
+                            }
+                            $fileEntry['content'] = $snippet;
+                            $fileEntry['contentTruncated'] = ($fileSizeBytes > LISTING_CONTENT_BYTES_MAX);
+                        }
+                    }
+                } else {
+                    // too large to sample: mark truncated so UI/search knows
+                    $fileEntry['contentTruncated'] = true;
+                }
+            }
+    
             $fileList[] = $fileEntry;
         }
-        
+    
+        if ($finfo) { @finfo_close($finfo); }
+    
         // Load global tags.
         $globalTagsFile = META_DIR . "createdTags.json";
-        $globalTags = file_exists($globalTagsFile) ? json_decode(file_get_contents($globalTagsFile), true) : [];
-        
+        $globalTags = file_exists($globalTagsFile) ? (json_decode(file_get_contents($globalTagsFile), true) ?: []) : [];
+    
         return ["files" => $fileList, "globalTags" => $globalTags];
     }
 
