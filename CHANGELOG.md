@@ -1,5 +1,13 @@
 # Changelog
 
+## Changes 10/7/2025 (no new version)
+
+feat(start.sh): stream Apache logs to console + startup polish
+
+- Tail /var/www/metadata/log/{access,error}.log to container stdout (STREAM_LOGS=true by default)
+- Ensure log/session dirs exist with sane perms; no port/vhost changes
+- Keep Apache in foreground; clearer startup message
+
 ## Changes 10/6/2025 v1.3.15
 
 feat/perf: large-file handling, faster file list, richer CodeMirror modes (fixes #48)

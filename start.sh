@@ -57,6 +57,11 @@ mkdir -p /var/www/metadata/log
 chown www-data:www-data /var/www/metadata/log
 chmod 775 /var/www/metadata/log
 
+: > /var/www/metadata/log/access.log
+: > /var/www/metadata/log/error.log
+chown www-data:www-data /var/www/metadata/log/access.log /var/www/metadata/log/error.log
+chmod 664 /var/www/metadata/log/access.log /var/www/metadata/log/error.log
+
 mkdir -p /var/www/sessions
 chown www-data:www-data /var/www/sessions
 chmod 700 /var/www/sessions
@@ -153,5 +158,13 @@ if [ "${SCAN_ON_START:-}" = "true" ]; then
   fi
 fi
 
-echo "🔥 Starting Apache..."
+# 9.6) Stream Apache logs to the container console (optional toggle)
+if [ "${STREAM_LOGS:-true}" = "true" ]; then
+  echo "[startup] Streaming Apache logs to container console..."
+  # access.log -> STDOUT, error.log -> STDERR
+  tail -n0 -F /var/www/metadata/log/access.log >> /proc/1/fd/1 &
+  tail -n0 -F /var/www/metadata/log/error.log  >> /proc/1/fd/2 &
+fi
+
+echo "✅ Apache starting (foreground). Check container logs for access/error output…"
 exec apachectl -D FOREGROUND
