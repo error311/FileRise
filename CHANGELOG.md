@@ -2,11 +2,13 @@
 
 ## Changes 10/7/2025 (no new version)
 
-feat(start.sh): stream Apache logs to console + startup polish
+feat(startup): stream error.log to console by default; add LOG_STREAM selector
 
-- Tail /var/www/metadata/log/{access,error}.log to container stdout (STREAM_LOGS=true by default)
-- Ensure log/session dirs exist with sane perms; no port/vhost changes
-- Keep Apache in foreground; clearer startup message
+- Touch error/access logs on start so tail can attach immediately
+- Add LOG_STREAM=error|access|both|none (default: error)
+- Tail with `-n0 -F` to follow new entries only and survive rotations
+- Keep access.log on disk but don’t spam console unless requested
+- (Unraid) Optional env var template entry for LOG_STREAM
 
 ## Changes 10/6/2025 v1.3.15
 

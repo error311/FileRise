@@ -56,11 +56,9 @@ fi
 mkdir -p /var/www/metadata/log
 chown www-data:www-data /var/www/metadata/log
 chmod 775 /var/www/metadata/log
-
-: > /var/www/metadata/log/access.log
 : > /var/www/metadata/log/error.log
-chown www-data:www-data /var/www/metadata/log/access.log /var/www/metadata/log/error.log
-chmod 664 /var/www/metadata/log/access.log /var/www/metadata/log/error.log
+: > /var/www/metadata/log/access.log
+chown www-data:www-data /var/www/metadata/log/*.log
 
 mkdir -p /var/www/sessions
 chown www-data:www-data /var/www/sessions
@@ -159,12 +157,16 @@ if [ "${SCAN_ON_START:-}" = "true" ]; then
 fi
 
 # 9.6) Stream Apache logs to the container console (optional toggle)
-if [ "${STREAM_LOGS:-true}" = "true" ]; then
-  echo "[startup] Streaming Apache logs to container console..."
-  # access.log -> STDOUT, error.log -> STDERR
-  tail -n0 -F /var/www/metadata/log/access.log >> /proc/1/fd/1 &
-  tail -n0 -F /var/www/metadata/log/error.log  >> /proc/1/fd/2 &
-fi
+LOG_STREAM="${LOG_STREAM:-error}"
+case "${LOG_STREAM,,}" in
+  none)   STREAM_ERR=false; STREAM_ACC=false ;;
+  access) STREAM_ERR=false; STREAM_ACC=true  ;;
+  both)   STREAM_ERR=true;  STREAM_ACC=true  ;;
+  error|*)STREAM_ERR=true;  STREAM_ACC=false ;;
+esac
 
-echo "✅ Apache starting (foreground). Check container logs for access/error output…"
+echo "🔥 Starting Apache..."
+# Stream only the chosen logs; -n0 = don't dump history, -F = follow across rotations/creation
+[ "${STREAM_ERR}" = "true" ] && tail -n0 -F /var/www/metadata/log/error.log 2>/dev/null &
+[ "${STREAM_ACC}" = "true" ] && tail -n0 -F /var/www/metadata/log/access.log 2>/dev/null &
 exec apachectl -D FOREGROUND
