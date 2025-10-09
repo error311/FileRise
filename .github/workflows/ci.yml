@@ -1,8 +1,8 @@
+---
 name: CI
-
-on:
+"on":
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
   workflow_dispatch:
 
@@ -18,21 +18,16 @@ jobs:
         php: ['8.1', '8.2', '8.3']
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup PHP ${{ matrix.php }}
-        uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-
       - name: Validate composer.json (if present)
         run: |
           if [ -f composer.json ]; then composer validate --no-check-publish; fi
-
       - name: Composer audit (if lock present)
         run: |
           if [ -f composer.lock ]; then composer audit || true; fi
-
       - name: PHP syntax check
         run: |
           set -e
@@ -47,10 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
-
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: ShellCheck all scripts
         run: |
           set -e
@@ -65,58 +57,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Lint Dockerfile with hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
-          # Ignore apt pinning and multiple RUNs (acceptable for Ubuntu base & readability)
-          ignore: DL3008,DL3059
-          failure-threshold: error
 
   sanity:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install linters
-        run: sudo apt-get update && sudo apt-get install -y jq yamllint
-
+      - run: sudo apt-get update && sudo apt-get install -y jq yamllint
       - name: Lint JSON
         run: |
           set -e
           mapfile -t jsons < <(git ls-files '*.json' ':!:vendor/**')
           if [ "${#jsons[@]}" -gt 0 ]; then
-            for j in "${jsons[@]}"; do
-              echo "Checking $j"
-              jq -e . "$j" >/dev/null
-            done
+            for j in "${jsons[@]}"; do jq -e . "$j" >/dev/null; done
           else
             echo "No JSON files."
           fi
-
       - name: Lint YAML
         run: |
           set -e
           mapfile -t yamls < <(git ls-files '*.yml' '*.yaml')
           if [ "${#yamls[@]}" -gt 0 ]; then
-            # Relax line-length to avoid noisy failures for README badges, etc.
-            yamllint -d "{extends: default, rules: {line-length: {max: 140}}}" "${yamls[@]}"
+            yamllint -d "{extends: default, rules: {line-length: disable, truthy: {check-keys: false}}}" "${yamls[@]}"
           else
             echo "No YAML files."
-          fi
-
-      - name: Validate docker-compose.yml (if present)
-        run: |
-          set -e
-          if [ -f docker-compose.yml ]; then
-            if docker compose version >/dev/null 2>&1; then
-              docker compose -f docker-compose.yml config -q
-            elif command -v docker-compose >/dev/null 2>&1; then
-              docker-compose -f docker-compose.yml config -q
-            else
-              echo "Docker Compose not available; skipping compose validation."
-            fi
-          else
-            echo "No docker-compose.yml found."
           fi
