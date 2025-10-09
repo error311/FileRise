@@ -12,7 +12,7 @@ chore: set up CI, add compose, tighten ignores, refresh README
   node_modules, resources/, etc. to slim build context.
 - .gitignore: ignore .env, editor/system files, build caches, optional data/.
 - README: update badges (CI, release, license), inline demo creds, add quick
-  links, tighten WebDAV section (Windows HTTPS note + wiki link), and star
+  links, tighten WebDAV section (Windows HTTPS note + wiki link), reduced length and star
   history chart.
 
 ## Changes 10/7/2025 (no new version)
