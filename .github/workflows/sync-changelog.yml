@@ -42,4 +42,3 @@ jobs:
             git commit -m "chore: sync CHANGELOG.md from FileRise"
             git push origin main
           fi
-          

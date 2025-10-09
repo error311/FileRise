@@ -6,6 +6,9 @@ name: CI
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -62,7 +65,7 @@ jobs:
         with:
           dockerfile: Dockerfile
           failure-threshold: error
-          ignore: DL3008,DL3059 
+          ignore: DL3008,DL3059
 
   sanity:
     runs-on: ubuntu-latest
@@ -87,4 +90,3 @@ jobs:
           else
             echo "No YAML files."
           fi
-          
