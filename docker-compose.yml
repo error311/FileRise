@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  filerise:
+    # Use the published image (does NOT build in CI by default)
+    image: error311/filerise-docker:latest
+    container_name: filerise
+    restart: unless-stopped
+
+    # If someone wants to build locally instead, they can uncomment:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
+    ports:
+      - "${HOST_HTTP_PORT:-8080}:80"
+      # Uncomment if you really terminate TLS inside the container:
+      # - "${HOST_HTTPS_PORT:-8443}:443"
+
+    environment:
+      TIMEZONE: "${TIMEZONE:-UTC}"
+      DATE_TIME_FORMAT: "${DATE_TIME_FORMAT:-m/d/y  h:iA}"
+      TOTAL_UPLOAD_SIZE: "${TOTAL_UPLOAD_SIZE:-5G}"
+      SECURE: "${SECURE:-false}"
+      PERSISTENT_TOKENS_KEY: "${PERSISTENT_TOKENS_KEY:-please_change_this_@@}"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      CHOWN_ON_START: "${CHOWN_ON_START:-true}"
+      SCAN_ON_START: "${SCAN_ON_START:-true}"
+      SHARE_URL: "${SHARE_URL:-}"
+
+    volumes:
+      - ./data/uploads:/var/www/uploads
+      - ./data/users:/var/www/users
+      - ./data/metadata:/var/www/metadata
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

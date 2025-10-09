@@ -1,5 +1,14 @@
 # FileRise
 
+[![GitHub stars](https://img.shields.io/github/stars/error311/FileRise?style=social)](https://github.com/error311/FileRise)
+[![Docker pulls](https://img.shields.io/docker/pulls/error311/filerise-docker)](https://hub.docker.com/r/error311/filerise-docker)
+[![CI](https://img.shields.io/github/actions/workflow/status/error311/FileRise/ci.yml?branch=master&label=CI)](https://github.com/error311/FileRise/actions/workflows/ci.yml)
+[![Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://demo.filerise.net) **demo / demo**
+[![Release](https://img.shields.io/github/v/release/error311/FileRise?include_prereleases&sort=semver)](https://github.com/error311/FileRise/releases)
+[![License](https://img.shields.io/github/license/error311/FileRise)](LICENSE)
+
+**Quick links:** [Demo](#live-demo) • [Install](#installation--setup) • [Docker](#1-running-with-docker-recommended) • [Unraid](#unraid) • [WebDAV](#quick-start-mount-via-webdav) • [FAQ](#faq--troubleshooting)
+
 **Elevate your File Management** – A modern, self-hosted web file manager.
 Upload, organize, and share files or folders through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, **FileRise** makes file management on your server a breeze.
 
@@ -14,35 +23,38 @@ Upload, organize, and share files or folders through a sleek web interface. **Fi
 
 ## Features at a Glance or [Full Features Wiki](https://github.com/error311/FileRise/wiki/Features)
 
-- 🚀 **Easy File Uploads:** Upload multiple files and folders via drag & drop or file picker. Supports large files with pause/resumable chunked uploads and shows real-time progress for each file. No more failed transfers – FileRise will pick up where it left off if your connection drops.
+- 🚀 **Easy File Uploads:** Upload multiple files and folders via drag & drop or file picker. Supports large files with pause/resumable chunked uploads and shows real-time progress for each file. FileRise will pick up where it left off if your connection drops.
 
-- 🗂️ **File Management:** Full set of file/folder operations – move or copy files (via intuitive drag-drop or dialogs), rename items, and delete in batches. You can even download selected files as a ZIP archive or extract uploaded ZIP files server-side. Organize content with an interactive folder tree and breadcrumb navigation for quick jumps.
+- 🗂️ **File Management:** Full set of file/folder operations – move or copy files (via intuitive drag-drop or dialogs), rename items, and delete in batches. You can download selected files as a ZIP archive or extract uploaded ZIP files server-side. Organize content with an interactive folder tree and breadcrumb navigation for quick jumps.
 
-- 🗃️ **Folder Sharing & File Sharing:** Easily share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items per page) with navigation controls, and file sizes are displayed in MB for clarity. Share files with others using one-time or expiring public links (with password protection if desired) – convenient for sending individual files without exposing the whole app.
+- 🗃️ **Folder Sharing & File Sharing:** Share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items per page) with navigation controls; file sizes are displayed in MB for clarity. Share individual files with one-time or expiring links (optional password protection).
 
-- 🔌 **WebDAV Support:** Mount FileRise as a network drive **or use it head‑less from the CLI**. Standard WebDAV operations (upload / download / rename / delete) work in Cyberduck, WinSCP, GNOME Files, Finder, etc., and you can also script against it with `curl` – see the [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV) + [curl](https://github.com/error311/FileRise/wiki/Accessing-FileRise-via-curl%C2%A0(WebDAV)) quick‑start for examples. Folder‑Only users are restricted to their personal directory, while admins and unrestricted users have full access.
+- 🔌 **WebDAV Support:** Mount FileRise as a network drive **or use it head-less from the CLI**. Standard WebDAV operations (upload / download / rename / delete) work in Cyberduck, WinSCP, GNOME Files, Finder, etc., and you can also script against it with `curl` – see the [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV) + [curl](https://github.com/error311/FileRise/wiki/Accessing-FileRise-via-curl-(WebDAV)) quick-starts. Folder-Only users are restricted to their personal directory; admins and unrestricted users have full access.
 
-- 📚 **API Documentation:** Fully auto‑generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
+- 📚 **API Documentation:** Auto-generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
 
-- 📝 **Built-in Editor & Preview:** View images, videos, audio, and PDFs inline with a preview modal – no need to download just to see them. Edit text/code files right in your browser with a CodeMirror-based editor featuring syntax highlighting and line numbers. Great for config files or notes – tweak and save changes without leaving FileRise.
+- 📝 **Built-in Editor & Preview:** View images, videos, audio, and PDFs inline with a preview modal. Edit text/code files in your browser with a CodeMirror-based editor featuring syntax highlighting and line numbers.
 
-- 🏷️ **Tags & Search:** Categorize your files with color-coded tags and locate them instantly using our indexed real-time search. Easily switch to Advanced Search mode to enable fuzzy matching not only across file names, tags, and uploader fields but also within the content of text files—helping you find that “important” document even if you make a typo or need to search deep within the file.
+- 🏷️ **Tags & Search:** Categorize your files with color-coded tags and locate them instantly using indexed real-time search. **Advanced Search** adds fuzzy matching across file names, tags, uploader fields, and within text file contents.
 
-- 🔒 **User Authentication & User Permissions:** Secure your portal with username/password login. Supports multiple users – create user accounts (admin UI provided) for family or team members. User permissions such as User “Folder Only” feature assigns each user a dedicated folder within the root directory, named after their username, restricting them from viewing or modifying other directories. User Read Only and Disable Upload are additional permissions. FileRise also integrates with Single Sign-On (OIDC) providers (e.g., OAuth2/OIDC for Google/Authentik/Keycloak) and offers optional TOTP two-factor auth for extra security.
+- 🔒 **User Authentication & Permissions:** Username/password login with multi-user support (admin UI). Current permissions: **Folder-only**, **Read-only**, **Disable upload**. SSO via OIDC providers (Google/Authentik/Keycloak) and optional TOTP 2FA.
 
-- 🎨 **Responsive UI (Dark/Light Mode):** FileRise is mobile-friendly out of the box – manage files from your phone or tablet with a responsive layout. Choose between Dark mode or Light theme, or let it follow your system preference. The interface remembers your preferences (layout, items per page, last visited folder, etc.) for a personalized experience each time.
+- 🎨 **Responsive UI (Dark/Light Mode):** Mobile-friendly layout with theme toggle. The interface remembers your preferences (layout, items per page, last visited folder, etc.).
 
-- 🌐 **Internationalization & Localization:** FileRise supports multiple languages via an integrated i18n system. Users can switch languages through a user panel dropdown, and their choice is saved in local storage for a consistent experience across sessions. Currently available in English, Spanish, French & German—please report any translation issues you encounter.
+- 🌐 **Internationalization & Localization:** Switch languages via the UI (English, Spanish, French, German). Contributions welcome.
 
-- 🗑️ **Trash & File Recovery:** Mistakenly deleted files? No worries – deleted items go to the Trash instead of immediate removal. Admins can restore files from Trash or empty it to free space. FileRise auto-purges old trash entries (default 3 days) to keep your storage tidy.
+- 🗑️ **Trash & File Recovery:** Deleted items go to Trash first; admins can restore or empty. Old trash entries auto-purge (default 3 days).
 
-- ⚙️ **Lightweight & Self‑Contained:** FileRise runs on PHP 8.1+ with no external database required – data is stored in files (users, metadata) for simplicity. It’s a single‑folder web app you can drop into any Apache/PHP server or run as a container. Docker & Unraid ready: use our pre‑built image for a hassle‑free setup. Memory and CPU footprint is minimal, yet the app scales to thousands of files with pagination and sorting features.
+- ⚙️ **Lightweight & Self-Contained:** Runs on PHP **8.3+** with no external database. Single-folder install or Docker image. Low footprint; scales to thousands of files with pagination and sorting.
 
-(For a full list of features and detailed changelogs, see the [Wiki](https://github.com/error311/FileRise/wiki), [changelog](https://github.com/error311/FileRise/blob/master/CHANGELOG.md) or the [releases](https://github.com/error311/FileRise/releases) pages.)
+(For full features and changelogs, see the [Wiki](https://github.com/error311/FileRise/wiki), [CHANGELOG](https://github.com/error311/FileRise/blob/master/CHANGELOG.md) or [Releases](https://github.com/error311/FileRise/releases).)
 
 ---
 
 ## Live Demo
+
+[![Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://demo.filerise.net)
+**Demo credentials:** `demo` / `demo`
 
 Curious about the UI? **Check out the live demo:** <https://demo.filerise.net> (login with username “demo” and password “demo”). *The demo is read-only for security*. Explore the interface, switch themes, preview files, and see FileRise in action!
 
@@ -50,7 +62,7 @@ Curious about the UI? **Check out the live demo:** <https://demo.filerise.net> (
 
 ## Installation & Setup
 
-You can deploy FileRise either by running the **Docker container** (quickest way) or by a **manual installation** on a PHP web server. Both methods are outlined below.
+Deploy FileRise using the **Docker image** (quickest) or a **manual install** on a PHP web server.
 
 ---
 
@@ -89,9 +101,9 @@ This starts FileRise on port **8080** → visit `http://your-server-ip:8080`.
 **Notes**  
 
 - **Do not use** Docker `--user`. Use **PUID/PGID** to map on-disk ownership (e.g., `1000:1000`; on Unraid typically `99:100`).
-- `CHOWN_ON_START=true` is recommended on **first run** to normalize ownership of existing trees. Set to **false** later for faster restarts.
-- `SCAN_ON_START=true` runs a one-time index of files added outside the UI so their metadata appears.
-- `SHARE_URL` is optional; leave blank to auto-detect from the current host/scheme. You can set it to your site root (e.g., `https://files.example.com`) or directly to the full endpoint.
+- `CHOWN_ON_START=true` is recommended on **first run**. Set to **false** later for faster restarts.
+- `SCAN_ON_START=true` indexes files added outside the UI so their metadata appears.
+- `SHARE_URL` optional; leave blank to auto-detect host/scheme. Set to site root (e.g., `https://files.example.com`) if needed.
 - Set `SECURE="true"` if you serve via HTTPS at your proxy layer.
 
 **Verify ownership mapping (optional)**  
@@ -131,17 +143,17 @@ services:
       - ./metadata:/var/www/metadata
 ```
 
-FileRise will be accessible at `http://localhost:8080` (or your server’s IP).  
-The example also sets a custom `PERSISTENT_TOKENS_KEY` (used to encrypt “Remember Me” tokens)—change it to a strong random string.
+Access at `http://localhost:8080` (or your server’s IP).  
+The example sets a custom `PERSISTENT_TOKENS_KEY`—change it to a strong random string.
 
 **First-time Setup**  
-On first launch, if no users exist, you’ll be prompted to create an **Admin account**. After logging in, use **User Management** to add more users.
+On first launch, if no users exist, you’ll be prompted to create an **Admin account**. Then use **User Management** to add more users.
 
 ---
 
 ### 2) Manual Installation (PHP/Apache)
 
-If you prefer to run FileRise on a traditional web server (LAMP stack or similar):
+If you prefer a traditional web server (LAMP stack or similar):
 
 **Requirements**  
 
@@ -157,8 +169,7 @@ git clone https://github.com/error311/FileRise.git
 
 Place the files in your web root (e.g., `/var/www/`). Subfolder installs are fine.
 
-**Composer (if applicable)**
-If you use optional features requiring Composer libraries, run:
+**Composer (if applicable)**  
 
 ```bash
 composer install
@@ -178,39 +189,49 @@ chmod -R 775 uploads users metadata
 
 **Configuration**  
 
-Open `config.php` and consider:
+Edit `config.php`:
 
 - `TIMEZONE`, `DATE_TIME_FORMAT` for your locale.
-- `TOTAL_UPLOAD_SIZE` (also ensure your PHP `upload_max_filesize` & `post_max_size` meet/exceed this).
-- `PERSISTENT_TOKENS_KEY` set to a unique secret if using “Remember Me”.
+- `TOTAL_UPLOAD_SIZE` (ensure PHP `upload_max_filesize` and `post_max_size` meet/exceed this).
+- `PERSISTENT_TOKENS_KEY` for “Remember Me” tokens.
 
-**Share links base URL**  
+**Share link base URL**  
 
-- You can set **`SHARE_URL`** via your web server environment variables (preferred),  
-  **or** keep using `BASE_URL` in `config.php` as a fallback for manual installs.
+- Set **`SHARE_URL`** via web-server env vars (preferred),  
+  **or** keep using `BASE_URL` in `config.php` as a fallback.
 - If neither is set, FileRise auto-detects from the current host/scheme.
 
-**Web Server Config**  
+**Web server config**  
 
 - Apache: allow `.htaccess` or merge its rules; ensure `mod_rewrite` is enabled.
-- Nginx/other: replicate the basic protections (no directory listing, deny sensitive files). See Wiki for examples.
+- Nginx/other: replicate basic protections (no directory listing, deny sensitive files). See Wiki for examples.
 
-Now browse to your FileRise URL; you’ll be prompted to create the Admin user on first load.
+Browse to your FileRise URL; you’ll be prompted to create the Admin user on first load.
 
 ---
 
-## Quick‑start: Mount via WebDAV
+## Unraid
 
-Once FileRise is running, you must enable WebDAV in admin panel to access it.
+- Install from **Community Apps** → search **FileRise**.  
+- Default **bridge**: access at `http://SERVER_IP:8080/`.  
+- **Custom br0** (own IP): map host ports to **80/443** if you want bare `http://CONTAINER_IP/` without a port.  
+- See the [support thread](https://forums.unraid.net/topic/187337-support-filerise/) for Unraid-specific help.
+
+---
+
+## Quick-start: Mount via WebDAV
+
+Once FileRise is running, enable WebDAV in the admin panel.
 
 ```bash
 # Linux (GVFS/GIO)
 gio mount dav://demo@your-host/webdav.php/
 
 # macOS (Finder → Go → Connect to Server…)
-dav://demo@your-host/webdav.php/
-
+https://your-host/webdav.php/
 ```
+
+> Finder typically uses `https://` (or `http://`) URLs for WebDAV, while GNOME/KDE use `dav://` / `davs://`.
 
 ### Windows (File Explorer)
 
@@ -222,8 +243,8 @@ dav://demo@your-host/webdav.php/
   https://your-host/webdav.php/
   ```
 
-- Check **Connect using different credentials**, and enter your FileRise username and password.
-- Click **Finish**. The drive will now appear under **This PC**.
+- Check **Connect using different credentials**, then enter your FileRise username/password.
+- Click **Finish**.
 
 > **Important:**  
 > Windows requires HTTPS (SSL) for WebDAV connections by default.  
@@ -238,33 +259,33 @@ dav://demo@your-host/webdav.php/
 >
 > 3. Find or create a `DWORD` value named **BasicAuthLevel**.
 > 4. Set its value to `2`.
-> 5. Restart the **WebClient** service or reboot your computer.
+> 5. Restart the **WebClient** service or reboot.
 
-📖 For a full guide (including SSL setup, HTTP workaround, and troubleshooting), see the [WebDAV Usage Wiki](https://github.com/error311/FileRise/wiki/WebDAV).
+📖 See the full [WebDAV Usage Wiki](https://github.com/error311/FileRise/wiki/WebDAV) for SSL setup, HTTP workaround, and troubleshooting.
 
 ---
 
 ## FAQ / Troubleshooting
 
-- **“Upload failed” or large files not uploading:** Make sure `TOTAL_UPLOAD_SIZE` in config and PHP’s `post_max_size` / `upload_max_filesize` are all set high enough. For extremely large files, you might also need to increase max_execution_time in PHP or rely on the resumable upload feature in smaller chunks.
+- **“Upload failed” or large files not uploading:** Ensure `TOTAL_UPLOAD_SIZE` in config and PHP’s `post_max_size` / `upload_max_filesize` are set high enough. For extremely large files, you might need to increase `max_execution_time` or rely on resumable uploads in smaller chunks.
 
-- **How to enable HTTPS?** FileRise itself doesn’t handle TLS. Run it behind a reverse proxy like Nginx, Caddy, or Apache with SSL, or use Docker with a companion like nginx-proxy or Caddy. Set `SECURE="true"` env var in Docker so FileRise knows to generate https links.
+- **How to enable HTTPS?** FileRise doesn’t terminate TLS itself. Run it behind a reverse proxy (Nginx, Caddy, Apache with SSL) or use a companion like nginx-proxy or Caddy in Docker. Set `SECURE="true"` in Docker so FileRise generates HTTPS links.
 
-- **Changing Admin or resetting password:** Admin can change any user’s password via the UI (User Management section). If you lose admin access, you can edit the `users/users.txt` file on the server – passwords are hashed (bcrypt), but you can delete the admin line and then restart the app to trigger the setup flow again.
+- **Changing Admin or resetting password:** Admin can change any user’s password via **User Management**. If you lose admin access, edit the `users/users.txt` file on the server – passwords are hashed (bcrypt), but you can delete the admin line and restart the app to trigger the setup flow again.
 
-- **Where are my files stored?** In the `uploads/` directory (or the path you set for `UPLOAD_DIR`). Within it, files are organized in the folder structure you see in the app. Deleted files move to `uploads/trash/`. Tag information is in `metadata/file_metadata`.json and trash metadata in `metadata/trash.json`, etc. Regular backups of these folders is recommended if the data is important.
+- **Where are my files stored?** In the `uploads/` directory (or the path you set). Deleted files move to `uploads/trash/`. Tag information is in `metadata/file_metadata.json` and trash metadata in `metadata/trash.json`, etc. Backups are recommended.
 
-- **Updating FileRise:** If using Docker, pull the new image and recreate the container. For manual installs, download the latest release and replace the files (preserve your `config.php` and the uploads/users/metadata folders). Clear your browser cache if you have issues after an update (in case CSS/JS changed).
+- **Updating FileRise:** For Docker, pull the new image and recreate the container. For manual installs, download the latest release and replace files (keep your `config.php` and `uploads/users/metadata`). Clear your browser cache if UI assets changed.
 
-For more Q&A or to ask for help, please check the Discussions or open an issue.
+For more Q&A or to ask for help, open a Discussion or Issue.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! If you have ideas for new features or have found a bug, feel free to open an issue. Check out the [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. You can also join the conversation in GitHub Discussions or on Reddit (see links below) to share feedback and suggestions.
-
-Areas where you can help: translations, bug fixes, UI improvements, or building integration with other services. If you like FileRise, giving the project a ⭐ star ⭐ on GitHub is also a much-appreciated contribution!
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).  
+Areas to help: translations, bug fixes, UI polish, integrations.  
+If you like FileRise, a ⭐ star on GitHub is much appreciated!
 
 ---
 
@@ -272,7 +293,9 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 
 - **Reddit:** [r/selfhosted: FileRise Discussion](https://www.reddit.com/r/selfhosted/comments/1kfxo9y/filerise_v131_major_updates_sneak_peek_at_whats/) – (Announcement and user feedback thread).
 - **Unraid Forums:** [FileRise Support Thread](https://forums.unraid.net/topic/187337-support-filerise/) – for Unraid-specific support or issues.
-- **GitHub Discussions:** Use the Q&A category for any setup questions, and the Ideas category to suggest enhancements.
+- **GitHub Discussions:** Use Q&A for setup questions, Ideas for enhancements.
+
+[![Star History Chart](https://api.star-history.com/svg?repos=error311/FileRise&type=Date)](https://star-history.com/#error311/FileRise&Date)
 
 ---
 
@@ -305,4 +328,4 @@ Areas where you can help: translations, bug fixes, UI improvements, or building 
 
 ## License
 
-This project is open-source under the MIT License. That means you’re free to use, modify, and distribute **FileRise**, with attribution. We hope you find it useful and contribute back!
+MIT License – see [LICENSE](LICENSE).

@@ -1,0 +1,86 @@
+name: CI
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: Validate composer.json (if present)
+        run: |
+          if [ -f composer.json ]; then composer validate --no-check-publish; fi
+      - name: Composer audit (if lock present)
+        run: |
+          if [ -f composer.lock ]; then composer audit || true; fi
+      - name: PHP syntax check
+        run: |
+          set -e
+          mapfile -t files < <(git ls-files '*.php')
+          if [ "${#files[@]}" -gt 0 ]; then
+            for f in "${files[@]}"; do php -l "$f"; done
+          else
+            echo "No PHP files found."
+          fi
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: ShellCheck all scripts
+        run: |
+          set -e
+          mapfile -t sh < <(git ls-files '*.sh')
+          if [ "${#sh[@]}" -gt 0 ]; then
+            shellcheck "${sh[@]}"
+          else
+            echo "No shell scripts found."
+          fi
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y jq yamllint
+      - name: Lint JSON
+        run: |
+          set -e
+          mapfile -t jsons < <(git ls-files '*.json' ':!:vendor/**')
+          if [ "${#jsons[@]}" -gt 0 ]; then
+            for j in "${jsons[@]}"; do jq -e . "$j" >/dev/null; done
+          else
+            echo "No JSON files."
+          fi
+      - name: Lint YAML
+        run: |
+          set -e
+          mapfile -t yamls < <(git ls-files '*.yml' '*.yaml')
+          if [ "${#yamls[@]}" -gt 0 ]; then
+            yamllint -d "{extends: default, rules: {line-length: disable}}" "${yamls[@]}"
+          else
+            echo "No YAML files."
+          fi

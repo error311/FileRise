@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 10/8/2025 (no new version)
+
+chore: set up CI, add compose, tighten ignores, refresh README
+
+- CI: add workflow to lint PHP (php -l), validate/audit composer,
+  shellcheck *.sh, hadolint Dockerfile, and sanity-check JSON/YAML; supports
+  push/PR/manual dispatch.
+- Docker: add docker-compose.yml for local dev (8080:80, volumes/env).
+- .dockerignore: exclude VCS, build artifacts, OS/editor junk, logs, temp dirs,
+  node_modules, resources/, etc. to slim build context.
+- .gitignore: ignore .env, editor/system files, build caches, optional data/.
+- README: update badges (CI, release, license), inline demo creds, add quick
+  links, tighten WebDAV section (Windows HTTPS note + wiki link), and star
+  history chart.
+
 ## Changes 10/7/2025 (no new version)
 
 feat(startup): stream error.log to console by default; add LOG_STREAM selector
@@ -9,6 +24,8 @@ feat(startup): stream error.log to console by default; add LOG_STREAM selector
 - Tail with `-n0 -F` to follow new entries only and survive rotations
 - Keep access.log on disk but don’t spam console unless requested
 - (Unraid) Optional env var template entry for LOG_STREAM
+
+---
 
 ## Changes 10/6/2025 v1.3.15
 

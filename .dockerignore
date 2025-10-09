@@ -12,3 +12,9 @@ tmp/
 .env
 .vscode/
 .DS_Store
+data/
+uploads/
+users/
+metadata/
+sessions/
+vendor/
