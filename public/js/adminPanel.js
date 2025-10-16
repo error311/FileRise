@@ -3,8 +3,14 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.3.15";
+const version = "v1.4.0";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
+
+// Translate with fallback: if t(key) just echos the key, use a readable string.
+const tf = (key, fallback) => {
+  const v = t(key);
+  return (v && v !== key) ? v : fallback;
+};
 
 // ————— Inject updated styles —————
 (function () {
@@ -493,21 +499,21 @@ export function openAdminPanel() {
 }
 
 function handleSave() {
-  const dFL    = document.getElementById("disableFormLogin").checked;
-  const dBA    = document.getElementById("disableBasicAuth").checked;
-  const dOIDC  = document.getElementById("disableOIDCLogin").checked;
-  const aBypass= document.getElementById("authBypass").checked;
-  const aHeader= document.getElementById("authHeaderName").value.trim() || "X-Remote-User";
-  const eWD    = document.getElementById("enableWebDAV").checked;
-  const sMax   = parseInt(document.getElementById("sharedMaxUploadSize").value, 10) || 0;
-  const nHT    = document.getElementById("headerTitle").value.trim();
-  const nOIDC  = {
+  const dFL = document.getElementById("disableFormLogin").checked;
+  const dBA = document.getElementById("disableBasicAuth").checked;
+  const dOIDC = document.getElementById("disableOIDCLogin").checked;
+  const aBypass = document.getElementById("authBypass").checked;
+  const aHeader = document.getElementById("authHeaderName").value.trim() || "X-Remote-User";
+  const eWD = document.getElementById("enableWebDAV").checked;
+  const sMax = parseInt(document.getElementById("sharedMaxUploadSize").value, 10) || 0;
+  const nHT = document.getElementById("headerTitle").value.trim();
+  const nOIDC = {
     providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
-    clientId:    document.getElementById("oidcClientId").value.trim(),
-    clientSecret:document.getElementById("oidcClientSecret").value.trim(),
+    clientId: document.getElementById("oidcClientId").value.trim(),
+    clientSecret: document.getElementById("oidcClientSecret").value.trim(),
     redirectUri: document.getElementById("oidcRedirectUri").value.trim()
   };
-  const gURL   = document.getElementById("globalOtpauthUrl").value.trim();
+  const gURL = document.getElementById("globalOtpauthUrl").value.trim();
 
   if ([dFL, dBA, dOIDC].filter(x => x).length === 3) {
     showToast(t("at_least_one_login_method"));
@@ -521,25 +527,25 @@ function handleSave() {
       disableFormLogin: dFL,
       disableBasicAuth: dBA,
       disableOIDCLogin: dOIDC,
-      authBypass:       aBypass,
-      authHeaderName:   aHeader
+      authBypass: aBypass,
+      authHeaderName: aHeader
     },
-    enableWebDAV:         eWD,
-    sharedMaxUploadSize:  sMax,
-    globalOtpauthUrl:     gURL
+    enableWebDAV: eWD,
+    sharedMaxUploadSize: sMax,
+    globalOtpauthUrl: gURL
   }, {
     "X-CSRF-Token": window.csrfToken
   })
-  .then(res => {
-    if (res.success) {
-      showToast(t("settings_updated_successfully"), "success");
-      captureInitialAdminConfig();
-      closeAdminPanel();
-      loadAdminConfigFunc();
-    } else {
-      showToast(t("error_updating_settings") + ": " + (res.error || t("unknown_error")), "error");
-    }
-  }).catch(() => {/*noop*/});
+    .then(res => {
+      if (res.success) {
+        showToast(t("settings_updated_successfully"), "success");
+        captureInitialAdminConfig();
+        closeAdminPanel();
+        loadAdminConfigFunc();
+      } else {
+        showToast(t("error_updating_settings") + ": " + (res.error || t("unknown_error")), "error");
+      }
+    }).catch(() => {/*noop*/ });
 }
 
 export async function closeAdminPanel() {
@@ -605,15 +611,16 @@ export function openUserPermissionsModal() {
       const rows = userPermissionsModal.querySelectorAll(".user-permission-row");
       const permissionsData = [];
       rows.forEach(row => {
-        const username = row.getAttribute("data-username");
-        const folderOnlyCheckbox = row.querySelector("input[data-permission='folderOnly']");
-        const readOnlyCheckbox = row.querySelector("input[data-permission='readOnly']");
-        const disableUploadCheckbox = row.querySelector("input[data-permission='disableUpload']");
+        const g = k => row.querySelector(`input[data-permission='${k}']`)?.checked ?? false;
         permissionsData.push({
-          username,
-          folderOnly: folderOnlyCheckbox.checked,
-          readOnly: readOnlyCheckbox.checked,
-          disableUpload: disableUploadCheckbox.checked
+          username: row.getAttribute("data-username"),
+          folderOnly:    g("folderOnly"),
+          readOnly:      g("readOnly"),
+          disableUpload: g("disableUpload"),
+          bypassOwnership: g("bypassOwnership"),
+          canShare:        g("canShare"),
+          canZip:          g("canZip"),
+          viewOwnOnly:     g("viewOwnOnly"),
         });
       });
       // Send the permissionsData to the server.
@@ -664,38 +671,79 @@ function loadUserPermissionsList() {
               folderOnly: false,
               readOnly: false,
               disableUpload: false,
+              bypassOwnership: false,
+              canShare: false,
+              canZip: false,
+              viewOwnOnly: false,
             };
 
             // Normalize the username key to match server storage (e.g., lowercase)
             const usernameKey = user.username.toLowerCase();
 
+
+            const toBool = v => v === true || v === 1 || v === "1";
             const userPerm = (permissionsData && typeof permissionsData === "object" && (usernameKey in permissionsData))
               ? permissionsData[usernameKey]
               : defaultPerm;
 
-            // Create a row for the user.
-            const row = document.createElement("div");
-            row.classList.add("user-permission-row");
-            row.setAttribute("data-username", user.username);
-            row.style.padding = "10px 0";
-            row.innerHTML = `
-                  <div style="font-weight: bold; margin-bottom: 5px;">${user.username}</div>
-                  <div style="display: flex; flex-direction: column; gap: 5px;">
-                    <label style="display: flex; align-items: center; gap: 5px;">
-                      <input type="checkbox" data-permission="folderOnly" ${userPerm.folderOnly ? "checked" : ""} />
-                      ${t("user_folder_only")}
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 5px;">
-                      <input type="checkbox" data-permission="readOnly" ${userPerm.readOnly ? "checked" : ""} />
-                      ${t("read_only")}
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 5px;">
-                      <input type="checkbox" data-permission="disableUpload" ${userPerm.disableUpload ? "checked" : ""} />
-                      ${t("disable_upload")}
-                    </label>
-                  </div>
-                  <hr style="margin-top: 10px; border: 0; border-bottom: 1px solid #ccc;">
-                `;
+
+            // Create a row for the user (collapsed by default)
+const row = document.createElement("div");
+row.classList.add("user-permission-row");
+row.setAttribute("data-username", user.username);
+row.style.padding = "6px 0";
+
+// helper for checkbox checked state
+const checked = key => (userPerm && userPerm[key]) ? "checked" : "";
+
+// header + caret
+row.innerHTML = `
+  <div class="user-perm-header"
+       role="button"
+       tabindex="0"
+       aria-expanded="false"
+       style="display:flex;align-items:center;justify-content:space-between;
+              padding:8px 6px;border-radius:6px;cursor:pointer;
+              background:var(--perm-header-bg, rgba(0,0,0,0.04));">
+    <span style="font-weight:600;">${user.username}</span>
+    <i class="material-icons perm-caret" style="transition:transform .2s; transform:rotate(-90deg);">expand_more</i>
+  </div>
+
+  <div class="user-perm-details"
+       style="display:none;margin:8px 4px 2px 10px;
+              display:none;gap:8px;
+              grid-template-columns: 1fr 1fr;">
+    <label><input type="checkbox" data-permission="folderOnly" ${checked("folderOnly")}/> ${t("user_folder_only")}</label>
+    <label><input type="checkbox" data-permission="readOnly" ${checked("readOnly")}/> ${t("read_only")}</label>
+    <label><input type="checkbox" data-permission="disableUpload" ${checked("disableUpload")}/> ${t("disable_upload")}</label>
+
+    <label><input type="checkbox" data-permission="bypassOwnership" ${checked("bypassOwnership")}/> Bypass ownership</label>
+    <label><input type="checkbox" data-permission="canShare" ${checked("canShare")}/> Can share</label>
+    <label><input type="checkbox" data-permission="canZip" ${checked("canZip")}/> Can zip</label>
+    <label><input type="checkbox" data-permission="viewOwnOnly" ${checked("viewOwnOnly")}/> View own files only</label>
+  </div>
+
+  <hr style="margin:8px 0 4px;border:0;border-bottom:1px solid #ccc;">
+`;
+
+// toggle open/closed on click + Enter/Space
+const header  = row.querySelector(".user-perm-header");
+const details = row.querySelector(".user-perm-details");
+const caret   = row.querySelector(".perm-caret");
+
+function toggleOpen() {
+  const willShow = details.style.display === "none";
+  details.style.display = willShow ? "grid" : "none";
+  header.setAttribute("aria-expanded", willShow ? "true" : "false");
+  caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
+}
+
+header.addEventListener("click", toggleOpen);
+header.addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleOpen(); }
+});
+
+listContainer.appendChild(row);
             listContainer.appendChild(row);
           });
         });

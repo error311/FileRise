@@ -3,9 +3,163 @@
 
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/FileModel.php';
+require_once PROJECT_ROOT . '/src/models/UserModel.php';
+
 
 class FileController
 {
+    /* =========================
+     * Permission helpers (fail-closed)
+     * ========================= */
+    private function isAdmin(array $perms): bool {
+        // explicit flags in permissions blob
+        if (!empty($perms['admin']) || !empty($perms['isAdmin'])) return true;
+    
+        // session-based flags commonly set at login
+        if (!empty($_SESSION['isAdmin']) && $_SESSION['isAdmin'] === true) return true;
+    
+        // sometimes apps store role in session
+        $role = $_SESSION['role'] ?? null;
+        if ($role === 'admin' || $role === '1' || $role === 1) return true;
+    
+        // definitive fallback: read users.txt role ("1" means admin)
+        $u = $_SESSION['username'] ?? '';
+        if ($u) {
+            $roleStr = userModel::getUserRole($u);
+            if ($roleStr === '1') return true;
+        }
+        return false;
+    }
+
+    private function isFolderOnly(array $perms): bool {
+        return !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']);
+    }
+
+    private function getMetadataPath(string $folder): string {
+        $folder = trim($folder);
+        if ($folder === '' || strtolower($folder) === 'root') {
+            return META_DIR . 'root_metadata.json';
+        }
+        return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+    }
+
+    private function loadFolderMetadata(string $folder): array {
+        $meta = $this->getMetadataPath($folder);
+        if (file_exists($meta)) {
+            $data = json_decode(file_get_contents($meta), true);
+            if (is_array($data)) return $data;
+        }
+        return [];
+    }
+
+    // Always return an array for user permissions.
+    private function loadPerms(string $username): array
+    {
+        try {
+            if (function_exists('loadUserPermissions')) {
+                $p = loadUserPermissions($username);
+                return is_array($p) ? $p : [];
+            }
+            if (class_exists('userModel') && method_exists('userModel', 'getUserPermissions')) {
+                $all = userModel::getUserPermissions();
+                if (is_array($all)) {
+                    if (isset($all[$username])) return (array)$all[$username];
+                    $lk = strtolower($username);
+                    if (isset($all[$lk])) return (array)$all[$lk];
+                }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+        return [];
+    }
+
+    /** Enforce that (a) folder-only users act only in their subtree, and
+     *  (b) non-admins own all files in the provided list (metadata.uploader === $username).
+     *  Returns an error string on violation, or null if ok. */
+    private function enforceScopeAndOwnership(string $folder, array $files, string $username, array $userPermissions): ?string {
+        $ignoreOwnership = $this->isAdmin($userPermissions)
+            || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+    
+        // Folder-only users must stay in "<username>" subtree
+        if ($this->isFolderOnly($userPermissions) && !$this->isAdmin($userPermissions)) {
+            $folder = trim($folder);
+            if ($folder !== '' && strtolower($folder) !== 'root') {
+                if ($folder !== $username && strpos($folder, $username . '/') !== 0) {
+                    return "Forbidden: folder scope violation.";
+                }
+            }
+        }
+    
+        if ($ignoreOwnership) return null;
+    
+        $metadata = $this->loadFolderMetadata($folder);
+        foreach ($files as $f) {
+            $name = basename((string)$f);
+            if (!isset($metadata[$name]['uploader']) || strcasecmp($metadata[$name]['uploader'], $username) !== 0) {
+                return "Forbidden: you are not the owner of '{$name}'.";
+            }
+        }
+        return null;
+    }
+    
+    private function enforceFolderScope(string $folder, string $username, array $userPermissions): ?string {
+        if ($this->isAdmin($userPermissions)) return null;
+        if (!$this->isFolderOnly($userPermissions)) return null;
+    
+        $folder = trim($folder);
+        if ($folder !== '' && strtolower($folder) !== 'root') {
+            if ($folder !== $username && strpos($folder, $username . '/') !== 0) {
+                return "Forbidden: folder scope violation.";
+            }
+        }
+        return null;
+    }
+
+    // --- JSON/session/error helpers (non-breaking additions) ---
+private function _jsonStart(): void {
+    if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+    header('Content-Type: application/json; charset=utf-8');
+    // Turn notices/warnings into exceptions so we can return JSON instead of HTML
+    set_error_handler(function ($severity, $message, $file, $line) {
+        if (!(error_reporting() & $severity)) return; // respect @-silence
+        throw new ErrorException($message, 0, $severity, $file, $line);
+    });
+}
+
+private function _jsonEnd(): void {
+    restore_error_handler();
+}
+
+private function _jsonOut(array $payload, int $status = 200): void {
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+private function _checkCsrf(): bool {
+    $headersArr = function_exists('getallheaders')
+        ? array_change_key_case(getallheaders(), CASE_LOWER)
+        : [];
+    $receivedToken = $headersArr['x-csrf-token'] ?? '';
+    if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
+        $this->_jsonOut(['error' => 'Invalid CSRF token'], 403);
+        return false;
+    }
+    return true;
+}
+
+private function _requireAuth(): bool {
+    if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+        $this->_jsonOut(['error' => 'Unauthorized'], 401);
+        return false;
+    }
+    return true;
+}
+
+private function _readJsonBody(): array {
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
     /**
      * @OA\Post(
      *     path="/api/file/copyFiles.php",
@@ -73,8 +227,8 @@ class FileController
 
         // Check user permissions (assuming loadUserPermissions() is available).
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if (!empty($userPermissions['readOnly'])) {
+        $userPermissions = $this->loadPerms($username);
+        if (!$this->isAdmin($userPermissions) && !empty($userPermissions['readOnly'])) {
             echo json_encode(["error" => "Read-only users are not allowed to copy files."]);
             exit;
         }
@@ -105,6 +259,12 @@ class FileController
             echo json_encode(["error" => "Invalid destination folder name."]);
             exit;
         }
+
+        // Scope + ownership on source; scope on destination
+        $violation = $this->enforceScopeAndOwnership($sourceFolder, $files, $username, $userPermissions);
+        if ($violation) { http_response_code(403); echo json_encode(["error"=>$violation]); return; }
+        $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions);
+        if ($dv) { http_response_code(403); echo json_encode(["error"=>$dv]); return; }
 
         // Delegate to the model.
         $result = FileModel::copyFiles($sourceFolder, $destinationFolder, $files);
@@ -177,7 +337,7 @@ class FileController
 
         // Load user's permissions.
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
+        $userPermissions = $this->loadPerms($username);
         if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
             echo json_encode(["error" => "Read-only users are not allowed to delete files."]);
             exit;
@@ -198,6 +358,10 @@ class FileController
             exit;
         }
         $folder = trim($folder, "/\\ ");
+
+        // Scope + ownership
+        $violation = $this->enforceScopeAndOwnership($folder, $data['files'], $username, $userPermissions);
+        if ($violation) { http_response_code(403); echo json_encode(["error"=>$violation]); return; }
 
         // Delegate to the FileModel.
         $result = FileModel::deleteFiles($folder, $data['files']);
@@ -271,8 +435,8 @@ class FileController
 
         // Verify that the user is not read-only.
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if (!empty($userPermissions['readOnly'])) {
+        $userPermissions = $this->loadPerms($username);
+        if (!$this->isAdmin($userPermissions) && !empty($userPermissions['readOnly'])) {
             echo json_encode(["error" => "Read-only users are not allowed to move files."]);
             exit;
         }
@@ -302,6 +466,12 @@ class FileController
             echo json_encode(["error" => "Invalid destination folder name."]);
             exit;
         }
+
+        // Scope + ownership on source; scope on destination
+        $violation = $this->enforceScopeAndOwnership($sourceFolder, $data['files'], $username, $userPermissions);
+        if ($violation) { http_response_code(403); echo json_encode(["error"=>$violation]); return; }
+        $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions);
+        if ($dv) { http_response_code(403); echo json_encode(["error"=>$dv]); return; }
 
         // Delegate to the model.
         $result = FileModel::moveFiles($sourceFolder, $destinationFolder, $data['files']);
@@ -351,64 +521,63 @@ class FileController
      * @return void Outputs a JSON response.
      */
     public function renameFile()
-    {
-        header('Content-Type: application/json');
-        header("Cache-Control: no-cache, no-store, must-revalidate");
-        header("Pragma: no-cache");
-        header("Expires: 0");
+{
+    $this->_jsonStart();
+    try {
+        if (!$this->_checkCsrf()) return;
+        if (!$this->_requireAuth()) return;
 
-        // --- CSRF Protection ---
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
-        if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(["error" => "Invalid CSRF token"]);
-            exit;
-        }
-
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-            http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
-        }
-
-        // Verify user permissions.
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
-            echo json_encode(["error" => "Read-only users are not allowed to rename files."]);
-            exit;
+        $userPermissions = $this->loadPerms($username);
+        if (!$this->isAdmin($userPermissions) && !empty($userPermissions['readOnly'])) {
+            $this->_jsonOut(["error" => "Read-only users are not allowed to rename files."], 403);
+            return;
         }
 
-        // Get JSON input.
-        $data = json_decode(file_get_contents("php://input"), true);
-        if (!$data || !isset($data['folder']) || !isset($data['oldName']) || !isset($data['newName'])) {
-            http_response_code(400);
-            echo json_encode(["error" => "Invalid input"]);
-            exit;
+        $data = $this->_readJsonBody();
+        if (!$data || !isset($data['folder'], $data['oldName'], $data['newName'])) {
+            $this->_jsonOut(["error" => "Invalid input"], 400);
+            return;
         }
 
-        $folder = trim($data['folder']) ?: 'root';
-        // Validate folder: allow letters, numbers, underscores, dashes, spaces, and forward slashes.
+        $folder  = trim((string)$data['folder']) ?: 'root';
+        $oldName = basename(trim((string)$data['oldName']));
+        $newName = basename(trim((string)$data['newName']));
+
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-            echo json_encode(["error" => "Invalid folder name"]);
-            exit;
+            $this->_jsonOut(["error" => "Invalid folder name"], 400);
+            return;
+        }
+        if ($oldName === '' || !preg_match(REGEX_FILE_NAME, $oldName)) {
+            $this->_jsonOut(["error" => "Invalid old file name."], 400);
+            return;
+        }
+        if ($newName === '' || !preg_match(REGEX_FILE_NAME, $newName)) {
+            $this->_jsonOut(["error" => "Invalid new file name."], 400);
+            return;
         }
 
-        $oldName = basename(trim($data['oldName']));
-        $newName = basename(trim($data['newName']));
+        // Non-admin must own the original
+        $violation = $this->enforceScopeAndOwnership($folder, [$oldName], $username, $userPermissions);
+        if ($violation) { $this->_jsonOut(["error"=>$violation], 403); return; }
 
-        // Validate file names.
-        if (!preg_match(REGEX_FILE_NAME, $oldName) || !preg_match(REGEX_FILE_NAME, $newName)) {
-            echo json_encode(["error" => "Invalid file name."]);
-            exit;
-        }
-
-        // Delegate the renaming operation to the model.
         $result = FileModel::renameFile($folder, $oldName, $newName);
-        echo json_encode($result);
+        if (!is_array($result)) {
+            throw new RuntimeException('FileModel::renameFile returned non-array');
+        }
+        if (isset($result['error'])) {
+            $this->_jsonOut($result, 400);
+            return;
+        }
+        $this->_jsonOut($result);
+
+    } catch (Throwable $e) {
+        error_log('FileController::renameFile error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        $this->_jsonOut(['error' => 'Internal server error while renaming file.'], 500);
+    } finally {
+        $this->_jsonEnd();
     }
+}
 
     /**
      * @OA\Post(
@@ -452,63 +621,75 @@ class FileController
      * @return void Outputs a JSON response.
      */
     public function saveFile()
-    {
-        header('Content-Type: application/json');
-
-        // --- CSRF Protection ---
-        $headersArr   = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = $headersArr['x-csrf-token'] ?? '';
-        if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(["error" => "Invalid CSRF token"]);
-            exit;
-        }
-
-        // --- Authentication Check ---
-        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-            http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
-        }
+{
+    $this->_jsonStart();
+    try {
+        if (!$this->_checkCsrf()) return;
+        if (!$this->_requireAuth()) return;
 
         $username = $_SESSION['username'] ?? '';
-        // --- Read‑only check ---
-        $userPermissions = loadUserPermissions($username);
-        if ($username && !empty($userPermissions['readOnly'])) {
-            echo json_encode(["error" => "Read-only users are not allowed to save files."]);
-            exit;
+        $userPermissions = $this->loadPerms($username);
+        if (!$this->isAdmin($userPermissions) && !empty($userPermissions['readOnly'])) {
+            $this->_jsonOut(["error" => "Read-only users are not allowed to save files."], 403);
+            return;
         }
 
-        // --- Input parsing ---
-        $data = json_decode(file_get_contents("php://input"), true);
+        $data = $this->_readJsonBody();
         if (empty($data) || !isset($data["fileName"], $data["content"])) {
-            http_response_code(400);
-            echo json_encode(["error" => "Invalid request data", "received" => $data]);
-            exit;
+            $this->_jsonOut(["error" => "Invalid request data"], 400);
+            return;
         }
 
-        $fileName = basename($data["fileName"]);
-        $folder   = isset($data["folder"]) ? trim($data["folder"]) : "root";
+        $fileName = basename(trim((string)$data["fileName"]));
+        $folder   = isset($data["folder"]) ? trim((string)$data["folder"]) : "root";
 
-        // --- Folder validation ---
+        if ($fileName === '' || !preg_match(REGEX_FILE_NAME, $fileName)) {
+            $this->_jsonOut(["error" => "Invalid file name."], 400);
+            return;
+        }
         if (strtolower($folder) !== "root" && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-            echo json_encode(["error" => "Invalid folder name"]);
-            exit;
+            $this->_jsonOut(["error" => "Invalid folder name"], 400);
+            return;
         }
-        $folder = trim($folder, "/\\ ");
 
-        // --- Delegate to model, passing the uploader ---
-        // Make sure FileModel::saveFile signature is:
-        // saveFile(string $folder, string $fileName, $content, ?string $uploader = null)
-        $result = FileModel::saveFile(
-            $folder,
-            $fileName,
-            $data["content"],
-            $username     // ← pass the real uploader here
-        );
+        // Folder-only users may only write within their scope
+        $dv = $this->enforceFolderScope($folder, $username, $userPermissions);
+        if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
 
-        echo json_encode($result);
+        // If overwriting, enforce ownership for non-admins
+        $baseDir = rtrim(UPLOAD_DIR, '/\\');
+        $dir = (strtolower($folder) === 'root') ? $baseDir : $baseDir . DIRECTORY_SEPARATOR . $folder;
+        $path = $dir . DIRECTORY_SEPARATOR . $fileName;
+        if (is_file($path)) {
+            $violation = $this->enforceScopeAndOwnership($folder, [$fileName], $username, $userPermissions);
+            if ($violation) { $this->_jsonOut(["error"=>$violation], 403); return; }
+        }
+
+        // Server-side guard: block saving executable/server-side script types
+        $deny = ['php','phtml','phar','php3','php4','php5','php7','php8','pht','shtml','cgi','fcgi'];
+        $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        if (in_array($ext, $deny, true)) {
+            $this->_jsonOut(['error' => 'Saving this file type is not allowed.'], 400);
+            return;
+        }
+
+        $result = FileModel::saveFile($folder, $fileName, (string)$data["content"], $username);
+        if (!is_array($result)) {
+            throw new RuntimeException('FileModel::saveFile returned non-array');
+        }
+        if (isset($result['error'])) {
+            $this->_jsonOut($result, 400);
+            return;
+        }
+        $this->_jsonOut($result);
+
+    } catch (Throwable $e) {
+        error_log('FileController::saveFile error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        $this->_jsonOut(['error' => 'Internal server error while saving file.'], 500);
+    } finally {
+        $this->_jsonEnd();
     }
+}
 
     /**
      * @OA\Get(
@@ -581,6 +762,23 @@ class FileController
             echo json_encode(["error" => "Invalid file name."]);
             exit;
         }
+
+// Ownership enforcement (allow admin OR bypassOwnership)
+$username        = $_SESSION['username'] ?? '';
+$userPermissions = $this->loadPerms($username);
+
+$ignoreOwnership = $this->isAdmin($userPermissions)
+    || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+
+if (!$ignoreOwnership) {
+    $meta = $this->loadFolderMetadata($folder);
+    if (!isset($meta[$file]['uploader']) || $meta[$file]['uploader'] !== $username) {
+        http_response_code(403);
+        echo json_encode(["error" => "Forbidden: you are not the owner of this file."]);
+        exit;
+    }
+}
+        
 
         // Retrieve download info from the model.
         $downloadInfo = FileModel::getDownloadInfo($folder, $file);
@@ -676,6 +874,13 @@ class FileController
             exit;
         }
 
+        if (!$this->isAdmin($userPermissions) && array_key_exists('canZip', $userPermissions) && !$userPermissions['canZip']) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(["error" => "ZIP downloads are not allowed for your account."]);
+            exit;
+        }
+
         // Read and decode JSON input.
         $data = json_decode(file_get_contents("php://input"), true);
         if (!is_array($data) || !isset($data['folder']) || !isset($data['files']) || !is_array($data['files'])) {
@@ -700,6 +905,22 @@ class FileController
                 }
             }
         }
+
+// Ownership enforcement (allow admin OR bypassOwnership)
+$username        = $_SESSION['username'] ?? '';
+$userPermissions = $this->loadPerms($username);
+
+$ignoreOwnership = $this->isAdmin($userPermissions)
+    || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+
+if (!$ignoreOwnership) {
+    $meta = $this->loadFolderMetadata($folder);
+    if (!isset($meta[$file]['uploader']) || $meta[$file]['uploader'] !== $username) {
+        http_response_code(403);
+        echo json_encode(["error" => "Forbidden: you are not the owner of this file."]);
+        exit;
+    }
+}
 
         // Create ZIP archive using FileModel.
         $result = FileModel::createZipArchive($folder, $files);
@@ -818,6 +1039,12 @@ class FileController
                 }
             }
         }
+
+        // Folder-only users can only extract inside their subtree
+        $username = $_SESSION['username'] ?? '';
+        $userPermissions = $this->loadPerms($username);
+        $dv = $this->enforceFolderScope($folder, $username, $userPermissions);
+        if ($dv) { http_response_code(403); echo json_encode(["error"=>$dv]); return; }
 
         // Delegate to the model.
         $result = FileModel::extractZipArchive($folder, $files);
@@ -1078,10 +1305,16 @@ class FileController
 
         // Check user permissions.
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if ($username && !empty($userPermissions['readOnly'])) {
+        $userPermissions = $this->loadPerms($username);
+        if (!$this->isAdmin($userPermissions) && !empty($userPermissions['readOnly'])) {
             http_response_code(403);
             echo json_encode(["error" => "Read-only users are not allowed to create share links."]);
+            exit;
+        }
+
+        if (!$this->isAdmin($userPermissions) && array_key_exists('canShare', $userPermissions) && !$userPermissions['canShare']) {
+            http_response_code(403);
+            echo json_encode(["error" => "You are not allowed to create share links."]);
             exit;
         }
 
@@ -1106,6 +1339,23 @@ class FileController
             echo json_encode(["error" => "Invalid folder name."]);
             exit;
         }
+
+        // Non-admins can only share their own files
+// Ownership enforcement (allow admin OR bypassOwnership)
+$username        = $_SESSION['username'] ?? '';
+$userPermissions = $this->loadPerms($username);
+
+$ignoreOwnership = $this->isAdmin($userPermissions)
+    || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+
+if (!$ignoreOwnership) {
+    $meta = $this->loadFolderMetadata($folder);
+    if (!isset($meta[$file]['uploader']) || $meta[$file]['uploader'] !== $username) {
+        http_response_code(403);
+        echo json_encode(["error" => "Forbidden: you are not the owner of this file."]);
+        exit;
+    }
+}
 
         // Convert the provided value+unit into seconds
         switch ($unit) {
@@ -1349,7 +1599,7 @@ class FileController
         // Delegate deletion to the model.
         $result = FileModel::deleteTrashFiles($filesToDelete);
 
-        // Build a human‑friendly success or error message
+        // Build a human-friendly success or error message
         if (!empty($result['deleted'])) {
             $count = count($result['deleted']);
             $msg = "Trash item" . ($count === 1 ? "" : "s") . " deleted: " . implode(", ", $result['deleted']);
@@ -1469,7 +1719,7 @@ class FileController
 
         // Check that the user is not read-only.
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
+        $userPermissions = $this->loadPerms($username);
         if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
             echo json_encode(["error" => "Read-only users are not allowed to file tags"]);
             exit;
@@ -1501,6 +1751,22 @@ class FileController
             echo json_encode(["error" => "Invalid folder name."]);
             exit;
         }
+
+// Ownership enforcement (allow admin OR bypassOwnership)
+$username        = $_SESSION['username'] ?? '';
+$userPermissions = $this->loadPerms($username);
+
+$ignoreOwnership = $this->isAdmin($userPermissions)
+    || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+
+if (!$ignoreOwnership) {
+    $meta = $this->loadFolderMetadata($folder);
+    if (!isset($meta[$file]['uploader']) || $meta[$file]['uploader'] !== $username) {
+        http_response_code(403);
+        echo json_encode(["error" => "Forbidden: you are not the owner of this file."]);
+        exit;
+    }
+}
 
         // Delegate to the model.
         $result = FileModel::saveFileTag($folder, $file, $tags, $deleteGlobal, $tagToDelete);
@@ -1545,32 +1811,96 @@ class FileController
      * @return void Outputs JSON response.
      */
     public function getFileList(): void
-    {
-        header('Content-Type: application/json');
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
 
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+    header('Content-Type: application/json; charset=utf-8');
+
+    set_error_handler(function ($severity, $message, $file, $line) {
+        if (!(error_reporting() & $severity)) return;
+        throw new ErrorException($message, 0, $severity, $file, $line);
+    });
+
+    try {
+        if (empty($_SESSION['username'])) {
             http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
         }
 
-        // Retrieve the folder from GET; default to "root".
-        $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
+        if (!is_dir(META_DIR)) {
+            @mkdir(META_DIR, 0775, true);
+        }
+
+        $folder = isset($_GET['folder']) ? trim((string)$_GET['folder']) : 'root';
+
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             http_response_code(400);
-            echo json_encode(["error" => "Invalid folder name."]);
-            exit;
+            echo json_encode(['error' => 'Invalid folder name.']);
+            return;
         }
 
-        // Delegate to the model.
+        if (!is_dir(UPLOAD_DIR)) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Uploads directory not found.']);
+            return;
+        }
+
         $result = FileModel::getFileList($folder);
+
+        if ($result === false || $result === null) {
+            http_response_code(500);
+            echo json_encode(['error' => 'File model failed.']);
+            return;
+        }
+        if (!is_array($result)) {
+            throw new RuntimeException('FileModel::getFileList returned a non-array.');
+        }
         if (isset($result['error'])) {
             http_response_code(400);
+            echo json_encode($result);
+            return;
         }
-        echo json_encode($result);
-        exit;
+
+        // --- viewOwnOnly (for non-admins) ---
+        $username = $_SESSION['username'] ?? '';
+        $perms    = $this->loadPerms($username);
+        $admin    = $this->isAdmin($perms);
+        $ownOnly  = !$admin && !empty($perms['viewOwnOnly']);
+
+        if ($ownOnly && isset($result['files'])) {
+            $files = $result['files'];
+            if (is_array($files) && array_keys($files) !== range(0, count($files) - 1)) {
+                // associative: name => meta
+                $filtered = [];
+                foreach ($files as $name => $meta) {
+                    if (!isset($meta['uploader']) || strcasecmp((string)$meta['uploader'], $username) === 0) {
+                        $filtered[$name] = $meta;
+                    }
+                }
+                $result['files'] = $filtered;
+            } elseif (is_array($files)) {
+                // list of objects
+                $result['files'] = array_values(array_filter($files, function ($f) use ($username) {
+                    return !isset($f['uploader']) || strcasecmp((string)$f['uploader'], $username) === 0;
+                }));
+            }
+        }
+
+        echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return;
+
+    } catch (Throwable $e) {
+        error_log('FileController::getFileList error: ' . $e->getMessage() .
+                  ' in ' . $e->getFile() . ':' . $e->getLine());
+        http_response_code(500);
+        echo json_encode(['error' => 'Internal server error while listing files.']);
+    } finally {
+        restore_error_handler();
     }
+}
 
     /**
      * GET /api/file/getShareLinks.php
@@ -1631,26 +1961,44 @@ class FileController
      * POST /api/file/createFile.php
      */
     public function createFile(): void
-    {
+{
+    $this->_jsonStart();
+    try {
+        if (!$this->_requireAuth()) return;
 
-        // Check user permissions (assuming loadUserPermissions() is available).
         $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if (!empty($userPermissions['readOnly'])) {
-            echo json_encode(["error" => "Read-only users are not allowed to create files."]);
-            exit;
+        $userPermissions = $this->loadPerms($username);
+        if (!$this->isAdmin($userPermissions) && !empty($userPermissions['readOnly'])) {
+            $this->_jsonOut(["error" => "Read-only users are not allowed to create files."], 403);
+            return;
         }
-        $body = json_decode(file_get_contents('php://input'), true);
-        $folder   = $body['folder']   ?? 'root';
-        $filename = $body['name']     ?? '';
 
-        $result = FileModel::createFile($folder, $filename, $_SESSION['username'] ?? 'Unknown');
+        $body = $this->_readJsonBody();
+        $folder   = isset($body['folder']) ? trim((string)$body['folder']) : 'root';
+        $filename = isset($body['name'])   ? basename(trim((string)$body['name'])) : '';
 
-        if (!$result['success']) {
-            http_response_code($result['code'] ?? 400);
-            echo json_encode(['success'=>false,'error'=>$result['error']]);
-        } else {
-            echo json_encode(['success'=>true]);
+        if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            $this->_jsonOut(["error" => "Invalid folder name."], 400); return;
         }
+        if ($filename === '' || !preg_match(REGEX_FILE_NAME, $filename)) {
+            $this->_jsonOut(["error" => "Invalid file name."], 400); return;
+        }
+
+        $dv = $this->enforceFolderScope($folder, $username, $userPermissions);
+        if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
+
+        $result = FileModel::createFile($folder, $filename, $username);
+        if (empty($result['success'])) {
+            $this->_jsonOut(['success'=>false,'error'=>$result['error'] ?? 'Failed to create file'], $result['code'] ?? 400);
+            return;
+        }
+        $this->_jsonOut(['success'=>true]);
+
+    } catch (Throwable $e) {
+        error_log('FileController::createFile error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        $this->_jsonOut(['error' => 'Internal server error while creating file.'], 500);
+    } finally {
+        $this->_jsonEnd();
     }
+}
 }

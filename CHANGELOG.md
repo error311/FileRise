@@ -1,5 +1,102 @@
 # Changelog
 
+## Changes 10/15/2025 (v1.4.0)
+
+feat(permissions)!: granular ACL (bypassOwnership/canShare/canZip/viewOwnOnly), admin panel v1.4.0 UI, and broad hardening across controllers/models/frontend
+
+### Security / Hardening
+
+- Tightened ownership checks across file ops; introduced centralized permission helper to avoid falsey-permissions bugs.
+- Consistent CSRF verification on mutating endpoints; stricter input validation using `REGEX_*` and `basename()` trims.
+- Safer path handling & metadata reads; reduced noisy error surfaces; consistent HTTP codes (401/403/400/500).
+- Adds defense-in-depth to reduce risk of unauthorized file manipulation.
+
+### Config (`config.php`)
+
+- Add optional defaults for new permissions (all optional):
+  - `DEFAULT_BYPASS_OWNERSHIP` (bool)
+  - `DEFAULT_CAN_SHARE` (bool)
+  - `DEFAULT_CAN_ZIP` (bool)
+  - `DEFAULT_VIEW_OWN_ONLY` (bool)
+- Keep existing behavior unless explicitly enabled (bypassOwnership typically true for admins; configurable per user).
+
+### Controllers
+
+#### `FileController.php`
+
+- New lightweight `loadPerms($username)` helper that **always** returns an array; prevents type errors when permissions are missing.
+- Ownership checks now respect: `isAdmin(...) || perms['bypassOwnership'] || DEFAULT_BYPASS_OWNERSHIP`.
+- Gate sharing/zip operations by `perms['canShare']` / `perms['canZip']`.
+- Implement `viewOwnOnly` filtering in `getFileList()` (supports both map and list shapes).
+- Normalize and validate folder/file input; enforce folder-only scope for writes/moves/copies where applicable.
+- Improve error handling: convert warnings/notices to exceptions within try/catch; consistent JSON error payloads.
+- Add missing `require_once PROJECT_ROOT . '/src/models/UserModel.php'` to fix “Class userModel not found”.
+- Download behavior: inline for images, attachment for others; owner/bypass logic applied.
+
+#### `FolderController.php`
+
+- `createShareFolderLink()` gated by `canShare`; validates duration (cap at 1y), folder names, password optional.
+- (If present) folder share deletion/read endpoints wired to new permission model.
+
+#### `AdminController.php`
+
+- `getConfig()` remains admin-only; returns safe subset. (Non-admins now simply receive 403; client can ignore.)
+
+#### `UserController.php`
+
+- Plumbs new permission fields in get/set endpoints (`folderOnly`, `readOnly`, `disableUpload`, **`bypassOwnership`**, **`canShare`**, **`canZip`**, **`viewOwnOnly`**).
+- Normalizes username keys and defaults to prevent undefined-index errors.
+
+### Models
+
+#### `FileModel.php` / `FolderModel.php`
+
+- Respect caller’s effective permissions (controllers pass-through); stricter input normalization.
+- ZIP creation/extraction guarded via `canZip`; metadata updates consistent; safer temp paths.
+- Improved return shapes and error messages (never return non-array on success paths).
+
+#### `AdminModel.php`
+
+- Reads/writes admin config with new `loginOptions` intact; never exposes sensitive OIDC secrets to the client layer.
+
+#### `UserModel.php`
+
+- Store/load the 4 new flags; helper ensures absent users/fields don’t break caller; returns normalized arrays.
+
+### Frontend
+
+#### `main.js`
+
+- Initialize after CSRF; keep dark-mode persistence, welcome toast, drag-over UX.
+- Leaves `loadAdminConfigFunc()` call in place (non-admins may 403; harmless).
+
+#### `adminPanel.js` (v1.4.0)
+
+- New **User Permissions** UI with collapsible rows per user:
+  - Shows username; clicking expands a checkbox matrix.
+  - Permissions: `folderOnly`, `readOnly`, `disableUpload`, **`bypassOwnership`**, **`canShare`**, **`canZip`**, **`viewOwnOnly`**.
+- **Manage Shared Links** section reads folder & file share metadata; delete buttons per token.
+- Refined modal sizing & dark-mode styling; consistent toasts; unsaved-changes confirmation.
+- Keeps 403 from `/api/admin/getConfig.php` for non-admins (acceptable; no UI break).
+
+### Breaking change
+
+- Non-admin users without `bypassOwnership` can no longer create/rename/move/copy/delete/share/zip files they don’t own.
+- If legacy behavior depended on broad access, set `bypassOwnership` per user or use `DEFAULT_BYPASS_OWNERSHIP=true` in `config.php`.
+
+### Migration
+
+- Add the new flags to existing users in your permissions store (or rely on `config.php` defaults).
+- Verify admin accounts have either `isAdmin` or `bypassOwnership`/`canShare`/`canZip` as desired.
+- Optionally tune `DEFAULT_*` constants for instance-wide defaults.
+
+### Security
+
+- Hardened access controls for file operations based on an external security report.  
+  Details are withheld temporarily to protect users; a full advisory will follow after wider adoption of the fix.
+
+---
+
 ## Changes 10/8/2025 (no new version)
 
 chore: set up CI, add compose, tighten ignores, refresh README
@@ -195,7 +292,7 @@ No behavior change unless SCAN_ON_START=true.
 
 - **Folder strip in file list**  
   - `loadFileList` now fetches sub-folders in parallel from `/api/folder/getFolderList.php`.  
-  - Filters to only *direct* children of the current folder, hiding `profile_pics` and `trash`.  
+  - Filters to only direct children of the current folder, hiding `profile_pics` and `trash`.  
   - Injects a new `.folder-strip-container` just below the Files In above (summary + slider).  
   - Clicking a folder in the strip updates:
     - the breadcrumb (via `updateBreadcrumbTitle`)
@@ -243,7 +340,7 @@ No behavior change unless SCAN_ON_START=true.
 
 - Moved previously standalone header buttons into the dropdown menu:
   - **User Panel** opens the modal
-  - **Admin Panel** only shown when `data.isAdmin` *and* on `demo.filerise.net`
+  - **Admin Panel** only shown when `data.isAdmin` and on `demo.filerise.net`
   - **API Docs** calls `openApiModal()`
   - **Logout** calls `triggerLogout()`
 - Each menu item now has a matching Material icon (e.g. `person`, `admin_panel_settings`, `description`, `logout`).
@@ -364,7 +461,7 @@ No behavior change unless SCAN_ON_START=true.
 - Removed the static `AUTH_HEADER` fallback; instead read the adminConfig.json at the end of the file and:
   - Overwrote `AUTH_BYPASS` with the `loginOptions.authBypass` setting from disk.
   - Defined `AUTH_HEADER` (normalized, e.g. `"X_REMOTE_USER"`) based on `loginOptions.authHeaderName`.
-- Inserted a **proxy-only auto-login** block *before* the usual session/auth checks:  
+- Inserted a **proxy-only auto-login** block before the usual session/auth checks:  
   If `AUTH_BYPASS` is true and the trusted header (`$_SERVER['HTTP_' . AUTH_HEADER]`) is present, bump the session, mark the user authenticated/admin, load their permissions, and skip straight to JSON output.
 - Relax filename validation regex to allow broader Unicode and special chars
 
@@ -406,7 +503,7 @@ No behavior change unless SCAN_ON_START=true.
   - In the “not authenticated” branch, only shows the login form if `authBypass` is false.
 - No other core fetch/token logic changed; all existing flows remain intact.
 
-### Security
+### Security old
 
 - **Admin API**: `getConfig.php` now returns only a safe subset of admin settings (omits `clientSecret`) to prevent accidental exposure of sensitive data.
 
@@ -435,7 +532,7 @@ No behavior change unless SCAN_ON_START=true.
 
 - **Added** `addUserModal`, `removeUserModal` & `renameFileModal` modals to `style="display:none;"`
 
-### `main.js`
+**`main.js`**
 
 - **Extracted** `initializeApp()` helper to centralize post-auth startup (tag search, file list, drag-and-drop, folder tree, upload, trash/restore, admin config).
 - **Updated** DOMContentLoaded `checkAuthentication()` flow to call `initializeApp()` when already authenticated.

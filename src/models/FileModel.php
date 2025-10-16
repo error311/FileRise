@@ -6,6 +6,42 @@ require_once PROJECT_ROOT . '/config/config.php';
 class FileModel {
 
     /**
+     * Resolve a logical folder key (e.g. "root", "invoices/2025") to a
+     * real path under UPLOAD_DIR, enforce REGEX_FOLDER_NAME, and ensure
+     * optional creation.
+     *
+     * @param string $folder
+     * @param bool   $create
+     * @return array [string|null $realPath, string|null $error]
+     */
+    private static function resolveFolderPath(string $folder, bool $create = true): array {
+        $folder = trim($folder) ?: 'root';
+
+        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            return [null, "Invalid folder name."];
+        }
+
+        $base = realpath(UPLOAD_DIR);
+        if ($base === false) {
+            return [null, "Server misconfiguration."];
+        }
+
+        $dir = (strtolower($folder) === 'root')
+            ? $base
+            : $base . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
+
+        if ($create && !is_dir($dir) && !mkdir($dir, 0775, true)) {
+            return [null, "Cannot create destination folder"];
+        }
+
+        $real = realpath($dir);
+        if ($real === false || strpos($real, $base) !== 0) {
+            return [null, "Invalid folder path."];
+        }
+        return [$real, null];
+    }
+
+    /**
      * Copies files from a source folder to a destination folder, updating metadata if available.
      *
      * @param string $sourceFolder The source folder (e.g. "root" or a subfolder)
@@ -15,71 +51,76 @@ class FileModel {
      */
     public static function copyFiles($sourceFolder, $destinationFolder, $files) {
         $errors = [];
-        $baseDir = rtrim(UPLOAD_DIR, '/\\');
-        
-        // Build source and destination directories.
-        $sourceDir = ($sourceFolder === 'root')
-            ? $baseDir . DIRECTORY_SEPARATOR
-            : $baseDir . DIRECTORY_SEPARATOR . trim($sourceFolder, "/\\ ") . DIRECTORY_SEPARATOR;
-        $destDir = ($destinationFolder === 'root')
-            ? $baseDir . DIRECTORY_SEPARATOR
-            : $baseDir . DIRECTORY_SEPARATOR . trim($destinationFolder, "/\\ ") . DIRECTORY_SEPARATOR;
-        
-        // Get metadata file paths.
-        $srcMetaFile = self::getMetadataFilePath($sourceFolder);
+
+        list($sourceDir, $err) = self::resolveFolderPath($sourceFolder, false);
+        if ($err) return ["error" => $err];
+        list($destDir, $err)   = self::resolveFolderPath($destinationFolder, true);
+        if ($err) return ["error" => $err];
+
+        $sourceDir .= DIRECTORY_SEPARATOR;
+        $destDir   .= DIRECTORY_SEPARATOR;
+
+        // Metadata paths
+        $srcMetaFile  = self::getMetadataFilePath($sourceFolder);
         $destMetaFile = self::getMetadataFilePath($destinationFolder);
-        
-        $srcMetadata = file_exists($srcMetaFile) ? json_decode(file_get_contents($srcMetaFile), true) : [];
-        $destMetadata = file_exists($destMetaFile) ? json_decode(file_get_contents($destMetaFile), true) : [];
-        
-        // Define a safe file name pattern.
+
+        $srcMetadata  = file_exists($srcMetaFile)  ? (json_decode(file_get_contents($srcMetaFile), true)  ?: []) : [];
+        $destMetadata = file_exists($destMetaFile) ? (json_decode(file_get_contents($destMetaFile), true) ?: []) : [];
+
         $safeFileNamePattern = REGEX_FILE_NAME;
-        
+        $actor = $_SESSION['username'] ?? 'Unknown';
+        $now   = date(DATE_TIME_FORMAT);
+
         foreach ($files as $fileName) {
-            // Get the clean file name.
             $originalName = basename(trim($fileName));
-            $basename = $originalName;
+            $basename     = $originalName;
+
             if (!preg_match($safeFileNamePattern, $basename)) {
                 $errors[] = "$basename has an invalid name.";
                 continue;
             }
-            
-            $srcPath = $sourceDir . $originalName;
+
+            $srcPath  = $sourceDir . $originalName;
             $destPath = $destDir . $basename;
-            
+
             clearstatcache();
             if (!file_exists($srcPath)) {
                 $errors[] = "$originalName does not exist in source.";
                 continue;
             }
-            
-            // If a file with the same name exists at the destination, create a unique name.
+
+            // Avoid overwrite: pick unique name
             if (file_exists($destPath)) {
-                $uniqueName = self::getUniqueFileName($destDir, $basename);
-                $basename = $uniqueName;
-                $destPath = $destDir . $uniqueName;
+                $basename = self::getUniqueFileName($destDir, $basename);
+                $destPath = $destDir . $basename;
             }
-            
+
             if (!copy($srcPath, $destPath)) {
                 $errors[] = "Failed to copy $basename.";
                 continue;
             }
-            
-            // Update destination metadata if metadata exists in source.
-            if (isset($srcMetadata[$originalName])) {
-                $destMetadata[$basename] = $srcMetadata[$originalName];
+
+            // Carry over non-ownership fields (e.g., tags), but stamp new ownership/timestamps
+            $tags = [];
+            if (isset($srcMetadata[$originalName]['tags']) && is_array($srcMetadata[$originalName]['tags'])) {
+                $tags = $srcMetadata[$originalName]['tags'];
             }
+
+            $destMetadata[$basename] = [
+                'uploaded' => $now,
+                'modified' => $now,
+                'uploader' => $actor,
+                'tags'     => $tags
+            ];
         }
-        
-        if (file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT)) === false) {
+
+        if (file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             $errors[] = "Failed to update destination metadata.";
         }
-        
-        if (empty($errors)) {
-            return ["success" => "Files copied successfully"];
-        } else {
-            return ["error" => implode("; ", $errors)];
-        }
+
+        return empty($errors)
+            ? ["success" => "Files copied successfully"]
+            : ["error" => implode("; ", $errors)];
     }
 
     /**
@@ -130,13 +171,11 @@ class FileModel {
      */
     public static function deleteFiles($folder, $files) {
         $errors = [];
-        $baseDir = rtrim(UPLOAD_DIR, '/\\');
-        
-        // Determine the upload directory.
-        $uploadDir = ($folder === 'root')
-            ? $baseDir . DIRECTORY_SEPARATOR
-            : $baseDir . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
-        
+
+        list($uploadDir, $err) = self::resolveFolderPath($folder, false);
+        if ($err) return ["error" => $err];
+        $uploadDir .= DIRECTORY_SEPARATOR;
+
         // Setup the Trash folder and metadata.
         $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
         if (!file_exists($trashDir)) {
@@ -149,7 +188,7 @@ class FileModel {
         if (!is_array($trashData)) {
             $trashData = [];
         }
-        
+
         // Load folder metadata if available.
         $metadataFile = self::getMetadataFilePath($folder);
         $folderMetadata = file_exists($metadataFile)
@@ -158,27 +197,25 @@ class FileModel {
         if (!is_array($folderMetadata)) {
             $folderMetadata = [];
         }
-        
+
         $movedFiles = [];
-        // Define a safe file name pattern.
         $safeFileNamePattern = REGEX_FILE_NAME;
-        
+
         foreach ($files as $fileName) {
             $basename = basename(trim($fileName));
-            
+
             // Validate the file name.
             if (!preg_match($safeFileNamePattern, $basename)) {
                 $errors[] = "$basename has an invalid name.";
                 continue;
             }
-            
+
             $filePath = $uploadDir . $basename;
-            
+
             // Check if file exists.
             if (file_exists($filePath)) {
-                // Append a timestamp to create a unique trash file name.
-                $timestamp = time();
-                $trashFileName = $basename . "_" . $timestamp;
+                // Unique trash name (timestamp + random)
+                $trashFileName = $basename . '_' . time() . '_' . bin2hex(random_bytes(4));
                 if (rename($filePath, $trashDir . $trashFileName)) {
                     $movedFiles[] = $basename;
                     // Record trash metadata for possible restoration.
@@ -187,11 +224,9 @@ class FileModel {
                         'originalFolder' => $uploadDir,
                         'originalName'   => $basename,
                         'trashName'      => $trashFileName,
-                        'trashedAt'      => $timestamp,
-                        'uploaded'       => isset($folderMetadata[$basename]['uploaded'])
-                                              ? $folderMetadata[$basename]['uploaded'] : "Unknown",
-                        'uploader'       => isset($folderMetadata[$basename]['uploader'])
-                                              ? $folderMetadata[$basename]['uploader'] : "Unknown",
+                        'trashedAt'      => time(),
+                        'uploaded'       => $folderMetadata[$basename]['uploaded'] ?? "Unknown",
+                        'uploader'       => $folderMetadata[$basename]['uploader'] ?? "Unknown",
                         'deletedBy'      => $_SESSION['username'] ?? "Unknown"
                     ];
                 } else {
@@ -203,10 +238,10 @@ class FileModel {
                 $movedFiles[] = $basename;
             }
         }
-        
+
         // Save updated trash metadata.
-        file_put_contents($trashMetadataFile, json_encode($trashData, JSON_PRETTY_PRINT));
-        
+        file_put_contents($trashMetadataFile, json_encode($trashData, JSON_PRETTY_PRINT), LOCK_EX);
+
         // Remove deleted file entries from folder metadata.
         if (file_exists($metadataFile)) {
             $metadata = json_decode(file_get_contents($metadataFile), true);
@@ -216,10 +251,10 @@ class FileModel {
                         unset($metadata[$delFile]);
                     }
                 }
-                file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
+                file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT), LOCK_EX);
             }
         }
-        
+
         if (empty($errors)) {
             return ["success" => "Files moved to Trash: " . implode(", ", $movedFiles)];
         } else {
@@ -227,7 +262,7 @@ class FileModel {
         }
     }
 
-        /**
+    /**
      * Moves files from a source folder to a destination folder and updates metadata.
      *
      * @param string $sourceFolder The source folder (e.g., "root" or a subfolder).
@@ -237,28 +272,20 @@ class FileModel {
      */
     public static function moveFiles($sourceFolder, $destinationFolder, $files) {
         $errors = [];
-        $baseDir = rtrim(UPLOAD_DIR, '/\\');
-        
-        // Build source and destination directories.
-        $sourceDir = ($sourceFolder === 'root')
-            ? $baseDir . DIRECTORY_SEPARATOR
-            : $baseDir . DIRECTORY_SEPARATOR . trim($sourceFolder, "/\\ ") . DIRECTORY_SEPARATOR;
-        $destDir = ($destinationFolder === 'root')
-            ? $baseDir . DIRECTORY_SEPARATOR
-            : $baseDir . DIRECTORY_SEPARATOR . trim($destinationFolder, "/\\ ") . DIRECTORY_SEPARATOR;
-        
-        // Ensure destination directory exists.
-        if (!is_dir($destDir)) {
-            if (!mkdir($destDir, 0775, true)) {
-                return ["error" => "Could not create destination folder"];
-            }
-        }
-        
+
+        list($sourceDir, $err) = self::resolveFolderPath($sourceFolder, false);
+        if ($err) return ["error" => $err];
+        list($destDir, $err)   = self::resolveFolderPath($destinationFolder, true);
+        if ($err) return ["error" => $err];
+
+        $sourceDir .= DIRECTORY_SEPARATOR;
+        $destDir   .= DIRECTORY_SEPARATOR;
+
         // Get metadata file paths.
-        $srcMetaFile = self::getMetadataFilePath($sourceFolder);
+        $srcMetaFile  = self::getMetadataFilePath($sourceFolder);
         $destMetaFile = self::getMetadataFilePath($destinationFolder);
-        
-        $srcMetadata = file_exists($srcMetaFile) ? json_decode(file_get_contents($srcMetaFile), true) : [];
+
+        $srcMetadata  = file_exists($srcMetaFile)  ? json_decode(file_get_contents($srcMetaFile), true)  : [];
         $destMetadata = file_exists($destMetaFile) ? json_decode(file_get_contents($destMetaFile), true) : [];
         if (!is_array($srcMetadata)) {
             $srcMetadata = [];
@@ -266,43 +293,42 @@ class FileModel {
         if (!is_array($destMetadata)) {
             $destMetadata = [];
         }
-        
+
         $movedFiles = [];
-        // Define a safe file name pattern.
         $safeFileNamePattern = REGEX_FILE_NAME;
-        
+
         foreach ($files as $fileName) {
             // Save the original file name for metadata lookup.
             $originalName = basename(trim($fileName));
             $basename = $originalName;
-            
+
             // Validate the file name.
             if (!preg_match($safeFileNamePattern, $basename)) {
                 $errors[] = "$basename has invalid characters.";
                 continue;
             }
-            
+
             $srcPath = $sourceDir . $originalName;
             $destPath = $destDir . $basename;
-            
+
             clearstatcache();
             if (!file_exists($srcPath)) {
                 $errors[] = "$originalName does not exist in source.";
                 continue;
             }
-            
+
             // If a file with the same name exists in destination, generate a unique name.
             if (file_exists($destPath)) {
                 $uniqueName = self::getUniqueFileName($destDir, $basename);
                 $basename = $uniqueName;
                 $destPath = $destDir . $uniqueName;
             }
-            
+
             if (!rename($srcPath, $destPath)) {
                 $errors[] = "Failed to move $basename.";
                 continue;
             }
-            
+
             $movedFiles[] = $originalName;
             // Update destination metadata: if metadata for the original file exists in source, move it under the new name.
             if (isset($srcMetadata[$originalName])) {
@@ -310,15 +336,15 @@ class FileModel {
                 unset($srcMetadata[$originalName]);
             }
         }
-        
+
         // Write back updated metadata.
-        if (file_put_contents($srcMetaFile, json_encode($srcMetadata, JSON_PRETTY_PRINT)) === false) {
+        if (file_put_contents($srcMetaFile, json_encode($srcMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             $errors[] = "Failed to update source metadata.";
         }
-        if (file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT)) === false) {
+        if (file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             $errors[] = "Failed to update destination metadata.";
         }
-        
+
         if (empty($errors)) {
             return ["success" => "Files moved successfully"];
         } else {
@@ -326,7 +352,7 @@ class FileModel {
         }
     }
 
-        /**
+    /**
      * Renames a file within a given folder and updates folder metadata.
      *
      * @param string $folder The folder where the file is located (or "root" for the base directory).
@@ -335,46 +361,45 @@ class FileModel {
      * @return array An associative array with either "success" (and newName) or "error" message.
      */
     public static function renameFile($folder, $oldName, $newName) {
-        // Determine the directory path.
-        $directory = ($folder !== 'root')
-            ? rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR
-            : UPLOAD_DIR;
-        
+        list($directory, $err) = self::resolveFolderPath($folder, false);
+        if ($err) return ["error" => $err];
+        $directory .= DIRECTORY_SEPARATOR;
+
         // Sanitize file names.
         $oldName = basename(trim($oldName));
         $newName = basename(trim($newName));
-        
+
         // Validate file names using REGEX_FILE_NAME.
         if (!preg_match(REGEX_FILE_NAME, $oldName) || !preg_match(REGEX_FILE_NAME, $newName)) {
             return ["error" => "Invalid file name."];
         }
-        
+
         $oldPath = $directory . $oldName;
         $newPath = $directory . $newName;
-        
+
         // Helper: Generate a unique file name if the new name already exists.
         if (file_exists($newPath)) {
             $newName = self::getUniqueFileName($directory, $newName);
             $newPath = $directory . $newName;
         }
-        
+
         // Check that the old file exists.
         if (!file_exists($oldPath)) {
             return ["error" => "File does not exist"];
         }
-        
+
         // Perform the rename.
         if (rename($oldPath, $newPath)) {
             // Update the metadata file.
             $metadataKey = ($folder === 'root') ? "root" : $folder;
             $metadataFile = META_DIR . str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
-    
+
             if (file_exists($metadataFile)) {
                 $metadata = json_decode(file_get_contents($metadataFile), true);
                 if (isset($metadata[$oldName])) {
                     $metadata[$newName] = $metadata[$oldName];
                     unset($metadata[$oldName]);
-                    file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
+                    file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT), LOCK_EX);
                 }
             }
             return ["success" => "File renamed successfully", "newName" => $newName];
@@ -383,96 +408,87 @@ class FileModel {
         }
     }
 
-/*
- * Save a file’s contents *and* record its metadata, including who uploaded it.
- *
- * @param string                $folder    Folder key (e.g. "root" or "invoices/2025")
- * @param string                $fileName  Basename of the file
- * @param resource|string       $content   File contents (stream or string)
- * @param string|null           $uploader  Username of uploader (if null, falls back to session)
- * @return array                          ["success"=>"…"] or ["error"=>"…"]
- */
-public static function saveFile(string $folder, string $fileName, $content, ?string $uploader = null): array {
-    // Sanitize inputs
-    $folder   = trim($folder) ?: 'root';
-    $fileName = basename(trim($fileName));
+    /*
+     * Save a file’s contents *and* record its metadata, including who uploaded it.
+     *
+     * @param string                $folder    Folder key (e.g. "root" or "invoices/2025")
+     * @param string                $fileName  Basename of the file
+     * @param resource|string       $content   File contents (stream or string)
+     * @param string|null           $uploader  Username of uploader (if null, falls back to session)
+     * @return array                          ["success"=>"…"] or ["error"=>"…"]
+     */
+    public static function saveFile(string $folder, string $fileName, $content, ?string $uploader = null): array {
+        $folder   = trim($folder) ?: 'root';
+        $fileName = basename(trim($fileName));
 
-    // Validate folder name
-    if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-        return ["error" => "Invalid folder name"];
-    }
-
-    // Determine target directory
-    $baseDir = rtrim(UPLOAD_DIR, '/\\');
-    $targetDir = strtolower($folder) === 'root'
-        ? $baseDir . DIRECTORY_SEPARATOR
-        : $baseDir . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
-
-    // Security check
-    if (strpos(realpath($targetDir), realpath($baseDir)) !== 0) {
-        return ["error" => "Invalid folder path"];
-    }
-
-    // Ensure directory exists
-    if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
-        return ["error" => "Failed to create destination folder"];
-    }
-
-    $filePath = $targetDir . $fileName;
-
-    // ——— STREAM TO DISK ———
-    if (is_resource($content)) {
-        $out = fopen($filePath, 'wb');
-        if ($out === false) {
-            return ["error" => "Unable to open file for writing"];
+        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            return ["error" => "Invalid folder name"];
         }
-        stream_copy_to_stream($content, $out);
-        fclose($out);
-    } else {
-        if (file_put_contents($filePath, (string)$content) === false) {
-            return ["error" => "Error saving file"];
+        if (!preg_match(REGEX_FILE_NAME, $fileName)) {
+            return ["error" => "Invalid file name"];
         }
-    }
 
-    // ——— UPDATE METADATA ———
-    $metadataKey      = strtolower($folder) === "root" ? "root" : $folder;
-    $metadataFileName = str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
-    $metadataFilePath = META_DIR . $metadataFileName;
-
-    // Load existing metadata
-    $metadata = [];
-    if (file_exists($metadataFilePath)) {
-        $existing = @json_decode(file_get_contents($metadataFilePath), true);
-        if (is_array($existing)) {
-            $metadata = $existing;
+        $baseDirReal = realpath(UPLOAD_DIR);
+        if ($baseDirReal === false) {
+            return ["error" => "Server misconfiguration"];
         }
+
+        $targetDir = (strtolower($folder) === 'root')
+            ? rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+            : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
+
+        // Ensure directory exists *before* realpath + containment check
+        if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
+            return ["error" => "Failed to create destination folder"];
+        }
+
+        $targetDirReal = realpath($targetDir);
+        if ($targetDirReal === false || strpos($targetDirReal, $baseDirReal) !== 0) {
+            return ["error" => "Invalid folder path"];
+        }
+
+        $filePath = $targetDirReal . DIRECTORY_SEPARATOR . $fileName;
+
+        if (is_resource($content)) {
+            $out = fopen($filePath, 'wb');
+            if ($out === false) return ["error" => "Unable to open file for writing"];
+            stream_copy_to_stream($content, $out);
+            fclose($out);
+        } else {
+            if (file_put_contents($filePath, (string)$content, LOCK_EX) === false) {
+                return ["error" => "Error saving file"];
+            }
+        }
+
+        // Metadata
+        $metadataKey      = strtolower($folder) === "root" ? "root" : $folder;
+        $metadataFileName = str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
+        $metadataFilePath = META_DIR . $metadataFileName;
+
+        $metadata = file_exists($metadataFilePath) ? (json_decode(file_get_contents($metadataFilePath), true) ?: []) : [];
+
+        $currentTime = date(DATE_TIME_FORMAT);
+        $uploader = $uploader ?? ($_SESSION['username'] ?? "Unknown");
+
+        if (isset($metadata[$fileName])) {
+            $metadata[$fileName]['modified'] = $currentTime;
+            $metadata[$fileName]['uploader'] = $uploader;
+        } else {
+            $metadata[$fileName] = [
+                "uploaded" => $currentTime,
+                "modified" => $currentTime,
+                "uploader" => $uploader
+            ];
+        }
+
+        if (file_put_contents($metadataFilePath, json_encode($metadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
+            return ["error" => "Failed to update metadata"];
+        }
+
+        return ["success" => "File saved successfully"];
     }
 
-    $currentTime = date(DATE_TIME_FORMAT);
-    // Use passed-in uploader, or fall back to session
-    if ($uploader === null) {
-        $uploader = $_SESSION['username'] ?? "Unknown";
-    }
-
-    if (isset($metadata[$fileName])) {
-        $metadata[$fileName]['modified'] = $currentTime;
-        $metadata[$fileName]['uploader'] = $uploader;
-    } else {
-        $metadata[$fileName] = [
-            "uploaded" => $currentTime,
-            "modified" => $currentTime,
-            "uploader" => $uploader
-        ];
-    }
-
-    if (file_put_contents($metadataFilePath, json_encode($metadata, JSON_PRETTY_PRINT)) === false) {
-        return ["error" => "Failed to update metadata"];
-    }
-
-    return ["success" => "File saved successfully"];
-}
-
-        /**
+    /**
      * Validates and retrieves information needed to download a file.
      *
      * @param string $folder The folder from which to download (e.g., "root" or a subfolder).
@@ -486,13 +502,13 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         if (!preg_match(REGEX_FILE_NAME, $file)) {
             return ["error" => "Invalid file name."];
         }
-        
+
         // Determine the real upload directory.
         $uploadDirReal = realpath(UPLOAD_DIR);
         if ($uploadDirReal === false) {
             return ["error" => "Server misconfiguration."];
         }
-        
+
         // Determine directory based on folder.
         if (strtolower($folder) === 'root' || trim($folder) === '') {
             $directory = $uploadDirReal;
@@ -507,11 +523,11 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 return ["error" => "Invalid folder path."];
             }
         }
-        
+
         // Build the file path.
         $filePath = $directory . DIRECTORY_SEPARATOR . $file;
         $realFilePath = realpath($filePath);
-        
+
         // Ensure the file exists and is within the allowed directory.
         if ($realFilePath === false || strpos($realFilePath, $uploadDirReal) !== 0) {
             return ["error" => "Access forbidden."];
@@ -519,16 +535,20 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         if (!file_exists($realFilePath)) {
             return ["error" => "File not found."];
         }
-        
-        // Get the MIME type.
-        $mimeType = mime_content_type($realFilePath);
+
+        // Get the MIME type with safe fallback.
+        $mimeType = function_exists('mime_content_type') ? mime_content_type($realFilePath) : null;
+        if (!$mimeType) {
+            $mimeType = 'application/octet-stream';
+        }
+
         return [
             "filePath" => $realFilePath,
             "mimeType" => $mimeType
         ];
     }
 
-        /**
+    /**
      * Creates a ZIP archive of the specified files from a given folder.
      *
      * @param string $folder The folder from which to zip the files (e.g., "root" or a subfolder).
@@ -555,7 +575,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 return ["error" => "Folder not found."];
             }
         }
-        
+
         // Validate each file and build an array of files to zip.
         $filesToZip = [];
         foreach ($files as $fileName) {
@@ -572,12 +592,12 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         if (empty($filesToZip)) {
             return ["error" => "No valid files found to zip."];
         }
-        
+
         // Create a temporary ZIP file.
         $tempZip = tempnam(sys_get_temp_dir(), 'zip');
         unlink($tempZip); // Remove the temp file so that ZipArchive can create a new file.
         $tempZip .= '.zip';
-        
+
         $zip = new ZipArchive();
         if ($zip->open($tempZip, ZipArchive::CREATE) !== TRUE) {
             return ["error" => "Could not create zip archive."];
@@ -587,11 +607,11 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             $zip->addFile($filePath, basename($filePath));
         }
         $zip->close();
-        
+
         return ["zipPath" => $tempZip];
     }
 
-        /**
+    /**
      * Extracts ZIP archives from the specified folder.
      *
      * @param string $folder The folder from which ZIP files will be extracted (e.g., "root" or a subfolder).
@@ -602,110 +622,125 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         $errors = [];
         $allSuccess = true;
         $extractedFiles = [];
-        
-        // Determine the base upload directory and build the folder path.
+
         $baseDir = realpath(UPLOAD_DIR);
         if ($baseDir === false) {
             return ["error" => "Uploads directory not configured correctly."];
         }
-        
-        if (strtolower($folder) === "root" || trim($folder) === "") {
+
+        // Build target dir
+        if (strtolower(trim($folder) ?: '') === "root") {
             $relativePath = "";
         } else {
             $parts = explode('/', trim($folder, "/\\"));
             foreach ($parts as $part) {
-                if (empty($part) || $part === '.' || $part === '..' || !preg_match(REGEX_FOLDER_NAME, $part)) {
+                if ($part === '' || $part === '.' || $part === '..' || !preg_match(REGEX_FOLDER_NAME, $part)) {
                     return ["error" => "Invalid folder name."];
                 }
             }
             $relativePath = implode(DIRECTORY_SEPARATOR, $parts) . DIRECTORY_SEPARATOR;
         }
-        
-        $folderPath = $baseDir . DIRECTORY_SEPARATOR . $relativePath;
+
+        $folderPath     = $baseDir . DIRECTORY_SEPARATOR . $relativePath;
+        if (!is_dir($folderPath) && !mkdir($folderPath, 0775, true)) {
+            return ["error" => "Folder not found and cannot be created."];
+        }
         $folderPathReal = realpath($folderPath);
         if ($folderPathReal === false || strpos($folderPathReal, $baseDir) !== 0) {
             return ["error" => "Folder not found."];
         }
-        
-        // Prepare metadata.
-        // Reuse our helper method if available; otherwise, re-create the logic.
-        $metadataFile = self::getMetadataFilePath($folder);
-        $srcMetadata = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
-        if (!is_array($srcMetadata)) {
-            $srcMetadata = [];
-        }
-        // For simplicity, we update the same metadata file after extraction.
-        $destMetadata = $srcMetadata;
-        
-        // Define a safe file name pattern.
+
+        // Prepare metadata container
+        $metadataFile  = self::getMetadataFilePath($folder);
+        $destMetadata  = file_exists($metadataFile) ? (json_decode(file_get_contents($metadataFile), true) ?: []) : [];
+
         $safeFileNamePattern = REGEX_FILE_NAME;
-        
-        // Process each ZIP file.
+        $actor = $_SESSION['username'] ?? 'Unknown';
+        $now   = date(DATE_TIME_FORMAT);
+
         foreach ($files as $zipFileName) {
-            $originalName = basename(trim($zipFileName));
-            // Process only .zip files.
-            if (strtolower(substr($originalName, -4)) !== '.zip') {
+            $zipBase = basename(trim($zipFileName));
+            if (strtolower(substr($zipBase, -4)) !== '.zip') {
                 continue;
             }
-            if (!preg_match($safeFileNamePattern, $originalName)) {
-                $errors[] = "$originalName has an invalid name.";
+            if (!preg_match($safeFileNamePattern, $zipBase)) {
+                $errors[] = "$zipBase has an invalid name.";
                 $allSuccess = false;
                 continue;
             }
-            
-            $zipFilePath = $folderPathReal . DIRECTORY_SEPARATOR . $originalName;
+
+            $zipFilePath = $folderPathReal . DIRECTORY_SEPARATOR . $zipBase;
             if (!file_exists($zipFilePath)) {
-                $errors[] = "$originalName does not exist in folder.";
+                $errors[] = "$zipBase does not exist in folder.";
                 $allSuccess = false;
                 continue;
             }
-            
+
             $zip = new ZipArchive();
             if ($zip->open($zipFilePath) !== TRUE) {
-                $errors[] = "Could not open $originalName as a zip file.";
+                $errors[] = "Could not open $zipBase as a zip file.";
                 $allSuccess = false;
                 continue;
             }
-            
-            // Attempt extraction.
-            if (!$zip->extractTo($folderPathReal)) {
-                $errors[] = "Failed to extract $originalName.";
+
+            // Minimal Zip Slip guard: fail if any entry looks unsafe
+            $unsafe = false;
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entryName = $zip->getNameIndex($i);
+                if ($entryName === false) { $unsafe = true; break; }
+                // Absolute paths, parent traversal, or Windows drive paths
+                if (strpos($entryName, '../') !== false || strpos($entryName, '..\\') !== false ||
+                    str_starts_with($entryName, '/') || preg_match('/^[A-Za-z]:[\\\\\\/]/', $entryName)) {
+                    $unsafe = true; break;
+                }
+            }
+            if ($unsafe) {
+                $zip->close();
+                $errors[] = "$zipBase contains unsafe paths; extraction aborted.";
                 $allSuccess = false;
-            } else {
-                // Collect extracted file names from this archive.
-                for ($i = 0; $i < $zip->numFiles; $i++) {
-                    $entryName = $zip->getNameIndex($i);
-                    $extractedFileName = basename($entryName);
-                    if ($extractedFileName) {
-                        $extractedFiles[] = $extractedFileName;
-                    }
-                }
-                // Update metadata for each extracted file if the ZIP has metadata.
-                if (isset($srcMetadata[$originalName])) {
-                    $zipMeta = $srcMetadata[$originalName];
-                    for ($i = 0; $i < $zip->numFiles; $i++) {
-                        $entryName = $zip->getNameIndex($i);
-                        $extractedFileName = basename($entryName);
-                        if ($extractedFileName) {
-                            $destMetadata[$extractedFileName] = $zipMeta;
-                        }
-                    }
-                }
+                continue;
+            }
+
+            // Extract safely (whole archive) after precheck
+            if (!$zip->extractTo($folderPathReal)) {
+                $errors[] = "Failed to extract $zipBase.";
+                $allSuccess = false;
+                $zip->close();
+                continue;
+            }
+
+            // Stamp metadata for extracted regular files
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entryName = $zip->getNameIndex($i);
+                if ($entryName === false) continue;
+
+                $basename = basename($entryName);
+                if ($basename === '' || !preg_match($safeFileNamePattern, $basename)) continue;
+
+                // Only stamp files that actually exist after extraction
+                $target = $folderPathReal . DIRECTORY_SEPARATOR . $entryName;
+                $isDir  = str_ends_with($entryName, '/') || is_dir($target);
+                if ($isDir) continue;
+
+                $extractedFiles[] = $basename;
+                $destMetadata[$basename] = [
+                    'uploaded' => $now,
+                    'modified' => $now,
+                    'uploader' => $actor,
+                    // no tags by default
+                ];
             }
             $zip->close();
         }
-        
-        // Save updated metadata.
-        if (file_put_contents($metadataFile, json_encode($destMetadata, JSON_PRETTY_PRINT)) === false) {
+
+        if (file_put_contents($metadataFile, json_encode($destMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             $errors[] = "Failed to update metadata.";
             $allSuccess = false;
         }
-        
-        if ($allSuccess) {
-            return ["success" => true, "extractedFiles" => $extractedFiles];
-        } else {
-            return ["success" => false, "error" => implode(" ", $errors)];
-        }
+
+        return $allSuccess
+            ? ["success" => true, "extractedFiles" => $extractedFiles]
+            : ["success" => false, "error" => implode(" ", $errors)];
     }
 
     /**
@@ -726,12 +761,12 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         return $shareLinks[$token];
     }
 
-        /**
+    /**
      * Creates a share link for a file.
      *
      * @param string $folder The folder containing the shared file (or "root").
      * @param string $file The name of the file being shared.
-     * @param int $expirationMinutes The number of minutes until expiration.
+     * @param int $expirationSeconds The number of seconds until expiration.
      * @param string $password Optional password protecting the share.
      * @return array Returns an associative array with keys "token" and "expires" on success,
      *               or "error" on failure.
@@ -741,16 +776,21 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             return ["error" => "Invalid folder name."];
         }
-        
+        // Validate file name.
+        $file = basename(trim($file));
+        if (!preg_match(REGEX_FILE_NAME, $file)) {
+            return ["error" => "Invalid file name."];
+        }
+
         // Generate a secure token (32 hex characters).
         $token = bin2hex(random_bytes(16));
-        
+
         // Calculate expiration (Unix timestamp).
         $expires = time() + $expirationSeconds;
-        
+
         // Hash the password if provided.
         $hashedPassword = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : "";
-        
+
         // File to store share links.
         $shareFile = META_DIR . "share_links.json";
         $shareLinks = [];
@@ -761,7 +801,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 $shareLinks = [];
             }
         }
-        
+
         // Clean up expired share links.
         $currentTime = time();
         foreach ($shareLinks as $key => $link) {
@@ -769,7 +809,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 unset($shareLinks[$key]);
             }
         }
-        
+
         // Add new share record.
         $shareLinks[$token] = [
             "folder"   => $folder,
@@ -777,16 +817,16 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             "expires"  => $expires,
             "password" => $hashedPassword
         ];
-        
+
         // Save the updated share links.
-        if (file_put_contents($shareFile, json_encode($shareLinks, JSON_PRETTY_PRINT))) {
+        if (file_put_contents($shareFile, json_encode($shareLinks, JSON_PRETTY_PRINT), LOCK_EX)) {
             return ["token" => $token, "expires" => $expires];
         } else {
             return ["error" => "Could not save share link."];
         }
     }
 
-        /**
+    /**
      * Retrieves and enriches trash records from the trash metadata file.
      *
      * @return array An array of trash items.
@@ -802,7 +842,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 $trashItems = [];
             }
         }
-        
+
         // Enrich each trash record.
         foreach ($trashItems as &$item) {
             if (empty($item['deletedBy'])) {
@@ -834,7 +874,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         return $trashItems;
     }
 
-        /**
+    /**
      * Restores files from Trash based on an array of trash file identifiers.
      *
      * @param array $trashFiles An array of trash file names (i.e. the 'trashName' fields).
@@ -844,7 +884,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
     public static function restoreFiles(array $trashFiles) {
         $errors = [];
         $restoredItems = [];
-        
+
         // Setup Trash directory and trash metadata file.
         $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
         if (!file_exists($trashDir)) {
@@ -859,7 +899,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 $trashData = [];
             }
         }
-        
+
         // Helper to get metadata file path for a folder.
         $getMetadataFilePath = function($folder) {
             if (strtolower($folder) === 'root' || trim($folder) === '') {
@@ -867,7 +907,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             }
             return META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
         };
-        
+
         // Process each provided trash file name.
         foreach ($trashFiles as $trashFileName) {
             $trashFileName = trim($trashFileName);
@@ -876,7 +916,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 $errors[] = "$trashFileName has an invalid format.";
                 continue;
             }
-            
+
             // Locate the matching trash record.
             $recordKey = null;
             foreach ($trashData as $key => $record) {
@@ -889,7 +929,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 $errors[] = "No trash record found for $trashFileName.";
                 continue;
             }
-            
+
             $record = $trashData[$recordKey];
             if (!isset($record['originalFolder']) || !isset($record['originalName'])) {
                 $errors[] = "Incomplete trash record for $trashFileName.";
@@ -897,7 +937,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             }
             $originalFolder = $record['originalFolder'];
             $originalName = $record['originalName'];
-            
+
             // Convert absolute original folder to relative folder.
             $relativeFolder = 'root';
             if (strpos($originalFolder, UPLOAD_DIR) === 0) {
@@ -906,12 +946,12 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                     $relativeFolder = 'root';
                 }
             }
-            
+
             // Build destination path.
             $destinationPath = (strtolower($relativeFolder) !== 'root')
                 ? rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $relativeFolder . DIRECTORY_SEPARATOR . $originalName
                 : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $originalName;
-            
+
             // Handle folder-type records if necessary.
             if (isset($record['type']) && $record['type'] === 'folder') {
                 if (!file_exists($destinationPath)) {
@@ -928,7 +968,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 unset($trashData[$recordKey]);
                 continue;
             }
-            
+
             // For files: Ensure destination directory exists.
             $destinationDir = dirname($destinationPath);
             if (!file_exists($destinationDir)) {
@@ -937,18 +977,18 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                     continue;
                 }
             }
-            
+
             if (file_exists($destinationPath)) {
                 $errors[] = "File already exists at destination: $originalName.";
                 continue;
             }
-            
+
             // Move the file from trash to its original location.
             $sourcePath = $trashDir . $trashFileName;
             if (file_exists($sourcePath)) {
                 if (rename($sourcePath, $destinationPath)) {
                     $restoredItems[] = $originalName;
-                    
+
                     // Update metadata: Restore metadata for this file.
                     $metadataFile = $getMetadataFilePath($relativeFolder);
                     $metadata = [];
@@ -963,7 +1003,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                         "uploader" => isset($record['uploader']) ? $record['uploader'] : "Unknown"
                     ];
                     $metadata[$originalName] = $restoredMeta;
-                    file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
+                    file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT), LOCK_EX);
                     unset($trashData[$recordKey]);
                 } else {
                     $errors[] = "Failed to restore $originalName.";
@@ -972,10 +1012,10 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 $errors[] = "Trash file not found: $trashFileName.";
             }
         }
-        
+
         // Write back updated trash metadata.
-        file_put_contents($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT));
-        
+        file_put_contents($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT), LOCK_EX);
+
         if (empty($errors)) {
             return ["success" => "Items restored: " . implode(", ", $restoredItems), "restored" => $restoredItems];
         } else {
@@ -983,7 +1023,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         }
     }
 
-        /**
+    /**
      * Deletes trash items based on an array of trash file identifiers.
      *
      * @param array $filesToDelete An array of trash file names (identifiers).
@@ -1045,7 +1085,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         }
 
         // Save the updated trash metadata back as an indexed array.
-        file_put_contents($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT));
+        file_put_contents($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT), LOCK_EX);
 
         if (empty($errors)) {
             return ["deleted" => $deletedFiles];
@@ -1054,37 +1094,37 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         }
     }
 
-        /**
+    /**
      * Retrieves file tags from the createdTags.json metadata file.
      *
      * @return array An array of tags. Returns an empty array if the file doesn't exist or is not readable.
      */
     public static function getFileTags(): array {
         $metadataPath = META_DIR . 'createdTags.json';
-        
+
         // Check if the metadata file exists and is readable.
         if (!file_exists($metadataPath) || !is_readable($metadataPath)) {
             error_log('Metadata file does not exist or is not readable: ' . $metadataPath);
             return [];
         }
-        
+
         $data = file_get_contents($metadataPath);
         if ($data === false) {
             error_log('Failed to read metadata file: ' . $metadataPath);
             // Return an empty array for a graceful fallback.
             return [];
         }
-        
+
         $jsonData = json_decode($data, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             error_log('Invalid JSON in metadata file: ' . $metadataPath . ' Error: ' . json_last_error_msg());
             return [];
         }
-        
+
         return $jsonData;
     }
 
-        /**
+    /**
      * Saves tag data for a specified file and updates the global tags.
      *
      * @param string $folder The folder where the file is located (e.g., "root" or a subfolder).
@@ -1095,31 +1135,37 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
      * @return array Returns an associative array with a "success" key and updated "globalTags", or an "error" key on failure.
      */
     public static function saveFileTag(string $folder, string $file, array $tags, bool $deleteGlobal = false, ?string $tagToDelete = null): array {
-        // Determine the folder metadata file.
+        // Validate the file name and folder
         $folder = trim($folder) ?: 'root';
-        $metadataFile = "";
-        if (strtolower($folder) === "root") {
-            $metadataFile = META_DIR . "root_metadata.json";
-        } else {
-            $metadataFile = META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+        $file   = basename(trim($file));
+        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            return ["error" => "Invalid folder name."];
         }
-        
+        if (!preg_match(REGEX_FILE_NAME, $file)) {
+            return ["error" => "Invalid file name."];
+        }
+
+        // Determine the folder metadata file.
+        $metadataFile = (strtolower($folder) === "root")
+            ? META_DIR . "root_metadata.json"
+            : META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+
         // Load existing metadata for this folder.
         $metadata = [];
         if (file_exists($metadataFile)) {
             $metadata = json_decode(file_get_contents($metadataFile), true) ?? [];
         }
-        
+
         // Update the metadata for the specified file.
         if (!isset($metadata[$file])) {
             $metadata[$file] = [];
         }
         $metadata[$file]['tags'] = $tags;
-        
-        if (file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT)) === false) {
+
+        if (file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             return ["error" => "Failed to save tag data for file metadata."];
         }
-        
+
         // Now update the global tags file.
         $globalTagsFile = META_DIR . "createdTags.json";
         $globalTags = [];
@@ -1129,7 +1175,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 $globalTags = [];
             }
         }
-        
+
         // If deleteGlobal is true and tagToDelete is provided, remove that tag.
         if ($deleteGlobal && !empty($tagToDelete)) {
             $tagToDeleteLower = strtolower($tagToDelete);
@@ -1151,16 +1197,17 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                     $globalTags[] = $tag;
                 }
             }
+            unset($globalTag);
         }
-        
-        if (file_put_contents($globalTagsFile, json_encode($globalTags, JSON_PRETTY_PRINT)) === false) {
+
+        if (file_put_contents($globalTagsFile, json_encode($globalTags, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             return ["error" => "Failed to save global tags."];
         }
-        
+
         return ["success" => "Tag data saved successfully.", "globalTags" => $globalTags];
     }
 
-        /**
+    /**
      * Retrieves the list of files in a given folder, enriched with metadata, along with global tags.
      *
      * @param string $folder The folder name (e.g., "root" or a subfolder).
@@ -1170,21 +1217,21 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         // --- caps for safe inlining ---
         if (!defined('LISTING_CONTENT_BYTES_MAX')) define('LISTING_CONTENT_BYTES_MAX', 8192);          // 8 KB snippet
         if (!defined('INDEX_TEXT_BYTES_MAX'))    define('INDEX_TEXT_BYTES_MAX', 5 * 1024 * 1024);     // only sample files ≤ 5 MB
-    
+
         $folder = trim($folder) ?: 'root';
-    
+
         // Determine the target directory.
         if (strtolower($folder) !== 'root') {
             $directory = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
         } else {
             $directory = UPLOAD_DIR;
         }
-    
+
         // Validate folder.
         if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             return ["error" => "Invalid folder name."];
         }
-    
+
         // Helper: Build the metadata file path.
         $getMetadataFilePath = function(string $folder): string {
             if (strtolower($folder) === 'root' || trim($folder) === '') {
@@ -1194,25 +1241,25 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         };
         $metadataFile = $getMetadataFilePath($folder);
         $metadata = file_exists($metadataFile) ? (json_decode(file_get_contents($metadataFile), true) ?: []) : [];
-    
+
         if (!is_dir($directory)) {
             return ["error" => "Directory not found."];
         }
-    
+
         $allFiles = array_values(array_diff(scandir($directory), array('.', '..')));
         $fileList = [];
-    
+
         // Define a safe file name pattern.
         $safeFileNamePattern = REGEX_FILE_NAME;
-    
+
         // Prepare finfo (if available) for MIME sniffing.
         $finfo = function_exists('finfo_open') ? @finfo_open(FILEINFO_MIME_TYPE) : false;
-    
+
         foreach ($allFiles as $file) {
             if ($file === '' || $file[0] === '.') {
                 continue; // Skip hidden/invalid entries.
             }
-    
+
             $filePath = $directory . DIRECTORY_SEPARATOR . $file;
             if (!is_file($filePath)) {
                 continue; // Only process files.
@@ -1220,14 +1267,14 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             if (!preg_match($safeFileNamePattern, $file)) {
                 continue;
             }
-    
+
             // Meta
             $mtime = @filemtime($filePath);
             $fileDateModified = $mtime ? date(DATE_TIME_FORMAT, $mtime) : "Unknown";
             $metaKey = $file;
             $fileUploadedDate = isset($metadata[$metaKey]["uploaded"]) ? $metadata[$metaKey]["uploaded"] : "Unknown";
             $fileUploader = isset($metadata[$metaKey]["uploader"]) ? $metadata[$metaKey]["uploader"] : "Unknown";
-    
+
             // Size
             $fileSizeBytes = @filesize($filePath);
             if (!is_int($fileSizeBytes)) $fileSizeBytes = 0;
@@ -1240,7 +1287,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             } else {
                 $fileSizeFormatted = sprintf("%s bytes", number_format($fileSizeBytes));
             }
-    
+
             // MIME + text detection (fallback to extension)
             $mime = 'application/octet-stream';
             if ($finfo) {
@@ -1250,7 +1297,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             $isTextByMime = (strpos((string)$mime, 'text/') === 0) || $mime === 'application/json' || $mime === 'application/xml';
             $isTextByExt  = (bool)preg_match('/\.(txt|md|csv|json|xml|html?|css|js|log|ini|conf|config|yml|yaml|php|py|rb|sh|bat|ps1|ts|tsx|c|cpp|h|hpp|java|go|rs)$/i', $file);
             $isText = $isTextByMime || $isTextByExt;
-    
+
             // Build entry
             $fileEntry = [
                 'name'      => $file,
@@ -1262,11 +1309,11 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                 'tags'      => isset($metadata[$metaKey]['tags']) ? $metadata[$metaKey]['tags'] : [],
                 'mime'      => $mime,
             ];
-    
+
             // Small, safe snippet for text files only (never full content)
             $fileEntry['content']          = '';
             $fileEntry['contentTruncated'] = false;
-    
+
             if ($isText && $fileSizeBytes > 0) {
                 if ($fileSizeBytes <= INDEX_TEXT_BYTES_MAX) {
                     $fh = @fopen($filePath, 'rb');
@@ -1289,16 +1336,16 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
                     $fileEntry['contentTruncated'] = true;
                 }
             }
-    
+
             $fileList[] = $fileEntry;
         }
-    
+
         if ($finfo) { @finfo_close($finfo); }
-    
+
         // Load global tags.
         $globalTagsFile = META_DIR . "createdTags.json";
         $globalTags = file_exists($globalTagsFile) ? (json_decode(file_get_contents($globalTagsFile), true) ?: []) : [];
-    
+
         return ["files" => $fileList, "globalTags" => $globalTags];
     }
 
@@ -1323,7 +1370,7 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             return false;
         }
         unset($links[$token]);
-        file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT));
+        file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT), LOCK_EX);
         return true;
     }
 
@@ -1338,21 +1385,18 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
     public static function createFile(string $folder, string $filename, string $uploader): array
     {
         // 1) basic validation
-        if (!preg_match('/^[\w\-. ]+$/', $filename)) {
+        $filename = basename(trim($filename));
+        if (!preg_match(REGEX_FILE_NAME, $filename)) {
             return ['success'=>false,'error'=>'Invalid filename','code'=>400];
         }
 
-        // 2) build target path
-        $base = UPLOAD_DIR;
-        if ($folder !== 'root') {
-            $base = rtrim(UPLOAD_DIR, '/\\')
-                  . DIRECTORY_SEPARATOR . $folder
-                  . DIRECTORY_SEPARATOR;
+        // 2) resolve target folder
+        list($baseDir, $err) = self::resolveFolderPath($folder, true);
+        if ($err) {
+            return ['success'=>false, 'error'=>$err, 'code'=>($err === 'Invalid folder name.' ? 400 : 500)];
         }
-        if (!is_dir($base) && !mkdir($base, 0775, true)) {
-            return ['success'=>false,'error'=>'Cannot create folder','code'=>500];
-        }
-        $path = $base . $filename;
+
+        $path = $baseDir . DIRECTORY_SEPARATOR . $filename;
 
         // 3) no overwrite
         if (file_exists($path)) {
@@ -1360,12 +1404,12 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
         }
 
         // 4) touch the file
-        if (false === @file_put_contents($path, '')) {
+        if (false === @file_put_contents($path, '', LOCK_EX)) {
             return ['success'=>false,'error'=>'Could not create file','code'=>500];
         }
 
         // 5) write metadata
-        $metaKey  = ($folder === 'root') ? 'root' : $folder;
+        $metaKey  = (strtolower($folder) === 'root' || trim($folder) === '') ? 'root' : $folder;
         $metaName = str_replace(['/', '\\', ' '], '-', $metaKey) . '_metadata.json';
         $metaPath = META_DIR . $metaName;
 
@@ -1375,12 +1419,14 @@ public static function saveFile(string $folder, string $fileName, $content, ?str
             $collection = json_decode($json, true) ?: [];
         }
 
+        $now = date(DATE_TIME_FORMAT);
         $collection[$filename] = [
-          'uploaded' => date(DATE_TIME_FORMAT),
+          'uploaded' => $now,
+          'modified' => $now,
           'uploader' => $uploader
         ];
 
-        if (false === file_put_contents($metaPath, json_encode($collection, JSON_PRETTY_PRINT))) {
+        if (false === file_put_contents($metaPath, json_encode($collection, JSON_PRETTY_PRINT), LOCK_EX)) {
             return ['success'=>false,'error'=>'Failed to update metadata','code'=>500];
         }
 

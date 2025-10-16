@@ -2,7 +2,12 @@
 
 ## Supported Versions
 
-FileRise is actively maintained. Only supported versions will receive security updates. For details on which versions are currently supported, please see the [Release Notes](https://github.com/error311/FileRise/releases).
+We provide security fixes for the latest minor release line.
+
+| Version     | Supported |
+|------------|-----------|
+| v1.4.x     | ✅        |
+| < v1.4.0   | ❌        |
 
 ## Reporting a Vulnerability
 

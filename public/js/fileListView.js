@@ -55,6 +55,18 @@ window.advancedSearchEnabled = false;
  * --- Helper Functions ---
  */
 
+// Safely parse JSON; if server returned HTML/text, throw it as a readable error.
+async function safeJson(res) {
+    const text = await res.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        // Common cases: PHP notice/HTML, "Access forbidden.", etc.
+        const msg = (text || '').toString().trim();
+        throw new Error(msg || `Unexpected ${res.status} ${res.statusText} from ${res.url || 'request'}`);
+    }
+}
+
 /**
  * Convert a file size string (e.g. "456.9KB", "1.2 MB", "1024") into bytes.
  */
@@ -219,8 +231,14 @@ export async function loadFileList(folderParam) {
 
     try {
         // Kick off both in parallel, but we'll render as soon as FILES are ready
-        const filesPromise = fetch(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=1&t=${Date.now()}`);
-        const foldersPromise = fetch(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`);
+        const filesPromise = fetch(
+            `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=1&t=${Date.now()}`,
+            { credentials: 'include' }
+        );
+        const foldersPromise = fetch(
+            `/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`,
+            { credentials: 'include' }
+        );
 
         // ----- FILES FIRST -----
         const filesRes = await filesPromise;
@@ -230,7 +248,10 @@ export async function loadFileList(folderParam) {
             throw new Error("Unauthorized");
         }
 
-        const data = await filesRes.json();
+        const data = await safeJson(filesRes);
+        if (data.error) {
+            throw new Error(typeof data.error === 'string' ? data.error : 'Server returned an error.');
+        }
 
         // If another loadFileList ran after this one, bail before touching the DOM
         if (reqId !== __fileListReqSeq) return [];
@@ -403,7 +424,7 @@ export async function loadFileList(folderParam) {
         // ----- FOLDERS NEXT (populate strip when ready; doesn't block rows) -----
         try {
             const foldersRes = await foldersPromise;
-            const folderRaw = await foldersRes.json();
+            const folderRaw = await safeJson(foldersRes).catch(() => []); // don't block file render on folder strip issues
             if (reqId !== __fileListReqSeq) return data.files;
 
             // --- build ONLY the *direct* children of current folder ---

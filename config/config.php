@@ -36,6 +36,13 @@ define('REGEX_USER',       '/^[\p{L}\p{N}_\- ]+$/u');
 date_default_timezone_set(TIMEZONE);
 
 
+if (!defined('DEFAULT_BYPASS_OWNERSHIP')) define('DEFAULT_BYPASS_OWNERSHIP', false);
+if (!defined('DEFAULT_CAN_SHARE'))        define('DEFAULT_CAN_SHARE', true);
+if (!defined('DEFAULT_CAN_ZIP'))          define('DEFAULT_CAN_ZIP', true);
+if (!defined('DEFAULT_VIEW_OWN_ONLY'))    define('DEFAULT_VIEW_OWN_ONLY', false);
+
+
+
 // Encryption helpers
 function encryptData($data, $encryptionKey)
 {

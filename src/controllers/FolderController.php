@@ -6,6 +6,94 @@ require_once PROJECT_ROOT . '/src/models/FolderModel.php';
 
 class FolderController
 {
+    // ---- Helpers -----------------------------------------------------------
+    private static function getHeadersLower(): array
+    {
+        // getallheaders() may not exist on some SAPIs
+        if (function_exists('getallheaders')) {
+            $h = getallheaders();
+            if (is_array($h)) return array_change_key_case($h, CASE_LOWER);
+        }
+        $headers = [];
+        foreach ($_SERVER as $k => $v) {
+            if (strpos($k, 'HTTP_') === 0) {
+                $name = strtolower(str_replace('_', '-', substr($k, 5)));
+                $headers[$name] = $v;
+            }
+        }
+        return $headers;
+    }
+
+    private static function requireCsrf(): void
+    {
+        $headers = self::getHeadersLower();
+        $received = trim($headers['x-csrf-token'] ?? ($_POST['csrfToken'] ?? ''));
+        if (!isset($_SESSION['csrf_token']) || $received !== $_SESSION['csrf_token']) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Invalid CSRF token']);
+            exit;
+        }
+    }
+
+    private static function requireAuth(): void
+    {
+        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Unauthorized']);
+            exit;
+        }
+    }
+
+    private static function requireNotReadOnly(): void
+    {
+        $username = $_SESSION['username'] ?? '';
+        $perms    = loadUserPermissions($username);
+        if ($username && !empty($perms['readOnly'])) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Read-only users are not allowed to perform this action.']);
+            exit;
+        }
+    }
+
+    private static function requireAdmin(): void
+    {
+        if (empty($_SESSION['isAdmin'])) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Admin privileges required.']);
+            exit;
+        }
+    }
+
+    private static function formatBytes(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes . " B";
+        } elseif ($bytes < 1048576) {
+            return round($bytes / 1024, 2) . " KB";
+        } elseif ($bytes < 1073741824) {
+            return round($bytes / 1048576, 2) . " MB";
+        } else {
+            return round($bytes / 1073741824, 2) . " GB";
+        }
+    }
+
+    private function enforceFolderScope(string $folder, string $username, array $userPermissions): ?string {
+        if ($this->isAdmin($userPermissions) || !empty($userPermissions['bypassFolderScope'])) return null;
+        if (!$this->isFolderOnly($userPermissions)) return null;
+    
+        $folder = trim($folder);
+        if ($folder !== '' && strtolower($folder) !== 'root') {
+            if ($folder !== $username && strpos($folder, $username . '/') !== 0) {
+                return "Forbidden: folder scope violation.";
+            }
+        }
+        return null;
+    }
+
     /**
      * @OA\Post(
      *     path="/api/folder/createFolder.php",
@@ -41,74 +129,41 @@ class FolderController
      *         description="Invalid CSRF token or permission denied"
      *     )
      * )
-     *
-     * Creates a new folder in the upload directory, optionally under a parent folder.
-     *
-     * @return void Outputs a JSON response.
      */
     public function createFolder(): void
     {
         header('Content-Type: application/json');
 
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-            http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
-        }
-
-        // Ensure the request method is POST.
+        self::requireAuth();
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            echo json_encode(['error' => 'Invalid request method.']);
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed.']);
             exit;
         }
+        self::requireCsrf();
+        self::requireNotReadOnly();
 
-        // CSRF check.
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = $headersArr['x-csrf-token'] ?? '';
-        if (!isset($_SESSION['csrf_token']) || trim($receivedToken) !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Invalid CSRF token.']);
-            exit;
-        }
-
-        // Check permissions.
-        $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
-            http_response_code(403);
-            echo json_encode([
-                "success" => false,
-                "error"   => "Read-only users are not allowed to create folders."
-            ]);
-            exit;
-        }
-
-        // Get and decode JSON input.
         $input = json_decode(file_get_contents('php://input'), true);
         if (!isset($input['folderName'])) {
+            http_response_code(400);
             echo json_encode(['error' => 'Folder name not provided.']);
             exit;
         }
 
         $folderName = trim($input['folderName']);
-        $parent = isset($input['parent']) ? trim($input['parent']) : "";
+        $parent     = isset($input['parent']) ? trim($input['parent']) : "";
 
-        // Basic sanitation for folderName.
         if (!preg_match(REGEX_FOLDER_NAME, $folderName)) {
             http_response_code(400);
             echo json_encode(['error' => 'Invalid folder name.']);
             exit;
         }
-
-        // Optionally sanitize the parent.
         if ($parent && !preg_match(REGEX_FOLDER_NAME, $parent)) {
             http_response_code(400);
             echo json_encode(['error' => 'Invalid parent folder name.']);
             exit;
         }
 
-        // Delegate to FolderModel.
         $result = FolderModel::createFolder($folderName, $parent);
         echo json_encode($result);
         exit;
@@ -148,60 +203,39 @@ class FolderController
      *         description="Invalid CSRF token or permission denied"
      *     )
      * )
-     *
-     * Deletes a folder if it is empty and not the root folder.
-     *
-     * @return void Outputs a JSON response.
      */
     public function deleteFolder(): void
     {
         header('Content-Type: application/json');
 
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-            http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
-        }
-
-        // Ensure the request is a POST.
+        self::requireAuth();
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            echo json_encode(["error" => "Invalid request method."]);
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed."]);
             exit;
         }
+        self::requireCsrf();
+        self::requireNotReadOnly();
 
-        // CSRF Protection.
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
-        if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(["error" => "Invalid CSRF token."]);
-            exit;
-        }
-
-        // Check user permissions.
-        $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
-            echo json_encode(["error" => "Read-only users are not allowed to delete folders."]);
-            exit;
-        }
-
-        // Get and decode JSON input.
         $input = json_decode(file_get_contents('php://input'), true);
         if (!isset($input['folder'])) {
+            http_response_code(400);
             echo json_encode(["error" => "Folder name not provided."]);
             exit;
         }
 
         $folder = trim($input['folder']);
-        // Prevent deletion of the root folder.
         if (strtolower($folder) === 'root') {
+            http_response_code(400);
             echo json_encode(["error" => "Cannot delete root folder."]);
             exit;
         }
+        if (!preg_match(REGEX_FOLDER_NAME, $folder)) {
+            http_response_code(400);
+            echo json_encode(["error" => "Invalid folder name."]);
+            exit;
+        }
 
-        // Delegate to the model.
         $result = FolderModel::deleteFolder($folder);
         echo json_encode($result);
         exit;
@@ -242,48 +276,23 @@ class FolderController
      *         description="Invalid CSRF token or permission denied"
      *     )
      * )
-     *
-     * Renames a folder by validating inputs and delegating to the model.
-     *
-     * @return void Outputs a JSON response.
      */
     public function renameFolder(): void
     {
         header('Content-Type: application/json');
 
-        // Ensure user is authenticated.
-        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-            http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
-        }
-
-        // Ensure the request method is POST.
+        self::requireAuth();
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            echo json_encode(['error' => 'Invalid request method.']);
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed.']);
             exit;
         }
+        self::requireCsrf();
+        self::requireNotReadOnly();
 
-        // CSRF Protection.
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
-        $receivedToken = isset($headersArr['x-csrf-token']) ? trim($headersArr['x-csrf-token']) : '';
-        if (!isset($_SESSION['csrf_token']) || $receivedToken !== $_SESSION['csrf_token']) {
-            http_response_code(403);
-            echo json_encode(["error" => "Invalid CSRF token."]);
-            exit;
-        }
-
-        // Check that the user is not read-only.
-        $username = $_SESSION['username'] ?? '';
-        $userPermissions = loadUserPermissions($username);
-        if ($username && isset($userPermissions['readOnly']) && $userPermissions['readOnly'] === true) {
-            echo json_encode(["error" => "Read-only users are not allowed to rename folders."]);
-            exit;
-        }
-
-        // Get JSON input.
         $input = json_decode(file_get_contents('php://input'), true);
         if (!isset($input['oldFolder']) || !isset($input['newFolder'])) {
+            http_response_code(400);
             echo json_encode(['error' => 'Required folder names not provided.']);
             exit;
         }
@@ -291,13 +300,12 @@ class FolderController
         $oldFolder = trim($input['oldFolder']);
         $newFolder = trim($input['newFolder']);
 
-        // Validate folder names.
         if (!preg_match(REGEX_FOLDER_NAME, $oldFolder) || !preg_match(REGEX_FOLDER_NAME, $newFolder)) {
+            http_response_code(400);
             echo json_encode(['error' => 'Invalid folder name(s).']);
             exit;
         }
 
-        // Delegate to the model.
         $result = FolderModel::renameFolder($oldFolder, $newFolder);
         echo json_encode($result);
         exit;
@@ -334,21 +342,19 @@ class FolderController
      *         description="Bad request"
      *     )
      * )
-     *
-     * Retrieves the folder list and associated metadata.
-     *
-     * @return void Outputs JSON response.
      */
     public function getFolderList(): void
     {
         header('Content-Type: application/json');
-        if (empty($_SESSION['authenticated'])) {
-            http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
+        self::requireAuth();
+
+        $parent = $_GET['folder'] ?? null;
+        if ($parent !== null && $parent !== '' && $parent !== 'root' && !preg_match(REGEX_FOLDER_NAME, $parent)) {
+            http_response_code(400);
+            echo json_encode(["error" => "Invalid folder name."]);
             exit;
         }
 
-        $parent = $_GET['folder'] ?? null;
         $folderList = FolderModel::getFolderList($parent);
         echo json_encode($folderList);
         exit;
@@ -400,34 +406,13 @@ class FolderController
      *         description="Share folder not found"
      *     )
      * )
-     *
-     * Displays a shared folder with file listings, pagination, and an upload container if allowed.
-     *
-     * @return void Outputs HTML content.
      */
-
-    function formatBytes($bytes)
-    {
-        if ($bytes < 1024) {
-            return $bytes . " B";
-        } elseif ($bytes < 1024 * 1024) {
-            return round($bytes / 1024, 2) . " KB";
-        } elseif ($bytes < 1024 * 1024 * 1024) {
-            return round($bytes / (1024 * 1024), 2) . " MB";
-        } else {
-            return round($bytes / (1024 * 1024 * 1024), 2) . " GB";
-        }
-    }
-
     public function shareFolder(): void
     {
-        // Retrieve GET parameters.
-        $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
+        $token        = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
         $providedPass = filter_input(INPUT_GET, 'pass', FILTER_SANITIZE_STRING);
-        $page = filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT);
-        if ($page === false || $page < 1) {
-            $page = 1;
-        }
+        $page         = filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT);
+        if ($page === false || $page < 1) $page = 1;
 
         if (empty($token)) {
             http_response_code(400);
@@ -436,57 +421,24 @@ class FolderController
             exit;
         }
 
-        // Delegate to the model.
         $data = FolderModel::getSharedFolderData($token, $providedPass, $page);
 
-        // If a password is needed, output an HTML form.
         if (isset($data['needs_password']) && $data['needs_password'] === true) {
-            header("Content-Type: text/html; charset=utf-8");
-?>
+            header("Content-Type: text/html; charset=utf-8"); ?>
             <!DOCTYPE html>
             <html lang="en">
-
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>Enter Password</title>
                 <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        padding: 20px;
-                        background-color: #f7f7f7;
-                    }
-
-                    .container {
-                        max-width: 400px;
-                        margin: 80px auto;
-                        background: #fff;
-                        padding: 20px;
-                        border-radius: 4px;
-                        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-                    }
-
-                    input[type="password"],
-                    button {
-                        width: 100%;
-                        padding: 10px;
-                        margin: 10px 0;
-                        font-size: 1rem;
-                    }
-
-                    button {
-                        background-color: #007BFF;
-                        border: none;
-                        color: #fff;
-                        cursor: pointer;
-                    }
-
-                    button:hover {
-                        background-color: #0056b3;
-                    }
+                    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f7f7f7; }
+                    .container { max-width: 400px; margin: 80px auto; background: #fff; padding: 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+                    input[type="password"], button { width: 100%; padding: 10px; margin: 10px 0; font-size: 1rem; }
+                    button { background-color: #007BFF; border: none; color: #fff; cursor: pointer; }
+                    button:hover { background-color: #0056b3; }
                 </style>
             </head>
-
             <body>
                 <div class="container">
                     <h2>Folder Protected</h2>
@@ -499,13 +451,10 @@ class FolderController
                     </form>
                 </div>
             </body>
-
             </html>
-        <?php
-            exit;
+            <?php exit;
         }
 
-        // If the model returned an error, output JSON error.
         if (isset($data['error'])) {
             http_response_code(403);
             header('Content-Type: application/json');
@@ -513,245 +462,94 @@ class FolderController
             exit;
         }
 
-        // Load admin config so we can pull the sharedMaxUploadSize
         require_once PROJECT_ROOT . '/src/models/AdminModel.php';
-        $adminConfig        = AdminModel::getConfig();
-        $sharedMaxUploadSize = isset($adminConfig['sharedMaxUploadSize']) && is_numeric($adminConfig['sharedMaxUploadSize'])
-            ? (int)$adminConfig['sharedMaxUploadSize']
-            : null;
+        $adminConfig          = AdminModel::getConfig();
+        $sharedMaxUploadSize  = (isset($adminConfig['sharedMaxUploadSize']) && is_numeric($adminConfig['sharedMaxUploadSize']))
+            ? (int)$adminConfig['sharedMaxUploadSize'] : null;
 
-        // For human‐readable formatting
-        function formatBytes($bytes)
-        {
-            if ($bytes < 1024) {
-                return $bytes . " B";
-            } elseif ($bytes < 1024 * 1024) {
-                return round($bytes / 1024, 2) . " KB";
-            } elseif ($bytes < 1024 * 1024 * 1024) {
-                return round($bytes / (1024 * 1024), 2) . " MB";
-            } else {
-                return round($bytes / (1024 * 1024 * 1024), 2) . " GB";
-            }
-        }
-
-        // Extract data for the HTML view.
-        $folderName = $data['folder'];
-        $files = $data['files'];
+        $folderName  = $data['folder'];
+        $files       = $data['files'];
         $currentPage = $data['currentPage'];
-        $totalPages = $data['totalPages'];
+        $totalPages  = $data['totalPages'];
 
-        // Build the HTML view.
-        header("Content-Type: text/html; charset=utf-8");
-        ?>
+        header("Content-Type: text/html; charset=utf-8"); ?>
         <!DOCTYPE html>
         <html lang="en">
-
         <head>
             <meta charset="UTF-8">
             <title>Shared Folder: <?php echo htmlspecialchars($folderName, ENT_QUOTES, 'UTF-8'); ?></title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body {
-                    background: #f2f2f2;
-                    font-family: Arial, sans-serif;
-                    padding: 0px 20px 20px 20px;
-                    color: #333;
-                }
-
-                .header {
-                    text-align: center;
-                    margin-bottom: 30px;
-                    margin-top: 0;
-                }
-
-                .header h1 {
-                    margin-top: 0;
-                }
-
-                .container {
-                    max-width: 800px;
-                    margin: 0 auto;
-                    background: #fff;
-                    border-radius: 4px;
-                    padding: 20px;
-                    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-                }
-
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 20px;
-                }
-
-                th,
-                td {
-                    padding: 12px;
-                    border-bottom: 1px solid #ddd;
-                    text-align: left;
-                }
-
-                th {
-                    background: #007BFF;
-                    color: #fff;
-                }
-
-                .pagination {
-                    text-align: center;
-                    margin-top: 20px;
-                }
-
-                .pagination a,
-                .pagination span {
-                    margin: 0 5px;
-                    padding: 8px 12px;
-                    background: #007BFF;
-                    color: #fff;
-                    border-radius: 4px;
-                    text-decoration: none;
-                }
-
-                .pagination span.current {
-                    background: #0056b3;
-                }
-
-                /* Gallery view styles if needed */
-                .shared-gallery-container {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                    gap: 10px;
-                    padding: 10px 0;
-                }
-
-                .shared-gallery-card {
-                    border: 1px solid #ccc;
-                    padding: 5px;
-                    text-align: center;
-                }
-
-                .shared-gallery-card img {
-                    max-width: 100%;
-                    display: block;
-                    margin: 0 auto;
-                }
-
-                /* Upload container */
-                .upload-container {
-                    margin-top: 30px;
-                    text-align: center;
-                }
-
-                .upload-container h3 {
-                    font-size: 1.4rem;
-                    margin-bottom: 10px;
-                }
-
-                .upload-container form {
-                    display: inline-block;
-                    margin-top: 10px;
-                }
-
-                .upload-container button {
-                    background-color: #28a745;
-                    border: none;
-                    color: #fff;
-                    padding: 10px 20px;
-                    font-size: 1rem;
-                    border-radius: 4px;
-                    cursor: pointer;
-                }
-
-                .upload-container button:hover {
-                    background-color: #218838;
-                }
-
-                .footer {
-                    text-align: center;
-                    margin-top: 40px;
-                    font-size: 0.9rem;
-                    color: #777;
-                }
-
-                .toggle-btn {
-                    background-color: #007BFF;
-                    color: #fff;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    font-size: 1rem;
-                    cursor: pointer;
-                }
-
-                .toggle-btn:hover {
-                    background-color: #0056b3;
-                }
-
-                .pagination a:hover {
-                    background-color: #0056b3;
-                }
-
-                .pagination span {
-                    cursor: default;
-                }
+                body { background:#f2f2f2; font-family: Arial, sans-serif; padding:0 20px 20px; color:#333; }
+                .header { text-align:center; margin:0 0 30px; }
+                .container { max-width: 800px; margin: 0 auto; background:#fff; border-radius:4px; padding:20px; box-shadow:0 2px 12px rgba(0,0,0,.1); }
+                table { width:100%; border-collapse:collapse; margin-top:20px; }
+                th, td { padding:12px; border-bottom:1px solid #ddd; text-align:left; }
+                th { background:#007BFF; color:#fff; }
+                .pagination { text-align:center; margin-top:20px; }
+                .pagination a, .pagination span { margin:0 5px; padding:8px 12px; background:#007BFF; color:#fff; border-radius:4px; text-decoration:none; }
+                .pagination span.current { background:#0056b3; }
+                .shared-gallery-container { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; padding:10px 0; }
+                .shared-gallery-card { border:1px solid #ccc; padding:5px; text-align:center; }
+                .shared-gallery-card img { max-width:100%; display:block; margin:0 auto; }
+                .upload-container { margin-top:30px; text-align:center; }
+                .upload-container h3 { font-size:1.4rem; margin-bottom:10px; }
+                .upload-container form { display:inline-block; margin-top:10px; }
+                .upload-container button { background-color:#28a745; border:none; color:#fff; padding:10px 20px; font-size:1rem; border-radius:4px; cursor:pointer; }
+                .upload-container button:hover { background-color:#218838; }
+                .footer { text-align:center; margin-top:40px; font-size:.9rem; color:#777; }
+                .toggle-btn { background-color:#007BFF; color:#fff; border:none; border-radius:4px; padding:8px 16px; font-size:1rem; cursor:pointer; }
+                .toggle-btn:hover { background-color:#0056b3; }
+                .pagination a:hover { background-color:#0056b3; }
+                .pagination span { cursor:default; }
             </style>
         </head>
-
         <body>
             <div class="header">
                 <h1>Shared Folder: <?php echo htmlspecialchars($folderName, ENT_QUOTES, 'UTF-8'); ?></h1>
             </div>
             <div class="container">
-                <!-- Toggle Button -->
                 <button id="toggleBtn" class="toggle-btn">Switch to Gallery View</button>
 
-                <!-- List View Container -->
                 <div id="listViewContainer">
                     <?php if (empty($files)): ?>
                         <p style="text-align:center;">This folder is empty.</p>
                     <?php else: ?>
                         <table>
                             <thead>
-                                <tr>
-                                    <th>Filename</th>
-                                    <th>Size</th>
-                                </tr>
+                                <tr><th>Filename</th><th>Size</th></tr>
                             </thead>
                             <tbody>
-                                <?php
-                                // For each file, build a download link using your downloadSharedFile endpoint.
-                                foreach ($files as $file):
-                                    $filePath = $data['realFolderPath'] . DIRECTORY_SEPARATOR . $file;
-                                    $fileSize = file_exists($filePath) ? formatBytes(filesize($filePath)) : "Unknown";
-                                    $downloadLink = "/api/folder/downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
-                                ?>
-                                    <tr>
-                                        <td>
-                                            <a href="<?php echo htmlspecialchars($downloadLink, ENT_QUOTES, 'UTF-8'); ?>">
-                                                <?php echo htmlspecialchars($file, ENT_QUOTES, 'UTF-8'); ?>
-                                                <span class="download-icon">&#x21E9;</span>
-                                            </a>
-                                        </td>
-                                        <td><?php echo $fileSize; ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
+                            <?php foreach ($files as $file):
+                                $safeName   = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
+                                $filePath   = $data['realFolderPath'] . DIRECTORY_SEPARATOR . $file;
+                                $sizeString = (is_file($filePath) ? self::formatBytes((int)@filesize($filePath)) : "Unknown");
+                                $downloadLink = "/api/folder/downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
+                            ?>
+                                <tr>
+                                    <td>
+                                        <a href="<?php echo htmlspecialchars($downloadLink, ENT_QUOTES, 'UTF-8'); ?>">
+                                            <?php echo $safeName; ?> <span class="download-icon">&#x21E9;</span>
+                                        </a>
+                                    </td>
+                                    <td><?php echo $sizeString; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
                             </tbody>
                         </table>
                     <?php endif; ?>
                 </div>
 
-                <!-- Gallery View Container (hidden by default) -->
                 <div id="galleryViewContainer" style="display:none;"></div>
 
-                <!-- Pagination Controls -->
                 <div class="pagination">
                     <?php if ($currentPage > 1): ?>
                         <a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
-                    <?php else: ?>
-                        <span>Prev</span>
-                    <?php endif; ?>
+                    <?php else: ?><span>Prev</span><?php endif; ?>
 
                     <?php
                     $startPage = max(1, $currentPage - 2);
-                    $endPage = min($totalPages, $currentPage + 2);
+                    $endPage   = min($totalPages, $currentPage + 2);
                     for ($i = $startPage; $i <= $endPage; $i++): ?>
                         <?php if ($i == $currentPage): ?>
                             <span class="current"><?php echo $i; ?></span>
@@ -762,21 +560,17 @@ class FolderController
 
                     <?php if ($currentPage < $totalPages): ?>
                         <a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
-                    <?php else: ?>
-                        <span>Next</span>
-                    <?php endif; ?>
+                    <?php else: ?><span>Next</span><?php endif; ?>
                 </div>
 
-                <!-- Upload Container (if uploads are allowed by the share record) -->
-                <?php if (isset($data['record']['allowUpload']) && $data['record']['allowUpload'] == 1): ?>
+                <?php if (isset($data['record']['allowUpload']) && (int)$data['record']['allowUpload'] === 1): ?>
                     <div class="upload-container">
                         <h3>Upload File
                             <?php if ($sharedMaxUploadSize !== null): ?>
-                                (<?php echo formatBytes($sharedMaxUploadSize); ?> max size)
+                                (<?php echo self::formatBytes($sharedMaxUploadSize); ?> max size)
                             <?php endif; ?>
                         </h3>
                         <form action="/api/folder/uploadToSharedFolder.php" method="post" enctype="multipart/form-data">
-                            <!-- Pass the share token so the upload endpoint can verify -->
                             <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="file" name="fileToUpload" required>
                             <br><br>
@@ -785,10 +579,8 @@ class FolderController
                     </div>
                 <?php endif; ?>
             </div>
-            <div class="footer">
-                &copy; <?php echo date("Y"); ?> FileRise. All rights reserved.
-            </div>
-            <!-- non-executing JSON payload, never blocked by CSP -->
+            <div class="footer">&copy; <?php echo date("Y"); ?> FileRise. All rights reserved.</div>
+
             <script type="application/json" id="shared-data">
                 {
                     "token": <?php echo json_encode($token, JSON_HEX_TAG); ?>,
@@ -797,9 +589,8 @@ class FolderController
             </script>
             <script src="/js/sharedFolderView.js" defer></script>
         </body>
-
         </html>
-<?php
+        <?php
         exit;
     }
 
@@ -842,74 +633,103 @@ class FolderController
      *         description="Read-only users are not allowed to create share links"
      *     )
      * )
-     *
-     * Creates a share link for a folder by validating input and delegating to the FolderModel.
-     *
-     * @return void Outputs a JSON response.
      */
     public function createShareFolderLink(): void
-    {
-        header('Content-Type: application/json');
+{
+    header('Content-Type: application/json');
 
-        // Auth check
-        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-            http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
-        }
+    self::requireAuth();
+    self::requireCsrf();
+    self::requireNotReadOnly();
 
-        // Read-only check
-        $username = $_SESSION['username'] ?? '';
-        $perms    = loadUserPermissions($username);
-        if ($username && !empty($perms['readOnly'])) {
-            http_response_code(403);
-            echo json_encode(["error" => "Read-only users are not allowed to create share folders."]);
-            exit;
-        }
-
-        // Input
-        $in = json_decode(file_get_contents("php://input"), true);
-        if (!$in || !isset($in['folder'])) {
-            http_response_code(400);
-            echo json_encode(["error" => "Invalid input."]);
-            exit;
-        }
-
-        $folder = trim($in['folder']);
-        $value  = isset($in['expirationValue']) ? intval($in['expirationValue']) : 60;
-        $unit   = $in['expirationUnit'] ?? 'minutes';
-        $password    = $in['password']    ?? '';
-        $allowUpload = intval($in['allowUpload'] ?? 0);
-
-        // Folder name validation
-        if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-            http_response_code(400);
-            echo json_encode(["error" => "Invalid folder name."]);
-            exit;
-        }
-
-        // Convert to seconds
-        switch ($unit) {
-            case 'seconds':
-                $seconds = $value;
-                break;
-            case 'hours':
-                $seconds = $value * 3600;
-                break;
-            case 'days':
-                $seconds = $value * 86400;
-                break;
-            case 'minutes':
-            default:
-                $seconds = $value * 60;
-                break;
-        }
-
-        // Delegate
-        $res = FolderModel::createShareFolderLink($folder, $seconds, $password, $allowUpload);
-        echo json_encode($res);
+    $in = json_decode(file_get_contents("php://input"), true);
+    if (!$in || !isset($in['folder'])) {
+        http_response_code(400);
+        echo json_encode(["error" => "Invalid input."]);
         exit;
     }
+
+    $folder      = trim($in['folder']);
+    $value       = isset($in['expirationValue']) ? intval($in['expirationValue']) : 60;
+    $unit        = $in['expirationUnit'] ?? 'minutes';
+    $password    = $in['password'] ?? '';
+    $allowUpload = intval($in['allowUpload'] ?? 0);
+
+    // Basic folder name guard
+    if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+        http_response_code(400);
+        echo json_encode(["error" => "Invalid folder name."]);
+        exit;
+    }
+
+    // ---- Permissions ----
+    $username = $_SESSION['username'] ?? '';
+    $perms    = loadUserPermissions($username) ?: [];
+
+    $isAdmin = !empty($perms['admin']) || !empty($perms['isAdmin']);
+    $canShare = $isAdmin || ($perms['canShare'] ?? (defined('DEFAULT_CAN_SHARE') ? DEFAULT_CAN_SHARE : true));
+    if (!$canShare) {
+        http_response_code(403);
+        echo json_encode(["error" => "Sharing is not permitted for your account."]);
+        exit;
+    }
+
+    // Folder-only scope: non-admins must stay inside their subtree and cannot share root
+    $folderOnly = !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']);
+    if (!$isAdmin && strcasecmp($folder, 'root') === 0) {
+        http_response_code(403);
+        echo json_encode(["error" => "Only admins may share the root folder."]);
+        exit;
+    }
+    if (!$isAdmin && $folderOnly && $folder !== 'root') {
+        if ($folder !== $username && strpos($folder, $username . '/') !== 0) {
+            http_response_code(403);
+            echo json_encode(["error" => "Forbidden: folder scope violation."]);
+            exit;
+        }
+    }
+
+    // Ownership check unless bypassOwnership
+    $ignoreOwnership = $isAdmin || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+    if (!$ignoreOwnership) {
+        // Only checks top-level files (sharing UI lists top-level files only)
+        $metaFile = (strcasecmp($folder, 'root') === 0)
+            ? META_DIR . 'root_metadata.json'
+            : META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+
+        $meta = (is_file($metaFile) ? json_decode(@file_get_contents($metaFile), true) : []) ?: [];
+        foreach ($meta as $fname => $m) {
+            if (($m['uploader'] ?? null) !== $username) {
+                http_response_code(403);
+                echo json_encode(["error" => "Forbidden: you don't own all files in this folder."]);
+                exit;
+            }
+        }
+    }
+
+    // If user is not allowed to upload generally, block share-with-upload
+    if ($allowUpload === 1 && !empty($perms['disableUpload']) && !$isAdmin) {
+        http_response_code(403);
+        echo json_encode(["error" => "You cannot enable uploads on shared folders."]);
+        exit;
+    }
+
+    // Expiration seconds (cap at 1 year)
+    if ($value < 1) $value = 1;
+    switch ($unit) {
+        case 'seconds': $seconds = $value; break;
+        case 'hours':   $seconds = $value * 3600; break;
+        case 'days':    $seconds = $value * 86400; break;
+        case 'minutes':
+        default:        $seconds = $value * 60; break;
+    }
+    $seconds = min($seconds, 31536000);
+
+    // Create share link
+    $res = FolderModel::createShareFolderLink($folder, $seconds, $password, $allowUpload);
+    echo json_encode($res);
+    exit;
+}
 
     /**
      * @OA\Get(
@@ -950,16 +770,11 @@ class FolderController
      *         description="File not found"
      *     )
      * )
-     *
-     * Downloads a file from a shared folder based on a token.
-     *
-     * @return void Outputs the file with proper headers.
      */
     public function downloadSharedFile(): void
     {
-        // Retrieve and sanitize GET parameters.
         $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
-        $file = filter_input(INPUT_GET, 'file', FILTER_SANITIZE_STRING);
+        $file  = filter_input(INPUT_GET, 'file', FILTER_SANITIZE_STRING);
 
         if (empty($token) || empty($file)) {
             http_response_code(400);
@@ -968,8 +783,16 @@ class FolderController
             exit;
         }
 
-        // Delegate to the model.
-        $result = FolderModel::getSharedFileInfo($token, $file);
+        // Extra safety: enforce filename policy before delegating
+        $basename = basename($file);
+        if (!preg_match(REGEX_FILE_NAME, $basename)) {
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(["error" => "Invalid file name."]);
+            exit;
+        }
+
+        $result = FolderModel::getSharedFileInfo($token, $basename);
         if (isset($result['error'])) {
             http_response_code(404);
             header('Content-Type: application/json');
@@ -978,17 +801,18 @@ class FolderController
         }
 
         $realFilePath = $result['realFilePath'];
-        $mimeType = $result['mimeType'];
+        $mimeType     = $result['mimeType'];
 
-        // Serve the file.
+        header('X-Content-Type-Options: nosniff');
         header("Content-Type: " . $mimeType);
         $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
-        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'])) {
+        if (in_array($ext, ['jpg','jpeg','png','gif','bmp','webp','svg','ico'])) {
             header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
         } else {
             header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
         }
-        header('Content-Length: ' . filesize($realFilePath));
+        $size = @filesize($realFilePath);
+        if (is_int($size)) header('Content-Length: ' . $size);
         readfile($realFilePath);
         exit;
     }
@@ -1029,14 +853,9 @@ class FolderController
      *         description="Server error during file move"
      *     )
      * )
-     *
-     * Handles uploading a file to a shared folder.
-     *
-     * @return void Redirects upon successful upload or outputs JSON errors.
      */
     public function uploadToSharedFolder(): void
     {
-        // Ensure request is POST.
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
             header('Content-Type: application/json');
@@ -1044,7 +863,6 @@ class FolderController
             exit;
         }
 
-        // Ensure the share token is provided.
         if (empty($_POST['token'])) {
             http_response_code(400);
             header('Content-Type: application/json');
@@ -1053,7 +871,6 @@ class FolderController
         }
         $token = trim($_POST['token']);
 
-        // Delegate the upload to the model.
         if (!isset($_FILES['fileToUpload'])) {
             http_response_code(400);
             header('Content-Type: application/json');
@@ -1061,6 +878,24 @@ class FolderController
             exit;
         }
         $fileUpload = $_FILES['fileToUpload'];
+
+        // Quick surface error mapping
+        if (!empty($fileUpload['error']) && $fileUpload['error'] !== UPLOAD_ERR_OK) {
+            $map = [
+                UPLOAD_ERR_INI_SIZE   => 'The uploaded file exceeds the upload_max_filesize directive.',
+                UPLOAD_ERR_FORM_SIZE  => 'The uploaded file exceeds the MAX_FILE_SIZE directive that was specified in the HTML form.',
+                UPLOAD_ERR_PARTIAL    => 'The uploaded file was only partially uploaded.',
+                UPLOAD_ERR_NO_FILE    => 'No file was uploaded.',
+                UPLOAD_ERR_NO_TMP_DIR => 'Missing a temporary folder.',
+                UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk.',
+                UPLOAD_ERR_EXTENSION  => 'A PHP extension stopped the file upload.'
+            ];
+            $msg = $map[$fileUpload['error']] ?? 'Upload error.';
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => $msg]);
+            exit;
+        }
 
         $result = FolderModel::uploadToSharedFolder($token, $fileUpload);
         if (isset($result['error'])) {
@@ -1070,10 +905,7 @@ class FolderController
             exit;
         }
 
-        // Optionally, set a flash message in session.
         $_SESSION['upload_message'] = "File uploaded successfully.";
-
-        // Redirect back to the shared folder view.
         $redirectUrl = "/api/folder/shareFolder.php?token=" . urlencode($token);
         header("Location: " . $redirectUrl);
         exit;
@@ -1085,6 +917,9 @@ class FolderController
     public function getAllShareFolderLinks(): void
     {
         header('Content-Type: application/json');
+        self::requireAuth();
+        self::requireAdmin(); // exposing all share folder links is an admin operation
+
         $shareFile = META_DIR . 'share_folder_links.json';
         $links     = file_exists($shareFile)
             ? json_decode(file_get_contents($shareFile), true) ?? []
@@ -1092,7 +927,6 @@ class FolderController
         $now       = time();
         $cleaned   = [];
 
-        // 1) Remove expired
         foreach ($links as $token => $record) {
             if (!empty($record['expires']) && $record['expires'] < $now) {
                 continue;
@@ -1100,7 +934,6 @@ class FolderController
             $cleaned[$token] = $record;
         }
 
-        // 2) Persist back if anything was pruned
         if (count($cleaned) !== count($links)) {
             file_put_contents($shareFile, json_encode($cleaned, JSON_PRETTY_PRINT));
         }
@@ -1114,8 +947,13 @@ class FolderController
     public function deleteShareFolderLink()
     {
         header('Content-Type: application/json');
+        self::requireAuth();
+        self::requireAdmin();
+        self::requireCsrf();
+
         $token = $_POST['token'] ?? '';
         if (!$token) {
+            http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'No token provided']);
             return;
         }
@@ -1124,6 +962,7 @@ class FolderController
         if ($deleted) {
             echo json_encode(['success' => true]);
         } else {
+            http_response_code(404);
             echo json_encode(['success' => false, 'error' => 'Not found']);
         }
     }

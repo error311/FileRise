@@ -2,8 +2,6 @@ import { sendRequest } from './networkUtils.js';
 import { toggleVisibility, toggleAllCheckboxes, updateFileActionButtons, showToast } from './domUtils.js';
 import { initUpload } from './upload.js';
 import { initAuth, fetchWithCsrf, checkAuthentication, loadAdminConfigFunc } from './auth.js';
-const _originalFetch = window.fetch;
-window.fetch = fetchWithCsrf;
 import { loadFolderTree } from './folderManager.js';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
 import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js';
@@ -14,14 +12,60 @@ import { initFileActions, renameFile, openDownloadModal, confirmSingleDownload }
 import { editFile, saveFile } from './fileEditor.js';
 import { t, applyTranslations, setLocale } from './i18n.js';
 
+/* =========================
+   CSRF HOTFIX UTILITIES
+   ========================= */
+const _nativeFetch = window.fetch; // keep the real fetch
+
+function setCsrfToken(token) {
+  if (!token) return;
+  window.csrfToken = token;
+  localStorage.setItem('csrf', token);
+
+  // meta tag for easy access in other places
+  let meta = document.querySelector('meta[name="csrf-token"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'csrf-token';
+    document.head.appendChild(meta);
+  }
+  meta.content = token;
+}
+function getCsrfToken() {
+  return window.csrfToken || localStorage.getItem('csrf') || '';
+}
+
+// Seed CSRF from storage ASAP (before any requests)
+setCsrfToken(getCsrfToken());
+
+// Wrap the existing fetchWithCsrf so we also capture rotated tokens from headers.
+async function fetchWithCsrfAndRefresh(input, init = {}) {
+  const res = await fetchWithCsrf(input, init);
+  try {
+    const rotated = res.headers?.get('X-CSRF-Token');
+    if (rotated) setCsrfToken(rotated);
+  } catch { /* ignore */ }
+  return res;
+}
+
+// Replace global fetch with the wrapped version so *all* callers benefit.
+window.fetch = fetchWithCsrfAndRefresh;
+
+/* =========================
+   APP INIT
+   ========================= */
+
 export function initializeApp() {
   const saved = parseInt(localStorage.getItem('rowHeight') || '48', 10);
   document.documentElement.style.setProperty('--file-row-height', saved + 'px');
+
   window.currentFolder = "root";
-  initTagSearch();
-  loadFileList(window.currentFolder);
   const stored = localStorage.getItem('showFoldersInList');
   window.showFoldersInList = stored === null ? true : stored === 'true';
+
+  initTagSearch();
+  loadFileList(window.currentFolder);
+
   const fileListArea = document.getElementById('fileListContainer');
   const uploadArea = document.getElementById('uploadDropArea');
   if (fileListArea && uploadArea) {
@@ -35,7 +79,6 @@ export function initializeApp() {
     fileListArea.addEventListener('drop', e => {
       e.preventDefault();
       fileListArea.classList.remove('drop-hover');
-      // re-dispatch the same drop into the real upload card
       uploadArea.dispatchEvent(new DragEvent('drop', {
         dataTransfer: e.dataTransfer,
         bubbles: true,
@@ -63,27 +106,36 @@ export function initializeApp() {
   }
 }
 
+/**
+ * Bootstrap/refresh CSRF from the server.
+ * Uses the *native* fetch to avoid any wrapper loops and to work even if we don't
+ * yet have a token. Also accepts a rotated token from the response header.
+ */
 export function loadCsrfToken() {
-  return fetchWithCsrf('/api/auth/token.php', { method: 'GET' })
-    .then(res => {
-      if (!res.ok) throw new Error(`Token fetch failed with status ${res.status}`);
-      return res.json();
-    })
-    .then(({ csrf_token, share_url }) => {
-      window.csrfToken = csrf_token;
+  return _nativeFetch('/api/auth/token.php', { method: 'GET', credentials: 'include' })
+    .then(async res => {
+      // header-based rotation
+      const hdr = res.headers.get('X-CSRF-Token');
+      if (hdr) setCsrfToken(hdr);
 
-      // update CSRF meta
-      let meta = document.querySelector('meta[name="csrf-token"]') ||
-        Object.assign(document.head.appendChild(document.createElement('meta')), { name: 'csrf-token' });
-      meta.content = csrf_token;
+      // body (if provided)
+      let body = {};
+      try { body = await res.json(); } catch { /* token endpoint may return empty */ }
 
-      // force share_url to match wherever we're browsing
+      const token = body.csrf_token || getCsrfToken();
+      setCsrfToken(token);
+
+      // share-url meta should reflect the actual origin
       const actualShare = window.location.origin;
-      let shareMeta = document.querySelector('meta[name="share-url"]') ||
-        Object.assign(document.head.appendChild(document.createElement('meta')), { name: 'share-url' });
+      let shareMeta = document.querySelector('meta[name="share-url"]');
+      if (!shareMeta) {
+        shareMeta = document.createElement('meta');
+        shareMeta.name = 'share-url';
+        document.head.appendChild(shareMeta);
+      }
       shareMeta.content = actualShare;
 
-      return { csrf_token, share_url: actualShare };
+      return { csrf_token: token, share_url: actualShare };
     });
 }
 
@@ -95,15 +147,14 @@ if (params.get('logout') === '1') {
 }
 
 export function triggerLogout() {
-  fetch("/api/auth/logout.php", {
+  _nativeFetch("/api/auth/logout.php", {
     method: "POST",
     credentials: "include",
-    headers: { "X-CSRF-Token": window.csrfToken }
+    headers: { "X-CSRF-Token": getCsrfToken() }
   })
     .then(() => window.location.reload(true))
     .catch(() => { });
 }
-
 
 // Expose functions for inline handlers.
 window.sendRequest = sendRequest;
@@ -119,105 +170,79 @@ window.openDownloadModal = openDownloadModal;
 window.currentFolder = "root";
 
 document.addEventListener("DOMContentLoaded", function () {
+  loadAdminConfigFunc();
 
-  loadAdminConfigFunc(); // Then fetch the latest config and update.
-  // Retrieve the saved language from localStorage; default to "en"
+  // i18n
   const savedLanguage = localStorage.getItem("language") || "en";
-  // Set the locale based on the saved language
   setLocale(savedLanguage);
-  // Apply the translations to update the UI
   applyTranslations();
-  // First, load the CSRF token (with retry).
-  loadCsrfToken().then(() => {
-    // Once CSRF token is loaded, initialize authentication.
-    initAuth();
 
-    // Continue with initializations that rely on a valid CSRF token:
-    checkAuthentication().then(authenticated => {
-      if (authenticated) {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) overlay.remove();
-        initializeApp();
-      }
-    });
+  // 1) Get/refresh CSRF first
+  loadCsrfToken()
+    .then(() => {
+      // 2) Auth boot
+      initAuth();
 
-    // Other DOM initialization that can happen after CSRF is ready.
-    const newPasswordInput = document.getElementById("newPassword");
-    if (newPasswordInput) {
-      newPasswordInput.addEventListener("input", function () {
-        console.log("newPassword input event:", this.value);
+      // 3) If authenticated, start app
+      checkAuthentication().then(authenticated => {
+        if (authenticated) {
+          const overlay = document.getElementById('loadingOverlay');
+          if (overlay) overlay.remove();
+          initializeApp();
+        }
       });
-    } else {
-      console.error("newPassword input not found!");
-    }
 
-    // --- Dark Mode Persistence ---
-    const darkModeToggle = document.getElementById("darkModeToggle");
-    const darkModeIcon = document.getElementById("darkModeIcon");
+      // --- Dark Mode Persistence ---
+      const darkModeToggle = document.getElementById("darkModeToggle");
+      const darkModeIcon = document.getElementById("darkModeIcon");
 
-    if (darkModeToggle && darkModeIcon) {
-      // 1) Load stored preference (or null)
-      let stored = localStorage.getItem("darkMode");
-      const hasStored = stored !== null;
+      if (darkModeToggle && darkModeIcon) {
+        let stored = localStorage.getItem("darkMode");
+        const hasStored = stored !== null;
 
-      // 2) Determine initial mode
-      const isDark = hasStored
-        ? (stored === "true")
-        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        const isDark = hasStored
+          ? (stored === "true")
+          : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-      document.body.classList.toggle("dark-mode", isDark);
-      darkModeToggle.classList.toggle("active", isDark);
+        document.body.classList.toggle("dark-mode", isDark);
+        darkModeToggle.classList.toggle("active", isDark);
 
-      // 3) Helper to update icon & aria-label
-      function updateIcon() {
-        const dark = document.body.classList.contains("dark-mode");
-        darkModeIcon.textContent = dark ? "light_mode" : "dark_mode";
-        darkModeToggle.setAttribute(
-          "aria-label",
-          dark ? t("light_mode") : t("dark_mode")
-        );
-        darkModeToggle.setAttribute(
-          "title",
-          dark
-            ? t("switch_to_light_mode")
-            : t("switch_to_dark_mode")
-        );
-      }
-
-      updateIcon();
-
-      // 4) Click handler: always override and store preference
-      darkModeToggle.addEventListener("click", () => {
-        const nowDark = document.body.classList.toggle("dark-mode");
-        localStorage.setItem("darkMode", nowDark ? "true" : "false");
+        function updateIcon() {
+          const dark = document.body.classList.contains("dark-mode");
+          darkModeIcon.textContent = dark ? "light_mode" : "dark_mode";
+          darkModeToggle.setAttribute("aria-label", dark ? t("light_mode") : t("dark_mode"));
+          darkModeToggle.setAttribute("title", dark ? t("switch_to_light_mode") : t("switch_to_dark_mode"));
+        }
         updateIcon();
-      });
 
-      // 5) OS‐level change: only if no stored pref at load
-      if (!hasStored && window.matchMedia) {
-        window
-          .matchMedia("(prefers-color-scheme: dark)")
-          .addEventListener("change", e => {
+        darkModeToggle.addEventListener("click", () => {
+          const nowDark = document.body.classList.toggle("dark-mode");
+          localStorage.setItem("darkMode", nowDark ? "true" : "false");
+          updateIcon();
+        });
+
+        if (!hasStored && window.matchMedia) {
+          window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
             document.body.classList.toggle("dark-mode", e.matches);
             updateIcon();
           });
+        }
       }
-    }
-    // --- End Dark Mode Persistence ---
+      // --- End Dark Mode Persistence ---
 
-    const message = sessionStorage.getItem("welcomeMessage");
-    if (message) {
-      showToast(message);
-      sessionStorage.removeItem("welcomeMessage");
-    }
-  }).catch(error => {
-    console.error("Initialization halted due to CSRF token load failure.", error);
-  });
+      const message = sessionStorage.getItem("welcomeMessage");
+      if (message) {
+        showToast(message);
+        sessionStorage.removeItem("welcomeMessage");
+      }
+    })
+    .catch(error => {
+      console.error("Initialization halted due to CSRF token load failure.", error);
+    });
 
   // --- Auto-scroll During Drag ---
-  const SCROLL_THRESHOLD = 50; // pixels from edge to start scrolling
-  const SCROLL_SPEED = 20;     // pixels to scroll per event
-
+  const SCROLL_THRESHOLD = 50;
+  const SCROLL_SPEED = 20;
   document.addEventListener("dragover", function (e) {
     if (e.clientY < SCROLL_THRESHOLD) {
       window.scrollBy(0, -SCROLL_SPEED);

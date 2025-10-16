@@ -6,25 +6,60 @@ require_once PROJECT_ROOT . '/config/config.php';
 class AdminModel
 {
     /**
-     * Parse a shorthand size value (e.g. "5G", "500M", "123K") into bytes.
+     * Parse a shorthand size value (e.g. "5G", "500M", "123K", "50MB", "10KiB") into bytes.
+     * Accepts bare numbers (bytes) and common suffixes: K, KB, KiB, M, MB, MiB, G, GB, GiB, etc.
      *
      * @param string $val
-     * @return int
+     * @return int Bytes (rounded)
      */
     private static function parseSize(string $val): int
     {
-        $unit = strtolower(substr($val, -1));
-        $num  = (int) rtrim($val, 'bkmgtpezyBKMGTPESY');
-        switch ($unit) {
-            case 'g':
-                return $num * 1024 ** 3;
-            case 'm':
-                return $num * 1024 ** 2;
-            case 'k':
-                return $num * 1024;
-            default:
-                return $num;
+        $val = trim($val);
+        if ($val === '') {
+            return 0;
         }
+
+        // Match: number + optional unit/suffix (K, KB, KiB, M, MB, MiB, G, GB, GiB, ...)
+        if (preg_match('/^\s*(\d+(?:\.\d+)?)\s*([kmgtpezy]?i?b?)?\s*$/i', $val, $m)) {
+            $num  = (float)$m[1];
+            $unit = strtolower($m[2] ?? '');
+
+            switch ($unit) {
+                case 'k': case 'kb': case 'kib':
+                    $num *= 1024;
+                    break;
+                case 'm': case 'mb': case 'mib':
+                    $num *= 1024 ** 2;
+                    break;
+                case 'g': case 'gb': case 'gib':
+                    $num *= 1024 ** 3;
+                    break;
+                case 't': case 'tb': case 'tib':
+                    $num *= 1024 ** 4;
+                    break;
+                case 'p': case 'pb': case 'pib':
+                    $num *= 1024 ** 5;
+                    break;
+                case 'e': case 'eb': case 'eib':
+                    $num *= 1024 ** 6;
+                    break;
+                case 'z': case 'zb': case 'zib':
+                    $num *= 1024 ** 7;
+                    break;
+                case 'y': case 'yb': case 'yib':
+                    $num *= 1024 ** 8;
+                    break;
+                // case 'b' or empty => bytes; do nothing
+                default:
+                    // If unit is just 'b' or empty, treat as bytes.
+                    // For unknown units fall back to bytes.
+                    break;
+            }
+            return (int) round($num);
+        }
+
+        // Fallback: cast any unrecognized input to int (bytes)
+        return (int)$val;
     }
 
     /**
@@ -35,17 +70,22 @@ class AdminModel
      */
     public static function updateConfig(array $configUpdate): array
     {
-        // New: only enforce OIDC fields when OIDC is enabled
+        // Ensure encryption key exists
+        if (empty($GLOBALS['encryptionKey']) || !is_string($GLOBALS['encryptionKey'])) {
+            return ["error" => "Server encryption key is not configured."];
+        }
+
+        // Only enforce OIDC fields when OIDC is enabled
         $oidcDisabled = isset($configUpdate['loginOptions']['disableOIDCLogin'])
-        ? (bool)$configUpdate['loginOptions']['disableOIDCLogin']
-        : true; // default to disabled when not present
+            ? (bool)$configUpdate['loginOptions']['disableOIDCLogin']
+            : true; // default to disabled when not present
 
         if (!$oidcDisabled) {
-        $oidc = $configUpdate['oidc'] ?? [];
-        $required = ['providerUrl','clientId','clientSecret','redirectUri'];
-        foreach ($required as $k) {
-            if (empty($oidc[$k]) || !is_string($oidc[$k])) {
-                return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, clientSecret, redirectUri)."];
+            $oidc = $configUpdate['oidc'] ?? [];
+            $required = ['providerUrl','clientId','clientSecret','redirectUri'];
+            foreach ($required as $k) {
+                if (empty($oidc[$k]) || !is_string($oidc[$k])) {
+                    return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, clientSecret, redirectUri)."];
                 }
             }
         }
@@ -72,7 +112,7 @@ class AdminModel
             $configUpdate['sharedMaxUploadSize'] = $sms;
         }
 
-        // ── NEW: normalize authBypass & authHeaderName ─────────────────────────
+        // Normalize authBypass & authHeaderName
         if (!isset($configUpdate['loginOptions']['authBypass'])) {
             $configUpdate['loginOptions']['authBypass'] = false;
         }
@@ -85,10 +125,8 @@ class AdminModel
         ) {
             $configUpdate['loginOptions']['authHeaderName'] = 'X-Remote-User';
         } else {
-            $configUpdate['loginOptions']['authHeaderName'] =
-                trim($configUpdate['loginOptions']['authHeaderName']);
+            $configUpdate['loginOptions']['authHeaderName'] = trim($configUpdate['loginOptions']['authHeaderName']);
         }
-        // ───────────────────────────────────────────────────────────────────────────
 
         // Convert configuration to JSON.
         $plainTextConfig = json_encode($configUpdate, JSON_PRETTY_PRINT);
@@ -109,7 +147,7 @@ class AdminModel
         if (file_put_contents($configFile, $encryptedContent, LOCK_EX) === false) {
             // Attempt a cleanup: delete the old file and try again.
             if (file_exists($configFile)) {
-                unlink($configFile);
+                @unlink($configFile);
             }
             if (file_put_contents($configFile, $encryptedContent, LOCK_EX) === false) {
                 error_log("AdminModel::updateConfig: Failed to write configuration even after deletion.");
@@ -130,13 +168,15 @@ class AdminModel
     public static function getConfig(): array
     {
         $configFile = USERS_DIR . 'adminConfig.json';
+
         if (file_exists($configFile)) {
             $encryptedContent = file_get_contents($configFile);
             $decryptedContent = decryptData($encryptedContent, $GLOBALS['encryptionKey']);
             if ($decryptedContent === false) {
-                http_response_code(500);
+                // Do not set HTTP status here; let the controller decide.
                 return ["error" => "Failed to decrypt configuration."];
             }
+
             $config = json_decode($decryptedContent, true);
             if (!is_array($config)) {
                 $config = [];
@@ -144,7 +184,7 @@ class AdminModel
 
             // Normalize login options if missing
             if (!isset($config['loginOptions'])) {
-                // migrate legacy top-level flags; default OIDC to true (disabled)
+                // Migrate legacy top-level flags; default OIDC to true (disabled)
                 $config['loginOptions'] = [
                     'disableFormLogin' => isset($config['disableFormLogin']) ? (bool)$config['disableFormLogin'] : false,
                     'disableBasicAuth' => isset($config['disableBasicAuth']) ? (bool)$config['disableBasicAuth'] : false,
@@ -152,13 +192,14 @@ class AdminModel
                 ];
                 unset($config['disableFormLogin'], $config['disableBasicAuth'], $config['disableOIDCLogin']);
             } else {
-                // normalize booleans; default OIDC to true (disabled) if missing
+                // Normalize booleans; default OIDC to true (disabled) if missing
                 $lo = &$config['loginOptions'];
                 $lo['disableFormLogin'] = isset($lo['disableFormLogin']) ? (bool)$lo['disableFormLogin'] : false;
                 $lo['disableBasicAuth'] = isset($lo['disableBasicAuth']) ? (bool)$lo['disableBasicAuth'] : false;
                 $lo['disableOIDCLogin'] = isset($lo['disableOIDCLogin']) ? (bool)$lo['disableOIDCLogin'] : true;
             }
 
+            // Ensure OIDC structure exists
             if (!isset($config['oidc']) || !is_array($config['oidc'])) {
                 $config['oidc'] = [
                     'providerUrl'  => '',
@@ -174,6 +215,7 @@ class AdminModel
                 }
             }
 
+            // Normalize authBypass & authHeaderName
             if (!array_key_exists('authBypass', $config['loginOptions'])) {
                 $config['loginOptions']['authBypass'] = false;
             } else {
@@ -191,38 +233,41 @@ class AdminModel
             if (!isset($config['globalOtpauthUrl'])) {
                 $config['globalOtpauthUrl'] = "";
             }
-            if (!isset($config['header_title']) || empty($config['header_title'])) {
+            if (!isset($config['header_title']) || $config['header_title'] === '') {
                 $config['header_title'] = "FileRise";
             }
             if (!isset($config['enableWebDAV'])) {
                 $config['enableWebDAV'] = false;
             }
-            // Default sharedMaxUploadSize to 50MB or TOTAL_UPLOAD_SIZE if smaller
-            if (!isset($config['sharedMaxUploadSize'])) {
-                $defaultSms = min(50 * 1024 * 1024, self::parseSize(TOTAL_UPLOAD_SIZE));
-                $config['sharedMaxUploadSize'] = $defaultSms;
+
+            // sharedMaxUploadSize: default if missing; clamp if present
+            $maxBytes = self::parseSize(TOTAL_UPLOAD_SIZE);
+            if (!isset($config['sharedMaxUploadSize']) || !is_numeric($config['sharedMaxUploadSize']) || $config['sharedMaxUploadSize'] < 1) {
+                $config['sharedMaxUploadSize'] = min(50 * 1024 * 1024, $maxBytes);
+            } else {
+                $config['sharedMaxUploadSize'] = (int)min((int)$config['sharedMaxUploadSize'], $maxBytes);
             }
 
             return $config;
-        } else {
-            // Return defaults.
-            return [
-                'header_title'          => "FileRise",
-                'oidc'                  => [
-                    'providerUrl'  => 'https://your-oidc-provider.com',
-                    'clientId'     => '',
-                    'clientSecret' => '',
-                    'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback'
-                ],
-                'loginOptions'          => [
-                    'disableFormLogin' => false,
-                    'disableBasicAuth' => false,
-                    'disableOIDCLogin' => true
-                ],
-                'globalOtpauthUrl'      => "",
-                'enableWebDAV'          => false,
-                'sharedMaxUploadSize'   => min(50 * 1024 * 1024, self::parseSize(TOTAL_UPLOAD_SIZE))
-            ];
         }
+
+        // No config on disk; return defaults.
+        return [
+            'header_title'          => "FileRise",
+            'oidc'                  => [
+                'providerUrl'  => 'https://your-oidc-provider.com',
+                'clientId'     => '',
+                'clientSecret' => '',
+                'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback'
+            ],
+            'loginOptions'          => [
+                'disableFormLogin' => false,
+                'disableBasicAuth' => false,
+                'disableOIDCLogin' => true
+            ],
+            'globalOtpauthUrl'      => "",
+            'enableWebDAV'          => false,
+            'sharedMaxUploadSize'   => min(50 * 1024 * 1024, self::parseSize(TOTAL_UPLOAD_SIZE))
+        ];
     }
 }
