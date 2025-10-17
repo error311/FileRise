@@ -64,6 +64,7 @@ Security and permission model overhaul. Tightens access controls with explicit, 
 
 ### Fix
 
+- fix(folder-model): resolve syntax error, unexpected token
 - Deleted accidental second `<?php`
 
 ---

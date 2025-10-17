@@ -212,7 +212,7 @@ class FolderModel
 
         return ['success' => true, 'folder' => $aclKey];
     }
-}
+
 
     /**
      * Deletes a folder if it is empty and removes its corresponding metadata.
