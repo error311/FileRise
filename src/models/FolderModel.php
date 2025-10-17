@@ -162,11 +162,7 @@ class FolderModel
      * Creates a folder under the specified parent (or in root) and creates an empty metadata file.
      * Also records the creator as the owner (if a session user is available).
      */
-    <?php
-require_once PROJECT_ROOT . '/src/lib/ACL.php';
 
-class FolderModel
-{
     /**
      * Create a folder on disk and register it in ACL with the creator as owner.
      * @param string $folderName leaf name

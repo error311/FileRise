@@ -62,6 +62,10 @@ Security and permission model overhaul. Tightens access controls with explicit, 
 
 - Security report acknowledged privately and will be credited in the published advisory.
 
+### Fix
+
+- Deleted accidental second `<?php`
+
 ---
 
 ## Changes 10/15/2025 (v1.4.0)
