@@ -81,62 +81,93 @@ class userModel
      * Remove a user and update encrypted userPermissions.json.
      */
     public static function removeUser($usernameToRemove)
-    {
-        global $encryptionKey;
+{
+    global $encryptionKey;
 
-        if (!preg_match(REGEX_USER, $usernameToRemove)) {
-            return ["error" => "Invalid username"];
-        }
-
-        $usersFile = USERS_DIR . USERS_FILE;
-        if (!file_exists($usersFile)) {
-            return ["error" => "Users file not found"];
-        }
-
-        $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $newUsers = [];
-        $userFound = false;
-
-        foreach ($existingUsers as $line) {
-            $parts = explode(':', trim($line));
-            if (count($parts) < 3) {
-                continue;
-            }
-            if ($parts[0] === $usernameToRemove) {
-                $userFound = true;
-                continue; // skip
-            }
-            $newUsers[] = $line;
-        }
-
-        if (!$userFound) {
-            return ["error" => "User not found"];
-        }
-
-        $newContent = $newUsers ? (implode(PHP_EOL, $newUsers) . PHP_EOL) : '';
-        if (file_put_contents($usersFile, $newContent, LOCK_EX) === false) {
-            return ["error" => "Failed to update users file"];
-        }
-
-        // Update *encrypted* userPermissions.json consistently
-        $permissionsFile = USERS_DIR . "userPermissions.json";
-        if (file_exists($permissionsFile)) {
-            $raw = file_get_contents($permissionsFile);
-            $decrypted = decryptData($raw, $encryptionKey);
-            $permissionsArray = $decrypted !== false
-                ? json_decode($decrypted, true)
-                : (json_decode($raw, true) ?: []); // tolerate legacy plaintext
-
-            if (is_array($permissionsArray)) {
-                unset($permissionsArray[strtolower($usernameToRemove)]);
-                $plain = json_encode($permissionsArray, JSON_PRETTY_PRINT);
-                $enc   = encryptData($plain, $encryptionKey);
-                file_put_contents($permissionsFile, $enc, LOCK_EX);
-            }
-        }
-
-        return ["success" => "User removed successfully"];
+    if (!preg_match(REGEX_USER, $usernameToRemove)) {
+        return ["error" => "Invalid username"];
     }
+
+    $usersFile = USERS_DIR . USERS_FILE;
+    if (!file_exists($usersFile)) {
+        return ["error" => "Users file not found"];
+    }
+
+    $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $newUsers = [];
+    $userFound = false;
+
+    foreach ($existingUsers as $line) {
+        $parts = explode(':', trim($line));
+        if (count($parts) < 3) {
+            continue;
+        }
+        if (strcasecmp($parts[0], $usernameToRemove) === 0) {
+            $userFound = true;
+            continue; // skip this user
+        }
+        $newUsers[] = $line;
+    }
+
+    if (!$userFound) {
+        return ["error" => "User not found"];
+    }
+
+    $newContent = $newUsers ? (implode(PHP_EOL, $newUsers) . PHP_EOL) : '';
+    if (file_put_contents($usersFile, $newContent, LOCK_EX) === false) {
+        return ["error" => "Failed to update users file"];
+    }
+
+    // Update encrypted userPermissions.json — remove any key matching case-insensitively
+    $permissionsFile = USERS_DIR . "userPermissions.json";
+    if (file_exists($permissionsFile)) {
+        $raw = file_get_contents($permissionsFile);
+        $decrypted = decryptData($raw, $encryptionKey);
+        $permissionsArray = $decrypted !== false
+            ? json_decode($decrypted, true)
+            : (json_decode($raw, true) ?: []); // tolerate legacy plaintext
+
+        if (is_array($permissionsArray)) {
+            foreach (array_keys($permissionsArray) as $k) {
+                if (strcasecmp($k, $usernameToRemove) === 0) {
+                    unset($permissionsArray[$k]);
+                }
+            }
+            $plain = json_encode($permissionsArray, JSON_PRETTY_PRINT);
+            $enc   = encryptData($plain, $encryptionKey);
+            file_put_contents($permissionsFile, $enc, LOCK_EX);
+        }
+    }
+
+    // Purge from ACL (remove from every bucket in every folder)
+    require_once PROJECT_ROOT . '/src/lib/ACL.php';
+    if (method_exists('ACL', 'purgeUser')) {
+        ACL::purgeUser($usernameToRemove);
+    } else {
+        // Fallback inline purge if you haven't added ACL::purgeUser yet:
+        $aclPath = rtrim(META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'folder_acl.json';
+        $acl = is_file($aclPath) ? json_decode((string)file_get_contents($aclPath), true) : [];
+        if (!is_array($acl)) $acl = ['folders' => [], 'groups' => []];
+        $buckets = ['owners','read','write','share','read_own'];
+
+        $changed = false;
+        foreach ($acl['folders'] ?? [] as $f => &$rec) {
+            foreach ($buckets as $b) {
+                if (!isset($rec[$b]) || !is_array($rec[$b])) { $rec[$b] = []; continue; }
+                $before = $rec[$b];
+                $rec[$b] = array_values(array_filter($rec[$b], fn($u) => strcasecmp((string)$u, $usernameToRemove) !== 0));
+                if ($rec[$b] !== $before) $changed = true;
+            }
+        }
+        unset($rec);
+
+        if ($changed) {
+            @file_put_contents($aclPath, json_encode($acl, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+        }
+    }
+
+    return ["success" => "User removed successfully"];
+}
 
     /**
      * Get permissions for current user (or all, if admin).
@@ -188,7 +219,7 @@ class userModel
     if (file_exists($permissionsFile)) {
         $encryptedContent = file_get_contents($permissionsFile);
         $json = decryptData($encryptedContent, $encryptionKey);
-        if ($json === false) $json = $encryptedContent; // plain JSON fallback
+        if ($json === false) $json = $encryptedContent; // legacy plaintext
         $existingPermissions = json_decode($json, true) ?: [];
     }
 
@@ -209,22 +240,34 @@ class userModel
         'bypassOwnership','canShare','canZip','viewOwnOnly'
     ];
 
+    // Build a map of lowercase->actual key to update existing entries case-insensitively
+    $lcIndex = [];
+    foreach ($existingPermissions as $k => $_) {
+        $lcIndex[strtolower($k)] = $k;
+    }
+
     foreach ($permissions as $perm) {
         if (empty($perm['username'])) continue;
-        $uname = strtolower($perm['username']);
-        $role = $userRoles[$uname] ?? null;
+
+        $unameOrig = (string)$perm['username'];             // preserve original case
+        $unameLc   = strtolower($unameOrig);
+        $role      = $userRoles[$unameLc] ?? null;
         if ($role === "1") continue; // skip admins
 
-        $current = $existingPermissions[$uname] ?? [];
+        // Find existing key case-insensitively; otherwise use original case as canonical
+        $storeKey = $lcIndex[$unameLc] ?? $unameOrig;
+
+        $current = $existingPermissions[$storeKey] ?? [];
         foreach ($knownKeys as $k) {
             if (array_key_exists($k, $perm)) {
                 $current[$k] = (bool)$perm[$k];
             } elseif (!isset($current[$k])) {
-                // default missing keys to false (preserve existing if set)
                 $current[$k] = false;
             }
         }
-        $existingPermissions[$uname] = $current;
+
+        $existingPermissions[$storeKey] = $current;
+        $lcIndex[$unameLc] = $storeKey; // keep index up to date
     }
 
     $plain = json_encode($existingPermissions, JSON_PRETTY_PRINT);

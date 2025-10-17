@@ -1,5 +1,69 @@
 # Changelog
 
+## Changes 10/17/2025 (v1.5.0)
+
+Security and permission model overhaul. Tightens access controls with explicit, server‑side ACL checks across controllers and WebDAV. Introduces `read_own` for own‑only visibility and separates view from write so uploaders can’t automatically see others’ files. Fixes session warnings and aligns the admin UI with the new capabilities.
+
+> **Security note**
+> This release contains security hardening based on a private report (tracked via a GitHub Security Advisory, CVE pending). For responsible disclosure, details will be published alongside the advisory once available. Users should upgrade promptly.
+
+### Highlights
+
+- **ACL**
+  - New `read_own` bucket (own‑only visibility) alongside `owners`, `read`, `write`, `share`.
+  - **Semantic change:** `write` no longer implies `read`.
+  - `ACL::applyUserGrantsAtomic()` to atomically set per‑folder grants (`view`, `viewOwn`, `upload`, `manage`, `share`).
+  - `ACL::purgeUser($username)` to remove a user from all buckets (used when deleting a user).
+  - Auto‑heal `folder_acl.json` (ensure `root` exists; add missing buckets; de‑dupe; normalize types).
+  - More robust admin detection (role flag or session/admin user).
+
+- **Controllers**
+  - `FileController`: ACL + ownership enforcement for list, download, zip download, extract, move, copy, rename, create, save, tag edit, and share‑link creation. `getFileList()` now filters to the caller’s uploads when they only have `read_own` (no `read`).
+  - `UploadController`: requires `ACL::canWrite()` for the target folder; CSRF refresh path improved; admin bypass intact.
+  - `FolderController`: listing filtered by `ACL::canRead()`; optional parent filter preserved; removed name‑based ownership assumptions.
+
+- **Admin UI**
+  - Folder Access grid now includes **View (own)**; bulk toolbar actions; column alignment fixes; more space for folder names; dark‑mode polish.
+
+- **WebDAV**
+  - WebDAV now enforces ACL consistently: listing requires `read` (or `read_own` ⇒ shows only caller’s files); writes require `write`.
+  - Removed legacy “folderOnly” behavior — ACL is the single source of truth.
+  - Metadata/uploader is preserved through existing models.
+
+### Behavior changes (⚠️ Breaking)
+
+- **`write` no longer implies `read`.**
+  - If you want uploaders to see all files in a folder, also grant **View (all)** (`read`).
+  - If you want uploaders to see only their own files, grant **View (own)** (`read_own`).
+
+- **Removed:** legacy `folderOnly` view logic in favor of ACL‑based access.
+
+### Upgrade checklist
+
+1. Review **Folder Access** in the admin UI and grant **View (all)** or **View (own)** where appropriate.
+2. For users who previously had “upload but not view,” confirm they now have **Upload** + **View (own)** (or add **View (all)** if intended).
+3. Verify WebDAV behavior for representative users:
+   - `read` shows full listings; `read_own` lists only the caller’s files.
+   - Writes only succeed where `write` is granted.
+4. Confirm admin can upload/move/zip across all folders (regression tested).
+
+### Affected areas
+
+- `config/config.php` — session/cookie initialization ordering; proxy header handling.
+- `src/lib/ACL.php` — new bucket, semantics, healing, purge, admin detection.
+- `src/controllers/FileController.php` — ACL + ownership gates across operations.
+- `src/controllers/UploadController.php` — write checks + CSRF refresh handling.
+- `src/controllers/FolderController.php` — ACL‑filtered listing and parent scoping.
+- `public/api/admin/acl/*.php` — includes `viewOwn` round‑trip and sanitization.
+- `public/js/*` & CSS — folder access grid alignment and layout fixes.
+- `src/webdav/*` & `public/webdav.php` — ACL‑aware WebDAV server.
+
+### Credits
+
+- Security report acknowledged privately and will be credited in the published advisory.
+
+---
+
 ## Changes 10/15/2025 (v1.4.0)
 
 feat(permissions)!: granular ACL (bypassOwnership/canShare/canZip/viewOwnOnly), admin panel v1.4.0 UI, and broad hardening across controllers/models/frontend

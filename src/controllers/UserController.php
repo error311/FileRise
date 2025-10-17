@@ -60,15 +60,36 @@ class UserController
 
     /** Enforce admin (401). */
     private static function requireAdmin(): void
-    {
-        self::requireAuth();
-        if (empty($_SESSION['isAdmin']) || $_SESSION['isAdmin'] !== true) {
-            http_response_code(401);
-            header('Content-Type: application/json');
-            echo json_encode(['error' => 'Unauthorized']);
-            exit;
+{
+    self::requireAuth();
+
+    // Prefer the session flag
+    $isAdmin = (!empty($_SESSION['isAdmin']) && $_SESSION['isAdmin'] === true);
+
+    // Fallback: check the user’s role in storage (e.g., users.txt/DB)
+    if (!$isAdmin) {
+        $u = $_SESSION['username'] ?? '';
+        if ($u) {
+            try {
+                // UserModel::getUserRole($u) should return '1' for admins
+                $isAdmin = (UserModel::getUserRole($u) === '1');
+                if ($isAdmin) {
+                    // Normalize session so downstream ACL checks see admin
+                    $_SESSION['isAdmin'] = true;
+                }
+            } catch (\Throwable $e) {
+                // ignore and continue to deny
+            }
         }
     }
+
+    if (!$isAdmin) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Admin privileges required.']);
+        exit;
+    }
+}
 
     /** Enforce CSRF using X-CSRF-Token header (or csrfToken param as fallback). */
     private static function requireCsrf(): void

@@ -35,13 +35,11 @@ define('REGEX_USER',       '/^[\p{L}\p{N}_\- ]+$/u');
 
 date_default_timezone_set(TIMEZONE);
 
-
 if (!defined('DEFAULT_BYPASS_OWNERSHIP')) define('DEFAULT_BYPASS_OWNERSHIP', false);
 if (!defined('DEFAULT_CAN_SHARE'))        define('DEFAULT_CAN_SHARE', true);
 if (!defined('DEFAULT_CAN_ZIP'))          define('DEFAULT_CAN_ZIP', true);
 if (!defined('DEFAULT_VIEW_OWN_ONLY'))    define('DEFAULT_VIEW_OWN_ONLY', false);
-
-
+define('FOLDER_OWNERS_FILE', META_DIR . 'folder_owners.json');
 
 // Encryption helpers
 function encryptData($data, $encryptionKey)
@@ -77,16 +75,27 @@ function loadUserPermissions($username)
 {
     global $encryptionKey;
     $permissionsFile = USERS_DIR . 'userPermissions.json';
-    if (file_exists($permissionsFile)) {
-        $content = file_get_contents($permissionsFile);
-        $decrypted = decryptData($content, $encryptionKey);
-        $json = ($decrypted !== false) ? $decrypted : $content;
-        $perms = json_decode($json, true);
-        if (is_array($perms) && isset($perms[$username])) {
-            return !empty($perms[$username]) ? $perms[$username] : false;
-        }
+    if (!file_exists($permissionsFile)) {
+        return false;
     }
-    return false;
+
+    $content   = file_get_contents($permissionsFile);
+    $decrypted = decryptData($content, $encryptionKey);
+    $json      = ($decrypted !== false) ? $decrypted : $content;
+    $permsAll  = json_decode($json, true);
+
+    if (!is_array($permsAll)) {
+        return false;
+    }
+
+    // Try exact match first, then lowercase (since we store keys lowercase elsewhere)
+    $uExact = (string)$username;
+    $uLower = strtolower($uExact);
+
+    $row = $permsAll[$uExact] ?? $permsAll[$uLower] ?? null;
+
+    // Normalize: always return an array when found, else false (to preserve current callers’ behavior)
+    return is_array($row) ? $row : false;
 }
 
 // Determine HTTPS usage
@@ -96,25 +105,39 @@ $secure = ($envSecure !== false)
     : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
 
 // Choose session lifetime based on "remember me" cookie
-$defaultSession = 7200;           // 2 hours
-$persistentDays = 30 * 24 * 60 * 60; // 30 days
-$sessionLifetime = isset($_COOKIE['remember_me_token'])
-    ? $persistentDays
-    : $defaultSession;
+$defaultSession  = 7200;              // 2 hours
+$persistentDays  = 30 * 24 * 60 * 60; // 30 days
+$sessionLifetime = isset($_COOKIE['remember_me_token']) ? $persistentDays : $defaultSession;
 
-// Configure PHP session cookie and GC
-session_set_cookie_params([
-    'lifetime' => $sessionLifetime,
-    'path'     => '/',
-    'domain'   => '',      // adjust if you need a specific domain
-    'secure'   => $secure,
-    'httponly' => true,
-    'samesite' => 'Lax'
-]);
-ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
-
+/**
+ * Start session idempotently:
+ * - If no session: set cookie params + gc_maxlifetime, then session_start().
+ * - If session already active: DO NOT change ini/cookie params; optionally refresh cookie expiry.
+ */
 if (session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params([
+        'lifetime' => $sessionLifetime,
+        'path'     => '/',
+        'domain'   => '',      // adjust if you need a specific domain
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+    ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
     session_start();
+} else {
+    // Optionally refresh the session cookie expiry to keep the user alive
+    $params = session_get_cookie_params();
+    if ($sessionLifetime > 0) {
+        setcookie(session_name(), session_id(), [
+            'expires'  => time() + $sessionLifetime,
+            'path'     => $params['path']     ?: '/',
+            'domain'   => $params['domain']   ?? '',
+            'secure'   => $secure,
+            'httponly' => true,
+            'samesite' => $params['samesite'] ?? 'Lax',
+        ]);
+    }
 }
 
 // CSRF token
@@ -122,8 +145,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-
-// Auto‑login via persistent token
+// Auto-login via persistent token
 if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) {
     $tokFile = USERS_DIR . 'persistent_tokens.json';
     $tokens = [];

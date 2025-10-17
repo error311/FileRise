@@ -8,6 +8,28 @@ import { fetchWithCsrf } from './auth.js';
 import { loadCsrfToken } from './main.js';
 
 /* ----------------------
+   Helpers: safe JSON + state
+----------------------*/
+
+// Robust JSON reader that surfaces server errors (with status)
+async function safeJson(res) {
+  const text = await res.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+
+  if (!res.ok) {
+    const msg =
+      (body && (body.error || body.message)) ||
+      (text && text.trim()) ||
+      `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return body ?? {};
+}
+
+/* ----------------------
    Helper Functions (Data/State)
 ----------------------*/
 
@@ -15,7 +37,7 @@ import { loadCsrfToken } from './main.js';
 export function formatFolderName(folder) {
   if (typeof folder !== "string") return "";
   if (folder.indexOf("/") !== -1) {
-    let parts = folder.split("/");
+    const parts = folder.split("/");
     let indent = "";
     for (let i = 1; i < parts.length; i++) {
       indent += "\u00A0\u00A0\u00A0\u00A0"; // 4 non-breaking spaces per level
@@ -34,9 +56,7 @@ function buildFolderTree(folders) {
     const parts = folderPath.split('/');
     let current = tree;
     parts.forEach(part => {
-      if (!current[part]) {
-        current[part] = {};
-      }
+      if (!current[part]) current[part] = {};
       current = current[part];
     });
   });
@@ -66,23 +86,29 @@ export function getParentFolder(folder) {
     Breadcrumb Functions
  ----------------------*/
 
-function renderBreadcrumb(normalizedFolder) {
-  if (!normalizedFolder || normalizedFolder === "") return "";
-  const parts = normalizedFolder.split("/");
-  let breadcrumbItems = [];
-  // Use the first segment as the root.
-  breadcrumbItems.push(`<span class="breadcrumb-link" data-folder="${parts[0]}">${escapeHTML(parts[0])}</span>`);
-  let cumulative = parts[0];
-  parts.slice(1).forEach(part => {
-    cumulative += "/" + part;
-    breadcrumbItems.push(`<span class="breadcrumb-separator"> / </span>`);
-    breadcrumbItems.push(`<span class="breadcrumb-link" data-folder="${cumulative}">${escapeHTML(part)}</span>`);
-  });
-  return breadcrumbItems.join('');
+async function applyFolderCapabilities(folder) {
+  try {
+    const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`, { credentials: 'include' });
+    if (!res.ok) return;
+    const caps = await res.json();
+
+    // top buttons
+    const createBtn  = document.getElementById('createFolderBtn');
+    const renameBtn  = document.getElementById('renameFolderBtn');
+    const deleteBtn  = document.getElementById('deleteFolderBtn');
+    const shareBtn   = document.getElementById('shareFolderBtn');
+
+    if (createBtn) createBtn.disabled = !caps.canCreate;
+    if (renameBtn) renameBtn.disabled = !caps.canRename || folder === 'root';
+    if (deleteBtn) deleteBtn.disabled = !caps.canDelete || folder === 'root';
+    if (shareBtn)  shareBtn.disabled  = !caps.canShare  || folder === 'root';
+
+    // keep for later if you want context menu to reflect caps
+    window.currentFolderCaps = caps;
+  } catch {}
 }
 
-// --- NEW: Breadcrumb Delegation Setup ---
-// bindBreadcrumbEvents(); removed in favor of delegation
+// --- Breadcrumb Delegation Setup ---
 export function setupBreadcrumbDelegation() {
   const container = document.getElementById("fileListTitle");
   if (!container) {
@@ -104,7 +130,6 @@ export function setupBreadcrumbDelegation() {
 
 // Click handler via delegation
 function breadcrumbClickHandler(e) {
-  // find the nearest .breadcrumb-link
   const link = e.target.closest(".breadcrumb-link");
   if (!link) return;
 
@@ -115,12 +140,10 @@ function breadcrumbClickHandler(e) {
   window.currentFolder = folder;
   localStorage.setItem("lastOpenedFolder", folder);
 
-  // rebuild the title safely
   updateBreadcrumbTitle(folder);
+  applyFolderCapabilities(folder);
   expandTreePath(folder);
-  document.querySelectorAll(".folder-option").forEach(el =>
-    el.classList.remove("selected")
-  );
+  document.querySelectorAll(".folder-option").forEach(el => el.classList.remove("selected"));
   const target = document.querySelector(`.folder-option[data-folder="${folder}"]`);
   if (target) target.classList.add("selected");
 
@@ -158,20 +181,18 @@ function breadcrumbDropHandler(e) {
   }
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
-  fetch("/api/file/moveFiles.php", {
+
+  fetchWithCsrf("/api/file/moveFiles.php", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
-    },
     body: JSON.stringify({
       source: dragData.sourceFolder,
       files: filesToMove,
       destination: dropFolder
     })
   })
-    .then(response => response.json())
+    .then(safeJson)
     .then(data => {
       if (data.success) {
         showToast(`File(s) moved successfully to ${dropFolder}!`);
@@ -186,47 +207,39 @@ function breadcrumbDropHandler(e) {
     });
 }
 
-
 /* ----------------------
    Check Current User's Folder-Only Permission
 ----------------------*/
-// This function uses localStorage values (set during login) to determine if the current user is restricted.
-// If folderOnly is "true", then the personal folder (i.e. username) is forced as the effective root.
-function checkUserFolderPermission() {
-  const username = localStorage.getItem("username");
-  console.log("checkUserFolderPermission: username =", username);
-  if (!username) {
-    console.warn("No username in localStorage; skipping getUserPermissions fetch.");
-    return Promise.resolve(false);
-  }
-  if (localStorage.getItem("folderOnly") === "true") {
-    window.userFolderOnly = true;
-    console.log("checkUserFolderPermission: using localStorage.folderOnly = true");
-    localStorage.setItem("lastOpenedFolder", username);
-    window.currentFolder = username;
-    return Promise.resolve(true);
-  }
-  return fetch("/api/getUserPermissions.php", { credentials: "include" })
-    .then(response => response.json())
-    .then(permissionsData => {
-      console.log("checkUserFolderPermission: permissionsData =", permissionsData);
-      if (permissionsData && permissionsData[username] && permissionsData[username].folderOnly) {
-        window.userFolderOnly = true;
-        localStorage.setItem("folderOnly", "true");
-        localStorage.setItem("lastOpenedFolder", username);
-        window.currentFolder = username;
-        return true;
-      } else {
-        window.userFolderOnly = false;
-        localStorage.setItem("folderOnly", "false");
-        return false;
-      }
-    })
-    .catch(err => {
-      console.error("Error fetching user permissions:", err);
-      window.userFolderOnly = false;
-      return false;
+// Authoritatively determine from the server; still write to localStorage for UI,
+// but ignore any preexisting localStorage override for security.
+async function checkUserFolderPermission() {
+  const username = localStorage.getItem("username") || "";
+  try {
+    const res = await fetchWithCsrf("/api/getUserPermissions.php", {
+      method: "GET",
+      credentials: "include"
     });
+    const permissionsData = await safeJson(res);
+
+    const isFolderOnly =
+      !!(permissionsData &&
+         permissionsData[username] &&
+         permissionsData[username].folderOnly);
+
+    window.userFolderOnly = isFolderOnly;
+    localStorage.setItem("folderOnly", isFolderOnly ? "true" : "false");
+
+    if (isFolderOnly && username) {
+      localStorage.setItem("lastOpenedFolder", username);
+      window.currentFolder = username;
+    }
+    return isFolderOnly;
+  } catch (err) {
+    console.error("Error fetching user permissions:", err);
+    window.userFolderOnly = false;
+    localStorage.setItem("folderOnly", "false");
+    return false;
+  }
 }
 
 /* ----------------------
@@ -273,7 +286,7 @@ function expandTreePath(path) {
         const toggle = li.querySelector(".folder-toggle");
         if (toggle) {
           toggle.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
-          let state = loadFolderTreeState();
+          const state = loadFolderTreeState();
           state[cumulative] = "block";
           saveFolderTreeState(state);
         }
@@ -307,20 +320,18 @@ function folderDropHandler(event) {
   }
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
-  fetch("/api/file/moveFiles.php", {
+
+  fetchWithCsrf("/api/file/moveFiles.php", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
-    },
     body: JSON.stringify({
       source: dragData.sourceFolder,
       files: filesToMove,
       destination: dropFolder
     })
   })
-    .then(response => response.json())
+    .then(safeJson)
     .then(data => {
       if (data.success) {
         showToast(`File(s) moved successfully to ${dropFolder}!`);
@@ -338,7 +349,7 @@ function folderDropHandler(event) {
 /* ----------------------
    Main Folder Tree Rendering and Event Binding
 ----------------------*/
-// --- Helpers for safe breadcrumb rendering ---
+// Safe breadcrumb DOM builder
 function renderBreadcrumbFragment(folderPath) {
   const frag = document.createDocumentFragment();
   const parts = folderPath.split("/");
@@ -363,49 +374,52 @@ function renderBreadcrumbFragment(folderPath) {
 
 export function updateBreadcrumbTitle(folder) {
   const titleEl = document.getElementById("fileListTitle");
+  if (!titleEl) return;
   titleEl.textContent = "";
   titleEl.appendChild(document.createTextNode(t("files_in") + " ("));
   titleEl.appendChild(renderBreadcrumbFragment(folder));
   titleEl.appendChild(document.createTextNode(")"));
   setupBreadcrumbDelegation();
+  // Ensure context menu delegation is hooked to the dynamic breadcrumb container
+  bindFolderManagerContextMenu();
 }
 
 export async function loadFolderTree(selectedFolder) {
   try {
-    // Check if the user has folder-only permission.
+    // Check if the user has folder-only permission (server-authoritative).
     await checkUserFolderPermission();
 
     // Determine effective root folder.
     const username = localStorage.getItem("username") || "root";
     let effectiveRoot = "root";
     let effectiveLabel = "(Root)";
-    if (window.userFolderOnly) {
-      effectiveRoot = username; // Use the username as the personal root.
+    if (window.userFolderOnly && username) {
+      effectiveRoot = username; // personal root
       effectiveLabel = `(Root)`;
-      // Force override of any saved folder.
       localStorage.setItem("lastOpenedFolder", username);
       window.currentFolder = username;
     } else {
       window.currentFolder = localStorage.getItem("lastOpenedFolder") || "root";
     }
 
-    // Build fetch URL.
-    let fetchUrl = '/api/folder/getFolderList.php';
-    if (window.userFolderOnly) {
-      fetchUrl += '?restricted=1';
-    }
-    console.log("Fetching folder list from:", fetchUrl);
+    // Fetch folder list from the server (server enforces scope).
+    const res = await fetchWithCsrf('/api/folder/getFolderList.php', {
+      method: 'GET',
+      credentials: 'include'
+    });
 
-    // Fetch folder list from the server.
-    const response = await fetch(fetchUrl);
-    if (response.status === 401) {
-      console.error("Unauthorized: Please log in to view folders.");
+    if (res.status === 401) {
       showToast("Session expired. Please log in again.");
       window.location.href = "/api/auth/logout.php";
       return;
     }
-    let folderData = await response.json();
-    console.log("Folder data received:", folderData);
+    if (res.status === 403) {
+      showToast("You don't have permission to view folders.");
+      return;
+    }
+
+    const folderData = await safeJson(res);
+
     let folders = [];
     if (Array.isArray(folderData) && folderData.length && typeof folderData[0] === "object" && folderData[0].folder) {
       folders = folderData.map(item => item.folder);
@@ -413,13 +427,12 @@ export async function loadFolderTree(selectedFolder) {
       folders = folderData;
     }
 
-    // Remove any global "root" entry.
+    // Remove any global "root" entry (server shouldn't return it, but be safe).
     folders = folders.filter(folder => folder.toLowerCase() !== "root");
 
-    // If restricted, filter folders: keep only those that start with effectiveRoot + "/" (do not include effectiveRoot itself).
+    // If restricted, filter client-side view to subtree for UX (server still enforces).
     if (window.userFolderOnly && effectiveRoot !== "root") {
       folders = folders.filter(folder => folder.startsWith(effectiveRoot + "/"));
-      // Force current folder to be the effective root.
       localStorage.setItem("lastOpenedFolder", effectiveRoot);
       window.currentFolder = effectiveRoot;
     }
@@ -455,8 +468,9 @@ export async function loadFolderTree(selectedFolder) {
     }
     localStorage.setItem("lastOpenedFolder", window.currentFolder);
 
-    // Initial breadcrumb update
+    // Initial breadcrumb + file list
     updateBreadcrumbTitle(window.currentFolder);
+    applyFolderCapabilities(window.currentFolder);
     loadFileList(window.currentFolder);
 
     const folderState = loadFolderTreeState();
@@ -480,8 +494,8 @@ export async function loadFolderTree(selectedFolder) {
         window.currentFolder = selected;
         localStorage.setItem("lastOpenedFolder", selected);
 
-        // Safe breadcrumb update
         updateBreadcrumbTitle(selected);
+        applyFolderCapabilities(selected);
         loadFileList(selected);
       });
     });
@@ -493,7 +507,7 @@ export async function loadFolderTree(selectedFolder) {
         e.stopPropagation();
         const nestedUl = container.querySelector("#rootRow + ul");
         if (nestedUl) {
-          let state = loadFolderTreeState();
+          const state = loadFolderTreeState();
           if (nestedUl.classList.contains("collapsed") || !nestedUl.classList.contains("expanded")) {
             nestedUl.classList.remove("collapsed");
             nestedUl.classList.add("expanded");
@@ -516,7 +530,7 @@ export async function loadFolderTree(selectedFolder) {
         e.stopPropagation();
         const siblingUl = this.parentNode.querySelector("ul");
         const folderPath = this.getAttribute("data-folder");
-        let state = loadFolderTreeState();
+        const state = loadFolderTreeState();
         if (siblingUl) {
           if (siblingUl.classList.contains("collapsed") || !siblingUl.classList.contains("expanded")) {
             siblingUl.classList.remove("collapsed");
@@ -536,9 +550,11 @@ export async function loadFolderTree(selectedFolder) {
 
   } catch (error) {
     console.error("Error loading folder tree:", error);
+    if (error.status === 403) {
+      showToast("You don't have permission to view folders.");
+    }
   }
 }
-
 
 // For backward compatibility.
 export function loadFolderList(selectedFolder) {
@@ -548,8 +564,11 @@ export function loadFolderList(selectedFolder) {
 /* ----------------------
    Folder Management (Rename, Delete, Create)
 ----------------------*/
-document.getElementById("renameFolderBtn").addEventListener("click", openRenameFolderModal);
-document.getElementById("deleteFolderBtn").addEventListener("click", openDeleteFolderModal);
+const renameBtn = document.getElementById("renameFolderBtn");
+if (renameBtn) renameBtn.addEventListener("click", openRenameFolderModal);
+
+const deleteBtn = document.getElementById("deleteFolderBtn");
+if (deleteBtn) deleteBtn.addEventListener("click", openDeleteFolderModal);
 
 export function openRenameFolderModal() {
   const selectedFolder = window.currentFolder || "root";
@@ -558,61 +577,69 @@ export function openRenameFolderModal() {
     return;
   }
   const parts = selectedFolder.split("/");
-  document.getElementById("newRenameFolderName").value = parts[parts.length - 1];
-  document.getElementById("renameFolderModal").style.display = "block";
+  const input = document.getElementById("newRenameFolderName");
+  const modal = document.getElementById("renameFolderModal");
+  if (!input || !modal) return;
+  input.value = parts[parts.length - 1];
+  modal.style.display = "block";
   setTimeout(() => {
-    const input = document.getElementById("newRenameFolderName");
     input.focus();
     input.select();
   }, 100);
 }
 
-document.getElementById("cancelRenameFolder").addEventListener("click", function () {
-  document.getElementById("renameFolderModal").style.display = "none";
-  document.getElementById("newRenameFolderName").value = "";
-});
+const cancelRename = document.getElementById("cancelRenameFolder");
+if (cancelRename) {
+  cancelRename.addEventListener("click", function () {
+    const modal = document.getElementById("renameFolderModal");
+    const input = document.getElementById("newRenameFolderName");
+    if (modal) modal.style.display = "none";
+    if (input) input.value = "";
+  });
+}
 attachEnterKeyListener("renameFolderModal", "submitRenameFolder");
-document.getElementById("submitRenameFolder").addEventListener("click", function (event) {
-  event.preventDefault();
-  const selectedFolder = window.currentFolder || "root";
-  const newNameBasename = document.getElementById("newRenameFolderName").value.trim();
-  if (!newNameBasename || newNameBasename === selectedFolder.split("/").pop()) {
-    showToast("Please enter a valid new folder name.");
-    return;
-  }
-  const parentPath = getParentFolder(selectedFolder);
-  const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
-  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-  if (!csrfToken) {
-    showToast("CSRF token not loaded yet! Please try again.");
-    return;
-  }
-  fetch("/api/folder/renameFolder.php", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": csrfToken
-    },
-    body: JSON.stringify({ oldFolder: window.currentFolder, newFolder: newFolderFull })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        showToast("Folder renamed successfully!");
-        window.currentFolder = newFolderFull;
-        localStorage.setItem("lastOpenedFolder", newFolderFull);
-        loadFolderList(newFolderFull);
-      } else {
-        showToast("Error: " + (data.error || "Could not rename folder"));
-      }
+
+const submitRename = document.getElementById("submitRenameFolder");
+if (submitRename) {
+  submitRename.addEventListener("click", function (event) {
+    event.preventDefault();
+    const selectedFolder = window.currentFolder || "root";
+    const input = document.getElementById("newRenameFolderName");
+    if (!input) return;
+    const newNameBasename = input.value.trim();
+    if (!newNameBasename || newNameBasename === selectedFolder.split("/").pop()) {
+      showToast("Please enter a valid new folder name.");
+      return;
+    }
+    const parentPath = getParentFolder(selectedFolder);
+    const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
+
+    fetchWithCsrf("/api/folder/renameFolder.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ oldFolder: window.currentFolder, newFolder: newFolderFull })
     })
-    .catch(error => console.error("Error renaming folder:", error))
-    .finally(() => {
-      document.getElementById("renameFolderModal").style.display = "none";
-      document.getElementById("newRenameFolderName").value = "";
-    });
-});
+      .then(safeJson)
+      .then(data => {
+        if (data.success) {
+          showToast("Folder renamed successfully!");
+          window.currentFolder = newFolderFull;
+          localStorage.setItem("lastOpenedFolder", newFolderFull);
+          loadFolderList(newFolderFull);
+        } else {
+          showToast("Error: " + (data.error || "Could not rename folder"));
+        }
+      })
+      .catch(error => console.error("Error renaming folder:", error))
+      .finally(() => {
+        const modal = document.getElementById("renameFolderModal");
+        const input2 = document.getElementById("newRenameFolderName");
+        if (modal) modal.style.display = "none";
+        if (input2) input2.value = "";
+      });
+  });
+}
 
 export function openDeleteFolderModal() {
   const selectedFolder = window.currentFolder || "root";
@@ -620,102 +647,117 @@ export function openDeleteFolderModal() {
     showToast("Please select a valid folder to delete.");
     return;
   }
-  document.getElementById("deleteFolderMessage").textContent =
-    "Are you sure you want to delete folder " + selectedFolder + "?";
-  document.getElementById("deleteFolderModal").style.display = "block";
+  const msgEl = document.getElementById("deleteFolderMessage");
+  const modal = document.getElementById("deleteFolderModal");
+  if (!msgEl || !modal) return;
+  msgEl.textContent = "Are you sure you want to delete folder " + selectedFolder + "?";
+  modal.style.display = "block";
 }
 
-document.getElementById("cancelDeleteFolder").addEventListener("click", function () {
-  document.getElementById("deleteFolderModal").style.display = "none";
-});
+const cancelDelete = document.getElementById("cancelDeleteFolder");
+if (cancelDelete) {
+  cancelDelete.addEventListener("click", function () {
+    const modal = document.getElementById("deleteFolderModal");
+    if (modal) modal.style.display = "none";
+  });
+}
 attachEnterKeyListener("deleteFolderModal", "confirmDeleteFolder");
-document.getElementById("confirmDeleteFolder").addEventListener("click", function () {
-  const selectedFolder = window.currentFolder || "root";
-  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-  fetch("/api/folder/deleteFolder.php", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": csrfToken
-    },
-    body: JSON.stringify({ folder: selectedFolder })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        showToast("Folder deleted successfully!");
-        window.currentFolder = getParentFolder(selectedFolder);
-        localStorage.setItem("lastOpenedFolder", window.currentFolder);
-        loadFolderList(window.currentFolder);
-      } else {
-        showToast("Error: " + (data.error || "Could not delete folder"));
-      }
+
+const confirmDelete = document.getElementById("confirmDeleteFolder");
+if (confirmDelete) {
+  confirmDelete.addEventListener("click", function () {
+    const selectedFolder = window.currentFolder || "root";
+
+    fetchWithCsrf("/api/folder/deleteFolder.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ folder: selectedFolder })
     })
-    .catch(error => console.error("Error deleting folder:", error))
-    .finally(() => {
-      document.getElementById("deleteFolderModal").style.display = "none";
-    });
-});
-
-document.getElementById("createFolderBtn").addEventListener("click", function () {
-  document.getElementById("createFolderModal").style.display = "block";
-  document.getElementById("newFolderName").focus();
-});
-
-document.getElementById("cancelCreateFolder").addEventListener("click", function () {
-  document.getElementById("createFolderModal").style.display = "none";
-  document.getElementById("newFolderName").value = "";
-});
-attachEnterKeyListener("createFolderModal", "submitCreateFolder");
-document.getElementById("submitCreateFolder").addEventListener("click", async () => {
-  const folderInput = document.getElementById("newFolderName").value.trim();
-  if (!folderInput) return showToast("Please enter a folder name.");
-
-  const selectedFolder = window.currentFolder || "root";
-  const parent = selectedFolder === "root" ? "" : selectedFolder;
-
-  // 1) Guarantee fresh CSRF
-  try {
-    await loadCsrfToken();
-  } catch {
-    return showToast("Could not refresh CSRF token. Please reload.");
-  }
-
-  // 2) Call with fetchWithCsrf
-  fetchWithCsrf("/api/folder/createFolder.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folderName: folderInput, parent })
-  })
-    .then(async res => {
-      if (!res.ok) {
-        // pull out a JSON error, or fallback to status text
-        let err;
-        try {
-          const j = await res.json();
-          err = j.error || j.message || res.statusText;
-        } catch {
-          err = res.statusText;
+      .then(safeJson)
+      .then(data => {
+        if (data.success) {
+          showToast("Folder deleted successfully!");
+          window.currentFolder = getParentFolder(selectedFolder);
+          localStorage.setItem("lastOpenedFolder", window.currentFolder);
+          loadFolderList(window.currentFolder);
+        } else {
+          showToast("Error: " + (data.error || "Could not delete folder"));
         }
-        throw new Error(err);
-      }
-      return res.json();
+      })
+      .catch(error => console.error("Error deleting folder:", error))
+      .finally(() => {
+        const modal = document.getElementById("deleteFolderModal");
+        if (modal) modal.style.display = "none";
+      });
+  });
+}
+
+const createBtn = document.getElementById("createFolderBtn");
+if (createBtn) {
+  createBtn.addEventListener("click", function () {
+    const modal = document.getElementById("createFolderModal");
+    const input = document.getElementById("newFolderName");
+    if (modal) modal.style.display = "block";
+    if (input) input.focus();
+  });
+}
+
+const cancelCreate = document.getElementById("cancelCreateFolder");
+if (cancelCreate) {
+  cancelCreate.addEventListener("click", function () {
+    const modal = document.getElementById("createFolderModal");
+    const input = document.getElementById("newFolderName");
+    if (modal) modal.style.display = "none";
+    if (input) input.value = "";
+  });
+}
+attachEnterKeyListener("createFolderModal", "submitCreateFolder");
+
+const submitCreate = document.getElementById("submitCreateFolder");
+if (submitCreate) {
+  submitCreate.addEventListener("click", async () => {
+    const input = document.getElementById("newFolderName");
+    const folderInput = input ? input.value.trim() : "";
+    if (!folderInput) return showToast("Please enter a folder name.");
+
+    const selectedFolder = window.currentFolder || "root";
+    const parent = selectedFolder === "root" ? "" : selectedFolder;
+
+    // 1) Guarantee fresh CSRF
+    try {
+      await loadCsrfToken();
+    } catch {
+      return showToast("Could not refresh CSRF token. Please reload.");
+    }
+
+    // 2) Call with fetchWithCsrf
+    fetchWithCsrf("/api/folder/createFolder.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ folderName: folderInput, parent })
     })
-    .then(data => {
-      showToast("Folder created!");
-      const full = parent ? `${parent}/${folderInput}` : folderInput;
-      window.currentFolder = full;
-      localStorage.setItem("lastOpenedFolder", full);
-      loadFolderList(full);
-    })
-    .catch(e => {
-      showToast("Error creating folder: " + e.message);
-    })
-    .finally(() => {
-      document.getElementById("createFolderModal").style.display = "none";
-      document.getElementById("newFolderName").value = "";
-    });
-});
+      .then(safeJson)
+      .then(data => {
+        if (!data.success) throw new Error(data.error || "Server rejected the request");
+        showToast("Folder created!");
+        const full = parent ? `${parent}/${folderInput}` : folderInput;
+        window.currentFolder = full;
+        localStorage.setItem("lastOpenedFolder", full);
+        loadFolderList(full);
+      })
+      .catch(e => {
+        showToast("Error creating folder: " + e.message);
+      })
+      .finally(() => {
+        const modal = document.getElementById("createFolderModal");
+        const input2 = document.getElementById("newFolderName");
+        if (modal) modal.style.display = "none";
+        if (input2) input2.value = "";
+      });
+  });
+}
 
 // ---------- CONTEXT MENU SUPPORT FOR FOLDER MANAGER ----------
 export function showFolderManagerContextMenu(x, y, menuItems) {
@@ -773,21 +815,28 @@ export function hideFolderManagerContextMenu() {
 }
 
 function folderManagerContextMenuHandler(e) {
-  e.preventDefault();
-  e.stopPropagation();
   const target = e.target.closest(".folder-option, .breadcrumb-link");
   if (!target) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
   const folder = target.getAttribute("data-folder");
   if (!folder) return;
   window.currentFolder = folder;
+
+  // Visual selection
   document.querySelectorAll(".folder-option, .breadcrumb-link").forEach(el => el.classList.remove("selected"));
   target.classList.add("selected");
+
   const menuItems = [
     {
       label: t("create_folder"),
       action: () => {
-        document.getElementById("createFolderModal").style.display = "block";
-        document.getElementById("newFolderName").focus();
+        const modal = document.getElementById("createFolderModal");
+        const input = document.getElementById("newFolderName");
+        if (modal) modal.style.display = "block";
+        if (input) input.focus();
       }
     },
     {
@@ -806,17 +855,34 @@ function folderManagerContextMenuHandler(e) {
   showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
 }
 
+// Delegate contextmenu so it works with dynamically re-rendered breadcrumbs
 function bindFolderManagerContextMenu() {
-  const container = document.getElementById("folderTreeContainer");
-  if (container) {
-    container.removeEventListener("contextmenu", folderManagerContextMenuHandler);
-    container.addEventListener("contextmenu", folderManagerContextMenuHandler, false);
+  const tree = document.getElementById("folderTreeContainer");
+  if (tree) {
+    // remove old bound handler if present
+    if (tree._ctxHandler) {
+      tree.removeEventListener("contextmenu", tree._ctxHandler, false);
+    }
+    tree._ctxHandler = function (e) {
+      const onOption = e.target.closest(".folder-option");
+      if (!onOption) return;
+      folderManagerContextMenuHandler(e);
+    };
+    tree.addEventListener("contextmenu", tree._ctxHandler, false);
   }
-  const breadcrumbNodes = document.querySelectorAll(".breadcrumb-link");
-  breadcrumbNodes.forEach(node => {
-    node.removeEventListener("contextmenu", folderManagerContextMenuHandler);
-    node.addEventListener("contextmenu", folderManagerContextMenuHandler, false);
-  });
+
+  const title = document.getElementById("fileListTitle");
+  if (title) {
+    if (title._ctxHandler) {
+      title.removeEventListener("contextmenu", title._ctxHandler, false);
+    }
+    title._ctxHandler = function (e) {
+      const onCrumb = e.target.closest(".breadcrumb-link");
+      if (!onCrumb) return;
+      folderManagerContextMenuHandler(e);
+    };
+    title.addEventListener("contextmenu", title._ctxHandler, false);
+  }
 }
 
 document.addEventListener("click", function () {
@@ -825,8 +891,8 @@ document.addEventListener("click", function () {
 
 document.addEventListener("DOMContentLoaded", function () {
   document.addEventListener("keydown", function (e) {
-    const tag = e.target.tagName.toLowerCase();
-    if (tag === "input" || tag === "textarea" || e.target.isContentEditable) {
+    const tag = e.target.tagName ? e.target.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "textarea" || (e.target && e.target.isContentEditable)) {
       return;
     }
     if (e.key === "Delete" || e.key === "Backspace" || e.keyCode === 46 || e.keyCode === 8) {
@@ -847,7 +913,6 @@ document.addEventListener("DOMContentLoaded", function () {
         showToast("Please select a valid folder to share.");
         return;
       }
-      // Call the folder share modal from the module.
       openFolderShareModal(selectedFolder);
     });
   } else {
@@ -855,4 +920,5 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+// Initial context menu delegation bind
 bindFolderManagerContextMenu();

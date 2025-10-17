@@ -2,9 +2,99 @@
 // src/models/FolderModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/lib/ACL.php';
 
 class FolderModel
 {
+    /* ============================================================
+     * Ownership mapping helpers (stored in META_DIR/folder_owners.json)
+     * ============================================================ */
+
+    /** Load the folder → owner map. */
+    public static function getFolderOwners(): array
+    {
+        $f = FOLDER_OWNERS_FILE;
+        if (!file_exists($f)) return [];
+        $json = json_decode(@file_get_contents($f), true);
+        return is_array($json) ? $json : [];
+    }
+
+    /** Persist the folder → owner map. */
+    public static function saveFolderOwners(array $map): bool
+    {
+        return (bool) @file_put_contents(FOLDER_OWNERS_FILE, json_encode($map, JSON_PRETTY_PRINT), LOCK_EX);
+    }
+
+    /** Set (or replace) the owner for a specific folder (relative path or 'root'). */
+    public static function setOwnerFor(string $folder, string $owner): void
+    {
+        $key    = trim($folder, "/\\ ");
+        $key    = ($key === '' ? 'root' : $key);
+        $owners = self::getFolderOwners();
+        $owners[$key] = $owner;
+        self::saveFolderOwners($owners);
+    }
+
+    /** Get the owner for a folder (relative path or 'root'); returns null if unmapped. */
+    public static function getOwnerFor(string $folder): ?string
+    {
+        $key    = trim($folder, "/\\ ");
+        $key    = ($key === '' ? 'root' : $key);
+        $owners = self::getFolderOwners();
+        return $owners[$key] ?? null;
+    }
+
+    /** Rename a single ownership key (old → new). */
+    public static function renameOwnerKey(string $old, string $new): void
+    {
+        $old    = trim($old, "/\\ ");
+        $new    = trim($new, "/\\ ");
+        $owners = self::getFolderOwners();
+        if (isset($owners[$old])) {
+            $owners[$new] = $owners[$old];
+            unset($owners[$old]);
+            self::saveFolderOwners($owners);
+        }
+    }
+
+    /** Remove ownership for a folder and all its descendants. */
+    public static function removeOwnerForTree(string $folder): void
+    {
+        $folder = trim($folder, "/\\ ");
+        $owners = self::getFolderOwners();
+        foreach (array_keys($owners) as $k) {
+            if ($k === $folder || strpos($k, $folder . '/') === 0) {
+                unset($owners[$k]);
+            }
+        }
+        self::saveFolderOwners($owners);
+    }
+
+    /** Rename ownership keys for an entire subtree: old/... → new/... */
+    public static function renameOwnersForTree(string $oldFolder, string $newFolder): void
+    {
+        $old = trim($oldFolder, "/\\ ");
+        $new = trim($newFolder, "/\\ ");
+        $owners = self::getFolderOwners();
+
+        $rebased = [];
+        foreach ($owners as $k => $v) {
+            if ($k === $old || strpos($k, $old . '/') === 0) {
+                $suffix = substr($k, strlen($old));
+                // ensure no leading slash duplication
+                $suffix = ltrim($suffix, '/');
+                $rebased[$new . ($suffix !== '' ? '/' . $suffix : '')] = $v;
+            } else {
+                $rebased[$k] = $v;
+            }
+        }
+        self::saveFolderOwners($rebased);
+    }
+
+    /* ============================================================
+     * Existing helpers
+     * ============================================================ */
+
     /**
      * Resolve a (possibly nested) relative folder like "invoices/2025" to a real path
      * under UPLOAD_DIR. Validates each path segment against REGEX_FOLDER_NAME, enforces
@@ -59,9 +149,7 @@ class FolderModel
         return [$real, $relative, null];
     }
 
-    /**
-     * Build metadata file path for a given (relative) folder.
-     */
+    /** Build metadata file path for a given (relative) folder. */
     private static function getMetadataFilePath(string $folder): string
     {
         if (strtolower($folder) === 'root' || trim($folder) === '') {
@@ -72,42 +160,67 @@ class FolderModel
 
     /**
      * Creates a folder under the specified parent (or in root) and creates an empty metadata file.
+     * Also records the creator as the owner (if a session user is available).
      */
-    public static function createFolder(string $folderName, string $parent = ""): array
+    <?php
+require_once PROJECT_ROOT . '/src/lib/ACL.php';
+
+class FolderModel
+{
+    /**
+     * Create a folder on disk and register it in ACL with the creator as owner.
+     * @param string $folderName leaf name
+     * @param string $parent     'root' or nested key (e.g. 'team/reports')
+     * @param string $creator    username to set as initial owner (falls back to 'admin')
+     */
+    public static function createFolder(string $folderName, string $parent = 'root', string $creator = 'admin'): array
     {
         $folderName = trim($folderName);
         $parent     = trim($parent);
 
-        if (!preg_match(REGEX_FOLDER_NAME, $folderName)) {
-            return ["error" => "Invalid folder name."];
+        if ($folderName === '' || !preg_match(REGEX_FOLDER_NAME, $folderName)) {
+            return ['success' => false, 'error' => 'Invalid folder name', 'code' => 400];
+        }
+        if ($parent !== '' && strcasecmp($parent, 'root') !== 0 && !preg_match(REGEX_FOLDER_NAME, $parent)) {
+            return ['success' => false, 'error' => 'Invalid parent folder', 'code' => 400];
         }
 
-        // Resolve parent path (root ok; nested ok)
-        [$parentReal, $parentRel, $err] = self::resolveFolderPath($parent === '' ? 'root' : $parent, true);
-        if ($err) return ["error" => $err];
+        // Compute ACL key and filesystem path
+        $aclKey = ($parent === '' || strcasecmp($parent, 'root') === 0) ? $folderName : ($parent . '/' . $folderName);
 
-        $targetRel = ($parentRel === 'root') ? $folderName : ($parentRel . '/' . $folderName);
-        $targetDir = $parentReal . DIRECTORY_SEPARATOR . $folderName;
+        $base = rtrim(UPLOAD_DIR, '/\\');
+        $path = ($parent === '' || strcasecmp($parent, 'root') === 0)
+            ? $base . DIRECTORY_SEPARATOR . $folderName
+            : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $parent) . DIRECTORY_SEPARATOR . $folderName;
 
-        if (file_exists($targetDir)) {
-            return ["error" => "Folder already exists."];
+        // Safety: stay inside UPLOAD_DIR
+        $realBase = realpath($base);
+        $realPath = $path; // may not exist yet
+        $parentDir = dirname($path);
+        if (!is_dir($parentDir) && !@mkdir($parentDir, 0775, true)) {
+            return ['success' => false, 'error' => 'Failed to create parent path', 'code' => 500];
         }
 
-        if (!mkdir($targetDir, 0775, true)) {
-            return ["error" => "Failed to create folder."];
+        if (is_dir($path)) {
+            // Idempotent: still ensure ACL record exists
+            ACL::ensureFolderRecord($aclKey, $creator ?: 'admin');
+            return ['success' => true, 'folder' => $aclKey, 'alreadyExists' => true];
         }
 
-        // Create an empty metadata file for the new folder.
-        $metadataFile = self::getMetadataFilePath($targetRel);
-        if (file_put_contents($metadataFile, json_encode([], JSON_PRETTY_PRINT), LOCK_EX) === false) {
-            return ["error" => "Folder created but failed to create metadata file."];
+        if (!@mkdir($path, 0775, true)) {
+            return ['success' => false, 'error' => 'Failed to create folder', 'code' => 500];
         }
 
-        return ["success" => true];
+        // Seed ACL: owner/read/write/share -> creator; read_own empty
+        ACL::ensureFolderRecord($aclKey, $creator ?: 'admin');
+
+        return ['success' => true, 'folder' => $aclKey];
     }
+}
 
     /**
      * Deletes a folder if it is empty and removes its corresponding metadata.
+     * Also removes ownership mappings for this folder and all its descendants.
      */
     public static function deleteFolder(string $folder): array
     {
@@ -119,12 +232,12 @@ class FolderModel
         if ($err) return ["error" => $err];
 
         // Prevent deletion if not empty.
-        $items = array_diff(scandir($real), array('.', '..'));
+        $items = array_diff(@scandir($real) ?: [], array('.', '..'));
         if (count($items) > 0) {
             return ["error" => "Folder is not empty."];
         }
 
-        if (!rmdir($real)) {
+        if (!@rmdir($real)) {
             return ["error" => "Failed to delete folder."];
         }
 
@@ -134,11 +247,15 @@ class FolderModel
             @unlink($metadataFile);
         }
 
+        // Remove ownership mappings for the subtree.
+        self::removeOwnerForTree($relative);
+
         return ["success" => true];
     }
 
     /**
      * Renames a folder and updates related metadata files (by renaming their filenames).
+     * Also rewrites ownership keys for the whole subtree from old → new.
      */
     public static function renameFolder(string $oldFolder, string $newFolder): array
     {
@@ -163,6 +280,7 @@ class FolderModel
         if ($base === false) return ["error" => "Uploads directory not configured correctly."];
 
         $newParts = array_filter(explode('/', $newFolder), fn($p) => $p!=='');
+        $newRel   = implode('/', $newParts);
         $newPath  = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $newParts);
 
         // Parent of new path must exist
@@ -174,13 +292,13 @@ class FolderModel
             return ["error" => "New folder name already exists."];
         }
 
-        if (!rename($oldReal, $newPath)) {
+        if (!@rename($oldReal, $newPath)) {
             return ["error" => "Failed to rename folder."];
         }
 
         // Update metadata filenames (prefix-rename)
         $oldPrefix = str_replace(['/', '\\', ' '], '-', $oldRel);
-        $newPrefix = str_replace(['/', '\\', ' '], '-', implode('/', $newParts));
+        $newPrefix = str_replace(['/', '\\', ' '], '-', $newRel);
         $globPat   = META_DIR . $oldPrefix . '*_metadata.json';
         $metadataFiles = glob($globPat) ?: [];
 
@@ -190,6 +308,9 @@ class FolderModel
             $newMeta    = META_DIR . $newBase;
             @rename($oldMetaFile, $newMeta);
         }
+
+        // Update ownership mapping for the entire subtree.
+        self::renameOwnersForTree($oldRel, $newRel);
 
         return ["success" => true];
     }
@@ -217,8 +338,9 @@ class FolderModel
 
     /**
      * Retrieves the list of folders (including "root") along with file count metadata.
+     * (Ownership filtering is handled in the controller; this function remains unchanged.)
      */
-    public static function getFolderList(): array
+    public static function getFolderList($ignoredParent = null, ?string $username = null, array $perms = []): array
     {
         $baseDir = realpath(UPLOAD_DIR);
         if ($baseDir === false) {
@@ -256,6 +378,12 @@ class FolderModel
             ];
         }
 
+        if ($username !== null) {
+            $folderInfoList = array_values(array_filter(
+                $folderInfoList,
+                fn($row) => ACL::canRead($username, $perms, $row['folder'])
+            ));
+        }
         return $folderInfoList;
     }
 

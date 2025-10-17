@@ -52,6 +52,52 @@ async function fetchWithCsrfAndRefresh(input, init = {}) {
 window.fetch = fetchWithCsrfAndRefresh;
 
 /* =========================
+   SAFE API HELPERS
+   ========================= */
+export async function apiGETJSON(url, opts = {}) {
+  const res = await fetch(url, { credentials: "include", ...opts });
+  if (res.status === 401) throw new Error("auth");
+  if (res.status === 403) throw new Error("forbidden");
+  if (!res.ok) throw new Error(`http ${res.status}`);
+  try { return await res.json(); } catch { return {}; }
+}
+
+export async function apiPOSTJSON(url, body, opts = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    "X-CSRF-Token": getCsrfToken(),
+    ...(opts.headers || {})
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body ?? {}),
+    ...opts
+  });
+  if (res.status === 401) throw new Error("auth");
+  if (res.status === 403) throw new Error("forbidden");
+  if (!res.ok) throw new Error(`http ${res.status}`);
+  try { return await res.json(); } catch { return {}; }
+}
+
+// Optional: expose on window for legacy callers
+window.apiGETJSON = apiGETJSON;
+window.apiPOSTJSON = apiPOSTJSON;
+
+// Global handler to keep UX friendly if something forgets to catch
+window.addEventListener("unhandledrejection", (ev) => {
+  const msg = (ev?.reason && ev.reason.message) || "";
+  if (msg === "auth") {
+    showToast(t("please_sign_in_again") || "Please sign in again.", "error");
+    ev.preventDefault();
+  } else if (msg === "forbidden") {
+    showToast(t("no_access_to_resource") || "You don’t have access to that.", "error");
+    ev.preventDefault();
+  }
+});
+
+/* =========================
    APP INIT
    ========================= */
 
@@ -94,7 +140,7 @@ export function initializeApp() {
   initUpload();
   loadFolderTree();
   setupTrashRestoreDelete();
-  loadAdminConfigFunc();
+  // NOTE: loadAdminConfigFunc() is called once in DOMContentLoaded; calling here would duplicate requests.
 
   const helpBtn = document.getElementById("folderHelpBtn");
   const helpTooltip = document.getElementById("folderHelpTooltip");
@@ -170,6 +216,7 @@ window.openDownloadModal = openDownloadModal;
 window.currentFolder = "root";
 
 document.addEventListener("DOMContentLoaded", function () {
+  // Load admin config once here; non-admins may get 403, which is fine.
   loadAdminConfigFunc();
 
   // i18n

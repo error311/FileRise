@@ -2,6 +2,7 @@
 // src/controllers/UploadController.php
 
 require_once __DIR__ . '/../../config/config.php';
+require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/UploadModel.php';
 
 class UploadController {
@@ -72,69 +73,80 @@ class UploadController {
      */
     public function handleUpload(): void {
         header('Content-Type: application/json');
-  
-        //
-        // 1) CSRF – pull from header or POST fields
-        //
-        $headersArr = array_change_key_case(getallheaders(), CASE_LOWER);
+    
+        // ---- 1) CSRF (header or form field) ----
+        $headersArr = array_change_key_case(getallheaders() ?: [], CASE_LOWER);
         $received = '';
         if (!empty($headersArr['x-csrf-token'])) {
             $received = trim($headersArr['x-csrf-token']);
         } elseif (!empty($_POST['csrf_token'])) {
             $received = trim($_POST['csrf_token']);
         } elseif (!empty($_POST['upload_token'])) {
+            // legacy alias
             $received = trim($_POST['upload_token']);
         }
     
-        // 1a) If it doesn’t match, soft-fail: send new token and let client retry
         if (!isset($_SESSION['csrf_token']) || $received !== $_SESSION['csrf_token']) {
-            // regenerate
+            // Soft-fail so client can retry with refreshed token
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-            // tell client “please retry with this new token”
             http_response_code(200);
             echo json_encode([
-              'csrf_expired' => true,
-              'csrf_token'   => $_SESSION['csrf_token']
+                'csrf_expired' => true,
+                'csrf_token'   => $_SESSION['csrf_token']
             ]);
-            exit;
+            return;
         }
     
-        //
-        // 2) Auth checks
-        //
-        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+        // ---- 2) Auth + account-level flags ----
+        if (empty($_SESSION['authenticated'])) {
             http_response_code(401);
-            echo json_encode(["error" => "Unauthorized"]);
-            exit;
-        }
-        $userPerms = loadUserPermissions($_SESSION['username']);
-        if (!empty($userPerms['disableUpload'])) {
-            http_response_code(403);
-            echo json_encode(["error" => "Upload disabled for this user."]);
-            exit;
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
         }
     
-        //
-        // 3) Delegate the actual file handling
-        //
+        $username  = (string)($_SESSION['username'] ?? '');
+        $userPerms = loadUserPermissions($username) ?: [];
+        $isAdmin   = ACL::isAdmin($userPerms);
+    
+        // Admins should never be blocked by account-level "disableUpload"
+        if (!$isAdmin && !empty($userPerms['disableUpload'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Upload disabled for this user.']);
+            return;
+        }
+    
+        // ---- 3) Folder-level WRITE permission (ACL) ----
+        // Always require client to send the folder; fall back to GET if needed.
+        $folderParam   = isset($_POST['folder']) ? (string)$_POST['folder'] : (isset($_GET['folder']) ? (string)$_GET['folder'] : 'root');
+        $targetFolder  = ACL::normalizeFolder($folderParam);
+    
+        // Admins bypass folder canWrite checks
+        if (!$isAdmin && !ACL::canWrite($username, $userPerms, $targetFolder)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden: no write access to folder "'.$targetFolder.'".']);
+            return;
+        }
+    
+        // ---- 4) Delegate to model (actual file/chunk processing) ----
+        // (Optionally re-check in UploadModel before finalizing.)
         $result = UploadModel::handleUpload($_POST, $_FILES);
     
-        //
-        // 4) Respond
-        //
+        // ---- 5) Response ----
         if (isset($result['error'])) {
             http_response_code(400);
             echo json_encode($result);
-            exit;
+            return;
         }
         if (isset($result['status'])) {
+            // e.g., {"status":"chunk uploaded"}
             echo json_encode($result);
-            exit;
+            return;
         }
     
-        // full‐upload redirect
-        $_SESSION['upload_message'] = "File uploaded successfully.";
-        exit;
+        echo json_encode([
+            'success'     => 'File uploaded successfully',
+            'newFilename' => $result['newFilename'] ?? null
+        ]);
     }
 
     /**
@@ -175,25 +187,22 @@ class UploadController {
      */
     public function removeChunks(): void {
         header('Content-Type: application/json');
-        
-        // CSRF Protection: Validate token from POST data.
+
         $receivedToken = isset($_POST['csrf_token']) ? trim($_POST['csrf_token']) : '';
-        if ($receivedToken !== $_SESSION['csrf_token']) {
+        if ($receivedToken !== ($_SESSION['csrf_token'] ?? '')) {
             http_response_code(403);
-            echo json_encode(["error" => "Invalid CSRF token"]);
-            exit;
+            echo json_encode(['error' => 'Invalid CSRF token']);
+            return;
         }
-        
-        // Check that the folder parameter is provided.
+
         if (!isset($_POST['folder'])) {
             http_response_code(400);
-            echo json_encode(["error" => "No folder specified"]);
-            exit;
+            echo json_encode(['error' => 'No folder specified']);
+            return;
         }
-        
-        $folder = $_POST['folder'];
+
+        $folder = (string)$_POST['folder'];
         $result = UploadModel::removeChunks($folder);
         echo json_encode($result);
-        exit;
     }
 }

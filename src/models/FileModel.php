@@ -2,6 +2,7 @@
 // src/models/FileModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once __DIR__ . '/../../src/lib/ACL.php';
 
 class FileModel {
 
