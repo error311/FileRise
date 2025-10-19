@@ -1,5 +1,49 @@
 # Changelog
 
+## Changes 10/19/2025 (v1.5.1)
+
+fix(config/ui): serve safe public config to non-admins; init early; gate trash UI to admins; dynamic title; demo toast (closes #56)
+
+Regular users were getting 403s from `/api/admin/getConfig.php`, breaking header title and login option rendering. Issue #56 tracks this.
+
+### What changed
+
+- **AdminController::getConfig**
+  - Return a **public, non-sensitive subset** of config for everyone (incl. unauthenticated and non-admin users): `header_title`, minimal `loginOptions` (disable* flags only), `globalOtpauthUrl`, `enableWebDAV`, `sharedMaxUploadSize`, and OIDC `providerUrl`/`redirectUri`.
+  - For **admins**, merge in admin-only fields (`authBypass`, `authHeaderName`).
+  - Never expose secrets or client IDs.
+- **auth.js**
+  - `loadAdminConfigFunc()` now robustly handles empty/204 responses, writes sane defaults, and sets `document.title` from `header_title`.
+  - `showToast()` override: on `demo.filerise.net` shows a longer demo-creds toast; keeps TOTP “don’t nag” behavior.
+- **main.js**
+  - Call `loadAdminConfigFunc()` early during app init.
+  - Run `setupTrashRestoreDelete()` **only for admins** (based on `localStorage.isAdmin`).
+- **adminPanel.js**
+  - Bump visible version to **v1.5.1**.
+- **index.html**
+  - Keep `<title>FileRise</title>` static; runtime title now driven by `loadAdminConfigFunc()`.
+
+### Security v1.5.1
+
+- Prevents info disclosure by strictly limiting non-admin fields.
+- Avoids noisy 403 for regular users while keeping admin-only data protected.
+
+### QA
+
+- As a non-admin:
+  - Opening the app no longer triggers a 403 on `getConfig.php`.
+  - Header title and login options render; document tab title updates to configured `header_title`.
+  - Trash/restore UI is not initialized.
+- As an admin:
+  - Admin Panel loads extra fields; trash/restore UI initializes.
+  - Title updates correctly.
+- On `demo.filerise.net`:
+  - Pre-login toast shows demo credentials for ~12s.
+
+Closes #56.
+
+---
+
 ## Changes 10/17/2025 (v1.5.0)
 
 Security and permission model overhaul. Tightens access controls with explicit, server‑side ACL checks across controllers and WebDAV. Introduces `read_own` for own‑only visibility and separates view from write so uploaders can’t automatically see others’ files. Fixes session warnings and aligns the admin UI with the new capabilities.

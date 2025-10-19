@@ -51,43 +51,54 @@ class AdminController
      * @return void Outputs a JSON response with configuration data.
      */
     public function getConfig(): void
-    {
-        header('Content-Type: application/json');
+{
+    header('Content-Type: application/json');
 
-        // Require authenticated admin to read config (prevents information disclosure)
-        if (
-            empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true ||
-            empty($_SESSION['isAdmin'])
-        ) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Unauthorized access.']);
-            exit;
-        }
-
-        $config = AdminModel::getConfig();
-        if (isset($config['error'])) {
-            http_response_code(500);
-            echo json_encode(['error' => $config['error']]);
-            exit;
-        }
-    
-        // Build a safe subset for the front-end
-        $safe = [
-          'header_title'        => $config['header_title'] ?? '',
-          'loginOptions'        => $config['loginOptions'] ?? [],
-          'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
-          'enableWebDAV'        => $config['enableWebDAV'] ?? false,
-          'sharedMaxUploadSize' => $config['sharedMaxUploadSize'] ?? 0,
-          'oidc' => [
-            'providerUrl' => $config['oidc']['providerUrl'] ?? '',
-            'redirectUri' => $config['oidc']['redirectUri'] ?? '',
-            // clientSecret and clientId never exposed here
-          ],
-        ];
-    
-        echo json_encode($safe);
+    // Load raw config (no disclosure yet)
+    $config = AdminModel::getConfig();
+    if (isset($config['error'])) {
+        http_response_code(500);
+        echo json_encode(['error' => $config['error']]);
         exit;
     }
+
+    // Minimal, safe subset for all callers (unauth users and regular users)
+    $public = [
+        'header_title'        => $config['header_title'] ?? 'FileRise',
+        'loginOptions'        => [
+            // expose only what the login page / header needs
+            'disableFormLogin'  => (bool)($config['loginOptions']['disableFormLogin']  ?? false),
+            'disableBasicAuth'  => (bool)($config['loginOptions']['disableBasicAuth']  ?? false),
+            'disableOIDCLogin'  => (bool)($config['loginOptions']['disableOIDCLogin']  ?? false),
+        ],
+        'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
+        'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
+        'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
+
+        'oidc' => [
+            'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
+            'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
+            // never expose clientId / clientSecret
+        ],
+    ];
+
+    $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
+
+    if ($isAdmin) {
+        // Add admin-only fields (used by Admin Panel UI)
+        $adminExtra = [
+            'loginOptions' => array_merge($public['loginOptions'], [
+                'authBypass'     => (bool)($config['loginOptions']['authBypass']     ?? false),
+                'authHeaderName' => (string)($config['loginOptions']['authHeaderName'] ?? 'X-Remote-User'),
+            ]),
+        ];
+        echo json_encode(array_merge($public, $adminExtra));
+        return;
+    }
+
+    // Non-admins / unauthenticated: only the public subset
+    echo json_encode($public);
+}
 
     /**
      * @OA\Put(

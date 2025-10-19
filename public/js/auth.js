@@ -36,13 +36,33 @@ window.currentOIDCConfig = currentOIDCConfig;
 window.pendingTOTP = new URLSearchParams(window.location.search).get('totp_required') === '1';
 
 // override showToast to suppress the "Please log in to continue." toast during TOTP
-function showToast(msgKey) {
-  const msg = t(msgKey);
-  if (window.pendingTOTP && msgKey === "please_log_in_to_continue") {
+
+function showToast(msgKeyOrText, type) {
+  const isDemoHost = window.location.hostname.toLowerCase() === "demo.filerise.net";
+
+  // If it's the pre-login prompt and we're on the demo site, show demo creds instead.
+  if (isDemoHost) {
+    return originalShowToast("Demo site — use: \nUsername: demo\nPassword: demo", 12000);
+  }
+
+  // Don’t nag during pending TOTP, as you already had
+  if (window.pendingTOTP && msgKeyOrText === "please_log_in_to_continue") {
     return;
   }
-  originalShowToast(msg);
+
+  // Translate if a key; otherwise pass through the raw text
+  let msg = msgKeyOrText;
+  try {
+    const translated = t(msgKeyOrText);
+    // If t() changed it or it's a key-like string, use the translation
+    if (typeof translated === "string" && translated !== msgKeyOrText) {
+      msg = translated;
+    }
+  } catch { /* if t() isn’t available here, just use the original */ }
+
+  return originalShowToast(msg);
 }
+
 window.showToast = showToast;
 
 const originalFetch = window.fetch;
@@ -161,27 +181,31 @@ function updateLoginOptionsUIFromStorage() {
 
 export function loadAdminConfigFunc() {
   return fetch("/api/admin/getConfig.php", { credentials: "include" })
-    .then(response => response.json())
-    .then(config => {
-      localStorage.setItem("headerTitle", config.header_title || "FileRise");
+    .then(async (response) => {
+      // If a proxy or some edge returns 204/empty, handle gracefully
+      let config = {};
+      try { config = await response.json(); } catch { config = {}; }
 
-      // Update login options using the nested loginOptions object.
-      localStorage.setItem("disableFormLogin", config.loginOptions.disableFormLogin);
-      localStorage.setItem("disableBasicAuth", config.loginOptions.disableBasicAuth);
-      localStorage.setItem("disableOIDCLogin", config.loginOptions.disableOIDCLogin);
-      localStorage.setItem("globalOtpauthUrl", config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
-      localStorage.setItem("authBypass", String(!!config.loginOptions.authBypass));
-      localStorage.setItem("authHeaderName", config.loginOptions.authHeaderName || "X-Remote-User");
+      const headerTitle = config.header_title || "FileRise";
+      localStorage.setItem("headerTitle", headerTitle);
+
+      document.title = headerTitle;
+      const lo = config.loginOptions || {};
+      localStorage.setItem("disableFormLogin",  String(!!lo.disableFormLogin));
+      localStorage.setItem("disableBasicAuth",  String(!!lo.disableBasicAuth));
+      localStorage.setItem("disableOIDCLogin",  String(!!lo.disableOIDCLogin));
+      localStorage.setItem("globalOtpauthUrl",  config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
+      // These may be absent for non-admins; default them
+      localStorage.setItem("authBypass",        String(!!lo.authBypass));
+      localStorage.setItem("authHeaderName",    lo.authHeaderName || "X-Remote-User");
 
       updateLoginOptionsUIFromStorage();
 
       const headerTitleElem = document.querySelector(".header-title h1");
-      if (headerTitleElem) {
-        headerTitleElem.textContent = config.header_title || "FileRise";
-      }
+      if (headerTitleElem) headerTitleElem.textContent = headerTitle;
     })
     .catch(() => {
-      // Use defaults.
+      // Fallback defaults if request truly fails
       localStorage.setItem("headerTitle", "FileRise");
       localStorage.setItem("disableFormLogin", "false");
       localStorage.setItem("disableBasicAuth", "false");
@@ -190,9 +214,7 @@ export function loadAdminConfigFunc() {
       updateLoginOptionsUIFromStorage();
 
       const headerTitleElem = document.querySelector(".header-title h1");
-      if (headerTitleElem) {
-        headerTitleElem.textContent = "FileRise";
-      }
+      if (headerTitleElem) headerTitleElem.textContent = "FileRise";
     });
 }
 

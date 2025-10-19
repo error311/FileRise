@@ -108,7 +108,7 @@ export function initializeApp() {
   window.currentFolder = "root";
   const stored = localStorage.getItem('showFoldersInList');
   window.showFoldersInList = stored === null ? true : stored === 'true';
-
+  loadAdminConfigFunc();
   initTagSearch();
   loadFileList(window.currentFolder);
 
@@ -139,8 +139,12 @@ export function initializeApp() {
   initFileActions();
   initUpload();
   loadFolderTree();
-  setupTrashRestoreDelete();
-  // NOTE: loadAdminConfigFunc() is called once in DOMContentLoaded; calling here would duplicate requests.
+  // Only run trash/restore for admins
+ const isAdmin =
+   localStorage.getItem('isAdmin') === '1' ||  localStorage.getItem('isAdmin') === 'true';
+ if (isAdmin) {
+   setupTrashRestoreDelete();
+ }
 
   const helpBtn = document.getElementById("folderHelpBtn");
   const helpTooltip = document.getElementById("folderHelpTooltip");
@@ -216,7 +220,7 @@ window.openDownloadModal = openDownloadModal;
 window.currentFolder = "root";
 
 document.addEventListener("DOMContentLoaded", function () {
-  // Load admin config once here; non-admins may get 403, which is fine.
+  // Load admin config early
   loadAdminConfigFunc();
 
   // i18n
