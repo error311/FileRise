@@ -13,6 +13,8 @@
 **Elevate your File Management** – A modern, self-hosted web file manager.
 Upload, organize, and share files or folders through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, **FileRise** makes file management on your server a breeze.
 
+> ⚠️ **Security fix in v1.5.0** — ACL hardening. If you’re on ≤1.4.x, please upgrade.
+
 **4/3/2025 Video demo:**
 
 <https://github.com/user-attachments/assets/221f6a53-85f5-48d4-9abe-89445e0af90e>
@@ -279,6 +281,16 @@ https://your-host/webdav.php/
 - **Updating FileRise:** For Docker, pull the new image and recreate the container. For manual installs, download the latest release and replace files (keep your `config.php` and `uploads/users/metadata`). Clear your browser cache if UI assets changed.
 
 For more Q&A or to ask for help, open a Discussion or Issue.
+
+---
+
+## Security posture
+
+We practice responsible disclosure. All known security issues are fixed in **v1.5.0** (ACL hardening).
+Advisories: [GHSA-6p87-q9rh-95wh](https://github.com/error311/FileRise/security/advisories/GHSA-6p87-q9rh-95wh) (≤ 1.3.15), [GHSA-jm96-2w52-5qjj](https://github.com/error311/FileRise/security/advisories/GHSA-jm96-2w52-5qjj) (v1.4.0). Fixed in **v1.5.0**. Thanks to [@kiwi865](https://github.com/kiwi865) for reporting.
+If you’re running ≤1.4.x, please upgrade.
+
+See also: [SECURITY.md](./SECURITY.md) for how to report vulnerabilities.
 
 ---
 
