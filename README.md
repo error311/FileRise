@@ -30,23 +30,27 @@ Upload, organize, and share files or folders through a sleek web interface. **Fi
 
 - 🗂️ **File Management:** Full set of file/folder operations – move or copy files (via intuitive drag-drop or dialogs), rename items, and delete in batches. You can download selected files as a ZIP archive or extract uploaded ZIP files server-side. Organize content with an interactive folder tree and breadcrumb navigation for quick jumps.
 
-- 🗃️ **Folder Sharing & File Sharing:** Share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items per page) with navigation controls; file sizes are displayed in MB for clarity. Share individual files with one-time or expiring links (optional password protection).
+- 🗃️ **Folder Sharing & File Sharing:** Share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items/page); file sizes are displayed in MB. Share individual files with one-time or expiring links (optional password protection).
 
-- 🔌 **WebDAV Support:** Mount FileRise as a network drive **or use it head-less from the CLI**. Standard WebDAV operations (upload / download / rename / delete) work in Cyberduck, WinSCP, GNOME Files, Finder, etc., and you can also script against it with `curl` – see the [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV) + [curl](https://github.com/error311/FileRise/wiki/Accessing-FileRise-via-curl-(WebDAV)) quick-starts. Folder-Only users are restricted to their personal directory; admins and unrestricted users have full access.
+- 🔐 **Fine-grained Access Control (ACL):** Per-folder grants for **owners**, **read** (view all), **read_own** (own-only visibility), **write** (upload/edit), and **share**.  
+  - _Note:_ **write no longer implies read**. Grant **read** if uploaders should see all files; or **read_own** for self-only listings.  
+  - Enforced server-side across UI, API, and WebDAV. Includes an admin UI for bulk editing (atomic updates) and safe defaults.
+
+- 🔌 **WebDAV Support (ACL-aware):** Mount FileRise as a network drive **or use it headless from the CLI**. Standard WebDAV ops (upload / download / delete) work in Cyberduck, WinSCP, GNOME Files, Finder, etc., and you can script with `curl`. Listings require **read**; users with **read_own** only see their own files; writes require **write**.
 
 - 📚 **API Documentation:** Auto-generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
 
-- 📝 **Built-in Editor & Preview:** View images, videos, audio, and PDFs inline with a preview modal. Edit text/code files in your browser with a CodeMirror-based editor featuring syntax highlighting and line numbers.
+- 📝 **Built-in Editor & Preview:** View images, videos, audio, and PDFs inline with a preview modal. Edit text/code files in your browser with a CodeMirror-based editor with syntax highlighting and line numbers.
 
 - 🏷️ **Tags & Search:** Categorize your files with color-coded tags and locate them instantly using indexed real-time search. **Advanced Search** adds fuzzy matching across file names, tags, uploader fields, and within text file contents.
 
-- 🔒 **User Authentication & Permissions:** Username/password login with multi-user support (admin UI). Current permissions: **Folder-only**, **Read-only**, **Disable upload**. SSO via OIDC providers (Google/Authentik/Keycloak) and optional TOTP 2FA.
+- 🔒 **Auth & SSO:** Username/password login, optional TOTP 2FA, and OIDC (Google/Authentik/Keycloak). Per-user flags like **readOnly**/**disableUpload** still supported, but folder access is governed by the ACL above.
+
+- 🗑️ **Trash & Recovery:** Deleted items go to Trash first; **admins** can restore or empty. Old trash entries auto-purge (default 3 days).
 
 - 🎨 **Responsive UI (Dark/Light Mode):** Mobile-friendly layout with theme toggle. The interface remembers your preferences (layout, items per page, last visited folder, etc.).
 
 - 🌐 **Internationalization & Localization:** Switch languages via the UI (English, Spanish, French, German). Contributions welcome.
-
-- 🗑️ **Trash & File Recovery:** Deleted items go to Trash first; admins can restore or empty. Old trash entries auto-purge (default 3 days).
 
 - ⚙️ **Lightweight & Self-Contained:** Runs on PHP **8.3+** with no external database. Single-folder install or Docker image. Low footprint; scales to thousands of files with pagination and sorting.
 
