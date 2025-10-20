@@ -3,6 +3,7 @@
 ## Changes 10/19/2025 (v1.5.2)
 
 fix(admin): modal bugs; chore(api): update ReDoc SRI; docs(openapi): add annotations + spec
+feat(dnd): default cards to sidebar on medium screens when no saved layout
 
 - adminPanel.js
   - Fix modal open/close reliability and stacking order
@@ -21,6 +22,10 @@ fix(admin): modal bugs; chore(api): update ReDoc SRI; docs(openapi): add annotat
   - Introduce src/openapi/Components.php with base Info/Server,
     common responses, and shared components
   - Regenerate and commit openapi.json.dist
+
+- Adds one-time responsive default in loadSidebarOrder() (uses layoutDefaultApplied_v1)
+- Preserves existing sidebarOrder/headerOrder and small-screen behavior
+- Keeps user changes persistent; no override once a layout exists
 
 - public/js/adminPanel.js
 - public/css/style.css

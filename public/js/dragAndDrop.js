@@ -5,32 +5,74 @@
 // It also includes functions to handle the drag-and-drop events, including mouse movements and drop zones.
 // It uses CSS classes to manage the appearance of the sidebar and header drop zones during drag-and-drop operations.
 
+// ---- responsive defaults ----
+const MEDIUM_MIN = 1205;      // matches your small-screen cutoff
+const MEDIUM_MAX = 1600;      // tweak as you like
+
+function isMediumScreen() {
+  const w = window.innerWidth;
+  return w >= MEDIUM_MIN && w < MEDIUM_MAX;
+}
+
 // Moves cards into the sidebar based on the saved order in localStorage.
 export function loadSidebarOrder() {
-    const sidebar = document.getElementById('sidebarDropArea');
-    if (!sidebar) return;
-    const orderStr = localStorage.getItem('sidebarOrder');
-    if (orderStr) {
-      const order = JSON.parse(orderStr);
-      if (order.length > 0) {
-        // Ensure main wrapper is visible.
-        const mainWrapper = document.querySelector('.main-wrapper');
-        if (mainWrapper) {
-          mainWrapper.style.display = 'flex';
+  const sidebar = document.getElementById('sidebarDropArea');
+  if (!sidebar) return;
+
+  const orderStr = localStorage.getItem('sidebarOrder');
+  const headerOrderStr = localStorage.getItem('headerOrder');
+  const defaultAppliedKey = 'layoutDefaultApplied_v1'; // bump the suffix if you ever change logic
+
+  // If we have a saved order (sidebar or header), just honor it as before
+  if (orderStr) {
+    const order = JSON.parse(orderStr || '[]');
+    if (Array.isArray(order) && order.length > 0) {
+      const mainWrapper = document.querySelector('.main-wrapper');
+      if (mainWrapper) mainWrapper.style.display = 'flex';
+      order.forEach(id => {
+        const card = document.getElementById(id);
+        if (card && card.parentNode?.id !== 'sidebarDropArea') {
+          sidebar.appendChild(card);
+          animateVerticalSlide(card);
         }
-        // For each saved ID, move the card into the sidebar.
-        order.forEach(id => {
-          const card = document.getElementById(id);
-          if (card && card.parentNode.id !== 'sidebarDropArea') {
-            sidebar.appendChild(card);
-            // Animate vertical slide for sidebar card
-            animateVerticalSlide(card);
-          }
-        });
-      }
+      });
+      updateSidebarVisibility();
+      return;
     }
-    updateSidebarVisibility();
   }
+
+  // No sidebar order saved yet: if user has header icons saved, do nothing (they've customized)
+  const headerOrder = JSON.parse(headerOrderStr || '[]');
+  if (Array.isArray(headerOrder) && headerOrder.length > 0) {
+    updateSidebarVisibility();
+    return;
+  }
+
+  // One-time default: on medium screens, start cards in the sidebar
+  const alreadyApplied = localStorage.getItem(defaultAppliedKey) === '1';
+  if (!alreadyApplied && isMediumScreen()) {
+    const mainWrapper = document.querySelector('.main-wrapper');
+    if (mainWrapper) mainWrapper.style.display = 'flex';
+
+    const candidates = ['uploadCard', 'folderManagementCard'];
+    const moved = [];
+    candidates.forEach(id => {
+      const card = document.getElementById(id);
+      if (card && card.parentNode?.id !== 'sidebarDropArea') {
+        sidebar.appendChild(card);
+        animateVerticalSlide(card);
+        moved.push(id);
+      }
+    });
+
+    if (moved.length) {
+      localStorage.setItem('sidebarOrder', JSON.stringify(moved));
+      localStorage.setItem(defaultAppliedKey, '1');
+    }
+  }
+
+  updateSidebarVisibility();
+}
   
 
   export function loadHeaderOrder() {
