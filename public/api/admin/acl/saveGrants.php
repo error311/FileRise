@@ -1,5 +1,27 @@
 <?php
 // public/api/admin/acl/saveGrants.php
+
+/**
+ * @OA\Post(
+ *   path="/api/admin/acl/saveGrants.php",
+ *   summary="Save ACL grants (single-user or batch)",
+ *   tags={"Admin","ACL"},
+ *   security={{"cookieAuth":{}}},
+ *   @OA\RequestBody(
+ *     required=true,
+ *     description="Either {user,grants} or {changes:[{user,grants}]}",
+ *     @OA\JsonContent(oneOf={
+ *       @OA\Schema(ref="#/components/schemas/SaveGrantsSingle"),
+ *       @OA\Schema(ref="#/components/schemas/SaveGrantsBatch")
+ *     })
+ *   ),
+ *   @OA\Response(response=200, description="Saved"),
+ *   @OA\Response(response=400, description="Invalid payload"),
+ *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=403, description="Invalid CSRF")
+ * )
+ */
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../../../config/config.php';

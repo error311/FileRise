@@ -1,4 +1,29 @@
 <?php
+
+
+/**
+ * @OA\Get(
+ *   path="/api/profile/getCurrentUser.php",
+ *   operationId="getCurrentUser",
+ *   tags={"Users"},
+ *   security={{"cookieAuth":{}}},
+ *   @OA\Response(
+ *     response=200,
+ *     description="Current user",
+ *     @OA\JsonContent(
+ *       type="object",
+ *       required={"username","isAdmin","totp_enabled","profile_picture"},
+ *       @OA\Property(property="username", type="string", example="ryan"),
+ *       @OA\Property(property="isAdmin", type="boolean"),
+ *       @OA\Property(property="totp_enabled", type="boolean"),
+ *       @OA\Property(property="profile_picture", type="string", example="/uploads/profile_pics/ryan.png")
+ *       // If you had an array: @OA\Property(property="roles", type="array", @OA\Items(type="string"))
+ *     )
+ *   ),
+ *   @OA\Response(response=401, ref="#/components/responses/Unauthorized")
+ * )
+ */
+
 require_once __DIR__ . '/../../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
 

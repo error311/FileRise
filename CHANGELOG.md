@@ -1,5 +1,36 @@
 # Changelog
 
+## Changes 10/19/2025 (v1.5.2)
+
+fix(admin): modal bugs; chore(api): update ReDoc SRI; docs(openapi): add annotations + spec
+
+- adminPanel.js
+  - Fix modal open/close reliability and stacking order
+  - Prevent background scroll while modal is open
+  - Tidy focus/keyboard handling for better UX
+
+- style.css
+  - Polish styles for Folder Access + Users views (spacing, tables, badges)
+  - Improve responsiveness and visual consistency
+
+- api.php
+  - Update Redoc SRI hash and pin to the current bundle URL
+
+- OpenAPI
+  - Add/refresh inline @OA annotations across endpoints
+  - Introduce src/openapi/Components.php with base Info/Server,
+    common responses, and shared components
+  - Regenerate and commit openapi.json.dist
+
+- public/js/adminPanel.js
+- public/css/style.css
+- public/api.php
+- src/openapi/Components.php
+- openapi.json.dist
+- public/api/** (annotated endpoints)
+
+---
+
 ## Changes 10/19/2025 (v1.5.1)
 
 fix(config/ui): serve safe public config to non-admins; init early; gate trash UI to admins; dynamic title; demo toast (closes #56)

@@ -63,7 +63,7 @@ Upload, organize, and share files or folders through a sleek web interface. **Fi
 [![Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://demo.filerise.net)
 **Demo credentials:** `demo` / `demo`
 
-Curious about the UI? **Check out the live demo:** <https://demo.filerise.net> (login with username “demo” and password “demo”). *The demo is read-only for security*. Explore the interface, switch themes, preview files, and see FileRise in action!
+Curious about the UI? **Check out the live demo:** <https://demo.filerise.net> (login with username “demo” and password “demo”). **The demo is read-only for security.** Explore the interface, switch themes, preview files, and see FileRise in action!
 
 ---
 

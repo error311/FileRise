@@ -1,5 +1,57 @@
 <?php
 // public/api/folder/capabilities.php
+
+/**
+ * @OA\Get(
+ *   path="/api/folder/capabilities.php",
+ *   summary="Get effective capabilities for the current user in a folder",
+ *   description="Computes the caller's capabilities for a given folder by combining account flags (readOnly/disableUpload), ACL grants (read/write/share), and the user-folder-only scope. Returns booleans indicating what the user can do.",
+ *   operationId="getFolderCapabilities",
+ *   tags={"Folders"},
+ *   security={{"cookieAuth": {}}},
+ *
+ *   @OA\Parameter(
+ *     name="folder",
+ *     in="query",
+ *     required=false,
+ *     description="Target folder path. Defaults to 'root'. Supports nested paths like 'team/reports'.",
+ *     @OA\Schema(type="string"),
+ *     example="projects/acme"
+ *   ),
+ *
+ *   @OA\Response(
+ *     response=200,
+ *     description="Capabilities computed successfully.",
+ *     @OA\JsonContent(
+ *       type="object",
+ *       required={"user","folder","isAdmin","flags","canView","canUpload","canCreate","canRename","canDelete","canMoveIn","canShare"},
+ *       @OA\Property(property="user", type="string", example="alice"),
+ *       @OA\Property(property="folder", type="string", example="projects/acme"),
+ *       @OA\Property(property="isAdmin", type="boolean", example=false),
+ *       @OA\Property(
+ *         property="flags",
+ *         type="object",
+ *         required={"folderOnly","readOnly","disableUpload"},
+ *         @OA\Property(property="folderOnly", type="boolean", example=false),
+ *         @OA\Property(property="readOnly", type="boolean", example=false),
+ *         @OA\Property(property="disableUpload", type="boolean", example=false)
+ *       ),
+ *       @OA\Property(property="owner", type="string", nullable=true, example="alice"),
+ *       @OA\Property(property="canView",   type="boolean", example=true,  description="User can view items in this folder."),
+ *       @OA\Property(property="canUpload", type="boolean", example=true,  description="User can upload/edit/rename/move/delete items (i.e., WRITE)."),
+ *       @OA\Property(property="canCreate", type="boolean", example=true,  description="User can create subfolders here."),
+ *       @OA\Property(property="canRename", type="boolean", example=true,  description="User can rename items here."),
+ *       @OA\Property(property="canDelete", type="boolean", example=true,  description="User can delete items here."),
+ *       @OA\Property(property="canMoveIn", type="boolean", example=true,  description="User can move items into this folder."),
+ *       @OA\Property(property="canShare",  type="boolean", example=false, description="User can create share links for this folder.")
+ *     )
+ *   ),
+ *   @OA\Response(response=400, description="Invalid folder name."),
+ *   @OA\Response(response=401, ref="#/components/responses/Unauthorized")
+ * )
+ */
+
+
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 
 require_once __DIR__ . '/../../../config/config.php';

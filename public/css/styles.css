@@ -2306,3 +2306,6 @@ body.dark-mode .user-dropdown .user-menu .item:hover {
   background-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
+
+:root { --perm-caret: #444; }          /* light */
+body.dark-mode { --perm-caret: #ccc; }  /* dark */

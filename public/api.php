@@ -20,7 +20,7 @@ if (isset($_GET['spec'])) {
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>FileRise API Docs</title>
   <script defer src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"
-          integrity="sha384-4vOjrBu7SuDWXcAw1qFznVLA/sKL+0l4nn+J1HY8w7cpa6twQEYuh4b0Cwuo7CyX"
+          integrity="sha384-70P5pmIdaQdVbxvjhrcTDv1uKcKqalZ3OHi7S2J+uzDl0PW8dO6L+pHOpm9EEjGJ"
           crossorigin="anonymous"></script>
   <script defer src="/js/redoc-init.js"></script>
 </head>

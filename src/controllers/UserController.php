@@ -122,31 +122,6 @@ class UserController
 
     /* ------------------------- End helpers -------------------------- */
 
-    /**
-     * @OA\Get(
-     *     path="/api/getUsers.php",
-     *     summary="Retrieve a list of users",
-     *     description="Returns a JSON array of users. Only available to authenticated admin users.",
-     *     operationId="getUsers",
-     *     tags={"Users"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Successful response with an array of users",
-     *         @OA\JsonContent(
-     *             type="array",
-     *             @OA\Items(
-     *                 type="object",
-     *                 @OA\Property(property="username", type="string", example="johndoe"),
-     *                 @OA\Property(property="role", type="string", example="admin")
-     *             )
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized: the user is not authenticated or is not an admin"
-     *     )
-     * )
-     */
     public function getUsers()
     {
         self::jsonHeaders();
@@ -158,39 +133,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Post(
-     *     path="/api/addUser.php",
-     *     summary="Add a new user",
-     *     description="Adds a new user to the system. In setup mode, the new user is automatically made admin.",
-     *     operationId="addUser",
-     *     tags={"Users"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"username", "password"},
-     *             @OA\Property(property="username", type="string", example="johndoe"),
-     *             @OA\Property(property="password", type="string", example="securepassword"),
-     *             @OA\Property(property="isAdmin", type="boolean", example=true)
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="User added successfully",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="string", example="User added successfully")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request"
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized"
-     *     )
-     * )
-     */
     public function addUser()
     {
         self::jsonHeaders();
@@ -258,41 +200,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Delete(
-     *     path="/api/removeUser.php",
-     *     summary="Remove a user",
-     *     description="Removes the specified user from the system. Cannot remove the currently logged-in user.",
-     *     operationId="removeUser",
-     *     tags={"Users"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"username"},
-     *             @OA\Property(property="username", type="string", example="johndoe")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="User removed successfully",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="string", example="User removed successfully")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request"
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized"
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Invalid CSRF token"
-     *     )
-     * )
-     */
     public function removeUser()
     {
         self::jsonHeaders();
@@ -322,24 +229,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Get(
-     *     path="/api/getUserPermissions.php",
-     *     summary="Retrieve user permissions",
-     *     description="Returns the permissions for the current user, or all permissions if the user is an admin.",
-     *     operationId="getUserPermissions",
-     *     tags={"Users"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Successful response with user permissions",
-     *         @OA\JsonContent(type="object")
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized"
-     *     )
-     * )
-     */
     public function getUserPermissions()
     {
         self::jsonHeaders();
@@ -350,51 +239,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Put(
-     *     path="/api/updateUserPermissions.php",
-     *     summary="Update user permissions",
-     *     description="Updates permissions for users. Only available to authenticated admin users.",
-     *     operationId="updateUserPermissions",
-     *     tags={"Users"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"permissions"},
-     *             @OA\Property(
-     *                 property="permissions",
-     *                 type="array",
-     *                 @OA\Items(
-     *                     type="object",
-     *                     @OA\Property(property="username", type="string", example="johndoe"),
-     *                     @OA\Property(property="folderOnly", type="boolean", example=true),
-     *                     @OA\Property(property="readOnly", type="boolean", example=false),
-     *                     @OA\Property(property="disableUpload", type="boolean", example=false)
-     *                 )
-     *             )
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="User permissions updated successfully",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="string", example="User permissions updated successfully.")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized"
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Invalid CSRF token"
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request"
-     *     )
-     * )
-     */
     public function updateUserPermissions()
     {
         self::jsonHeaders();
@@ -415,43 +259,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Post(
-     *     path="/api/changePassword.php",
-     *     summary="Change user password",
-     *     description="Allows an authenticated user to change their password by verifying the old password and updating to a new one.",
-     *     operationId="changePassword",
-     *     tags={"Users"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"oldPassword", "newPassword", "confirmPassword"},
-     *             @OA\Property(property="oldPassword", type="string", example="oldpass123"),
-     *             @OA\Property(property="newPassword", type="string", example="newpass456"),
-     *             @OA\Property(property="confirmPassword", type="string", example="newpass456")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="Password updated successfully",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="string", example="Password updated successfully.")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request"
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized"
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Invalid CSRF token"
-     *     )
-     * )
-     */
     public function changePassword()
     {
         self::jsonHeaders();
@@ -488,41 +295,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Put(
-     *     path="/api/updateUserPanel.php",
-     *     summary="Update user panel settings",
-     *     description="Updates user panel settings by disabling TOTP when not enabled. Accessible to authenticated users.",
-     *     operationId="updateUserPanel",
-     *     tags={"Users"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"totp_enabled"},
-     *             @OA\Property(property="totp_enabled", type="boolean", example=false)
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="User panel updated successfully",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="string", example="User panel updated: TOTP disabled")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized"
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Invalid CSRF token"
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request"
-     *     )
-     * )
-     */
     public function updateUserPanel()
     {
         self::jsonHeaders();
@@ -551,31 +323,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Put(
-     *     path="/api/totp_disable.php",
-     *     summary="Disable TOTP for the authenticated user",
-     *     description="Clears the TOTP secret from the users file for the current user.",
-     *     operationId="disableTOTP",
-     *     tags={"TOTP"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="TOTP disabled successfully",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="message", type="string", example="TOTP disabled successfully.")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Not authenticated or invalid CSRF token"
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="Failed to disable TOTP"
-     *     )
-     * )
-     */
     public function disableTOTP()
     {
         self::jsonHeaders();
@@ -601,45 +348,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Post(
-     *     path="/api/totp_recover.php",
-     *     summary="Recover TOTP",
-     *     description="Verifies a recovery code to disable TOTP and finalize login.",
-     *     operationId="recoverTOTP",
-     *     tags={"TOTP"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"recovery_code"},
-     *             @OA\Property(property="recovery_code", type="string", example="ABC123DEF456")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="Recovery successful",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="status", type="string", example="ok")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Invalid input or recovery code"
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Invalid CSRF token"
-     *     ),
-     *     @OA\Response(
-     *         response=405,
-     *         description="Method not allowed"
-     *     ),
-     *     @OA\Response(
-     *         response=429,
-     *         description="Too many attempts"
-     *     )
-     * )
-     */
     public function recoverTOTP()
     {
         self::jsonHeaders();
@@ -681,35 +389,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Post(
-     *     path="/api/totp_saveCode.php",
-     *     summary="Generate and save a new TOTP recovery code",
-     *     description="Generates a new TOTP recovery code for the authenticated user, stores its hash, and returns the plain text recovery code.",
-     *     operationId="totpSaveCode",
-     *     tags={"TOTP"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Recovery code generated successfully",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="status", type="string", example="ok"),
-     *             @OA\Property(property="recoveryCode", type="string", example="ABC123DEF456")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request"
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Invalid CSRF token or unauthorized"
-     *     ),
-     *     @OA\Response(
-     *         response=405,
-     *         description="Method not allowed"
-     *     )
-     * )
-     */
     public function saveTOTPRecoveryCode()
     {
         self::jsonHeaders();
@@ -739,30 +418,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Get(
-     *     path="/api/totp_setup.php",
-     *     summary="Set up TOTP and generate a QR code",
-     *     description="Generates (or retrieves) the TOTP secret for the user and builds a QR code image for scanning.",
-     *     operationId="setupTOTP",
-     *     tags={"TOTP"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="QR code image for TOTP setup",
-     *         @OA\MediaType(
-     *             mediaType="image/png"
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Unauthorized or invalid CSRF token"
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="Server error"
-     *     )
-     * )
-     */
     public function setupTOTP()
     {
         // Allow access if authenticated OR pending TOTP
@@ -799,42 +454,6 @@ class UserController
         exit;
     }
 
-    /**
-     * @OA\Post(
-     *     path="/api/totp_verify.php",
-     *     summary="Verify TOTP code",
-     *     description="Verifies a TOTP code and completes login for pending users or validates TOTP for setup verification.",
-     *     operationId="verifyTOTP",
-     *     tags={"TOTP"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"totp_code"},
-     *             @OA\Property(property="totp_code", type="string", example="123456")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="TOTP successfully verified",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="status", type="string", example="ok"),
-     *             @OA\Property(property="message", type="string", example="Login successful")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request (e.g., invalid input)"
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Not authenticated or invalid CSRF token"
-     *     ),
-     *     @OA\Response(
-     *         response=429,
-     *         description="Too many attempts. Try again later."
-     *     )
-     * )
-     */
     public function verifyTOTP()
     {
         header('Content-Type: application/json');

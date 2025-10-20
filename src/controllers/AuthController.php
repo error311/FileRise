@@ -13,53 +13,6 @@ use Jumbojett\OpenIDConnectClient;
 class AuthController
 {
 
-    /**
-     * @OA\Post(
-     *     path="/api/auth/auth.php",
-     *     summary="Authenticate user",
-     *     description="Handles user authentication via OIDC or form-based credentials. For OIDC flows, processes callbacks; otherwise, performs standard authentication with optional TOTP verification.",
-     *     operationId="authUser",
-     *     tags={"Auth"},
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             required={"username", "password"},
-     *             @OA\Property(property="username", type="string", example="johndoe"),
-     *             @OA\Property(property="password", type="string", example="secretpassword"),
-     *             @OA\Property(property="remember_me", type="boolean", example=true),
-     *             @OA\Property(property="totp_code", type="string", example="123456")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="Login successful; returns user info and status",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="status", type="string", example="ok"),
-     *             @OA\Property(property="success", type="string", example="Login successful"),
-     *             @OA\Property(property="username", type="string", example="johndoe"),
-     *             @OA\Property(property="isAdmin", type="boolean", example=true)
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=400,
-     *         description="Bad Request (e.g., missing credentials)"
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized (e.g., invalid credentials, too many attempts)"
-     *     ),
-     *     @OA\Response(
-     *         response=429,
-     *         description="Too many failed login attempts"
-     *     )
-     * )
-     *
-     * Handles user authentication via OIDC or form-based login.
-     *
-     * @return void Redirects on success or outputs JSON error.
-     */
-    // in src/controllers/AuthController.php
-
     public function auth(): void
     {
         header('Content-Type: application/json');
@@ -307,40 +260,6 @@ class AuthController
         exit();
     }
 
-    /**
-     * @OA\Get(
-     *     path="/api/auth/checkAuth.php",
-     *     summary="Check authentication status",
-     *     description="Checks if the current session is authenticated. If the users file is missing or empty, returns a setup flag. Also returns information about admin privileges, TOTP status, and folder-only access.",
-     *     operationId="checkAuth",
-     *     tags={"Auth"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Returns authentication status and user details",
-     *         @OA\JsonContent(
-     *             type="object",
-     *             @OA\Property(property="authenticated", type="boolean", example=true),
-     *             @OA\Property(property="isAdmin", type="boolean", example=true),
-     *             @OA\Property(property="totp_enabled", type="boolean", example=false),
-     *             @OA\Property(property="username", type="string", example="johndoe"),
-     *             @OA\Property(property="folderOnly", type="boolean", example=false)
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="Setup mode (if the users file is missing or empty)",
-     *         @OA\JsonContent(
-     *             type="object",
-     *             @OA\Property(property="setup", type="boolean", example=true)
-     *         )
-     *     )
-     * )
-     *
-     * Checks whether the user is authenticated or if the system is in setup mode.
-     *
-     * @return void Outputs a JSON response with authentication details.
-     */
-
     public function checkAuth(): void
     {
 
@@ -427,28 +346,6 @@ class AuthController
         exit();
     }
 
-    /**
-     * @OA\Get(
-     *     path="/api/auth/token.php",
-     *     summary="Retrieve CSRF token and share URL",
-     *     description="Returns the current CSRF token along with the configured share URL.",
-     *     operationId="getToken",
-     *     tags={"Auth"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="CSRF token and share URL",
-     *         @OA\JsonContent(
-     *             type="object",
-     *             @OA\Property(property="csrf_token", type="string", example="0123456789abcdef..."),
-     *             @OA\Property(property="share_url", type="string", example="https://yourdomain.com/share.php")
-     *         )
-     *     )
-     * )
-     *
-     * Returns the CSRF token and share URL.
-     *
-     * @return void Outputs the JSON response.
-     */
     public function getToken(): void
     {
         // 1) Ensure session and CSRF token exist
@@ -468,31 +365,6 @@ class AuthController
         exit;
     }
 
-    /**
-     * @OA\Get(
-     *     path="/api/auth/login_basic.php",
-     *     summary="Authenticate using HTTP Basic Authentication",
-     *     description="Performs HTTP Basic authentication. If credentials are missing, sends a 401 response prompting for Basic auth. On valid credentials, optionally handles TOTP verification and finalizes session login.",
-     *     operationId="loginBasic",
-     *     tags={"Auth"},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Login successful; redirects to index.html",
-     *         @OA\JsonContent(
-     *             type="object",
-     *             @OA\Property(property="success", type="string", example="Login successful")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized due to missing credentials or invalid credentials."
-     *     )
-     * )
-     *
-     * Handles HTTP Basic authentication (with optional TOTP) and logs the user in.
-     *
-     * @return void Redirects on success or sends a 401 header.
-     */
     public function loginBasic(): void
     {
         // Set header for plain-text or JSON as needed.
@@ -550,27 +422,6 @@ class AuthController
         exit;
     }
 
-    /**
-     * @OA\Post(
-     *     path="/api/auth/logout.php",
-     *     summary="Logout user",
-     *     description="Clears the session, removes persistent login tokens, and redirects the user to the login page.",
-     *     operationId="logoutUser",
-     *     tags={"Auth"},
-     *     @OA\Response(
-     *         response=302,
-     *         description="Redirects to the login page with a logout flag."
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized"
-     *     )
-     * )
-     *
-     * Logs the user out by clearing session data, removing persistent tokens, and destroying the session.
-     *
-     * @return void Redirects to index.html with a logout flag.
-     */
     public function logout(): void
     {
         // Retrieve headers and check CSRF token.

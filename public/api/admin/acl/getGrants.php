@@ -1,5 +1,28 @@
 <?php
 // public/api/admin/acl/getGrants.php
+
+/**
+ * @OA\Get(
+ *   path="/api/admin/acl/getGrants.php",
+ *   summary="Get ACL grants for a user",
+ *   tags={"Admin","ACL"},
+ *   security={{"cookieAuth":{}}},
+ *   @OA\Parameter(name="user", in="query", required=true, @OA\Schema(type="string")),
+ *   @OA\Response(
+ *     response=200,
+ *     description="Map of folder → grant flags",
+ *     @OA\JsonContent(
+ *       type="object",
+ *       required={"grants"},
+ *       @OA\Property(property="grants", ref="#/components/schemas/GrantsMap")
+ *     )
+ *   ),
+ *   @OA\Response(response=400, description="Invalid user"),
+ *   @OA\Response(response=401, description="Unauthorized")
+ * )
+ */
+
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../../../config/config.php';

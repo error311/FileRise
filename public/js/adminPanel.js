@@ -4,7 +4,7 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.5.1";
+const version = "v1.5.2";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
 
 // Translate with fallback: if t(key) just echos the key, use a readable string.
@@ -340,14 +340,14 @@ export function openAdminPanel() {
             <h3>${adminTitle}</h3>
             <form id="adminPanelForm">
               ${[
-                { id: "userManagement", label: t("user_management") },
-                { id: "headerSettings", label: t("header_settings") },
-                { id: "loginOptions", label: t("login_options") },
-                { id: "webdav", label: "WebDAV Access" },
-                { id: "upload", label: t("shared_max_upload_size_bytes_title") },
-                { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
-                { id: "shareLinks", label: t("manage_shared_links") }
-              ].map(sec => `
+            { id: "userManagement", label: t("user_management") },
+            { id: "headerSettings", label: t("header_settings") },
+            { id: "loginOptions", label: t("login_options") },
+            { id: "webdav", label: "WebDAV Access" },
+            { id: "upload", label: t("shared_max_upload_size_bytes_title") },
+            { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
+            { id: "shareLinks", label: t("manage_shared_links") }
+          ].map(sec => `
                 <div id="${sec.id}Header" class="section-header collapsed">
                   ${sec.label} <i class="material-icons">expand_more</i>
                 </div>
@@ -384,7 +384,7 @@ export function openAdminPanel() {
           <button type="button" id="adminOpenUserFlags" class="btn btn-secondary">${tf("user_permissions", "User Permissions")}</button>
         `;
 
-        
+
         document.getElementById("adminOpenAddUser")
           .addEventListener("click", () => {
             toggleVisibility("addUserModal", true);
@@ -472,25 +472,25 @@ export function openAdminPanel() {
         });
 
         // after you set #userManagementContent.innerHTML (right after those three buttons are inserted)
-const userMgmt = document.getElementById("userManagementContent");
+        const userMgmt = document.getElementById("userManagementContent");
 
-// defensive: remove any old listener first
-userMgmt?.removeEventListener("click", window.__userMgmtDelegatedClick);
+        // defensive: remove any old listener first
+        userMgmt?.removeEventListener("click", window.__userMgmtDelegatedClick);
 
-window.__userMgmtDelegatedClick = (e) => {
-  const flagsBtn = e.target.closest("#adminOpenUserFlags");
-  if (flagsBtn) {
-    e.preventDefault();
-    openUserFlagsModal();
-  }
-  const folderBtn = e.target.closest("#adminOpenUserPermissions");
-  if (folderBtn) {
-    e.preventDefault();
-    openUserPermissionsModal();
-  }
-};
+        window.__userMgmtDelegatedClick = (e) => {
+          const flagsBtn = e.target.closest("#adminOpenUserFlags");
+          if (flagsBtn) {
+            e.preventDefault();
+            openUserFlagsModal();
+          }
+          const folderBtn = e.target.closest("#adminOpenUserPermissions");
+          if (folderBtn) {
+            e.preventDefault();
+            openUserPermissionsModal();
+          }
+        };
 
-userMgmt?.addEventListener("click", window.__userMgmtDelegatedClick);
+        userMgmt?.addEventListener("click", window.__userMgmtDelegatedClick);
 
         // Initialize inputs from config + capture
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
@@ -615,15 +615,26 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   // toolbar
   const toolbar = document.createElement('div');
   toolbar.className = 'folder-access-toolbar';
+  // Toolbar (bulk toggles with descriptions)
   toolbar.innerHTML = `
-    <input type="text" class="form-control" style="max-width:220px;" placeholder="${tf('search_folders', 'Search folders')}" />
-    <label class="muted"><input type="checkbox" data-bulk="view"    /> ${tf('view_all','View (all)')}</label>
-    <label class="muted"><input type="checkbox" data-bulk="viewOwn" /> ${tf('view_own','View (own)')}</label>
-    <label class="muted"><input type="checkbox" data-bulk="upload"  /> ${tf('upload','Upload')}</label>
-    <label class="muted"><input type="checkbox" data-bulk="manage"  /> ${tf('manage','Manage')}</label>
-    <label class="muted"><input type="checkbox" data-bulk="share"   /> ${tf('share','Share')}</label>
-    <span class="muted">(${tf('applies_to_filtered','applies to filtered list')})</span>
-  `;
+  <input type="text" class="form-control" style="max-width:220px;" placeholder="${tf('search_folders', 'Search folders')}" />
+  <label class="muted" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">
+    <input type="checkbox" data-bulk="view" /> ${tf('view_all', 'View (all)')}
+  </label>
+  <label class="muted" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
+    <input type="checkbox" data-bulk="viewOwn" /> ${tf('view_own', 'View (own)')}
+  </label>
+  <label class="muted" title="${tf('write_help', 'Create/upload files and edit/rename/move/delete items in this folder')}">
+    <input type="checkbox" data-bulk="upload" /> ${tf('write_full', 'Write (upload/edit/delete)')}
+  </label>
+  <label class="muted" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all) + Write + Share')}">
+    <input type="checkbox" data-bulk="manage" /> ${tf('manage', 'Manage')}
+  </label>
+  <label class="muted" title="${tf('share_help', 'Create/manage share links; implies View (all)')}">
+    <input type="checkbox" data-bulk="share" /> ${tf('share', 'Share')}
+  </label>
+  <span class="muted">(${tf('applies_to_filtered', 'applies to filtered list')})</span>
+`;
   container.appendChild(toolbar);
 
   // list (will contain sticky header + rows)
@@ -631,16 +642,27 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   list.className = 'folder-access-list';
   container.appendChild(list);
 
+  // Header (compact labels, descriptive tooltips so the column width stays the same)
   const headerHtml = `
-    <div class="folder-access-header">
-      <div>${tf('folder', 'Folder')}</div>
-      <div class="perm-col">${tf('view_all','View (all)')}</div>
-      <div class="perm-col">${tf('view_own','View (own)')}</div>
-      <div class="perm-col">${tf('upload','Upload')}</div>
-      <div class="perm-col">${tf('manage','Manage')}</div>
-      <div class="perm-col">${tf('share','Share')}</div>
+  <div class="folder-access-header">
+    <div title="${tf('folder_help', 'Folder path within FileRise')}">${tf('folder', 'Folder')}</div>
+    <div class="perm-col" title="${tf('view_all_help', 'See all files in this folder (everyones files)')}">
+      ${tf('view_all', 'View (all)')}
     </div>
-  `;
+    <div class="perm-col" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
+      ${tf('view_own', 'View (own)')}
+    </div>
+    <div class="perm-col" title="${tf('write_help', 'Create/upload files and edit/rename/move/delete items in this folder')}">
+      ${tf('write', 'Write')}
+    </div>
+    <div class="perm-col" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all) + Write + Share')}">
+      ${tf('manage', 'Manage')}
+    </div>
+    <div class="perm-col" title="${tf('share_help', 'Create/manage share links; implies View (all)')}">
+      ${tf('share', 'Share')}
+    </div>
+  </div>
+`;
 
   function rowHtml(folder) {
     const g = grants[folder] || {};
@@ -648,28 +670,28 @@ function renderFolderGrantsUI(username, container, folders, grants) {
     return `
       <div class="folder-access-row" data-folder="${folder}">
         <div class="folder-badge"><i class="material-icons" style="font-size:18px;">folder</i>${name}</div>
-        <div class="perm-col"><input type="checkbox" data-cap="view"     ${g.view    ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="view"     ${g.view ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="viewOwn"  ${g.viewOwn ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="upload"   ${g.upload  ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="manage"   ${g.manage  ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="share"    ${g.share   ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="upload"   ${g.upload ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="manage"   ${g.manage ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="share"    ${g.share ? 'checked' : ''}></div>
       </div>
     `;
   }
 
   // Dependencies
   function applyDeps(row) {
-    const cbView    = row.querySelector('input[data-cap="view"]');
+    const cbView = row.querySelector('input[data-cap="view"]');
     const cbViewOwn = row.querySelector('input[data-cap="viewOwn"]');
-    const cbUpload  = row.querySelector('input[data-cap="upload"]');
-    const cbManage  = row.querySelector('input[data-cap="manage"]');
-    const cbShare   = row.querySelector('input[data-cap="share"]');
+    const cbUpload = row.querySelector('input[data-cap="upload"]');
+    const cbManage = row.querySelector('input[data-cap="manage"]');
+    const cbShare = row.querySelector('input[data-cap="share"]');
 
     // Manage ⇒ full view + upload + share
     if (cbManage.checked) {
-      cbView.checked   = true;
+      cbView.checked = true;
       cbUpload.checked = true;
-      cbShare.checked  = true;
+      cbShare.checked = true;
     }
 
     // Share ⇒ full view
@@ -684,7 +706,7 @@ function renderFolderGrantsUI(username, container, folders, grants) {
     if (cbView.checked || cbManage.checked) {
       cbViewOwn.checked = false;
       cbViewOwn.disabled = true;
-      cbViewOwn.title = tf('full_view_supersedes_own','Full view supersedes own-only');
+      cbViewOwn.title = tf('full_view_supersedes_own', 'Full view supersedes own-only');
     } else {
       cbViewOwn.disabled = false;
       cbViewOwn.removeAttribute('title');
@@ -701,14 +723,14 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   }
 
   function wireRow(row) {
-    const cbView    = row.querySelector('input[data-cap="view"]');
+    const cbView = row.querySelector('input[data-cap="view"]');
     const cbViewOwn = row.querySelector('input[data-cap="viewOwn"]');
-    const cbUpload  = row.querySelector('input[data-cap="upload"]');
-    const cbManage  = row.querySelector('input[data-cap="manage"]');
-    const cbShare   = row.querySelector('input[data-cap="share"]');
+    const cbUpload = row.querySelector('input[data-cap="upload"]');
+    const cbManage = row.querySelector('input[data-cap="manage"]');
+    const cbShare = row.querySelector('input[data-cap="share"]');
 
     cbUpload.addEventListener('change', () => applyDeps(row));
-    cbShare .addEventListener('change', () => applyDeps(row));
+    cbShare.addEventListener('change', () => applyDeps(row));
     cbManage.addEventListener('change', () => applyDeps(row));
 
     cbView.addEventListener('change', () => {
@@ -762,13 +784,13 @@ function renderFolderGrantsUI(username, container, folders, grants) {
           row.querySelector('input[data-cap="view"]').checked = true;
         }
         if (which === 'upload' && bulk.checked) {
-          const v  = row.querySelector('input[data-cap="view"]');
+          const v = row.querySelector('input[data-cap="view"]');
           const vo = row.querySelector('input[data-cap="viewOwn"]');
           if (!v.checked && !vo.checked) vo.checked = true;
         }
         if (which === 'view' && !bulk.checked) {
           row.querySelector('input[data-cap="manage"]').checked = false;
-          row.querySelector('input[data-cap="share"]').checked  = false;
+          row.querySelector('input[data-cap="share"]').checked = false;
         }
 
         applyDeps(row);
@@ -784,11 +806,11 @@ function collectGrantsFrom(container) {
     const folder = row.dataset.folder;
     if (!folder) return;
     const g = {
-      view:    row.querySelector('input[data-cap="view"]').checked,
+      view: row.querySelector('input[data-cap="view"]').checked,
       viewOwn: row.querySelector('input[data-cap="viewOwn"]').checked,
-      upload:  row.querySelector('input[data-cap="upload"]').checked,
-      manage:  row.querySelector('input[data-cap="manage"]').checked,
-      share:   row.querySelector('input[data-cap="share"]').checked
+      upload: row.querySelector('input[data-cap="upload"]').checked,
+      manage: row.querySelector('input[data-cap="manage"]').checked,
+      share: row.querySelector('input[data-cap="share"]').checked
     };
     if (g.view || g.viewOwn || g.upload || g.manage || g.share) out[folder] = g;
   });
@@ -801,14 +823,17 @@ export function openUserPermissionsModal() {
   const isDarkMode = document.body.classList.contains("dark-mode");
   const overlayBackground = isDarkMode ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
   const modalContentStyles = `
-    background: ${isDarkMode ? "#2c2c2c" : "#fff"};
-    color: ${isDarkMode ? "#e0e0e0" : "#000"};
-    padding: 20px;
-    max-width: 780px;
-    width: 95%;
-    border-radius: 8px;
-    position: relative;
-  `;
+  background: ${isDarkMode ? "#2c2c2c" : "#fff"};
+  color: ${isDarkMode ? "#e0e0e0" : "#000"};
+  padding: 20px;
+  /* Wider, responsive */
+  width: clamp(980px, 92vw, 1280px);
+  max-width: none;
+  border-radius: 8px;
+  position: relative;
+  max-height: 90vh;
+  overflow: auto;
+`;
 
   if (!userPermissionsModal) {
     userPermissionsModal = document.createElement("div");
@@ -825,9 +850,9 @@ export function openUserPermissionsModal() {
         <span id="closeUserPermissionsModal" class="editor-close-btn">&times;</span>
         <h3>${tf("folder_access", "Folder Access")}</h3>
         <div class="muted" style="margin:-4px 0 10px;">
-          ${tf("grant_folders_help", "Grant per-folder capabilities to each user. 'Upload/Manage/Share' imply 'View'.")}
+          ${tf("grant_folders_help", "Grant per-folder capabilities to each user. 'Write/Manage/Share' imply 'View'.")}
         </div>
-        <div id="userPermissionsList" style="max-height: 60vh; overflow-y: auto; margin-bottom: 15px;">
+        <div id="userPermissionsList" style="max-height: 70vh; overflow-y: auto; margin-bottom: 15px;">
           <!-- User rows will load here -->
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -856,19 +881,19 @@ export function openUserPermissionsModal() {
       });
 
       try {
-                if (saves.length === 0) {
-                  showToast(tf("nothing_to_save", "Nothing to save"));
-                  return;
-                }
-                for (const payload of saves) {
-                  await sendRequest("/api/admin/acl/saveGrants.php", "POST", payload, { "X-CSRF-Token": window.csrfToken });
-                }
-                showToast(tf("user_permissions_updated_successfully", "User permissions updated successfully"));
-                userPermissionsModal.style.display = "none";
-              } catch (err) {
-                console.error(err);
-                showToast(tf("error_updating_permissions", "Error updating permissions"), "error");
-              }
+        if (saves.length === 0) {
+          showToast(tf("nothing_to_save", "Nothing to save"));
+          return;
+        }
+        for (const payload of saves) {
+          await sendRequest("/api/admin/acl/saveGrants.php", "POST", payload, { "X-CSRF-Token": window.csrfToken });
+        }
+        showToast(tf("user_permissions_updated_successfully", "User permissions updated successfully"));
+        userPermissionsModal.style.display = "none";
+      } catch (err) {
+        console.error(err);
+        showToast(tf("error_updating_permissions", "Error updating permissions"), "error");
+      }
     });
   } else {
     userPermissionsModal.style.display = "flex";
@@ -887,12 +912,12 @@ async function fetchAllUserFlags() {
   const r = await fetch("/api/getUserPermissions.php", { credentials: "include" });
   const data = await r.json();
   // remove deprecated flag if present, so UI never shows it
- if (data && typeof data === "object") {
-   const map = data.allPermissions || data.permissions || data;
-   if (map && typeof map === "object") {
-     Object.values(map).forEach(u => { if (u && typeof u === "object") delete u.folderOnly; });
-   }
- }
+  if (data && typeof data === "object") {
+    const map = data.allPermissions || data.permissions || data;
+    if (map && typeof map === "object") {
+      Object.values(map).forEach(u => { if (u && typeof u === "object") delete u.folderOnly; });
+    }
+  }
   // Accept both shapes: {users:[...]} or a plain object map
   if (Array.isArray(data)) {
     // unlikely, but normalize
@@ -901,7 +926,7 @@ async function fetchAllUserFlags() {
     return out;
   }
   if (data && data.allPermissions) return data.allPermissions;
-  if (data && data.permissions)    return data.permissions;
+  if (data && data.permissions) return data.permissions;
   return data || {};
 }
 
@@ -912,33 +937,49 @@ function flagRow(u, flags) {
   return `
     <tr data-username="${u.username}">
       <td><strong>${u.username}</strong></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="readOnly"        ${f.readOnly ? "checked":""}></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="disableUpload"   ${f.disableUpload ? "checked":""}></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="canShare"        ${f.canShare ? "checked":""}></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="bypassOwnership" ${f.bypassOwnership ? "checked":""}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="readOnly"        ${f.readOnly ? "checked" : ""}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="disableUpload"   ${f.disableUpload ? "checked" : ""}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="canShare"        ${f.canShare ? "checked" : ""}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="bypassOwnership" ${f.bypassOwnership ? "checked" : ""}></td>
     </tr>
   `;
 }
 
 export async function openUserFlagsModal() {
+  const isDark = document.body.classList.contains("dark-mode");
+  const overlayBg = isDark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
+  const contentBg = isDark ? "#2c2c2c" : "#fff";
+  const contentFg = isDark ? "#e0e0e0" : "#000";
+  const borderCol = isDark ? "#555" : "#ccc";
+
   let modal = document.getElementById("userFlagsModal");
   if (!modal) {
     modal = document.createElement("div");
     modal.id = "userFlagsModal";
     modal.style.cssText = `
-      position:fixed; inset:0; background:rgba(0,0,0,.5);
+      position:fixed; inset:0; background:${overlayBg};
       display:flex; align-items:center; justify-content:center; z-index:3600;
     `;
     modal.innerHTML = `
-      <div class="modal-content" style="background:#fff; color:#000; padding:16px; max-width:900px; width:95%; border-radius:8px; position:relative;">
-        <span id="closeUserFlagsModal" class="editor-close-btn" style="right:8px; top:8px;">&times;</span>
+      <div class="modal-content"
+           style="background:${contentBg}; color:${contentFg};
+                  padding:16px; max-width:900px; width:95%;
+                  border-radius:8px; position:relative;
+                  border:1px solid ${borderCol};">
+        <span id="closeUserFlagsModal"
+              class="editor-close-btn"
+              style="right:8px; top:8px;">&times;</span>
+
         <h3>${tf("user_permissions", "User Permissions")}</h3>
         <p class="muted" style="margin-top:-6px;">
           ${tf("user_flags_help", "Account-level switches. These are NOT per-folder grants.")}
         </p>
-        <div id="userFlagsBody" style="max-height:60vh; overflow:auto; margin:8px 0;">
+
+        <div id="userFlagsBody"
+             style="max-height:60vh; overflow:auto; margin:8px 0;">
           ${t("loading")}…
         </div>
+
         <div style="display:flex; justify-content:flex-end; gap:8px;">
           <button type="button" id="cancelUserFlags" class="btn btn-secondary">${t("cancel")}</button>
           <button type="button" id="saveUserFlags"   class="btn btn-primary">${t("save_permissions")}</button>
@@ -946,10 +987,21 @@ export async function openUserFlagsModal() {
       </div>
     `;
     document.body.appendChild(modal);
-    document.getElementById("closeUserFlagsModal").onclick  = () => modal.style.display = "none";
-    document.getElementById("cancelUserFlags").onclick      = () => modal.style.display = "none";
-    document.getElementById("saveUserFlags").onclick        = saveUserFlags;
+
+    document.getElementById("closeUserFlagsModal").onclick = () => (modal.style.display = "none");
+    document.getElementById("cancelUserFlags").onclick = () => (modal.style.display = "none");
+    document.getElementById("saveUserFlags").onclick = saveUserFlags;
+  } else {
+    // Re-apply theme if user toggled dark mode since last open
+    modal.style.background = overlayBg;
+    const content = modal.querySelector(".modal-content");
+    if (content) {
+      content.style.background = contentBg;
+      content.style.color = contentFg;
+      content.style.border = `1px solid ${borderCol}`;
+    }
   }
+
   modal.style.display = "flex";
   loadUserFlagsList();
 }
@@ -990,9 +1042,9 @@ async function saveUserFlags() {
     const get = k => tr.querySelector(`input[data-flag="${k}"]`).checked;
     permissions.push({
       username,
-      readOnly:        get("readOnly"),
-      disableUpload:   get("disableUpload"),
-      canShare:        get("canShare"),
+      readOnly: get("readOnly"),
+      disableUpload: get("disableUpload"),
+      canShare: get("canShare"),
       bypassOwnership: get("bypassOwnership")
     });
   });
@@ -1051,7 +1103,10 @@ async function loadUserPermissionsList() {
                     padding:8px 6px;border-radius:6px;cursor:pointer;
                     background:var(--perm-header-bg, rgba(0,0,0,0.04));">
           <span style="font-weight:600;">${user.username}</span>
-          <i class="material-icons perm-caret" style="transition:transform .2s; transform:rotate(-90deg);">expand_more</i>
+          <i class="material-icons perm-caret"
+   style="transition:transform .2s; transform:rotate(-90deg); color: var(--perm-caret, #444);">
+  expand_more
+</i>
         </div>
 
         <div class="user-perm-details" style="display:none;margin:8px 4px 2px 10px;">
@@ -1063,9 +1118,9 @@ async function loadUserPermissionsList() {
         <hr style="margin:8px 0 4px;border:0;border-bottom:1px solid #ccc;">
       `;
 
-      const header  = row.querySelector(".user-perm-header");
+      const header = row.querySelector(".user-perm-header");
       const details = row.querySelector(".user-perm-details");
-      const caret   = row.querySelector(".perm-caret");
+      const caret = row.querySelector(".perm-caret");
       const grantsBox = row.querySelector(".folder-grants-box");
 
       async function ensureLoaded() {
