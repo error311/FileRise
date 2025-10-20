@@ -1,9 +1,46 @@
 # Changelog
 
+## Changes 10/20/2025 (v1.5.3)
+
+security(acl): enforce folder-scope & own-only; fix file list “Select All”; harden ops
+
+### fileListView.js (v1.5.3)
+
+- Restore master “Select All” checkbox behavior and row highlighting.
+- Keep selection working with own-only filtered lists.
+- Build preview/thumb URLs via secure API endpoints; avoid direct /uploads.
+- Minor UI polish: slider wiring and pagination focus handling.
+
+### FileController.php (v1.5.3)
+
+- Add enforceFolderScope($folder, $user, $perms, $need) and apply across actions.
+- Copy/Move: require read on source, write on destination; apply scope on both.
+- When user only has read_own, enforce per-file ownership (uploader==user).
+- Extract ZIP: require write + scope; consistent 403 messages.
+- Save/Rename/Delete/Create: tighten ACL checks; block dangerous extensions; consistent CSRF/Auth handling and error codes.
+- Download/ZIP: honor read vs read_own; own-only gates by uploader; safer headers.
+
+### FolderController.php (v1.5.3)
+
+- Align with ACL: enforce folder-scope for non-admins; require owner or bypass for destructive ops.
+- Create/Rename/Delete: gate by write on parent/target + ownership when needed.
+- Share folder link: require share capability; forbid root sharing for non-admins; validate expiry; optional password.
+- Folder listing: return only folders user can fully view or has read_own.
+- Shared downloads/uploads: stricter validation, headers, and error handling.
+
+This commits a consistent, least-privilege ACL model (owners/read/write/share/read_own), fixes bulk-select in the UI, and closes scope/ownership gaps across file & folder actions.
+
+feat(dnd): default cards to sidebar on medium screens when no saved layout
+
+- Adds one-time responsive default in loadSidebarOrder() (uses layoutDefaultApplied_v1)
+- Preserves existing sidebarOrder/headerOrder and small-screen behavior
+- Keeps user changes persistent; no override once a layout exists
+
+---
+
 ## Changes 10/19/2025 (v1.5.2)
 
 fix(admin): modal bugs; chore(api): update ReDoc SRI; docs(openapi): add annotations + spec
-feat(dnd): default cards to sidebar on medium screens when no saved layout
 
 - adminPanel.js
   - Fix modal open/close reliability and stacking order
@@ -22,10 +59,6 @@ feat(dnd): default cards to sidebar on medium screens when no saved layout
   - Introduce src/openapi/Components.php with base Info/Server,
     common responses, and shared components
   - Regenerate and commit openapi.json.dist
-
-- Adds one-time responsive default in loadSidebarOrder() (uses layoutDefaultApplied_v1)
-- Preserves existing sidebarOrder/headerOrder and small-screen behavior
-- Keeps user changes persistent; no override once a layout exists
 
 - public/js/adminPanel.js
 - public/css/style.css

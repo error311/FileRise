@@ -65,6 +65,59 @@ import {
     return `/api/file/download.php?${q.toString()}`;
   }
   
+  // Wire "select all" header checkbox for the current table render
+function wireSelectAll(fileListContent) {
+  // Be flexible about how the header checkbox is identified
+  const selectAll = fileListContent.querySelector(
+    'thead input[type="checkbox"].select-all, ' +
+    'thead .select-all input[type="checkbox"], ' +
+    'thead input#selectAll, ' +
+    'thead input#selectAllCheckbox, ' +
+    'thead input[data-select-all]'
+  );
+  if (!selectAll) return;
+
+  const getRowCbs = () =>
+    Array.from(fileListContent.querySelectorAll('tbody .file-checkbox'))
+      .filter(cb => !cb.disabled);
+
+  // Toggle all rows when the header checkbox changes
+  selectAll.addEventListener('change', () => {
+    const checked = selectAll.checked;
+    getRowCbs().forEach(cb => {
+      cb.checked = checked;
+      updateRowHighlight(cb);
+    });
+    updateFileActionButtons();
+    // No indeterminate state when explicitly toggled
+    selectAll.indeterminate = false;
+  });
+
+  // Keep header checkbox state in sync with row selections
+  const syncHeader = () => {
+    const cbs = getRowCbs();
+    const total = cbs.length;
+    const checked = cbs.filter(cb => cb.checked).length;
+    if (!total) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+      return;
+    }
+    selectAll.checked = checked === total;
+    selectAll.indeterminate = checked > 0 && checked < total;
+  };
+
+  // Listen for any row checkbox changes to refresh header state
+  fileListContent.addEventListener('change', (e) => {
+    if (e.target && e.target.classList.contains('file-checkbox')) {
+      syncHeader();
+    }
+  });
+
+  // Initial sync on mount
+  syncHeader();
+}
+
   /* -----------------------------
      Helper: robust JSON handling
      ----------------------------- */
@@ -607,6 +660,8 @@ import {
     const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
   
     fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
+
+    wireSelectAll(fileListContent);
   
     // PATCH each row's preview/thumb to use the secure API URLs
     if (totalFiles > 0) {
@@ -985,6 +1040,7 @@ import {
   
     // render
     fileListContent.innerHTML = galleryHTML;
+    
   
     // pagination buttons for gallery
     const prevBtn = document.getElementById("prevPageBtn");

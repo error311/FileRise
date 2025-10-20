@@ -96,6 +96,11 @@ class FolderController
         return false;
     }
 
+    private static function isFolderOnly(array $perms): bool
+    {
+        return !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']);
+    }
+
     private static function requireNotReadOnly(): void
     {
         $perms = self::getPerms();
@@ -126,23 +131,52 @@ class FolderController
         return round($bytes / 1073741824, 2) . " GB";
     }
 
-    /** Enforce "user folder only" scope for non-admins. Returns error string or null if allowed. */
-    private static function enforceFolderScope(string $folder, string $username, array $perms): ?string
+    /** Return true if user is explicit owner of the folder or any of its ancestors (admins also true). */
+    private static function ownsFolderOrAncestor(string $folder, string $username, array $perms): bool
     {
+        if (self::isAdmin($perms)) return true;
+        $folder = ACL::normalizeFolder($folder);
+        $f = $folder;
+        while ($f !== '' && strtolower($f) !== 'root') {
+            if (ACL::isOwner($username, $perms, $f)) return true;
+            $pos = strrpos($f, '/');
+            $f = ($pos === false) ? '' : substr($f, 0, $pos);
+        }
+        return false;
+    }
+
+    /**
+     * Enforce per-folder scope for folder-only accounts.
+     * $need: 'read' | 'write' | 'manage' | 'share' | 'read_own' (default 'read')
+     * Returns null if allowed, or an error string if forbidden.
+     */
+    private static function enforceFolderScope(string $folder, string $username, array $perms, string $need = 'read'): ?string
+    {
+        // Admins bypass scope
         if (self::isAdmin($perms)) return null;
 
-        $folderOnly = !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']);
-        if (!$folderOnly) return null;
+        // Not a folder-only account? no gate here
+        if (!self::isFolderOnly($perms)) return null;
 
-        $folder = trim($folder);
-        if ($folder === '' || strcasecmp($folder, 'root') === 0) {
-            return "Forbidden: non-admins may not operate on the root folder.";
+        $folder = ACL::normalizeFolder($folder);
+
+        // If user owns folder or an ancestor, allow
+        $f = $folder;
+        while ($f !== '' && strtolower($f) !== 'root') {
+            if (ACL::isOwner($username, $perms, $f)) return null;
+            $pos = strrpos($f, '/');
+            $f = ($pos === false) ? '' : substr($f, 0, $pos);
         }
 
-        if ($folder === $username || strpos($folder, $username . '/') === 0) {
-            return null;
+        // Otherwise, require specific capability on the target folder
+        switch ($need) {
+            case 'manage':   $ok = ACL::canManage($username, $perms, $folder); break;
+            case 'write':    $ok = ACL::canWrite($username, $perms, $folder);  break;
+            case 'share':    $ok = ACL::canShare($username, $perms, $folder);  break;
+            case 'read_own': $ok = ACL::canReadOwn($username, $perms, $folder);break;
+            default:         $ok = ACL::canRead($username, $perms, $folder);
         }
-        return "Forbidden: folder scope violation.";
+        return $ok ? null : "Forbidden: folder scope violation.";
     }
 
     /** Returns true if caller can ignore ownership (admin or bypassOwnership/default). */
@@ -152,61 +186,57 @@ class FolderController
         return (bool)($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
     }
 
-    /** Returns true if caller can share. */
-    private static function canShare(array $perms): bool
+    /** ACL-aware folder owner check (explicit). */
+    private static function isFolderOwner(string $folder, string $username, array $perms): bool
     {
-        if (self::isAdmin($perms)) return true;
-        return (bool)($perms['canShare'] ?? (defined('DEFAULT_CAN_SHARE') ? DEFAULT_CAN_SHARE : false));
-    }
-
-    /** Check folder ownership via mapping; returns true if $username is the explicit owner. */
-    private static function isFolderOwner(string $folder, string $username): bool
-    {
-        $owner = FolderModel::getOwnerFor($folder);
-        return is_string($owner) && strcasecmp($owner, $username) === 0;
+        return ACL::isOwner($username, $perms, $folder);
     }
 
     /* -------------------- API: Create Folder -------------------- */
     public function createFolder(): void
-{
-    header('Content-Type: application/json');
-    self::requireAuth();
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['error' => 'Method not allowed.']); exit; }
-    self::requireCsrf();
-    self::requireNotReadOnly();
+    {
+        header('Content-Type: application/json');
+        self::requireAuth();
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['error' => 'Method not allowed.']); exit; }
+        self::requireCsrf();
+        self::requireNotReadOnly();
 
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!isset($input['folderName'])) { http_response_code(400); echo json_encode(['error' => 'Folder name not provided.']); exit; }
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!isset($input['folderName'])) { http_response_code(400); echo json_encode(['error' => 'Folder name not provided.']); exit; }
 
-    $folderName = trim((string)$input['folderName']);
-    $parentIn   = isset($input['parent']) ? trim((string)$input['parent']) : '';
+        $folderName = trim((string)$input['folderName']);
+        $parentIn   = isset($input['parent']) ? trim((string)$input['parent']) : '';
 
-    if (!preg_match(REGEX_FOLDER_NAME, $folderName)) {
-        http_response_code(400); echo json_encode(['error' => 'Invalid folder name.']); exit;
-    }
-    if ($parentIn !== '' && strcasecmp($parentIn, 'root') !== 0 && !preg_match(REGEX_FOLDER_NAME, $parentIn)) {
-        http_response_code(400); echo json_encode(['error' => 'Invalid parent folder name.']); exit;
-    }
+        if (!preg_match(REGEX_FOLDER_NAME, $folderName)) {
+            http_response_code(400); echo json_encode(['error' => 'Invalid folder name.']); exit;
+        }
+        if ($parentIn !== '' && strcasecmp($parentIn, 'root') !== 0 && !preg_match(REGEX_FOLDER_NAME, $parentIn)) {
+            http_response_code(400); echo json_encode(['error' => 'Invalid parent folder name.']); exit;
+        }
 
-    // Normalize parent to an ACL key
-    $parent = ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) ? 'root' : $parentIn;
+        // Normalize parent to an ACL key
+        $parent = ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) ? 'root' : $parentIn;
 
-    $username = $_SESSION['username'] ?? '';
-    $perms    = self::getPerms();
+        $username = $_SESSION['username'] ?? '';
+        $perms    = self::getPerms();
 
-    // ACL: must be able to WRITE into the parent folder (admins pass)
-    if (!self::isAdmin($perms) && !ACL::canWrite($username, $perms, $parent)) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Forbidden: no write access to parent folder.']);
+        // Must be able to write into parent OR be owner (or ancestor owner) of it
+        if (!(ACL::canWrite($username, $perms, $parent) || self::ownsFolderOrAncestor($parent, $username, $perms))) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden: no write access to parent folder.']);
+            exit;
+        }
+
+        // Folder-scope gate for folder-only accounts (need write on parent)
+        if ($msg = self::enforceFolderScope($parent, $username, $perms, 'write')) {
+            http_response_code(403); echo json_encode(['error' => $msg]); exit;
+        }
+
+        // Model should create folder and seed ACL (owner = creator)
+        $result = FolderModel::createFolder($folderName, $parent, $username);
+        echo json_encode($result);
         exit;
     }
-
-    // Let the model do the filesystem work AND seed ACL owner
-    $result = FolderModel::createFolder($folderName, $parent, $username);
-
-    echo json_encode($result);
-    exit;
-}
 
     /* -------------------- API: Delete Folder -------------------- */
     public function deleteFolder(): void
@@ -220,15 +250,26 @@ class FolderController
         $input = json_decode(file_get_contents('php://input'), true);
         if (!isset($input['folder'])) { http_response_code(400); echo json_encode(["error" => "Folder name not provided."]); exit; }
 
-        $folder = trim($input['folder']);
+        $folder = trim((string)$input['folder']);
         if (strcasecmp($folder, 'root') === 0) { http_response_code(400); echo json_encode(["error" => "Cannot delete root folder."]); exit; }
         if (!preg_match(REGEX_FOLDER_NAME, $folder)) { http_response_code(400); echo json_encode(["error" => "Invalid folder name."]); exit; }
 
         $username = $_SESSION['username'] ?? '';
         $perms    = self::getPerms();
 
-        if ($msg = self::enforceFolderScope($folder, $username, $perms)) { http_response_code(403); echo json_encode(["error" => $msg]); exit; }
-        if (!self::canBypassOwnership($perms) && !self::isFolderOwner($folder, $username)) {
+        // Folder-scope: need manage (owner) OR explicit manage grant
+        if ($msg = self::enforceFolderScope($folder, $username, $perms, 'manage')) {
+            http_response_code(403); echo json_encode(["error" => $msg]); exit;
+        }
+
+        // Require either manage permission or ancestor ownership (strong gate)
+        $canManage = ACL::canManage($username, $perms, $folder) || self::ownsFolderOrAncestor($folder, $username, $perms);
+        if (!$canManage) {
+            http_response_code(403); echo json_encode(["error" => "Forbidden: you lack manage rights for this folder."]); exit;
+        }
+
+        // If not bypassing ownership, require ownership (direct or ancestor) as an extra safeguard
+        if (!self::canBypassOwnership($perms) && !self::ownsFolderOrAncestor($folder, $username, $perms)) {
             http_response_code(403); echo json_encode(["error" => "Forbidden: you are not the folder owner."]); exit;
         }
 
@@ -251,8 +292,8 @@ class FolderController
             http_response_code(400); echo json_encode(['error' => 'Required folder names not provided.']); exit;
         }
 
-        $oldFolder = trim($input['oldFolder']);
-        $newFolder = trim($input['newFolder']);
+        $oldFolder = trim((string)$input['oldFolder']);
+        $newFolder = trim((string)$input['newFolder']);
 
         if (!preg_match(REGEX_FOLDER_NAME, $oldFolder) || !preg_match(REGEX_FOLDER_NAME, $newFolder)) {
             http_response_code(400); echo json_encode(['error' => 'Invalid folder name(s).']); exit;
@@ -261,10 +302,23 @@ class FolderController
         $username = $_SESSION['username'] ?? '';
         $perms    = self::getPerms();
 
-        if ($msg = self::enforceFolderScope($oldFolder, $username, $perms)) { http_response_code(403); echo json_encode(["error" => $msg]); exit; }
-        if ($msg = self::enforceFolderScope($newFolder, $username, $perms)) { http_response_code(403); echo json_encode(["error" => "New path not allowed: " . $msg]); exit; }
+        // Must be allowed to manage the old folder
+        if ($msg = self::enforceFolderScope($oldFolder, $username, $perms, 'manage')) {
+            http_response_code(403); echo json_encode(["error" => $msg]); exit;
+        }
+        // For the new folder path, require write scope (we're "creating" a path)
+        if ($msg = self::enforceFolderScope($newFolder, $username, $perms, 'write')) {
+            http_response_code(403); echo json_encode(["error" => "New path not allowed: " . $msg]); exit;
+        }
 
-        if (!self::canBypassOwnership($perms) && !self::isFolderOwner($oldFolder, $username)) {
+        // Strong gates: need manage on old OR ancestor owner; need write on new parent or ancestor owner
+        $canManageOld = ACL::canManage($username, $perms, $oldFolder) || self::ownsFolderOrAncestor($oldFolder, $username, $perms);
+        if (!$canManageOld) {
+            http_response_code(403); echo json_encode(['error' => 'Forbidden: you lack manage rights on the source folder.']); exit;
+        }
+
+        // If not bypassing ownership, require ownership (direct or ancestor) on the old folder
+        if (!self::canBypassOwnership($perms) && !self::ownsFolderOrAncestor($oldFolder, $username, $perms)) {
             http_response_code(403); echo json_encode(['error' => 'Forbidden: you are not the folder owner.']); exit;
         }
 
@@ -275,65 +329,63 @@ class FolderController
 
     /* -------------------- API: Get Folder List -------------------- */
     public function getFolderList(): void
-{
-    header('Content-Type: application/json');
-    self::requireAuth();
+    {
+        header('Content-Type: application/json');
+        self::requireAuth();
 
-    // Optional "folder" filter (supports nested like "team/reports")
-    $parent = $_GET['folder'] ?? null;
-    if ($parent !== null && $parent !== '' && strcasecmp($parent, 'root') !== 0) {
-        $parts = array_filter(explode('/', trim($parent, "/\\ ")), fn($p) => $p !== '');
-        if (empty($parts)) {
-            http_response_code(400);
-            echo json_encode(["error" => "Invalid folder name."]);
-            exit;
-        }
-        foreach ($parts as $seg) {
-            if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+        // Optional "folder" filter (supports nested like "team/reports")
+        $parent = $_GET['folder'] ?? null;
+        if ($parent !== null && $parent !== '' && strcasecmp($parent, 'root') !== 0) {
+            $parts = array_filter(explode('/', trim($parent, "/\\ ")), fn($p) => $p !== '');
+            if (empty($parts)) {
                 http_response_code(400);
                 echo json_encode(["error" => "Invalid folder name."]);
                 exit;
             }
+            foreach ($parts as $seg) {
+                if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+                    http_response_code(400);
+                    echo json_encode(["error" => "Invalid folder name."]);
+                    exit;
+                }
+            }
+            $parent = implode('/', $parts);
         }
-        $parent = implode('/', $parts);
-    }
 
-    $username = $_SESSION['username'] ?? '';
-    $perms    = loadUserPermissions($username) ?: [];
-    $isAdmin  = self::isAdmin($perms);
+        $username = $_SESSION['username'] ?? '';
+        $perms    = self::getPerms();
+        $isAdmin  = self::isAdmin($perms);
 
-    // 1) full list from model
-    $all = FolderModel::getFolderList(); // each row: ["folder","fileCount","metadataFile"]
-    if (!is_array($all)) {
-        echo json_encode([]);
+        // 1) Full list from model
+        $all = FolderModel::getFolderList(); // each row: ["folder","fileCount","metadataFile"]
+        if (!is_array($all)) { echo json_encode([]); exit; }
+
+        // 2) Filter by view rights
+        if (!$isAdmin) {
+            $all = array_values(array_filter($all, function ($row) use ($username, $perms) {
+                $f = $row['folder'] ?? '';
+                if ($f === '') return false;
+
+                // Full view if canRead OR owns ancestor; otherwise allow if read_own granted
+                $fullView = ACL::canRead($username, $perms, $f) || FolderController::ownsFolderOrAncestor($f, $username, $perms);
+                $ownOnly  = ACL::hasGrant($username, $f, 'read_own');
+
+                return $fullView || $ownOnly;
+            }));
+        }
+
+        // 3) Optional parent filter (applies to both admin and non-admin)
+        if ($parent && strcasecmp($parent, 'root') !== 0) {
+            $pref = $parent . '/';
+            $all = array_values(array_filter($all, function ($row) use ($parent, $pref) {
+                $f = $row['folder'] ?? '';
+                return ($f === $parent) || (strpos($f, $pref) === 0);
+            }));
+        }
+
+        echo json_encode($all);
         exit;
     }
-
-    // 2) Admin sees all; others: include folder if user has full view OR own-only view
-    if (!$isAdmin) {
-        $all = array_values(array_filter($all, function ($row) use ($username, $perms) {
-            $f = $row['folder'] ?? '';
-            if ($f === '') return false;
-
-            $fullView = ACL::canRead($username, $perms, $f);            // owners|write|read
-            $ownOnly  = ACL::hasGrant($username, $f, 'read_own');       // view-own
-
-            return $fullView || $ownOnly;
-        }));
-    }
-
-    // 3) Optional parent filter (applies to both admin and non-admin)
-    if ($parent && strcasecmp($parent, 'root') !== 0) {
-        $pref = $parent . '/';
-        $all = array_values(array_filter($all, function ($row) use ($parent, $pref) {
-            $f = $row['folder'] ?? '';
-            return ($f === $parent) || (strpos($f, $pref) === 0);
-        }));
-    }
-
-    echo json_encode($all);
-    exit;
-}
 
     /* -------------------- Public Shared Folder HTML -------------------- */
     public function shareFolder(): void
@@ -451,10 +503,10 @@ for ($i = $startPage; $i <= $endPage; $i++): ?>
         $in = json_decode(file_get_contents("php://input"), true);
         if (!$in || !isset($in['folder'])) { http_response_code(400); echo json_encode(["error" => "Invalid input."]); exit; }
 
-        $folder      = trim($in['folder']);
+        $folder      = trim((string)$in['folder']);
         $value       = isset($in['expirationValue']) ? intval($in['expirationValue']) : 60;
         $unit        = $in['expirationUnit'] ?? 'minutes';
-        $password    = $in['password'] ?? '';
+        $password    = (string)($in['password'] ?? '');
         $allowUpload = intval($in['allowUpload'] ?? 0);
 
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) { http_response_code(400); echo json_encode(["error" => "Invalid folder name."]); exit; }
@@ -463,14 +515,18 @@ for ($i = $startPage; $i <= $endPage; $i++): ?>
         $perms    = self::getPerms();
         $isAdmin  = self::isAdmin($perms);
 
-        if (!self::canShare($perms)) { http_response_code(403); echo json_encode(["error" => "Sharing is not permitted for your account."]); exit; }
-
-        if (!$isAdmin) {
-            if (strcasecmp($folder, 'root') === 0) { http_response_code(403); echo json_encode(["error" => "Only admins may share the root folder."]); exit; }
-            if ($msg = self::enforceFolderScope($folder, $username, $perms)) { http_response_code(403); echo json_encode(["error" => $msg]); exit; }
+        // Must have share on this folder OR be ancestor owner
+        if (!(ACL::canShare($username, $perms, $folder) || self::ownsFolderOrAncestor($folder, $username, $perms))) {
+            http_response_code(403); echo json_encode(["error" => "Sharing is not permitted for your account."]); exit;
         }
 
-        if (!self::canBypassOwnership($perms) && !self::isFolderOwner($folder, $username)) {
+        // Folder-scope: need share capability within scope
+        if ($msg = self::enforceFolderScope($folder, $username, $perms, 'share')) {
+            http_response_code(403); echo json_encode(["error" => $msg]); exit;
+        }
+
+        // Ownership requirement unless bypassed (allow ancestor owners)
+        if (!self::canBypassOwnership($perms) && !self::ownsFolderOrAncestor($folder, $username, $perms)) {
             http_response_code(403); echo json_encode(["error" => "Forbidden: you are not the owner of this folder."]); exit;
         }
 
