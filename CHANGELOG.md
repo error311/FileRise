@@ -36,6 +36,17 @@ feat(dnd): default cards to sidebar on medium screens when no saved layout
 - Preserves existing sidebarOrder/headerOrder and small-screen behavior
 - Keeps user changes persistent; no override once a layout exists
 
+feat(editor): make modal non-blocking; add SRI + timeout for CodeMirror mode loads
+
+- Build the editor modal immediately and wire close (✖, Close button, and Esc) before any async work, so the UI is always dismissible.
+- Restore MODE_URL and add normalizeModeName() to resolve aliases (text/html → htmlmixed, php → application/x-httpd-php).
+- Add SRI for each lazily loaded mode (MODE_SRI) and apply integrity/crossOrigin on script tags; switch to async and improved error messages.
+- Introduce MODE_LOAD_TIMEOUT_MS=2500 and Promise.race() to init in text/plain if a mode is slow; auto-upgrade to the real mode once it arrives.
+- Graceful fallback: if CodeMirror core isn’t present, keep textarea, enable Save, and proceed.
+- Minor UX: disable Save until the editor is ready, support theme toggling, better resize handling, and font size controls without blocking.
+
+Security: Locks CDN mode scripts with SRI.
+
 ---
 
 ## Changes 10/19/2025 (v1.5.2)
