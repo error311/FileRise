@@ -7,6 +7,8 @@
 [![Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://demo.filerise.net)
 [![Release](https://img.shields.io/github/v/release/error311/FileRise?include_prereleases&sort=semver)](https://github.com/error311/FileRise/releases)
 [![License](https://img.shields.io/github/license/error311/FileRise)](LICENSE)
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-❤-red)](https://github.com/sponsors/error311)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
 
 **Quick links:** [Demo](#live-demo) • [Install](#installation--setup) • [Docker](#1-running-with-docker-recommended) • [Unraid](#unraid) • [WebDAV](#quick-start-mount-via-webdav) • [FAQ](#faq--troubleshooting)
 
