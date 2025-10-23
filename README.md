@@ -42,14 +42,17 @@ With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2
   Per-folder permissions for **owners**, **view**, **view (own)**, **write**, **manage**, **share**, and extended granular capabilities.  
   Each grant controls specific actions across the UI, API, and WebDAV:
 
-  - **Manage / Owner:** Full control — can grant/revoke ACLs, rename/create/delete folders, and share subfolders. Implies all other permissions on that folder and its subfolders.  
-  - **View (All):** See all files within a folder. Required for sharing folders.  
-  - **View (Own):** See only your own uploads (useful for drop zones or limited contributors).  
-  - **Write:** General write access — allows editing, renaming, moving, copying, deleting, and extracting files.  
-  - **Create:** Allows creating subfolders (now gated by *Manage* or explicit *Create*).  
-  - **Upload:** Upload new files (can be given without full write).  
-  - **Edit / Rename / Copy / Move / Delete / Extract:** Individually controllable granular file actions.  
-  - **Share File / Share Folder:** Create share links; folder shares require full View (All).  
+  | Permission | Description |
+  |-------------|-------------|
+  | **Manage (Owner)** | Full control of folder and subfolders. Can edit ACLs, rename/delete/create folders, and share items. Implies all other permissions for that folder and below. |
+  | **View (All)** | Allows viewing all files within the folder. Required for folder-level sharing. |
+  | **View (Own)** | Restricts visibility to files uploaded by the user only. Ideal for drop zones or limited-access users. |
+  | **Write** | Grants general write access — enables renaming, editing, moving, copying, deleting, and extracting files. |
+  | **Create** | Allows creating subfolders. Automatically granted to *Manage* users. |
+  | **Upload** | Allows uploading new files without granting full write privileges. |
+  | **Edit / Rename / Copy / Move / Delete / Extract** | Individually toggleable granular file operations. |
+  | **Share File / Share Folder** | Controls sharing capabilities. Folder shares require full View (All). |
+
   - **Automatic Propagation:** Enabling **Manage** on a folder applies to all subfolders; deselecting subfolder permissions overrides inheritance in the UI.
 
   ACL enforcement is centralized and atomic across:
