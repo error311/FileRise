@@ -1,5 +1,34 @@
 # Changelog
 
+## Changes 10/23/2025 (v1.6.1)
+
+feat(ui): unified zone toggle + polished interactions for sidebar/top cards
+
+- Add floating toggle button styling (hover lift, press, focus ring, ripple)
+  for #zonesToggleFloating and #sidebarToggleFloating (CSS).
+- Ensure icons are visible and centered; enforce consistent sizing/color.
+- Introduce unified “zones collapsed” state persisted via `localStorage.zonesCollapsed`.
+- Update dragAndDrop.js to:
+  - manage a single floating toggle for both Sidebar and Top Zone
+  - keep toggle visible when cards are in Top Zone; hide only when both cards are in Header
+  - rotate icon 90° when both cards are in Top Zone and panels are open
+  - respect collapsed state during DnD flows and on load
+  - preserve original DnD behaviors and saved orders (sidebar/header)
+- Minor layout/visibility fixes during drag (clear temp heights; honor collapsed).
+
+Notes:
+
+- No breaking API changes; existing `sidebarOrder` / `headerOrder` continue to work.
+- New key: `zonesCollapsed` (string '0'/'1') controls visibility of Sidebar + Top Zone.
+
+UX:
+
+- Floating toggle feels more “material”: subtle hover elevation, press feedback,
+  focus ring, and click ripple to restore the prior interactive feel.
+- Icons remain legible on white (explicit color set), centered in the circular button.
+
+---
+
 ## Changes 10/22/2025 (v1.6.0)
 
 feat(acl): granular per-folder permissions + stricter gates; WebDAV & UI aligned

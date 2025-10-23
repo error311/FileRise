@@ -2309,3 +2309,68 @@ body.dark-mode .user-dropdown .user-menu .item:hover {
 
 :root { --perm-caret: #444; }          /* light */
 body.dark-mode { --perm-caret: #ccc; }  /* dark */
+
+#zonesToggleFloating,
+#sidebarToggleFloating {
+  transition:
+    transform 160ms cubic-bezier(.2,.0,.2,1),
+    box-shadow 160ms cubic-bezier(.2,.0,.2,1),
+    border-color 160ms cubic-bezier(.2,.0,.2,1),
+    background-color 160ms cubic-bezier(.2,.0,.2,1);
+}
+
+#zonesToggleFloating .material-icons,
+#zonesToggleFloating .material-icons-outlined,
+#sidebarToggleFloating .material-icons,
+#sidebarToggleFloating .material-icons-outlined {
+  color: #333 !important;
+  font-size: 22px;
+  line-height: 1;
+  display: block;
+}
+
+#zonesToggleFloating:hover,
+#sidebarToggleFloating:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0,0,0,.14);
+  border-color: #cfcfcf;
+}
+
+#zonesToggleFloating:active,
+#sidebarToggleFloating:active {
+  transform: translateY(0) scale(.96);
+  box-shadow: 0 3px 8px rgba(0,0,0,.12);
+}
+
+#zonesToggleFloating:focus-visible,
+#sidebarToggleFloating:focus-visible {
+  outline: none;
+  box-shadow:
+    0 6px 16px rgba(0,0,0,.14),
+    0 0 0 3px rgba(25,118,210,.25); /* soft brandy ring */
+}
+
+#zonesToggleFloating::after,
+#sidebarToggleFloating::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(0,0,0,.12) 0%, rgba(0,0,0,0) 60%);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 300ms ease, opacity 450ms ease;
+  pointer-events: none;
+}
+
+#zonesToggleFloating:active::after,
+#sidebarToggleFloating:active::after {
+  transform: scale(1.4);
+  opacity: 1;
+}
+
+#zonesToggleFloating.is-collapsed,
+#sidebarToggleFloating.is-collapsed {
+  background: #fafafa;
+  border-color: #e2e2e2;
+}
