@@ -11,6 +11,10 @@ feat(i18n,auth): add Simplified Chinese (zh-CN) and expose in User Panel
 - Wire zh-CN into Auth/User Panel (authModals) language dropdown.
 - Fallback-safe rendering for language names when a key is missing.
 
+ui: fix “Change Password” button sizing in User Panel
+
+- Keep consistent padding and font size for cleaner layout
+
 ---
 
 ## Changes 10/23/2025 (v1.6.1)

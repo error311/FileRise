@@ -2036,10 +2036,9 @@ body.dark-mode .admin-panel-content label {
 }
 
 #openChangePasswordModalBtn {
-  width: auto;
-  padding: 5px 10px;
+  width: max-content;
+  padding: 6px 12px;
   font-size: 14px;
-  margin-right: 300px;
 }
 
 #changePasswordModal {
