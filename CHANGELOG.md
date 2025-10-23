@@ -1,5 +1,18 @@
 # Changelog
 
+## Changes 10/23/2025 (v1.6.2)
+
+feat(i18n,auth): add Simplified Chinese (zh-CN) and expose in User Panel
+
+- Add zh-CN locale to i18n.js with full key set.
+- Introduce chinese_simplified label key across locales.
+- Added some missing labels
+- Update language selector mapping to include zh-CN (English/Spanish/French/German/简体中文).
+- Wire zh-CN into Auth/User Panel (authModals) language dropdown.
+- Fallback-safe rendering for language names when a key is missing.
+
+---
+
 ## Changes 10/23/2025 (v1.6.1)
 
 feat(ui): unified zone toggle + polished interactions for sidebar/top cards

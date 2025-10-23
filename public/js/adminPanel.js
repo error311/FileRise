@@ -1141,7 +1141,7 @@ async function loadUserFlagsList() {
             <th>${t("read_only")}</th>
             <th>${t("disable_upload")}</th>
             <th>${t("can_share")}</th>
-            <th>bypassOwnership</th>
+            <th>${t("bypass_ownership")}</th>
           </tr>
         </thead>
         <tbody>${rows || `<tr><td colspan="6">${t("no_users_found")}</td></tr>`}</tbody>

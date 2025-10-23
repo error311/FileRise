@@ -80,7 +80,7 @@ With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2
 
 - 🎨 **Responsive UI (Dark/Light Mode):** Modern, mobile-friendly design with persistent preferences (theme, layout, last folder, etc.).
 
-- 🌐 **Internationalization:** English, Spanish, French, and German available. Community translations welcome.
+- 🌐 **Internationalization:** English, Spanish, French, German & Simplified Chinese available. Community translations welcome.
 
 - ⚙️ **Lightweight & Self-Contained:** Runs on PHP 8.3+, no external DB required. Single-folder or Docker deployment with minimal footprint, optimized for Unraid and self-hosting.
 

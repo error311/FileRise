@@ -328,10 +328,19 @@ export async function openUserPanel() {
     const langSel = document.createElement('select');
     langSel.id = 'languageSelector';
     langSel.className = 'form-select';
-    ['en', 'es', 'fr', 'de'].forEach(code => {
+    const languages = [
+      { code: 'en',    labelKey: 'english',             fallback: 'English' },
+      { code: 'es',    labelKey: 'spanish',             fallback: 'Español' },
+      { code: 'fr',    labelKey: 'french',              fallback: 'Français' },
+      { code: 'de',    labelKey: 'german',              fallback: 'Deutsch' },
+      { code: 'zh-CN', labelKey: 'chinese_simplified',  fallback: '简体中文' },
+    ];
+    
+    languages.forEach(({ code, labelKey, fallback }) => {
       const opt = document.createElement('option');
       opt.value = code;
-      opt.textContent = t(code === 'en' ? 'english' : code === 'es' ? 'spanish' : code === 'fr' ? 'french' : 'german');
+      // use i18n if available, otherwise fallback
+      opt.textContent = (typeof t === 'function' ? t(labelKey) : '') || fallback;
       langSel.appendChild(opt);
     });
     langSel.value = localStorage.getItem('language') || 'en';
