@@ -38,8 +38,9 @@ class FileRiseFile implements IFile, INode {
 
     public function delete(): void {
         [$folderKey, $fileName] = $this->split();
-        if (!$this->isAdmin && !\ACL::canWrite($this->user, $this->perms, $folderKey)) {
-            throw new Forbidden('No write access to delete this file');
+    
+        if (!$this->isAdmin && !\ACL::canDelete($this->user, $this->perms, $folderKey)) {
+            throw new Forbidden('No delete permission in this folder');
         }
         if (!$this->canTouchOwnership($folderKey, $fileName)) {
             throw new Forbidden('You do not own this file');
@@ -67,34 +68,40 @@ class FileRiseFile implements IFile, INode {
 
     public function put($data): ?string {
         [$folderKey, $fileName] = $this->split();
-
-        if (!$this->isAdmin && !\ACL::canWrite($this->user, $this->perms, $folderKey)) {
-            throw new Forbidden('No write access to this folder');
-        }
-        if (!empty($this->perms['disableUpload']) && !$this->isAdmin) {
-            throw new Forbidden('Uploads are disabled for your account');
-        }
-
-        // If overwriting existing file, enforce ownership for non-admin unless bypassOwnership
+    
         $exists = is_file($this->path);
-        $bypass = !empty($this->perms['bypassOwnership']);
-        if ($exists && !$this->isAdmin && !$bypass && !$this->isOwner($folderKey, $fileName)) {
+    
+        if (!$this->isAdmin) {
+            // uploads disabled blocks both create & overwrite
+            if (!empty($this->perms['disableUpload'])) {
+                throw new Forbidden('Uploads are disabled for your account');
+            }
+            // granular gates
+            if ($exists) {
+                if (!\ACL::canEdit($this->user, $this->perms, $folderKey)) {
+                    throw new Forbidden('No edit permission in this folder');
+                }
+            } else {
+                if (!\ACL::canUpload($this->user, $this->perms, $folderKey)) {
+                    throw new Forbidden('No upload permission in this folder');
+                }
+            }
+        }
+    
+        // Ownership on overwrite (unless admin/bypass)
+        $bypass = !empty($this->perms['bypassOwnership']) || $this->isAdmin;
+        if ($exists && !$bypass && !$this->isOwner($folderKey, $fileName)) {
             throw new Forbidden('You do not own the target file');
         }
-
-        // Write data
+    
+        // write + metadata (unchanged)
         file_put_contents(
             $this->path,
             is_resource($data) ? stream_get_contents($data) : (string)$data
         );
-
-        // Update metadata (uploader on first write; modified every write)
         $this->updateMetadata($folderKey, $fileName);
-
-        if (function_exists('fastcgi_finish_request')) {
-            fastcgi_finish_request();
-        }
-        return null; // no ETag
+        if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+        return null;
     }
 
     public function getSize(): int {

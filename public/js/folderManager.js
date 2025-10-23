@@ -86,26 +86,26 @@ export function getParentFolder(folder) {
     Breadcrumb Functions
  ----------------------*/
 
+ function setControlEnabled(el, enabled) {
+  if (!el) return;
+  if ('disabled' in el) el.disabled = !enabled;
+  el.classList.toggle('disabled', !enabled);
+  el.setAttribute('aria-disabled', String(!enabled));
+  el.style.pointerEvents = enabled ? '' : 'none';
+  el.style.opacity = enabled ? '' : '0.5';
+}
+
 async function applyFolderCapabilities(folder) {
-  try {
-    const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`, { credentials: 'include' });
-    if (!res.ok) return;
-    const caps = await res.json();
+  const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`, { credentials: 'include' });
+  if (!res.ok) return;
+  const caps = await res.json();
+  window.currentFolderCaps = caps;
 
-    // top buttons
-    const createBtn  = document.getElementById('createFolderBtn');
-    const renameBtn  = document.getElementById('renameFolderBtn');
-    const deleteBtn  = document.getElementById('deleteFolderBtn');
-    const shareBtn   = document.getElementById('shareFolderBtn');
-
-    if (createBtn) createBtn.disabled = !caps.canCreate;
-    if (renameBtn) renameBtn.disabled = !caps.canRename || folder === 'root';
-    if (deleteBtn) deleteBtn.disabled = !caps.canDelete || folder === 'root';
-    if (shareBtn)  shareBtn.disabled  = !caps.canShare  || folder === 'root';
-
-    // keep for later if you want context menu to reflect caps
-    window.currentFolderCaps = caps;
-  } catch {}
+  const isRoot   = (folder === 'root');
+  setControlEnabled(document.getElementById('createFolderBtn'), !!caps.canCreate);
+  setControlEnabled(document.getElementById('renameFolderBtn'), !isRoot && !!caps.canRename);
+  setControlEnabled(document.getElementById('deleteFolderBtn'), !isRoot && !!caps.canDelete);
+  setControlEnabled(document.getElementById('shareFolderBtn'), !isRoot && !!caps.canShareFolder);
 }
 
 // --- Breadcrumb Delegation Setup ---
@@ -146,6 +146,7 @@ function breadcrumbClickHandler(e) {
   document.querySelectorAll(".folder-option").forEach(el => el.classList.remove("selected"));
   const target = document.querySelector(`.folder-option[data-folder="${folder}"]`);
   if (target) target.classList.add("selected");
+  applyFolderCapabilities(window.currentFolder);
 
   loadFileList(folder);
 }
@@ -824,6 +825,7 @@ function folderManagerContextMenuHandler(e) {
   const folder = target.getAttribute("data-folder");
   if (!folder) return;
   window.currentFolder = folder;
+  applyFolderCapabilities(window.currentFolder);
 
   // Visual selection
   document.querySelectorAll(".folder-option, .breadcrumb-link").forEach(el => el.classList.remove("selected"));

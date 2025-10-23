@@ -169,48 +169,67 @@ class FolderModel
      * @param string $parent     'root' or nested key (e.g. 'team/reports')
      * @param string $creator    username to set as initial owner (falls back to 'admin')
      */
-    public static function createFolder(string $folderName, string $parent = 'root', string $creator = 'admin'): array
+    public static function createFolder(string $folderName, string $parent, string $creator): array
     {
+        // -------- Normalize incoming values (use ONLY the parameters) --------
+        $folderName = trim((string)$folderName);
+        $parentIn   = trim((string)$parent);
+    
+        // If the client sent a path in folderName (e.g., "bob/new-sub") and parent is root/empty,
+        // derive parent = "bob" and folderName = "new-sub" so permission checks hit "bob".
+        $normalized = ACL::normalizeFolder($folderName);
+        if ($normalized !== 'root' && strpos($normalized, '/') !== false &&
+            ($parentIn === '' || strcasecmp($parentIn, 'root') === 0)) {
+            $parentIn  = trim(str_replace('\\', '/', dirname($normalized)), '/');
+            $folderName = basename($normalized);
+            if ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) $parentIn = 'root';
+        }
+    
+        $parent = ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) ? 'root' : $parentIn;
         $folderName = trim($folderName);
-        $parent     = trim($parent);
-
-        if ($folderName === '' || !preg_match(REGEX_FOLDER_NAME, $folderName)) {
-            return ['success' => false, 'error' => 'Invalid folder name', 'code' => 400];
+        if ($folderName === '') return ['success'=>false, 'error' => 'Folder name required'];
+    
+        // ACL key for new folder
+        $newKey = ($parent === 'root') ? $folderName : ($parent . '/' . $folderName);
+    
+        // -------- Compose filesystem paths --------
+        $base = rtrim((string)UPLOAD_DIR, "/\\");
+        $parentRel = ($parent === 'root') ? '' : str_replace('/', DIRECTORY_SEPARATOR, $parent);
+        $parentAbs = $parentRel ? ($base . DIRECTORY_SEPARATOR . $parentRel) : $base;
+        $newAbs = $parentAbs . DIRECTORY_SEPARATOR . $folderName;
+    
+        // -------- Exists / sanity checks --------
+        if (!is_dir($parentAbs))   return ['success'=>false, 'error' => 'Parent folder does not exist'];
+        if (is_dir($newAbs))       return ['success'=>false, 'error' => 'Folder already exists'];
+    
+        // -------- Create directory --------
+        if (!@mkdir($newAbs, 0775, true)) {
+            $err = error_get_last();
+            return ['success'=>false, 'error' => 'Failed to create folder' . (!empty($err['message']) ? (': '.$err['message']) : '')];
         }
-        if ($parent !== '' && strcasecmp($parent, 'root') !== 0 && !preg_match(REGEX_FOLDER_NAME, $parent)) {
-            return ['success' => false, 'error' => 'Invalid parent folder', 'code' => 400];
+    
+        // -------- Seed ACL --------
+        $inherit = defined('ACL_INHERIT_ON_CREATE') && ACL_INHERIT_ON_CREATE;
+        try {
+            if ($inherit) {
+                // Copy parent’s explicit (legacy 5 buckets), add creator to owners
+                $p = ACL::explicit($parent); // owners, read, write, share, read_own
+                $owners = array_values(array_unique(array_map('strval', array_merge($p['owners'], [$creator]))));
+                $read   = $p['read'];
+                $write  = $p['write'];
+                $share  = $p['share'];
+                ACL::upsert($newKey, $owners, $read, $write, $share);
+            } else {
+                // Creator owns the new folder
+                ACL::ensureFolderRecord($newKey, $creator);
+            }
+        } catch (Throwable $e) {
+            // Roll back FS if ACL seeding fails
+            @rmdir($newAbs);
+            return ['success'=>false, 'error' => 'Failed to seed ACL: ' . $e->getMessage()];
         }
-
-        // Compute ACL key and filesystem path
-        $aclKey = ($parent === '' || strcasecmp($parent, 'root') === 0) ? $folderName : ($parent . '/' . $folderName);
-
-        $base = rtrim(UPLOAD_DIR, '/\\');
-        $path = ($parent === '' || strcasecmp($parent, 'root') === 0)
-            ? $base . DIRECTORY_SEPARATOR . $folderName
-            : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $parent) . DIRECTORY_SEPARATOR . $folderName;
-
-        // Safety: stay inside UPLOAD_DIR
-        $realBase = realpath($base);
-        $realPath = $path; // may not exist yet
-        $parentDir = dirname($path);
-        if (!is_dir($parentDir) && !@mkdir($parentDir, 0775, true)) {
-            return ['success' => false, 'error' => 'Failed to create parent path', 'code' => 500];
-        }
-
-        if (is_dir($path)) {
-            // Idempotent: still ensure ACL record exists
-            ACL::ensureFolderRecord($aclKey, $creator ?: 'admin');
-            return ['success' => true, 'folder' => $aclKey, 'alreadyExists' => true];
-        }
-
-        if (!@mkdir($path, 0775, true)) {
-            return ['success' => false, 'error' => 'Failed to create folder', 'code' => 500];
-        }
-
-        // Seed ACL: owner/read/write/share -> creator; read_own empty
-        ACL::ensureFolderRecord($aclKey, $creator ?: 'admin');
-
-        return ['success' => true, 'folder' => $aclKey];
+    
+        return ['success' => true, 'folder' => $newKey];
     }
 
 

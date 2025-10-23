@@ -1,5 +1,22 @@
 # Changelog
 
+## Changes 10/22/2025 (v1.6.0)
+
+feat(acl): granular per-folder permissions + stricter gates; WebDAV & UI aligned
+
+- Add granular ACL buckets: create, upload, edit, rename, copy, move, delete, extract, share_file, share_folder
+- Implement ACL::canX helpers and expand upsert/explicit APIs (preserve read_own)
+- Enforce “write no longer implies read” in canRead; use granular gates for write-ish ops
+- WebDAV: use canDelete for DELETE, canUpload/canEdit + disableUpload for PUT; enforce ownership on overwrite
+- Folder create: require Manage/Owner on parent; normalize paths; seed ACL; rollback on failure
+- FileController: refactor copy/move/rename/delete/extract to granular gates + folder-scope checks + own-only ownership enforcement
+- Capabilities API: compute effective actions with scope + readOnly/disableUpload; protect root
+- Admin Panel (v1.6.0): new Folder Access editor with granular caps, inheritance hints, bulk toggles, and UX validations
+- getFileList: keep root visible but inert for users without visibility; apply own-only filtering server-side
+- Bump version to v1.6.0
+
+---
+
 ## Changes 10/20/2025 (v1.5.3)
 
 security(acl): enforce folder-scope & own-only; fix file list “Select All”; harden ops

@@ -65,6 +65,37 @@ class FileController
         return [];
     }
 
+    private static function folderOfPath(string $path): string {
+        // normalize path to folder; files: use dirname, folders: return path
+        $p = trim(str_replace('\\', '/', $path), "/ \t\r\n");
+        if ($p === '' || $p === 'root') return 'root';
+        // If it ends with a slash or is an existing folder path, treat as folder
+        if (substr($p, -1) === '/') $p = rtrim($p, '/');
+        // For files, take the parent folder
+        $dir = dirname($p);
+        return ($dir === '.' || $dir === '') ? 'root' : $dir;
+    }
+    
+    private static function ensureSrcDstAllowedForCopy(
+        string $user, array $perms, string $srcPath, string $dstFolder
+    ): bool {
+        $srcFolder = ACL::normalizeFolder(self::folderOfPath($srcPath));
+        $dstFolder = ACL::normalizeFolder($dstFolder);
+        // Need to be able to see the source (own or full) and copy into destination
+        return ACL::canReadOwn($user, $perms, $srcFolder)
+            && ACL::canCopy($user, $perms, $dstFolder);
+    }
+    
+    private static function ensureSrcDstAllowedForMove(
+        string $user, array $perms, string $srcPath, string $dstFolder
+    ): bool {
+        $srcFolder = ACL::normalizeFolder(self::folderOfPath($srcPath));
+        $dstFolder = ACL::normalizeFolder($dstFolder);
+        // Move removes from source and adds to dest
+        return ACL::canDelete($user, $perms, $srcFolder)
+            && ACL::canMove($user, $perms, $dstFolder);
+    }
+
     /**
      * Ownership-only enforcement for a set of files in a folder.
      * Returns null if OK, or an error string.
@@ -135,21 +166,26 @@ class FileController
         // Otherwise, require the specific capability on the target folder
         $ok = false;
         switch ($need) {
-            case 'manage':
-                $ok = ACL::canManage($username, $userPermissions, $folder);
-                break;
-            case 'write':
-                $ok = ACL::canWrite($username, $userPermissions, $folder);
-                break;
-            case 'share':
-                $ok = ACL::canShare($username, $userPermissions, $folder);
-                break;
-            case 'read_own':
-                $ok = ACL::canReadOwn($username, $userPermissions, $folder);
-                break;
-            default: // 'read'
-                $ok = ACL::canRead($username, $userPermissions, $folder);
-        }
+                case 'manage':   $ok = ACL::canManage($username, $userPermissions, $folder); break;
+                case 'write':    $ok = ACL::canWrite($username, $userPermissions, $folder);  break; // legacy
+                case 'share':    $ok = ACL::canShare($username, $userPermissions, $folder);  break; // legacy
+                case 'read_own': $ok = ACL::canReadOwn($username, $userPermissions, $folder); break;
+                // granular:
+                case 'create':   $ok = ACL::canCreate($username, $userPermissions, $folder); break;
+                case 'upload':   $ok = ACL::canUpload($username, $userPermissions, $folder); break;
+                case 'edit':     $ok = ACL::canEdit($username, $userPermissions, $folder);   break;
+                case 'rename':   $ok = ACL::canRename($username, $userPermissions, $folder); break;
+                case 'copy':     $ok = ACL::canCopy($username, $userPermissions, $folder);   break;
+                case 'move':     $ok = ACL::canMove($username, $userPermissions, $folder);   break;
+                case 'delete':   $ok = ACL::canDelete($username, $userPermissions, $folder); break;
+                case 'extract':  $ok = ACL::canExtract($username, $userPermissions, $folder); break;
+                case 'shareFile':
+                case 'share_file':   $ok = ACL::canShareFile($username, $userPermissions, $folder);   break;
+                case 'shareFolder':
+                case 'share_folder': $ok = ACL::canShareFolder($username, $userPermissions, $folder); break;
+                default: // 'read'
+                    $ok = ACL::canRead($username, $userPermissions, $folder);
+            }
 
         return $ok ? null : "Forbidden: folder scope violation.";
     }
@@ -209,110 +245,157 @@ class FileController
      * Actions
      * ========================= */
 
-    public function copyFiles()
-    {
-        $this->_jsonStart();
-        try {
-            if (!$this->_checkCsrf()) return;
-            if (!$this->_requireAuth()) return;
+     public function copyFiles()
+     {
+         $this->_jsonStart();
+         try {
+             if (!$this->_checkCsrf()) return;
+             if (!$this->_requireAuth()) return;
+     
+             $data = $this->_readJsonBody();
+             if (
+                 !$data
+                 || !isset($data['source'], $data['destination'], $data['files'])
+                 || !is_array($data['files'])
+             ) {
+                 $this->_jsonOut(["error" => "Invalid request"], 400); return;
+             }
+     
+             $sourceFolder      = $this->_normalizeFolder($data['source']);
+             $destinationFolder = $this->_normalizeFolder($data['destination']);
+             $files             = array_values(array_filter(array_map('basename', (array)$data['files'])));
 
-            $data = $this->_readJsonBody();
-            if (!$data || !isset($data['source'], $data['destination'], $data['files']) || !is_array($data['files'])) {
-                $this->_jsonOut(["error" => "Invalid request"], 400); return;
+     
+             if (!$this->_validFolder($sourceFolder) || !$this->_validFolder($destinationFolder)) {
+                 $this->_jsonOut(["error" => "Invalid folder name(s)."], 400); return;
+             }
+             if (empty($files)) {
+                        $this->_jsonOut(["error" => "No files specified."], 400); return;
+                }
+     
+             $username        = $_SESSION['username'] ?? '';
+             $userPermissions = $this->loadPerms($username);
+     
+             // --- Permission gates (granular) ------------------------------------
+             // Source: own-only view is enough to copy (we'll enforce ownership below if no full read)
+             $hasSourceView = ACL::canReadOwn($username, $userPermissions, $sourceFolder)
+                            || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions);
+             if (!$hasSourceView) {
+                 $this->_jsonOut(["error" => "Forbidden: no read access to source"], 403); return;
+             }
+     
+             // Destination: must have 'copy' capability (or own ancestor)
+             $hasDestCreate = ACL::canCreate($username, $userPermissions, $destinationFolder)
+                          || $this->ownsFolderOrAncestor($destinationFolder, $username, $userPermissions);
+            if (!$hasDestCreate) {
+                $this->_jsonOut(["error" => "Forbidden: no write access to destination"], 403); return;
             }
 
-            $sourceFolder      = $this->_normalizeFolder($data['source']);
-            $destinationFolder = $this->_normalizeFolder($data['destination']);
-            $files             = $data['files'];
+            $needSrcScope = ACL::canRead($username, $userPermissions, $sourceFolder) ? 'read' : 'read_own';
+     
+             // Folder-scope checks with the needed capabilities
+             $sv = $this->enforceFolderScope($sourceFolder, $username, $userPermissions, $needSrcScope);
+            if ($sv) { $this->_jsonOut(["error" => $sv], 403); return; }
+     
+             $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions, 'create');
+             if ($dv) { $this->_jsonOut(["error" => $dv], 403); return; }
+     
+             // If the user doesn't have full read on source (only read_own), enforce per-file ownership
+             $ignoreOwnership = $this->isAdmin($userPermissions)
+                 || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+     
+             if (
+                 !$ignoreOwnership
+                 && !ACL::canRead($username, $userPermissions, $sourceFolder)   // no explicit full read
+                 && ACL::hasGrant($username, $sourceFolder, 'read_own')         // but has own-only
+             ) {
+                 $ownErr = $this->enforceScopeAndOwnership($sourceFolder, $files, $username, $userPermissions);
+                 if ($ownErr) { $this->_jsonOut(["error" => $ownErr], 403); return; }
+             }
 
-            if (!$this->_validFolder($sourceFolder) || !$this->_validFolder($destinationFolder)) {
-                $this->_jsonOut(["error" => "Invalid folder name(s)."], 400); return;
-            }
+             // Account flags: copy writes new objects into destination
+           if (!empty($userPermissions['readOnly'])) {
+                    $this->_jsonOut(["error" => "Account is read-only."], 403); return;
+                }
+                if (!empty($userPermissions['disableUpload'])) {
+                    $this->_jsonOut(["error" => "Uploads are disabled for your account."], 403); return;
+                }
+     
+             // --- Do the copy ----------------------------------------------------
+             $result = FileModel::copyFiles($sourceFolder, $destinationFolder, $files);
+             $this->_jsonOut($result);
+     
+         } catch (Throwable $e) {
+             error_log('FileController::copyFiles error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+             $this->_jsonOut(['error' => 'Internal server error while copying files.'], 500);
+         } finally {
+             $this->_jsonEnd();
+         }
+     }
 
-            $username        = $_SESSION['username'] ?? '';
-            $userPermissions = $this->loadPerms($username);
+public function deleteFiles()
+{
+    $this->_jsonStart();
+    try {
+        if (!$this->_checkCsrf()) return;
+        if (!$this->_requireAuth()) return;
 
-            // Gate: need read on source (or ancestor-owner) and write on destination (or ancestor-owner)
-            if (!(ACL::canRead($username, $userPermissions, $sourceFolder) || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no read access to source"], 403); return;
-            }
-            if (!(ACL::canWrite($username, $userPermissions, $destinationFolder) || $this->ownsFolderOrAncestor($destinationFolder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access to destination"], 403); return;
-            }
+        $data = $this->_readJsonBody();
+        if (!is_array($data) || !isset($data['files']) || !is_array($data['files'])) {
+            $this->_jsonOut(["error" => "No file names provided"], 400); return;
+        }
 
-            // Folder-scope checks with the needed capabilities
-            $sv = $this->enforceFolderScope($sourceFolder, $username, $userPermissions, 'read');
-            if ($sv) { $this->_jsonOut(["error"=>$sv], 403); return; }
+        // sanitize/normalize the list (empty names filtered out)
+        $files = array_values(array_filter(array_map('strval', $data['files']), fn($s) => $s !== ''));
+        if (!$files) {
+            $this->_jsonOut(["error" => "No file names provided"], 400); return;
+        }
 
-            $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions, 'write');
-            if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
+        $folder = $this->_normalizeFolder($data['folder'] ?? 'root');
+        if (!$this->_validFolder($folder)) {
+            $this->_jsonOut(["error" => "Invalid folder name."], 400); return;
+        }
 
-            // If the user doesn't have full read on source (only read_own), enforce per-file ownership
-            $ignoreOwnership = $this->isAdmin($userPermissions)
-                || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
-            if (
-                !$ignoreOwnership
-                && !ACL::canRead($username, $userPermissions, $sourceFolder)   // no explicit full read
-                && ACL::hasGrant($username, $sourceFolder, 'read_own')         // but has own-only
-            ) {
-                $ownErr = $this->enforceScopeAndOwnership($sourceFolder, $files, $username, $userPermissions);
-                if ($ownErr) { $this->_jsonOut(["error"=>$ownErr], 403); return; }
-            }
+        $username        = $_SESSION['username'] ?? '';
+        $userPermissions = $this->loadPerms($username);
 
-            $result = FileModel::copyFiles($sourceFolder, $destinationFolder, $files);
-            $this->_jsonOut($result);
-        } catch (Throwable $e) {
-            error_log('FileController::copyFiles error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
-            $this->_jsonOut(['error' => 'Internal server error while copying files.'], 500);
-        } finally { $this->_jsonEnd(); }
-    }
+        // --- Permission gates (granular) ------------------------------------
+        // Need delete on folder (or ancestor-owner)
+        $hasDelete = ACL::canDelete($username, $userPermissions, $folder)
+                  || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
+        if (!$hasDelete) {
+            $this->_jsonOut(["error" => "Forbidden: no delete permission"], 403); return;
+        }
 
-    public function deleteFiles()
-    {
-        $this->_jsonStart();
-        try {
-            if (!$this->_checkCsrf()) return;
-            if (!$this->_requireAuth()) return;
+        // --- Folder-scope check (granular) ----------------------------------
+        $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'delete');
+        if ($dv) { $this->_jsonOut(["error" => $dv], 403); return; }
 
-            $data = $this->_readJsonBody();
-            if (!isset($data['files']) || !is_array($data['files'])) {
-                $this->_jsonOut(["error" => "No file names provided"], 400); return;
-            }
+        // --- Ownership enforcement when user only has viewOwn ----------------
+        $ignoreOwnership = $this->isAdmin($userPermissions)
+            || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+        $isFolderOwner = ACL::isOwner($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
 
-            $folder = $this->_normalizeFolder($data['folder'] ?? 'root');
-            if (!$this->_validFolder($folder)) {
-                $this->_jsonOut(["error" => "Invalid folder name."], 400); return;
-            }
+        // If user is not owner/admin and does NOT have full view, but does have own-only, enforce per-file ownership
+        if (
+            !$ignoreOwnership
+            && !$isFolderOwner
+            && !ACL::canRead($username, $userPermissions, $folder)   // lacks full read
+            && ACL::hasGrant($username, $folder, 'read_own')         // has own-only
+        ) {
+            $ownErr = $this->enforceScopeAndOwnership($folder, $files, $username, $userPermissions);
+            if ($ownErr) { $this->_jsonOut(["error" => $ownErr], 403); return; }
+        }
 
-            $username        = $_SESSION['username'] ?? '';
-            $userPermissions = $this->loadPerms($username);
+        // --- Perform delete --------------------------------------------------
+        $result = FileModel::deleteFiles($folder, $files);
+        $this->_jsonOut($result);
 
-            // Need write (or ancestor-owner)
-            if (!(ACL::canWrite($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access"], 403); return;
-            }
-
-            // Folder-scope: write
-            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'write');
-            if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
-
-            // Ownership enforcement for non-admins who are not folder owners
-            $ignoreOwnership = $this->isAdmin($userPermissions)
-                || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
-            $isFolderOwner = ACL::isOwner($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
-
-            if (!$ignoreOwnership && !$isFolderOwner) {
-                $violation = $this->enforceScopeAndOwnership($folder, $data['files'], $username, $userPermissions);
-                if ($violation) { $this->_jsonOut(["error"=>$violation], 403); return; }
-            }
-
-            $result = FileModel::deleteFiles($folder, $data['files']);
-            $this->_jsonOut($result);
-        } catch (Throwable $e) {
-            error_log('FileController::deleteFiles error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
-            $this->_jsonOut(['error' => 'Internal server error while deleting files.'], 500);
-        } finally { $this->_jsonEnd(); }
-    }
+    } catch (Throwable $e) {
+        error_log('FileController::deleteFiles error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        $this->_jsonOut(['error' => 'Internal server error while deleting files.'], 500);
+    } finally { $this->_jsonEnd(); }
+}
 
     public function moveFiles()
     {
@@ -320,41 +403,59 @@ class FileController
         try {
             if (!$this->_checkCsrf()) return;
             if (!$this->_requireAuth()) return;
-
+    
             $data = $this->_readJsonBody();
-            if (!$data || !isset($data['source'], $data['destination'], $data['files']) || !is_array($data['files'])) {
+            if (
+                !$data
+                || !isset($data['source'], $data['destination'], $data['files'])
+                || !is_array($data['files'])
+            ) {
                 $this->_jsonOut(["error" => "Invalid request"], 400); return;
             }
-
+    
             $sourceFolder      = $this->_normalizeFolder($data['source']);
             $destinationFolder = $this->_normalizeFolder($data['destination']);
             if (!$this->_validFolder($sourceFolder) || !$this->_validFolder($destinationFolder)) {
                 $this->_jsonOut(["error" => "Invalid folder name(s)."], 400); return;
             }
-
-            $username        = $_SESSION['username'] ?? '';
-            $userPermissions = $this->loadPerms($username);
-
-            // Require write on both ends (or ancestor-owner on each end)
-            if (!(ACL::canWrite($username, $userPermissions, $sourceFolder) || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access to source"], 403); return;
+    
+            $files            = $data['files'];
+            $username         = $_SESSION['username'] ?? '';
+            $userPermissions  = $this->loadPerms($username);
+    
+            // --- Permission gates (granular) ------------------------------------
+            // Must be able to at least SEE the source and DELETE there
+            $hasSourceView = ACL::canReadOwn($username, $userPermissions, $sourceFolder)
+                           || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions);
+            if (!$hasSourceView) {
+                $this->_jsonOut(["error" => "Forbidden: no read access to source"], 403); return;
             }
-            if (!(ACL::canWrite($username, $userPermissions, $destinationFolder) || $this->ownsFolderOrAncestor($destinationFolder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access to destination"], 403); return;
+    
+            $hasSourceDelete = ACL::canDelete($username, $userPermissions, $sourceFolder)
+                            || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions);
+            if (!$hasSourceDelete) {
+                $this->_jsonOut(["error" => "Forbidden: no delete permission on source"], 403); return;
             }
-
-            $files = $data['files'];
-
-            // Folder scope: need WRITE on both ends for a move
-            $sv = $this->enforceFolderScope($sourceFolder, $username, $userPermissions, 'write');
-            if ($sv) { $this->_jsonOut(["error"=>$sv], 403); return; }
-            $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions, 'write');
-            if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
-
-            // If the user doesn't have full read on source (only read_own), enforce per-file ownership
+    
+            // Destination must allow MOVE
+            $hasDestMove = ACL::canMove($username, $userPermissions, $destinationFolder)
+                        || $this->ownsFolderOrAncestor($destinationFolder, $username, $userPermissions);
+            if (!$hasDestMove) {
+                $this->_jsonOut(["error" => "Forbidden: no move permission on destination"], 403); return;
+            }
+    
+            // --- Folder-scope checks --------------------------------------------
+            // Source needs 'delete' scope; destination needs 'move' scope
+            $sv = $this->enforceFolderScope($sourceFolder, $username, $userPermissions, 'delete');
+            if ($sv) { $this->_jsonOut(["error" => $sv], 403); return; }
+    
+            $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions, 'move');
+            if ($dv) { $this->_jsonOut(["error" => $dv], 403); return; }
+    
+            // --- Ownership enforcement when only viewOwn on source --------------
             $ignoreOwnership = $this->isAdmin($userPermissions)
                 || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
-
+    
             if (
                 !$ignoreOwnership
                 && !ACL::canRead($username, $userPermissions, $sourceFolder)   // no explicit full read
@@ -363,13 +464,17 @@ class FileController
                 $ownErr = $this->enforceScopeAndOwnership($sourceFolder, $files, $username, $userPermissions);
                 if ($ownErr) { $this->_jsonOut(["error"=>$ownErr], 403); return; }
             }
-
+    
+            // --- Perform move ----------------------------------------------------
             $result = FileModel::moveFiles($sourceFolder, $destinationFolder, $files);
             $this->_jsonOut($result);
+    
         } catch (Throwable $e) {
             error_log('FileController::moveFiles error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
             $this->_jsonOut(['error' => 'Internal server error while moving files.'], 500);
-        } finally { $this->_jsonEnd(); }
+        } finally {
+            $this->_jsonEnd();
+        }
     }
 
     public function renameFile()
@@ -378,12 +483,12 @@ class FileController
         try {
             if (!$this->_checkCsrf()) return;
             if (!$this->_requireAuth()) return;
-
+    
             $data = $this->_readJsonBody();
             if (!$data || !isset($data['folder'], $data['oldName'], $data['newName'])) {
                 $this->_jsonOut(["error" => "Invalid input"], 400); return;
             }
-
+    
             $folder  = $this->_normalizeFolder($data['folder']);
             $oldName = basename(trim((string)$data['oldName']));
             $newName = basename(trim((string)$data['newName']));
@@ -391,19 +496,19 @@ class FileController
             if (!$this->_validFile($oldName) || !$this->_validFile($newName)) {
                 $this->_jsonOut(["error"=>"Invalid file name(s)."], 400); return;
             }
-
+    
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
-
-            // Need write (or ancestor-owner)
-            if (!(ACL::canWrite($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access"], 403); return;
+    
+            // Need granular rename (or ancestor-owner)
+            if (!(ACL::canRename($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
+                $this->_jsonOut(["error"=>"Forbidden: no rename rights"], 403); return;
             }
-
-            // Folder scope: write
-            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'write');
+    
+            // Folder scope: rename
+            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'rename');
             if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
-
+    
             // Ownership for non-admins when not a folder owner
             $ignoreOwnership = $this->isAdmin($userPermissions)
                 || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
@@ -412,7 +517,7 @@ class FileController
                 $violation = $this->enforceScopeAndOwnership($folder, [$oldName], $username, $userPermissions);
                 if ($violation) { $this->_jsonOut(["error"=>$violation], 403); return; }
             }
-
+    
             $result = FileModel::renameFile($folder, $oldName, $newName);
             if (!is_array($result)) throw new RuntimeException('FileModel::renameFile returned non-array');
             if (isset($result['error'])) { $this->_jsonOut($result, 400); return; }
@@ -444,12 +549,12 @@ class FileController
             $userPermissions = $this->loadPerms($username);
 
             // Need write (or ancestor-owner)
-            if (!(ACL::canWrite($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access"], 403); return;
+            if (!(ACL::canEdit($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
+                $this->_jsonOut(["error"=>"Forbidden: no full write access"], 403); return;
             }
 
             // Folder scope: write
-            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'write');
+            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'edit');
             if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
 
             // If overwriting, enforce ownership for non-admins (unless folder owner)
@@ -580,7 +685,7 @@ class FileController
             $perms    = $this->loadPerms($username);
 
             // Optional zip gate by account flag
-            if (!$this->isAdmin($perms) && array_key_exists('canZip', $perms) && !$perms['canZip']) {
+            if (!$this->isAdmin($perms) && !empty($perms['disableZip'])) {
                 $this->_jsonOut(["error" => "ZIP downloads are not allowed for your account."], 403); return;
             }
 
@@ -652,12 +757,12 @@ class FileController
             $perms    = $this->loadPerms($username);
 
             // must be able to write into target folder (or be ancestor-owner)
-            if (!(ACL::canWrite($username, $perms, $folder) || $this->ownsFolderOrAncestor($folder, $username, $perms))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access to destination"], 403); return;
+            if (!(ACL::canExtract($username, $perms, $folder) || $this->ownsFolderOrAncestor($folder, $username, $perms))) {
+                $this->_jsonOut(["error"=>"Forbidden: no full write access to destination"], 403); return;
             }
 
             // Folder scope: write
-            $dv = $this->enforceFolderScope($folder, $username, $perms, 'write');
+            $dv = $this->enforceFolderScope($folder, $username, $perms, 'extract');
             if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
 
             $result = FileModel::extractZipArchive($folder, $data['files']);
@@ -785,7 +890,7 @@ class FileController
             $userPermissions = $this->loadPerms($username);
 
             // Need share (or ancestor-owner)
-            if (!(ACL::canShare($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
+            if (!(ACL::canShareFile($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
                 $this->_jsonOut(["error"=>"Forbidden: no share access"], 403); return;
             }
 
@@ -936,7 +1041,7 @@ class FileController
 
             // Need write (or ancestor-owner)
             if (!(ACL::canWrite($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access"], 403); return;
+                $this->_jsonOut(["error"=>"Forbidden: no full write access"], 403); return;
             }
 
             // Folder scope: write
@@ -967,49 +1072,78 @@ class FileController
     {
         if (session_status() !== PHP_SESSION_ACTIVE) session_start();
         header('Content-Type: application/json; charset=utf-8');
-
+    
         // convert warnings/notices to exceptions for cleaner error handling
         set_error_handler(function ($severity, $message, $file, $line) {
             if (!(error_reporting() & $severity)) return;
             throw new ErrorException($message, 0, $severity, $file, $line);
         });
-
+    
         try {
             if (empty($_SESSION['username'])) {
                 http_response_code(401);
                 echo json_encode(['error' => 'Unauthorized']);
                 return;
             }
-
+    
             if (!is_dir(META_DIR)) @mkdir(META_DIR, 0775, true);
-
-            $folder = isset($_GET['folder']) ? trim((string)$_GET['folder']) : 'root';
-            if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Invalid folder name.']);
-                return;
-            }
-
             if (!is_dir(UPLOAD_DIR)) {
                 http_response_code(500);
                 echo json_encode(['error' => 'Uploads directory not found.']);
                 return;
             }
-
+    
+            // --- inputs ---
+            $folder = isset($_GET['folder']) ? trim((string)$_GET['folder']) : 'root';
+    
+            // Validate folder path: allow "root" or nested segments that each match REGEX_FOLDER_NAME
+            if ($folder !== 'root') {
+                $parts = array_filter(explode('/', trim($folder, "/\\ ")));
+                if (empty($parts)) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Invalid folder name.']);
+                    return;
+                }
+                foreach ($parts as $seg) {
+                    if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+                        http_response_code(400);
+                        echo json_encode(['error' => 'Invalid folder name.']);
+                        return;
+                    }
+                }
+                $folder = implode('/', $parts);
+            }
+    
             // ---- Folder-level view checks (full vs own-only) ----
             $username = $_SESSION['username'] ?? '';
             $perms    = $this->loadPerms($username);
-
+    
             // Full view if read OR ancestor owner
-            $fullView = ACL::canRead($username, $perms, $folder) || $this->ownsFolderOrAncestor($folder, $username, $perms);
+            $fullView     = ACL::canRead($username, $perms, $folder) || $this->ownsFolderOrAncestor($folder, $username, $perms);
             $ownOnlyGrant = ACL::hasGrant($username, $folder, 'read_own');
-
-            if (!$fullView && !$ownOnlyGrant) {
+    
+            // Special-case: keep Root visible but inert if user lacks any visibility there.
+            if ($folder === 'root' && !$fullView && !$ownOnlyGrant) {
+                echo json_encode([
+                    'success' => true,
+                    'folder'  => 'root',
+                    'files'   => [],
+                    // Optional hint the UI can use to show a soft message / disable actions:
+                    'uiHints' => [
+                        'noAccessRoot' => true,
+                        'message'      => "You don't have access to Root. Select a folder you have access to."
+                    ],
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+    
+            // Non-root: still enforce 403 if no visibility
+            if ($folder !== 'root' && !$fullView && !$ownOnlyGrant) {
                 http_response_code(403);
                 echo json_encode(['error' => 'Forbidden: no view access to this folder.']);
                 return;
             }
-
+    
             // Fetch the list
             $result = FileModel::getFileList($folder);
             if ($result === false || $result === null) {
@@ -1025,12 +1159,12 @@ class FileController
                 echo json_encode($result);
                 return;
             }
-
+    
             // ---- Apply own-only filter if user does NOT have full view ----
             if (!$fullView && $ownOnlyGrant && isset($result['files'])) {
                 $files = $result['files'];
-
-                // If files keyed by filename
+    
+                // If files keyed by filename (assoc array)
                 if (is_array($files) && array_keys($files) !== range(0, count($files) - 1)) {
                     $filtered = [];
                     foreach ($files as $name => $meta) {
@@ -1040,7 +1174,7 @@ class FileController
                     }
                     $result['files'] = $filtered;
                 }
-                // If files are a numeric array of metadata
+                // If files is a numeric array of metadata items
                 else if (is_array($files)) {
                     $result['files'] = array_values(array_filter(
                         $files,
@@ -1050,7 +1184,7 @@ class FileController
                     ));
                 }
             }
-
+    
             echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         } catch (Throwable $e) {
             error_log('FileController::getFileList error: '.$e->getMessage().' in '.$e->getFile().':'.$e->getLine());
@@ -1117,12 +1251,12 @@ class FileController
             $userPermissions = $this->loadPerms($username);
 
             // Need write (or ancestor-owner)
-            if (!(ACL::canWrite($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
-                $this->_jsonOut(["error"=>"Forbidden: no write access"], 403); return;
+            if (!(ACL::canCreate($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
+                $this->_jsonOut(["error"=>"Forbidden: no full write access"], 403); return;
             }
 
             // Folder scope: write
-            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'write');
+            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'create');
             if ($dv) { $this->_jsonOut(["error"=>$dv], 403); return; }
 
             $result = FileModel::createFile($folder, $filename, $username);

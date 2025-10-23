@@ -40,6 +40,7 @@ if (!defined('DEFAULT_CAN_SHARE'))        define('DEFAULT_CAN_SHARE', true);
 if (!defined('DEFAULT_CAN_ZIP'))          define('DEFAULT_CAN_ZIP', true);
 if (!defined('DEFAULT_VIEW_OWN_ONLY'))    define('DEFAULT_VIEW_OWN_ONLY', false);
 define('FOLDER_OWNERS_FILE', META_DIR . 'folder_owners.json');
+define('ACL_INHERIT_ON_CREATE', true);
 
 // Encryption helpers
 function encryptData($data, $encryptionKey)

@@ -1,6 +1,8 @@
 <?php
 namespace FileRise\WebDAV;
 
+//src/webdav/FileRiseDirectory.php
+
 require_once __DIR__ . '/../../config/config.php';      // constants + loadUserPermissions()
 require_once __DIR__ . '/../../vendor/autoload.php';    // SabreDAV
 require_once __DIR__ . '/../../src/lib/ACL.php';
@@ -166,9 +168,9 @@ class FileRiseDirectory implements ICollection, INode {
 
     public function createDirectory($name): INode {
         $parentKey = $this->folderKeyForPath($this->path);
-        if (!$this->isAdmin && !\ACL::canWrite($this->user, $this->perms, $parentKey)) {
-            throw new Forbidden('No permission to create subfolders here');
-        }
+        if (!$this->isAdmin && !\ACL::canManage($this->user, $this->perms, $parentKey)) {
+                        throw new Forbidden('No permission to create subfolders here');
+            }
 
         $full = $this->path . DIRECTORY_SEPARATOR . $name;
         if (!is_dir($full)) {

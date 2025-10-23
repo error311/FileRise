@@ -57,7 +57,7 @@ class UploadController {
         $targetFolder  = ACL::normalizeFolder($folderParam);
     
         // Admins bypass folder canWrite checks
-        if (!$isAdmin && !ACL::canWrite($username, $userPerms, $targetFolder)) {
+        if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden: no write access to folder "'.$targetFolder.'".']);
             return;

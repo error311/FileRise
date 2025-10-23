@@ -1,27 +1,5 @@
 <?php
 // public/api/admin/acl/saveGrants.php
-
-/**
- * @OA\Post(
- *   path="/api/admin/acl/saveGrants.php",
- *   summary="Save ACL grants (single-user or batch)",
- *   tags={"Admin","ACL"},
- *   security={{"cookieAuth":{}}},
- *   @OA\RequestBody(
- *     required=true,
- *     description="Either {user,grants} or {changes:[{user,grants}]}",
- *     @OA\JsonContent(oneOf={
- *       @OA\Schema(ref="#/components/schemas/SaveGrantsSingle"),
- *       @OA\Schema(ref="#/components/schemas/SaveGrantsBatch")
- *     })
- *   ),
- *   @OA\Response(response=200, description="Saved"),
- *   @OA\Response(response=400, description="Invalid payload"),
- *   @OA\Response(response=401, description="Unauthorized"),
- *   @OA\Response(response=403, description="Invalid CSRF")
- * )
- */
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../../../config/config.php';
@@ -47,22 +25,38 @@ if (empty($_SESSION['csrf_token']) || $csrf !== $_SESSION['csrf_token']) {
 }
 
 // ---- Helpers ---------------------------------------------------------------
-/**
- * Sanitize a grants map to allowed flags only:
- * view | viewOwn | upload | manage | share
- */
+function normalize_caps(array $row): array {
+  // booleanize known keys
+  $bool = function($v){ return !empty($v) && $v !== 'false' && $v !== 0; };
+  $k = [
+    'view','viewOwn','upload','manage','share',
+    'create','edit','rename','copy','move','delete','extract',
+    'shareFile','shareFolder','write'
+  ];
+  $out = [];
+  foreach ($k as $kk) $out[$kk] = $bool($row[$kk] ?? false);
+
+  // BUSINESS RULES:
+  // A) Share Folder REQUIRES View (all). If shareFolder is true but view is false, force view=true.
+  if ($out['shareFolder'] && !$out['view']) {
+    $out['view'] = true;
+  }
+
+  // B) Share File requires at least View (own). If neither view nor viewOwn set, set viewOwn=true.
+  if ($out['shareFile'] && !$out['view'] && !$out['viewOwn']) {
+    $out['viewOwn'] = true;
+  }
+
+  // C) "write" does NOT imply view. It also does not imply granular here; ACL expands legacy write if present.
+  return $out;
+}
+
 function sanitize_grants_map(array $grants): array {
-  $allowed = ['view','viewOwn','upload','manage','share'];
   $out = [];
   foreach ($grants as $folder => $caps) {
     if (!is_string($folder)) $folder = (string)$folder;
     if (!is_array($caps))    $caps   = [];
-    $row = [];
-    foreach ($allowed as $k) {
-      $row[$k] = !empty($caps[$k]);
-    }
-    // include folder even if all false (signals "remove all for this user on this folder")
-    $out[$folder] = $row;
+    $out[$folder] = normalize_caps($caps);
   }
   return $out;
 }

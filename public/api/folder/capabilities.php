@@ -51,7 +51,7 @@
  * )
  */
 
-
+declare(strict_types=1);
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 
 require_once __DIR__ . '/../../../config/config.php';
@@ -88,30 +88,50 @@ function loadPermsFor(string $u): array {
   return [];
 }
 
-function isAdminUser(string $u, array $perms): bool {
-  if (!empty($perms['admin']) || !empty($perms['isAdmin'])) return true;
-  if (!empty($_SESSION['isAdmin']) && $_SESSION['isAdmin'] === true) return true;
-  $role = $_SESSION['role'] ?? null;
-  if ($role === 'admin' || $role === '1' || $role === 1) return true;
-  if ($u) {
-    $r = userModel::getUserRole($u);
-    if ($r === '1') return true;
+function isOwnerOrAncestorOwner(string $user, array $perms, string $folder): bool {
+  $f = ACL::normalizeFolder($folder);
+  // direct owner
+  if (ACL::isOwner($user, $perms, $f)) return true;
+  // ancestor owner
+  while ($f !== '' && strcasecmp($f, 'root') !== 0) {
+    $pos = strrpos($f, '/');
+    if ($pos === false) break;
+    $f = substr($f, 0, $pos);
+    if ($f === '' || strcasecmp($f, 'root') === 0) break;
+    if (ACL::isOwner($user, $perms, $f)) return true;
   }
   return false;
 }
 
+/**
+ * folder-only scope:
+ * - Admins: always in scope
+ * - Non folder-only accounts: always in scope
+ * - Folder-only accounts: in scope iff:
+ *   - folder == username OR subpath of username, OR
+ *   - user is owner of this folder (or any ancestor)
+ */
 function inUserFolderScope(string $folder, string $u, array $perms, bool $isAdmin): bool {
   if ($isAdmin) return true;
-  $folderOnly = !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']);
-  if (!$folderOnly) return true;
-  $f = trim($folder);
-  if ($f === '' || strcasecmp($f, 'root') === 0) return false; // non-admin folderOnly: not root
-  return ($f === $u) || (strpos($f, $u . '/') === 0);
+  //$folderOnly = !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']);
+  //if (!$folderOnly) return true;
+
+  $f = ACL::normalizeFolder($folder);
+  if ($f === 'root' || $f === '') {
+    // folder-only users cannot act on root unless they own a subfolder (handled below)
+    return isOwnerOrAncestorOwner($u, $perms, $f);
+  }
+
+  if ($f === $u || str_starts_with($f, $u . '/')) return true;
+
+  // Treat ownership as in-scope
+  return isOwnerOrAncestorOwner($u, $perms, $f);
 }
 
 // --- inputs ---
 $folder = isset($_GET['folder']) ? trim((string)$_GET['folder']) : 'root';
-// validate folder path: allow "root" or nested segments matching REGEX_FOLDER_NAME
+
+// validate folder path
 if ($folder !== 'root') {
   $parts = array_filter(explode('/', trim($folder, "/\\ ")));
   if (empty($parts)) {
@@ -129,44 +149,90 @@ if ($folder !== 'root') {
   $folder = implode('/', $parts);
 }
 
-$perms   = loadPermsFor($username);
-$isAdmin = isAdminUser($username, $perms);
+// --- user + flags ---
+$perms       = loadPermsFor($username);
+$isAdmin     = ACL::isAdmin($perms);
+$readOnly    = !empty($perms['readOnly']);
+$disableUp   = !empty($perms['disableUpload']);
+$inScope     = inUserFolderScope($folder, $username, $perms, $isAdmin);
 
-// base permissions via ACL
-$canRead   = $isAdmin || ACL::canRead($username, $perms, $folder);
-$canWrite  = $isAdmin || ACL::canWrite($username, $perms, $folder);
-$canShare  = $isAdmin || ACL::canShare($username, $perms, $folder);
+// --- ACL base abilities ---
+$canViewBase   = $isAdmin || ACL::canRead($username, $perms, $folder);
+$canViewOwn    = $isAdmin || ACL::canReadOwn($username, $perms, $folder);
+$canWriteBase  = $isAdmin || ACL::canWrite($username, $perms, $folder);
+$canShareBase  = $isAdmin || ACL::canShare($username, $perms, $folder);
 
-// scope + flags
-$inScope         = inUserFolderScope($folder, $username, $perms, $isAdmin);
-$readOnly        = !empty($perms['readOnly']);
-$disableUpload   = !empty($perms['disableUpload']);
+$canManageBase = $isAdmin || ACL::canManage($username, $perms, $folder);
 
-$canUpload       = $canWrite && !$readOnly && !$disableUpload && $inScope;
-$canCreateFolder = $canWrite && !$readOnly && $inScope;
-$canRename       = $canWrite && !$readOnly && $inScope;
-$canDelete       = $canWrite && !$readOnly && $inScope;
-$canMoveIn       = $canWrite && !$readOnly && $inScope;
+// granular base
+$gCreateBase   = $isAdmin || ACL::canCreate($username, $perms, $folder);
+$gRenameBase   = $isAdmin || ACL::canRename($username, $perms, $folder);
+$gDeleteBase   = $isAdmin || ACL::canDelete($username, $perms, $folder);
+$gMoveBase     = $isAdmin || ACL::canMove($username, $perms, $folder);
+$gUploadBase   = $isAdmin || ACL::canUpload($username, $perms, $folder);
+$gEditBase     = $isAdmin || ACL::canEdit($username, $perms, $folder);
+$gCopyBase     = $isAdmin || ACL::canCopy($username, $perms, $folder);
+$gExtractBase  = $isAdmin || ACL::canExtract($username, $perms, $folder);
+$gShareFile    = $isAdmin || ACL::canShareFile($username, $perms, $folder);
+$gShareFolder  = $isAdmin || ACL::canShareFolder($username, $perms, $folder);
 
-// (optional) owner info if you need it client-side
-$owner = FolderModel::getOwnerFor($folder);
+// --- Apply scope + flags to effective UI actions ---
+$canView     = $canViewBase && $inScope;              // keep scope for folder-only
+$canUpload   = $gUploadBase   && !$readOnly && !$disableUpload && $inScope;
+$canCreate   = $canManageBase && !$readOnly && $inScope;  // Create **folder**
+$canRename   = $canManageBase && !$readOnly && $inScope;  // Rename **folder**
+$canDelete   = $gDeleteBase   && !$readOnly && $inScope;
+// Destination can receive items if user can create/write (or manage) here
+$canReceive  = ($gUploadBase || $gCreateBase || $canManageBase) && !$readOnly && $inScope;
+// Back-compat: expose as canMoveIn (used by toolbar/context-menu/drag&drop)
+$canMoveIn   = $canReceive;
+$canEdit     = $gEditBase     && !$readOnly && $inScope;
+$canCopy     = $gCopyBase     && !$readOnly && $inScope;
+$canExtract  = $gExtractBase  && !$readOnly && $inScope;
 
-// output
+// Sharing respects scope; optionally also gate on readOnly
+$canShare         = $canShareBase && $inScope;         // legacy umbrella
+$canShareFileEff  = $gShareFile   && $inScope;
+$canShareFoldEff  = $gShareFolder && $inScope;
+
+// never allow destructive ops on root
+$isRoot = ($folder === 'root');
+if ($isRoot) {
+  $canRename = false;
+  $canDelete = false;
+  $canShareFoldEff = false;
+}
+
+$owner = null;
+try { $owner = FolderModel::getOwnerFor($folder); } catch (Throwable $e) {}
+
 echo json_encode([
-  'user'        => $username,
-  'folder'      => $folder,
-  'isAdmin'     => $isAdmin,
-  'flags'       => [
-    'folderOnly'    => !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']),
+  'user'    => $username,
+  'folder'  => $folder,
+  'isAdmin' => $isAdmin,
+  'flags'   => [
+    //'folderOnly'    => !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']),
     'readOnly'      => $readOnly,
-    'disableUpload' => $disableUpload,
+    'disableUpload' => $disableUp,
   ],
-  'owner'      => $owner,
-  'canView'    => $canRead,
-  'canUpload'  => $canUpload,
-  'canCreate'  => $canCreateFolder,
-  'canRename'  => $canRename,
-  'canDelete'  => $canDelete,
-  'canMoveIn'  => $canMoveIn,
-  'canShare'   => $canShare,
+  'owner'        => $owner,
+
+  // viewing
+  'canView'      => $canView,
+  'canViewOwn'   => $canViewOwn,
+
+  // write-ish
+  'canUpload'    => $canUpload,
+  'canCreate'    => $canCreate,
+  'canRename'    => $canRename,
+  'canDelete'    => $canDelete,
+  'canMoveIn'    => $canMoveIn,
+  'canEdit'      => $canEdit,
+  'canCopy'      => $canCopy,
+  'canExtract'   => $canExtract,
+
+  // sharing
+  'canShare'        => $canShare,          // legacy
+  'canShareFile'    => $canShareFileEff,
+  'canShareFolder'  => $canShareFoldEff,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

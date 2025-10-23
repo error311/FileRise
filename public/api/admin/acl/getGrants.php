@@ -1,28 +1,5 @@
 <?php
 // public/api/admin/acl/getGrants.php
-
-/**
- * @OA\Get(
- *   path="/api/admin/acl/getGrants.php",
- *   summary="Get ACL grants for a user",
- *   tags={"Admin","ACL"},
- *   security={{"cookieAuth":{}}},
- *   @OA\Parameter(name="user", in="query", required=true, @OA\Schema(type="string")),
- *   @OA\Response(
- *     response=200,
- *     description="Map of folder → grant flags",
- *     @OA\JsonContent(
- *       type="object",
- *       required={"grants"},
- *       @OA\Property(property="grants", ref="#/components/schemas/GrantsMap")
- *     )
- *   ),
- *   @OA\Response(response=400, description="Invalid user"),
- *   @OA\Response(response=401, description="Unauthorized")
- * )
- */
-
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../../../config/config.php';
@@ -32,7 +9,6 @@ require_once PROJECT_ROOT . '/src/models/FolderModel.php';
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 header('Content-Type: application/json');
 
-// Admin only
 if (empty($_SESSION['authenticated']) || empty($_SESSION['isAdmin'])) {
   http_response_code(401); echo json_encode(['error'=>'Unauthorized']); exit;
 }
@@ -55,7 +31,7 @@ try {
 } catch (Throwable $e) { /* ignore */ }
 
 if (empty($folders)) {
-  $aclPath = META_DIR . 'folder_acl.json';
+  $aclPath = rtrim(META_DIR, "/\\") . DIRECTORY_SEPARATOR . 'folder_acl.json';
   if (is_file($aclPath)) {
     $data = json_decode((string)@file_get_contents($aclPath), true);
     if (is_array($data['folders'] ?? null)) {
@@ -74,27 +50,34 @@ $has = function(array $arr, string $u): bool {
 
 $out = [];
 foreach ($folderList as $f) {
-  $rec = ACL::explicit($f); // owners, read, write, share, read_own
+  $rec = ACL::explicitAll($f); // legacy + granular
 
-  $isOwner   = $has($rec['owners'],   $user);
-  $canUpload = $isOwner || $has($rec['write'], $user);
-
-  // IMPORTANT: full view only if owner or explicit read
+  $isOwner    = $has($rec['owners'], $user);
   $canViewAll = $isOwner || $has($rec['read'], $user);
-
-  // own-only view reflects explicit read_own (we keep it separate even if they have full view)
   $canViewOwn = $has($rec['read_own'], $user);
+  $canShare   = $isOwner || $has($rec['share'], $user);
+  $canUpload  = $isOwner || $has($rec['write'], $user) || $has($rec['upload'], $user);
 
-  // Share only if owner or explicit share
-  $canShare = $isOwner || $has($rec['share'], $user);
-
-  if ($canViewAll || $canViewOwn || $canUpload || $isOwner || $canShare) {
+  if ($canViewAll || $canViewOwn || $canUpload || $canShare || $isOwner
+      || $has($rec['create'],$user) || $has($rec['edit'],$user) || $has($rec['rename'],$user)
+      || $has($rec['copy'],$user) || $has($rec['move'],$user) || $has($rec['delete'],$user)
+      || $has($rec['extract'],$user) || $has($rec['share_file'],$user) || $has($rec['share_folder'],$user)) {
     $out[$f] = [
-      'view'    => $canViewAll,
-      'viewOwn' => $canViewOwn,
-      'upload'  => $canUpload,
-      'manage'  => $isOwner,
-      'share'   => $canShare,
+      'view'        => $canViewAll,
+      'viewOwn'     => $canViewOwn,
+      'write'       => $has($rec['write'], $user) || $isOwner,
+      'manage'      => $isOwner,
+      'share'       => $canShare, // legacy
+      'create'      => $isOwner || $has($rec['create'], $user),
+      'upload'      => $isOwner || $has($rec['upload'], $user) || $has($rec['write'],$user),
+      'edit'        => $isOwner || $has($rec['edit'], $user)   || $has($rec['write'],$user),
+      'rename'      => $isOwner || $has($rec['rename'], $user) || $has($rec['write'],$user),
+      'copy'        => $isOwner || $has($rec['copy'], $user)   || $has($rec['write'],$user),
+      'move'        => $isOwner || $has($rec['move'], $user)   || $has($rec['write'],$user),
+      'delete'      => $isOwner || $has($rec['delete'], $user) || $has($rec['write'],$user),
+      'extract'     => $isOwner || $has($rec['extract'], $user)|| $has($rec['write'],$user),
+      'shareFile'   => $isOwner || $has($rec['share_file'], $user) || $has($rec['share'],$user),
+      'shareFolder' => $isOwner || $has($rec['share_folder'], $user) || $has($rec['share'],$user),
     ];
   }
 }

@@ -10,8 +10,14 @@
 
 **Quick links:** [Demo](#live-demo) • [Install](#installation--setup) • [Docker](#1-running-with-docker-recommended) • [Unraid](#unraid) • [WebDAV](#quick-start-mount-via-webdav) • [FAQ](#faq--troubleshooting)
 
-**Elevate your File Management** – A modern, self-hosted web file manager.
-Upload, organize, and share files or folders through a sleek web interface. **FileRise** is lightweight yet powerful: think of it as your personal cloud drive that you control. With drag-and-drop uploads, in-browser editing, secure user logins (with SSO and 2FA support), and one-click sharing, **FileRise** makes file management on your server a breeze.
+**Elevate your File Management** – A modern, self-hosted web file manager.  
+Upload, organize, and share files or folders through a sleek, responsive web interface.  
+**FileRise** is lightweight yet powerful — your personal cloud drive that you fully control.  
+
+Now featuring **Granular Access Control (ACL)** with per-folder permissions, inheritance, and live admin editing.  
+Grant precise capabilities like *view*, *upload*, *rename*, *delete*, or *manage* on a per-user, per-folder basis — enforced across the UI, API, and WebDAV.  
+
+With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2FA), and one-click public sharing, **FileRise** brings professional-grade file management to your own server — simple to deploy, easy to scale, and fully self-hosted.
 
 > ⚠️ **Security fix in v1.5.0** — ACL hardening. If you’re on ≤1.4.x, please upgrade.
 
@@ -26,33 +32,54 @@ Upload, organize, and share files or folders through a sleek web interface. **Fi
 
 ## Features at a Glance or [Full Features Wiki](https://github.com/error311/FileRise/wiki/Features)
 
-- 🚀 **Easy File Uploads:** Upload multiple files and folders via drag & drop or file picker. Supports large files with pause/resumable chunked uploads and shows real-time progress for each file. FileRise will pick up where it left off if your connection drops.
+- 🚀 **Easy File Uploads:** Upload multiple files and folders via drag & drop or file picker. Supports large files with resumable chunked uploads, pause/resume, and real-time progress. If your connection drops, FileRise resumes automatically.
 
-- 🗂️ **File Management:** Full set of file/folder operations – move or copy files (via intuitive drag-drop or dialogs), rename items, and delete in batches. You can download selected files as a ZIP archive or extract uploaded ZIP files server-side. Organize content with an interactive folder tree and breadcrumb navigation for quick jumps.
+- 🗂️ **File Management:** Full suite of operations — move/copy (via drag-drop or dialogs), rename, and batch delete. Download selected files as ZIPs or extract uploaded ZIPs server-side. Organize with an interactive folder tree and breadcrumbs for instant navigation.
 
-- 🗃️ **Folder Sharing & File Sharing:** Share entire folders via secure, expiring public links. Folder shares can be password-protected, and shared folders support file uploads from outside users with a separate, secure upload mechanism. Folder listings are paginated (10 items/page); file sizes are displayed in MB. Share individual files with one-time or expiring links (optional password protection).
+- 🗃️ **Folder & File Sharing:** Share folders or individual files with expiring, optionally password-protected links. Shared folders can accept external uploads (if enabled). Listings are paginated (10 items/page) with file sizes shown in MB.
 
-- 🔐 **Fine-grained Access Control (ACL):** Per-folder grants for **owners**, **read** (view all), **read_own** (own-only visibility), **write** (upload/edit), and **share**.  
-  - _Note:_ **write no longer implies read**. Grant **read** if uploaders should see all files; or **read_own** for self-only listings.  
-  - Enforced server-side across UI, API, and WebDAV. Includes an admin UI for bulk editing (atomic updates) and safe defaults.
+- 🔐 **Granular Access Control (ACL):**  
+  Per-folder permissions for **owners**, **view**, **view (own)**, **write**, **manage**, **share**, and extended granular capabilities.  
+  Each grant controls specific actions across the UI, API, and WebDAV:
 
-- 🔌 **WebDAV Support (ACL-aware):** Mount FileRise as a network drive **or use it headless from the CLI**. Standard WebDAV ops (upload / download / delete) work in Cyberduck, WinSCP, GNOME Files, Finder, etc., and you can script with `curl`. Listings require **read**; users with **read_own** only see their own files; writes require **write**.
+  - **Manage / Owner:** Full control — can grant/revoke ACLs, rename/create/delete folders, and share subfolders. Implies all other permissions on that folder and its subfolders.  
+  - **View (All):** See all files within a folder. Required for sharing folders.  
+  - **View (Own):** See only your own uploads (useful for drop zones or limited contributors).  
+  - **Write:** General write access — allows editing, renaming, moving, copying, deleting, and extracting files.  
+  - **Create:** Allows creating subfolders (now gated by *Manage* or explicit *Create*).  
+  - **Upload:** Upload new files (can be given without full write).  
+  - **Edit / Rename / Copy / Move / Delete / Extract:** Individually controllable granular file actions.  
+  - **Share File / Share Folder:** Create share links; folder shares require full View (All).  
+  - **Automatic Propagation:** Enabling **Manage** on a folder applies to all subfolders; deselecting subfolder permissions overrides inheritance in the UI.
 
-- 📚 **API Documentation:** Auto-generated OpenAPI spec (`openapi.json`) and interactive HTML docs (`api.html`) powered by Redoc.
+  ACL enforcement is centralized and atomic across:
+  - **Admin Panel:** Interactive ACL editor with batch save and dynamic inheritance visualization.  
+  - **API Endpoints:** All file/folder operations validate server-side.  
+  - **WebDAV:** Uses the same ACL engine — View / Own determine listings, granular permissions control upload/edit/delete/create.
 
-- 📝 **Built-in Editor & Preview:** View images, videos, audio, and PDFs inline with a preview modal. Edit text/code files in your browser with a CodeMirror-based editor with syntax highlighting and line numbers.
+- 🔌 **WebDAV (ACL-Aware):** Mount FileRise as a drive (Cyberduck, WinSCP, Finder, etc.) or access via `curl`.  
+  - Listings require **View** or **View (Own)**.  
+  - Uploads require **Upload**.  
+  - Overwrites require **Edit**.  
+  - Deletes require **Delete**.  
+  - Creating folders requires **Create** or **Manage**.  
+  - All ACLs and ownership rules are enforced exactly as in the web UI.
 
-- 🏷️ **Tags & Search:** Categorize your files with color-coded tags and locate them instantly using indexed real-time search. **Advanced Search** adds fuzzy matching across file names, tags, uploader fields, and within text file contents.
+- 📚 **API Documentation:** Auto-generated OpenAPI spec (`openapi.json`) with interactive HTML docs (`api.html`) via Redoc.
 
-- 🔒 **Auth & SSO:** Username/password login, optional TOTP 2FA, and OIDC (Google/Authentik/Keycloak). Per-user flags like **readOnly**/**disableUpload** still supported, but folder access is governed by the ACL above.
+- 📝 **Built-in Editor & Preview:** Inline preview for images, video, audio, and PDFs. CodeMirror-based editor for text/code with syntax highlighting and line numbers.
 
-- 🗑️ **Trash & Recovery:** Deleted items go to Trash first; **admins** can restore or empty. Old trash entries auto-purge (default 3 days).
+- 🏷️ **Tags & Search:** Add color-coded tags and search by name, tag, uploader, or content. Advanced fuzzy search indexes metadata and file contents.
 
-- 🎨 **Responsive UI (Dark/Light Mode):** Mobile-friendly layout with theme toggle. The interface remembers your preferences (layout, items per page, last visited folder, etc.).
+- 🔒 **Authentication & SSO:** Username/password, optional TOTP 2FA, and OIDC (Google, Authentik, Keycloak).
 
-- 🌐 **Internationalization & Localization:** Switch languages via the UI (English, Spanish, French, German). Contributions welcome.
+- 🗑️ **Trash & Recovery:** Deleted items move to Trash for recovery (default 3-day retention). Admins can restore or purge globally.
 
-- ⚙️ **Lightweight & Self-Contained:** Runs on PHP **8.3+** with no external database. Single-folder install or Docker image. Low footprint; scales to thousands of files with pagination and sorting.
+- 🎨 **Responsive UI (Dark/Light Mode):** Modern, mobile-friendly design with persistent preferences (theme, layout, last folder, etc.).
+
+- 🌐 **Internationalization:** English, Spanish, French, and German available. Community translations welcome.
+
+- ⚙️ **Lightweight & Self-Contained:** Runs on PHP 8.3+, no external DB required. Single-folder or Docker deployment with minimal footprint, optimized for Unraid and self-hosting.
 
 (For full features and changelogs, see the [Wiki](https://github.com/error311/FileRise/wiki), [CHANGELOG](https://github.com/error311/FileRise/blob/master/CHANGELOG.md) or [Releases](https://github.com/error311/FileRise/releases).)
 

@@ -4,10 +4,61 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.5.3";
+const version = "v1.6.0";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
 
-// Translate with fallback: if t(key) just echos the key, use a readable string.
+
+/* === BEGIN: Folder Access helpers (merged + improved) === */
+function qs(scope, sel){ return (scope||document).querySelector(sel); }
+function qsa(scope, sel){ return Array.from((scope||document).querySelectorAll(sel)); }
+
+function enforceShareFolderRule(row) {
+  const manage = qs(row, 'input[data-cap="manage"]');
+  const viewAll = qs(row, 'input[data-cap="view"]');
+  const shareFolder = qs(row, 'input[data-cap="shareFolder"]');
+  if (!shareFolder) return;
+  const ok = !!(manage && manage.checked) && !!(viewAll && viewAll.checked);
+  if (!ok) {
+    shareFolder.checked = false;
+    shareFolder.disabled = true;
+    shareFolder.setAttribute('data-disabled-reason', 'Requires Manage + View (all)');
+  } else {
+    shareFolder.disabled = false;
+    shareFolder.removeAttribute('data-disabled-reason');
+  }
+}
+
+function onShareFolderToggle(row, checked) {
+  const manage = qs(row, 'input[data-cap="manage"]');
+  const viewAll = qs(row, 'input[data-cap="view"]');
+  if (checked) {
+    if (manage && !manage.checked) manage.checked = true;
+    if (viewAll && !viewAll.checked) viewAll.checked = true;
+  }
+  enforceShareFolderRule(row);
+}
+
+function onShareFileToggle(row, checked) {
+  if (!checked) return;
+  const viewAll = qs(row, 'input[data-cap="view"]');
+  const viewOwn = qs(row, 'input[data-cap="viewOwn"]');
+  const hasView = !!(viewAll && viewAll.checked);
+  const hasOwn  = !!(viewOwn && viewOwn.checked);
+  if (!hasView && !hasOwn && viewOwn) {
+    viewOwn.checked = true;
+  }
+}
+
+function onWriteToggle(row, checked) {
+  const caps = ["create","upload","edit","rename","copy","move","delete","extract"];
+  caps.forEach(c => {
+    const box = qs(row, `input[data-cap="${c}"]`);
+    if (box) box.checked = checked;
+  });
+}
+/* === END: Folder Access helpers (merged + improved) === */
+
+// Translate with fallback
 const tf = (key, fallback) => {
   const v = t(key);
   return (v && v !== key) ? v : fallback;
@@ -44,19 +95,16 @@ async function safeJson(res) {
       color: #000 !important;
       border: 1px solid #ccc !important;
     }
-    /* Small phones: 90% width */
     @media (max-width: 900px) {
       #adminPanelModal .modal-content {
         width: 90% !important;
         max-width: none !important;
       }
     }
-    /* Dark-mode fixes */
     body.dark-mode #adminPanelModal .modal-content { background:#2c2c2c !important; color:#e0e0e0 !important; border-color:#555 !important; }
     body.dark-mode .form-control { background-color:#333; border-color:#555; color:#eee; }
     body.dark-mode .form-control::placeholder { color:#888; }
 
-    /* Section headers */
     .section-header {
       background:#f5f5f5; padding:10px 15px; cursor:pointer; border-radius:4px; font-weight:bold;
       display:flex; align-items:center; justify-content:space-between; margin-top:16px;
@@ -67,10 +115,8 @@ async function safeJson(res) {
     body.dark-mode .section-header { background:#3a3a3a; color:#eee; }
     body.dark-mode .section-header .material-icons { color:#ccc; }
 
-    /* Hidden by default */
     .section-content { display:none; margin-left:20px; margin-top:8px; margin-bottom:8px; }
 
-    /* Close button */
     #adminPanelModal .editor-close-btn {
       position:absolute; top:10px; right:10px; display:flex; align-items:center; justify-content:center;
       font-size:20px; font-weight:bold; cursor:pointer; z-index:1000; width:32px; height:32px; border-radius:50%;
@@ -80,37 +126,31 @@ async function safeJson(res) {
     #adminPanelModal .editor-close-btn:hover { color:#fff; background:#ff4d4d; box-shadow:0 0 6px rgba(255,77,77,.8); transform:scale(1.05); }
     body.dark-mode #adminPanelModal .editor-close-btn { background:rgba(0,0,0,0.6); color:#ff4d4d; }
 
-    /* Action-row */
     .action-row { display:flex; justify-content:space-between; margin-top:15px; }
 
     /* ---------- Folder access editor ---------- */
     .folder-access-toolbar {
       display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0 6px;
     }
-
-    /* Scroll area (header lives inside, sticky) */
     .folder-access-list {
-      --col-perm: 84px;         /* width of each permission column */
-      --col-folder-min: 340px;  /* min width for folder names */
+      --col-perm: 84px;
+      --col-folder-min: 340px;
       max-height: 320px;
       overflow: auto;
       border: 1px solid #ccc;
       border-radius: 6px;
-      padding: 0;               /* no inner padding to keep grid aligned */
+      padding: 0;
     }
     body.dark-mode .folder-access-list { border-color:#555; }
 
-    /* Shared grid for header + rows (MUST match) */
     .folder-access-header,
     .folder-access-row {
       display: grid;
-      grid-template-columns: minmax(var(--col-folder-min), 1fr) repeat(5, var(--col-perm));
+      grid-template-columns: minmax(var(--col-folder-min), 1fr) repeat(14, var(--col-perm));
       gap: 8px;
       align-items: center;
       padding: 8px 10px;
     }
-
-    /* Sticky header so it always aligns with the rows under the same scrollbar */
     .folder-access-header {
       position: sticky;
       top: 0;
@@ -121,24 +161,36 @@ async function safeJson(res) {
     }
     body.dark-mode .folder-access-header { background:#2c2c2c; }
 
-    /* Rows */
     .folder-access-row { border-bottom: 1px solid rgba(0,0,0,0.06); }
     .folder-access-row:last-child { border-bottom: none; }
 
-    /* Columns */
     .perm-col { text-align:center; white-space:nowrap; }
     .folder-access-header > div { white-space: nowrap; }
 
-    /* Folder label: show more of the path, ellipsis if needed */
     .folder-badge {
       display:inline-flex; align-items:center; gap:6px;
       font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
-      min-width: 0; /* allow ellipsis in grid */
+      min-width: 0;
     }
 
     .muted { opacity:.65; font-size:.9em; }
 
-    /* Tighter on small screens */
+    /* Inheritance visuals */
+    .inherited-row {
+      opacity: 0.8;
+      background: rgba(32, 132, 255, 0.06);
+    }
+    .inherited-tag {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: rgba(32,132,255,0.12);
+      color: #2064ff;
+      margin-left: 6px;
+    }
+    body.dark-mode .inherited-row { background: rgba(32,132,255,0.12); }
+    body.dark-mode .inherited-tag { background: rgba(32,132,255,0.2); color: #89b3ff; }
+
     @media (max-width: 900px) {
       .folder-access-list { --col-perm: 72px; --col-folder-min: 240px; }
     }
@@ -149,34 +201,37 @@ async function safeJson(res) {
 
 let originalAdminConfig = {};
 function captureInitialAdminConfig() {
+  const ht = document.getElementById("headerTitle");
   originalAdminConfig = {
-    headerTitle: document.getElementById("headerTitle").value.trim(),
-    oidcProviderUrl: document.getElementById("oidcProviderUrl").value.trim(),
-    oidcClientId: document.getElementById("oidcClientId").value.trim(),
-    oidcClientSecret: document.getElementById("oidcClientSecret").value.trim(),
-    oidcRedirectUri: document.getElementById("oidcRedirectUri").value.trim(),
-    disableFormLogin: document.getElementById("disableFormLogin").checked,
-    disableBasicAuth: document.getElementById("disableBasicAuth").checked,
-    disableOIDCLogin: document.getElementById("disableOIDCLogin").checked,
-    enableWebDAV: document.getElementById("enableWebDAV").checked,
-    sharedMaxUploadSize: document.getElementById("sharedMaxUploadSize").value.trim(),
-    globalOtpauthUrl: document.getElementById("globalOtpauthUrl").value.trim()
+    headerTitle: ht ? ht.value.trim() : "",
+    oidcProviderUrl: (document.getElementById("oidcProviderUrl")?.value || "").trim(),
+    oidcClientId: (document.getElementById("oidcClientId")?.value || "").trim(),
+    oidcClientSecret: (document.getElementById("oidcClientSecret")?.value || "").trim(),
+    oidcRedirectUri: (document.getElementById("oidcRedirectUri")?.value || "").trim(),
+    disableFormLogin: !!document.getElementById("disableFormLogin")?.checked,
+    disableBasicAuth: !!document.getElementById("disableBasicAuth")?.checked,
+    disableOIDCLogin: !!document.getElementById("disableOIDCLogin")?.checked,
+    enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
+    sharedMaxUploadSize: (document.getElementById("sharedMaxUploadSize")?.value || "").trim(),
+    globalOtpauthUrl: (document.getElementById("globalOtpauthUrl")?.value || "").trim()
   };
 }
 function hasUnsavedChanges() {
   const o = originalAdminConfig;
+  const getVal = id => (document.getElementById(id)?.value || "").trim();
+  const getChk = id => !!document.getElementById(id)?.checked;
   return (
-    document.getElementById("headerTitle").value.trim() !== o.headerTitle ||
-    document.getElementById("oidcProviderUrl").value.trim() !== o.oidcProviderUrl ||
-    document.getElementById("oidcClientId").value.trim() !== o.oidcClientId ||
-    document.getElementById("oidcClientSecret").value.trim() !== o.oidcClientSecret ||
-    document.getElementById("oidcRedirectUri").value.trim() !== o.oidcRedirectUri ||
-    document.getElementById("disableFormLogin").checked !== o.disableFormLogin ||
-    document.getElementById("disableBasicAuth").checked !== o.disableBasicAuth ||
-    document.getElementById("disableOIDCLogin").checked !== o.disableOIDCLogin ||
-    document.getElementById("enableWebDAV").checked !== o.enableWebDAV ||
-    document.getElementById("sharedMaxUploadSize").value.trim() !== o.sharedMaxUploadSize ||
-    document.getElementById("globalOtpauthUrl").value.trim() !== o.globalOtpauthUrl
+    getVal("headerTitle") !== o.headerTitle ||
+    getVal("oidcProviderUrl") !== o.oidcProviderUrl ||
+    getVal("oidcClientId") !== o.oidcClientId ||
+    getVal("oidcClientSecret") !== o.oidcClientSecret ||
+    getVal("oidcRedirectUri") !== o.oidcRedirectUri ||
+    getChk("disableFormLogin") !== o.disableFormLogin ||
+    getChk("disableBasicAuth") !== o.disableBasicAuth ||
+    getChk("disableOIDCLogin") !== o.disableOIDCLogin ||
+    getChk("enableWebDAV") !== o.enableWebDAV ||
+    getVal("sharedMaxUploadSize") !== o.sharedMaxUploadSize ||
+    getVal("globalOtpauthUrl") !== o.globalOtpauthUrl
   );
 }
 
@@ -186,6 +241,7 @@ function showCustomConfirmModal(message) {
     const msg = document.getElementById("confirmMessage");
     const yes = document.getElementById("confirmYesBtn");
     const no = document.getElementById("confirmNoBtn");
+    if (!modal || !msg || !yes || !no) { resolve(true); return; }
     msg.textContent = message;
     modal.style.display = "block";
     function clean() {
@@ -203,6 +259,7 @@ function showCustomConfirmModal(message) {
 function toggleSection(id) {
   const hdr = document.getElementById(id + "Header");
   const cnt = document.getElementById(id + "Content");
+  if (!hdr || !cnt) return;
   const isCollapsedNow = hdr.classList.toggle("collapsed");
   cnt.style.display = isCollapsedNow ? "none" : "block";
   if (!isCollapsedNow && id === "shareLinks") {
@@ -212,6 +269,7 @@ function toggleSection(id) {
 
 function loadShareLinksSection() {
   const container = document.getElementById("shareLinksContent");
+  if (!container) return;
   container.textContent = t("loading") + "...";
 
   function fetchMeta(fileName) {
@@ -306,7 +364,8 @@ export function openAdminPanel() {
     .then(r => r.json())
     .then(config => {
       if (config.header_title) {
-        document.querySelector(".header-title h1").textContent = config.header_title;
+        const h = document.querySelector(".header-title h1");
+        if (h) h.textContent = config.header_title;
         window.headerTitle = config.header_title;
       }
       if (config.oidc) Object.assign(window.currentOIDCConfig, config.oidc);
@@ -340,14 +399,14 @@ export function openAdminPanel() {
             <h3>${adminTitle}</h3>
             <form id="adminPanelForm">
               ${[
-            { id: "userManagement", label: t("user_management") },
-            { id: "headerSettings", label: t("header_settings") },
-            { id: "loginOptions", label: t("login_options") },
-            { id: "webdav", label: "WebDAV Access" },
-            { id: "upload", label: t("shared_max_upload_size_bytes_title") },
-            { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
-            { id: "shareLinks", label: t("manage_shared_links") }
-          ].map(sec => `
+                { id: "userManagement", label: t("user_management") },
+                { id: "headerSettings", label: t("header_settings") },
+                { id: "loginOptions", label: t("login_options") },
+                { id: "webdav", label: "WebDAV Access" },
+                { id: "upload", label: t("shared_max_upload_size_bytes_title") },
+                { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
+                { id: "shareLinks", label: t("manage_shared_links") }
+              ].map(sec => `
                 <div id="${sec.id}Header" class="section-header collapsed">
                   ${sec.label} <i class="material-icons">expand_more</i>
                 </div>
@@ -363,20 +422,15 @@ export function openAdminPanel() {
         `;
         document.body.appendChild(mdl);
 
-        // Bind close & cancel
-        document.getElementById("closeAdminPanel")
-          .addEventListener("click", closeAdminPanel);
-        document.getElementById("cancelAdminSettings")
-          .addEventListener("click", closeAdminPanel);
+        document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
+        document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
 
-        // Section toggles
         ["userManagement", "headerSettings", "loginOptions", "webdav", "upload", "oidc", "shareLinks"]
           .forEach(id => {
             document.getElementById(id + "Header")
               .addEventListener("click", () => toggleSection(id));
           });
 
-        // — User Mgmt —
         document.getElementById("userManagementContent").innerHTML = `
           <button type="button" id="adminOpenAddUser" class="btn btn-success me-2">${t("add_user")}</button>
           <button type="button" id="adminOpenRemoveUser" class="btn btn-danger me-2">${t("remove_user")}</button>
@@ -384,11 +438,10 @@ export function openAdminPanel() {
           <button type="button" id="adminOpenUserFlags" class="btn btn-secondary">${tf("user_permissions", "User Permissions")}</button>
         `;
 
-
         document.getElementById("adminOpenAddUser")
           .addEventListener("click", () => {
             toggleVisibility("addUserModal", true);
-            document.getElementById("newUsername").focus();
+            document.getElementById("newUsername")?.focus();
           });
         document.getElementById("adminOpenRemoveUser")
           .addEventListener("click", () => {
@@ -398,15 +451,13 @@ export function openAdminPanel() {
         document.getElementById("adminOpenUserPermissions")
           .addEventListener("click", openUserPermissionsModal);
 
-        // — Header Settings —
         document.getElementById("headerSettingsContent").innerHTML = `
           <div class="form-group">
             <label for="headerTitle">${t("header_title_text")}:</label>
-            <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle}" />
+            <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle || ""}" />
           </div>
         `;
 
-        // — Login Options —
         document.getElementById("loginOptionsContent").innerHTML = `
           <div class="form-group"><input type="checkbox" id="disableFormLogin" /> <label for="disableFormLogin">${t("disable_login_form")}</label></div>
           <div class="form-group"><input type="checkbox" id="disableBasicAuth" /> <label for="disableBasicAuth">${t("disable_basic_http_auth")}</label></div>
@@ -421,12 +472,10 @@ export function openAdminPanel() {
           </div>
         `;
 
-        // — WebDAV —
         document.getElementById("webdavContent").innerHTML = `
           <div class="form-group"><input type="checkbox" id="enableWebDAV" /> <label for="enableWebDAV">Enable WebDAV</label></div>
         `;
 
-        // — Upload —
         document.getElementById("uploadContent").innerHTML = `
           <div class="form-group">
             <label for="sharedMaxUploadSize">${t("shared_max_upload_size_bytes")}:</label>
@@ -435,22 +484,19 @@ export function openAdminPanel() {
           </div>
         `;
 
-        // — OIDC & TOTP —
         document.getElementById("oidcContent").innerHTML = `
           <div class="form-text text-muted" style="margin-top:8px;">
             <small>Note: OIDC credentials (Client ID/Secret) will show blank here after saving, but remain unchanged until you explicitly edit and save them.</small>
           </div>
-          <div class="form-group"><label for="oidcProviderUrl">${t("oidc_provider_url")}:</label><input type="text" id="oidcProviderUrl" class="form-control" value="${window.currentOIDCConfig.providerUrl}" /></div>
-          <div class="form-group"><label for="oidcClientId">${t("oidc_client_id")}:</label><input type="text" id="oidcClientId" class="form-control" value="${window.currentOIDCConfig.clientId}" /></div>
-          <div class="form-group"><label for="oidcClientSecret">${t("oidc_client_secret")}:</label><input type="text" id="oidcClientSecret" class="form-control" value="${window.currentOIDCConfig.clientSecret}" /></div>
-          <div class="form-group"><label for="oidcRedirectUri">${t("oidc_redirect_uri")}:</label><input type="text" id="oidcRedirectUri" class="form-control" value="${window.currentOIDCConfig.redirectUri}" /></div>
-          <div class="form-group"><label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label><input type="text" id="globalOtpauthUrl" class="form-control" value="${window.currentOIDCConfig.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" /></div>
+          <div class="form-group"><label for="oidcProviderUrl">${t("oidc_provider_url")}:</label><input type="text" id="oidcProviderUrl" class="form-control" value="${window.currentOIDCConfig?.providerUrl || ""}" /></div>
+          <div class="form-group"><label for="oidcClientId">${t("oidc_client_id")}:</label><input type="text" id="oidcClientId" class="form-control" value="${window.currentOIDCConfig?.clientId || ""}" /></div>
+          <div class="form-group"><label for="oidcClientSecret">${t("oidc_client_secret")}:</label><input type="text" id="oidcClientSecret" class="form-control" value="${window.currentOIDCConfig?.clientSecret || ""}" /></div>
+          <div class="form-group"><label for="oidcRedirectUri">${t("oidc_redirect_uri")}:</label><input type="text" id="oidcRedirectUri" class="form-control" value="${window.currentOIDCConfig?.redirectUri || ""}" /></div>
+          <div class="form-group"><label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label><input type="text" id="globalOtpauthUrl" class="form-control" value="${window.currentOIDCConfig?.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" /></div>
         `;
 
-        // — Share Links —
         document.getElementById("shareLinksContent").textContent = t("loading") + "…";
 
-        // — Save handler & constraints —
         document.getElementById("saveAdminSettings")
           .addEventListener("click", handleSave);
         ["disableFormLogin", "disableBasicAuth", "disableOIDCLogin"].forEach(id => {
@@ -471,28 +517,16 @@ export function openAdminPanel() {
           }
         });
 
-        // after you set #userManagementContent.innerHTML (right after those three buttons are inserted)
         const userMgmt = document.getElementById("userManagementContent");
-
-        // defensive: remove any old listener first
         userMgmt?.removeEventListener("click", window.__userMgmtDelegatedClick);
-
         window.__userMgmtDelegatedClick = (e) => {
           const flagsBtn = e.target.closest("#adminOpenUserFlags");
-          if (flagsBtn) {
-            e.preventDefault();
-            openUserFlagsModal();
-          }
+          if (flagsBtn) { e.preventDefault(); openUserFlagsModal(); }
           const folderBtn = e.target.closest("#adminOpenUserPermissions");
-          if (folderBtn) {
-            e.preventDefault();
-            openUserPermissionsModal();
-          }
+          if (folderBtn) { e.preventDefault(); openUserPermissionsModal(); }
         };
-
         userMgmt?.addEventListener("click", window.__userMgmtDelegatedClick);
 
-        // Initialize inputs from config + capture
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
@@ -503,7 +537,6 @@ export function openAdminPanel() {
         captureInitialAdminConfig();
 
       } else {
-        // modal already exists → just refresh values & re-show
         mdl.style.display = "flex";
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
@@ -512,11 +545,11 @@ export function openAdminPanel() {
         document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
-        document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig.providerUrl;
-        document.getElementById("oidcClientId").value = window.currentOIDCConfig.clientId;
-        document.getElementById("oidcClientSecret").value = window.currentOIDCConfig.clientSecret;
-        document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig.redirectUri;
-        document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig.globalOtpauthUrl || '';
+        document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig?.providerUrl || "";
+        document.getElementById("oidcClientId").value = window.currentOIDCConfig?.clientId || "";
+        document.getElementById("oidcClientSecret").value = window.currentOIDCConfig?.clientSecret || "";
+        document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig?.redirectUri || "";
+        document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig?.globalOtpauthUrl || '';
         captureInitialAdminConfig();
       }
     })
@@ -524,21 +557,21 @@ export function openAdminPanel() {
 }
 
 function handleSave() {
-  const dFL = document.getElementById("disableFormLogin").checked;
-  const dBA = document.getElementById("disableBasicAuth").checked;
-  const dOIDC = document.getElementById("disableOIDCLogin").checked;
-  const aBypass = document.getElementById("authBypass").checked;
-  const aHeader = document.getElementById("authHeaderName").value.trim() || "X-Remote-User";
-  const eWD = document.getElementById("enableWebDAV").checked;
-  const sMax = parseInt(document.getElementById("sharedMaxUploadSize").value, 10) || 0;
-  const nHT = document.getElementById("headerTitle").value.trim();
+  const dFL = !!document.getElementById("disableFormLogin")?.checked;
+  const dBA = !!document.getElementById("disableBasicAuth")?.checked;
+  const dOIDC = !!document.getElementById("disableOIDCLogin")?.checked;
+  const aBypass = !!document.getElementById("authBypass")?.checked;
+  const aHeader = (document.getElementById("authHeaderName")?.value || "X-Remote-User").trim();
+  const eWD = !!document.getElementById("enableWebDAV")?.checked;
+  const sMax = parseInt(document.getElementById("sharedMaxUploadSize")?.value || "0", 10) || 0;
+  const nHT = (document.getElementById("headerTitle")?.value || "").trim();
   const nOIDC = {
-    providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
-    clientId: document.getElementById("oidcClientId").value.trim(),
-    clientSecret: document.getElementById("oidcClientSecret").value.trim(),
-    redirectUri: document.getElementById("oidcRedirectUri").value.trim()
+    providerUrl: (document.getElementById("oidcProviderUrl")?.value || "").trim(),
+    clientId: (document.getElementById("oidcClientId")?.value || "").trim(),
+    clientSecret: (document.getElementById("oidcClientSecret")?.value || "").trim(),
+    redirectUri: (document.getElementById("oidcRedirectUri")?.value || "").trim()
   };
-  const gURL = document.getElementById("globalOtpauthUrl").value.trim();
+  const gURL = (document.getElementById("globalOtpauthUrl")?.value || "").trim();
 
   if ([dFL, dBA, dOIDC].filter(x => x).length === 3) {
     showToast(t("at_least_one_login_method"));
@@ -576,7 +609,8 @@ export async function closeAdminPanel() {
     const ok = await showCustomConfirmModal(t("unsaved_changes_confirm"));
     if (!ok) return;
   }
-  document.getElementById("adminPanelModal").style.display = "none";
+  const m = document.getElementById("adminPanelModal");
+  if (m) m.style.display = "none";
 }
 
 /* ===========================
@@ -591,7 +625,6 @@ async function getAllFolders() {
   const list = Array.isArray(data)
     ? data.map(x => (typeof x === 'string' ? x : x.folder)).filter(Boolean)
     : [];
-  // Keep "root" first, hide special internal ones
   const hidden = new Set(["profile_pics", "trash"]);
   const cleaned = list
     .filter(f => f && !hidden.has(f.toLowerCase()))
@@ -605,7 +638,6 @@ async function getUserGrants(username) {
     credentials: 'include'
   });
   const data = await safeJson(res).catch(() => ({}));
-  // expected: { grants: { "folder/name": {view,upload,manage,share}, ... } }
   return (data && data.grants) ? data.grants : {};
 }
 
@@ -615,131 +647,226 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   // toolbar
   const toolbar = document.createElement('div');
   toolbar.className = 'folder-access-toolbar';
-  // Toolbar (bulk toggles with descriptions)
   toolbar.innerHTML = `
-  <input type="text" class="form-control" style="max-width:220px;" placeholder="${tf('search_folders', 'Search folders')}" />
-  <label class="muted" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">
-    <input type="checkbox" data-bulk="view" /> ${tf('view_all', 'View (all)')}
-  </label>
-  <label class="muted" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
-    <input type="checkbox" data-bulk="viewOwn" /> ${tf('view_own', 'View (own)')}
-  </label>
-  <label class="muted" title="${tf('write_help', 'Create/upload files and edit/rename/move/delete items in this folder')}">
-    <input type="checkbox" data-bulk="upload" /> ${tf('write_full', 'Write (upload/edit/delete)')}
-  </label>
-  <label class="muted" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all) + Write + Share')}">
-    <input type="checkbox" data-bulk="manage" /> ${tf('manage', 'Manage')}
-  </label>
-  <label class="muted" title="${tf('share_help', 'Create/manage share links; implies View (all)')}">
-    <input type="checkbox" data-bulk="share" /> ${tf('share', 'Share')}
-  </label>
-  <span class="muted">(${tf('applies_to_filtered', 'applies to filtered list')})</span>
-`;
+    <input type="text" class="form-control" style="max-width:220px;" placeholder="${tf('search_folders', 'Search folders')}" />
+    <label class="muted" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">
+      <input type="checkbox" data-bulk="view" /> ${tf('view_all', 'View (all)')}
+    </label>
+    <label class="muted" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
+      <input type="checkbox" data-bulk="viewOwn" /> ${tf('view_own', 'View (own)')}
+    </label>
+    <label class="muted" title="${tf('write_help', 'Create/upload files and edit/rename/copy/delete items in this folder')}">
+      <input type="checkbox" data-bulk="write" /> ${tf('write_full', 'Write (upload/edit/delete)')}
+    </label>
+    <label class="muted" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all)/Create Folder/Rename Folder/Move Files/Share Folder')}">
+      <input type="checkbox" data-bulk="manage" /> ${tf('manage', 'Manage')}
+    </label>
+    <label class="muted" title="${tf('share_help', 'Create/manage share links; implies View (all)')}">
+      <input type="checkbox" data-bulk="share" /> ${tf('share', 'Share')}
+    </label>
+    <span class="muted">(${tf('applies_to_filtered', 'applies to filtered list')})</span>
+  `;
   container.appendChild(toolbar);
 
-  // list (will contain sticky header + rows)
   const list = document.createElement('div');
   list.className = 'folder-access-list';
   container.appendChild(list);
 
-  // Header (compact labels, descriptive tooltips so the column width stays the same)
   const headerHtml = `
   <div class="folder-access-header">
     <div title="${tf('folder_help', 'Folder path within FileRise')}">${tf('folder', 'Folder')}</div>
-    <div class="perm-col" title="${tf('view_all_help', 'See all files in this folder (everyones files)')}">
-      ${tf('view_all', 'View (all)')}
-    </div>
-    <div class="perm-col" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
-      ${tf('view_own', 'View (own)')}
-    </div>
-    <div class="perm-col" title="${tf('write_help', 'Create/upload files and edit/rename/move/delete items in this folder')}">
-      ${tf('write', 'Write')}
-    </div>
-    <div class="perm-col" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all) + Write + Share')}">
-      ${tf('manage', 'Manage')}
-    </div>
-    <div class="perm-col" title="${tf('share_help', 'Create/manage share links; implies View (all)')}">
-      ${tf('share', 'Share')}
-    </div>
-  </div>
-`;
+    <div class="perm-col" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">${tf('view_all', 'View (all)')}</div>
+    <div class="perm-col" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">${tf('view_own', 'View (own)')}</div>
+    <div class="perm-col" title="${tf('write_help', 'Meta: toggles all write operations (below) on/off for this row')}">${tf('write_full', 'Write')}</div>
+    <div class="perm-col" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all)/Create Folder/Rename Folder/Move Files/Share Folder')}">${tf('manage', 'Manage')}</div>
+    <div class="perm-col" title="${tf('create_help', 'Create empty files')}">${tf('create', 'Create')}</div>
+    <div class="perm-col" title="${tf('upload_help', 'Upload files to this folder')}">${tf('upload', 'Upload')}</div>
+    <div class="perm-col" title="${tf('edit_help', 'Edit file contents')}">${tf('edit', 'Edit')}</div>
+    <div class="perm-col" title="${tf('rename_help', 'Rename files')}">${tf('rename', 'Rename')}</div>
+    <div class="perm-col" title="${tf('copy_help', 'Copy files')}">${tf('copy', 'Copy')}</div>
+    <div class="perm-col" title="${tf('move_help', 'Move files: requires Manage')}">${tf('move', 'Move')}</div>
+    <div class="perm-col" title="${tf('delete_help', 'Delete files/folders')}">${tf('delete', 'Delete')}</div>
+    <div class="perm-col" title="${tf('extract_help', 'Extract ZIP archives')}">${tf('extract', 'Extract ZIP')}</div>
+    <div class="perm-col" title="${tf('share_file_help', 'Create share links for files')}">${tf('share_file', 'Share File')}</div>
+    <div class="perm-col" title="${tf('share_folder_help', 'Create share links for folders (requires View all)')}">${tf('share_folder', 'Share Folder')}</div>
+  </div>`;
 
   function rowHtml(folder) {
     const g = grants[folder] || {};
     const name = folder === 'root' ? '(Root)' : folder;
+    const writeMetaChecked = !!(g.create || g.upload || g.edit || g.rename || g.copy || g.move || g.delete || g.extract);
+    const shareFolderDisabled = !g.view;
     return `
       <div class="folder-access-row" data-folder="${folder}">
-        <div class="folder-badge"><i class="material-icons" style="font-size:18px;">folder</i>${name}</div>
-        <div class="perm-col"><input type="checkbox" data-cap="view"     ${g.view ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="viewOwn"  ${g.viewOwn ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="upload"   ${g.upload ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="manage"   ${g.manage ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="share"    ${g.share ? 'checked' : ''}></div>
+        <div class="folder-badge"><i class="material-icons" style="font-size:18px;">folder</i>${name}<span class="inherited-tag" style="display:none;"></span></div>
+        <div class="perm-col"><input type="checkbox" data-cap="view"      ${g.view ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="viewOwn"   ${g.viewOwn ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="write"     ${writeMetaChecked ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="manage"    ${g.manage ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="create"    ${g.create ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="upload"    ${g.upload ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="edit"      ${g.edit ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="rename"    ${g.rename ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="copy"      ${g.copy ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="move"      ${g.move ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="delete"    ${g.delete ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="extract"   ${g.extract ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="shareFile" ${g.shareFile ? 'checked' : ''}></div>
+        <div class="perm-col"><input type="checkbox" data-cap="shareFolder" ${g.shareFolder ? 'checked' : ''} ${shareFolderDisabled ? 'disabled' : ''}></div>
       </div>
     `;
   }
 
-  // Dependencies
-  function applyDeps(row) {
-    const cbView = row.querySelector('input[data-cap="view"]');
-    const cbViewOwn = row.querySelector('input[data-cap="viewOwn"]');
-    const cbUpload = row.querySelector('input[data-cap="upload"]');
-    const cbManage = row.querySelector('input[data-cap="manage"]');
-    const cbShare = row.querySelector('input[data-cap="share"]');
+  function setRowDisabled(row, disabled) {
+    qsa(row, 'input[type="checkbox"]').forEach(cb => {
+      cb.disabled = disabled || cb.hasAttribute('data-hard-disabled');
+    });
+    row.classList.toggle('inherited-row', !!disabled);
+    const tag = row.querySelector('.inherited-tag');
+    if (tag) tag.style.display = disabled ? 'inline-block' : 'none';
+  }
 
-    // Manage ⇒ full view + upload + share
-    if (cbManage.checked) {
-      cbView.checked = true;
-      cbUpload.checked = true;
-      cbShare.checked = true;
+  function refreshInheritance() {
+    const rows = qsa(list, '.folder-access-row').sort((a,b)=> (a.dataset.folder||'').length - (b.dataset.folder||'').length);
+    const managedPrefixes = new Set();
+    rows.forEach(row => {
+      const folder = row.dataset.folder || "";
+      const manage = qs(row, 'input[data-cap="manage"]');
+      if (manage && manage.checked) managedPrefixes.add(folder);
+      let inheritedFrom = null;
+      for (const p of managedPrefixes) {
+        if (p && folder !== p && folder.startsWith(p + '/')) { inheritedFrom = p; break; }
+      }
+      if (inheritedFrom) {
+        const v = qs(row,'input[data-cap="view"]');
+        const w = qs(row,'input[data-cap="write"]');
+        const vo= qs(row,'input[data-cap="viewOwn"]');
+        if (v) v.checked = true;
+        if (w) w.checked = true;
+        if (vo) { vo.checked = false; vo.disabled = true; }
+        ['create','upload','edit','rename','copy','move','delete','extract','shareFile','shareFolder']
+          .forEach(c => { const cb = qs(row, `input[data-cap="${c}"]`); if (cb) cb.checked = true; });
+        setRowDisabled(row, true);
+        const tag = row.querySelector('.inherited-tag');
+        if (tag) tag.textContent = `(${tf('inherited', 'inherited')} ${tf('from', 'from')} ${inheritedFrom})`;
+      } else {
+        setRowDisabled(row, false);
+      }
+      enforceShareFolderRule(row);
+      const cbView = qs(row,'input[data-cap="view"]');
+      const cbViewOwn = qs(row,'input[data-cap="viewOwn"]');
+      if (cbView && cbViewOwn) {
+        if (cbView.checked) {
+          cbViewOwn.checked = false;
+          cbViewOwn.disabled = true;
+          cbViewOwn.title = tf('full_view_supersedes_own', 'Full view supersedes own-only');
+        } else {
+          cbViewOwn.disabled = false;
+          cbViewOwn.removeAttribute('title');
+        }
+      }
+    });
+  }
+
+  function setFromViewChange(row, which, checked) {
+    if (!checked && (which === 'view' || which === 'viewOwn')) {
+      qsa(row, 'input[type="checkbox"]').forEach(cb => cb.checked = false);
     }
-
-    // Share ⇒ full view
-    if (cbShare.checked) cbView.checked = true;
-
-    // Upload ⇒ at least own view
-    if (cbUpload.checked && !cbView.checked && !cbViewOwn.checked) {
-      cbViewOwn.checked = true;
+    const cbView = qs(row,'input[data-cap="view"]');
+    const cbVO = qs(row,'input[data-cap="viewOwn"]');
+    if (cbView && cbVO) {
+      if (cbView.checked) {
+        cbVO.checked = false;
+        cbVO.disabled = true;
+        cbVO.title = tf('full_view_supersedes_own', 'Full view supersedes own-only');
+      } else {
+        cbVO.disabled = false;
+        cbVO.removeAttribute('title');
+      }
     }
-
-    // Full view supersedes own-only
-    if (cbView.checked || cbManage.checked) {
-      cbViewOwn.checked = false;
-      cbViewOwn.disabled = true;
-      cbViewOwn.title = tf('full_view_supersedes_own', 'Full view supersedes own-only');
-    } else {
-      cbViewOwn.disabled = false;
-      cbViewOwn.removeAttribute('title');
-    }
-
-    // Owners can always share (UI hint only)
-    if (cbManage.checked) {
-      cbShare.disabled = true;
-      cbShare.title = tf('owners_can_always_share', 'Owners can always share');
-    } else {
-      cbShare.disabled = false;
-      cbShare.removeAttribute('title');
-    }
+    enforceShareFolderRule(row);
   }
 
   function wireRow(row) {
-    const cbView = row.querySelector('input[data-cap="view"]');
+    const cbView    = row.querySelector('input[data-cap="view"]');
     const cbViewOwn = row.querySelector('input[data-cap="viewOwn"]');
-    const cbUpload = row.querySelector('input[data-cap="upload"]');
-    const cbManage = row.querySelector('input[data-cap="manage"]');
-    const cbShare = row.querySelector('input[data-cap="share"]');
+    const cbWrite   = row.querySelector('input[data-cap="write"]');
+    const cbManage  = row.querySelector('input[data-cap="manage"]');
+    const cbCreate  = row.querySelector('input[data-cap="create"]');
+    const cbUpload  = row.querySelector('input[data-cap="upload"]');
+    const cbEdit    = row.querySelector('input[data-cap="edit"]');
+    const cbRename  = row.querySelector('input[data-cap="rename"]');
+    const cbCopy    = row.querySelector('input[data-cap="copy"]');
+    const cbMove    = row.querySelector('input[data-cap="move"]');
+    const cbDelete  = row.querySelector('input[data-cap="delete"]');
+    const cbExtract = row.querySelector('input[data-cap="extract"]');
+    const cbShareF  = row.querySelector('input[data-cap="shareFile"]');
+    const cbShareFo = row.querySelector('input[data-cap="shareFolder"]');
 
-    cbUpload.addEventListener('change', () => applyDeps(row));
-    cbShare.addEventListener('change', () => applyDeps(row));
-    cbManage.addEventListener('change', () => applyDeps(row));
+    const granular = [cbCreate, cbUpload, cbEdit, cbRename, cbCopy, cbMove, cbDelete, cbExtract];
 
-    cbView.addEventListener('change', () => {
-      if (!cbView.checked) { cbManage.checked = false; cbShare.checked = false; }
-      applyDeps(row);
-    });
-    cbViewOwn.addEventListener('change', () => applyDeps(row));
+    const applyManage = () => {
+      if (cbManage && cbManage.checked) {
+        if (cbView) cbView.checked = true;
+        if (cbWrite) cbWrite.checked = true;
+        granular.forEach(cb => { if (cb) cb.checked = true; });
+        if (cbShareF)  cbShareF.checked = true;
+        if (cbShareFo && !cbShareFo.disabled) cbShareFo.checked = true;
+      }
+    };
 
-    applyDeps(row);
+    const syncWriteFromGranular = () => {
+      if (!cbWrite) return;
+      cbWrite.checked = granular.some(cb => cb && cb.checked);
+    };
+    const applyWrite = () => {
+      if (!cbWrite) return;
+      granular.forEach(cb => { if (cb) cb.checked = cbWrite.checked; });
+      const any = granular.some(cb => cb && cb.checked);
+      if (any && cbView && !cbView.checked && cbViewOwn && !cbViewOwn.checked) cbViewOwn.checked = true;
+    };
+
+    const onShareFile = () => {
+      if (cbShareF && cbShareF.checked && cbView && !cbView.checked && cbViewOwn && !cbViewOwn.checked) {
+        cbViewOwn.checked = true;
+      }
+    };
+
+    const cascadeManage = (checked) => {
+      const base = row.dataset.folder || "";
+      if (!base) return;
+      qsa(container, '.folder-access-row').forEach(r => {
+        const f = r.dataset.folder || "";
+        if (!f || f === base) return;
+        if (!f.startsWith(base + '/')) return;
+        const m = r.querySelector('input[data-cap="manage"]');
+        const v = r.querySelector('input[data-cap="view"]');
+        const w = r.querySelector('input[data-cap="write"]');
+        const vo = r.querySelector('input[data-cap="viewOwn"]');
+        const boxes = [
+          'create','upload','edit','rename','copy','move','delete','extract','shareFile','shareFolder'
+        ].map(c => r.querySelector(`input[data-cap="${c}"]`));
+        if (m) m.checked = checked;
+        if (v) v.checked = checked;
+        if (w) w.checked = checked;
+        if (vo) { vo.checked = false; vo.disabled = checked; }
+        boxes.forEach(b => { if (b) b.checked = checked; });
+        enforceShareFolderRule(r);
+      });
+      refreshInheritance();
+    };
+
+    if (cbManage) cbManage.addEventListener('change', () => { applyManage(); onShareFile(); cascadeManage(cbManage.checked); });
+    if (cbWrite)  cbWrite.addEventListener('change', applyWrite);
+    granular.forEach(cb => { if (cb) cb.addEventListener('change', () => { syncWriteFromGranular(); }); });
+    if (cbView) cbView.addEventListener('change', () => { setFromViewChange(row, 'view', cbView.checked); refreshInheritance(); });
+    if (cbViewOwn) cbViewOwn.addEventListener('change', () => { setFromViewChange(row, 'viewOwn', cbViewOwn.checked); refreshInheritance(); });
+    if (cbShareF) cbShareF.addEventListener('change', onShareFile);
+    if (cbShareFo) cbShareFo.addEventListener('change', () => onShareFolderToggle(row, cbShareFo.checked));
+
+    applyManage();
+    enforceShareFolderRule(row);
+    syncWriteFromGranular();
   }
 
   function render(filter = "") {
@@ -750,16 +877,14 @@ function renderFolderGrantsUI(username, container, folders, grants) {
       .join("");
 
     list.innerHTML = headerHtml + rowsHtml;
-
     list.querySelectorAll('.folder-access-row').forEach(wireRow);
+    refreshInheritance();
   }
 
-  // initial render + filter wire-up
   render();
   const filterInput = toolbar.querySelector('input[type="text"]');
   filterInput.addEventListener('input', () => render(filterInput.value));
 
-  // bulk toggles
   toolbar.querySelectorAll('input[type="checkbox"][data-bulk]').forEach(bulk => {
     bulk.addEventListener('change', () => {
       const which = bulk.dataset.bulk;
@@ -774,50 +899,56 @@ function renderFolderGrantsUI(username, container, folders, grants) {
 
         target.checked = bulk.checked;
 
-        // simple implications for bulk; detailed state handled by applyDeps
-        if (which === 'manage' && bulk.checked) {
-          row.querySelector('input[data-cap="view"]').checked = true;
-          row.querySelector('input[data-cap="upload"]').checked = true;
-          row.querySelector('input[data-cap="share"]').checked = true;
-        }
-        if (which === 'share' && bulk.checked) {
-          row.querySelector('input[data-cap="view"]').checked = true;
-        }
-        if (which === 'upload' && bulk.checked) {
-          const v = row.querySelector('input[data-cap="view"]');
-          const vo = row.querySelector('input[data-cap="viewOwn"]');
-          if (!v.checked && !vo.checked) vo.checked = true;
-        }
-        if (which === 'view' && !bulk.checked) {
-          row.querySelector('input[data-cap="manage"]').checked = false;
-          row.querySelector('input[data-cap="share"]').checked = false;
+        if (which === 'manage') {
+          target.dispatchEvent(new Event('change'));
+        } else if (which === 'share') {
+          if (bulk.checked) {
+            const v = row.querySelector('input[data-cap="view"]');
+            if (v) v.checked = true;
+          }
+        } else if (which === 'write') {
+          onWriteToggle(row, bulk.checked);
+        } else if (which === 'view' || which === 'viewOwn') {
+          setFromViewChange(row, which, bulk.checked);
         }
 
-        applyDeps(row);
+        enforceShareFolderRule(row);
       });
+      refreshInheritance();
     });
   });
 }
 
-// Collect grants from a user's UI
 function collectGrantsFrom(container) {
   const out = {};
+  const get = (row, sel) => {
+    const el = row.querySelector(sel);
+    return el ? !!el.checked : false;
+  };
   container.querySelectorAll('.folder-access-row').forEach(row => {
-    const folder = row.dataset.folder;
+    const folder = row.dataset.folder || row.getAttribute('data-folder');
     if (!folder) return;
     const g = {
-      view: row.querySelector('input[data-cap="view"]').checked,
-      viewOwn: row.querySelector('input[data-cap="viewOwn"]').checked,
-      upload: row.querySelector('input[data-cap="upload"]').checked,
-      manage: row.querySelector('input[data-cap="manage"]').checked,
-      share: row.querySelector('input[data-cap="share"]').checked
+      view:        get(row, 'input[data-cap="view"]'),
+      viewOwn:     get(row, 'input[data-cap="viewOwn"]'),
+      manage:      get(row, 'input[data-cap="manage"]'),
+      create:      get(row, 'input[data-cap="create"]'),
+      upload:      get(row, 'input[data-cap="upload"]'),
+      edit:        get(row, 'input[data-cap="edit"]'),
+      rename:      get(row, 'input[data-cap="rename"]'),
+      copy:        get(row, 'input[data-cap="copy"]'),
+      move:        get(row, 'input[data-cap="move"]'),
+      delete:      get(row, 'input[data-cap="delete"]'),
+      extract:     get(row, 'input[data-cap="extract"]'),
+      shareFile:   get(row, 'input[data-cap="shareFile"]'),
+      shareFolder: get(row, 'input[data-cap="shareFolder"]')
     };
-    if (g.view || g.viewOwn || g.upload || g.manage || g.share) out[folder] = g;
+    g.share = !!(g.shareFile || g.shareFolder);
+    out[folder] = g;
   });
   return out;
 }
 
-// --- New: User Permissions (Folder Access) Modal ---
 export function openUserPermissionsModal() {
   let userPermissionsModal = document.getElementById("userPermissionsModal");
   const isDarkMode = document.body.classList.contains("dark-mode");
@@ -826,7 +957,6 @@ export function openUserPermissionsModal() {
   background: ${isDarkMode ? "#2c2c2c" : "#fff"};
   color: ${isDarkMode ? "#e0e0e0" : "#000"};
   padding: 20px;
-  /* Wider, responsive */
   width: clamp(980px, 92vw, 1280px);
   max-width: none;
   border-radius: 8px;
@@ -853,7 +983,6 @@ export function openUserPermissionsModal() {
           ${tf("grant_folders_help", "Grant per-folder capabilities to each user. 'Write/Manage/Share' imply 'View'.")}
         </div>
         <div id="userPermissionsList" style="max-height: 70vh; overflow-y: auto; margin-bottom: 15px;">
-          <!-- User rows will load here -->
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
           <button type="button" id="cancelUserPermissionsBtn" class="btn btn-secondary">${t("cancel")}</button>
@@ -869,25 +998,22 @@ export function openUserPermissionsModal() {
       userPermissionsModal.style.display = "none";
     });
     document.getElementById("saveUserPermissionsBtn").addEventListener("click", async () => {
-      // Collect grants for every expanded user (or all rows that have a grants list)
       const rows = userPermissionsModal.querySelectorAll(".user-permission-row");
-      let saves = [];
+      const changes = [];
       rows.forEach(row => {
-        const username = row.getAttribute("data-username");
+        const username = String(row.getAttribute("data-username") || "").trim();
+        if (!username) return;
         const grantsBox = row.querySelector(".folder-grants-box");
-        if (!username || !grantsBox) return;
+        if (!grantsBox || grantsBox.getAttribute('data-loaded') !== '1') return;
         const grants = collectGrantsFrom(grantsBox);
-        saves.push({ user: username, grants });
+        changes.push({ user: username, grants });
       });
-
       try {
-        if (saves.length === 0) {
-          showToast(tf("nothing_to_save", "Nothing to save"));
-          return;
-        }
-        for (const payload of saves) {
-          await sendRequest("/api/admin/acl/saveGrants.php", "POST", payload, { "X-CSRF-Token": window.csrfToken });
-        }
+        if (changes.length === 0) { showToast(tf("nothing_to_save", "Nothing to save")); return; }
+        await sendRequest("/api/admin/acl/saveGrants.php", "POST",
+          { changes },
+          { "X-CSRF-Token": window.csrfToken || "" }
+        );
         showToast(tf("user_permissions_updated_successfully", "User permissions updated successfully"));
         userPermissionsModal.style.display = "none";
       } catch (err) {
@@ -904,26 +1030,20 @@ export function openUserPermissionsModal() {
 
 async function fetchAllUsers() {
   const r = await fetch("/api/getUsers.php", { credentials: "include" });
-  return await r.json(); // array of { username, role }
+  return await r.json();
 }
 
-// Returns a map of { username: { readOnly, folderOnly, disableUpload, canShare, bypassOwnership } }
 async function fetchAllUserFlags() {
   const r = await fetch("/api/getUserPermissions.php", { credentials: "include" });
   const data = await r.json();
-  // remove deprecated flag if present, so UI never shows it
   if (data && typeof data === "object") {
     const map = data.allPermissions || data.permissions || data;
     if (map && typeof map === "object") {
       Object.values(map).forEach(u => { if (u && typeof u === "object") delete u.folderOnly; });
     }
   }
-  // Accept both shapes: {users:[...]} or a plain object map
   if (Array.isArray(data)) {
-    // unlikely, but normalize
-    const out = {};
-    data.forEach(u => { if (u.username) out[u.username] = u; });
-    return out;
+    const out = {}; data.forEach(u => { if (u.username) out[u.username] = u; }); return out;
   }
   if (data && data.allPermissions) return data.allPermissions;
   if (data && data.permissions) return data.permissions;
@@ -933,7 +1053,7 @@ async function fetchAllUserFlags() {
 function flagRow(u, flags) {
   const f = flags[u.username] || {};
   const isAdmin = String(u.role) === "1" || u.username.toLowerCase() === "admin";
-  if (isAdmin) return ""; // skip admins here
+  if (isAdmin) return "";
   return `
     <tr data-username="${u.username}">
       <td><strong>${u.username}</strong></td>
@@ -992,7 +1112,6 @@ export async function openUserFlagsModal() {
     document.getElementById("cancelUserFlags").onclick = () => (modal.style.display = "none");
     document.getElementById("saveUserFlags").onclick = saveUserFlags;
   } else {
-    // Re-apply theme if user toggled dark mode since last open
     modal.style.background = overlayBg;
     const content = modal.querySelector(".modal-content");
     if (content) {
@@ -1008,10 +1127,11 @@ export async function openUserFlagsModal() {
 
 async function loadUserFlagsList() {
   const body = document.getElementById("userFlagsBody");
+  if (!body) return;
   body.textContent = `${t("loading")}…`;
   try {
-    const users = await fetchAllUsers();                     // [{username, role}]
-    const flagsMap = await fetchAllUserFlags();              // { username: {…} }
+    const users = await fetchAllUsers();
+    const flagsMap = await fetchAllUserFlags();
     const rows = users.map(u => flagRow(u, flagsMap)).filter(Boolean).join("");
     body.innerHTML = `
       <table class="table table-sm" style="width:100%;">
@@ -1035,7 +1155,7 @@ async function loadUserFlagsList() {
 
 async function saveUserFlags() {
   const body = document.getElementById("userFlagsBody");
-  const rows = body.querySelectorAll("tbody tr[data-username]");
+  const rows = body?.querySelectorAll("tbody tr[data-username]") || [];
   const permissions = [];
   rows.forEach(tr => {
     const username = tr.getAttribute("data-username");
@@ -1050,14 +1170,14 @@ async function saveUserFlags() {
   });
 
   try {
-    // reuse your existing endpoint
     const res = await sendRequest("/api/updateUserPermissions.php", "PUT",
       { permissions },
       { "X-CSRF-Token": window.csrfToken }
     );
     if (res && res.success) {
       showToast(tf("user_permissions_updated_successfully", "User permissions updated successfully"));
-      document.getElementById("userFlagsModal").style.display = "none";
+      const m = document.getElementById("userFlagsModal");
+      if (m) m.style.display = "none";
     } else {
       showToast(tf("error_updating_permissions", "Error updating permissions"), "error");
     }
@@ -1081,12 +1201,10 @@ async function loadUserPermissionsList() {
       return;
     }
 
-    // Preload folders once (admin should see all)
     const folders = await getAllFolders();
 
-    listContainer.innerHTML = ""; // clear
+    listContainer.innerHTML = "";
     users.forEach(user => {
-      // Skip admins
       if ((user.role && String(user.role) === "1") || String(user.username).toLowerCase() === "admin") return;
 
       const row = document.createElement("div");
@@ -1095,27 +1213,15 @@ async function loadUserPermissionsList() {
       row.style.padding = "6px 0";
 
       row.innerHTML = `
-        <div class="user-perm-header"
-             role="button"
-             tabindex="0"
-             aria-expanded="false"
-             style="display:flex;align-items:center;justify-content:space-between;
-                    padding:8px 6px;border-radius:6px;cursor:pointer;
-                    background:var(--perm-header-bg, rgba(0,0,0,0.04));">
-          <span style="font-weight:600;">${user.username}</span>
-          <i class="material-icons perm-caret"
-   style="transition:transform .2s; transform:rotate(-90deg); color: var(--perm-caret, #444);">
-  expand_more
-</i>
+        <div class="user-perm-header" tabindex="0" role="button" aria-expanded="false"
+             style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:6px;">
+          <span class="perm-caret" style="display:inline-block; transform: rotate(-90deg); transition: transform 120ms ease;">▸</span>
+          <strong>${user.username}</strong>
+          <span class="muted" style="margin-left:auto;">${tf('click_to_edit', 'Click to edit')}</span>
         </div>
-
-        <div class="user-perm-details" style="display:none;margin:8px 4px 2px 10px;">
-          <div class="folder-grants-box">
-            <div class="muted">${t("loading")}…</div>
-          </div>
+        <div class="user-perm-details" style="display:none; margin:8px 0 12px;">
+          <div class="folder-grants-box" data-loaded="0"></div>
         </div>
-
-        <hr style="margin:8px 0 4px;border:0;border-bottom:1px solid #ccc;">
       `;
 
       const header = row.querySelector(".user-perm-header");
