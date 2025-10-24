@@ -75,4 +75,3 @@ jobs:
             git commit -m "chore: sync CHANGELOG.md and VERSION (${{ steps.ver.outputs.version }}) from FileRise"
             git push origin main
           fi
-          
