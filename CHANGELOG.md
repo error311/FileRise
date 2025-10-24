@@ -1,5 +1,45 @@
 # Changelog
 
+## Changes 10/24/2025 (v1.6.3)
+
+release(v1.6.3): drag/drop card persistence, admin UX fixes, and docs (closes #58)
+
+Drag & Drop - Upload/Folder Management Cards layout
+
+- Persist panel locations across refresh; snapshot + restore when collapsing/expanding.
+- Unified “zones” toggle; header-icon mode no longer loses card state.
+- Responsive: auto-move sidebar cards to top on small screens; restore on resize.
+- Better top-zone placeholder/cleanup during drag; tighter header modal sizing.
+- Safer order saving + deterministic placement for upload/folder cards.
+
+Admin Panel – Folder Access
+
+- Fix: newly created folders now appear without a full page refresh (cache-busted `getFolderList`).
+- Show admin users in the list with full access pre-applied and inputs disabled (read-only).
+- Skip sending updates for admins when saving grants.
+- “Folder” column now has its own horizontal scrollbar so long names / “Inherited from …” are never cut off.
+
+Admin Panel – User Permissions (flags)
+
+- Show admins (marked as Admin) with all switches disabled; exclude from save payload.
+- Clarified helper text (account-level vs per-folder).
+
+UI/Styling
+
+- Added `.folder-cell` scroller in ACL table; improved dark-mode scrollbar/thumb.
+
+Docs
+
+- README edits:
+  - Clarified PUID/PGID mapping and host/NAS ownership requirements for mounted volumes.
+  - Environment variables section added
+  - CHOWN_ON_START additional details
+  - Admin details
+  - Upgrade section added
+  - 💖 Sponsor FileRise section added
+
+---
+
 ## Changes 10/23/2025 (v1.6.2)
 
 feat(i18n,auth): add Simplified Chinese (zh-CN) and expose in User Panel

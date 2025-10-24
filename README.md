@@ -105,6 +105,22 @@ Deploy FileRise using the **Docker image** (quickest) or a **manual install** on
 
 ---
 
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TIMEZONE` | `UTC` | PHP/app timezone. |
+| `DATE_TIME_FORMAT` | `m/d/y  h:iA` | Display format used in UI. |
+| `TOTAL_UPLOAD_SIZE` | `5G` | Max combined upload per request (resumable). |
+| `SECURE` | `false` | Set `true` if served behind HTTPS proxy (affects link generation). |
+| `PERSISTENT_TOKENS_KEY` | *(required)* | Secret for “Remember Me” tokens. Change from the example! |
+| `PUID` / `PGID` | `1000` / `1000` | Map `www-data` to host uid:gid (Unraid: often `99:100`). |
+| `CHOWN_ON_START` | `true` | First run: try to chown mounted dirs to PUID:PGID. |
+| `SCAN_ON_START` | `true` | Reindex files added outside UI at boot. |
+| `SHARE_URL` | *(blank)* | Override base URL for share links; blank = auto-detect. |
+
+---
+
 ### 1) Running with Docker (Recommended)
 
 #### Pull the image
@@ -134,6 +150,8 @@ docker run -d \
   -v ~/filerise/metadata:/var/www/metadata \
   error311/filerise-docker:latest
 ```
+
+The app runs as www-data mapped to PUID/PGID. Ensure your mounted uploads/, users/, metadata/ are owned by PUID:PGID (e.g., chown -R 1000:1000 …), or set PUID/PGID to match existing host ownership (e.g., 99:100 on Unraid). On NAS/NFS, apply the ownership change on the host/NAS.
 
 This starts FileRise on port **8080** → visit `http://your-server-ip:8080`.
 
@@ -184,6 +202,8 @@ services:
 
 Access at `http://localhost:8080` (or your server’s IP).  
 The example sets a custom `PERSISTENT_TOKENS_KEY`—change it to a strong random string.
+
+- “`CHOWN_ON_START=true` attempts to align ownership **inside the container**; if the host/NAS disallows changes, set the correct UID/GID on the host.”
 
 **First-time Setup**  
 On first launch, if no users exist, you’ll be prompted to create an **Admin account**. Then use **User Management** to add more users.
@@ -249,12 +269,29 @@ Browse to your FileRise URL; you’ll be prompted to create the Admin user on fi
 
 ---
 
+### 3) Admins
+
+> **Admins in ACL UI**
+> Admin accounts appear in the Folder Access and User Permissions modals as **read-only** with full access implied. This is by design—admins always have full control and are excluded from save payloads.
+
+---
+
 ## Unraid
 
 - Install from **Community Apps** → search **FileRise**.  
 - Default **bridge**: access at `http://SERVER_IP:8080/`.  
 - **Custom br0** (own IP): map host ports to **80/443** if you want bare `http://CONTAINER_IP/` without a port.  
 - See the [support thread](https://forums.unraid.net/topic/187337-support-filerise/) for Unraid-specific help.
+
+---
+
+## Upgrade
+
+```bash
+docker pull error311/filerise-docker:latest
+docker stop filerise && docker rm filerise
+# re-run with the same -v and -e flags you used originally
+```
 
 ---
 
@@ -335,6 +372,17 @@ See also: [SECURITY.md](./SECURITY.md) for how to report vulnerabilities.
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).  
 Areas to help: translations, bug fixes, UI polish, integrations.  
 If you like FileRise, a ⭐ star on GitHub is much appreciated!
+
+---
+
+## 💖 Sponsor FileRise
+
+If FileRise saves you time (or sparks joy 😄), please consider supporting ongoing development:
+
+- ❤️ [**GitHub Sponsors:**](https://github.com/sponsors/error311) recurring or one-time - helps fund new features and docs.
+- ☕ [**Ko-fi:**](https://ko-fi.com/error311) buy me a coffee.
+
+Every bit helps me keep FileRise fast, polished, and well-maintained. Thank you!
 
 ---
 

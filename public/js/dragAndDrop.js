@@ -8,11 +8,216 @@
 const MEDIUM_MIN = 1205;      // matches your small-screen cutoff
 const MEDIUM_MAX = 1600;      // tweak as you like
 
-const TOGGLE_TOP_PX = 10;  
+const TOGGLE_TOP_PX = 10;
 const TOGGLE_LEFT_PX = 100;
 
-const TOGGLE_ICON_OPEN   = 'view_sidebar';
-const TOGGLE_ICON_CLOSED = 'menu';  
+const TOGGLE_ICON_OPEN = 'view_sidebar';
+const TOGGLE_ICON_CLOSED = 'menu';
+
+// Cards we manage
+const KNOWN_CARD_IDS = ['uploadCard', 'folderManagementCard'];
+
+const CARD_IDS = ['uploadCard', 'folderManagementCard'];
+
+function getKnownCards() {
+  return CARD_IDS
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+}
+
+// Save current container for each card so we can restore after refresh.
+function snapshotZoneLocations() {
+  const snap = {};
+  getKnownCards().forEach(card => {
+    const p = card.parentNode;
+    snap[card.id] = p && p.id ? p.id : '';
+  });
+  localStorage.setItem('zonesSnapshot', JSON.stringify(snap));
+}
+
+// Move a card to default expanded spot (your request: sidebar is default).
+function moveCardToSidebarDefault(card) {
+  const sidebar = getSidebar();
+  if (sidebar) {
+    sidebar.appendChild(card);
+    card.style.width = '100%';
+    animateVerticalSlide(card);
+  }
+}
+
+// Remove any header icon/modal for a card (so it truly leaves header mode).
+function stripHeaderArtifacts(card) {
+  if (card.headerIconButton) {
+    if (card.headerIconButton.modalInstance) {
+      try { card.headerIconButton.modalInstance.remove(); } catch { }
+    }
+    try { card.headerIconButton.remove(); } catch { }
+    card.headerIconButton = null;
+  }
+}
+
+// Restore cards after “expand” (toggle off) or after refresh.
+// - If we have a snapshot, use it.
+// - If not, put all cards in the sidebar (your default).
+function restoreCardsFromSnapshot() {
+  const sidebar = getSidebar();
+  const leftCol = document.getElementById('leftCol');
+  const rightCol = document.getElementById('rightCol');
+
+  let snap = {};
+  try { snap = JSON.parse(localStorage.getItem('zonesSnapshot') || '{}'); } catch { }
+
+  getKnownCards().forEach(card => {
+    stripHeaderArtifacts(card);
+    const destId = snap[card.id] || 'sidebarDropArea'; // fallback to sidebar
+    const dest =
+      destId === 'leftCol' ? leftCol :
+        destId === 'rightCol' ? rightCol :
+          destId === 'sidebarDropArea' ? sidebar :
+            sidebar; // final fallback
+    card.style.width = '';
+    card.style.minWidth = '';
+    if (dest) dest.appendChild(card);
+  });
+
+  // Clear header icons storage because we’re expanded.
+  localStorage.removeItem('headerOrder');
+  const headerDropArea = document.getElementById('headerDropArea');
+  if (headerDropArea) headerDropArea.innerHTML = '';
+
+  updateTopZoneLayout();
+  updateSidebarVisibility();
+  ensureZonesToggle();
+  updateZonesToggleUI();
+}
+
+// Read the saved snapshot (or {} if none)
+function readZonesSnapshot() {
+  try {
+    return JSON.parse(localStorage.getItem('zonesSnapshot') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+// Move a card into the header zone as an icon (uses your existing helper)
+function moveCardToHeader(card) {
+  // If it's already in header icon form, skip
+  if (card.headerIconButton && card.headerIconButton.parentNode) return;
+  insertCardInHeader(card, null);
+}
+
+// Collapse behavior: snapshot locations, then move all known cards to header as icons
+function collapseCardsToHeader() {
+  const headerDropArea = document.getElementById('headerDropArea');
+  if (headerDropArea) headerDropArea.style.display = 'inline-flex'; // NEW
+
+  getKnownCards().forEach(card => {
+    if (!card.headerIconButton) insertCardInHeader(card, null);
+  });
+
+  updateTopZoneLayout();
+  updateSidebarVisibility();
+  ensureZonesToggle();
+  updateZonesToggleUI();
+}
+
+// Clean up any header icon (button + modal) attached to a card
+function removeHeaderIconForCard(card) {
+  if (card.headerIconButton) {
+    const btn = card.headerIconButton;
+    const modal = btn.modalInstance;
+    if (btn.parentNode) btn.parentNode.removeChild(btn);
+    if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
+    card.headerIconButton = null;
+  }
+}
+
+// New: small-screen detector
+function isSmallScreen() { return window.innerWidth < MEDIUM_MIN; }
+
+// New: remember which cards were in the sidebar right before we go small
+const RESPONSIVE_SNAPSHOT_KEY = 'responsiveSidebarSnapshot';
+
+function snapshotSidebarCardsForResponsive() {
+  const sb = getSidebar();
+  if (!sb) return;
+  const ids = Array.from(sb.querySelectorAll('#uploadCard, #folderManagementCard'))
+    .map(el => el.id);
+  localStorage.setItem(RESPONSIVE_SNAPSHOT_KEY, JSON.stringify(ids));
+}
+
+function readResponsiveSnapshot() {
+  try { return JSON.parse(localStorage.getItem(RESPONSIVE_SNAPSHOT_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function clearResponsiveSnapshot() {
+  localStorage.removeItem(RESPONSIVE_SNAPSHOT_KEY);
+}
+
+// New: deterministic mapping from card -> top column
+function moveCardToTopByMapping(card) {
+  const leftCol  = document.getElementById('leftCol');
+  const rightCol = document.getElementById('rightCol');
+  if (!leftCol || !rightCol) return;
+
+  const target = (card.id === 'uploadCard') ? leftCol :
+                 (card.id === 'folderManagementCard') ? rightCol : leftCol;
+
+  // clear any sticky widths from sidebar/header
+  card.style.width = '';
+  card.style.minWidth = '';
+  target.appendChild(card);
+  card.dataset.originalContainerId = target.id;
+  animateVerticalSlide(card);
+}
+
+// New: move all sidebar cards to top (used when we cross into small)
+function moveAllSidebarCardsToTop() {
+  const sb = getSidebar();
+  if (!sb) return;
+  const cards = Array.from(sb.querySelectorAll('#uploadCard, #folderManagementCard'));
+  cards.forEach(moveCardToTopByMapping);
+  updateTopZoneLayout();
+  updateSidebarVisibility();
+}
+
+// New: enforce responsive behavior (sidebar disabled on small screens)
+let __lastIsSmall = null;
+
+function enforceResponsiveZones() {
+  const isSmall = isSmallScreen();
+  const sidebar = getSidebar();
+  const topZone = getTopZone();
+
+  if (isSmall && __lastIsSmall !== true) {
+    // entering small: remember what was in sidebar, move them up, hide sidebar
+    snapshotSidebarCardsForResponsive();
+    moveAllSidebarCardsToTop();
+    if (sidebar) sidebar.style.display = 'none';
+    if (topZone)  topZone.style.display = ''; // ensure visible
+    __lastIsSmall = true;
+  } else if (!isSmall && __lastIsSmall !== false) {
+    // leaving small: restore only what used to be in the sidebar
+    const ids = readResponsiveSnapshot();
+    const sb = getSidebar();
+    ids.forEach(id => {
+      const card = document.getElementById(id);
+      if (card && sb && !sb.contains(card)) {
+        sb.appendChild(card);
+        card.style.width = '100%';
+      }
+    });
+    clearResponsiveSnapshot();
+    // show sidebar again if panels aren’t collapsed
+    if (sidebar) sidebar.style.display = isZonesCollapsed() ? 'none' : 'block';
+    updateTopZoneLayout();
+    updateSidebarVisibility();
+    __lastIsSmall = false;
+  }
+}
+
 
 function updateSidebarToggleUI() {
   const btn = document.getElementById('sidebarToggleFloating');
@@ -22,9 +227,8 @@ function updateSidebarToggleUI() {
   if (!hasSidebarCards()) { btn.remove(); return; }
 
   const collapsed = isSidebarCollapsed();
-  btn.innerHTML = `<i class="material-icons" aria-hidden="true">${
-    collapsed ? TOGGLE_ICON_CLOSED : TOGGLE_ICON_OPEN
-  }</i>`;
+  btn.innerHTML = `<i class="material-icons" aria-hidden="true">${collapsed ? TOGGLE_ICON_CLOSED : TOGGLE_ICON_OPEN
+    }</i>`;
   btn.title = collapsed ? 'Show sidebar' : 'Hide sidebar';
   btn.style.display = 'block';
   btn.classList.toggle('toggle-ping', collapsed);
@@ -43,28 +247,45 @@ function hasTopZoneCards() {
 
 // Both cards are in the top zone (upload + folder)
 function allCardsInTopZone() {
-    const tz = getTopZone();
-    if (!tz) return false;
-    const hasUpload  = !!tz.querySelector('#uploadCard');
-    const hasFolder  = !!tz.querySelector('#folderManagementCard');
-    return hasUpload && hasFolder;
-  }
+  const tz = getTopZone();
+  if (!tz) return false;
+  const hasUpload = !!tz.querySelector('#uploadCard');
+  const hasFolder = !!tz.querySelector('#folderManagementCard');
+  return hasUpload && hasFolder;
+}
 
 function isZonesCollapsed() {
   return localStorage.getItem('zonesCollapsed') === '1';
 }
 function setZonesCollapsed(collapsed) {
   localStorage.setItem('zonesCollapsed', collapsed ? '1' : '0');
-  applyZonesCollapsed();
+
+  if (collapsed) {
+    // Remember where cards were, then show them as header icons
+    snapshotZoneLocations();
+    collapseCardsToHeader();     // your existing helper that calls insertCardInHeader(...)
+  } else {
+    // Expand: bring cards back
+    restoreCardsFromSnapshot();
+
+    // Ensure zones are visible right away after expand
+    const sidebar = getSidebar();
+    const topZone = getTopZone();
+    if (sidebar) sidebar.style.display = 'block';
+    if (topZone) topZone.style.display = '';
+  }
+
+  ensureZonesToggle();
   updateZonesToggleUI();
 }
+
 function applyZonesCollapsed() {
   const collapsed = isZonesCollapsed();
   const sidebar = getSidebar();
   const topZone = getTopZone();
 
   if (sidebar) sidebar.style.display = collapsed ? 'none' : (hasSidebarCards() ? 'block' : 'none');
-  if (topZone)  topZone.style.display  = collapsed ? 'none' : (hasTopZoneCards()  ? ''      : '');
+  if (topZone) topZone.style.display = collapsed ? 'none' : (hasTopZoneCards() ? '' : '');
 }
 
 function isMediumScreen() {
@@ -101,14 +322,7 @@ function applySidebarCollapsed() {
 }
 
 function ensureZonesToggle() {
-  // show only if at least one zone *can* show a card
-  const shouldShow = hasSidebarCards() || hasTopZoneCards();
-
   let btn = document.getElementById('sidebarToggleFloating');
-  if (!shouldShow) {
-    if (btn) btn.remove();
-    return;
-  }
   if (!btn) {
     btn = document.createElement('button');
     btn.id = 'sidebarToggleFloating';
@@ -126,11 +340,11 @@ function ensureZonesToggle() {
       background: '#fff',
       cursor: 'pointer',
       boxShadow: '0 2px 6px rgba(0,0,0,.15)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '0',
-        lineHeight: '0',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '0',
+      lineHeight: '0',
     });
     btn.addEventListener('click', () => {
       setZonesCollapsed(!isZonesCollapsed());
@@ -139,23 +353,18 @@ function ensureZonesToggle() {
   }
   updateZonesToggleUI();
 }
+
 function updateZonesToggleUI() {
   const btn = document.getElementById('sidebarToggleFloating');
   if (!btn) return;
 
-  // if neither zone has cards, remove the toggle
-  if (!hasSidebarCards() && !hasTopZoneCards()) {
-    btn.remove();
-    return;
-  }
-
+  // Never remove the button just because cards are in header.
   const collapsed = isZonesCollapsed();
   const iconName = collapsed ? TOGGLE_ICON_CLOSED : TOGGLE_ICON_OPEN;
   btn.innerHTML = `<i class="material-icons toggle-icon" aria-hidden="true">${iconName}</i>`;
   btn.title = collapsed ? 'Show panels' : 'Hide panels';
   btn.style.display = 'block';
 
-  // Rotate the icon 90° when BOTH cards are in the top zone and panels are open
   const iconEl = btn.querySelector('.toggle-icon');
   if (iconEl) {
     iconEl.style.transition = 'transform 0.2s ease';
@@ -228,27 +437,35 @@ export function loadSidebarOrder() {
   const headerOrderStr = localStorage.getItem('headerOrder');
   const defaultAppliedKey = 'layoutDefaultApplied_v1'; // bump if logic changes
 
-  // If we have a saved order (sidebar), honor it as before
-  if (orderStr) {
-    const order = JSON.parse(orderStr || '[]');
-    if (Array.isArray(order) && order.length > 0) {
-      const mainWrapper = document.querySelector('.main-wrapper');
-      if (mainWrapper) mainWrapper.style.display = 'flex';
-      order.forEach(id => {
-        const card = document.getElementById(id);
-        if (card && card.parentNode?.id !== 'sidebarDropArea') {
-          sidebar.appendChild(card);
-          animateVerticalSlide(card);
-        }
-      });
-      updateSidebarVisibility();
-      //applySidebarCollapsed();   // NEW: honor collapsed state
-      //ensureSidebarToggle();     // NEW: inject toggle
-      applyZonesCollapsed();
-      ensureZonesToggle();
-      
-      return;
-    }
+
+  // One-time default: if no saved order and no header order,
+// put cards into the sidebar on all ≥ MEDIUM_MIN screens.
+if ((!orderStr || !JSON.parse(orderStr || '[]').length) &&
+(!headerOrderStr || !JSON.parse(headerOrderStr || '[]').length)) {
+
+const isLargeEnough = window.innerWidth >= MEDIUM_MIN;
+if (isLargeEnough) {
+const mainWrapper = document.querySelector('.main-wrapper');
+if (mainWrapper) mainWrapper.style.display = 'flex';
+
+const moved = [];
+['uploadCard', 'folderManagementCard'].forEach(id => {
+  const card = document.getElementById(id);
+  if (card && card.parentNode?.id !== 'sidebarDropArea') {
+    // clear any sticky widths from header/top
+    card.style.width = '';
+    card.style.minWidth = '';
+    getSidebar().appendChild(card);
+    animateVerticalSlide(card);
+    moved.push(id);
+  }
+});
+
+if (moved.length) {
+  localStorage.setItem('sidebarOrder', JSON.stringify(moved));
+}
+}
+
   }
 
   // No sidebar order saved yet: if user has header icons saved, do nothing (they've customized)
@@ -258,7 +475,7 @@ export function loadSidebarOrder() {
     //applySidebarCollapsed();
     //ensureSidebarToggle();
     applyZonesCollapsed();
-      ensureZonesToggle();
+    ensureZonesToggle();
     return;
   }
 
@@ -289,34 +506,28 @@ export function loadSidebarOrder() {
   //applySidebarCollapsed();
   //ensureSidebarToggle();
   applyZonesCollapsed();
-      ensureZonesToggle();
+  ensureZonesToggle();
 }
 
 export function loadHeaderOrder() {
   const headerDropArea = document.getElementById('headerDropArea');
   if (!headerDropArea) return;
 
-  // 1) Clear out any icons that might already be in the drop area
-  headerDropArea.innerHTML = '';
-
-  // 2) Read the saved array (or empty array if invalid/missing)
-  let stored;
-  try {
-    stored = JSON.parse(localStorage.getItem('headerOrder') || '[]');
-  } catch {
-    stored = [];
+  // If panels are expanded, do not re-create header icons.
+  if (!isZonesCollapsed()) {
+    headerDropArea.innerHTML = '';
+    localStorage.removeItem('headerOrder');
+    return;
   }
 
-  // 3) Deduplicate IDs
+  headerDropArea.innerHTML = '';
+  let stored;
+  try { stored = JSON.parse(localStorage.getItem('headerOrder') || '[]'); } catch { stored = []; }
   const uniqueIds = Array.from(new Set(stored));
-
-  // 4) Re-insert exactly one icon per saved card ID
   uniqueIds.forEach(id => {
     const card = document.getElementById(id);
     if (card) insertCardInHeader(card, null);
   });
-
-  // 5) Persist the cleaned, deduped list back to storage
   localStorage.setItem('headerOrder', JSON.stringify(uniqueIds));
 }
 
@@ -332,13 +543,13 @@ function updateSidebarVisibility() {
   sidebar.style.height = '';
 
   if (anyCards) {
-        sidebar.classList.add('active');
-        // respect the unified zones-collapsed switch
-        sidebar.style.display = isZonesCollapsed() ? 'none' : 'block';
-      } else {
-        sidebar.classList.remove('active');
-        sidebar.style.display = 'none';
-      }
+    sidebar.classList.add('active');
+    // respect the unified zones-collapsed switch
+    sidebar.style.display = isZonesCollapsed() ? 'none' : 'block';
+  } else {
+    sidebar.classList.remove('active');
+    sidebar.style.display = 'none';
+  }
 
   // Save order and update toggle visibility
   saveSidebarOrder();
@@ -358,19 +569,22 @@ function saveHeaderOrder() {
 
 // Internal helper: update top zone layout (center a card if one column is empty).
 function updateTopZoneLayout() {
+  const topZone = getTopZone();
   const leftCol = document.getElementById('leftCol');
   const rightCol = document.getElementById('rightCol');
 
-  const leftIsEmpty = !leftCol?.querySelector('#uploadCard');
-  const rightIsEmpty = !rightCol?.querySelector('#folderManagementCard');
+  const hasUpload  = !!topZone?.querySelector('#uploadCard');
+  const hasFolder  = !!topZone?.querySelector('#folderManagementCard');
 
   if (leftCol && rightCol) {
-    if (leftIsEmpty && !rightIsEmpty) {
-      leftCol.style.display = 'none';
-      rightCol.style.margin = '0 auto';
-    } else if (rightIsEmpty && !leftIsEmpty) {
+    if (hasUpload && !hasFolder) {
       rightCol.style.display = 'none';
       leftCol.style.margin = '0 auto';
+      leftCol.style.display = '';
+    } else if (!hasUpload && hasFolder) {
+      leftCol.style.display = 'none';
+      rightCol.style.margin = '0 auto';
+      rightCol.style.display = '';
     } else {
       leftCol.style.display = '';
       rightCol.style.display = '';
@@ -378,6 +592,9 @@ function updateTopZoneLayout() {
       rightCol.style.margin = '';
     }
   }
+
+  // hide whole top row when empty (kills the gap)
+  if (topZone) topZone.style.display = (hasUpload || hasFolder) ? '' : 'none';
 }
 
 // When a card is being dragged, if the top drop zone is empty, set its min-height.
@@ -422,6 +639,7 @@ function animateVerticalSlide(card) {
 function insertCardInSidebar(card, event) {
   const sidebar = getSidebar();
   if (!sidebar) return;
+
   const existingCards = Array.from(sidebar.querySelectorAll('#uploadCard, #folderManagementCard'));
   let inserted = false;
   for (const currentCard of existingCards) {
@@ -433,14 +651,19 @@ function insertCardInSidebar(card, event) {
       break;
     }
   }
-  if (!inserted) {
-    sidebar.appendChild(card);
-  }
-  // Ensure card fills the sidebar.
+  if (!inserted) sidebar.appendChild(card);
+
+  // Make it fill the sidebar and clear any sticky width from header/top zone.
   card.style.width = '100%';
+  removeHeaderIconForCard(card);           // NEW: remove any header artifacts
+  card.dataset.originalContainerId = 'sidebarDropArea';
   animateVerticalSlide(card);
-  // if user dropped into sidebar, auto-un-collapse if currently collapsed
-  if (isZonesCollapsed()) setZonesCollapsed(false);
+
+  // SAVE order & refresh minimal UI, but DO NOT collapse/restore here:
+  saveSidebarOrder();
+  updateSidebarVisibility();
+  ensureZonesToggle();
+  updateZonesToggleUI();
 }
 
 // Internal helper: save the current sidebar card order to localStorage.
@@ -472,16 +695,55 @@ function moveSidebarCardsToTop() {
 }
 
 // Listen for window resize to automatically move sidebar cards back to top on small screens.
-window.addEventListener('resize', function () {
-  if (window.innerWidth < 1205) {
-    moveSidebarCardsToTop();
+(function () {
+  let rAF = null;
+  window.addEventListener('resize', () => {
+    if (rAF) cancelAnimationFrame(rAF);
+    rAF = requestAnimationFrame(() => {
+      enforceResponsiveZones();
+    });
+  });
+})();
+
+function showTopZoneWhileDragging() {
+  const topZone = getTopZone();
+  if (!topZone) return;
+  topZone.style.display = '';                 // make it droppable
+  // add a temporary placeholder only if empty
+  if (topZone.querySelectorAll('#uploadCard, #folderManagementCard').length === 0) {
+    let ph = topZone.querySelector('.placeholder');
+    if (!ph) {
+      ph = document.createElement('div');
+      ph.className = 'placeholder';
+      ph.style.visibility = 'hidden';
+      ph.style.display = 'block';
+      ph.style.width = '100%';
+      ph.style.height = '375px';
+      topZone.appendChild(ph);
+    }
   }
-});
+}
+
+function cleanupTopZoneAfterDrop() {
+  const topZone = getTopZone();
+  if (!topZone) return;
+
+  // remove placeholder and highlight/minHeight no matter what
+  const ph = topZone.querySelector('.placeholder');
+  if (ph) ph.remove();
+  topZone.classList.remove('highlight');
+  topZone.style.minHeight = '';
+
+  // if no cards left, hide the whole row to remove the gap
+  const hasAny = topZone.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
+  topZone.style.display = hasAny ? '' : 'none';
+}
 
 // This function ensures the top drop zone (#uploadFolderRow) has a stable width when empty.
 function ensureTopZonePlaceholder() {
   const topZone = document.getElementById('uploadFolderRow');
   if (!topZone) return;
+  topZone.style.display = '';
   if (topZone.querySelectorAll('#uploadCard, #folderManagementCard').length === 0) {
     let placeholder = topZone.querySelector('.placeholder');
     if (!placeholder) {
@@ -578,6 +840,8 @@ function insertCardInHeader(card, event) {
         border: 'none',
         padding: '0',
         boxShadow: 'none',
+        maxWidth: '440px',   // NEW: keep card from overflowing center content
+        width: 'max-content' // NEW
       });
       document.body.appendChild(modal);
       modal.addEventListener('mouseover', handleMouseOver);
@@ -586,9 +850,10 @@ function insertCardInHeader(card, event) {
     }
     if (!modal.contains(card)) {
       const hiddenContainer = document.getElementById('hiddenCardsContainer');
-      if (hiddenContainer && hiddenContainer.contains(card)) {
-        hiddenContainer.removeChild(card);
-      }
+      if (hiddenContainer && hiddenContainer.contains(card)) hiddenContainer.removeChild(card);
+      // Clear sticky widths before placing in modal
+      card.style.width = '';
+      card.style.minWidth = '';
       modal.appendChild(card);
     }
     modal.style.visibility = 'visible';
@@ -638,10 +903,13 @@ function insertCardInHeader(card, event) {
 export function initDragAndDrop() {
   function run() {
     // make sure toggle exists even if user hasn't dragged yet
-   // ensureSidebarToggle();
-    //applySidebarCollapsed();
+    loadSidebarOrder();
+    loadHeaderOrder();
+
+    // 2) Then paint visibility/toggle
     applyZonesCollapsed();
-      ensureZonesToggle();
+    ensureZonesToggle();
+    updateZonesToggleUI();
 
     const draggableCards = document.querySelectorAll('#uploadCard, #folderManagementCard');
     draggableCards.forEach(card => {
@@ -672,16 +940,24 @@ export function initDragAndDrop() {
             card.classList.add('dragging');
             card.style.pointerEvents = 'none';
             addTopZoneHighlight();
+            showTopZoneWhileDragging();
 
             const sidebar = getSidebar();
             if (sidebar) {
               sidebar.classList.add('active');
-              sidebar.style.display = isSidebarCollapsed() ? 'none' : 'block';
+              sidebar.style.display = isZonesCollapsed() ? 'none' : 'block';
               sidebar.classList.add('highlight');
               sidebar.style.height = '800px';
+              sidebar.style.minWidth = '280px';
             }
 
             showHeaderDropZone();
+            const topZone = getTopZone();
+            if (topZone) 
+              {
+                topZone.style.display = '';
+                ensureTopZonePlaceholder();
+              }
 
             initialLeft = initialRect.left + window.pageXOffset;
             initialTop = initialRect.top + window.pageYOffset;
@@ -728,12 +1004,13 @@ export function initDragAndDrop() {
           isDragging = false;
           card.style.pointerEvents = '';
           card.classList.remove('dragging');
-          removeTopZoneHighlight();
+
 
           const sidebar = getSidebar();
           if (sidebar) {
             sidebar.classList.remove('highlight');
             sidebar.style.height = '';
+            sidebar.style.minWidth = '';
           }
 
           if (card.headerIconButton) {
@@ -760,7 +1037,7 @@ export function initDragAndDrop() {
               e.clientX >= rect.left &&
               e.clientX <= rect.right &&
               e.clientY >= rect.top &&
-              e.clientY <= dropZoneBottom
+              e.clientY <= rect.bottom
             ) {
               insertCardInSidebar(card, e);
               droppedInSidebar = true;
@@ -787,6 +1064,7 @@ export function initDragAndDrop() {
                 ensureTopZonePlaceholder();
                 updateTopZoneLayout();
                 container.appendChild(card);
+                card.dataset.originalContainerId = container.id;
                 droppedInTop = true;
                 card.style.width = "363px";
                 animateVerticalSlide(card);
@@ -843,6 +1121,10 @@ export function initDragAndDrop() {
           updateTopZoneLayout();
           updateSidebarVisibility();
           hideHeaderDropZone();
+
+          cleanupTopZoneAfterDrop();
+          const tz = getTopZone();
+          if (tz) tz.style.minHeight = '';
         }
       });
     });

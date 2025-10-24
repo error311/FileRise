@@ -4,9 +4,18 @@ import { loadAdminConfigFunc } from './auth.js';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
 import { sendRequest } from './networkUtils.js';
 
-const version = "v1.6.2";
+const version = "v1.6.3";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
 
+
+function buildFullGrantsForAllFolders(folders) {
+  const allTrue = {
+    view:true, viewOwn:false, manage:true, create:true, upload:true, edit:true,
+    rename:true, copy:true, move:true, delete:true, extract:true,
+    shareFile:true, shareFolder:true, share:true
+  };
+  return folders.reduce((acc, f) => { acc[f] = { ...allTrue }; return acc; }, {});
+}
 
 /* === BEGIN: Folder Access helpers (merged + improved) === */
 function qs(scope, sel){ return (scope||document).querySelector(sel); }
@@ -194,6 +203,25 @@ async function safeJson(res) {
     @media (max-width: 900px) {
       .folder-access-list { --col-perm: 72px; --col-folder-min: 240px; }
     }
+
+    /* Folder cell: horizontal-only scroll */
+  .folder-cell{
+    overflow-x:auto;
+    overflow-y:hidden;
+    white-space:nowrap;
+    -webkit-overflow-scrolling:touch;
+  }
+  /* nicer thin scrollbar (supported browsers) */
+  .folder-cell::-webkit-scrollbar{ height:8px; }
+  .folder-cell::-webkit-scrollbar-thumb{ background:rgba(0,0,0,.25); border-radius:4px; }
+  body.dark-mode .folder-cell::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.25); }
+
+  /* Badge now doesn't clip; let the wrapper handle scroll */
+  .folder-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    font-weight:600;
+    min-width:0; /* allow child to be as wide as needed inside scroller */
+  }
   `;
   document.head.appendChild(style);
 })();
@@ -617,21 +645,29 @@ export async function closeAdminPanel() {
    New: Folder Access (ACL) UI
    =========================== */
 
-let __allFoldersCache = null; // array of folder strings
-async function getAllFolders() {
-  if (__allFoldersCache) return __allFoldersCache.slice();
-  const res = await fetch('/api/folder/getFolderList.php', { credentials: 'include' });
-  const data = await safeJson(res).catch(() => []);
-  const list = Array.isArray(data)
-    ? data.map(x => (typeof x === 'string' ? x : x.folder)).filter(Boolean)
-    : [];
-  const hidden = new Set(["profile_pics", "trash"]);
-  const cleaned = list
-    .filter(f => f && !hidden.has(f.toLowerCase()))
-    .sort((a, b) => (a === 'root' ? -1 : b === 'root' ? 1 : a.localeCompare(b)));
-  __allFoldersCache = cleaned;
-  return cleaned.slice();
-}
+   let __allFoldersCache = null;
+
+   async function getAllFolders(force = false) {
+     if (!force && __allFoldersCache) return __allFoldersCache.slice();
+   
+     const res = await fetch('/api/folder/getFolderList.php?ts=' + Date.now(), {
+       credentials: 'include',
+       cache: 'no-store',
+       headers: { 'Cache-Control': 'no-store' }
+     });
+     const data = await safeJson(res).catch(() => []);
+     const list = Array.isArray(data)
+       ? data.map(x => (typeof x === 'string' ? x : x.folder)).filter(Boolean)
+       : [];
+   
+     const hidden = new Set(['profile_pics', 'trash']);
+     const cleaned = list
+       .filter(f => f && !hidden.has(f.toLowerCase()))
+       .sort((a, b) => (a === 'root' ? -1 : b === 'root' ? 1 : a.localeCompare(b)));
+   
+     __allFoldersCache = cleaned;
+     return cleaned.slice();
+   }
 
 async function getUserGrants(username) {
   const res = await fetch(`/api/admin/acl/getGrants.php?user=${encodeURIComponent(username)}`, {
@@ -673,8 +709,10 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   container.appendChild(list);
 
   const headerHtml = `
-  <div class="folder-access-header">
-    <div title="${tf('folder_help', 'Folder path within FileRise')}">${tf('folder', 'Folder')}</div>
+    <div class="folder-access-header">
+    <div class="folder-cell" title="${tf('folder_help','Folder path within FileRise')}">
+      ${tf('folder','Folder')}
+    </div>
     <div class="perm-col" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">${tf('view_all', 'View (all)')}</div>
     <div class="perm-col" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">${tf('view_own', 'View (own)')}</div>
     <div class="perm-col" title="${tf('write_help', 'Meta: toggles all write operations (below) on/off for this row')}">${tf('write_full', 'Write')}</div>
@@ -698,7 +736,13 @@ function renderFolderGrantsUI(username, container, folders, grants) {
     const shareFolderDisabled = !g.view;
     return `
       <div class="folder-access-row" data-folder="${folder}">
-        <div class="folder-badge"><i class="material-icons" style="font-size:18px;">folder</i>${name}<span class="inherited-tag" style="display:none;"></span></div>
+    <div class="folder-cell">
+      <div class="folder-badge">
+        <i class="material-icons" style="font-size:18px;">folder</i>
+        ${name}
+        <span class="inherited-tag" style="display:none;"></span>
+      </div>
+    </div>
         <div class="perm-col"><input type="checkbox" data-cap="view"      ${g.view ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="viewOwn"   ${g.viewOwn ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="write"     ${writeMetaChecked ? 'checked' : ''}></div>
@@ -999,15 +1043,16 @@ export function openUserPermissionsModal() {
     });
     document.getElementById("saveUserPermissionsBtn").addEventListener("click", async () => {
       const rows = userPermissionsModal.querySelectorAll(".user-permission-row");
-      const changes = [];
-      rows.forEach(row => {
-        const username = String(row.getAttribute("data-username") || "").trim();
-        if (!username) return;
-        const grantsBox = row.querySelector(".folder-grants-box");
-        if (!grantsBox || grantsBox.getAttribute('data-loaded') !== '1') return;
-        const grants = collectGrantsFrom(grantsBox);
-        changes.push({ user: username, grants });
-      });
+const changes = [];
+rows.forEach(row => {
+  if (row.getAttribute("data-admin") === "1") return; // skip admins
+  const username = String(row.getAttribute("data-username") || "").trim();
+  if (!username) return;
+  const grantsBox = row.querySelector(".folder-grants-box");
+  if (!grantsBox || grantsBox.getAttribute('data-loaded') !== '1') return;
+  const grants = collectGrantsFrom(grantsBox);
+  changes.push({ user: username, grants });
+});
       try {
         if (changes.length === 0) { showToast(tf("nothing_to_save", "Nothing to save")); return; }
         await sendRequest("/api/admin/acl/saveGrants.php", "POST",
@@ -1053,14 +1098,17 @@ async function fetchAllUserFlags() {
 function flagRow(u, flags) {
   const f = flags[u.username] || {};
   const isAdmin = String(u.role) === "1" || u.username.toLowerCase() === "admin";
-  if (isAdmin) return "";
+
+  const disabledAttr = isAdmin ? "disabled data-admin='1' title='Admin: full access'" : "";
+  const note = isAdmin ? " <span class='muted'>(Admin)</span>" : "";
+
   return `
-    <tr data-username="${u.username}">
-      <td><strong>${u.username}</strong></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="readOnly"        ${f.readOnly ? "checked" : ""}></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="disableUpload"   ${f.disableUpload ? "checked" : ""}></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="canShare"        ${f.canShare ? "checked" : ""}></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="bypassOwnership" ${f.bypassOwnership ? "checked" : ""}></td>
+    <tr data-username="${u.username}" ${isAdmin ? "data-admin='1'" : ""}>
+      <td><strong>${u.username}</strong>${note}</td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="readOnly"        ${f.readOnly ? "checked" : ""} ${disabledAttr}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="disableUpload"   ${f.disableUpload ? "checked" : ""} ${disabledAttr}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="canShare"        ${f.canShare ? "checked" : ""} ${disabledAttr}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="bypassOwnership" ${f.bypassOwnership ? "checked" : ""} ${disabledAttr}></td>
     </tr>
   `;
 }
@@ -1092,7 +1140,7 @@ export async function openUserFlagsModal() {
 
         <h3>${tf("user_permissions", "User Permissions")}</h3>
         <p class="muted" style="margin-top:-6px;">
-          ${tf("user_flags_help", "Account-level switches. These are NOT per-folder grants.")}
+          ${tf("user_flags_help", "Non Admin User Account-level switches. These are NOT per-folder grants.")}
         </p>
 
         <div id="userFlagsBody"
@@ -1158,6 +1206,7 @@ async function saveUserFlags() {
   const rows = body?.querySelectorAll("tbody tr[data-username]") || [];
   const permissions = [];
   rows.forEach(tr => {
+    if (tr.getAttribute("data-admin") === "1") return; // don't send admin updates
     const username = tr.getAttribute("data-username");
     const get = k => tr.querySelector(`input[data-flag="${k}"]`).checked;
     permissions.push({
@@ -1201,61 +1250,73 @@ async function loadUserPermissionsList() {
       return;
     }
 
-    const folders = await getAllFolders();
+    const folders = await getAllFolders(true);
 
     listContainer.innerHTML = "";
-    users.forEach(user => {
-      if ((user.role && String(user.role) === "1") || String(user.username).toLowerCase() === "admin") return;
+users.forEach(user => {
+  const isAdmin = (user.role && String(user.role) === "1") || String(user.username).toLowerCase() === "admin";
 
-      const row = document.createElement("div");
-      row.classList.add("user-permission-row");
-      row.setAttribute("data-username", user.username);
-      row.style.padding = "6px 0";
+  const row = document.createElement("div");
+  row.classList.add("user-permission-row");
+  row.setAttribute("data-username", user.username);
+  if (isAdmin) row.setAttribute("data-admin", "1"); // mark admins
+  row.style.padding = "6px 0";
 
-      row.innerHTML = `
-        <div class="user-perm-header" tabindex="0" role="button" aria-expanded="false"
-             style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:6px;">
-          <span class="perm-caret" style="display:inline-block; transform: rotate(-90deg); transition: transform 120ms ease;">▸</span>
-          <strong>${user.username}</strong>
-          <span class="muted" style="margin-left:auto;">${tf('click_to_edit', 'Click to edit')}</span>
-        </div>
-        <div class="user-perm-details" style="display:none; margin:8px 0 12px;">
-          <div class="folder-grants-box" data-loaded="0"></div>
-        </div>
-      `;
+  row.innerHTML = `
+    <div class="user-perm-header" tabindex="0" role="button" aria-expanded="false"
+         style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:6px;">
+      <span class="perm-caret" style="display:inline-block; transform: rotate(-90deg); transition: transform 120ms ease;">▸</span>
+      <strong>${user.username}</strong>
+      ${isAdmin ? `<span class="muted" style="margin-left:auto;">Admin (full access)</span>`
+                : `<span class="muted" style="margin-left:auto;">${tf('click_to_edit', 'Click to edit')}</span>`}
+    </div>
+    <div class="user-perm-details" style="display:none; margin:8px 0 12px;">
+      <div class="folder-grants-box" data-loaded="0"></div>
+    </div>
+  `;
 
-      const header = row.querySelector(".user-perm-header");
-      const details = row.querySelector(".user-perm-details");
-      const caret = row.querySelector(".perm-caret");
-      const grantsBox = row.querySelector(".folder-grants-box");
+  const header = row.querySelector(".user-perm-header");
+  const details = row.querySelector(".user-perm-details");
+  const caret = row.querySelector(".perm-caret");
+  const grantsBox = row.querySelector(".folder-grants-box");
 
-      async function ensureLoaded() {
-        if (grantsBox.dataset.loaded === "1") return;
-        try {
-          const grants = await getUserGrants(user.username);
-          renderFolderGrantsUI(user.username, grantsBox, ["root", ...folders.filter(f => f !== "root")], grants);
-          grantsBox.dataset.loaded = "1";
-        } catch (e) {
-          console.error(e);
-          grantsBox.innerHTML = `<div class="muted">${tf("error_loading_user_grants", "Error loading user grants")}</div>`;
-        }
+  async function ensureLoaded() {
+    if (grantsBox.dataset.loaded === "1") return;
+    try {
+      let grants;
+      if (isAdmin) {
+        // synthesize full access
+        const ordered = ["root", ...folders.filter(f => f !== "root")];
+        grants = buildFullGrantsForAllFolders(ordered);
+        renderFolderGrantsUI(user.username, grantsBox, ordered, grants);
+        // disable all inputs
+        grantsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
+      } else {
+        const userGrants = await getUserGrants(user.username);
+        renderFolderGrantsUI(user.username, grantsBox, ["root", ...folders.filter(f => f !== "root")], userGrants);
       }
+      grantsBox.dataset.loaded = "1";
+    } catch (e) {
+      console.error(e);
+      grantsBox.innerHTML = `<div class="muted">${tf("error_loading_user_grants", "Error loading user grants")}</div>`;
+    }
+  }
 
-      function toggleOpen() {
-        const willShow = details.style.display === "none";
-        details.style.display = willShow ? "block" : "none";
-        header.setAttribute("aria-expanded", willShow ? "true" : "false");
-        caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
-        if (willShow) ensureLoaded();
-      }
+  function toggleOpen() {
+    const willShow = details.style.display === "none";
+    details.style.display = willShow ? "block" : "none";
+    header.setAttribute("aria-expanded", willShow ? "true" : "false");
+    caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
+    if (willShow) ensureLoaded();
+  }
 
-      header.addEventListener("click", toggleOpen);
-      header.addEventListener("keydown", e => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleOpen(); }
-      });
+  header.addEventListener("click", toggleOpen);
+  header.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleOpen(); }
+  });
 
-      listContainer.appendChild(row);
-    });
+  listContainer.appendChild(row);
+});
   } catch (err) {
     console.error(err);
     listContainer.innerHTML = "<p>" + t("error_loading_users") + "</p>";
