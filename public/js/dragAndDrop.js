@@ -19,6 +19,25 @@ const KNOWN_CARD_IDS = ['uploadCard', 'folderManagementCard'];
 
 const CARD_IDS = ['uploadCard', 'folderManagementCard'];
 
+function isDarkMode() {
+  return document.body.classList.contains('dark-mode');
+}
+
+function themeToggleButton(btn) {
+  if (!btn) return;
+  if (isDarkMode()) {
+    btn.style.background = '#2c2c2c';
+    btn.style.border = '1px solid #555';
+    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.35)';
+    btn.style.color = '#e0e0e0';       // <- material icon inherits this
+  } else {
+    btn.style.background = '#fff';
+    btn.style.border = '1px solid #ccc';
+    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.15)';
+    btn.style.color = '#222';          // <- material icon inherits this
+  }
+}
+
 function getKnownCards() {
   return CARD_IDS
     .map(id => document.getElementById(id))
@@ -133,6 +152,34 @@ function removeHeaderIconForCard(card) {
   }
 }
 
+function applySnapshotIfPresent() {
+  const snap = readZonesSnapshot();
+  const keys = Object.keys(snap || {});
+  if (!keys.length) return false;
+
+  const sidebar = getSidebar();
+  const leftCol  = document.getElementById('leftCol');
+  const rightCol = document.getElementById('rightCol');
+
+  getKnownCards().forEach(card => {
+    const destId = snap[card.id];
+    const dest =
+      destId === 'leftCol' ? leftCol :
+      destId === 'rightCol' ? rightCol :
+      destId === 'sidebarDropArea' ? sidebar : null;
+    if (dest) {
+      // clear sticky widths if coming from sidebar/header
+      card.style.width = '';
+      card.style.minWidth = '';
+      dest.appendChild(card);
+    }
+  });
+
+  // prevent first-run default from stomping this on reload
+  localStorage.setItem('layoutDefaultApplied_v1', '1');
+  return true;
+}
+
 // New: small-screen detector
 function isSmallScreen() { return window.innerWidth < MEDIUM_MIN; }
 
@@ -158,12 +205,12 @@ function clearResponsiveSnapshot() {
 
 // New: deterministic mapping from card -> top column
 function moveCardToTopByMapping(card) {
-  const leftCol  = document.getElementById('leftCol');
+  const leftCol = document.getElementById('leftCol');
   const rightCol = document.getElementById('rightCol');
   if (!leftCol || !rightCol) return;
 
   const target = (card.id === 'uploadCard') ? leftCol :
-                 (card.id === 'folderManagementCard') ? rightCol : leftCol;
+    (card.id === 'folderManagementCard') ? rightCol : leftCol;
 
   // clear any sticky widths from sidebar/header
   card.style.width = '';
@@ -196,7 +243,7 @@ function enforceResponsiveZones() {
     snapshotSidebarCardsForResponsive();
     moveAllSidebarCardsToTop();
     if (sidebar) sidebar.style.display = 'none';
-    if (topZone)  topZone.style.display = ''; // ensure visible
+    if (topZone) topZone.style.display = ''; // ensure visible
     __lastIsSmall = true;
   } else if (!isSmall && __lastIsSmall !== false) {
     // leaving small: restore only what used to be in the sidebar
@@ -321,17 +368,70 @@ function applySidebarCollapsed() {
   sidebar.style.display = collapsed ? 'none' : 'block';
 }
 
+function getHeaderHost() {
+  // 1) exact structure you shared
+  let host = document.querySelector('.header-container .header-left');
+  // 2) fallback to header root
+  if (!host) host = document.querySelector('.header-container');
+  // 3) last resort
+  if (!host) host = document.querySelector('header');
+  return host || document.body;
+}
+
+function mountHeaderToggle(btn) {
+  const host = document.querySelector('.header-left');
+  const logoA = host?.querySelector('a');
+  if (!host) return;
+
+  // ensure positioning context
+  if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+
+  if (logoA) {
+    logoA.insertAdjacentElement('afterend', btn);  // sibling of <a>, not inside it
+  } else {
+    host.appendChild(btn);
+  }
+
+  Object.assign(btn.style, {
+    position: 'absolute',
+    left: '100px',  // adjust position beside the logo
+    top:  '10px',
+    zIndex: '10010',
+    pointerEvents: 'auto'
+  });
+}
+
 function ensureZonesToggle() {
   let btn = document.getElementById('sidebarToggleFloating');
+  const host = getHeaderHost();
+  if (!host) return;
+
+  // ensure the host is a positioning context
+  const hostStyle = getComputedStyle(host);
+  if (hostStyle.position === 'static') {
+    host.style.position = 'relative';
+  }
+
   if (!btn) {
     btn = document.createElement('button');
+    
     btn.id = 'sidebarToggleFloating';
-    btn.type = 'button';
+    btn.type = 'button'; // not a submit
+btn.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();           // don't bubble into the <a href="index.html">
+  setSidebarCollapsed(!isSidebarCollapsed());
+  updateSidebarToggleUI();       // refresh icon/title
+});
+['mousedown','mouseup','pointerdown','pointerup'].forEach(evt =>
+  btn.addEventListener(evt, (e) => e.stopPropagation())
+);
     btn.setAttribute('aria-label', 'Toggle panels');
+
     Object.assign(btn.style, {
-      position: 'fixed',
-      left: `${TOGGLE_LEFT_PX}px`,
-      top: `${TOGGLE_TOP_PX}px`,
+      position: 'absolute',   // <-- key change (was fixed)
+      top: '8px',             // adjust to line up with header content
+      left: '100px',          // place to the right of your logo; tweak as needed
       zIndex: '1000',
       width: '38px',
       height: '38px',
@@ -344,13 +444,31 @@ function ensureZonesToggle() {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '0',
-      lineHeight: '0',
+      lineHeight: '0'
     });
+
+    // dark-mode polish (optional)
+    if (document.body.classList.contains('dark-mode')) {
+      btn.style.background = '#2c2c2c';
+      btn.style.border = '1px solid #555';
+      btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.35)';
+      btn.style.color = '#e0e0e0';
+    }
+
     btn.addEventListener('click', () => {
       setZonesCollapsed(!isZonesCollapsed());
     });
-    document.body.appendChild(btn);
+
+    // Insert right after the logo if present, else just append to host
+    const afterLogo = host.querySelector('.header-logo');
+    if (afterLogo && afterLogo.parentNode) {
+      afterLogo.parentNode.insertBefore(btn, afterLogo.nextSibling);
+    } else {
+      host.appendChild(btn);
+    }
+    themeToggleButton(btn);
   }
+
   updateZonesToggleUI();
 }
 
@@ -376,7 +494,20 @@ function updateZonesToggleUI() {
       iconEl.style.transform = 'rotate(0deg)';
     }
   }
+  themeToggleButton(btn);
 }
+
+(function watchThemeChanges() {
+  const obs = new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.type === 'attributes' && m.attributeName === 'class') {
+        const btn = document.getElementById('sidebarToggleFloating');
+        if (btn) themeToggleButton(btn);
+      }
+    }
+  });
+  obs.observe(document.body, { attributes: true });
+})();
 
 // create a small floating toggle button (no HTML edits needed)
 function ensureSidebarToggle() {
@@ -433,55 +564,61 @@ export function loadSidebarOrder() {
   const sidebar = getSidebar();
   if (!sidebar) return;
 
+  const defaultAppliedKey = 'layoutDefaultApplied_v1';
+  const defaultAlready = localStorage.getItem(defaultAppliedKey) === '1';
+
   const orderStr = localStorage.getItem('sidebarOrder');
   const headerOrderStr = localStorage.getItem('headerOrder');
-  const defaultAppliedKey = 'layoutDefaultApplied_v1'; // bump if logic changes
 
-
-  // One-time default: if no saved order and no header order,
-// put cards into the sidebar on all ≥ MEDIUM_MIN screens.
-if ((!orderStr || !JSON.parse(orderStr || '[]').length) &&
-(!headerOrderStr || !JSON.parse(headerOrderStr || '[]').length)) {
-
-const isLargeEnough = window.innerWidth >= MEDIUM_MIN;
-if (isLargeEnough) {
-const mainWrapper = document.querySelector('.main-wrapper');
-if (mainWrapper) mainWrapper.style.display = 'flex';
-
-const moved = [];
-['uploadCard', 'folderManagementCard'].forEach(id => {
-  const card = document.getElementById(id);
-  if (card && card.parentNode?.id !== 'sidebarDropArea') {
-    // clear any sticky widths from header/top
-    card.style.width = '';
-    card.style.minWidth = '';
-    getSidebar().appendChild(card);
-    animateVerticalSlide(card);
-    moved.push(id);
-  }
-});
-
-if (moved.length) {
-  localStorage.setItem('sidebarOrder', JSON.stringify(moved));
-}
-}
-
-  }
-
-  // No sidebar order saved yet: if user has header icons saved, do nothing (they've customized)
-  const headerOrder = JSON.parse(headerOrderStr || '[]');
-  if (Array.isArray(headerOrder) && headerOrder.length > 0) {
+  if (applySnapshotIfPresent()) {
+    updateTopZoneLayout();
     updateSidebarVisibility();
-    //applySidebarCollapsed();
-    //ensureSidebarToggle();
     applyZonesCollapsed();
     ensureZonesToggle();
     return;
   }
 
-  // One-time default: on medium screens, start cards in the sidebar
-  const alreadyApplied = localStorage.getItem(defaultAppliedKey) === '1';
-  if (!alreadyApplied && isMediumScreen()) {
+  // Only apply the one-time default if *not* initialized yet
+  if (!defaultAlready &&
+      ((!orderStr || !JSON.parse(orderStr || '[]').length) &&
+       (!headerOrderStr || !JSON.parse(headerOrderStr || '[]').length))) {
+
+    const isLargeEnough = window.innerWidth >= MEDIUM_MIN;
+    if (isLargeEnough) {
+      const mainWrapper = document.querySelector('.main-wrapper');
+      if (mainWrapper) mainWrapper.style.display = 'flex';
+
+      const moved = [];
+      ['uploadCard', 'folderManagementCard'].forEach(id => {
+        const card = document.getElementById(id);
+        if (card && card.parentNode?.id !== 'sidebarDropArea') {
+          card.style.width = '';
+          card.style.minWidth = '';
+          getSidebar().appendChild(card);
+          animateVerticalSlide(card);
+          moved.push(id);
+        }
+      });
+
+      if (moved.length) {
+        localStorage.setItem('sidebarOrder', JSON.stringify(moved));
+      }
+    }
+
+    // Mark initialized so this default never fires again
+    localStorage.setItem(defaultAppliedKey, '1');
+  }
+
+  // If user has header icons saved, honor that and bail
+  const headerOrder = JSON.parse(headerOrderStr || '[]');
+  if (Array.isArray(headerOrder) && headerOrder.length > 0) {
+    updateSidebarVisibility();
+    applyZonesCollapsed();
+    ensureZonesToggle();
+    return;
+  }
+
+  if (!defaultAlready && isMediumScreen()) {
     const mainWrapper = document.querySelector('.main-wrapper');
     if (mainWrapper) mainWrapper.style.display = 'flex';
 
@@ -498,13 +635,11 @@ if (moved.length) {
 
     if (moved.length) {
       localStorage.setItem('sidebarOrder', JSON.stringify(moved));
-      localStorage.setItem(defaultAppliedKey, '1');
+      localStorage.setItem(defaultAppliedKey, '1');  // mark initialized
     }
   }
 
   updateSidebarVisibility();
-  //applySidebarCollapsed();
-  //ensureSidebarToggle();
   applyZonesCollapsed();
   ensureZonesToggle();
 }
@@ -553,7 +688,10 @@ function updateSidebarVisibility() {
 
   // Save order and update toggle visibility
   saveSidebarOrder();
-  ensureZonesToggle(); // will hide/remove the button if no cards
+  // Mark layout initialized so the first-run default won't fire on reload
+  localStorage.setItem('layoutDefaultApplied_v1', '1');
+
+  ensureZonesToggle();
 }
 
 // NEW: Save header order to localStorage.
@@ -573,8 +711,8 @@ function updateTopZoneLayout() {
   const leftCol = document.getElementById('leftCol');
   const rightCol = document.getElementById('rightCol');
 
-  const hasUpload  = !!topZone?.querySelector('#uploadCard');
-  const hasFolder  = !!topZone?.querySelector('#folderManagementCard');
+  const hasUpload = !!topZone?.querySelector('#uploadCard');
+  const hasFolder = !!topZone?.querySelector('#folderManagementCard');
 
   if (leftCol && rightCol) {
     if (hasUpload && !hasFolder) {
@@ -953,11 +1091,10 @@ export function initDragAndDrop() {
 
             showHeaderDropZone();
             const topZone = getTopZone();
-            if (topZone) 
-              {
-                topZone.style.display = '';
-                ensureTopZonePlaceholder();
-              }
+            if (topZone) {
+              topZone.style.display = '';
+              ensureTopZonePlaceholder();
+            }
 
             initialLeft = initialRect.left + window.pageXOffset;
             initialTop = initialRect.top + window.pageYOffset;
@@ -1123,6 +1260,7 @@ export function initDragAndDrop() {
           hideHeaderDropZone();
 
           cleanupTopZoneAfterDrop();
+          snapshotZoneLocations();
           const tz = getTopZone();
           if (tz) tz.style.minHeight = '';
         }

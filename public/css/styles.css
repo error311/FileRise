@@ -2318,11 +2318,14 @@ body.dark-mode { --perm-caret: #ccc; }  /* dark */
     background-color 160ms cubic-bezier(.2,.0,.2,1);
 }
 
+:root { --toggle-icon-color: #333; }
+body.dark-mode { --toggle-icon-color: #eee; }
+
 #zonesToggleFloating .material-icons,
 #zonesToggleFloating .material-icons-outlined,
 #sidebarToggleFloating .material-icons,
 #sidebarToggleFloating .material-icons-outlined {
-  color: #333 !important;
+  color: var(--toggle-icon-color);
   font-size: 22px;
   line-height: 1;
   display: block;

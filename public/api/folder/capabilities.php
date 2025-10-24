@@ -153,7 +153,6 @@ if ($folder !== 'root') {
 $perms       = loadPermsFor($username);
 $isAdmin     = ACL::isAdmin($perms);
 $readOnly    = !empty($perms['readOnly']);
-$disableUpload = (bool)($perms['disableUpload'] ?? false);
 $inScope     = inUserFolderScope($folder, $username, $perms, $isAdmin);
 
 // --- ACL base abilities ---
@@ -178,7 +177,7 @@ $gShareFolder  = $isAdmin || ACL::canShareFolder($username, $perms, $folder);
 
 // --- Apply scope + flags to effective UI actions ---
 $canView     = $canViewBase && $inScope;              // keep scope for folder-only
-$canUpload   = $gUploadBase   && !$readOnly && !$disableUpload && $inScope;
+$canUpload   = $gUploadBase   && !$readOnly && $inScope;
 $canCreate   = $canManageBase && !$readOnly && $inScope;  // Create **folder**
 $canRename   = $canManageBase && !$readOnly && $inScope;  // Rename **folder**
 $canDelete   = $gDeleteBase   && !$readOnly && $inScope;
@@ -213,7 +212,6 @@ echo json_encode([
   'flags'   => [
     //'folderOnly'    => !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']),
     'readOnly'      => $readOnly,
-    'disableUpload' => $disableUpload,
   ],
   'owner'        => $owner,
 

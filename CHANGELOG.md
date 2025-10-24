@@ -1,5 +1,21 @@
 # Changelog
 
+## Changes 10/24/2025 (v1.6.6)
+
+release(v1.6.6): header-mounted toggle, dark-mode polish, persistent layout, and ACL fix
+
+- dragAndDrop: mount zones toggle beside header logo (absolute, non-scrolling);
+  stop click propagation so it doesn’t trigger the logo link; theme-aware styling
+  - live updates via MutationObserver; snapshot card locations on drop and restore
+  on load (prevents sidebar reset); guard first-run defaults with
+  `layoutDefaultApplied_v1`; small/medium layout tweaks & refactors.
+- CSS: switch toggle icon to CSS variable (`--toggle-icon-color`) with dark-mode
+  override; remove hardcoded `!important`.
+- API (capabilities.php): remove unused `disableUpload` flag from `canUpload`
+  and flags payload to resolve undefined variable warning.
+
+---
+
 ## Changes 10/24/2025 (v1.6.5)
 
 release(v1.6.5): fix PHP warning and upload-flag check in capabilities.php
