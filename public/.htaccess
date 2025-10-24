@@ -50,6 +50,12 @@ RewriteEngine On
   <FilesMatch "\.(js|css)$">
     Header set Cache-Control "public, max-age=3600, must-revalidate"
   </FilesMatch>
+  # version.js should always revalidate (it changes on releases)
+  <FilesMatch "^js/version\.js$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
 </IfModule>
 
 # -----------------------------

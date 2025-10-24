@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 10/24/2025 (v1.6.4)
+
+release(v1.6.4): runtime version injection + CI bump/sync; caching tweaks
+
+- Add public/js/version.js (default "dev") and load it before main.js.
+- adminPanel.js: replace hard-coded string with `window.APP_VERSION || "dev"`.
+- public/.htaccess: add no-cache for js/version.js
+- GitHub Actions: replace sync job with “Bump version and sync Changelog to Docker Repo”.
+  - Parse commit msg `release(vX.Y.Z)` -> set step output `version`.
+  - Write `public/js/version.js` with `window.APP_VERSION = '<version>'`.
+  - Commit/push version.js if changed.
+  - Mirror CHANGELOG.md to filerise-docker and write a VERSION file with `<version>`.
+  - Guard all steps with `if: steps.ver.outputs.version != ''` to no-op on non-release commits.
+
+This wires the UI version label to CI, keeps dev builds showing “dev”, and feeds the Docker repo with CHANGELOG + VERSION for builds.
+
+---
+
 ## Changes 10/24/2025 (v1.6.3)
 
 release(v1.6.3): drag/drop card persistence, admin UX fixes, and docs (closes #58)
