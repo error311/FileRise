@@ -1,3 +1,4 @@
+---
 name: Bump version and sync Changelog to Docker Repo
 
 on:
