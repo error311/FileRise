@@ -153,7 +153,7 @@ if ($folder !== 'root') {
 $perms       = loadPermsFor($username);
 $isAdmin     = ACL::isAdmin($perms);
 $readOnly    = !empty($perms['readOnly']);
-$disableUp   = !empty($perms['disableUpload']);
+$disableUpload = (bool)($perms['disableUpload'] ?? false);
 $inScope     = inUserFolderScope($folder, $username, $perms, $isAdmin);
 
 // --- ACL base abilities ---
@@ -213,7 +213,7 @@ echo json_encode([
   'flags'   => [
     //'folderOnly'    => !empty($perms['folderOnly']) || !empty($perms['userFolderOnly']) || !empty($perms['UserFolderOnly']),
     'readOnly'      => $readOnly,
-    'disableUpload' => $disableUp,
+    'disableUpload' => $disableUpload,
   ],
   'owner'        => $owner,
 

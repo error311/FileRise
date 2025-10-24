@@ -1,5 +1,15 @@
 # Changelog
 
+## Changes 10/24/2025 (v1.6.5)
+
+release(v1.6.5): fix PHP warning and upload-flag check in capabilities.php
+
+- Fix undefined variable: use $disableUpload consistently
+- Harden flag read: (bool)($perms['disableUpload'] ?? false)
+- Prevents warning and ensures Upload capability is computed correctly
+
+---
+
 ## Changes 10/24/2025 (v1.6.4)
 
 release(v1.6.4): runtime version injection + CI bump/sync; caching tweaks
