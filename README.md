@@ -25,7 +25,7 @@ With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2
 
 **10/25/2025 Video demo:**
 
-https://github.com/user-attachments/assets/a2240300-6348-4de7-b72f-1b85b7da3a08
+<https://github.com/user-attachments/assets/a2240300-6348-4de7-b72f-1b85b7da3a08>
 
 **Dark mode:**
 ![Dark Header](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-header.png)
