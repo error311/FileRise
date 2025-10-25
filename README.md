@@ -23,9 +23,9 @@ With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2
 
 > ⚠️ **Security fix in v1.5.0** — ACL hardening. If you’re on ≤1.4.x, please upgrade.
 
-**4/3/2025 Video demo:**
+**10/25/2025 Video demo:**
 
-<https://github.com/user-attachments/assets/221f6a53-85f5-48d4-9abe-89445e0af90e>
+https://github.com/user-attachments/assets/a2240300-6348-4de7-b72f-1b85b7da3a08
 
 **Dark mode:**
 ![Dark Header](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-header.png)
