@@ -59,7 +59,7 @@ function onShareFileToggle(row, checked) {
 }
 
 function onWriteToggle(row, checked) {
-  const caps = ["create","upload","edit","rename","copy","move","delete","extract"];
+  const caps = ["create","upload","edit","rename","copy","delete","extract"];
   caps.forEach(c => {
     const box = qs(row, `input[data-cap="${c}"]`);
     if (box) box.checked = checked;
@@ -683,25 +683,32 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   // toolbar
   const toolbar = document.createElement('div');
   toolbar.className = 'folder-access-toolbar';
-  toolbar.innerHTML = `
-    <input type="text" class="form-control" style="max-width:220px;" placeholder="${tf('search_folders', 'Search folders')}" />
-    <label class="muted" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">
-      <input type="checkbox" data-bulk="view" /> ${tf('view_all', 'View (all)')}
-    </label>
-    <label class="muted" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
-      <input type="checkbox" data-bulk="viewOwn" /> ${tf('view_own', 'View (own)')}
-    </label>
-    <label class="muted" title="${tf('write_help', 'Create/upload files and edit/rename/copy/delete items in this folder')}">
-      <input type="checkbox" data-bulk="write" /> ${tf('write_full', 'Write (upload/edit/delete)')}
-    </label>
-    <label class="muted" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all)/Create Folder/Rename Folder/Move Files/Share Folder')}">
-      <input type="checkbox" data-bulk="manage" /> ${tf('manage', 'Manage')}
-    </label>
-    <label class="muted" title="${tf('share_help', 'Create/manage share links; implies View (all)')}">
-      <input type="checkbox" data-bulk="share" /> ${tf('share', 'Share')}
-    </label>
-    <span class="muted">(${tf('applies_to_filtered', 'applies to filtered list')})</span>
-  `;
+toolbar.innerHTML = `
+  <input type="text" class="form-control" style="max-width:220px;"
+         placeholder="${tf('search_folders', 'Search folders')}" />
+
+  <label class="muted" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">
+    <input type="checkbox" data-bulk="view" /> ${tf('view_all', 'View (all)')}
+  </label>
+
+  <label class="muted" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
+    <input type="checkbox" data-bulk="viewOwn" /> ${tf('view_own', 'View (own files)')}
+  </label>
+
+  <label class="muted" title="${tf('write_help', 'File-level: upload, edit, rename, copy, delete, extract ZIPs')}">
+    <input type="checkbox" data-bulk="write" /> ${tf('write_full', 'Write (file ops)')}
+  </label>
+
+  <label class="muted" title="${tf('manage_help', 'Folder-level (owner): can create/rename/move folders and grant access; implies View (all)')}">
+    <input type="checkbox" data-bulk="manage" /> ${tf('manage', 'Manage (folder owner)')}
+  </label>
+
+  <label class="muted" title="${tf('share_help', 'Create/manage share links; implies View (all)')}">
+    <input type="checkbox" data-bulk="share" /> ${tf('share', 'Share')}
+  </label>
+
+  <span class="muted">(${tf('applies_to_filtered', 'applies to filtered list')})</span>
+`;
   container.appendChild(toolbar);
 
   const list = document.createElement('div');
@@ -709,30 +716,55 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   container.appendChild(list);
 
   const headerHtml = `
-    <div class="folder-access-header">
+  <div class="folder-access-header">
     <div class="folder-cell" title="${tf('folder_help','Folder path within FileRise')}">
       ${tf('folder','Folder')}
     </div>
-    <div class="perm-col" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">${tf('view_all', 'View (all)')}</div>
-    <div class="perm-col" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">${tf('view_own', 'View (own)')}</div>
-    <div class="perm-col" title="${tf('write_help', 'Meta: toggles all write operations (below) on/off for this row')}">${tf('write_full', 'Write')}</div>
-    <div class="perm-col" title="${tf('manage_help', 'Owner-level: can grant access; implies View (all)/Create Folder/Rename Folder/Move Files/Share Folder')}">${tf('manage', 'Manage')}</div>
-    <div class="perm-col" title="${tf('create_help', 'Create empty files')}">${tf('create', 'Create')}</div>
-    <div class="perm-col" title="${tf('upload_help', 'Upload files to this folder')}">${tf('upload', 'Upload')}</div>
-    <div class="perm-col" title="${tf('edit_help', 'Edit file contents')}">${tf('edit', 'Edit')}</div>
-    <div class="perm-col" title="${tf('rename_help', 'Rename files')}">${tf('rename', 'Rename')}</div>
-    <div class="perm-col" title="${tf('copy_help', 'Copy files')}">${tf('copy', 'Copy')}</div>
-    <div class="perm-col" title="${tf('move_help', 'Move files: requires Manage')}">${tf('move', 'Move')}</div>
-    <div class="perm-col" title="${tf('delete_help', 'Delete files/folders')}">${tf('delete', 'Delete')}</div>
-    <div class="perm-col" title="${tf('extract_help', 'Extract ZIP archives')}">${tf('extract', 'Extract ZIP')}</div>
-    <div class="perm-col" title="${tf('share_file_help', 'Create share links for files')}">${tf('share_file', 'Share File')}</div>
-    <div class="perm-col" title="${tf('share_folder_help', 'Create share links for folders (requires View all)')}">${tf('share_folder', 'Share Folder')}</div>
+    <div class="perm-col" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">
+      ${tf('view_all', 'View (all)')}
+    </div>
+    <div class="perm-col" title="${tf('view_own_help', 'See only files you uploaded in this folder')}">
+      ${tf('view_own', 'View (own)')}
+    </div>
+    <div class="perm-col" title="${tf('write_help', 'Meta: toggles all file-level operations below')}">
+      ${tf('write_full', 'Write')}
+    </div>
+    <div class="perm-col" title="${tf('manage_help', 'Folder owner: can create/rename/move folders and grant access; implies View (all)')}">
+      ${tf('manage', 'Manage')}
+    </div>
+    <div class="perm-col" title="${tf('create_help', 'Create empty file')}">
+      ${tf('create', 'Create File')}
+    </div>
+    <div class="perm-col" title="${tf('upload_help', 'Upload a file into this folder')}">
+      ${tf('upload', 'Upload File')}
+    </div>
+    <div class="perm-col" title="${tf('edit_help', 'Edit file contents')}">
+      ${tf('edit', 'Edit File')}
+    </div>
+    <div class="perm-col" title="${tf('rename_help', 'Rename a file')}">
+      ${tf('rename', 'Rename File')}
+    </div>
+    <div class="perm-col" title="${tf('copy_help', 'Copy a file')}">
+      ${tf('copy', 'Copy File')}
+    </div>
+    <div class="perm-col" title="${tf('delete_help', 'Delete a file')}">
+      ${tf('delete', 'Delete File')}
+    </div>
+    <div class="perm-col" title="${tf('extract_help', 'Extract ZIP archives')}">
+      ${tf('extract', 'Extract ZIP')}
+    </div>
+    <div class="perm-col" title="${tf('share_file_help', 'Create share links for files')}">
+      ${tf('share_file', 'Share File')}
+    </div>
+    <div class="perm-col" title="${tf('share_folder_help', 'Create share links for folders (requires Manage + View (all))')}">
+      ${tf('share_folder', 'Share Folder')}
+    </div>
   </div>`;
 
   function rowHtml(folder) {
     const g = grants[folder] || {};
     const name = folder === 'root' ? '(Root)' : folder;
-    const writeMetaChecked = !!(g.create || g.upload || g.edit || g.rename || g.copy || g.move || g.delete || g.extract);
+    const writeMetaChecked = !!(g.create || g.upload || g.edit || g.rename || g.copy || g.delete || g.extract);
     const shareFolderDisabled = !g.view;
     return `
       <div class="folder-access-row" data-folder="${folder}">
@@ -752,7 +784,6 @@ function renderFolderGrantsUI(username, container, folders, grants) {
         <div class="perm-col"><input type="checkbox" data-cap="edit"      ${g.edit ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="rename"    ${g.rename ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="copy"      ${g.copy ? 'checked' : ''}></div>
-        <div class="perm-col"><input type="checkbox" data-cap="move"      ${g.move ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="delete"    ${g.delete ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="extract"   ${g.extract ? 'checked' : ''}></div>
         <div class="perm-col"><input type="checkbox" data-cap="shareFile" ${g.shareFile ? 'checked' : ''}></div>
@@ -788,7 +819,7 @@ function renderFolderGrantsUI(username, container, folders, grants) {
         if (v) v.checked = true;
         if (w) w.checked = true;
         if (vo) { vo.checked = false; vo.disabled = true; }
-        ['create','upload','edit','rename','copy','move','delete','extract','shareFile','shareFolder']
+        ['create','upload','edit','rename','copy','delete','extract','shareFile','shareFolder']
           .forEach(c => { const cb = qs(row, `input[data-cap="${c}"]`); if (cb) cb.checked = true; });
         setRowDisabled(row, true);
         const tag = row.querySelector('.inherited-tag');
@@ -888,7 +919,7 @@ function renderFolderGrantsUI(username, container, folders, grants) {
         const w = r.querySelector('input[data-cap="write"]');
         const vo = r.querySelector('input[data-cap="viewOwn"]');
         const boxes = [
-          'create','upload','edit','rename','copy','move','delete','extract','shareFile','shareFolder'
+          'create','upload','edit','rename','copy','delete','extract','shareFile','shareFolder'
         ].map(c => r.querySelector(`input[data-cap="${c}"]`));
         if (m) m.checked = checked;
         if (v) v.checked = checked;

@@ -1,5 +1,55 @@
 # Changelog
 
+## Changes 10/25/2025 (v1.6.7)
+
+release(v1.6.7): Folder Move feature, stable DnD persistence, safer uploads, and ACL/UI polish
+
+### 📂 Folder Move (new major feature)
+
+**Drag & Drop to move folder, use context menu or Move Folder button**  
+
+- Added **Move Folder** support across backend and UI.  
+  - New API endpoint: `public/api/folder/moveFolder.php`  
+  - Controller and ACL updates to validate scope, ownership, and permissions.  
+  - Non-admins can only move within folders they own.  
+  - `ACL::renameTree()` re-keys all subtree ACLs on folder rename/move.  
+- Introduced new capabilities:
+  - `canMoveFolder`
+  - `canMove` (UI alias for backward compatibility)
+- New “Move Folder” button + modal in the UI with full i18n strings (`i18n.js`).  
+- Action button styling and tooltip consistency for all folder actions.
+
+### 🧱 Drag & Drop / Layout Improvements
+
+- Fixed **random sidebar → top zone jumps** on refresh.  
+- Cards/panels now **persist exactly where you placed them** (`userZonesSnapshot`)  
+  — no unwanted repositioning unless the window is resized below the small-screen threshold.
+- Added hysteresis around the 1205 px breakpoint to prevent flicker when resizing.  
+- Eliminated the 50 px “ghost” gutter with `clampSidebarWhenEmpty()`:
+  - Sidebar no longer reserves space when collapsed or empty.  
+  - Temporarily “unclamps” during drag so drop targets remain accurate and full-width.  
+- Removed forced 800 px height on drag highlight; uses natural flex layout now.  
+- General layout polish — smoother transitions when toggling *Hide/Show Panels*.
+
+### ☁️ Uploads & UX
+
+- Stronger folder sanitization and safer base-path handling.  
+- Fixed subfolder creation when uploading directories (now builds under correct parent).  
+- Improved chunk error handling and metadata key correctness.  
+- Clearer success/failure toasts and accurate filename display from server responses.
+
+### 🔐 Permissions / ACL
+
+- Simplified file rename checks — now rely solely on granular `ACL::canRename()`.  
+- Updated capability lists to include move/rename operations consistently.
+
+### 🌐 UI / i18n Enhancements
+
+- Added i18n strings for new “Move Folder” prompts, modals, and tooltips.  
+- Minor UI consistency tweaks: button alignment, focus states, reduced-motion support.  
+
+---
+
 ## Changes 10/24/2025 (v1.6.6)
 
 release(v1.6.6): header-mounted toggle, dark-mode polish, persistent layout, and ACL fix

@@ -286,9 +286,27 @@
                           </div>
                         </div>
                       </div>
+                      <button id="moveFolderBtn" class="btn btn-warning ml-2" data-i18n-title="move_folder">
+                        <i class="material-icons">drive_file_move</i>
+                      </button>
+                      <!-- MOVE FOLDER MODAL (place near your other folder modals) -->
+                      <div id="moveFolderModal" class="modal" style="display:none;">
+                        <div class="modal-content">
+                          <h4 data-i18n-key="move_folder_title">Move Folder</h4>
+                          <p data-i18n-key="move_folder_message">Select a destination folder to move the current folder
+                            into:</p>
+                          <select id="moveFolderTarget" class="form-control modal-input"></select>
+                          <div class="modal-footer" style="margin-top:15px; text-align:right;">
+                            <button id="cancelMoveFolder" class="btn btn-secondary"
+                              data-i18n-key="cancel">Cancel</button>
+                            <button id="confirmMoveFolder" class="btn btn-primary" data-i18n-key="move">Move</button>
+                          </div>
+                        </div>
+                      </div>
                       <button id="renameFolderBtn" class="btn btn-warning ml-2" data-i18n-title="rename_folder">
                         <i class="material-icons">drive_file_rename_outline</i>
                       </button>
+
                       <div id="renameFolderModal" class="modal">
                         <div class="modal-content">
                           <h4 data-i18n-key="rename_folder_title">Rename Folder</h4>
@@ -391,14 +409,12 @@
               data-i18n-key="download_zip">Download ZIP</button>
             <button id="extractZipBtn" class="btn action-btn btn-sm btn-info" data-i18n-title="extract_zip"
               data-i18n-key="extract_zip_button">Extract Zip</button>
-              <div id="createDropdown" class="dropdown-container" style="position:relative; display:inline-block;">
-                <button id="createBtn"  class="btn action-btn" data-i18n-key="create">
-                  ${t('create')} <span class="material-icons" style="font-size:16px;vertical-align:middle;">arrow_drop_down</span>
-                </button>
-                <ul
-                  id="createMenu"
-                  class="dropdown-menu"
-                  style="
+            <div id="createDropdown" class="dropdown-container" style="position:relative; display:inline-block;">
+              <button id="createBtn" class="btn action-btn" data-i18n-key="create">
+                ${t('create')} <span class="material-icons"
+                  style="font-size:16px;vertical-align:middle;">arrow_drop_down</span>
+              </button>
+              <ul id="createMenu" class="dropdown-menu" style="
                     display: none;
                     position: absolute;
                     top: 100%;
@@ -411,27 +427,23 @@
                     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
                     z-index: 1000;
                     min-width: 140px;
-                  "
-                >
-                  <li id="createFileOption" class="dropdown-item" data-i18n-key="create_file" style="padding:8px 12px; cursor:pointer;">
-                    ${t('create_file')}
-                  </li>
-                  <li id="createFolderOption" class="dropdown-item" data-i18n-key="create_folder" style="padding:8px 12px; cursor:pointer;">
-                    ${t('create_folder')}
-                  </li>
-                </ul>
-              </div>
+                  ">
+                <li id="createFileOption" class="dropdown-item" data-i18n-key="create_file"
+                  style="padding:8px 12px; cursor:pointer;">
+                  ${t('create_file')}
+                </li>
+                <li id="createFolderOption" class="dropdown-item" data-i18n-key="create_folder"
+                  style="padding:8px 12px; cursor:pointer;">
+                  ${t('create_folder')}
+                </li>
+              </ul>
+            </div>
             <!-- Create File Modal -->
             <div id="createFileModal" class="modal" style="display:none;">
               <div class="modal-content">
                 <h4 data-i18n-key="create_new_file">Create New File</h4>
-                <input
-                  type="text"
-                  id="createFileNameInput"
-                  class="form-control"
-                  placeholder="Enter filename…"
-                  data-i18n-placeholder="newfile_placeholder"
-                />
+                <input type="text" id="createFileNameInput" class="form-control" placeholder="Enter filename…"
+                  data-i18n-placeholder="newfile_placeholder" />
                 <div class="modal-footer" style="margin-top:1rem; text-align:right;">
                   <button id="cancelCreateFile" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
                   <button id="confirmCreateFile" class="btn btn-primary" data-i18n-key="create">Create</button>

@@ -695,4 +695,79 @@ for ($i = $startPage; $i <= $endPage; $i++): ?>
             echo json_encode(['success' => false, 'error' => 'Not found']);
         }
     }
+
+    /* -------------------- API: Move Folder -------------------- */
+    public function moveFolder(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        self::requireAuth();
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { http_response_code(405); echo json_encode(['error'=>'Method not allowed']); return; }
+        // CSRF: accept header or form field
+        $hdr = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        $tok = $_SESSION['csrf_token'] ?? '';
+        if (!$hdr || !$tok || !hash_equals((string)$tok, (string)$hdr)) { http_response_code(403); echo json_encode(['error'=>'Invalid CSRF token']); return; }
+
+        $raw = file_get_contents('php://input');
+        $input = json_decode($raw ?: "{}", true);
+        $source = trim((string)($input['source'] ?? ''));
+        $destination = trim((string)($input['destination'] ?? ''));
+
+        if ($source === '' || strcasecmp($source,'root')===0) { http_response_code(400); echo json_encode(['error'=>'Invalid source folder']); return; }
+        if ($destination === '') $destination = 'root';
+
+        // basic segment validation
+        foreach ([$source,$destination] as $f) {
+            if ($f==='root') continue;
+            $parts = array_filter(explode('/', trim($f, "/\\ ")), fn($p)=>$p!=='');
+            foreach ($parts as $seg) {
+                if (!preg_match(REGEX_FOLDER_NAME, $seg)) { http_response_code(400); echo json_encode(['error'=>'Invalid folder segment']); return; }
+            }
+        }
+
+        $srcNorm = trim($source, "/\\ ");
+        $dstNorm = $destination==='root' ? '' : trim($destination, "/\\ ");
+
+        // prevent move into self/descendant
+        if ($dstNorm !== '' && (strcasecmp($dstNorm,$srcNorm)===0 || strpos($dstNorm.'/', $srcNorm.'/')===0)) {
+            http_response_code(400); echo json_encode(['error'=>'Destination cannot be the source or its descendant']); return;
+        }
+
+        $username = $_SESSION['username'] ?? '';
+        $perms = $this->loadPerms($username);
+
+        // enforce scopes (source manage-ish, dest write-ish)
+        if ($msg = self::enforceFolderScope($source, $username, $perms, 'manage')) { http_response_code(403); echo json_encode(['error'=>$msg]); return; }
+        if ($msg = self::enforceFolderScope($destination, $username, $perms, 'write')) { http_response_code(403); echo json_encode(['error'=>$msg]); return; }
+
+        // Check capabilities using ACL helpers
+        $canManageSource = ACL::canManage($username, $perms, $source) || ACL::isOwner($username, $perms, $source);
+        $canMoveIntoDest = ACL::canMove($username, $perms, $destination) || ($destination==='root' ? self::isAdmin($perms) : ACL::isOwner($username, $perms, $destination));
+        if (!$canManageSource) { http_response_code(403); echo json_encode(['error'=>'Forbidden: manage rights required on source']); return; }
+        if (!$canMoveIntoDest) { http_response_code(403); echo json_encode(['error'=>'Forbidden: move rights required on destination']); return; }
+
+        // Non-admin: enforce same owner between source and destination tree (if any)
+        $isAdmin = self::isAdmin($perms);
+        if (!$isAdmin) {
+            try {
+                $ownerSrc = FolderModel::getOwnerFor($source) ?? '';
+                $ownerDst = $destination==='root' ? '' : (FolderModel::getOwnerFor($destination) ?? '');
+                if ($ownerSrc !== $ownerDst) {
+                    http_response_code(403); echo json_encode(['error'=>'Source and destination must have the same owner']); return;
+                }
+            } catch (\Throwable $e) { /* ignore – fall through */ }
+        }
+
+        // Compute final target "destination/basename(source)"
+        $baseName = basename(str_replace('\\','/', $srcNorm));
+        $target   = $destination==='root' ? $baseName : rtrim($destination, "/\\ ") . '/' . $baseName;
+
+        try {
+            $result = FolderModel::renameFolder($source, $target);
+            echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (\Throwable $e) {
+            error_log('moveFolder error: '.$e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error'=>'Internal error moving folder']);
+        }
+    }
 }

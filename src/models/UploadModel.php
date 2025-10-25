@@ -4,6 +4,19 @@
 require_once PROJECT_ROOT . '/config/config.php';
 
 class UploadModel {
+
+    private static function sanitizeFolder(string $folder): string {
+                $folder = trim($folder);
+                if ($folder === '' || strtolower($folder) === 'root') return '';
+                // no traversal
+                if (strpos($folder, '..') !== false) return '';
+                // only safe chars + forward slashes
+                if (!preg_match('/^[A-Za-z0-9_\-\/]+$/', $folder)) return '';
+                // normalize: strip leading slashes
+                return ltrim($folder, '/');
+            }
+
+
     /**
      * Handles file uploads – supports both chunked uploads and full (non-chunked) uploads.
      *
@@ -38,15 +51,19 @@ class UploadModel {
                 return ["error" => "Invalid file name: $resumableFilename"];
             }
             
-            $folder = isset($post['folder']) ? trim($post['folder']) : 'root';
-            if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-                return ["error" => "Invalid folder name"];
-            }
+            $folderRaw = $post['folder'] ?? 'root';
+            $folderSan = self::sanitizeFolder((string)$folderRaw);
+
+            
+            if (empty($files['file']) || !isset($files['file']['name'])) {
+                        return ["error" => "No files received"];
+                    }
             
             $baseUploadDir = UPLOAD_DIR;
-            if ($folder !== 'root') {
-                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
-            }
+            if ($folderSan !== '') {
+                                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+                                               . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
+                            }
             if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
                 return ["error" => "Failed to create upload directory"];
             }
@@ -56,12 +73,14 @@ class UploadModel {
                 return ["error" => "Failed to create temporary chunk directory"];
             }
             
-            if (!isset($files["file"]) || $files["file"]["error"] !== UPLOAD_ERR_OK) {
+            $chunkErr = $files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+            if ($chunkErr !== UPLOAD_ERR_OK) {
                 return ["error" => "Upload error on chunk $chunkNumber"];
             }
             
             $chunkFile = $tempDir . $chunkNumber;
-            if (!move_uploaded_file($files["file"]["tmp_name"], $chunkFile)) {
+            $tmpName = $files['file']['tmp_name'] ?? null;
+            if (!$tmpName || !move_uploaded_file($tmpName, $chunkFile)) {
                 return ["error" => "Failed to move uploaded chunk $chunkNumber"];
             }
             
@@ -100,8 +119,7 @@ class UploadModel {
             fclose($out);
             
             // Update metadata.
-            $relativeFolder = $folder;
-            $metadataKey = ($relativeFolder === '' || strtolower($relativeFolder) === 'root') ? "root" : $relativeFolder;
+            $metadataKey = ($folderSan === '') ? "root" : $folderSan;
             $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
             $metadataFile = META_DIR . $metadataFileName;
             $uploadedDate = date(DATE_TIME_FORMAT);
@@ -134,16 +152,16 @@ class UploadModel {
             
             return ["success" => "File uploaded successfully"];
         } else {
-            // Handle full upload (non-chunked).
-            $folder = isset($post['folder']) ? trim($post['folder']) : 'root';
-            if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
-                return ["error" => "Invalid folder name"];
+                        // Handle full upload (non-chunked)
+                        $folderRaw = $post['folder'] ?? 'root';
+                        $folderSan = self::sanitizeFolder((string)$folderRaw);
             }
             
             $baseUploadDir = UPLOAD_DIR;
-            if ($folder !== 'root') {
-                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
-            }
+            if ($folderSan !== '') {
+                                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+                                               . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
+                            }
             if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
                 return ["error" => "Failed to create upload directory"];
             }
@@ -153,6 +171,10 @@ class UploadModel {
             $metadataChanged = [];
             
             foreach ($files["file"]["name"] as $index => $fileName) {
+                // Basic PHP upload error check per file
+                if (($files['file']['error'][$index] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                        return ["error" => "Error uploading file"];
+                    }
                 $safeFileName = trim(urldecode(basename($fileName)));
                 if (!preg_match($safeFileNamePattern, $safeFileName)) {
                     return ["error" => "Invalid file name: " . $fileName];
@@ -161,21 +183,22 @@ class UploadModel {
                 if (isset($post['relativePath'])) {
                     $relativePath = is_array($post['relativePath']) ? $post['relativePath'][$index] ?? '' : $post['relativePath'];
                 }
-                $uploadDir = $baseUploadDir;
+                $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR;
                 if (!empty($relativePath)) {
                     $subDir = dirname($relativePath);
                     if ($subDir !== '.' && $subDir !== '') {
-                        $uploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $subDir) . DIRECTORY_SEPARATOR;
+                      // IMPORTANT: build the subfolder under the *current* base folder
+                        $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR .
+                                     str_replace('/', DIRECTORY_SEPARATOR, $subDir) . DIRECTORY_SEPARATOR;
                     }
                     $safeFileName = basename($relativePath);
                 }
-                if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true)) {
-                    return ["error" => "Failed to create subfolder"];
+                if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0775, true)) {
+                    return ["error" => "Failed to create subfolder: " . $uploadDir];
                 }
                 $targetPath = $uploadDir . $safeFileName;
                 if (move_uploaded_file($files["file"]["tmp_name"][$index], $targetPath)) {
-                    $folderPath = $folder;
-                    $metadataKey = ($folderPath === '' || strtolower($folderPath) === 'root') ? "root" : $folderPath;
+                                        $metadataKey = ($folderSan === '') ? "root" : $folderSan;
                     $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
                     $metadataFile = META_DIR . $metadataFileName;
                     if (!isset($metadataCollection[$metadataKey])) {
@@ -208,7 +231,7 @@ class UploadModel {
             }
             return ["success" => "Files uploaded successfully"];
         }
-    }
+    
 
         /**
      * Recursively removes a directory and its contents.

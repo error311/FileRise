@@ -161,91 +161,91 @@ function createFileEntry(file) {
   const removeBtn = document.createElement("button");
   removeBtn.classList.add("remove-file-btn");
   removeBtn.textContent = "×";
-// In your remove button event listener, replace the fetch call with:
-removeBtn.addEventListener("click", function (e) {
-  e.stopPropagation();
-  const uploadIndex = file.uploadIndex;
-  window.selectedFiles = window.selectedFiles.filter(f => f.uploadIndex !== uploadIndex);
-  
-  // Cancel the file upload if possible.
-  if (typeof file.cancel === "function") {
-    file.cancel();
-    console.log("Canceled file upload:", file.fileName);
-  }
-  
-  // Remove file from the resumable queue.
-  if (resumableInstance && typeof resumableInstance.removeFile === "function") {
-    resumableInstance.removeFile(file);
-  }
-  
-  // Call our helper repeatedly to remove the chunk folder.
-  if (file.uniqueIdentifier) {
-    removeChunkFolderRepeatedly(file.uniqueIdentifier, window.csrfToken, 3, 1000);
-  }
-  
-  li.remove();
-  updateFileInfoCount();
-});
+  // In your remove button event listener, replace the fetch call with:
+  removeBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    const uploadIndex = file.uploadIndex;
+    window.selectedFiles = window.selectedFiles.filter(f => f.uploadIndex !== uploadIndex);
+
+    // Cancel the file upload if possible.
+    if (typeof file.cancel === "function") {
+      file.cancel();
+      console.log("Canceled file upload:", file.fileName);
+    }
+
+    // Remove file from the resumable queue.
+    if (resumableInstance && typeof resumableInstance.removeFile === "function") {
+      resumableInstance.removeFile(file);
+    }
+
+    // Call our helper repeatedly to remove the chunk folder.
+    if (file.uniqueIdentifier) {
+      removeChunkFolderRepeatedly(file.uniqueIdentifier, window.csrfToken, 3, 1000);
+    }
+
+    li.remove();
+    updateFileInfoCount();
+  });
   li.removeBtn = removeBtn;
   li.appendChild(removeBtn);
 
   // Add pause/resume/restart button if the file supports pause/resume.
-// Conditionally add the pause/resume button only if file.pause is available
-// Pause/Resume button (for resumable file–picker uploads)
-if (typeof file.pause === "function") {
-  const pauseResumeBtn = document.createElement("button");
-  pauseResumeBtn.setAttribute("type", "button"); // not a submit button
-  pauseResumeBtn.classList.add("pause-resume-btn");
-  // Start with pause icon and disable button until upload starts
-  pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
-  pauseResumeBtn.disabled = true; 
-  pauseResumeBtn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    if (file.isError) {
-      // If the file previously failed, try restarting upload.
-      if (typeof file.retry === "function") {
-        file.retry();
-        file.isError = false;
-        pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
-      }
-    } else if (!file.paused) {
-      // Pause the upload (if possible)
-      if (typeof file.pause === "function") {
-        file.pause();
-        file.paused = true;
-        pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">play_circle_outline</span>';
-      } else {
-      }
-    } else if (file.paused) {
-      // Resume sequence: first call to resume (or upload() fallback)
-      if (typeof file.resume === "function") {
-        file.resume();
-      } else {
-        resumableInstance.upload();
-      }
-      // After a short delay, pause again then resume
-      setTimeout(() => {
+  // Conditionally add the pause/resume button only if file.pause is available
+  // Pause/Resume button (for resumable file–picker uploads)
+  if (typeof file.pause === "function") {
+    const pauseResumeBtn = document.createElement("button");
+    pauseResumeBtn.setAttribute("type", "button"); // not a submit button
+    pauseResumeBtn.classList.add("pause-resume-btn");
+    // Start with pause icon and disable button until upload starts
+    pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
+    pauseResumeBtn.disabled = true;
+    pauseResumeBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (file.isError) {
+        // If the file previously failed, try restarting upload.
+        if (typeof file.retry === "function") {
+          file.retry();
+          file.isError = false;
+          pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
+        }
+      } else if (!file.paused) {
+        // Pause the upload (if possible)
         if (typeof file.pause === "function") {
           file.pause();
+          file.paused = true;
+          pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">play_circle_outline</span>';
+        } else {
+        }
+      } else if (file.paused) {
+        // Resume sequence: first call to resume (or upload() fallback)
+        if (typeof file.resume === "function") {
+          file.resume();
         } else {
           resumableInstance.upload();
         }
+        // After a short delay, pause again then resume
         setTimeout(() => {
-          if (typeof file.resume === "function") {
-            file.resume();
+          if (typeof file.pause === "function") {
+            file.pause();
           } else {
             resumableInstance.upload();
           }
+          setTimeout(() => {
+            if (typeof file.resume === "function") {
+              file.resume();
+            } else {
+              resumableInstance.upload();
+            }
+          }, 100);
         }, 100);
-      }, 100);
-      file.paused = false;
-      pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
-    } else {
-      console.error("Pause/resume function not available for file", file);
-    }
-  });
-  li.appendChild(pauseResumeBtn);
-}
+        file.paused = false;
+        pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">pause_circle_outline</span>';
+      } else {
+        console.error("Pause/resume function not available for file", file);
+      }
+    });
+    li.appendChild(pauseResumeBtn);
+  }
 
   // Preview element
   const preview = document.createElement("div");
@@ -406,19 +406,26 @@ let resumableInstance;
 function initResumableUpload() {
   resumableInstance = new Resumable({
     target: "/api/upload/upload.php",
-    query: { folder: window.currentFolder || "root", upload_token: window.csrfToken },
-    chunkSize: 1.5 * 1024 * 1024, // 1.5 MB chunks
+    chunkSize: 1.5 * 1024 * 1024,
     simultaneousUploads: 3,
     forceChunkSize: true,
     testChunks: false,
-    throttleProgressCallbacks: 1,
     withCredentials: true,
     headers: { 'X-CSRF-Token': window.csrfToken },
-    query: {
+    query: () => ({
       folder: window.currentFolder || "root",
-      upload_token: window.csrfToken   // still as a fallback
-    }
+      upload_token: window.csrfToken
+    })
   });
+
+  // keep query fresh when folder changes (call this from your folder nav code)
+  function updateResumableQuery() {
+    if (!resumableInstance) return;
+    resumableInstance.opts.headers['X-CSRF-Token'] = window.csrfToken;
+    // if you're not using a function for query, do:
+    resumableInstance.opts.query.folder = window.currentFolder || 'root';
+    resumableInstance.opts.query.upload_token = window.csrfToken;
+  }
 
   const fileInput = document.getElementById("file");
   if (fileInput) {
@@ -432,6 +439,7 @@ function initResumableUpload() {
   }
 
   resumableInstance.on("fileAdded", function (file) {
+
     // Initialize custom paused flag
     file.paused = false;
     file.uploadIndex = file.uniqueIdentifier;
@@ -461,16 +469,17 @@ function initResumableUpload() {
     li.dataset.uploadIndex = file.uniqueIdentifier;
     list.appendChild(li);
     updateFileInfoCount();
+    updateResumableQuery();
   });
 
-  resumableInstance.on("fileProgress", function(file) {
+  resumableInstance.on("fileProgress", function (file) {
     const progress = file.progress(); // value between 0 and 1
     const percent = Math.floor(progress * 100);
     const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
     if (li && li.progressBar) {
       if (percent < 99) {
         li.progressBar.style.width = percent + "%";
-        
+
         // Calculate elapsed time and speed.
         const elapsed = (Date.now() - li.startTime) / 1000;
         let speed = "";
@@ -491,7 +500,7 @@ function initResumableUpload() {
         li.progressBar.style.width = "100%";
         li.progressBar.innerHTML = '<i class="material-icons spinning" style="vertical-align: middle;">autorenew</i>';
       }
-      
+
       // Enable the pause/resume button once progress starts.
       const pauseResumeBtn = li.querySelector(".pause-resume-btn");
       if (pauseResumeBtn) {
@@ -499,8 +508,8 @@ function initResumableUpload() {
       }
     }
   });
-  
-  resumableInstance.on("fileSuccess", function(file, message) {
+
+  resumableInstance.on("fileSuccess", function (file, message) {
     // Try to parse JSON response
     let data;
     try {
@@ -508,18 +517,18 @@ function initResumableUpload() {
     } catch (e) {
       data = null;
     }
-  
+
     // 1) Soft‐fail CSRF? then update token & retry this file
     if (data && data.csrf_expired) {
       // Update global and Resumable headers
       window.csrfToken = data.csrf_token;
       resumableInstance.opts.headers['X-CSRF-Token'] = data.csrf_token;
-      resumableInstance.opts.query.upload_token        = data.csrf_token;
+      resumableInstance.opts.query.upload_token = data.csrf_token;
       // Retry this chunk/file
       file.retry();
-      return; 
+      return;
     }
-  
+
     // 2) Otherwise treat as real success:
     const li = document.querySelector(
       `li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`
@@ -531,13 +540,13 @@ function initResumableUpload() {
       const pauseResumeBtn = li.querySelector(".pause-resume-btn");
       if (pauseResumeBtn) pauseResumeBtn.style.display = "none";
       const removeBtn = li.querySelector(".remove-file-btn");
-      if (removeBtn)   removeBtn.style.display = "none";
+      if (removeBtn) removeBtn.style.display = "none";
       setTimeout(() => li.remove(), 5000);
     }
-  
+
     loadFileList(window.currentFolder);
   });
-  
+
 
 
   resumableInstance.on("fileError", function (file, message) {
@@ -637,7 +646,7 @@ function submitFiles(allFiles) {
       } catch (e) {
         jsonResponse = null;
       }
-    
+
       // ─── Soft-fail CSRF: retry this upload ───────────────────────
       if (jsonResponse && jsonResponse.csrf_expired) {
         console.warn("CSRF expired during upload, retrying chunk", file.uploadIndex);
@@ -650,10 +659,10 @@ function submitFiles(allFiles) {
         xhr.send(formData);
         return;  // skip the "finishedCount++" and error/success logic for now
       }
-    
+
       // ─── Normal success/error handling ────────────────────────────  
       const li = progressElements[file.uploadIndex];
-    
+
       if (xhr.status >= 200 && xhr.status < 300 && (!jsonResponse || !jsonResponse.error)) {
         // real success
         if (li) {
@@ -662,6 +671,7 @@ function submitFiles(allFiles) {
           if (li.removeBtn) li.removeBtn.style.display = "none";
         }
         uploadResults[file.uploadIndex] = true;
+
       } else {
         // real failure
         if (li) {
@@ -681,12 +691,17 @@ function submitFiles(allFiles) {
           }
         }, 5000);
       }
-    
+
       // ─── Only now count this chunk as finished ───────────────────
       finishedCount++;
-      if (finishedCount === allFiles.length) {
-        refreshFileList(allFiles, uploadResults, progressElements);
-      }
+if (finishedCount === allFiles.length) {
+  const succeededCount = uploadResults.filter(Boolean).length;
+  const failedCount = allFiles.length - succeededCount;
+
+  setTimeout(() => {
+    refreshFileList(allFiles, uploadResults, progressElements);
+  }, 250);
+}
     });
 
     xhr.addEventListener("error", function () {
@@ -699,6 +714,9 @@ function submitFiles(allFiles) {
       finishedCount++;
       if (finishedCount === allFiles.length) {
         refreshFileList(allFiles, uploadResults, progressElements);
+        // Immediate summary toast based on actual XHR outcomes
+        const succeededCount = uploadResults.filter(Boolean).length;
+        const failedCount = allFiles.length - succeededCount;
       }
     });
 
@@ -725,17 +743,30 @@ function submitFiles(allFiles) {
     loadFileList(folderToUse)
       .then(serverFiles => {
         initFileActions();
-        serverFiles = (serverFiles || []).map(item => item.name.trim().toLowerCase());
+        // Be tolerant to API shapes: string or object with name/fileName/filename
+        serverFiles = (serverFiles || [])
+          .map(item => {
+            if (typeof item === 'string') return item;
+            const n = item?.name ?? item?.fileName ?? item?.filename ?? '';
+            return String(n);
+          })
+          .map(s => s.trim().toLowerCase())
+          .filter(Boolean);
         let overallSuccess = true;
+        let succeeded = 0;
         allFiles.forEach(file => {
           const clientFileName = file.name.trim().toLowerCase();
           const li = progressElements[file.uploadIndex];
-          if (!uploadResults[file.uploadIndex] || !serverFiles.includes(clientFileName)) {
+          const hadRelative = !!(file.webkitRelativePath || file.customRelativePath);
+          if (!uploadResults[file.uploadIndex] || (!hadRelative && !serverFiles.includes(clientFileName))) {
             if (li) {
               li.progressBar.innerText = "Error";
             }
             overallSuccess = false;
+            
           } else if (li) {
+            succeeded++;
+            
             // Schedule removal of successful file entry after 5 seconds.
             setTimeout(() => {
               li.remove();
@@ -757,9 +788,12 @@ function submitFiles(allFiles) {
             }, 5000);
           }
         });
-        
+
         if (!overallSuccess) {
-          showToast("Some files failed to upload. Please check the list.");
+          const failed = allFiles.length - succeeded;
+          showToast(`${failed} file(s) failed, ${succeeded} succeeded. Please check the list.`);
+        } else {
+          showToast(`${succeeded} file succeeded. Please check the list.`);
         }
       })
       .catch(error => {
@@ -768,6 +802,7 @@ function submitFiles(allFiles) {
       })
       .finally(() => {
         loadFolderTree(window.currentFolder);
+        
       });
   }
 }

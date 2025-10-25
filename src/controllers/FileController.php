@@ -501,7 +501,7 @@ public function deleteFiles()
             $userPermissions = $this->loadPerms($username);
     
             // Need granular rename (or ancestor-owner)
-            if (!(ACL::canRename($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
+            if (!(ACL::canRename($username, $userPermissions, $folder))) {
                 $this->_jsonOut(["error"=>"Forbidden: no rename rights"], 403); return;
             }
     

@@ -185,6 +185,7 @@ $canDelete   = $gDeleteBase   && !$readOnly && $inScope;
 $canReceive  = ($gUploadBase || $gCreateBase || $canManageBase) && !$readOnly && $inScope;
 // Back-compat: expose as canMoveIn (used by toolbar/context-menu/drag&drop)
 $canMoveIn   = $canReceive;
+$canMoveAlias = $canMoveIn;
 $canEdit     = $gEditBase     && !$readOnly && $inScope;
 $canCopy     = $gCopyBase     && !$readOnly && $inScope;
 $canExtract  = $gExtractBase  && !$readOnly && $inScope;
@@ -200,6 +201,12 @@ if ($isRoot) {
   $canRename = false;
   $canDelete = false;
   $canShareFoldEff = false;
+  $canMoveFolder = false;
+}
+
+if (!$isRoot) {
+  $canMoveFolder = (ACL::canManage($username, $perms, $folder) || ACL::isOwner($username, $perms, $folder))
+                   && !$readOnly;
 }
 
 $owner = null;
@@ -225,6 +232,8 @@ echo json_encode([
   'canRename'    => $canRename,
   'canDelete'    => $canDelete,
   'canMoveIn'    => $canMoveIn,
+  'canMove'       => $canMoveAlias, 
+  'canMoveFolder'=> $canMoveFolder,
   'canEdit'      => $canEdit,
   'canCopy'      => $canCopy,
   'canExtract'   => $canExtract,

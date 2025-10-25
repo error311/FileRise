@@ -326,6 +326,8 @@ class FolderModel
 
         // Update ownership mapping for the entire subtree.
         self::renameOwnersForTree($oldRel, $newRel);
+        // Re-key explicit ACLs for the moved subtree
+        ACL::renameTree($oldRel, $newRel);
 
         return ["success" => true];
     }

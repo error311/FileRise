@@ -103,6 +103,7 @@ async function applyFolderCapabilities(folder) {
 
   const isRoot   = (folder === 'root');
   setControlEnabled(document.getElementById('createFolderBtn'), !!caps.canCreate);
+  setControlEnabled(document.getElementById('moveFolderBtn'), !!caps.canMoveFolder);
   setControlEnabled(document.getElementById('renameFolderBtn'), !isRoot && !!caps.canRename);
   setControlEnabled(document.getElementById('deleteFolderBtn'), !isRoot && !!caps.canDelete);
   setControlEnabled(document.getElementById('shareFolderBtn'), !isRoot && !!caps.canShareFolder);
@@ -180,6 +181,49 @@ function breadcrumbDropHandler(e) {
     console.error("Invalid drag data on breadcrumb:", err);
     return;
   }
+  /* FOLDER MOVE FALLBACK */
+  if (!dragData) {
+    const plain = (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
+                  (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
+    if (plain) {
+      const sourceFolder = String(plain).trim();
+      if (sourceFolder && sourceFolder !== "root") {
+        if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
+          showToast("Invalid destination.", 4000);
+          return;
+        }
+        fetchWithCsrf("/api/folder/moveFolder.php", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
+        })
+          .then(safeJson)
+          .then(data => {
+            if (data && !data.error) {
+              showToast(`Folder moved to ${dropFolder}!`);
+              if (window.currentFolder && (window.currentFolder === sourceFolder || window.currentFolder.startsWith(sourceFolder + "/"))) {
+                const base = sourceFolder.split("/").pop();
+                const newPath = (dropFolder === "root" ? "" : dropFolder + "/") + base;
+                window.currentFolder = newPath;
+              }
+              return loadFolderTree().then(() => {
+                try { expandTreePath(window.currentFolder || "root"); } catch (_) {}
+                loadFileList(window.currentFolder || "root");
+              });
+            } else {
+              showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
+            }
+          })
+          .catch(err => {
+            console.error("Error moving folder:", err);
+            showToast("Error moving folder", 5000);
+          });
+      }
+    }
+    return;
+  }
+
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
 
@@ -262,7 +306,7 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
     } else {
       html += `<span class="folder-indent-placeholder"></span>`;
     }
-    html += `<span class="folder-option" data-folder="${fullPath}">${escapeHTML(folder)}</span>`;
+    html += `<span class="folder-option" draggable="true" data-folder="${fullPath}">${escapeHTML(folder)}</span>`;
     if (hasChildren) {
       html += renderFolderTree(tree[folder], fullPath, displayState);
     }
@@ -312,13 +356,58 @@ function folderDropHandler(event) {
   event.preventDefault();
   event.currentTarget.classList.remove("drop-hover");
   const dropFolder = event.currentTarget.getAttribute("data-folder");
-  let dragData;
+  let dragData = null;
   try {
-    dragData = JSON.parse(event.dataTransfer.getData("application/json"));
-  } catch (e) {
+    const jsonStr = event.dataTransfer.getData("application/json") || "";
+    if (jsonStr) dragData = JSON.parse(jsonStr);
+  } 
+ catch (e) {
     console.error("Invalid drag data", e);
     return;
   }
+  /* FOLDER MOVE FALLBACK */
+  if (!dragData) {
+    const plain = (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
+                  (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
+    if (plain) {
+      const sourceFolder = String(plain).trim();
+      if (sourceFolder && sourceFolder !== "root") {
+        if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
+          showToast("Invalid destination.", 4000);
+          return;
+        }
+        fetchWithCsrf("/api/folder/moveFolder.php", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
+        })
+          .then(safeJson)
+          .then(data => {
+            if (data && !data.error) {
+              showToast(`Folder moved to ${dropFolder}!`);
+              if (window.currentFolder && (window.currentFolder === sourceFolder || window.currentFolder.startsWith(sourceFolder + "/"))) {
+                const base = sourceFolder.split("/").pop();
+                const newPath = (dropFolder === "root" ? "" : dropFolder + "/") + base;
+                window.currentFolder = newPath;
+              }
+              return loadFolderTree().then(() => {
+                try { expandTreePath(window.currentFolder || "root"); } catch (_) {}
+                loadFileList(window.currentFolder || "root");
+              });
+            } else {
+              showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
+            }
+          })
+          .catch(err => {
+            console.error("Error moving folder:", err);
+            showToast("Error moving folder", 5000);
+          });
+      }
+    }
+    return;
+  }
+
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
 
@@ -459,6 +548,14 @@ export async function loadFolderTree(selectedFolder) {
 
     // Attach drag/drop event listeners.
     container.querySelectorAll(".folder-option").forEach(el => {
+      // Provide folder path payload for folder->folder DnD
+      el.addEventListener("dragstart", (ev) => {
+        const src = el.getAttribute("data-folder");
+        try { ev.dataTransfer.setData("application/x-filerise-folder", src); } catch (e) {}
+        try { ev.dataTransfer.setData("text/plain", src); } catch (e) {}
+        ev.dataTransfer.effectAllowed = "move";
+      });
+
       el.addEventListener("dragover", folderDragOverHandler);
       el.addEventListener("dragleave", folderDragLeaveHandler);
       el.addEventListener("drop", folderDropHandler);
@@ -487,6 +584,14 @@ export async function loadFolderTree(selectedFolder) {
 
     // Folder-option click: update selection, breadcrumbs, and file list
     container.querySelectorAll(".folder-option").forEach(el => {
+      // Provide folder path payload for folder->folder DnD
+      el.addEventListener("dragstart", (ev) => {
+        const src = el.getAttribute("data-folder");
+        try { ev.dataTransfer.setData("application/x-filerise-folder", src); } catch (e) {}
+        try { ev.dataTransfer.setData("text/plain", src); } catch (e) {}
+        ev.dataTransfer.effectAllowed = "move";
+      });
+
       el.addEventListener("click", function (e) {
         e.stopPropagation();
         container.querySelectorAll(".folder-option").forEach(item => item.classList.remove("selected"));
@@ -640,6 +745,44 @@ if (submitRename) {
         if (input2) input2.value = "";
       });
   });
+}
+
+// === Move Folder Modal helper (shared by button + context menu) ===
+function openMoveFolderUI(sourceFolder) {
+  const modal     = document.getElementById('moveFolderModal');
+  const targetSel = document.getElementById('moveFolderTarget');
+
+  // If you right-clicked a different folder than currently selected, use that
+  if (sourceFolder && sourceFolder !== 'root') {
+    window.currentFolder = sourceFolder;
+  }
+
+  // Fill target dropdown
+  if (targetSel) {
+    targetSel.innerHTML = '';
+    fetch('/api/folder/getFolderList.php', { credentials: 'include' })
+      .then(r => r.json())
+      .then(list => {
+        if (Array.isArray(list) && list.length && typeof list[0] === 'object' && list[0].folder) {
+          list = list.map(it => it.folder);
+        }
+        // Root option
+        const rootOpt = document.createElement('option');
+        rootOpt.value = 'root'; rootOpt.textContent = '(Root)';
+        targetSel.appendChild(rootOpt);
+
+        (list || [])
+          .filter(f => f && f !== 'trash' && f !== (window.currentFolder || ''))
+          .forEach(f => {
+            const o = document.createElement('option');
+            o.value = f; o.textContent = f;
+            targetSel.appendChild(o);
+          });
+      })
+      .catch(()=>{ /* no-op */ });
+  }
+
+  if (modal) modal.style.display = 'block';
 }
 
 export function openDeleteFolderModal() {
@@ -842,6 +985,10 @@ function folderManagerContextMenuHandler(e) {
       }
     },
     {
+      label: t("move_folder"),
+      action: () => { openMoveFolderUI(folder); }
+    },
+    {
       label: t("rename_folder"),
       action: () => { openRenameFolderModal(); }
     },
@@ -924,3 +1071,52 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Initial context menu delegation bind
 bindFolderManagerContextMenu();
+
+document.addEventListener("DOMContentLoaded", () => {
+  const moveBtn   = document.getElementById('moveFolderBtn');
+  const modal     = document.getElementById('moveFolderModal');
+  const targetSel = document.getElementById('moveFolderTarget');
+  const cancelBtn = document.getElementById('cancelMoveFolder');
+  const confirmBtn= document.getElementById('confirmMoveFolder');
+
+  if (moveBtn) {
+    moveBtn.addEventListener('click', () => {
+      const cf = window.currentFolder || 'root';
+      if (!cf || cf === 'root') { showToast('Select a non-root folder to move.'); return; }
+      openMoveFolderUI(cf);
+    });
+  }
+
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { if (modal) modal.style.display = 'none'; });
+
+  if (confirmBtn) confirmBtn.addEventListener('click', async () => {
+    if (!targetSel) return;
+    const destination = targetSel.value;
+    const source      = window.currentFolder;
+
+    if (!destination) { showToast('Pick a destination'); return; }
+    if (destination === source || (destination + '/').startsWith(source + '/')) {
+      showToast('Invalid destination'); return;
+    }
+
+    try {
+      const res = await fetch('/api/folder/moveFolder.php', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken },
+        body: JSON.stringify({ source, destination })
+      });
+      const data = await safeJson(res);
+      if (res.ok && data && !data.error) {
+        showToast('Folder moved');
+        if (modal) modal.style.display='none';
+        await loadFolderTree();
+        const base = source.split('/').pop();
+        const newPath = (destination === 'root' ? '' : destination + '/') + base;
+        window.currentFolder = newPath;
+        loadFileList(window.currentFolder || 'root');
+      } else {
+        showToast('Error: ' + (data && data.error || 'Move failed'));
+      }
+    } catch (e) { console.error(e); showToast('Move failed'); }
+  });
+});

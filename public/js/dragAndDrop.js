@@ -8,7 +8,7 @@
 const MEDIUM_MIN = 1205;      // matches your small-screen cutoff
 const MEDIUM_MAX = 1600;      // tweak as you like
 
-const TOGGLE_TOP_PX = 10;
+const TOGGLE_TOP_PX = 8;
 const TOGGLE_LEFT_PX = 100;
 
 const TOGGLE_ICON_OPEN = 'view_sidebar';
@@ -18,6 +18,13 @@ const TOGGLE_ICON_CLOSED = 'menu';
 const KNOWN_CARD_IDS = ['uploadCard', 'folderManagementCard'];
 
 const CARD_IDS = ['uploadCard', 'folderManagementCard'];
+
+// --- NEW: separate user snapshot so refresh restores *manual* placements only ---
+const USER_SNAPSHOT_KEY = 'userZonesSnapshot';   // { cardId: 'sidebarDropArea'|'leftCol'|'rightCol' }
+
+function hasUserSnapshot() {
+  try { const s = JSON.parse(localStorage.getItem(USER_SNAPSHOT_KEY) || '{}'); return !!s && Object.keys(s).length > 0; } catch { return false; }
+}
 
 function isDarkMode() {
   return document.body.classList.contains('dark-mode');
@@ -54,6 +61,16 @@ function snapshotZoneLocations() {
   localStorage.setItem('zonesSnapshot', JSON.stringify(snap));
 }
 
+// NEW: Save where the user *manually* placed cards (used on normal refresh).
+function snapshotUserZones() {
+  const snap = {};
+  getKnownCards().forEach(card => {
+    const p = card.parentNode;
+    snap[card.id] = p && p.id ? p.id : '';
+  });
+  localStorage.setItem(USER_SNAPSHOT_KEY, JSON.stringify(snap));
+}
+
 // Move a card to default expanded spot (your request: sidebar is default).
 function moveCardToSidebarDefault(card) {
   const sidebar = getSidebar();
@@ -72,6 +89,56 @@ function stripHeaderArtifacts(card) {
     }
     try { card.headerIconButton.remove(); } catch { }
     card.headerIconButton = null;
+  }
+}
+
+// Kill the 50px ghost gutter when the sidebar isn't participating in layout.
+function clampSidebarWhenEmpty() {
+  const sidebar = getSidebar();
+  if (!sidebar) return;
+
+  const sidebarHasCards = hasSidebarCards();
+  const collapsed = isZonesCollapsed();
+
+  // Sidebar should not take space if it's collapsed OR has no cards.
+  const shouldHideSidebarSpace = collapsed || !sidebarHasCards;
+
+  if (shouldHideSidebarSpace) {
+    // Make sure it takes absolutely no horizontal space.
+    sidebar.style.display   = 'none'; // don't render at all
+    sidebar.style.width     = '0px';
+    sidebar.style.minWidth  = '0px';
+    sidebar.style.margin    = '0';
+    sidebar.style.padding   = '0';
+    sidebar.style.flex      = '0 0 0px';
+
+    // if you add/remove highlight elsewhere, also ensure it's not forcing size
+    sidebar.classList.remove('active');
+  } else {
+    // Let your CSS control it when it's actually visible/has cards.
+    sidebar.style.width     = '';
+    sidebar.style.minWidth  = '';
+    sidebar.style.margin    = '';
+    sidebar.style.padding   = '';
+    sidebar.style.flex      = '';
+    // display is already decided by updateSidebarVisibility/applyZonesCollapsed
+  }
+}
+
+// Let the sidebar become a real drop target during drag, even if empty.
+function unclampSidebarForDrag() {
+  const sidebar = getSidebar();
+  if (!sidebar) return;
+  // only un-clamp if panels are not collapsed
+  if (!isZonesCollapsed()) {
+    sidebar.style.display  = 'block';
+    // give it a sensible min width so the highlight looks right
+    sidebar.style.minWidth = '280px';
+    // never force a fixed height here; let CSS layout handle it
+    sidebar.style.width    = '';
+    sidebar.style.flex     = ''; // don't lock flex while dragging
+    sidebar.style.margin   = '';
+    sidebar.style.padding  = '';
   }
 }
 
@@ -152,8 +219,10 @@ function removeHeaderIconForCard(card) {
   }
 }
 
+// Apply *user* snapshot on normal load (not expand) to preserve manual placement.
 function applySnapshotIfPresent() {
-  const snap = readZonesSnapshot();
+  let snap = {};
+  try { snap = JSON.parse(localStorage.getItem(USER_SNAPSHOT_KEY) || '{}'); } catch { snap = {}; }
   const keys = Object.keys(snap || {});
   if (!keys.length) return false;
 
@@ -231,21 +300,39 @@ function moveAllSidebarCardsToTop() {
 }
 
 // New: enforce responsive behavior (sidebar disabled on small screens)
+// Add hysteresis to avoid flapping near threshold
 let __lastIsSmall = null;
+let __lastWidth = null;
+const SMALL_ENTER = MEDIUM_MIN - 16;  // enter small below this
+const SMALL_EXIT  = MEDIUM_MIN + 16;  // leave small above this
 
 function enforceResponsiveZones() {
-  const isSmall = isSmallScreen();
+  const w = window.innerWidth;
+  const prevSmall = __lastIsSmall;
+  let nowSmall;
+
+  if (__lastWidth == null) {
+    nowSmall = w < MEDIUM_MIN;
+  } else if (prevSmall === true) {
+    nowSmall = !(w >= SMALL_EXIT);
+  } else if (prevSmall === false) {
+    nowSmall = (w < SMALL_ENTER);
+  } else {
+    nowSmall = w < MEDIUM_MIN;
+  }
+  __lastWidth = w;
+
   const sidebar = getSidebar();
   const topZone = getTopZone();
 
-  if (isSmall && __lastIsSmall !== true) {
+  if (nowSmall && prevSmall !== true) {
     // entering small: remember what was in sidebar, move them up, hide sidebar
     snapshotSidebarCardsForResponsive();
     moveAllSidebarCardsToTop();
     if (sidebar) sidebar.style.display = 'none';
     if (topZone) topZone.style.display = ''; // ensure visible
     __lastIsSmall = true;
-  } else if (!isSmall && __lastIsSmall !== false) {
+  } else if (!nowSmall && prevSmall !== false) {
     // leaving small: restore only what used to be in the sidebar
     const ids = readResponsiveSnapshot();
     const sb = getSidebar();
@@ -309,10 +396,10 @@ function setZonesCollapsed(collapsed) {
 
   if (collapsed) {
     // Remember where cards were, then show them as header icons
-    snapshotZoneLocations();
-    collapseCardsToHeader();     // your existing helper that calls insertCardInHeader(...)
+    snapshotZoneLocations();   // original snapshot used only for collapse/expand
+    collapseCardsToHeader();   // your existing helper that calls insertCardInHeader(...)
   } else {
-    // Expand: bring cards back
+    // Expand: bring cards back (from the collapse snapshot)
     restoreCardsFromSnapshot();
 
     // Ensure zones are visible right away after expand
@@ -324,6 +411,7 @@ function setZonesCollapsed(collapsed) {
 
   ensureZonesToggle();
   updateZonesToggleUI();
+  clampSidebarWhenEmpty();
 }
 
 function applyZonesCollapsed() {
@@ -570,12 +658,30 @@ export function loadSidebarOrder() {
   const orderStr = localStorage.getItem('sidebarOrder');
   const headerOrderStr = localStorage.getItem('headerOrder');
 
+  // Restore user's last manual placement on normal load
   if (applySnapshotIfPresent()) {
     updateTopZoneLayout();
     updateSidebarVisibility();
     applyZonesCollapsed();
     ensureZonesToggle();
     return;
+  }
+  // If no user snapshot exists and we're not on small screens,
+  // but the cards are currently in the top zone, default them to the sidebar once.
+  if (!hasUserSnapshot() && !isSmallScreen() && hasTopZoneCards() && !hasSidebarCards()) {
+    const sb = getSidebar();
+    if (sb) {
+      ['uploadCard','folderManagementCard'].forEach(id => {
+        const c = document.getElementById(id);
+        if (c && !sb.contains(c)) {
+          sb.appendChild(c);
+          c.style.width = '100%';
+        }
+      });
+      snapshotUserZones();      // persist this as the user's baseline
+      updateSidebarVisibility();
+      updateTopZoneLayout();
+    }
   }
 
   // Only apply the one-time default if *not* initialized yet
@@ -692,6 +798,7 @@ function updateSidebarVisibility() {
   localStorage.setItem('layoutDefaultApplied_v1', '1');
 
   ensureZonesToggle();
+  clampSidebarWhenEmpty(); 
 }
 
 // NEW: Save header order to localStorage.
@@ -733,6 +840,7 @@ function updateTopZoneLayout() {
 
   // hide whole top row when empty (kills the gap)
   if (topZone) topZone.style.display = (hasUpload || hasFolder) ? '' : 'none';
+  clampSidebarWhenEmpty(); 
 }
 
 // When a card is being dragged, if the top drop zone is empty, set its min-height.
@@ -799,6 +907,10 @@ function insertCardInSidebar(card, event) {
 
   // SAVE order & refresh minimal UI, but DO NOT collapse/restore here:
   saveSidebarOrder();
+
+  // NEW: persist user manual placement (used on normal refresh)
+  snapshotUserZones();
+
   updateSidebarVisibility();
   ensureZonesToggle();
   updateZonesToggleUI();
@@ -1081,13 +1193,15 @@ export function initDragAndDrop() {
             showTopZoneWhileDragging();
 
             const sidebar = getSidebar();
-            if (sidebar) {
-              sidebar.classList.add('active');
-              sidebar.style.display = isZonesCollapsed() ? 'none' : 'block';
-              sidebar.classList.add('highlight');
-              sidebar.style.height = '800px';
-              sidebar.style.minWidth = '280px';
-            }
+if (sidebar) {
+  unclampSidebarForDrag();                // <— NEW
+  sidebar.classList.add('active');
+  sidebar.classList.add('highlight');
+  // keep it visible, but don't force a fixed height
+  sidebar.style.removeProperty('height'); // <— no 800px box
+  // ensure it's actually visible if not collapsed
+  if (!isZonesCollapsed()) sidebar.style.display = 'block';
+}
 
             showHeaderDropZone();
             const topZone = getTopZone();
@@ -1169,7 +1283,6 @@ export function initDragAndDrop() {
           const sidebarElem = getSidebar();
           if (sidebarElem) {
             const rect = sidebarElem.getBoundingClientRect();
-            const dropZoneBottom = rect.top + 800; // Virtual drop zone height.
             if (
               e.clientX >= rect.left &&
               e.clientX <= rect.right &&
@@ -1208,6 +1321,9 @@ export function initDragAndDrop() {
                 setTimeout(() => {
                   card.style.removeProperty('width');
                 }, 210);
+
+                // NEW: persist user manual placement
+                snapshotUserZones();
               }
             }
           }
@@ -1224,6 +1340,7 @@ export function initDragAndDrop() {
             ) {
               insertCardInHeader(card, e);
               droppedInHeader = true;
+              // header mode is transient; do not overwrite userZones here
             }
           }
 
@@ -1257,10 +1374,16 @@ export function initDragAndDrop() {
 
           updateTopZoneLayout();
           updateSidebarVisibility();
+          clampSidebarWhenEmpty();
+          if (sidebar) {
+            sidebar.classList.remove('highlight');
+            sidebar.style.height = '';
+            sidebar.style.minWidth = '';
+          }
           hideHeaderDropZone();
 
           cleanupTopZoneAfterDrop();
-          snapshotZoneLocations();
+          snapshotZoneLocations();   // keep original (collapse/expand)
           const tz = getTopZone();
           if (tz) tz.style.minHeight = '';
         }

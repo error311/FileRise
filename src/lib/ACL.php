@@ -40,6 +40,48 @@ class ACL
         unset($rec);
         return $changed ? self::save($acl) : true;
     }
+    public static function ownsFolderOrAncestor(string $user, array $perms, string $folder): bool
+{
+    $folder = self::normalizeFolder($folder);
+    if (self::isAdmin($perms)) return true;
+    if (self::hasGrant($user, $folder, 'owners')) return true;
+
+    $folder = trim($folder, "/\\ ");
+    if ($folder === '' || $folder === 'root') return false;
+
+    $parts = explode('/', $folder);
+    while (count($parts) > 1) {
+        array_pop($parts);
+        $parent = implode('/', $parts);
+        if (self::hasGrant($user, $parent, 'owners')) return true;
+    }
+    return false;
+}
+
+    /** Re-key explicit ACL entries for an entire subtree: old/... → new/... */
+public static function renameTree(string $oldFolder, string $newFolder): void
+{
+    $old = self::normalizeFolder($oldFolder);
+    $new = self::normalizeFolder($newFolder);
+    if ($old === '' || $old === 'root') return; // nothing to re-key for root
+
+    $acl = self::$cache ?? self::loadFresh();
+    if (!isset($acl['folders']) || !is_array($acl['folders'])) return;
+
+    $rebased = [];
+    foreach ($acl['folders'] as $k => $rec) {
+        if ($k === $old || strpos($k, $old . '/') === 0) {
+            $suffix = substr($k, strlen($old));
+            $suffix = ltrim((string)$suffix, '/');
+            $newKey = $new . ($suffix !== '' ? '/' . $suffix : '');
+            $rebased[$newKey] = $rec;
+        } else {
+            $rebased[$k] = $rec;
+        }
+    }
+    $acl['folders'] = $rebased;
+    self::save($acl);
+}
 
     private static function loadFresh(): array {
         $path = self::path();
@@ -323,10 +365,10 @@ class ACL
                 $sf  = !empty($caps['shareFile'])   || !empty($caps['share_file']);
                 $sfo = !empty($caps['shareFolder']) || !empty($caps['share_folder']);
 
-                if ($m) { $v = true; $w = true; $u = $c = $ed = $rn = $cp = $mv = $dl = $ex = $sf = $sfo = true; }
+                if ($m) { $v = true; $w = true; $u = $c = $ed = $rn = $cp = $dl = $ex = $sf = $sfo = true; }
                 if ($u && !$v && !$vo) $vo = true;
                 //if ($s && !$v) $v = true;
-                if ($w) { $c = $u = $ed = $rn = $cp = $mv = $dl = $ex = true; }
+                if ($w) { $c = $u = $ed = $rn = $cp = $dl = $ex = true; }
 
                 if ($m)  $rec['owners'][]       = $user;
                 if ($v)  $rec['read'][]         = $user;
@@ -419,9 +461,13 @@ public static function canCopy(string $user, array $perms, string $folder): bool
 public static function canMove(string $user, array $perms, string $folder): bool {
     $folder = self::normalizeFolder($folder);
     if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'move')
-        || self::hasGrant($user, $folder, 'write');
+    return self::ownsFolderOrAncestor($user, $perms, $folder);
+}
+
+public static function canMoveFolder(string $user, array $perms, string $folder): bool {
+    $folder = self::normalizeFolder($folder);
+    if (self::isAdmin($perms)) return true;
+    return self::ownsFolderOrAncestor($user, $perms, $folder);
 }
 
 public static function canDelete(string $user, array $perms, string $folder): bool {

@@ -1046,11 +1046,6 @@ label {
   display: none;
 }
 
-#createFolderBtn {
-  margin-top: 0px !important;
-  height: 40px !important;
-  font-size: 1rem;
-}
 
 .folder-actions {
   display: flex;
@@ -1058,12 +1053,77 @@ label {
   padding-left: 8px;
   align-items: center;
   white-space: nowrap;
+  padding-top: 10px;
 }
 
 @media (min-width: 600px) and (max-width: 992px) {
   .folder-actions {
     white-space: nowrap;
   }
+}
+
+.folder-actions .btn {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.1;
+  border-radius: 6px;
+}
+
+.folder-actions .material-icons {
+  font-size: 24px;
+  vertical-align: -2px; 
+}
+
+.folder-actions .btn + .btn {
+  margin-left: 6px;
+}
+
+.folder-actions .btn {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.1;
+  border-radius: 6px;
+
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  will-change: transform;
+}
+
+
+.folder-actions .material-icons {
+  font-size: 24px;
+  vertical-align: -2px;
+  transition: transform 120ms ease;
+}
+
+.folder-actions .btn:hover,
+.folder-actions .btn:focus-visible {
+  transform: scale(1.06);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.folder-actions .btn:hover .material-icons,
+.folder-actions .btn:focus-visible .material-icons {
+  transform: scale(1.05);
+}
+
+.folder-actions .btn:focus-visible {
+  outline: 2px solid rgba(33,150,243,0.6);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folder-actions .btn,
+  .folder-actions .material-icons {
+    transition: none;
+  }
+}
+
+#moveFolderBtn {
+  background-color: #ff9800;
+  border-color: #ff9800;
+  color: #fff;
 }
 
 .row-selected {
