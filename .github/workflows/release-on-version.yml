@@ -3,9 +3,10 @@ name: Release on version.js update
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
     paths:
-      - 'public/js/version.js'
+      - public/js/version.js
 
 permissions:
   contents: write
@@ -28,12 +29,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -f public/js/version.js ]]; then
-            echo "version.js not found"; exit 1
-          fi
-          VER=$(grep -Eo "APP_VERSION\s*=\s*'v[^']+'" public/js/version.js | sed -E "s/.*'([^']+)'.*/\1/")
+          VER=$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")
           if [[ -z "$VER" ]]; then
-            echo "Could not parse APP_VERSION from version.js"; exit 1
+            echo "Could not parse APP_VERSION from version.js" >&2
+            exit 1
           fi
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "Parsed version: $VER"
@@ -59,7 +58,6 @@ jobs:
           set -euo pipefail
           NOTES_PATH=""
           if [[ -f CHANGELOG.md ]]; then
-            # Extract from first "## " until a line that is exactly "---"
             awk '
               BEGIN{found=0}
               /^## / && !found {found=1}
@@ -67,21 +65,14 @@ jobs:
               found {print}
             ' CHANGELOG.md > RELEASE_BODY.md || true
 
-            # Clean up trailing blank lines
+            # Trim trailing blank lines
             sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' RELEASE_BODY.md || true
 
             if [[ -s RELEASE_BODY.md ]]; then
               NOTES_PATH="RELEASE_BODY.md"
-              echo "Using extracted notes:"
-              head -n 60 RELEASE_BODY.md
-            else
-              echo "Top section not found or empty; will use auto-generated notes."
             fi
-          else
-            echo "No CHANGELOG.md; will use auto-generated notes."
           fi
-
-          echo "path=${NOTES_PATH}" >> "$GITHUB_OUTPUT"
+          echo "path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
 
       - name: (optional) Build archive to attach
         if: steps.tagcheck.outputs.exists == 'false'
@@ -89,7 +80,6 @@ jobs:
         run: |
           set -euo pipefail
           zip -r "FileRise-${{ steps.ver.outputs.version }}.zip" public/ README.md LICENSE >/dev/null || true
-          ls -l "FileRise-${{ steps.ver.outputs.version }}.zip" || true
 
       # Path A: we have extracted notes -> use body_path
       - name: Create GitHub Release (with CHANGELOG snippet)
