@@ -1,5 +1,18 @@
 # Changelog
 
+## Changes 10/25/2025 (v1.6.8)
+
+release(v1.6.8): fix(ui) prevent Extract/Create flash on refresh; remember last folder
+
+- Seed `currentFolder` from `localStorage.lastOpenedFolder` (fallback to "root")
+- Stop eager `loadFileList('root')` on boot; defer initial load to resolved folder
+- Hide capability-gated actions by default (`#extractZipBtn`, `#createBtn`) to avoid pre-auth flash
+- Eliminates transient root state when reloading inside a subfolder
+
+User-visible: refreshing a non-root folder no longer flashes Root items or privileged buttons; app resumes in the last opened folder.
+
+---
+
 ## Changes 10/25/2025 (v1.6.7)
 
 release(v1.6.7): Folder Move feature, stable DnD persistence, safer uploads, and ACL/UI polish

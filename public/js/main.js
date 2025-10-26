@@ -105,12 +105,14 @@ export function initializeApp() {
   const saved = parseInt(localStorage.getItem('rowHeight') || '48', 10);
   document.documentElement.style.setProperty('--file-row-height', saved + 'px');
 
-  window.currentFolder = "root";
+  //window.currentFolder = "root";
+  const last = localStorage.getItem('lastOpenedFolder');
+  window.currentFolder = last ? last : "root";
   const stored = localStorage.getItem('showFoldersInList');
   window.showFoldersInList = stored === null ? true : stored === 'true';
   loadAdminConfigFunc();
   initTagSearch();
-  loadFileList(window.currentFolder);
+  //loadFileList(window.currentFolder);
 
   const fileListArea = document.getElementById('fileListContainer');
   const uploadArea = document.getElementById('uploadDropArea');
