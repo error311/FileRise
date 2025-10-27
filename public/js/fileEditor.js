@@ -54,7 +54,7 @@ const MODE_LOAD_TIMEOUT_MS = 2500; // allow closing immediately; don't wait fore
 function loadScriptOnce(url) {
   return new Promise((resolve, reject) => {
     const ver = (window.APP_VERSION ?? 'dev').replace(/^v/, ''); // "v1.6.9" -> "1.6.9"
-    const withQS = url + '?v=' + ver;
+    const withQS = url + '?v=1.6.9' + ver;
 
     const key = `cm:${withQS}`;
     let s = document.querySelector(`script[data-key="${key}"]`);
