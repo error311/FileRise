@@ -8,7 +8,8 @@ const EDITOR_PLAIN_THRESHOLD = 5 * 1024 * 1024;  // >5 MiB => force plain text, 
 const EDITOR_BLOCK_THRESHOLD = 10 * 1024 * 1024; // >10 MiB => block editing
 
 // Lazy-load CodeMirror modes on demand
-const CM_CDN = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/";
+//const CM_CDN = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/";
+const CM_LOCAL = "/vendor/codemirror/5.65.5/";
 
 // Which mode file to load for a given name/mime
 const MODE_URL = {
@@ -48,50 +49,27 @@ function normalizeModeName(modeOption) {
   return name;
 }
 
-const MODE_SRI = {
-  "mode/xml/xml.min.js": "sha512-LarNmzVokUmcA7aUDtqZ6oTS+YXmUKzpGdm8DxC46A6AHu+PQiYCUlwEGWidjVYMo/QXZMFMIadZtrkfApYp/g==",
-  "mode/css/css.min.js": "sha512-oikhYLgIKf0zWtVTOXh101BWoSacgv4UTJHQOHU+iUQ1Dol3Xjz/o9Jh0U33MPoT/d4aQruvjNvcYxvkTQd0nA==",
-  "mode/javascript/javascript.min.js": "sha512-I6CdJdruzGtvDyvdO4YsiAq+pkWf2efgd1ZUSK2FnM/u2VuRASPC7GowWQrWyjxCZn6CT89s3ddGI+be0Ak9Fg==",
-  "mode/htmlmixed/htmlmixed.min.js": "sha512-HN6cn6mIWeFJFwRN9yetDAMSh+AK9myHF1X9GlSlKmThaat65342Yw8wL7ITuaJnPioG0SYG09gy0qd5+s777w==",
-  "mode/php/php.min.js": "sha512-jZGz5n9AVTuQGhKTL0QzOm6bxxIQjaSbins+vD3OIdI7mtnmYE6h/L+UBGIp/SssLggbkxRzp9XkQNA4AyjFBw==",
-  "mode/markdown/markdown.min.js": "sha512-DmMao0nRIbyDjbaHc8fNd3kxGsZj9PCU6Iu/CeidLQT9Py8nYVA5n0PqXYmvqNdU+lCiTHOM/4E7bM/G8BttJg==",
-  "mode/python/python.min.js": "sha512-2M0GdbU5OxkGYMhakED69bw0c1pW3Nb0PeF3+9d+SnwN1ryPx3wiDdNqK3gSM7KAU/pEV+2tFJFbMKjKAahOkQ==",
-  "mode/sql/sql.min.js": "sha512-u8r8NUnG9B9L2dDmsfvs9ohQ0SO/Z7MB8bkdLxV7fE0Q8bOeP7/qft1D4KyE8HhVrpH3ihSrRoDiMbYR1VQBWQ==",
-  "mode/shell/shell.min.js": "sha512-HoC6JXgjHHevWAYqww37Gfu2c1G7SxAOv42wOakjR8csbTUfTB7OhVzSJ95LL62nII0RCyImp+7nR9zGmJ1wRQ==",
-  "mode/yaml/yaml.min.js": "sha512-+aXDZ93WyextRiAZpsRuJyiAZ38ztttUyO/H3FZx4gOAOv4/k9C6Um1CvHVtaowHZ2h7kH0d+orWvdBLPVwb4g==",
-  "mode/properties/properties.min.js": "sha512-P4OaO+QWj1wPRsdkEHlrgkx+a7qp6nUC8rI6dS/0/HPjHtlEmYfiambxowYa/UfqTxyNUnwTyPt5U6l1GO76yw==",
-  "mode/clike/clike.min.js": "sha512-l8ZIWnQ3XHPRG3MQ8+hT1OffRSTrFwrph1j1oc1Fzc9UKVGef5XN9fdO0vm3nW0PRgQ9LJgck6ciG59m69rvfg=="
-};
-
 const MODE_LOAD_TIMEOUT_MS = 2500; // allow closing immediately; don't wait forever
 
 function loadScriptOnce(url) {
   return new Promise((resolve, reject) => {
-    const key = `cm:${url}`;
+    const ver = (window.APP_VERSION ?? 'dev').replace(/^v/, ''); // "v1.6.9" -> "1.6.9"
+    const withQS = url + '?v=' + ver;
+
+    const key = `cm:${withQS}`;
     let s = document.querySelector(`script[data-key="${key}"]`);
     if (s) {
       if (s.dataset.loaded === "1") return resolve();
-      s.addEventListener("load", () => resolve());
-      s.addEventListener("error", () => reject(new Error(`Load failed: ${url}`)));
+      s.addEventListener("load", resolve);
+      s.addEventListener("error", () => reject(new Error(`Load failed: ${withQS}`)));
       return;
     }
     s = document.createElement("script");
-    s.src = url;
+    s.src = withQS;
     s.async = true;
     s.dataset.key = key;
-
-    // 🔒 Add SRI if we have it
-    const relPath = url.replace(/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/codemirror\/5\.65\.5\//, "");
-    const sri = MODE_SRI[relPath];
-    if (sri) {
-      s.integrity = sri;
-      s.crossOrigin = "anonymous";
-      // (Optional) further tighten referrer behavior:
-      // s.referrerPolicy = "no-referrer";
-    }
-
     s.addEventListener("load", () => { s.dataset.loaded = "1"; resolve(); });
-    s.addEventListener("error", () => reject(new Error(`Load failed: ${url}`)));
+    s.addEventListener("error", () => reject(new Error(`Load failed: ${withQS}`)));
     document.head.appendChild(s);
   });
 }
@@ -124,7 +102,7 @@ async function ensureModeLoaded(modeOption) {
     await ensureModeLoaded("htmlmixed");
   }
 
-  await loadScriptOnce(CM_CDN + url);
+  await loadScriptOnce(CM_LOCAL + url);
 }
 
 function getModeForFile(fileName) {

@@ -6,10 +6,10 @@
 
 // ---- responsive defaults ----
 const MEDIUM_MIN = 1205;      // matches your small-screen cutoff
-const MEDIUM_MAX = 1600;      // tweak as you like
+const MEDIUM_MAX = 1600;      
 
 const TOGGLE_TOP_PX = 8;
-const TOGGLE_LEFT_PX = 100;
+const TOGGLE_LEFT_PX = 50;
 
 const TOGGLE_ICON_OPEN = 'view_sidebar';
 const TOGGLE_ICON_CLOSED = 'menu';
@@ -482,8 +482,8 @@ function mountHeaderToggle(btn) {
 
   Object.assign(btn.style, {
     position: 'absolute',
-    left: '100px',  // adjust position beside the logo
-    top:  '10px',
+    left: TOGGLE_LEFT_PX,  // adjust position beside the logo
+    top:  TOGGLE_TOP_PX,
     zIndex: '10010',
     pointerEvents: 'auto'
   });
@@ -519,7 +519,7 @@ btn.addEventListener('click', (e) => {
     Object.assign(btn.style, {
       position: 'absolute',   // <-- key change (was fixed)
       top: '8px',             // adjust to line up with header content
-      left: '100px',          // place to the right of your logo; tweak as needed
+      left: '65px',          // place to the right of your logo; tweak as needed
       zIndex: '1000',
       width: '38px',
       height: '38px',

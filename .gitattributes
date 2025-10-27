@@ -1,4 +1,40 @@
-public/api.html linguist-documentation
-public/openapi.json linguist-documentation
-resources/ export-ignore
-.github/ export-ignore
+# --- Docs that shouldn't count toward code stats
+public/api.php            linguist-documentation
+public/openapi.json       linguist-documentation
+openapi.json.dist         linguist-documentation
+SECURITY.md               linguist-documentation
+CHANGELOG.md              linguist-documentation
+CONTRIBUTING.md           linguist-documentation
+CODE_OF_CONDUCT.md        linguist-documentation
+LICENSE                   linguist-documentation
+README.md                 linguist-documentation
+
+# --- Vendored/minified stuff: exclude from Linguist
+public/vendor/**          linguist-vendored
+public/css/vendor/**      linguist-vendored
+public/fonts/**           linguist-vendored
+public/js/**/*.min.js     linguist-vendored
+public/**/*.min.css       linguist-vendored
+public/**/*.map           linguist-generated
+
+# --- Treat assets as binary (nicer diffs)
+*.png   -diff
+*.jpg   -diff
+*.jpeg  -diff
+*.gif   -diff
+*.webp  -diff
+*.svg   -diff
+*.ico   -diff
+*.woff  -diff
+*.woff2 -diff
+*.ttf   -diff
+*.otf   -diff
+*.zip   -diff
+
+# --- Keep these out of auto-generated source archives (OK to ignore)
+# Only ignore things you *never* need in release tarballs
+.github/           export-ignore
+resources/         export-ignore
+
+# --- Normalize text files
+* text=auto

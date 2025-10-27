@@ -1,0 +1,5 @@
+Google Fonts & Icons NOTICE
+
+This product bundles font files from Google Fonts (Roboto, Material Icons, and/or Material Symbols).
+Copyright 2012–present Google Inc. All Rights Reserved.
+Licensed under the Apache License, Version 2.0 (see ../apache-2.0.txt).

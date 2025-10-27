@@ -175,10 +175,10 @@ docker exec -it filerise id www-data
 Save as `docker-compose.yml`, then `docker-compose up -d`:
 
 ```yaml
-version: "3"
 services:
   filerise:
     image: error311/filerise-docker:latest
+    container_name: filerise
     ports:
       - "8080:80"
     environment:
@@ -198,6 +198,7 @@ services:
       - ./uploads:/var/www/uploads
       - ./users:/var/www/users
       - ./metadata:/var/www/metadata
+    restart: unless-stopped
 ```
 
 Access at `http://localhost:8080` (or your server’s IP).  
@@ -423,6 +424,10 @@ Every bit helps me keep FileRise fast, polished, and well-maintained. Thank you!
 
 ---
 
-## License
+## License & Credits
 
 MIT License – see [LICENSE](LICENSE).
+This project bundles third-party assets such as Bootstrap, CodeMirror, DOMPurify, Fuse.js, Resumable.js, and Google Fonts (Roboto, Material Icons).
+All third-party code and fonts remain under their original open-source licenses (MIT or Apache 2.0).
+
+See THIRD_PARTY.md and the /licenses directory for full license texts and attributions.

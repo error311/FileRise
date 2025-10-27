@@ -1,5 +1,49 @@
 # Changelog
 
+## Changes 10/27/2025 (v1.6.9)
+
+release(v1.6.9): feat(core) localize assets, harden headers, and speed up load
+
+- index.html: drop all CDNs in favor of local /vendor assets
+  - add versioned cache-busting query (?v=…) on CSS/JS
+  - wire version.js for APP_VERSION and numeric cache key
+- public/vendor/: add pinned copies of:
+  - bootstrap 4.5.2, codemirror 5.65.5 (+ themes/modes), dompurify 2.4.0,
+    fuse.js 6.6.2, resumable.js 1.1.0
+- fonts: add self-hosted Material Icons + Roboto (latin + latin-ext) with
+  vendor CSS (material-icons.css, roboto.css)
+
+- fileEditor.js: load CodeMirror modes from local vendor with ?v=APP_VERSION_NUM,
+  keep timeout/plain-text fallback, no SRI (same-origin)
+- dragAndDrop.js: nudge zonesToggle 65px left to sit tighter to the logo
+
+- styles.css: prune/organize rules and add small utility classes; move 3P
+  font CSS to /css/vendor/
+
+- .htaccess: security + performance overhaul
+  - Content-Security-Policy: default-src 'self'; img-src include data: and blob:
+  - version-aware caching: HTML/version.js = no-cache; assets with ?v= = 1y immutable
+  - correct MIME for fonts/SVG; enable Brotli/Gzip (if available)
+  - X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS, Permissions-Policy
+  - disable TRACE; deny dotfiles; prevent directory listing
+
+- .gitattributes: mark vendor/minified as linguist-vendored, treat assets as
+  binary in diffs, exclude CI/resources from source archives
+
+- docs/licensing:
+  - add licenses/ and THIRD_PARTY.md with upstream licenses/attribution
+  - README: add “License & Credits” section with components and licenses
+
+- CI: (sync-changelog) stamp asset cache-busters to the numeric release
+  (e.g. ?v=1.6.9) and write window.APP_VERSION in version.js before Docker build
+
+perf: site loads significantly faster with local assets + compression + long-lived caching
+security: CSP, strict headers, and same-origin assets reduce XSS/SRI/CORS risk
+
+Refs: #performance #security
+
+---
+
 ## Changes 10/25/2025 (v1.6.8)
 
 release(v1.6.8): fix(ui) prevent Extract/Create flash on refresh; remember last folder

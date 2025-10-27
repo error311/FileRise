@@ -1,81 +1,76 @@
-# -----------------------------
-# 1) Prevent directory listings
-# -----------------------------
+# --------------------------------
+# Base: safe in most environments
+# --------------------------------
 Options -Indexes
-
-# -----------------------------
-# Default index files
-# -----------------------------
 DirectoryIndex index.html
 
-# -----------------------------
-# Deny access to hidden files
-# -----------------------------
-<FilesMatch "^\.">
-  Require all denied
-</FilesMatch>
+<IfModule mod_authz_core.c>
+  <FilesMatch "^\.">
+    Require all denied
+  </FilesMatch>
+</IfModule>
 
-# -----------------------------
-# Enforce HTTPS (optional)
-# -----------------------------
 RewriteEngine On
 #RewriteCond %{HTTPS} off
 #RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-<IfModule mod_headers.c>
-    # Allow requests from a specific origin
-    #Header set Access-Control-Allow-Origin "https://demo.filerise.net"
-    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
-    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, X-CSRF-Token"
-    Header set Access-Control-Allow-Credentials "true"
+# MIME types for fonts/SVG
+<IfModule mod_mime.c>
+  AddType font/woff2 .woff2
+  AddType font/woff  .woff
+  AddType image/svg+xml .svg
 </IfModule>
 
+# Security headers
 <IfModule mod_headers.c>
-  # Prevent clickjacking
   Header always set X-Frame-Options "SAMEORIGIN"
-  # Block XSS
   Header always set X-XSS-Protection "1; mode=block"
-  # No MIME sniffing
   Header always set X-Content-Type-Options "nosniff"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  Header always set X-Download-Options "noopen"
+  Header always set Expect-CT "max-age=86400, enforce"
+  Header set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 </IfModule>
 
+# Caching
+SetEnvIfNoCase QUERY_STRING "(^|&)v=" has_version_param=1
 <IfModule mod_headers.c>
-  # HTML: always revalidate
-  <FilesMatch "\.(html|htm)$">
+  <FilesMatch "\.(html?|php)$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
   </FilesMatch>
-  # JS/CSS: short‑term cache, revalidate regularly
-  <FilesMatch "\.(js|css)$">
-    Header set Cache-Control "public, max-age=3600, must-revalidate"
-  </FilesMatch>
-  # version.js should always revalidate (it changes on releases)
+
   <FilesMatch "^js/version\.js$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
   </FilesMatch>
+
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "public, max-age=3600, must-revalidate" env=!has_version_param
+  </FilesMatch>
+
+  <FilesMatch "\.(png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
+    Header set Cache-Control "public, max-age=604800" env=!has_version_param
+  </FilesMatch>
+
+  <FilesMatch "\.(js|css|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
+    Header set Cache-Control "public, max-age=31536000, immutable" env=has_version_param
+  </FilesMatch>
 </IfModule>
 
-# -----------------------------
-# Additional Security Headers
-# -----------------------------
-<IfModule mod_headers.c>
-    # Enforce HTTPS for a year with subdomains and preload option.
-    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-    # Set a Referrer Policy.
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    # Permissions Policy: disable features you don't need.
-    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
-    # IE-specific header to prevent downloads from opening in IE.
-    Header always set X-Download-Options "noopen"
-    # Expect-CT header for Certificate Transparency (optional).
-    Header always set Expect-CT "max-age=86400, enforce"
+# Compression (only if module exists)
+<IfModule mod_brotli.c>
+  BrotliCompressionQuality 5
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/css application/javascript application/json image/svg+xml
+</IfModule>
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
 </IfModule>
 
-# -----------------------------
-# Disable TRACE method
-# -----------------------------
+# Disable TRACE
 RewriteCond %{REQUEST_METHOD} ^TRACE
 RewriteRule .* - [F]
