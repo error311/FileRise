@@ -551,6 +551,10 @@ function ensureZonesToggle() {
       btn.style.color = '#e0e0e0';
     }
 
+    btn.addEventListener('click', () => {
+      setZonesCollapsed(!isZonesCollapsed());
+    });
+
     // Insert right after the logo if present, else append to host
     const afterLogo = host.querySelector('.header-logo');
     if (afterLogo && afterLogo.parentNode) {

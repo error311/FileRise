@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 10/28/2025 (v1.6.11)
+
+release(v1.6.11) fix(ui/dragAndDrop) restore floating zones toggle click action
+
+Re-add the click handler to toggle `zonesCollapsed` so the header
+“sidebarToggleFloating” button actually expands/collapses the zones
+again. This regressed in v1.6.10 during auth-gating refactor.
+
+Refs: #regression #ux
+
+chore(codeql): move config to repo root for default setup
+
+- Relocate .github/codeql/codeql-config.yml to codeql-config.yml so GitHub default code scanning picks it up
+- Keep paths: public/js, api
+- Keep ignores: public/vendor/**, public/css/vendor/**, public/fonts/**, public/**/*.min.{js,css}, public/**/*.map
+
+---
+
 ## Changes 10/28/2025 (v1.6.10)
 
 release(v1.6.10): self-host ReDoc, gate sidebar toggle on auth, and enrich release workflow
