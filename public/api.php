@@ -21,10 +21,10 @@ if (isset($_GET['spec'])) {
   <title>FileRise API Docs</title>
 
   <!-- Local ReDoc bundle -->
-  <script defer src="/vendor/redoc/redoc.standalone.js?v=1.6.10"></script>
+  <script defer src="/vendor/redoc/redoc.standalone.js?v=1.6.11"></script>
 
   <!-- Your init (also local) -->
-  <script defer src="/js/redoc-init.js?v=1.6.10"></script>
+  <script defer src="/js/redoc-init.js?v=1.6.11"></script>
 </head>
 <body>
   <redoc spec-url="/api.php?spec=1"></redoc>
