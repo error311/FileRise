@@ -1,153 +1,159 @@
 ---
-  name: Release on version.js update
-  
-  on:
-    push:
-      branches:
-        - master
-      paths:
-        - public/js/version.js
-    workflow_run:
-      workflows: "Bump version and sync Changelog to Docker Repo"
-      types: completed
-  
-  permissions:
-    contents: write
-  
-  jobs:
-    release:
-      runs-on: ubuntu-latest
-      concurrency:
-        group: release-${{ github.ref }}-${{ github.sha }}
-        cancel-in-progress: false
-  
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
-  
-        - name: Read version from version.js
-          id: ver
-          shell: bash
-          run: |
-            set -euo pipefail
-            VER=$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")
-            if [[ -z "$VER" ]]; then
-              echo "Could not parse APP_VERSION from version.js" >&2
-              exit 1
+name: Release on version.js update
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - public/js/version.js
+  workflow_run:
+    workflows: ["Bump version and sync Changelog to Docker Repo"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-${{ github.ref }}-${{ github.sha }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tags available
+        run: |
+          git fetch --tags --force --prune --quiet
+
+      - name: Read version from version.js
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER=$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")
+          if [[ -z "$VER" ]]; then
+            echo "Could not parse APP_VERSION from version.js" >&2
+            exit 1
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Parsed version: $VER"
+
+      - name: Skip if tag already exists
+        id: tagcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/${{ steps.ver.outputs.version }}" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ steps.ver.outputs.version }} already exists. Skipping release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build zip artifact
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="FileRise-${{ steps.ver.outputs.version }}.zip"
+          zip -r "$ZIP" . \
+            -x "./.git/*" "./.github/*" \
+               "./resources/*" "./resources/**" \
+               "./.dockerignore" "./.gitattributes" "./.gitignore" \
+               "$ZIP" "${ZIP}.sha256" >/dev/null
+
+      - name: Compute SHA-256 checksum
+        if: steps.tagcheck.outputs.exists == 'false'
+        id: sum
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="FileRise-${{ steps.ver.outputs.version }}.zip"
+          SHA=$(shasum -a 256 "$ZIP" | awk '{print $1}')
+          echo "$SHA  $ZIP" > "${ZIP}.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Computed SHA-256: $SHA"
+
+      - name: Extract notes from CHANGELOG (optional)
+        if: steps.tagcheck.outputs.exists == 'false'
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES_PATH=""
+          if [[ -f CHANGELOG.md ]]; then
+            awk '
+              BEGIN{found=0}
+              /^## / && !found {found=1}
+              found && /^---$/ {exit}
+              found {print}
+            ' CHANGELOG.md > CHANGELOG_SNIPPET.md || true
+            sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG_SNIPPET.md || true
+            if [[ -s CHANGELOG_SNIPPET.md ]]; then
+              NOTES_PATH="CHANGELOG_SNIPPET.md"
             fi
-            echo "version=$VER" >> "$GITHUB_OUTPUT"
-            echo "Parsed version: $VER"
-  
-        - name: Skip if tag already exists
-          id: tagcheck
-          shell: bash
-          run: |
-            set -euo pipefail
-            git fetch --tags --quiet
-            if git rev-parse -q --verify "refs/tags/${{ steps.ver.outputs.version }}" >/dev/null; then
-              echo "exists=true" >> "$GITHUB_OUTPUT"
-              echo "Tag ${{ steps.ver.outputs.version }} already exists. Skipping release."
-            else
-              echo "exists=false" >> "$GITHUB_OUTPUT"
-            fi
-  
-        # Build the artifact first so we can checksum it
-        - name: Build zip artifact
-          if: steps.tagcheck.outputs.exists == 'false'
-          shell: bash
-          run: |
-            set -euo pipefail
-            zip -r "FileRise-${{ steps.ver.outputs.version }}.zip" public/ README.md LICENSE >/dev/null || true
-  
-        - name: Compute SHA-256 checksum
-          if: steps.tagcheck.outputs.exists == 'false'
-          id: sum
-          shell: bash
-          run: |
-            set -euo pipefail
-            ZIP="FileRise-${{ steps.ver.outputs.version }}.zip"
-            SHA=$(shasum -a 256 "$ZIP" | awk '{print $1}')
-            echo "$SHA  $ZIP" > "${ZIP}.sha256"
-            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-            echo "Computed SHA-256: $SHA"
-  
-        - name: Extract notes from CHANGELOG (optional)
-          if: steps.tagcheck.outputs.exists == 'false'
-          id: notes
-          shell: bash
-          run: |
-            set -euo pipefail
-            NOTES_PATH=""
-            if [[ -f CHANGELOG.md ]]; then
-              awk '
-                BEGIN{found=0}
-                /^## / && !found {found=1}
-                found && /^---$/ {exit}
-                found {print}
-              ' CHANGELOG.md > CHANGELOG_SNIPPET.md || true
-              sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG_SNIPPET.md || true
-              if [[ -s CHANGELOG_SNIPPET.md ]]; then
-                NOTES_PATH="CHANGELOG_SNIPPET.md"
-              fi
-            fi
-            echo "path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
-  
-        - name: Compute previous tag (for Full Changelog link)
-          if: steps.tagcheck.outputs.exists == 'false'
-          id: prev
-          shell: bash
-          run: |
-            set -euo pipefail
-            git fetch --tags --quiet
-            PREV=$(git tag --list "v*" --sort=-v:refname | sed -n '2p' || true)
-            if [[ -z "$PREV" ]]; then
-              PREV=$(git rev-list --max-parents=0 HEAD | tail -n1)
-            fi
-            echo "prev=$PREV" >> "$GITHUB_OUTPUT"
-            echo "Previous tag or baseline: $PREV"
-  
-        - name: Build release body (snippet + full changelog + checksum)
-          if: steps.tagcheck.outputs.exists == 'false'
-          shell: bash
-          run: |
-            set -euo pipefail
-            VER="${{ steps.ver.outputs.version }}"
-            PREV="${{ steps.prev.outputs.prev }}"
-            REPO="${GITHUB_REPOSITORY}"
-            COMPARE_URL="https://github.com/${REPO}/compare/${PREV}...${VER}"
-            ZIP="FileRise-${VER}.zip"
-            SHA="${{ steps.sum.outputs.sha }}"
-  
-            {
-              echo "## ${VER}"
+          fi
+          echo "path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Compute previous tag (for Full Changelog link)
+        if: steps.tagcheck.outputs.exists == 'false'
+        id: prev
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ steps.ver.outputs.version }}"
+          PREV=$(git tag --list "v*" --sort=-v:refname | grep -v -F "$VER" | head -n1 || true)
+          if [[ -z "$PREV" ]]; then
+            PREV=$(git rev-list --max-parents=0 HEAD | tail -n1)
+          fi
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          echo "Previous tag or baseline: $PREV"
+
+      - name: Build release body (snippet + full changelog + checksum)
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ steps.ver.outputs.version }}"
+          PREV="${{ steps.prev.outputs.prev }}"
+          REPO="${GITHUB_REPOSITORY}"
+          COMPARE_URL="https://github.com/${REPO}/compare/${PREV}...${VER}"
+          ZIP="FileRise-${VER}.zip"
+          SHA="${{ steps.sum.outputs.sha }}"
+
+          {
+            echo "## ${VER}"
+            echo
+            if [[ -s CHANGELOG_SNIPPET.md ]]; then
+              cat CHANGELOG_SNIPPET.md
               echo
-              if [[ -s CHANGELOG_SNIPPET.md ]]; then
-                cat CHANGELOG_SNIPPET.md
-                echo
-              fi
-              echo "### Full Changelog"
-              echo "[${PREV} → ${VER}](${COMPARE_URL})"
-              echo
-              echo "### SHA-256 (zip)"
-              echo '```'
-              echo "${SHA}  ${ZIP}"
-              echo '```'
-            } > RELEASE_BODY.md
-  
-            echo "Release body:"
-            sed -n '1,200p' RELEASE_BODY.md
-  
-        - name: Create GitHub Release
-          if: steps.tagcheck.outputs.exists == 'false'
-          uses: softprops/action-gh-release@v2
-          with:
-            tag_name: ${{ steps.ver.outputs.version }}
-            target_commitish: ${{ github.sha }}
-            name: ${{ steps.ver.outputs.version }}
-            body_path: RELEASE_BODY.md
-            generate_release_notes: false
-            files: |
-              FileRise-${{ steps.ver.outputs.version }}.zip
-              FileRise-${{ steps.ver.outputs.version }}.zip.sha256
+            fi
+            echo "### Full Changelog"
+            echo "[${PREV} → ${VER}](${COMPARE_URL})"
+            echo
+            echo "### SHA-256 (zip)"
+            echo '```'
+            echo "${SHA}  ${ZIP}"
+            echo '```'
+          } > RELEASE_BODY.md
+
+          echo "Release body:"
+          sed -n '1,200p' RELEASE_BODY.md
+
+      - name: Create GitHub Release
+        if: steps.tagcheck.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.ver.outputs.version }}
+          body_path: RELEASE_BODY.md
+          generate_release_notes: false
+          files: |
+            FileRise-${{ steps.ver.outputs.version }}.zip
+            FileRise-${{ steps.ver.outputs.version }}.zip.sha256
