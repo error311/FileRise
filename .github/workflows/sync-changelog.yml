@@ -52,7 +52,7 @@ jobs:
           echo "Stamping ?v=${QVER} and {{APP_VER}}=${VER}"
 
           # 1) Only stamp ?v= in HTML/CSS (avoid JS concatenation issues)
-          mapfile -t html_css < <(git ls-files -- 'public/*.html' 'public/**/*.html' 'public/*.css' 'public/**/*.css')
+          mapfile -t html_css < <(git ls-files -- 'public/*.html' 'public/**/*.html' 'public/*.php' 'public/**/*.css')
           for f in "${html_css[@]}"; do
             sed -E -i "s/(\?v=)[^\"'&<>\s]*/\1${QVER}/g" "$f"
             sed -E -i "s/\{\{APP_VER\}\}/${VER}/g" "$f"

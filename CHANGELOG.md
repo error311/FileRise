@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 10/28/2025 (v1.6.10)
+
+release(v1.6.10): self-host ReDoc, gate sidebar toggle on auth, and enrich release workflow
+
+- Vendor ReDoc and add MIT license file under public/vendor/redoc/; switch api.php to local bundle to satisfy CSP (script-src 'self').
+- main.js: add/remove body.authenticated on login/logout so UI can reflect auth state.
+- dragAndDrop.js: only render sidebarToggleFloating when authenticated; stop event bubbling, keep dark-mode styles.
+- sync-changelog.yml: also stamp ?v= in PHP templates (public/**/*.php).
+- release-on-version.yml: build zip first, compute SHA-256, assemble release body with latest CHANGELOG snippet, “Full Changelog” compare link, and attach .sha256 alongside the zip.
+- THIRD_PARTY.md: document ReDoc vendoring and rationale.
+
+Refs: #security #csp #release
+
+---
+
 ## Changes 10/27/2025 (v1.6.9)
 
 release(v1.6.9): feat(core) localize assets, harden headers, and speed up load

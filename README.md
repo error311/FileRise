@@ -139,7 +139,7 @@ docker run -d \
   -e DATE_TIME_FORMAT="m/d/y  h:iA" \
   -e TOTAL_UPLOAD_SIZE="5G" \
   -e SECURE="false" \
-  -e PERSISTENT_TOKENS_KEY="please_change_this_@@" \
+  -e PERSISTENT_TOKENS_KEY="default_please_change_this_key" \
   -e PUID="1000" \
   -e PGID="1000" \
   -e CHOWN_ON_START="true" \
@@ -186,7 +186,7 @@ services:
       DATE_TIME_FORMAT: "m/d/y  h:iA"
       TOTAL_UPLOAD_SIZE: "10G"
       SECURE: "false"
-      PERSISTENT_TOKENS_KEY: "please_change_this_@@"
+      PERSISTENT_TOKENS_KEY: "default_please_change_this_key"
       # Ownership & indexing
       PUID: "1000"              # Unraid users often use 99
       PGID: "1000"              # Unraid users often use 100

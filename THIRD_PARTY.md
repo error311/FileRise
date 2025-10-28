@@ -37,6 +37,10 @@ If you believe any attribution is missing or incorrect, please open an issue.
 - **Resumable.js 1.1.0** — MIT License  
   **Files:** `public/vendor/resumable/1.1.0/resumable.min.js`
 
+- **ReDoc (redoc.standalone.js)** — MIT License  
+  **Files:** `public/vendor/redoc/redoc.standalone.js`  
+  **Notes:** Self-hosted to comply with `script-src 'self'` CSP.
+
 > MIT-licensed code: see `licenses/mit.txt`.  
 > Apache-2.0–licensed code: see `licenses/apache-2.0.txt`.
 

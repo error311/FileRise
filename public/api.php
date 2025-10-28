@@ -19,13 +19,15 @@ if (isset($_GET['spec'])) {
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>FileRise API Docs</title>
-  <script defer src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"
-          integrity="sha384-70P5pmIdaQdVbxvjhrcTDv1uKcKqalZ3OHi7S2J+uzDl0PW8dO6L+pHOpm9EEjGJ"
-          crossorigin="anonymous"></script>
-  <script defer src="/js/redoc-init.js"></script>
+
+  <!-- Local ReDoc bundle -->
+  <script defer src="/vendor/redoc/redoc.standalone.js?v=dev"></script>
+
+  <!-- Your init (also local) -->
+  <script defer src="/js/redoc-init.js?v=dev"></script>
 </head>
 <body>
-  <redoc spec-url="api.php?spec=1"></redoc>
+  <redoc spec-url="/api.php?spec=1"></redoc>
   <div id="redoc-container"></div>
 </body>
 </html>

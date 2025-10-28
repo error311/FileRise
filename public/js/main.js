@@ -204,8 +204,11 @@ export function triggerLogout() {
     credentials: "include",
     headers: { "X-CSRF-Token": getCsrfToken() }
   })
-    .then(() => window.location.reload(true))
-    .catch(() => { });
+  .then(() => {
+    document.body.classList.remove('authenticated');
+    window.location.reload(true);
+  })
+  .catch(() => {});
 }
 
 // Expose functions for inline handlers.
@@ -239,9 +242,12 @@ document.addEventListener("DOMContentLoaded", function () {
       // 3) If authenticated, start app
       checkAuthentication().then(authenticated => {
         if (authenticated) {
+          document.body.classList.add('authenticated');
           const overlay = document.getElementById('loadingOverlay');
           if (overlay) overlay.remove();
           initializeApp();
+        } else {
+          document.body.classList.remove('authenticated');
         }
       });
 

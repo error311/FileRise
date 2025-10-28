@@ -490,9 +490,16 @@ function mountHeaderToggle(btn) {
 }
 
 function ensureZonesToggle() {
+  const isAuthed = document.body.classList.contains('authenticated');
   let btn = document.getElementById('sidebarToggleFloating');
   const host = getHeaderHost();
   if (!host) return;
+
+  // If not authenticated, make sure the button is gone and bail.
+  if (!isAuthed) {
+    if (btn) btn.remove();
+    return;
+  }
 
   // ensure the host is a positioning context
   const hostStyle = getComputedStyle(host);
@@ -502,24 +509,25 @@ function ensureZonesToggle() {
 
   if (!btn) {
     btn = document.createElement('button');
-    
     btn.id = 'sidebarToggleFloating';
-    btn.type = 'button'; // not a submit
-btn.addEventListener('click', (e) => {
-  e.preventDefault();
-  e.stopPropagation();           // don't bubble into the <a href="index.html">
-  setSidebarCollapsed(!isSidebarCollapsed());
-  updateSidebarToggleUI();       // refresh icon/title
-});
-['mousedown','mouseup','pointerdown','pointerup'].forEach(evt =>
-  btn.addEventListener(evt, (e) => e.stopPropagation())
-);
+    btn.type = 'button';
     btn.setAttribute('aria-label', 'Toggle panels');
 
+    // Prevent accidental navigations / bubbling
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSidebarCollapsed(!isSidebarCollapsed());
+      updateSidebarToggleUI();
+    });
+    ['mousedown','mouseup','pointerdown','pointerup'].forEach(evt =>
+      btn.addEventListener(evt, (e) => e.stopPropagation())
+    );
+
     Object.assign(btn.style, {
-      position: 'absolute',   // <-- key change (was fixed)
-      top: '8px',             // adjust to line up with header content
-      left: '65px',          // place to the right of your logo; tweak as needed
+      position: 'absolute',
+      top: '8px',
+      left: '65px',
       zIndex: '1000',
       width: '38px',
       height: '38px',
@@ -535,7 +543,7 @@ btn.addEventListener('click', (e) => {
       lineHeight: '0'
     });
 
-    // dark-mode polish (optional)
+    // Dark mode polish
     if (document.body.classList.contains('dark-mode')) {
       btn.style.background = '#2c2c2c';
       btn.style.border = '1px solid #555';
@@ -543,17 +551,14 @@ btn.addEventListener('click', (e) => {
       btn.style.color = '#e0e0e0';
     }
 
-    btn.addEventListener('click', () => {
-      setZonesCollapsed(!isZonesCollapsed());
-    });
-
-    // Insert right after the logo if present, else just append to host
+    // Insert right after the logo if present, else append to host
     const afterLogo = host.querySelector('.header-logo');
     if (afterLogo && afterLogo.parentNode) {
       afterLogo.parentNode.insertBefore(btn, afterLogo.nextSibling);
     } else {
       host.appendChild(btn);
     }
+
     themeToggleButton(btn);
   }
 
