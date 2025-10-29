@@ -89,8 +89,16 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$(pwd)/staging"
-          if grep -R -n "{{APP_QVER}}\|{{APP_VER}}" "$ROOT" --include='*.html' --include='*.php' --include='*.css' --include='*.js' 2>/dev/null; then
-            echo "ERROR: Found unreplaced placeholders above in staging."
+          if grep -R -n -E "{{APP_QVER}}|{{APP_VER}}" "$ROOT" \
+              --include='*.html' --include='*.php' --include='*.css' --include='*.js' 2>/dev/null; then
+            echo "---- DEBUG (show 10 hits with context) ----"
+            grep -R -n -E "{{APP_QVER}}|{{APP_VER}}" "$ROOT" \
+              --include='*.html' --include='*.php' --include='*.css' --include='*.js' \
+              | head -n 10 | while IFS=: read -r file line _; do
+                  echo ">>> $file:$line"
+                  nl -ba "$file" | sed -n "$((line-3)),$((line+3))p" || true
+                  echo "----------------------------------------"
+                done
             exit 1
           fi
           echo "OK: No unreplaced placeholders in staging."

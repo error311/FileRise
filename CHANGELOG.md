@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 10/29/2025 (v1.7.0 & v1.7.1)
+## Changes 10/29/2025 (v1.7.0 & v1.7.1 & v1.7.2)
 
 release(v1.7.0): asset cache-busting pipeline, public siteConfig cache, JS core split, and caching/security polish
 
@@ -69,6 +69,18 @@ release(v1.7.0): asset cache-busting pipeline, public siteConfig cache, JS core 
 - `release-on-version.yml`
   - normalize line endings (strip CRLF)
   - stamp-assets.sh don’t rely on the exec; invoke via bash
+
+release(v1.7.2): harden asset stamping & CI verification
+
+### build(stamper)
+
+- Rewrite scripts/stamp-assets.sh to be repo-agnostic and macOS/Windows friendly:
+  - Drop reliance on git ls-files/mapfile; use find + null-delimited loops
+  - Normalize CRLF to LF for all web assets before stamping
+  - Stamp ?v=<APP_QVER> in HTML/CSS/PHP and {{APP_VER}} everywhere
+  - Normalize any ".mjs|.js?v=..." occurrences inside JS (ESM imports/strings)
+  - Force-write public/js/version.js from VER (source of truth in stamped output)
+  - Print touched counts and fail fast if any {{APP_QVER}}|{{APP_VER}} remain
 
 ---
 

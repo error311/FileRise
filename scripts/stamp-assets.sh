@@ -1,37 +1,54 @@
 #!/usr/bin/env bash
-# usage: scripts/stamp-assets.sh v1.6.12 /path/to/target/dir
+# usage: scripts/stamp-assets.sh vX.Y.Z /path/to/target/dir
 set -euo pipefail
+
 VER="${1:?usage: stamp-assets.sh vX.Y.Z target_dir}"
 QVER="${VER#v}"
 TARGET="${2:-.}"
 
+echo "Stamping assets in: $TARGET"
+echo "VER=${VER}  QVER=${QVER}"
+
 cd "$TARGET"
 
-# Build file lists. Prefer git ls-files if we're in a repo, else use find.
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  mapfile -t HTML_CSS < <(git ls-files -- 'public/*.html' 'public/**/*.html' 'public/*.php' 'public/**/*.css' || true)
-  mapfile -t JSFILES  < <(git ls-files -- 'public/*.js' 'public/**/*.js' 'js/*.js' 'js/**/*.js' || true)
-else
-  mapfile -t HTML_CSS < <(find public -type f \( -name '*.html' -o -name '*.php' -o -name '*.css' \) -print 2>/dev/null || true)
-  mapfile -t JSFILES  < <(find public js -type f -name '*.js' -print 2>/dev/null || true)
-fi
+# Normalize CRLF to LF (if any files were edited on Windows)
+# We only touch web assets.
+find public \( -name '*.html' -o -name '*.php' -o -name '*.css' -o -name '*.js' \) -type f -print0 \
+  | xargs -0 -r sed -i 's/\r$//'
 
-# HTML/CSS/PHP: stamp ?v=... and {{APP_VER}}
-for f in "${HTML_CSS[@]}"; do
+# --- HTML/CSS/PHP: stamp ?v=... and {{APP_VER}} ---
+# (?v=...) -> ?v=<QVER>
+HTML_CSS_COUNT=0
+while IFS= read -r -d '' f; do
   sed -E -i "s/(\?v=)[^\"'&<>\s]*/\1${QVER}/g" "$f"
   sed -E -i "s/\{\{APP_VER\}\}/${VER}/g" "$f"
-done
+  HTML_CSS_COUNT=$((HTML_CSS_COUNT+1))
+done < <(find public -type f \( -name '*.html' -o -name '*.php' -o -name '*.css' \) -print0)
 
-# JS: stamp placeholders and normalize any pre-existing ?v=...
-for f in "${JSFILES[@]}"; do
+# --- JS: stamp placeholders and normalize any pre-existing ?v=... ---
+JS_COUNT=0
+while IFS= read -r -d '' f; do
+  # Replace placeholders
   sed -E -i "s/\{\{APP_VER\}\}/${VER}/g" "$f"
   sed -E -i "s/\{\{APP_QVER\}\}/${QVER}/g" "$f"
+  # Normalize any "?v=..." that appear in ESM imports or strings
+  # This keeps any ".js" or ".mjs" then forces ?v=<QVER>
   perl -0777 -i -pe "s@(\.m?js)\?v=[^\"')]+@\1?v=${QVER}@g" "$f"
-done
+  JS_COUNT=$((JS_COUNT+1))
+done < <(find public -type f -name '*.js' -print0)
 
-# Optional: version.js fallback update
+# Force-write version.js (source of truth in stamped output)
 if [[ -f public/js/version.js ]]; then
-  sed -E -i "s/(APP_VERSION\s*=\s*['\"])v[^'\"]+(['\"])/\1${VER}\2/" public/js/version.js
+  printf "window.APP_VERSION = '%s';\n" "$VER" > public/js/version.js
 fi
 
-echo "Stamped assets in ${TARGET} to ${VER} (${QVER})"
+echo "Touched files: HTML/CSS/PHP=${HTML_CSS_COUNT}, JS=${JS_COUNT}"
+
+# Final self-check: fail if anything is left
+if grep -R -n -E "{{APP_QVER}}|{{APP_VER}}" public \
+   --include='*.html' --include='*.php' --include='*.css' --include='*.js' 2>/dev/null; then
+  echo "ERROR: Placeholders remain after stamping." >&2
+  exit 2
+fi
+
+echo "✅ Stamped to ${VER} (${QVER})"
