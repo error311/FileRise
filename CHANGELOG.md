@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 10/29/2025 (v1.7.0)
+## Changes 10/29/2025 (v1.7.0 & v1.7.1)
 
 release(v1.7.0): asset cache-busting pipeline, public siteConfig cache, JS core split, and caching/security polish
 
@@ -63,6 +63,12 @@ release(v1.7.0): asset cache-busting pipeline, public siteConfig cache, JS core 
 - Ensure `USERS_DIR` is writable by web server for `siteConfig.json`.
 - Proxies/edge caches: the new `?v=` scheme enables long-lived immutable caching; purge is automatic on version bump.
 - If you previously read admin config directly on the client, it now reads `/api/siteConfig.php`.
+
+### Additional changes/fixes for release
+
+- `release-on-version.yml`
+  - normalize line endings (strip CRLF)
+  - stamp-assets.sh don’t rely on the exec; invoke via bash
 
 ---
 

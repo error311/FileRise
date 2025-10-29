@@ -55,6 +55,15 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Ensure the stamper is executable and has LF endings (helps if edited on Windows)
+      - name: Prep stamper script
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/\r$//' scripts/stamp-assets.sh || true
+          chmod +x scripts/stamp-assets.sh
+
       - name: Build zip artifact (stamped)
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
@@ -71,8 +80,8 @@ jobs:
             --exclude '.dockerignore' --exclude '.gitattributes' --exclude '.gitignore' \
             ./ staging/
 
-          # Stamp IN THE STAGING COPY
-          ./scripts/stamp-assets.sh "${VER}" "$(pwd)/staging"
+          # Stamp IN THE STAGING COPY (invoke via bash to avoid exec-bit issues)
+          bash ./scripts/stamp-assets.sh "${VER}" "$(pwd)/staging"
 
       - name: Verify placeholders are gone (staging)
         if: steps.tagcheck.outputs.exists == 'false'
