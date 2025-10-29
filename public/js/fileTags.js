@@ -3,9 +3,9 @@
 // adding tags to files (with a global tag store for reuse),
 // updating the file row display with tag badges,
 // filtering the file list by tag, and persisting tag data.
-import { escapeHTML } from './domUtils.js';
-import { t } from './i18n.js';
-import { renderFileTable, renderGalleryView } from './fileListView.js';
+import { escapeHTML } from './domUtils.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
+import { renderFileTable, renderGalleryView } from './fileListView.js?v={{APP_QVER}}';
 
 export function openTagModal(file) {
   // Create the modal element.

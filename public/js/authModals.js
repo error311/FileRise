@@ -1,7 +1,7 @@
-import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
-import { sendRequest } from './networkUtils.js';
-import { t, applyTranslations, setLocale } from './i18n.js';
-import { loadAdminConfigFunc, updateAuthenticatedUI } from './auth.js';
+import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
+import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
+import { t, applyTranslations, setLocale } from './i18n.js?v={{APP_QVER}}';
+import { loadAdminConfigFunc, updateAuthenticatedUI } from './auth.js?v={{APP_QVER}}';
 
 let lastLoginData = null;
 export function setLastLoginData(data) {

@@ -489,17 +489,11 @@ function mountHeaderToggle(btn) {
   });
 }
 
+
 function ensureZonesToggle() {
-  const isAuthed = document.body.classList.contains('authenticated');
   let btn = document.getElementById('sidebarToggleFloating');
   const host = getHeaderHost();
   if (!host) return;
-
-  // If not authenticated, make sure the button is gone and bail.
-  if (!isAuthed) {
-    if (btn) btn.remove();
-    return;
-  }
 
   // ensure the host is a positioning context
   const hostStyle = getComputedStyle(host);
@@ -542,6 +536,7 @@ function ensureZonesToggle() {
       padding: '0',
       lineHeight: '0'
     });
+    btn.classList.add('zones-toggle');
 
     // Dark mode polish
     if (document.body.classList.contains('dark-mode')) {

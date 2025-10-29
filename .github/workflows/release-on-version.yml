@@ -55,17 +55,45 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build zip artifact
+      - name: Build zip artifact (stamped)
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="FileRise-${{ steps.ver.outputs.version }}.zip"
-          zip -r "$ZIP" . \
-            -x "./.git/*" "./.github/*" \
-               "./resources/*" "./resources/**" \
-               "./.dockerignore" "./.gitattributes" "./.gitignore" \
-               "$ZIP" "${ZIP}.sha256" >/dev/null
+          VER="${{ steps.ver.outputs.version }}"  # e.g. v1.6.12
+          ZIP="FileRise-${VER}.zip"
+
+          # Clean staging copy (exclude dotfiles you don’t want)
+          rm -rf staging
+          rsync -a \
+            --exclude '.git' --exclude '.github' \
+            --exclude 'resources' \
+            --exclude '.dockerignore' --exclude '.gitattributes' --exclude '.gitignore' \
+            ./ staging/
+
+          # Stamp IN THE STAGING COPY
+          ./scripts/stamp-assets.sh "${VER}" "$(pwd)/staging"
+
+      - name: Verify placeholders are gone (staging)
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$(pwd)/staging"
+          if grep -R -n "{{APP_QVER}}\|{{APP_VER}}" "$ROOT" --include='*.html' --include='*.php' --include='*.css' --include='*.js' 2>/dev/null; then
+            echo "ERROR: Found unreplaced placeholders above in staging."
+            exit 1
+          fi
+          echo "OK: No unreplaced placeholders in staging."
+
+      - name: Zip stamped staging
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ steps.ver.outputs.version }}"
+          ZIP="FileRise-${VER}.zip"
+          (cd staging && zip -r "../$ZIP" . >/dev/null)
 
       - name: Compute SHA-256 checksum
         if: steps.tagcheck.outputs.exists == 'false'
@@ -127,12 +155,12 @@ jobs:
           SHA="${{ steps.sum.outputs.sha }}"
 
           {
-            echo "## ${VER}"
             echo
             if [[ -s CHANGELOG_SNIPPET.md ]]; then
               cat CHANGELOG_SNIPPET.md
               echo
             fi
+            echo "## ${VER}"
             echo "### Full Changelog"
             echo "[${PREV} → ${VER}](${COMPARE_URL})"
             echo

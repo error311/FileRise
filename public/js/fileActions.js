@@ -1,8 +1,8 @@
 // fileActions.js
-import { showToast, attachEnterKeyListener } from './domUtils.js';
-import { loadFileList } from './fileListView.js';
-import { formatFolderName } from './fileListView.js';
-import { t } from './i18n.js';
+import { showToast, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { formatFolderName } from './fileListView.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 export function handleDeleteSelected(e) {
   e.preventDefault();

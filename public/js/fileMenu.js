@@ -1,11 +1,11 @@
 // fileMenu.js
-import { updateRowHighlight, showToast } from './domUtils.js';
-import { handleDeleteSelected, handleCopySelected, handleMoveSelected, handleDownloadZipSelected, handleExtractZipSelected, renameFile, openCreateFileModal } from './fileActions.js';
-import { previewFile } from './filePreview.js';
-import { editFile } from './fileEditor.js';
-import { canEditFile, fileData } from './fileListView.js';
-import { openTagModal, openMultiTagModal } from './fileTags.js';
-import { t } from './i18n.js';
+import { updateRowHighlight, showToast } from './domUtils.js?v={{APP_QVER}}';
+import { handleDeleteSelected, handleCopySelected, handleMoveSelected, handleDownloadZipSelected, handleExtractZipSelected, renameFile, openCreateFileModal } from './fileActions.js?v={{APP_QVER}}';
+import { previewFile } from './filePreview.js?v={{APP_QVER}}';
+import { editFile } from './fileEditor.js?v={{APP_QVER}}';
+import { canEditFile, fileData } from './fileListView.js?v={{APP_QVER}}';
+import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 export function showFileContextMenu(x, y, menuItems) {
   let menu = document.getElementById("fileContextMenu");

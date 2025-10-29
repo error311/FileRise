@@ -62,6 +62,51 @@ class AdminModel
         return (int)$val;
     }
 
+    public static function buildPublicSubset(array $config): array
+    {
+        return [
+            'header_title'        => $config['header_title'] ?? 'FileRise',
+            'loginOptions'        => [
+                'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
+                'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
+                'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
+                // do NOT include authBypass/authHeaderName here — admin-only
+            ],
+            'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
+            'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
+            'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
+            'oidc' => [
+                'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
+                'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
+                // never include clientId / clientSecret
+            ],
+        ];
+    }
+
+    /** Write USERS_DIR/siteConfig.json atomically (unencrypted). */
+    public static function writeSiteConfig(array $publicSubset): array
+    {
+        $dest = rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR . 'siteConfig.json';
+        $tmp  = $dest . '.tmp';
+
+        $json = json_encode($publicSubset, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            return ["error" => "Failed to encode siteConfig.json"];
+        }
+
+        if (file_put_contents($tmp, $json, LOCK_EX) === false) {
+            return ["error" => "Failed to write temp siteConfig.json"];
+        }
+
+        if (!@rename($tmp, $dest)) {
+            @unlink($tmp);
+            return ["error" => "Failed to move siteConfig.json into place"];
+        }
+
+        @chmod($dest, 0664); // readable in bind mounts
+        return ["success" => true];
+    }
+
     /**
      * Updates the admin configuration file.
      *
@@ -156,6 +201,14 @@ class AdminModel
         }
         // Best-effort normalize perms for host visibility (user rw, group rw)
         @chmod($configFile, 0664);
+
+        $public = self::buildPublicSubset($configUpdate);
+        $w = self::writeSiteConfig($public);
+        // Don’t fail the whole update if public cache write had a minor issue.
+        if (isset($w['error'])) {
+            // Log but keep success for admin write
+            error_log("AdminModel::writeSiteConfig warning: " . $w['error']);
+        }
 
         return ["success" => "Configuration updated successfully."];
     }
@@ -262,7 +315,7 @@ class AdminModel
             ],
             'loginOptions'          => [
                 'disableFormLogin' => false,
-                'disableBasicAuth' => false,
+                'disableBasicAuth' => true,
                 'disableOIDCLogin' => true
             ],
             'globalOtpauthUrl'      => "",

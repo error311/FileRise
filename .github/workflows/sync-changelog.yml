@@ -32,7 +32,7 @@ jobs:
             echo "No release(vX.Y.Z) tag in commit message; skipping bump."
           fi
 
-      - name: Update public/js/version.js
+      - name: Update public/js/version.js (source of truth)
         if: steps.ver.outputs.version != ''
         shell: bash
         run: |
@@ -42,43 +42,20 @@ jobs:
           window.APP_VERSION = '${{ steps.ver.outputs.version }}';
           EOF
 
-      - name: Stamp asset cache-busters (?v=...) in HTML/CSS and {{APP_VER}} everywhere
-        if: steps.ver.outputs.version != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          VER="${{ steps.ver.outputs.version }}"  # e.g. v1.6.9
-          QVER="${VER#v}"                         # e.g. 1.6.9
-          echo "Stamping ?v=${QVER} and {{APP_VER}}=${VER}"
+      # ✂️ REMOVED: repo stamping of HTML/CSS/JS
 
-          # 1) Only stamp ?v= in HTML/CSS (avoid JS concatenation issues)
-          mapfile -t html_css < <(git ls-files -- 'public/*.html' 'public/**/*.html' 'public/*.php' 'public/**/*.css')
-          for f in "${html_css[@]}"; do
-            sed -E -i "s/(\?v=)[^\"'&<>\s]*/\1${QVER}/g" "$f"
-            sed -E -i "s/\{\{APP_VER\}\}/${VER}/g" "$f"
-          done
-
-          # 2) For JS, only replace the {{APP_VER}} placeholder (do NOT touch ?v=)
-          mapfile -t jsfiles < <(git ls-files -- 'public/*.js' 'public/**/*.js')
-          for f in "${jsfiles[@]}"; do
-            sed -E -i "s/\{\{APP_VER\}\}/${VER}/g" "$f"
-          done
-
-          echo "Changed files:"
-          git status --porcelain | awk '{print $2}' | sed 's/^/  - /'
-
-      - name: Commit version bump + stamped assets
+      - name: Commit version.js only
         if: steps.ver.outputs.version != ''
         shell: bash
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/js/version.js public
+          git add public/js/version.js
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore(release): set APP_VERSION and stamp assets to ${{ steps.ver.outputs.version }} [skip ci]"
+            git commit -m "chore(release): set APP_VERSION to ${{ steps.ver.outputs.version }} [skip ci]"
             git push
           fi
 
@@ -110,6 +87,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: sync CHANGELOG.md and VERSION (${{ steps.ver.outputs.version }}) from FileRise"
+            git commit -m "chore: sync CHANGELOG.md + VERSION (${{ steps.ver.outputs.version }}) from FileRise"
             git push origin main
           fi

@@ -1,7 +1,7 @@
 // filePreview.js
-import { escapeHTML, showToast } from './domUtils.js';
-import { fileData } from './fileListView.js';
-import { t } from './i18n.js';
+import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
+import { fileData } from './fileListView.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 export function openShareModal(file, folder) {
   // Remove any existing modal

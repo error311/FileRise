@@ -11,14 +11,16 @@ DirectoryIndex index.html
 </IfModule>
 
 RewriteEngine On
+# If you want forced HTTPS behind a proxy, keep this off here and do it at the proxy
 #RewriteCond %{HTTPS} off
 #RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# MIME types for fonts/SVG
+# MIME types (fonts/SVG/ESM)
 <IfModule mod_mime.c>
   AddType font/woff2 .woff2
   AddType font/woff  .woff
   AddType image/svg+xml .svg
+  AddType application/javascript .mjs
 </IfModule>
 
 # Security headers
@@ -26,43 +28,53 @@ RewriteEngine On
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set X-XSS-Protection "1; mode=block"
   Header always set X-Content-Type-Options "nosniff"
-  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  # HSTS: only if HTTPS (prevents mixed local dev warnings)
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" "expr=%{HTTPS} == 'on'"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
   Header always set X-Download-Options "noopen"
   Header always set Expect-CT "max-age=86400, enforce"
+  # Nice extra hardening (same-origin resource sharing)
+  Header always set Cross-Origin-Resource-Policy "same-origin"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
+
+  # CSP (modules, workers, blobs already accounted for)
   Header set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 </IfModule>
 
 # Caching
 SetEnvIfNoCase QUERY_STRING "(^|&)v=" has_version_param=1
 <IfModule mod_headers.c>
+  # HTML/PHP: no cache (app shell)
   <FilesMatch "\.(html?|php)$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
   </FilesMatch>
 
+  # version.js is your source-of-truth; keep it non-cacheable so dev/CI flips show up
   <FilesMatch "^js/version\.js$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
   </FilesMatch>
 
-  <FilesMatch "\.(js|css)$">
-    Header set Cache-Control "public, max-age=3600, must-revalidate" env=!has_version_param
-  </FilesMatch>
+# Unversioned JS/CSS (dev): 1 hour
+<FilesMatch "\.(?:m?js|css)$">
+  Header set Cache-Control "public, max-age=3600, must-revalidate" env=!has_version_param
+</FilesMatch>
 
-  <FilesMatch "\.(png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
-    Header set Cache-Control "public, max-age=604800" env=!has_version_param
-  </FilesMatch>
+# Unversioned static assets (dev): 7 days
+<FilesMatch "\.(?:png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
+  Header set Cache-Control "public, max-age=604800" env=!has_version_param
+</FilesMatch>
 
-  <FilesMatch "\.(js|css|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
-    Header set Cache-Control "public, max-age=31536000, immutable" env=has_version_param
-  </FilesMatch>
-</IfModule>
+# Versioned assets (?v=...): 1 year + immutable
+<FilesMatch "\.(?:m?js|css|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
+  Header set Cache-Control "public, max-age=31536000, immutable" env=has_version_param
+</FilesMatch>
 
-# Compression (only if module exists)
+# Compression (if modules exist)
 <IfModule mod_brotli.c>
   BrotliCompressionQuality 5
   AddOutputFilterByType BROTLI_COMPRESS text/html text/css application/javascript application/json image/svg+xml

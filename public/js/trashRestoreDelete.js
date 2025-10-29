@@ -1,9 +1,9 @@
 // trashRestoreDelete.js
-import { sendRequest } from './networkUtils.js';
-import { toggleVisibility, showToast } from './domUtils.js';
-import { loadFileList } from './fileListView.js';
-import { loadFolderTree } from './folderManager.js';
-import { t } from './i18n.js';
+import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
+import { toggleVisibility, showToast } from './domUtils.js?v={{APP_QVER}}';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 function showConfirm(message, onConfirm) {
     const modal = document.getElementById("customConfirmModal");

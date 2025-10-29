@@ -1,15 +1,15 @@
-import { sendRequest } from './networkUtils.js';
-import { t, applyTranslations } from './i18n.js';
+import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
+import { t, applyTranslations } from './i18n.js?v={{APP_QVER}}';
 import {
   toggleVisibility,
   showToast as originalShowToast,
   attachEnterKeyListener,
   showCustomConfirmModal
-} from './domUtils.js';
-import { loadFileList } from './fileListView.js';
-import { initFileActions } from './fileActions.js';
-import { renderFileTable } from './fileListView.js';
-import { loadFolderTree } from './folderManager.js';
+} from './domUtils.js?v={{APP_QVER}}';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { initFileActions } from './fileActions.js?v={{APP_QVER}}';
+import { renderFileTable } from './fileListView.js?v={{APP_QVER}}';
+import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
 import {
   openTOTPLoginModal as originalOpenTOTPLoginModal,
   openUserPanel,
@@ -17,9 +17,9 @@ import {
   closeTOTPModal,
   setLastLoginData,
   openApiModal
-} from './authModals.js';
-import { openAdminPanel } from './adminPanel.js';
-import { initializeApp, triggerLogout } from './main.js';
+} from './authModals.js?v={{APP_QVER}}';
+import { openAdminPanel } from './adminPanel.js?v={{APP_QVER}}';
+import { initializeApp, triggerLogout } from './appCore.js?v={{APP_QVER}}';
 
 // Production OIDC configuration (override via API as needed)
 const currentOIDCConfig = {
@@ -180,7 +180,7 @@ function updateLoginOptionsUIFromStorage() {
 }
 
 export function loadAdminConfigFunc() {
-  return fetch("/api/admin/getConfig.php", { credentials: "include" })
+  return fetch("/api/siteConfig.php", { credentials: "include" })
     .then(async (response) => {
       // If a proxy or some edge returns 204/empty, handle gracefully
       let config = {};

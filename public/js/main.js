@@ -1,55 +1,65 @@
-import { sendRequest } from './networkUtils.js';
-import { toggleVisibility, toggleAllCheckboxes, updateFileActionButtons, showToast } from './domUtils.js';
-import { initUpload } from './upload.js';
-import { initAuth, fetchWithCsrf, checkAuthentication, loadAdminConfigFunc } from './auth.js';
-import { loadFolderTree } from './folderManager.js';
-import { setupTrashRestoreDelete } from './trashRestoreDelete.js';
-import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js';
-import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js';
-import { displayFilePreview } from './filePreview.js';
-import { loadFileList } from './fileListView.js';
-import { initFileActions, renameFile, openDownloadModal, confirmSingleDownload } from './fileActions.js';
-import { editFile, saveFile } from './fileEditor.js';
-import { t, applyTranslations, setLocale } from './i18n.js';
+// /js/main.js
+import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
+import { toggleVisibility, toggleAllCheckboxes, updateFileActionButtons, showToast } from './domUtils.js?v={{APP_QVER}}';
+import { initUpload } from './upload.js?v={{APP_QVER}}';
+import { initAuth, fetchWithCsrf, checkAuthentication, loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
+import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
+import { setupTrashRestoreDelete } from './trashRestoreDelete.js?v={{APP_QVER}}';
+import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js?v={{APP_QVER}}';
+import { initTagSearch, openTagModal, filterFilesByTag } from './fileTags.js?v={{APP_QVER}}';
+import { displayFilePreview } from './filePreview.js?v={{APP_QVER}}';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { initFileActions, renameFile, openDownloadModal, confirmSingleDownload } from './fileActions.js?v={{APP_QVER}}';
+import { editFile, saveFile } from './fileEditor.js?v={{APP_QVER}}';
+import { t, applyTranslations, setLocale } from './i18n.js?v={{APP_QVER}}';
+
+// NEW: import shared helpers from appCore (moved out of main.js)
+import {
+  initializeApp,
+  loadCsrfToken,
+  triggerLogout,
+  setCsrfToken,
+  getCsrfToken
+} from './appCore.js?v={{APP_QVER}}';
 
 /* =========================
    CSRF HOTFIX UTILITIES
    ========================= */
-const _nativeFetch = window.fetch; // keep the real fetch
-
-function setCsrfToken(token) {
-  if (!token) return;
-  window.csrfToken = token;
-  localStorage.setItem('csrf', token);
-
-  // meta tag for easy access in other places
-  let meta = document.querySelector('meta[name="csrf-token"]');
-  if (!meta) {
-    meta = document.createElement('meta');
-    meta.name = 'csrf-token';
-    document.head.appendChild(meta);
-  }
-  meta.content = token;
-}
-function getCsrfToken() {
-  return window.csrfToken || localStorage.getItem('csrf') || '';
-}
+// Keep a handle to the native fetch so wrappers never recurse
+const _nativeFetch = window.fetch.bind(window);
 
 // Seed CSRF from storage ASAP (before any requests)
 setCsrfToken(getCsrfToken());
 
-// Wrap the existing fetchWithCsrf so we also capture rotated tokens from headers.
+// Wrap fetch so *all* callers get CSRF header + token rotation, without recursion
 async function fetchWithCsrfAndRefresh(input, init = {}) {
-  const res = await fetchWithCsrf(input, init);
+  const headers = new Headers(init?.headers || {});
+  const token = getCsrfToken();
+
+  if (token && !headers.has('X-CSRF-Token')) {
+    headers.set('X-CSRF-Token', token);
+  }
+
+  const res = await _nativeFetch(input, {
+    credentials: 'include',
+    ...init,
+    headers,
+  });
+
   try {
     const rotated = res.headers?.get('X-CSRF-Token');
     if (rotated) setCsrfToken(rotated);
   } catch { /* ignore */ }
+
   return res;
 }
 
-// Replace global fetch with the wrapped version so *all* callers benefit.
-window.fetch = fetchWithCsrfAndRefresh;
+// Avoid double-wrapping if this module re-evaluates for any reason
+if (!window.fetch || !window.fetch._frWrapped) {
+  const wrapped = fetchWithCsrfAndRefresh;
+  Object.defineProperty(wrapped, '_frWrapped', { value: true });
+  window.fetch = wrapped;
+}
 
 /* =========================
    SAFE API HELPERS
@@ -84,6 +94,7 @@ export async function apiPOSTJSON(url, body, opts = {}) {
 // Optional: expose on window for legacy callers
 window.apiGETJSON = apiGETJSON;
 window.apiPOSTJSON = apiPOSTJSON;
+window.triggerLogout = triggerLogout; // expose the moved helper
 
 // Global handler to keep UX friendly if something forgets to catch
 window.addEventListener("unhandledrejection", (ev) => {
@@ -98,134 +109,16 @@ window.addEventListener("unhandledrejection", (ev) => {
 });
 
 /* =========================
-   APP INIT
+   BOOTSTRAP
    ========================= */
-
-export function initializeApp() {
-  const saved = parseInt(localStorage.getItem('rowHeight') || '48', 10);
-  document.documentElement.style.setProperty('--file-row-height', saved + 'px');
-
-  //window.currentFolder = "root";
-  const last = localStorage.getItem('lastOpenedFolder');
-  window.currentFolder = last ? last : "root";
-  const stored = localStorage.getItem('showFoldersInList');
-  window.showFoldersInList = stored === null ? true : stored === 'true';
-  loadAdminConfigFunc();
-  initTagSearch();
-  //loadFileList(window.currentFolder);
-
-  const fileListArea = document.getElementById('fileListContainer');
-  const uploadArea = document.getElementById('uploadDropArea');
-  if (fileListArea && uploadArea) {
-    fileListArea.addEventListener('dragover', e => {
-      e.preventDefault();
-      fileListArea.classList.add('drop-hover');
-    });
-    fileListArea.addEventListener('dragleave', () => {
-      fileListArea.classList.remove('drop-hover');
-    });
-    fileListArea.addEventListener('drop', e => {
-      e.preventDefault();
-      fileListArea.classList.remove('drop-hover');
-      uploadArea.dispatchEvent(new DragEvent('drop', {
-        dataTransfer: e.dataTransfer,
-        bubbles: true,
-        cancelable: true
-      }));
-    });
-  }
-
-  initDragAndDrop();
-  loadSidebarOrder();
-  loadHeaderOrder();
-  initFileActions();
-  initUpload();
-  loadFolderTree();
-  // Only run trash/restore for admins
- const isAdmin =
-   localStorage.getItem('isAdmin') === '1' ||  localStorage.getItem('isAdmin') === 'true';
- if (isAdmin) {
-   setupTrashRestoreDelete();
- }
-
-  const helpBtn = document.getElementById("folderHelpBtn");
-  const helpTooltip = document.getElementById("folderHelpTooltip");
-  if (helpBtn && helpTooltip) {
-    helpBtn.addEventListener("click", () => {
-      helpTooltip.style.display =
-        helpTooltip.style.display === "block" ? "none" : "block";
-    });
-  }
-}
-
-/**
- * Bootstrap/refresh CSRF from the server.
- * Uses the *native* fetch to avoid any wrapper loops and to work even if we don't
- * yet have a token. Also accepts a rotated token from the response header.
- */
-export function loadCsrfToken() {
-  return _nativeFetch('/api/auth/token.php', { method: 'GET', credentials: 'include' })
-    .then(async res => {
-      // header-based rotation
-      const hdr = res.headers.get('X-CSRF-Token');
-      if (hdr) setCsrfToken(hdr);
-
-      // body (if provided)
-      let body = {};
-      try { body = await res.json(); } catch { /* token endpoint may return empty */ }
-
-      const token = body.csrf_token || getCsrfToken();
-      setCsrfToken(token);
-
-      // share-url meta should reflect the actual origin
-      const actualShare = window.location.origin;
-      let shareMeta = document.querySelector('meta[name="share-url"]');
-      if (!shareMeta) {
-        shareMeta = document.createElement('meta');
-        shareMeta.name = 'share-url';
-        document.head.appendChild(shareMeta);
-      }
-      shareMeta.content = actualShare;
-
-      return { csrf_token: token, share_url: actualShare };
-    });
-}
-
-// 1) Immediately clear “?logout=1” flag
 const params = new URLSearchParams(window.location.search);
 if (params.get('logout') === '1') {
   localStorage.removeItem("username");
   localStorage.removeItem("userTOTPEnabled");
 }
 
-export function triggerLogout() {
-  _nativeFetch("/api/auth/logout.php", {
-    method: "POST",
-    credentials: "include",
-    headers: { "X-CSRF-Token": getCsrfToken() }
-  })
-  .then(() => {
-    document.body.classList.remove('authenticated');
-    window.location.reload(true);
-  })
-  .catch(() => {});
-}
-
-// Expose functions for inline handlers.
-window.sendRequest = sendRequest;
-window.toggleVisibility = toggleVisibility;
-window.toggleAllCheckboxes = toggleAllCheckboxes;
-window.editFile = editFile;
-window.saveFile = saveFile;
-window.renameFile = renameFile;
-window.confirmSingleDownload = confirmSingleDownload;
-window.openDownloadModal = openDownloadModal;
-
-// Global variable for the current folder.
-window.currentFolder = "root";
-
 document.addEventListener("DOMContentLoaded", function () {
-  // Load admin config early
+  // Load site config early (safe subset)
   loadAdminConfigFunc();
 
   // i18n
@@ -242,12 +135,9 @@ document.addEventListener("DOMContentLoaded", function () {
       // 3) If authenticated, start app
       checkAuthentication().then(authenticated => {
         if (authenticated) {
-          document.body.classList.add('authenticated');
           const overlay = document.getElementById('loadingOverlay');
           if (overlay) overlay.remove();
           initializeApp();
-        } else {
-          document.body.classList.remove('authenticated');
         }
       });
 
@@ -310,3 +200,16 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 });
+
+// Expose functions for inline handlers 
+window.sendRequest = sendRequest;
+window.toggleVisibility = toggleVisibility;
+window.toggleAllCheckboxes = toggleAllCheckboxes;
+window.editFile = editFile;
+window.saveFile = saveFile;
+window.renameFile = renameFile;
+window.confirmSingleDownload = confirmSingleDownload;
+window.openDownloadModal = openDownloadModal;
+
+// Global variable for the current folder (initial default; initializeApp will update)
+window.currentFolder = "root";

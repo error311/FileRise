@@ -99,7 +99,7 @@ class AdminController
             'header_title'        => '',
             'loginOptions'        => [
                 'disableFormLogin' => false,
-                'disableBasicAuth' => false,
+                'disableBasicAuth' => true,
                 'disableOIDCLogin' => true,
                 'authBypass'       => false,
                 'authHeaderName'   => 'X-Remote-User'

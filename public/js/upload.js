@@ -1,9 +1,9 @@
-import { initFileActions } from './fileActions.js';
-import { displayFilePreview } from './filePreview.js';
-import { showToast, escapeHTML } from './domUtils.js';
-import { loadFolderTree } from './folderManager.js';
-import { loadFileList } from './fileListView.js';
-import { t } from './i18n.js';
+import { initFileActions } from './fileActions.js?v={{APP_QVER}}';
+import { displayFilePreview } from './filePreview.js?v={{APP_QVER}}';
+import { showToast, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
+import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 /* -----------------------------------------------------
    Helpers for Drag–and–Drop Folder Uploads (Original Code)

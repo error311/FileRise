@@ -1,5 +1,71 @@
 # Changelog
 
+## Changes 10/29/2025 (v1.7.0)
+
+release(v1.7.0): asset cache-busting pipeline, public siteConfig cache, JS core split, and caching/security polish
+
+### ✨ Features
+
+- Public, non-sensitive site config cache:
+  - Add `AdminModel::buildPublicSubset()` and `writeSiteConfig()` to write `USERS_DIR/siteConfig.json`.
+  - New endpoint `public/api/siteConfig.php` + `UserController::siteConfig()` to serve the public subset (regenerates if stale).
+  - Frontend now reads `/api/siteConfig.php` (safe subset) instead of `/api/admin/getConfig.php`.
+- Frontend module versioning:
+  - Replace all module imports with `?v={{APP_QVER}}` query param so the release/Docker stamper can pin exact versions.
+  - Add `scripts/stamp-assets.sh` to stamp `?v=` and `{{APP_VER}}/{{APP_QVER}}` in **staging** for ZIP/Docker builds.
+
+### 🧩 Refactors
+
+- Extract shared boot/bootstrap logic into `public/js/appCore.js`:
+  - CSRF helpers (`setCsrfToken`, `getCsrfToken`, `loadCsrfToken`)
+  - `initializeApp()`, `triggerLogout()`
+  - Keep `main.js` lean; wrap global `fetch` once to append/rotate CSRF.
+- Update imports across JS modules to use versioned module URLs.
+
+### 🚀 Performance
+
+- Aggressive, safe caching for versioned assets:
+  - `.htaccess`: `?v=…` ⇒ `Cache-Control: max-age=31536000, immutable`.
+  - Unversioned JS/CSS short cache (1h), other static (7d).
+- Eliminate duplicate `main.js` loads and tighten CodeMirror mode loading.
+
+### 🔒 Security / Hardening
+
+- `.htaccess`:
+  - Conditional HSTS only when HTTPS, add CORP and X-Permitted-Cross-Domain-Policies.
+  - CSP kept strict for modules, workers, blobs.
+- Admin config exposure reduced to a curated subset in `siteConfig.json`.
+
+### 🧪 CI/CD / Release
+
+- **FileRise repo**
+  - `sync-changelog.yml`: keep `public/js/version.js` as source-of-truth only (no repo-wide stamping).
+  - `release-on-version.yml`: build **stamped** ZIP from a staging copy via `scripts/stamp-assets.sh`, verify placeholders removed, attach checksum.
+- **filerise-docker repo**
+  - Read `VERSION`, checkout app to `app/`, run stamper inside build context before `docker buildx`, tag `latest` and `:${VERSION}`.
+
+### 🔧 Defaults
+
+- Sample/admin config defaults now set `disableBasicAuth: true` (safer default). Existing installations keep their current setting.
+
+### 📂 Notable file changes
+
+- `src/models/AdminModel.php` (+public subset +atomic write)
+- `src/controllers/UserController.php` (+siteConfig action)
+- `public/api/siteConfig.php` (new)
+- `public/js/appCore.js` (new), `public/js/main.js` (slim, uses appCore)
+- Many `public/js/*.js` import paths updated to `?v={{APP_QVER}}`
+- `public/.htaccess` (caching & headers)
+- `scripts/stamp-assets.sh` (new)
+
+### ⚠️ Upgrade notes
+
+- Ensure `USERS_DIR` is writable by web server for `siteConfig.json`.
+- Proxies/edge caches: the new `?v=` scheme enables long-lived immutable caching; purge is automatic on version bump.
+- If you previously read admin config directly on the client, it now reads `/api/siteConfig.php`.
+
+---
+
 ## Changes 10/28/2025 (v1.6.11)
 
 release(v1.6.11) fix(ui/dragAndDrop) restore floating zones toggle click action

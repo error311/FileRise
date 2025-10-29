@@ -1,8 +1,8 @@
 // adminPanel.js
-import { t } from './i18n.js';
-import { loadAdminConfigFunc } from './auth.js';
-import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js';
-import { sendRequest } from './networkUtils.js';
+import { t } from './i18n.js?v={{APP_QVER}}';
+import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
+import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
+import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
 
 const version = window.APP_VERSION || "dev";
 const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;

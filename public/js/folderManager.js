@@ -1,11 +1,11 @@
 // folderManager.js
 
-import { loadFileList } from './fileListView.js';
-import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js';
-import { t } from './i18n.js';
-import { openFolderShareModal } from './folderShareModal.js';
-import { fetchWithCsrf } from './auth.js';
-import { loadCsrfToken } from './main.js';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
+import { openFolderShareModal } from './folderShareModal.js?v={{APP_QVER}}';
+import { fetchWithCsrf } from './auth.js?v={{APP_QVER}}';
+import { loadCsrfToken } from './appCore.js?v={{APP_QVER}}';
 
 /* ----------------------
    Helpers: safe JSON + state

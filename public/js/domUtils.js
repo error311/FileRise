@@ -1,6 +1,6 @@
 // domUtils.js
-import { t } from './i18n.js';
-import { openDownloadModal } from './fileActions.js';
+import { t } from './i18n.js?v={{APP_QVER}}';
+import { openDownloadModal } from './fileActions.js?v={{APP_QVER}}';
 
 // Basic DOM Helpers
 export function toggleVisibility(elementId, shouldShow) {

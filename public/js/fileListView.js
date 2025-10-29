@@ -11,11 +11,11 @@ import {
     updateRowHighlight,
     toggleRowSelection,
     attachEnterKeyListener
-  } from './domUtils.js';
-  import { t } from './i18n.js';
-  import { bindFileListContextMenu } from './fileMenu.js';
-  import { openDownloadModal } from './fileActions.js';
-  import { openTagModal, openMultiTagModal } from './fileTags.js';
+  } from './domUtils.js?v={{APP_QVER}}';
+  import { t } from './i18n.js?v={{APP_QVER}}';
+  import { bindFileListContextMenu } from './fileMenu.js?v={{APP_QVER}}';
+  import { openDownloadModal } from './fileActions.js?v={{APP_QVER}}';
+  import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
   import {
     getParentFolder,
     updateBreadcrumbTitle,
@@ -24,13 +24,13 @@ import {
     hideFolderManagerContextMenu,
     openRenameFolderModal,
     openDeleteFolderModal
-  } from './folderManager.js';
-  import { openFolderShareModal } from './folderShareModal.js';
+  } from './folderManager.js?v={{APP_QVER}}';
+  import { openFolderShareModal } from './folderShareModal.js?v={{APP_QVER}}';
   import {
     folderDragOverHandler,
     folderDragLeaveHandler,
     folderDropHandler
-  } from './fileDragDrop.js';
+  } from './fileDragDrop.js?v={{APP_QVER}}';
   
   export let fileData = [];
   export let sortOrder = { column: "uploaded", ascending: true };
@@ -750,7 +750,7 @@ function wireSelectAll(fileListContent) {
     fileListContent.querySelectorAll(".edit-btn").forEach(btn => {
       btn.addEventListener("click", async e => {
         e.stopPropagation();
-        const m = await import('./fileEditor.js');
+        const m = await import('./fileEditor.js?v={{APP_QVER}}');
         m.editFile(btn.dataset.editName, btn.dataset.editFolder);
       });
     });
@@ -759,7 +759,7 @@ function wireSelectAll(fileListContent) {
     fileListContent.querySelectorAll(".rename-btn").forEach(btn => {
       btn.addEventListener("click", async e => {
         e.stopPropagation();
-        const m = await import('./fileActions.js');
+        const m = await import('./fileActions.js?v={{APP_QVER}}');
         m.renameFile(btn.dataset.renameName, btn.dataset.renameFolder);
       });
     });
@@ -768,7 +768,7 @@ function wireSelectAll(fileListContent) {
     fileListContent.querySelectorAll(".preview-btn").forEach(btn => {
       btn.addEventListener("click", async e => {
         e.stopPropagation();
-        const m = await import('./filePreview.js');
+        const m = await import('./filePreview.js?v={{APP_QVER}}');
         m.previewFile(btn.dataset.previewUrl, btn.dataset.previewName);
       });
     });
@@ -822,7 +822,7 @@ function wireSelectAll(fileListContent) {
         const fileName = this.getAttribute("data-file");
         const file = fileData.find(f => f.name === fileName);
         if (file) {
-          import('./filePreview.js').then(module => {
+          import('./filePreview.js?v={{APP_QVER}}').then(module => {
             module.openShareModal(file, folder);
           });
         }
@@ -831,7 +831,7 @@ function wireSelectAll(fileListContent) {
     updateFileActionButtons();
     document.querySelectorAll("#fileList tbody tr").forEach(row => {
       row.setAttribute("draggable", "true");
-      import('./fileDragDrop.js').then(module => {
+      import('./fileDragDrop.js?v={{APP_QVER}}').then(module => {
         row.addEventListener("dragstart", module.fileDragStartHandler);
       });
     });
@@ -1085,7 +1085,7 @@ function wireSelectAll(fileListContent) {
     // preview clicks (dynamic import to avoid global dependency)
     fileListContent.querySelectorAll(".gallery-preview").forEach(el => {
       el.addEventListener("click", async () => {
-        const m = await import('./filePreview.js');
+        const m = await import('./filePreview.js?v={{APP_QVER}}');
         m.previewFile(el.dataset.previewUrl, el.dataset.previewName);
       });
     });
@@ -1102,7 +1102,7 @@ function wireSelectAll(fileListContent) {
     fileListContent.querySelectorAll(".edit-btn").forEach(btn => {
       btn.addEventListener("click", async e => {
         e.stopPropagation();
-        const m = await import('./fileEditor.js');
+        const m = await import('./fileEditor.js?v={{APP_QVER}}');
         m.editFile(btn.dataset.editName, btn.dataset.editFolder);
       });
     });
@@ -1111,7 +1111,7 @@ function wireSelectAll(fileListContent) {
     fileListContent.querySelectorAll(".rename-btn").forEach(btn => {
       btn.addEventListener("click", async e => {
         e.stopPropagation();
-        const m = await import('./fileActions.js');
+        const m = await import('./fileActions.js?v={{APP_QVER}}');
         m.renameFile(btn.dataset.renameName, btn.dataset.renameFolder);
       });
     });
@@ -1123,7 +1123,7 @@ function wireSelectAll(fileListContent) {
         const fileName = btn.dataset.file;
         const fileObj = fileData.find(f => f.name === fileName);
         if (fileObj) {
-          import('./filePreview.js').then(m => m.openShareModal(fileObj, folder));
+          import('./filePreview.js?v={{APP_QVER}}').then(m => m.openShareModal(fileObj, folder));
         }
       });
     });

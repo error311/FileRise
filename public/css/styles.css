@@ -27,7 +27,9 @@ body {
       padding-left: 30px !important;
       padding-right: 30px !important;
   }}
-  
+  @media (max-width: 600px) {
+    .zones-toggle { left: 85px !important; }
+  }
   /* ===========================================================
      HEADER & NAVIGATION
      =========================================================== */
@@ -35,7 +37,7 @@ body {
   /************************************************************/
   /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
   /************************************************************/
-  
+  .header-logo .logo { height: 50px; width: auto; display: block; }
   .btn-login {
   margin-top: 10px;
   }/* Color overrides */

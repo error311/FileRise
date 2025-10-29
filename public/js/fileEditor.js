@@ -1,7 +1,7 @@
 // fileEditor.js
-import { escapeHTML, showToast } from './domUtils.js';
-import { loadFileList } from './fileListView.js';
-import { t } from './i18n.js';
+import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 // thresholds for editor behavior
 const EDITOR_PLAIN_THRESHOLD = 5 * 1024 * 1024;  // >5 MiB => force plain text, lighter settings
@@ -14,30 +14,30 @@ const CM_LOCAL = "/vendor/codemirror/5.65.5/";
 // Which mode file to load for a given name/mime
 const MODE_URL = {
   // core/common
-  "xml":        "mode/xml/xml.min.js",
-  "css":        "mode/css/css.min.js",
-  "javascript": "mode/javascript/javascript.min.js",
+  "xml":        "mode/xml/xml.min.js?v={{APP_QVER}}",
+  "css":        "mode/css/css.min.js?v={{APP_QVER}}",
+  "javascript": "mode/javascript/javascript.min.js?v={{APP_QVER}}",
 
   // meta / combos
-  "htmlmixed":  "mode/htmlmixed/htmlmixed.min.js",
-  "application/x-httpd-php": "mode/php/php.min.js",
+  "htmlmixed":  "mode/htmlmixed/htmlmixed.min.js?v={{APP_QVER}}",
+  "application/x-httpd-php": "mode/php/php.min.js?v={{APP_QVER}}",
 
   // docs / data
-  "markdown":   "mode/markdown/markdown.min.js",
-  "yaml":       "mode/yaml/yaml.min.js",
-  "properties": "mode/properties/properties.min.js",
-  "sql":        "mode/sql/sql.min.js",
+  "markdown":   "mode/markdown/markdown.min.js?v={{APP_QVER}}",
+  "yaml":       "mode/yaml/yaml.min.js?v={{APP_QVER}}",
+  "properties": "mode/properties/properties.min.js?v={{APP_QVER}}",
+  "sql":        "mode/sql/sql.min.js?v={{APP_QVER}}",
 
   // shells
-  "shell":      "mode/shell/shell.min.js",
+  "shell":      "mode/shell/shell.min.js?v={{APP_QVER}}",
 
   // languages
-  "python":     "mode/python/python.min.js",
-  "text/x-csrc":    "mode/clike/clike.min.js",
-  "text/x-c++src":  "mode/clike/clike.min.js",
-  "text/x-java":    "mode/clike/clike.min.js",
-  "text/x-csharp":  "mode/clike/clike.min.js",
-  "text/x-kotlin":  "mode/clike/clike.min.js"
+  "python":     "mode/python/python.min.js?v={{APP_QVER}}",
+  "text/x-csrc":    "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-c++src":  "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-java":    "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-csharp":  "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-kotlin":  "mode/clike/clike.min.js?v={{APP_QVER}}"
 };
 
 // Map any mime/alias to the key we use in MODE_URL
@@ -54,7 +54,7 @@ const MODE_LOAD_TIMEOUT_MS = 2500; // allow closing immediately; don't wait fore
 function loadScriptOnce(url) {
   return new Promise((resolve, reject) => {
     const ver = (window.APP_VERSION ?? 'dev').replace(/^v/, ''); // "v1.6.9" -> "1.6.9"
-    const withQS = url + '?v=' + ver;
+    const withQS = url; //+ '?v=' + ver;
 
     const key = `cm:${withQS}`;
     let s = document.querySelector(`script[data-key="${key}"]`);

@@ -1,6 +1,6 @@
 // js/folderShareModal.js
-import { escapeHTML, showToast } from './domUtils.js';
-import { t } from './i18n.js';
+import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 export function openFolderShareModal(folder) {
   // Remove any existing modal

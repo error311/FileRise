@@ -1,6 +1,6 @@
 // fileDragDrop.js
-import { showToast } from './domUtils.js';
-import { loadFileList } from './fileListView.js';
+import { showToast } from './domUtils.js?v={{APP_QVER}}';
+import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 
 export function fileDragStartHandler(event) {
   const row = event.currentTarget;

@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
+require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 /**
  * UserController
@@ -664,5 +665,39 @@ class UserController
 
         echo json_encode(['success' => true, 'url' => $url]);
         exit;
+    }
+
+    public function siteConfig(): void
+    {
+        header('Content-Type: application/json');
+
+        $usersDir     = rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $publicPath   = $usersDir . 'siteConfig.json';
+        $adminEncPath = $usersDir . 'adminConfig.json';
+
+        $publicMtime = is_file($publicPath) ? (int)@filemtime($publicPath) : 0;
+        $adminMtime  = is_file($adminEncPath) ? (int)@filemtime($adminEncPath) : 0;
+
+        // If public cache is present and fresh enough, serve it
+        if ($publicMtime > 0 && $publicMtime >= $adminMtime) {
+            $raw = @file_get_contents($publicPath);
+            $data = is_string($raw) ? json_decode($raw, true) : null;
+            if (is_array($data)) {
+                echo json_encode($data);
+                return;
+            }
+        }
+
+        // Otherwise regenerate from decrypted admin config
+        $cfg = AdminModel::getConfig();
+        if (isset($cfg['error'])) {
+            http_response_code(500);
+            echo json_encode(['error' => $cfg['error']]);
+            return;
+        }
+
+        $public = AdminModel::buildPublicSubset($cfg);
+        $w = AdminModel::writeSiteConfig($public); // best effort
+        echo json_encode($public);
     }
 }
