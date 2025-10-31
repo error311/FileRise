@@ -247,7 +247,7 @@ const translations = {
     "login_options": "Login Options",
     "disable_login_form": "Disable Login Form",
     "disable_basic_http_auth": "Disable Basic HTTP Auth",
-    "disable_oidc_login": "Disable OIDC Login",
+    "disable_oidc_login": "Disable OIDC Login (OIDC Config Required to enable)",
     "save_settings": "Save Settings",
     "at_least_one_login_method": "At least one login method must remain enabled.",
     "settings_updated_successfully": "Settings updated successfully.",

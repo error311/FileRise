@@ -86,7 +86,7 @@ export function initializeApp() {
 
   // Hook DnD relay from fileList area into upload area
   const fileListArea = document.getElementById('fileListContainer');
-  const uploadArea   = document.getElementById('uploadDropArea');
+  const uploadArea = document.getElementById('uploadDropArea');
   if (fileListArea && uploadArea) {
     fileListArea.addEventListener('dragover', e => {
       e.preventDefault();
@@ -136,13 +136,30 @@ export function initializeApp() {
    LOGOUT (shared)
    ========================= */
 export function triggerLogout() {
+  const clearWelcomeFlags = () => {
+    try {
+      // one-per-tab toast guard
+      sessionStorage.removeItem('__fr_welcomed');
+      // if you also used the per-user (all-tabs) guard, clear that too:
+      const u = localStorage.getItem('username') || '';
+      if (u) localStorage.removeItem(`__fr_welcomed_${u}`);
+    } catch { }
+  };
+
   _nativeFetch("/api/auth/logout.php", {
     method: "POST",
     credentials: "include",
     headers: { "X-CSRF-Token": getCsrfToken() }
   })
-    .then(() => window.location.reload(true))
-    .catch(() => { /* no-op */ });
+    .then(() => {
+      clearWelcomeFlags();
+      window.location.reload(true);
+    })
+    .catch(() => {
+      // even if the request fails, clear the flags so the next login can toast
+      clearWelcomeFlags();
+      window.location.reload(true);
+    });
 }
 
 /* =========================

@@ -1,5 +1,89 @@
 # Changelog
 
+## Changes 10/31/2025 (v1.7.3)
+
+release(v1.7.3): lightweight boot pipeline, dramatically faster first paint, deduped /api writes, sturdier uploads/auth
+
+### 🎃 Highlights (advantages) 👻 🦇
+
+- ⚡ Faster, cleaner boot: a lightweight **main.js** decides auth/setup before painting, avoids flicker, and wires modules exactly once.
+- ♻️ Fewer duplicate actions: **request coalescer** dedupes POST/PUT/PATCH/DELETE to /api/* .
+- ✅ Truthy UX: global **toast bridge** queues early toasts and normalizes misleading “not found/already exists” messages after success.
+- 🔐 Smoother auth: CSRF priming/rotation + **TOTP step-up detection** across JSON & redirect paths; “Welcome back, `user`” toast once per tab.
+- 🌓 Polished UI: **dark-mode persistence with system fallback**, live siteConfig title application, higher-z modals, drag auto-scroll.
+- 🚀 Faster first paint & interactions: defer CodeMirror/Fuse/Resumable, promote preloaded CSS, and coalesce duplicate requests → snappier UI.
+- 🧭 Admin polish: live header title preview, masked OIDC fields with **Replace** flow, and a **read-only Sponsors/Donations** section.
+- 🧱 Safer & cache-smarter: opinionated .htaccess (CSP/HSTS/MIME/compression) + `?v={{APP_QVER}}` for versioned immutable assets.
+
+### Core bootstrap (main.js) overhaul
+
+- Early **toast bridge** (queues until domUtils is ready); expose `window.__FR_TOAST_FILTER__` for centralized rewrites/suppression.
+- **Result guard + request coalescer** wrapping `fetch`:
+  - Dedupes same-origin `/api/*` mutating requests for ~800ms using a stable key (method + path + normalized body).
+  - Tracks “last OK” JSON (`success|status|result=ok`) to suppress false-negative error toasts after success.
+- **Boot orchestrator** with hard guards:
+  - `__FR_FLAGS` (`booted`, `initialized`, `wired.*`, `bootPromise`, `entryStarted`) to prevent double init/leaks.
+  - **No-flicker login**: resolve `checkAuth()` + `setup` before showing UI; show login only when truly unauthenticated.
+  - **Heavy boot** for authed users: load i18n, `appCore.loadCsrfToken/initializeApp`, first file list, then light UI wiring.
+- **Auth flow**:
+  - `primeCsrf()` + `<meta name="csrf-token">` management; persist token in localStorage.
+  - **TOTP** detection via header (`X-TOTP-Required`) & JSON (`totp_required` / `TOTP_REQUIRED`); calls `openTOTPLoginModal()`.
+  - **Welcome toast** once per tab via `sessionStorage.__fr_welcomed`.
+- **UI/UX niceties**:
+  - `applySiteConfig()` updates header title & login method visibility on both login & authed screens.
+  - Dark-mode persistence with system fallback, proper a11y labels/icons.
+  - Create dropdown/menu wiring with capture-phase outside-click + ESC close; modal cancel safeties.
+  - Lift modals above cards (z-index), **drag auto-scroll** near viewport edges.
+  - Dispatch legacy `DOMContentLoaded`/`load` **once** (supports older inline handlers).
+  - Username label refresh for existing `.user-name-label` without injecting new DOM.
+
+### Performance & UX changes
+
+- CSS/first paint:
+  - Preload Bootstrap & app CSS; promote at DOMContentLoaded; keep inline CSS minimal.
+  - Add `width/height/decoding/fetchpriority` to logo to reduce layout shift.
+- Search/editor/uploads:
+  - **fileListView.js**: lazy-load Fuse with instant substring fallback; `warmUpSearch()` hook.
+  - **fileEditor.js**: lazy-load CodeMirror core/theme/modes; start plain then upgrade; guard very large files gracefully.
+  - **upload.js**: lazy-load Resumable; resilient init; background warm-up; smarter addFile/submit; clearer toasts.
+- Toast/UX:
+  - Install early toast bridge; queue & normalize messages; neutral “Done.” when server returns misleading errors after success.
+
+### Correctness: uploads, paths, ACLs
+
+- **UploadController/UploadModel**: normalize folders via `ACL::normalizeFolder(rawurldecode())`; stricter segment checks; consistent base paths; safer metadata writes; proper chunk presence/merge & temp cleanup.
+
+### Auth hardening & resilience
+
+- **auth.js/main.js/appCore.js**: CSRF rotate/retry (JSON then x-www-form-urlencoded fallback); robust login handling; fewer misleading error toasts.
+- **AuthController**: OIDC username fallback to `email` or `sub` when `preferred_username` missing.
+
+### Admin panel
+
+- **adminPanel.js**:
+  - Live header title preview (instant update without reload).
+  - Masked OIDC client fields with **Replace** button; saved-value hints; only send secrets when replacing.
+  - **New “Sponsor / Donations” section (read-only)**:
+    - GitHub Sponsors → `https://github.com/sponsors/error311`
+    - Ko-fi → `https://ko-fi.com/error311`
+    - Includes **Copy** and **Open** buttons; values are fixed.
+- **AdminController**: boolean for `oidc.hasClientId/hasClientSecret` to drive masked inputs.
+
+### Security & caching (.htaccess)
+
+- Consolidated security headers (CSP, CORP, HSTS on HTTPS), MIME types, compression (Brotli/Deflate), TRACE disable.
+- Caching rules:
+  - HTML/version.js: no-cache; unversioned JS/CSS: 1h; unversioned static: 7d; **versioned assets `?v=`: 1y `immutable`**.
+- **config.php**: remove duplicate runtime headers (now via Apache) to avoid proxy/CDN conflicts.
+
+### Upgrade notes
+
+- No schema changes.
+- Ensure Apache modules (`headers`, `rewrite`, `brotli`/`deflate`) are available for the new .htaccess rules (fallbacks included).
+- Versioned assets mean users shouldn’t need a hard refresh; `?v={{APP_QVER}}` busts caches automatically.
+
+---
+
 ## Changes 10/29/2025 (v1.7.0 & v1.7.1 & v1.7.2)
 
 release(v1.7.0): asset cache-busting pipeline, public siteConfig cache, JS core split, and caching/security polish

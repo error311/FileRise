@@ -31,6 +31,49 @@ const currentOIDCConfig = {
 };
 window.currentOIDCConfig = currentOIDCConfig;
 
+
+
+(function installToastFilter() {
+  const isDemoHost = location.hostname.toLowerCase() === 'demo.filerise.net';
+
+  window.__FR_TOAST_FILTER__ = function (msgKeyOrText) {
+    // Suppress the nag while doing TOTP step-up
+    if (window.pendingTOTP && (msgKeyOrText === 'please_log_in_to_continue' ||
+      /please log in/i.test(String(msgKeyOrText)))) {
+      return null; // suppress
+    }
+
+    // Demo host
+    if (isDemoHost && (msgKeyOrText === 'please_log_in_to_continue' ||
+      /please log in/i.test(String(msgKeyOrText)))) {
+      return "Demo site — use:\nUsername: demo\nPassword: demo";
+    }
+
+    // Try to translate keys; pass through plain text
+    try {
+      const maybe = t(msgKeyOrText);
+      if (typeof maybe === 'string' && maybe !== msgKeyOrText) return maybe;
+    } catch { }
+    return msgKeyOrText;
+  };
+})();
+
+function queueWelcomeToast(name) {
+  const uname = String(name || '').trim().slice(0, 80);
+  if (!uname) return;
+  // show immediately (if we don’t reload instantly)
+  try {
+    window.dispatchEvent(new CustomEvent('filerise:toast', {
+      detail: { message: `Welcome back, ${uname}!`, duration: 2000 }
+    }));
+  } catch { }
+
+  // and persist for after-reload (flushed by main.js on boot)
+  try {
+    sessionStorage.setItem('welcomeMessage', `Welcome back, ${uname}!`);
+  } catch { }
+}
+
 /* ----------------- TOTP & Toast Overrides ----------------- */
 // detect if we’re in a pending‑TOTP state
 window.pendingTOTP = new URLSearchParams(window.location.search).get('totp_required') === '1';
@@ -72,45 +115,51 @@ const originalFetch = window.fetch;
  * @param {object} options
  * @returns {Promise<Response>}
  */
+
 export async function fetchWithCsrf(url, options = {}) {
-  // 1) Merge in credentials + header
-  options = {
-    credentials: 'include',
-    ...options,
-  };
+  const original = window.fetch.bind(window);
+  const wantJson = (options.headers && /json/i.test(options.headers['Content-Type'] || '')) || typeof options.body === 'string' && options.body.trim().startsWith('{');
+
+  options = { credentials: 'include', ...options };
   options.headers = {
-    ...(options.headers || {}),
-    'X-CSRF-Token': window.csrfToken,
+    'Accept': 'application/json',
+    ...(options.headers || {})
   };
-
-  // 2) First attempt
-  let res = await originalFetch(url, options);
-
-  // 3) If we got a 403, try to refresh token & retry
-  if (res.status === 403) {
-    // 3a) See if the server gave us a new token header
-    let newToken = res.headers.get('X-CSRF-Token');
-    // 3b) Otherwise fall back to the /api/auth/token endpoint
-    if (!newToken) {
-      const tokRes = await originalFetch('/api/auth/token.php', { credentials: 'include' });
-      if (tokRes.ok) {
-        const body = await tokRes.json();
-        newToken = body.csrf_token;
-      }
-    }
-    if (newToken) {
-      // 3c) Update global + meta
-      window.csrfToken = newToken;
-      const meta = document.querySelector('meta[name="csrf-token"]');
-      if (meta) meta.content = newToken;
-
-      // 3d) Retry the original request with the new token
-      options.headers['X-CSRF-Token'] = newToken;
-      res = await originalFetch(url, options);
-    }
+  if (window.csrfToken) {
+    options.headers['X-CSRF-Token'] = window.csrfToken;
   }
 
-  // 4) Return the real Response—no body peeking here!
+  async function retryWithFreshCsrf(asFormFallback = false) {
+    const tokRes = await original('/api/auth/token.php', { credentials: 'include' });
+    if (tokRes.ok) {
+      const body = await tokRes.json().catch(() => ({}));
+      if (body?.csrf_token) {
+        window.csrfToken = body.csrf_token;
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) meta.content = body.csrf_token;
+        options.headers['X-CSRF-Token'] = body.csrf_token;
+      }
+    }
+    if (asFormFallback && wantJson) {
+      // convert JSON body into x-www-form-urlencoded
+      const orig = options.body && typeof options.body === 'string' ? JSON.parse(options.body) : {};
+      options.body = toFormBody(orig);
+      options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
+    return original(url, options);
+  }
+
+  let res = await original(url, options);
+
+  // If API doesn’t like JSON or token is stale
+  if (res.status === 400 || res.status === 403 || res.status === 415) {
+    // 1) retry with fresh CSRF keeping same encoding
+    res = await retryWithFreshCsrf(false);
+    if (!res.ok && wantJson) {
+      // 2) retry again as form-encoded
+      res = await retryWithFreshCsrf(true);
+    }
+  }
   return res;
 }
 
@@ -191,13 +240,13 @@ export function loadAdminConfigFunc() {
 
       document.title = headerTitle;
       const lo = config.loginOptions || {};
-      localStorage.setItem("disableFormLogin",  String(!!lo.disableFormLogin));
-      localStorage.setItem("disableBasicAuth",  String(!!lo.disableBasicAuth));
-      localStorage.setItem("disableOIDCLogin",  String(!!lo.disableOIDCLogin));
-      localStorage.setItem("globalOtpauthUrl",  config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
+      localStorage.setItem("disableFormLogin", String(!!lo.disableFormLogin));
+      localStorage.setItem("disableBasicAuth", String(!!lo.disableBasicAuth));
+      localStorage.setItem("disableOIDCLogin", String(!!lo.disableOIDCLogin));
+      localStorage.setItem("globalOtpauthUrl", config.globalOtpauthUrl || "otpauth://totp/{label}?secret={secret}&issuer=FileRise");
       // These may be absent for non-admins; default them
-      localStorage.setItem("authBypass",        String(!!lo.authBypass));
-      localStorage.setItem("authHeaderName",    lo.authHeaderName || "X-Remote-User");
+      localStorage.setItem("authBypass", String(!!lo.authBypass));
+      localStorage.setItem("authHeaderName", lo.authHeaderName || "X-Remote-User");
 
       updateLoginOptionsUIFromStorage();
 
@@ -253,14 +302,14 @@ export async function updateAuthenticatedUI(data) {
   if (loading) loading.remove();
 
   // 2) Show main UI
-  document.querySelector('.main-wrapper').style.display    = '';
-  document.getElementById('loginForm').style.display       = 'none';
+  document.querySelector('.main-wrapper').style.display = '';
+  document.getElementById('loginForm').style.display = 'none';
   toggleVisibility("loginForm", false);
   toggleVisibility("mainOperations", true);
   toggleVisibility("uploadFileForm", true);
   toggleVisibility("fileListContainer", true);
-  attachEnterKeyListener("removeUserModal",   "deleteUserBtn");
-  attachEnterKeyListener("changePasswordModal","saveNewPasswordBtn");
+  attachEnterKeyListener("removeUserModal", "deleteUserBtn");
+  attachEnterKeyListener("changePasswordModal", "saveNewPasswordBtn");
   document.querySelector(".header-buttons").style.visibility = "visible";
 
   // 3) Persist auth flags (unchanged)
@@ -271,9 +320,9 @@ export async function updateAuthenticatedUI(data) {
     localStorage.setItem("username", data.username);
   }
   if (typeof data.folderOnly !== "undefined") {
-    localStorage.setItem("folderOnly",   data.folderOnly   ? "true" : "false");
-    localStorage.setItem("readOnly",     data.readOnly     ? "true" : "false");
-    localStorage.setItem("disableUpload",data.disableUpload? "true" : "false");
+    localStorage.setItem("folderOnly", data.folderOnly ? "true" : "false");
+    localStorage.setItem("readOnly", data.readOnly ? "true" : "false");
+    localStorage.setItem("disableUpload", data.disableUpload ? "true" : "false");
   }
 
   // 4) Fetch up-to-date profile picture — ALWAYS overwrite localStorage
@@ -282,7 +331,7 @@ export async function updateAuthenticatedUI(data) {
 
   // 5) Build / update header buttons
   const headerButtons = document.querySelector(".header-buttons");
-  const firstButton   = headerButtons.firstElementChild;
+  const firstButton = headerButtons.firstElementChild;
 
   // a) restore-from-trash for admins
   if (data.isAdmin) {
@@ -290,8 +339,8 @@ export async function updateAuthenticatedUI(data) {
     if (!r) {
       r = document.createElement("button");
       r.id = "restoreFilesBtn";
-      r.classList.add("btn","btn-warning");
-      r.setAttribute("data-i18n-title","trash_restore_delete");
+      r.classList.add("btn", "btn-warning");
+      r.setAttribute("data-i18n-title", "trash_restore_delete");
       r.innerHTML = '<i class="material-icons">restore_from_trash</i>';
       if (firstButton) insertAfter(r, firstButton);
       else headerButtons.appendChild(r);
@@ -308,8 +357,8 @@ export async function updateAuthenticatedUI(data) {
     if (!a) {
       a = document.createElement("button");
       a.id = "adminPanelBtn";
-      a.classList.add("btn","btn-info");
-      a.setAttribute("data-i18n-title","admin_panel");
+      a.classList.add("btn", "btn-info");
+      a.setAttribute("data-i18n-title", "admin_panel");
       a.innerHTML = '<i class="material-icons">admin_panel_settings</i>';
       insertAfter(a, document.getElementById("restoreFilesBtn"));
       a.addEventListener("click", openAdminPanel);
@@ -330,19 +379,19 @@ export async function updateAuthenticatedUI(data) {
       : `<i class="material-icons">account_circle</i>`;
 
     // fallback username if missing
-    const usernameText = data.username 
-      || localStorage.getItem("username") 
+    const usernameText = data.username
+      || localStorage.getItem("username")
       || "";
 
     if (!dd) {
       dd = document.createElement("div");
-      dd.id    = "userDropdown";
+      dd.id = "userDropdown";
       dd.classList.add("user-dropdown");
 
       // toggle button
       const toggle = document.createElement("button");
-      toggle.id    = "userDropdownToggle";
-      toggle.classList.add("btn","btn-user");
+      toggle.id = "userDropdownToggle";
+      toggle.classList.add("btn", "btn-user");
       toggle.setAttribute("title", t("user_settings"));
       toggle.innerHTML = `
         ${avatarHTML}
@@ -464,6 +513,14 @@ function checkAuthentication(showLoginToast = true) {
         }
         updateAuthenticatedUI(data);
         return data;
+
+        // at the end of updateAuthenticatedUI(data)
+        if (!window.__FR_FLAGS?.initialized && typeof initializeApp === 'function') {
+          initializeApp();
+          window.__FR_FLAGS.initialized = true;
+        }
+        if (typeof applyTranslations === 'function') applyTranslations();
+        if (typeof updateLoginOptionsUIFromStorage === 'function') updateLoginOptionsUIFromStorage();
       } else {
         const overlay = document.getElementById('loadingOverlay');
         if (overlay) overlay.remove();
@@ -484,53 +541,162 @@ function checkAuthentication(showLoginToast = true) {
 }
 
 /* ----------------- Authentication Submission ----------------- */
+async function primeCsrfStrict() {
+  const r = await fetch('/api/auth/token.php', { credentials: 'include' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.csrf_token) throw new Error('CSRF missing');
+  window.csrfToken = j.csrf_token;
+  const m = document.querySelector('meta[name="csrf-token"]');
+  if (m) m.content = j.csrf_token;
+}
+
+function toFormBody(obj) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj || {})) p.set(k, v == null ? '' : String(v));
+  return p.toString();
+}
+
+async function safeJson(res) {
+  const ct = res.headers.get('content-type') || '';
+  if (!/application\/json/i.test(ct)) return null;
+  try { return await res.clone().json(); } catch { return null; }
+}
+
+async function sniffTOTP(res, bodyMaybe) {
+  if (res.headers.get('X-TOTP-Required') === '1') return true;
+  if (res.redirected && /[?&]totp_required=1\b/.test(res.url)) return true;
+  const body = bodyMaybe ?? await safeJson(res);
+  if (body && (body.totp_required || body.error === 'TOTP_REQUIRED')) return true;
+  try {
+    const txt = await res.clone().text();
+    if (/\btotp_required\s*=\s*1\b/i.test(txt)) return true;
+  } catch { }
+  return false;
+}
+
+async function isAuthedNow() {
+  try {
+    const r = await fetch('/api/auth/checkAuth.php', { credentials: 'include' });
+    const j = await r.json().catch(() => ({}));
+    return !!j.authenticated;
+  } catch { return false; }
+}
+
+function rafTick(times = 2) {
+  return new Promise(res => {
+    const step = () => { if (--times <= 0) res(); else requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
+}
+
+async function fetchAuthSnapshot() {
+  try {
+    const r = await fetch('/api/auth/checkAuth.php', { credentials: 'include' });
+    return await r.json();
+  } catch { return {}; }
+}
+
+async function syncPermissionsToLocalStorage() {
+  try {
+    const r = await fetch('/api/getUserPermissions.php', { credentials: 'include' });
+    const perm = await r.json();
+    if (perm && typeof perm === 'object') {
+      localStorage.setItem('folderOnly', perm.folderOnly ? 'true' : 'false');
+      localStorage.setItem('readOnly', perm.readOnly ? 'true' : 'false');
+      localStorage.setItem('disableUpload', perm.disableUpload ? 'true' : 'false');
+    }
+  } catch { /* non-fatal */ }
+}
+
+// ——— main ———
+let __loginInFlight = false;
+
 async function submitLogin(data) {
-  setLastLoginData(data);
-  window.__lastLoginData = data;
+  if (__loginInFlight) return;
+  __loginInFlight = true;
+
+  const payload = {
+    username: String(data.username || '').trim(),
+    password: String(data.password || '').trim(),
+    remember_me: data.remember_me ? 1 : 0
+  };
+
+  setLastLoginData(payload);
+  window.__lastLoginData = payload;
 
   try {
-    // ─── 1) Get CSRF for the initial auth call ───
-    let res = await fetch("/api/auth/token.php", { credentials: "include" });
-    if (!res.ok) throw new Error("Could not fetch CSRF token");
-    window.csrfToken = (await res.json()).csrf_token;
+    await primeCsrfStrict();
 
-    // ─── 2) Send credentials ───
-    const response = await sendRequest(
-      "/api/auth/auth.php",
-      "POST",
-      data,
-      { "X-CSRF-Token": window.csrfToken }
-    );
+    // Attempt #1 — JSON
+    let res = await fetchWithCsrf('/api/auth/auth.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    let body = await safeJson(res);
 
-    // ─── 3a) Full login (no TOTP) ───
-    if (response.success || response.status === "ok") {
-      sessionStorage.setItem("welcomeMessage", "Welcome back, " + data.username + "!");
-      // … fetch permissions & reload …
+    // TOTP requested?
+    if (await sniffTOTP(res, body)) {
+      try { await primeCsrfStrict(); } catch { }
+      window.pendingTOTP = true;
       try {
-        const perm = await sendRequest("/api/getUserPermissions.php", "GET");
-        if (perm && typeof perm === "object") {
-          localStorage.setItem("folderOnly", perm.folderOnly ? "true" : "false");
-          localStorage.setItem("readOnly", perm.readOnly ? "true" : "false");
-          localStorage.setItem("disableUpload", perm.disableUpload ? "true" : "false");
-        }
+        const auth = await import('/js/auth.js?v={{APP_QVER}}');
+        if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
       } catch { }
-      return window.location.reload();
+      return;
     }
 
-    // ─── 3b) TOTP required ───
-    if (response.totp_required) {
-      // **Refresh** CSRF before the TOTP verify call
-      res = await fetch("/api/auth/token.php", { credentials: "include" });
-      if (res.ok) {
-        window.csrfToken = (await res.json()).csrf_token;
-      }
-      // now open the modal—any totp_verify fetch from here on will use the new token
-      return openTOTPLoginModal();
+    // Full success (no TOTP)
+    if (body && (body.success || body.status === 'ok' || body.authenticated)) {
+
+      await syncPermissionsToLocalStorage();
+      return afterLogin();
     }
 
-    // ─── 3c) Too many attempts ───
-    if (response.error && response.error.includes("Too many failed login attempts")) {
-      showToast(response.error);
+    // Cookie set but non-JSON body — double check session
+    if (!body && await isAuthedNow()) {
+
+      await syncPermissionsToLocalStorage();
+
+      return afterLogin();
+    }
+
+    // Attempt #2 — form fallback
+    res = await fetchWithCsrf('/api/auth/auth.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: toFormBody(payload)
+    });
+    body = await safeJson(res);
+
+    if (await sniffTOTP(res, body)) {
+      try { await primeCsrfStrict(); } catch { }
+      window.pendingTOTP = true;
+      try {
+        const auth = await import('/js/auth.js?v={{APP_QVER}}');
+        if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
+      } catch { }
+      return;
+    }
+
+    if (body && (body.success || body.status === 'ok' || body.authenticated)) {
+      await syncPermissionsToLocalStorage();
+
+      return afterLogin();
+    }
+
+    if (!body && await isAuthedNow()) {
+
+      await syncPermissionsToLocalStorage();
+
+      return afterLogin();
+    }
+
+    // Rate limit still respected
+    if (body?.error && /Too many failed login attempts/i.test(body.error)) {
+      showToast(body.error);
       const btn = document.querySelector("#authForm button[type='submit']");
       if (btn) {
         btn.disabled = true;
@@ -542,12 +708,12 @@ async function submitLogin(data) {
       return;
     }
 
-    // ─── 3d) Other failures ───
-    showToast("Login failed: " + (response.error || "Unknown error"));
+    showToast('Login failed' + (body?.error ? `: ${body.error}` : ''));
 
-  } catch (err) {
-    const msg = err.message || err.error || "Unknown error";
-    showToast(`Login failed: ${msg}`);
+  } catch (e) {
+    showToast('Login failed: ' + (e.message || 'Unknown error'));
+  } finally {
+    __loginInFlight = false;
   }
 }
 
@@ -763,4 +929,4 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-export { initAuth, checkAuthentication };
+export { initAuth, checkAuthentication, openTOTPLoginModal };

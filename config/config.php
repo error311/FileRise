@@ -1,22 +1,6 @@
 <?php
 // config.php
 
-// Prevent caching
-header("Cache-Control: no-cache, must-revalidate");
-header("Pragma: no-cache");
-header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
-header("Expires: 0");
-
-// Security headers
-header('X-Content-Type-Options: nosniff');
-header("X-Frame-Options: SAMEORIGIN");
-header("Referrer-Policy: no-referrer-when-downgrade");
-header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
-header("X-XSS-Protection: 1; mode=block");
-if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
-    header("Strict-Transport-Security: max-age=31536000; includeSubDomains; preload");
-}
-
 // Define constants
 define('PROJECT_ROOT', dirname(__DIR__));
 define('UPLOAD_DIR',    '/var/www/uploads/');

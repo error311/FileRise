@@ -37,7 +37,11 @@ body {
   /************************************************************/
   /* FLEXBOX HEADER: LOGO, TITLE, BUTTONS FIXED               */
   /************************************************************/
-  .header-logo .logo { height: 50px; width: auto; display: block; }
+  .header-logo .logo {
+    display:block;
+    max-width:100%;
+    height:auto;         /* keep aspect ratio; HTML attrs set the intrinsic box */
+  }
   .btn-login {
   margin-top: 10px;
   }/* Color overrides */
@@ -1598,7 +1602,7 @@ body {
   #removeUserModal {
   z-index: 5000 !important;
   }#customConfirmModal {
-  z-index: 6000 !important;
+  z-index: 12000 !important;
   }.admin-panel-content {
   background: #fff;
     color: #000;
@@ -1868,3 +1872,4 @@ body {
   background: #fafafa;
     border-color: #e2e2e2;
   }
+  

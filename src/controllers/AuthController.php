@@ -70,7 +70,10 @@ class AuthController
             if ($oidcAction === 'callback') {
                 try {
                     $oidc->authenticate();
-                    $username = $oidc->requestUserInfo('preferred_username');
+                    $username =
+    $oidc->requestUserInfo('preferred_username')
+    ?: $oidc->requestUserInfo('email')
+    ?: $oidc->requestUserInfo('sub');
 
                     // check if this user has a TOTP secret
                     $totp_secret = null;

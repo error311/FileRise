@@ -5,38 +5,58 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FileRise</title>
+
+  <!-- Icons -->
   <link rel="icon" type="image/png" href="/assets/logo.png">
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+
+  <!-- App meta -->
+  <meta name="description" content="FileRise is a fast, self-hosted file manager with granular per-folder ACLs, drag-and-drop folder moves, WebDAV, tagging, and a clean UI.">
   <meta name="csrf-token" content="">
   <meta name="share-url" content="">
+  <meta name="theme-color" content="#0b5ed7">
 
-  <style>.main-wrapper{display:none}#loadingOverlay{position:fixed;inset:0;background:var(--bg-color,#fff);z-index:9999;display:flex;align-items:center;justify-content:center}</style>
-  <link rel="stylesheet" href="/css/vendor/roboto.css?v={{APP_QVER}}">
-  <link rel="stylesheet" href="/css/vendor/material-icons.css?v={{APP_QVER}}">
+  <!-- Minimal critical CSS only (keeps CSP clean, no inline JS) -->
+  <style>
+    .main-wrapper{display:none}
+    #loadingOverlay{position:fixed;inset:0;background:var(--bg-color,#fff);z-index:9999;display:flex;align-items:center;justify-content:center}
+  </style>
 
-  <!-- Bootstrap CSS (local) -->
-  <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+  <!-- CSS: preload, then promote via tiny external JS (no inline onload) -->
+  <link rel="preload" as="style" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+  <link rel="preload" as="style" href="/css/styles.css?v={{APP_QVER}}">
 
-  <!-- CodeMirror CSS (local) -->
-  <link rel="stylesheet" href="/vendor/codemirror/5.65.5/codemirror.min.css?v={{APP_QVER}}">
-  <link rel="stylesheet" href="/vendor/codemirror/5.65.5/theme/material-darker.min.css?v={{APP_QVER}}">
+  <!-- Fonts: preload only those used above the fold -->
+  <link rel="preload" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3KUBHMdazTgWw.woff2?v={{APP_QVER}}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBHMdazQ.woff2?v={{APP_QVER}}" as="font" type="font/woff2" crossorigin>
+  <!-- Do NOT preload material icons unless needed above the fold -->
 
-  <!-- app CSS -->
-  <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
+  <!-- Non-blocking stylesheet promotion (external to satisfy CSP) -->
+  <script src="/js/defer-css.js?v={{APP_QVER}}" defer></script>
+  
 
-  <!-- Libraries (JS) -->
-  <script src="/vendor/dompurify/2.4.0/purify.min.js?v={{APP_QVER}}"></script>
-  <script src="/vendor/fuse/6.6.2/fuse.min.js?v={{APP_QVER}}"></script>
-  <script src="/vendor/resumable/1.1.0/resumable.min.js?v={{APP_QVER}}"></script>
+  <!-- Base CSS as a fallback if JS is disabled -->
+  <noscript>
+    <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+    <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
+  </noscript>
 
-  <!-- CodeMirror core FIRST -->
-  <script src="/vendor/codemirror/5.65.5/codemirror.min.js?v={{APP_QVER}}"></script>
+  <!-- Preload font CSS (non-blocking) -->
+  <link rel="preload" as="style" href="/css/vendor/roboto.css?v={{APP_QVER}}">
+  <link rel="preload" as="style" href="/css/vendor/material-icons.css?v={{APP_QVER}}">
 
-  <script src="/js/version.js?v={{APP_QVER}}"></script>
+  <!-- Vendor JS (keep defer; they’re not modules) -->
+  <script src="/vendor/dompurify/2.4.0/purify.min.js?v={{APP_QVER}}" defer></script>
 
+  <!-- IMPORTANT: Remove CodeMirror here; lazy-load it inside your editor route/module. -->
+
+  <!-- Version marker (non-blocking) -->
+  <script src="/js/version.js?v={{APP_QVER}}" defer></script>
+ 
+
+  <!-- App entry: start fetching early, execute after parse -->
   <link rel="modulepreload" href="/js/main.js?v={{APP_QVER}}">
   <script type="module" src="/js/main.js?v={{APP_QVER}}"></script>
-
 </head>
 
 <body>
@@ -44,7 +64,14 @@
     <div class="header-left">
       <a href="index.html">
         <div class="header-logo">
-          <img src="/assets/logo.svg?v={{APP_QVER}}" alt="FileRise" class="logo" />
+          <img
+  src="/assets/logo.svg?v={{APP_QVER}}"
+  alt="FileRise"
+  class="logo"
+  width="50" height="50"
+  decoding="async"
+  fetchpriority="low"
+/>
         </div>
       </a>
     </div>
@@ -103,7 +130,7 @@
   <!-- Custom Toast Container -->
   <div id="customToast"></div>
   <div id="hiddenCardsContainer" style="display:none;"></div>
-
+  <main id="main">
   <div class="row mt-4" id="loginForm">
     <div class="col-12">
       <form id="authForm" method="post">
@@ -115,7 +142,7 @@
           <label for="loginPassword" data-i18n-key="password">Password:</label>
           <input type="password" class="form-control" id="loginPassword" name="password" required />
         </div>
-        <button type="submit" class="btn btn-primary btn-block btn-login" data-i18n-key="login">Login</button>
+        <button type="submit" class="btn btn-primary btn-block btn-login" data-i18n-key="login" data-default>Login</button>
         <div class="form-group remember-me-container">
           <input type="checkbox" id="rememberMeCheckbox" name="remember_me" />
           <label for="rememberMeCheckbox" data-i18n-key="remember_me">Remember me</label>
@@ -133,6 +160,8 @@
       </div>
     </div>
   </div>
+</main>
+  
 
   <!-- Main Wrapper: Hidden by default; remove "display: none;" after login -->
   <div class="main-wrapper">
@@ -215,7 +244,7 @@
                           <div class="modal-footer" style="margin-top:15px; text-align:right;">
                             <button id="cancelMoveFolder" class="btn btn-secondary"
                               data-i18n-key="cancel">Cancel</button>
-                            <button id="confirmMoveFolder" class="btn btn-primary" data-i18n-key="move">Move</button>
+                            <button id="confirmMoveFolder" class="btn btn-primary" data-i18n-key="move" data-default>Move</button>
                           </div>
                         </div>
                       </div>
@@ -233,7 +262,7 @@
                             <button id="cancelRenameFolder" class="btn btn-secondary"
                               data-i18n-key="cancel">Cancel</button>
                             <button id="submitRenameFolder" class="btn btn-primary"
-                              data-i18n-key="rename">Rename</button>
+                              data-i18n-key="rename" data-default>Rename</button>
                           </div>
                         </div>
                       </div>
@@ -253,7 +282,7 @@
                             <button id="cancelDeleteFolder" class="btn btn-secondary"
                               data-i18n-key="cancel">Cancel</button>
                             <button id="confirmDeleteFolder" class="btn btn-danger"
-                              data-i18n-key="delete">Delete</button>
+                              data-i18n-key="delete" data-default>Delete</button>
                           </div>
                         </div>
                       </div>
@@ -289,7 +318,7 @@
                   selected files?</p>
                 <div class="modal-footer">
                   <button id="cancelDeleteFiles" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-                  <button id="confirmDeleteFiles" class="btn btn-danger" data-i18n-key="delete">Delete</button>
+                  <button id="confirmDeleteFiles" class="btn btn-danger" data-i18n-key="delete" data-default>Delete</button>
                 </div>
               </div>
             </div>
@@ -303,7 +332,7 @@
                 <select id="copyTargetFolder" class="form-control modal-input"></select>
                 <div class="modal-footer">
                   <button id="cancelCopyFiles" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-                  <button id="confirmCopyFiles" class="btn btn-primary" data-i18n-key="copy">Copy</button>
+                  <button id="confirmCopyFiles" class="btn btn-primary" data-i18n-key="copy" data-default>Copy</button>
                 </div>
               </div>
             </div>
@@ -317,7 +346,7 @@
                 <select id="moveTargetFolder" class="form-control modal-input"></select>
                 <div class="modal-footer">
                   <button id="cancelMoveFiles" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-                  <button id="confirmMoveFiles" class="btn btn-primary" data-i18n-key="move">Move</button>
+                  <button id="confirmMoveFiles" class="btn btn-primary" data-i18n-key="move" data-default>Move</button>
                 </div>
               </div>
             </div>
@@ -325,35 +354,20 @@
               data-i18n-key="download_zip">Download ZIP</button>
             <button id="extractZipBtn" class="btn action-btn btn-sm btn-info"  style="display: none;" disabled
               data-i18n-key="extract_zip_button">Extract Zip</button>
-            <div id="createDropdown" class="dropdown-container" style="position:relative; display:inline-block;">
-              <button id="createBtn" class="btn action-btn" style="display: none;" data-i18n-key="create">
-                ${t('create')} <span class="material-icons"
-                  style="font-size:16px;vertical-align:middle;">arrow_drop_down</span>
-              </button>
-              <ul id="createMenu" class="dropdown-menu" style="
-                    display: none;
-                    position: absolute;
-                    top: 100%;
-                    left: 0;
-                    margin: 4px 0 0;
-                    padding: 0;
-                    list-style: none;
-                    background: #fff;
-                    border: 1px solid #ccc;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-                    z-index: 1000;
-                    min-width: 140px;
-                  ">
-                <li id="createFileOption" class="dropdown-item" data-i18n-key="create_file"
-                  style="padding:8px 12px; cursor:pointer;">
-                  ${t('create_file')}
-                </li>
-                <li id="createFolderOption" class="dropdown-item" data-i18n-key="create_folder"
-                  style="padding:8px 12px; cursor:pointer;">
-                  ${t('create_folder')}
-                </li>
-              </ul>
-            </div>
+              <div id="createDropdown" class="dropdown-container" style="position:relative; display:inline-block;">
+                <button id="createBtn" class="btn action-btn" type="button" style="display:none;" aria-haspopup="true" aria-expanded="false">
+                  <span data-i18n-key="create">Create</span>
+                  <span class="material-icons" style="font-size:16px;vertical-align:middle;">arrow_drop_down</span>
+                </button>
+                <ul id="createMenu" class="dropdown-menu" style="display:none; position:absolute; top:100%; left:0; margin:4px 0 0; padding:0; list-style:none; background:#fff; border:1px solid #ccc; box-shadow:0 2px 6px rgba(0,0,0,0.2); z-index:10010; min-width:160px;">
+                  <li id="createFileOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
+                    <span data-i18n-key="create_file">Create file</span>
+                  </li>
+                  <li id="createFolderOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
+                    <span data-i18n-key="create_folder">Create folder</span>
+                  </li>
+                </ul>
+              </div>
             <!-- Create File Modal -->
             <div id="createFileModal" class="modal" style="display:none;">
               <div class="modal-content">
@@ -362,7 +376,7 @@
                   data-i18n-placeholder="newfile_placeholder" />
                 <div class="modal-footer" style="margin-top:1rem; text-align:right;">
                   <button id="cancelCreateFile" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-                  <button id="confirmCreateFile" class="btn btn-primary" data-i18n-key="create">Create</button>
+                  <button id="confirmCreateFile" class="btn btn-primary" data-i18n-key="create" data-default>Create</button>
                 </div>
               </div>
             </div>
@@ -374,7 +388,7 @@
                   placeholder="files.zip" />
                 <div class="modal-footer" style="margin-top:15px; text-align:right;">
                   <button id="cancelDownloadZip" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-                  <button id="confirmDownloadZip" class="btn btn-primary" data-i18n-key="download">Download</button>
+                  <button id="confirmDownloadZip" class="btn btn-primary" data-i18n-key="download" data-default>Download</button>
                 </div>
               </div>
             </div>
@@ -412,14 +426,14 @@
         placeholder="Filename" />
       <div style="margin-top: 15px; text-align: right;">
         <button id="cancelDownloadFile" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-        <button id="confirmSingleDownloadButton" class="btn btn-primary" data-i18n-key="download">Download</button>
+        <button id="confirmSingleDownloadButton" class="btn btn-primary" data-i18n-key="download" data-default>Download</button>
       </div>
     </div>
   </div>
 
   <!-- Change Password, Add User, Remove User, Rename File, and Custom Confirm Modals (unchanged) -->
   <div id="changePasswordModal" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width:400px; margin:auto;">
+    <div class="modal-content" style="text-align: center; padding: 20px;">
       <span id="closeChangePasswordModal" class="editor-close-btn">&times;</span>
       <h3 data-i18n-key="change_password_title">Change Password</h3>
       <input type="password" id="oldPassword" class="form-control" data-i18n-placeholder="old_password"
@@ -428,7 +442,7 @@
         placeholder="New Password" style="width:100%; margin: 5px 0;" />
       <input type="password" id="confirmPassword" class="form-control" data-i18n-placeholder="confirm_new_password"
         placeholder="Confirm New Password" style="width:100%; margin: 5px 0;" />
-      <button id="saveNewPasswordBtn" class="btn btn-primary" data-i18n-key="save" style="width:100%;">Save</button>
+      <button id="saveNewPasswordBtn" class="btn btn-primary" data-i18n-key="save" style="width:100%;" data-default>Save</button>
     </div>
   </div>
   <div id="addUserModal" class="modal" style="display:none;">
@@ -453,7 +467,7 @@
             Cancel
           </button>
           <!-- Save becomes type="submit" -->
-          <button type="submit" id="saveUserBtn" class="btn btn-primary" data-i18n-key="save_user">
+          <button type="submit" id="saveUserBtn" class="btn btn-primary" data-i18n-key="save_user" data-default>
             Save User
           </button>
         </div>
@@ -478,7 +492,7 @@
         placeholder="Enter new file name" style="margin-top:10px;" />
       <div style="margin-top:15px; text-align:right;">
         <button id="cancelRenameFile" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
-        <button id="submitRenameFile" class="btn btn-primary" data-i18n-key="rename">Rename</button>
+        <button id="submitRenameFile" class="btn btn-primary" data-i18n-key="rename" data-default>Rename</button>
       </div>
     </div>
   </div>
@@ -486,7 +500,7 @@
     <div class="modal-content">
       <p id="confirmMessage"></p>
       <div class="modal-actions">
-        <button id="confirmYesBtn" class="btn btn-primary" data-i18n-key="yes">Yes</button>
+        <button id="confirmYesBtn" class="btn btn-primary" data-i18n-key="yes" data-default>Yes</button>
         <button id="confirmNoBtn" class="btn btn-secondary" data-i18n-key="no">No</button>
       </div>
     </div>

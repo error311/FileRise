@@ -6,231 +6,206 @@ require_once PROJECT_ROOT . '/config/config.php';
 class UploadModel {
 
     private static function sanitizeFolder(string $folder): string {
-                $folder = trim($folder);
-                if ($folder === '' || strtolower($folder) === 'root') return '';
-                // no traversal
-                if (strpos($folder, '..') !== false) return '';
-                // only safe chars + forward slashes
-                if (!preg_match('/^[A-Za-z0-9_\-\/]+$/', $folder)) return '';
-                // normalize: strip leading slashes
-                return ltrim($folder, '/');
+        // decode "%20", normalise slashes & trim via ACL helper
+        $f = ACL::normalizeFolder(rawurldecode($folder));
+
+        // model uses '' to represent root
+        if ($f === 'root') return '';
+
+        // forbid dot segments / empty parts
+        foreach (explode('/', $f) as $seg) {
+            if ($seg === '' || $seg === '.' || $seg === '..') {
+                return '';
             }
+        }
 
+        // allow spaces & unicode via your global regex
+        // (REGEX_FOLDER_NAME validates a path "seg(/seg)*")
+        if (!preg_match(REGEX_FOLDER_NAME, $f)) {
+            return '';
+        }
 
-    /**
-     * Handles file uploads – supports both chunked uploads and full (non-chunked) uploads.
-     *
-     * @param array $post The $_POST array.
-     * @param array $files The $_FILES array.
-     * @return array Returns an associative array with "success" on success or "error" on failure.
-     */
+        return $f; // safe, normalised, with spaces allowed
+    }
+
     public static function handleUpload(array $post, array $files): array {
-        // If this is a GET request for testing chunk existence.
+        // --- GET resumable test (make folder handling consistent)
         if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($post['resumableTest'])) {
-            $chunkNumber = intval($post['resumableChunkNumber']);
+            $chunkNumber         = (int)($post['resumableChunkNumber'] ?? 0);
             $resumableIdentifier = $post['resumableIdentifier'] ?? '';
-            $folder = isset($post['folder']) ? trim($post['folder']) : 'root';
+            $folderSan           = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+
             $baseUploadDir = UPLOAD_DIR;
-            if ($folder !== 'root') {
-                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder . DIRECTORY_SEPARATOR;
+            if ($folderSan !== '') {
+                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+                               . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
             }
-            $tempDir = $baseUploadDir . 'resumable_' . $resumableIdentifier . DIRECTORY_SEPARATOR;
+
+            $tempDir  = $baseUploadDir . 'resumable_' . $resumableIdentifier . DIRECTORY_SEPARATOR;
             $chunkFile = $tempDir . $chunkNumber;
             return ["status" => file_exists($chunkFile) ? "found" : "not found"];
         }
-        
-        // Handle chunked uploads.
+
+        // --- CHUNKED ---
         if (isset($post['resumableChunkNumber'])) {
-            $chunkNumber         = intval($post['resumableChunkNumber']);
-            $totalChunks         = intval($post['resumableTotalChunks']);
+            $chunkNumber         = (int)$post['resumableChunkNumber'];
+            $totalChunks         = (int)$post['resumableTotalChunks'];
             $resumableIdentifier = $post['resumableIdentifier'] ?? '';
-            $resumableFilename   = urldecode(basename($post['resumableFilename']));
-            
-            // Validate file name.
+            $resumableFilename   = urldecode(basename($post['resumableFilename'] ?? ''));
+
             if (!preg_match(REGEX_FILE_NAME, $resumableFilename)) {
                 return ["error" => "Invalid file name: $resumableFilename"];
             }
-            
-            $folderRaw = $post['folder'] ?? 'root';
-            $folderSan = self::sanitizeFolder((string)$folderRaw);
 
-            
+            $folderSan = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+
             if (empty($files['file']) || !isset($files['file']['name'])) {
-                        return ["error" => "No files received"];
-                    }
-            
+                return ["error" => "No files received"];
+            }
+
             $baseUploadDir = UPLOAD_DIR;
             if ($folderSan !== '') {
-                                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
-                                               . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
-                            }
+                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+                               . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
+            }
             if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
                 return ["error" => "Failed to create upload directory"];
             }
-            
+
             $tempDir = $baseUploadDir . 'resumable_' . $resumableIdentifier . DIRECTORY_SEPARATOR;
             if (!is_dir($tempDir) && !mkdir($tempDir, 0775, true)) {
                 return ["error" => "Failed to create temporary chunk directory"];
             }
-            
+
             $chunkErr = $files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
             if ($chunkErr !== UPLOAD_ERR_OK) {
                 return ["error" => "Upload error on chunk $chunkNumber"];
             }
-            
+
             $chunkFile = $tempDir . $chunkNumber;
-            $tmpName = $files['file']['tmp_name'] ?? null;
+            $tmpName   = $files['file']['tmp_name'] ?? null;
             if (!$tmpName || !move_uploaded_file($tmpName, $chunkFile)) {
                 return ["error" => "Failed to move uploaded chunk $chunkNumber"];
             }
-            
-            // Check if all chunks are present.
-            $allChunksPresent = true;
+
+            // all chunks present?
             for ($i = 1; $i <= $totalChunks; $i++) {
                 if (!file_exists($tempDir . $i)) {
-                    $allChunksPresent = false;
-                    break;
+                    return ["status" => "chunk uploaded"];
                 }
             }
-            if (!$allChunksPresent) {
-                return ["status" => "chunk uploaded"];
-            }
-            
-            // Merge chunks.
+
+            // merge
             $targetPath = $baseUploadDir . $resumableFilename;
             if (!$out = fopen($targetPath, "wb")) {
                 return ["error" => "Failed to open target file for writing"];
             }
             for ($i = 1; $i <= $totalChunks; $i++) {
                 $chunkPath = $tempDir . $i;
-                if (!file_exists($chunkPath)) {
-                    fclose($out);
-                    return ["error" => "Chunk $i missing during merge"];
-                }
-                if (!$in = fopen($chunkPath, "rb")) {
-                    fclose($out);
-                    return ["error" => "Failed to open chunk $i"];
-                }
-                while ($buff = fread($in, 4096)) {
-                    fwrite($out, $buff);
-                }
+                if (!file_exists($chunkPath)) { fclose($out); return ["error" => "Chunk $i missing during merge"]; }
+                if (!$in = fopen($chunkPath, "rb")) { fclose($out); return ["error" => "Failed to open chunk $i"]; }
+                while ($buff = fread($in, 4096)) { fwrite($out, $buff); }
                 fclose($in);
             }
             fclose($out);
-            
-            // Update metadata.
-            $metadataKey = ($folderSan === '') ? "root" : $folderSan;
+
+            // metadata
+            $metadataKey      = ($folderSan === '') ? "root" : $folderSan;
             $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
-            $metadataFile = META_DIR . $metadataFileName;
-            $uploadedDate = date(DATE_TIME_FORMAT);
-            $uploader = $_SESSION['username'] ?? "Unknown";
-            $metadataCollection = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
-            if (!is_array($metadataCollection)) {
-                $metadataCollection = [];
+            $metadataFile     = META_DIR . $metadataFileName;
+            $uploadedDate     = date(DATE_TIME_FORMAT);
+            $uploader         = $_SESSION['username'] ?? "Unknown";
+            $collection       = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
+            if (!is_array($collection)) $collection = [];
+            if (!isset($collection[$resumableFilename])) {
+                $collection[$resumableFilename] = ["uploaded" => $uploadedDate, "uploader" => $uploader];
+                file_put_contents($metadataFile, json_encode($collection, JSON_PRETTY_PRINT));
             }
-            if (!isset($metadataCollection[$resumableFilename])) {
-                $metadataCollection[$resumableFilename] = [
-                    "uploaded" => $uploadedDate,
-                    "uploader" => $uploader
-                ];
-                file_put_contents($metadataFile, json_encode($metadataCollection, JSON_PRETTY_PRINT));
-            }
-            
-            // Cleanup temporary directory.
-            $rrmdir = function($dir) use (&$rrmdir) {
-                if (!is_dir($dir)) return;
-                $iterator = new RecursiveIteratorIterator(
-                    new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
-                    RecursiveIteratorIterator::CHILD_FIRST
-                );
-                foreach ($iterator as $item) {
-                    $item->isDir() ? rmdir($item->getRealPath()) : unlink($item->getRealPath());
-                }
-                rmdir($dir);
-            };
-            $rrmdir($tempDir);
-            
+
+            // cleanup temp
+            self::rrmdir($tempDir);
+
             return ["success" => "File uploaded successfully"];
-        } else {
-                        // Handle full upload (non-chunked)
-                        $folderRaw = $post['folder'] ?? 'root';
-                        $folderSan = self::sanitizeFolder((string)$folderRaw);
-            }
-            
-            $baseUploadDir = UPLOAD_DIR;
-            if ($folderSan !== '') {
-                                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
-                                               . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
-                            }
-            if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
-                return ["error" => "Failed to create upload directory"];
-            }
-            
-            $safeFileNamePattern = REGEX_FILE_NAME;
-            $metadataCollection = [];
-            $metadataChanged = [];
-            
-            foreach ($files["file"]["name"] as $index => $fileName) {
-                // Basic PHP upload error check per file
-                if (($files['file']['error'][$index] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-                        return ["error" => "Error uploading file"];
-                    }
-                $safeFileName = trim(urldecode(basename($fileName)));
-                if (!preg_match($safeFileNamePattern, $safeFileName)) {
-                    return ["error" => "Invalid file name: " . $fileName];
-                }
-                $relativePath = '';
-                if (isset($post['relativePath'])) {
-                    $relativePath = is_array($post['relativePath']) ? $post['relativePath'][$index] ?? '' : $post['relativePath'];
-                }
-                $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR;
-                if (!empty($relativePath)) {
-                    $subDir = dirname($relativePath);
-                    if ($subDir !== '.' && $subDir !== '') {
-                      // IMPORTANT: build the subfolder under the *current* base folder
-                        $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR .
-                                     str_replace('/', DIRECTORY_SEPARATOR, $subDir) . DIRECTORY_SEPARATOR;
-                    }
-                    $safeFileName = basename($relativePath);
-                }
-                if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0775, true)) {
-                    return ["error" => "Failed to create subfolder: " . $uploadDir];
-                }
-                $targetPath = $uploadDir . $safeFileName;
-                if (move_uploaded_file($files["file"]["tmp_name"][$index], $targetPath)) {
-                                        $metadataKey = ($folderSan === '') ? "root" : $folderSan;
-                    $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
-                    $metadataFile = META_DIR . $metadataFileName;
-                    if (!isset($metadataCollection[$metadataKey])) {
-                        $metadataCollection[$metadataKey] = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
-                        if (!is_array($metadataCollection[$metadataKey])) {
-                            $metadataCollection[$metadataKey] = [];
-                        }
-                        $metadataChanged[$metadataKey] = false;
-                    }
-                    if (!isset($metadataCollection[$metadataKey][$safeFileName])) {
-                        $uploadedDate = date(DATE_TIME_FORMAT);
-                        $uploader = $_SESSION['username'] ?? "Unknown";
-                        $metadataCollection[$metadataKey][$safeFileName] = [
-                            "uploaded" => $uploadedDate,
-                            "uploader" => $uploader
-                        ];
-                        $metadataChanged[$metadataKey] = true;
-                    }
-                } else {
-                    return ["error" => "Error uploading file"];
-                }
-            }
-            
-            foreach ($metadataCollection as $folderKey => $data) {
-                if ($metadataChanged[$folderKey]) {
-                    $metadataFileName = str_replace(['/', '\\', ' '], '-', $folderKey) . '_metadata.json';
-                    $metadataFile = META_DIR . $metadataFileName;
-                    file_put_contents($metadataFile, json_encode($data, JSON_PRETTY_PRINT));
-                }
-            }
-            return ["success" => "Files uploaded successfully"];
         }
+
+        // --- NON-CHUNKED ---
+        $folderSan = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+
+        $baseUploadDir = UPLOAD_DIR;
+        if ($folderSan !== '') {
+            $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+                           . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
+        }
+        if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
+            return ["error" => "Failed to create upload directory"];
+        }
+
+        $safeFileNamePattern = REGEX_FILE_NAME;
+        $metadataCollection  = [];
+        $metadataChanged     = [];
+
+        foreach ($files["file"]["name"] as $index => $fileName) {
+            if (($files['file']['error'][$index] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                return ["error" => "Error uploading file"];
+            }
+
+            $safeFileName = trim(urldecode(basename($fileName)));
+            if (!preg_match($safeFileNamePattern, $safeFileName)) {
+                return ["error" => "Invalid file name: " . $fileName];
+            }
+
+            $relativePath = '';
+            if (isset($post['relativePath'])) {
+                $relativePath = is_array($post['relativePath']) ? ($post['relativePath'][$index] ?? '') : $post['relativePath'];
+            }
+
+            $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR;
+            if (!empty($relativePath)) {
+                $subDir = dirname($relativePath);
+                if ($subDir !== '.' && $subDir !== '') {
+                    $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
+                               . str_replace('/', DIRECTORY_SEPARATOR, $subDir) . DIRECTORY_SEPARATOR;
+                }
+                $safeFileName = basename($relativePath);
+            }
+
+            if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0775, true)) {
+                return ["error" => "Failed to create subfolder: " . $uploadDir];
+            }
+
+            $targetPath = $uploadDir . $safeFileName;
+            if (!move_uploaded_file($files["file"]["tmp_name"][$index], $targetPath)) {
+                return ["error" => "Error uploading file"];
+            }
+
+            $metadataKey      = ($folderSan === '') ? "root" : $folderSan;
+            $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
+            $metadataFile     = META_DIR . $metadataFileName;
+
+            if (!isset($metadataCollection[$metadataKey])) {
+                $metadataCollection[$metadataKey] = file_exists($metadataFile) ? json_decode(file_get_contents($metadataFile), true) : [];
+                if (!is_array($metadataCollection[$metadataKey])) $metadataCollection[$metadataKey] = [];
+                $metadataChanged[$metadataKey] = false;
+            }
+
+            if (!isset($metadataCollection[$metadataKey][$safeFileName])) {
+                $uploadedDate = date(DATE_TIME_FORMAT);
+                $uploader     = $_SESSION['username'] ?? "Unknown";
+                $metadataCollection[$metadataKey][$safeFileName] = ["uploaded" => $uploadedDate, "uploader" => $uploader];
+                $metadataChanged[$metadataKey] = true;
+            }
+        }
+
+        foreach ($metadataCollection as $folderKey => $data) {
+            if (!empty($metadataChanged[$folderKey])) {
+                $metadataFileName = str_replace(['/', '\\', ' '], '-', $folderKey) . '_metadata.json';
+                $metadataFile     = META_DIR . $metadataFileName;
+                file_put_contents($metadataFile, json_encode($data, JSON_PRETTY_PRINT));
+            }
+        }
+
+        return ["success" => "Files uploaded successfully"];
+    }
     
 
         /**

@@ -52,57 +52,69 @@ class UploadController {
         }
     
         // ---- 3) Folder-level WRITE permission (ACL) ----
-        // Always require client to send the folder; fall back to GET if needed.
-        $folderParam   = isset($_POST['folder']) ? (string)$_POST['folder'] : (isset($_GET['folder']) ? (string)$_GET['folder'] : 'root');
-        $targetFolder  = ACL::normalizeFolder($folderParam);
-    
-        // Admins bypass folder canWrite checks
-        if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Forbidden: no write access to folder "'.$targetFolder.'".']);
-            return;
-        }
-    
-        // ---- 4) Delegate to model (actual file/chunk processing) ----
-        // (Optionally re-check in UploadModel before finalizing.)
-        $result = UploadModel::handleUpload($_POST, $_FILES);
-    
-        // ---- 5) Response ----
-        if (isset($result['error'])) {
-            http_response_code(400);
-            echo json_encode($result);
-            return;
-        }
-        if (isset($result['status'])) {
-            // e.g., {"status":"chunk uploaded"}
-            echo json_encode($result);
-            return;
-        }
-    
-        echo json_encode([
-            'success'     => 'File uploaded successfully',
-            'newFilename' => $result['newFilename'] ?? null
-        ]);
+    // Always require client to send the folder; fall back to GET if needed.
+    $folderParam = isset($_POST['folder'])
+        ? (string)$_POST['folder']
+        : (isset($_GET['folder']) ? (string)$_GET['folder'] : 'root');
+
+    // Decode %xx (e.g., "test%20folder") then normalize
+    $folderParam  = rawurldecode($folderParam);
+    $targetFolder = ACL::normalizeFolder($folderParam);
+
+    // Admins bypass folder canWrite checks
+    $username  = (string)($_SESSION['username'] ?? '');
+    $userPerms = loadUserPermissions($username) ?: [];
+    $isAdmin   = ACL::isAdmin($userPerms);
+
+    if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Forbidden: no write access to folder "'.$targetFolder.'".']);
+        return;
     }
+
+    // ---- 4) Delegate to model (force the sanitized folder) ----
+    $_POST['folder'] = $targetFolder; // in case model reads superglobal
+    $post = $_POST;
+    $post['folder'] = $targetFolder;
+
+    $result = UploadModel::handleUpload($post, $_FILES);
+
+    // ---- 5) Response (unchanged) ----
+    if (isset($result['error'])) {
+        http_response_code(400);
+        echo json_encode($result);
+        return;
+    }
+    if (isset($result['status'])) {
+        echo json_encode($result);
+        return;
+    }
+
+    echo json_encode([
+        'success'     => 'File uploaded successfully',
+        'newFilename' => $result['newFilename'] ?? null
+    ]);
+}
     
     public function removeChunks(): void {
-        header('Content-Type: application/json');
+    header('Content-Type: application/json');
 
-        $receivedToken = isset($_POST['csrf_token']) ? trim($_POST['csrf_token']) : '';
-        if ($receivedToken !== ($_SESSION['csrf_token'] ?? '')) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Invalid CSRF token']);
-            return;
-        }
-
-        if (!isset($_POST['folder'])) {
-            http_response_code(400);
-            echo json_encode(['error' => 'No folder specified']);
-            return;
-        }
-
-        $folder = (string)$_POST['folder'];
-        $result = UploadModel::removeChunks($folder);
-        echo json_encode($result);
+    $receivedToken = isset($_POST['csrf_token']) ? trim($_POST['csrf_token']) : '';
+    if ($receivedToken !== ($_SESSION['csrf_token'] ?? '')) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Invalid CSRF token']);
+        return;
     }
+
+    if (!isset($_POST['folder'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'No folder specified']);
+        return;
+    }
+
+    $folderRaw = (string)$_POST['folder'];
+    $folder    = ACL::normalizeFolder(rawurldecode($folderRaw));
+
+    echo json_encode(UploadModel::removeChunks($folder));
+}
 }

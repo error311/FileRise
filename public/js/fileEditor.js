@@ -7,9 +7,17 @@ import { t } from './i18n.js?v={{APP_QVER}}';
 const EDITOR_PLAIN_THRESHOLD = 5 * 1024 * 1024;  // >5 MiB => force plain text, lighter settings
 const EDITOR_BLOCK_THRESHOLD = 10 * 1024 * 1024; // >10 MiB => block editing
 
-// Lazy-load CodeMirror modes on demand
-//const CM_CDN = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/";
-const CM_LOCAL = "/vendor/codemirror/5.65.5/";
+// ==== CodeMirror lazy loader ===============================================
+const CM_BASE = "/vendor/codemirror/5.65.5/";
+
+// Stamp-friendly helpers (the stamper will replace {{APP_QVER}})
+const coreUrl = (p) => `${CM_BASE}${p}?v={{APP_QVER}}`;
+
+const CORE = {
+  js:  coreUrl("codemirror.min.js"),
+  css: coreUrl("codemirror.min.css"),
+  themeCss: coreUrl("theme/material-darker.min.css"),
+};
 
 // Which mode file to load for a given name/mime
 const MODE_URL = {
@@ -40,6 +48,13 @@ const MODE_URL = {
   "text/x-kotlin":  "mode/clike/clike.min.js?v={{APP_QVER}}"
 };
 
+// Mode dependency graph
+const MODE_DEPS = {
+  "htmlmixed": ["xml", "javascript", "css"],
+  "application/x-httpd-php": ["htmlmixed", "text/x-csrc"], // php overlays + clike bits
+  "markdown": ["xml"]
+};
+
 // Map any mime/alias to the key we use in MODE_URL
 function normalizeModeName(modeOption) {
   const name = typeof modeOption === "string" ? modeOption : (modeOption && modeOption.name);
@@ -49,61 +64,77 @@ function normalizeModeName(modeOption) {
   return name;
 }
 
-const MODE_LOAD_TIMEOUT_MS = 2500; // allow closing immediately; don't wait forever
+const _loadedScripts = new Set();
+const _loadedCss = new Set();
+let _corePromise = null;
 
 function loadScriptOnce(url) {
   return new Promise((resolve, reject) => {
-    const ver = (window.APP_VERSION ?? 'dev').replace(/^v/, ''); // "v1.6.9" -> "1.6.9"
-    const withQS = url; //+ '?v=' + ver;
-
-    const key = `cm:${withQS}`;
-    let s = document.querySelector(`script[data-key="${key}"]`);
-    if (s) {
-      if (s.dataset.loaded === "1") return resolve();
-      s.addEventListener("load", resolve);
-      s.addEventListener("error", () => reject(new Error(`Load failed: ${withQS}`)));
-      return;
-    }
-    s = document.createElement("script");
-    s.src = withQS;
+    if (_loadedScripts.has(url)) return resolve();
+    const s = document.createElement("script");
+    s.src = url;
     s.async = true;
-    s.dataset.key = key;
-    s.addEventListener("load", () => { s.dataset.loaded = "1"; resolve(); });
-    s.addEventListener("error", () => reject(new Error(`Load failed: ${withQS}`)));
+    s.onload = () => { _loadedScripts.add(url); resolve(); };
+    s.onerror = () => reject(new Error(`Load failed: ${url}`));
     document.head.appendChild(s);
   });
 }
 
+function loadCssOnce(href) {
+  return new Promise((resolve, reject) => {
+    if (_loadedCss.has(href)) return resolve();
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = href;
+    l.onload = () => { _loadedCss.add(href); resolve(); };
+    l.onerror = () => reject(new Error(`Load failed: ${href}`));
+    document.head.appendChild(l);
+  });
+}
+
+async function ensureCore() {
+  if (_corePromise) return _corePromise;
+  _corePromise = (async () => {
+    // load CSS first to avoid FOUC
+    await loadCssOnce(CORE.css);
+    await loadCssOnce(CORE.themeCss);
+    if (!window.CodeMirror) {
+      await loadScriptOnce(CORE.js);
+    }
+  })();
+  return _corePromise;
+}
+
+async function loadSingleMode(name) {
+  const rel = MODE_URL[name];
+  if (!rel) return;
+  // prepend base if needed
+  const url = rel.startsWith("http") ? rel : (rel.startsWith("/") ? rel : (CM_BASE + rel));
+  await loadScriptOnce(url);
+}
+
+function isModeRegistered(name) {
+  return !!(
+    (window.CodeMirror?.modes && window.CodeMirror.modes[name]) ||
+    (window.CodeMirror?.mimeModes && window.CodeMirror.mimeModes[name])
+  );
+}
 
 async function ensureModeLoaded(modeOption) {
-  if (!window.CodeMirror) return;
-
+  await ensureCore();
   const name = normalizeModeName(modeOption);
   if (!name) return;
-
-  const isRegistered = () =>
-    (window.CodeMirror?.modes && window.CodeMirror.modes[name]) ||
-    (window.CodeMirror?.mimeModes && window.CodeMirror.mimeModes[name]);
-
-  if (isRegistered()) return;
-
-  const url = MODE_URL[name];
-  if (!url) return; // unknown -> stay in text/plain
-
-  // Dependencies
-  if (name === "htmlmixed") {
-    await Promise.all([
-      ensureModeLoaded("xml"),
-      ensureModeLoaded("css"),
-      ensureModeLoaded("javascript")
-    ]);
+  if (isModeRegistered(name)) return;
+  const deps = MODE_DEPS[name] || [];
+  for (const d of deps) {
+    if (!isModeRegistered(d)) await loadSingleMode(d);
   }
-  if (name === "application/x-httpd-php") {
-    await ensureModeLoaded("htmlmixed");
-  }
-
-  await loadScriptOnce(CM_LOCAL + url);
+  await loadSingleMode(name);
 }
+
+// Public helper for callers (we keep your existing function name in use):
+const MODE_LOAD_TIMEOUT_MS = 2500; // allow closing immediately; don't wait forever
+// ==== /CodeMirror lazy loader ===============================================
 
 function getModeForFile(fileName) {
   const dot = fileName.lastIndexOf(".");
@@ -215,7 +246,7 @@ export function editFile(fileName, folder) {
         </div>
         <textarea id="fileEditor" class="editor-textarea">${escapeHTML(content)}</textarea>
         <div class="editor-footer">
-          <button id="saveBtn" class="btn btn-primary" disabled>${t("save")}</button>
+          <button id="saveBtn" class="btn btn-primary" data-default disabled>${t("save")} </button>
           <button id="closeBtn" class="btn btn-secondary">${t("close")}</button>
         </div>
       `;
@@ -246,20 +277,20 @@ export function editFile(fileName, folder) {
       const theme = isDarkMode ? "material-darker" : "default";
       const desiredMode = forcePlainText ? "text/plain" : getModeForFile(fileName);
 
-      // Helper to check whether a mode is currently registered
-      const modeName = typeof desiredMode === "string" ? desiredMode : (desiredMode && desiredMode.name);
-      const isModeRegistered = () =>
-        (window.CodeMirror?.modes && window.CodeMirror.modes[modeName]) ||
-        (window.CodeMirror?.mimeModes && window.CodeMirror.mimeModes[modeName]);
-
-      // Start mode loading (don’t block closing)
-      const modePromise = ensureModeLoaded(desiredMode);
+      // Start core+mode loading (don’t block closing)
+      const modePromise = (async () => {
+        await ensureCore();                 // load CM core + CSS
+        if (!forcePlainText) {
+          await ensureModeLoaded(desiredMode); // then load the needed mode + deps
+        }
+      })();
 
       // Wait up to MODE_LOAD_TIMEOUT_MS; then proceed with whatever is available
       const timeout = new Promise((res) => setTimeout(res, MODE_LOAD_TIMEOUT_MS));
 
       Promise.race([modePromise, timeout]).then(() => {
         if (canceled) return;
+
         if (!window.CodeMirror) {
           // Core not present: keep plain <textarea>; enable Save and bail gracefully
           document.getElementById("saveBtn").disabled = false;
@@ -267,7 +298,9 @@ export function editFile(fileName, folder) {
           return;
         }
 
-        const initialMode = (forcePlainText || !isModeRegistered()) ? "text/plain" : desiredMode;
+        const normName = normalizeModeName(desiredMode) || "text/plain";
+        const initialMode = (forcePlainText || !isModeRegistered(normName)) ? "text/plain" : desiredMode;
+
         const cmOptions = {
           lineNumbers: !forcePlainText,
           mode: initialMode,
@@ -319,8 +352,11 @@ export function editFile(fileName, folder) {
 
         // If we started in plain text due to timeout, flip to the real mode once it arrives
         modePromise.then(() => {
-          if (!canceled && !forcePlainText && isModeRegistered()) {
-            editor.setOption("mode", desiredMode);
+          if (!canceled && !forcePlainText) {
+            const nn = normalizeModeName(desiredMode);
+            if (nn && isModeRegistered(nn)) {
+              editor.setOption("mode", desiredMode);
+            }
           }
         }).catch(() => {
           // If the mode truly fails to load, we just stay in plain text

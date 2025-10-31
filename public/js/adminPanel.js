@@ -10,16 +10,16 @@ const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;
 
 function buildFullGrantsForAllFolders(folders) {
   const allTrue = {
-    view:true, viewOwn:false, manage:true, create:true, upload:true, edit:true,
-    rename:true, copy:true, move:true, delete:true, extract:true,
-    shareFile:true, shareFolder:true, share:true
+    view: true, viewOwn: false, manage: true, create: true, upload: true, edit: true,
+    rename: true, copy: true, move: true, delete: true, extract: true,
+    shareFile: true, shareFolder: true, share: true
   };
   return folders.reduce((acc, f) => { acc[f] = { ...allTrue }; return acc; }, {});
 }
 
 /* === BEGIN: Folder Access helpers (merged + improved) === */
-function qs(scope, sel){ return (scope||document).querySelector(sel); }
-function qsa(scope, sel){ return Array.from((scope||document).querySelectorAll(sel)); }
+function qs(scope, sel) { return (scope || document).querySelector(sel); }
+function qsa(scope, sel) { return Array.from((scope || document).querySelectorAll(sel)); }
 
 function enforceShareFolderRule(row) {
   const manage = qs(row, 'input[data-cap="manage"]');
@@ -37,6 +37,66 @@ function enforceShareFolderRule(row) {
   }
 }
 
+function wireHeaderTitleLive() {
+  const input = document.getElementById('headerTitle');
+  if (!input || input.__live) return;
+  input.__live = true;
+
+  const apply = (val) => {
+    const title = (val || '').trim() || 'FileRise';
+    const h1 = document.querySelector('.header-title h1');
+    if (h1) h1.textContent = title;
+    document.title = title;
+    window.headerTitle = val || ''; // preserve raw value user typed
+    try { localStorage.setItem('headerTitle', title); } catch { }
+  };
+
+  // apply current value immediately + on each keystroke
+  apply(input.value);
+  input.addEventListener('input', (e) => apply(e.target.value));
+}
+
+function renderMaskedInput({ id, label, hasValue, isSecret = false }) {
+  const type = isSecret ? 'password' : 'text';
+  const disabled = hasValue ? 'disabled data-replace="0" placeholder="•••••• (saved)"' : '';
+  const replaceBtn = hasValue
+    ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-replace-for="${id}">Replace</button>`
+    : '';
+  const note = hasValue
+    ? `<small class="text-success" style="margin-left:4px;">Saved — leave blank to keep</small>`
+    : '';
+
+  return `
+    <div class="form-group">
+      <label for="${id}">${label}:</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="${type}" id="${id}" class="form-control" ${disabled} />
+        ${replaceBtn}
+      </div>
+      ${note}
+    </div>
+  `;
+}
+
+function wireReplaceButtons(scope = document) {
+  scope.querySelectorAll('[data-replace-for]').forEach(btn => {
+    if (btn.__wired) return;
+    btn.__wired = true;
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-replace-for');
+      const inp = scope.querySelector('#' + id);
+      if (!inp) return;
+      inp.disabled = false;
+      inp.dataset.replace = '1';
+      inp.placeholder = '';
+      inp.value = '';
+      btn.textContent = 'Keep saved value';
+      btn.removeAttribute('data-replace-for');
+      btn.addEventListener('click', () => { /* no-op after first toggle */ }, { once: true });
+    }, { once: true });
+  });
+}
+
 function onShareFolderToggle(row, checked) {
   const manage = qs(row, 'input[data-cap="manage"]');
   const viewAll = qs(row, 'input[data-cap="view"]');
@@ -52,14 +112,14 @@ function onShareFileToggle(row, checked) {
   const viewAll = qs(row, 'input[data-cap="view"]');
   const viewOwn = qs(row, 'input[data-cap="viewOwn"]');
   const hasView = !!(viewAll && viewAll.checked);
-  const hasOwn  = !!(viewOwn && viewOwn.checked);
+  const hasOwn = !!(viewOwn && viewOwn.checked);
   if (!hasView && !hasOwn && viewOwn) {
     viewOwn.checked = true;
   }
 }
 
 function onWriteToggle(row, checked) {
-  const caps = ["create","upload","edit","rename","copy","delete","extract"];
+  const caps = ["create", "upload", "edit", "rename", "copy", "delete", "extract"];
   caps.forEach(c => {
     const box = qs(row, `input[data-cap="${c}"]`);
     if (box) box.checked = checked;
@@ -426,20 +486,21 @@ export function openAdminPanel() {
             <div class="editor-close-btn" id="closeAdminPanel">&times;</div>
             <h3>${adminTitle}</h3>
             <form id="adminPanelForm">
-              ${[
-                { id: "userManagement", label: t("user_management") },
-                { id: "headerSettings", label: t("header_settings") },
-                { id: "loginOptions", label: t("login_options") },
-                { id: "webdav", label: "WebDAV Access" },
-                { id: "upload", label: t("shared_max_upload_size_bytes_title") },
-                { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
-                { id: "shareLinks", label: t("manage_shared_links") }
-              ].map(sec => `
-                <div id="${sec.id}Header" class="section-header collapsed">
-                  ${sec.label} <i class="material-icons">expand_more</i>
-                </div>
-                <div id="${sec.id}Content" class="section-content"></div>
-              `).join("")}
+            ${[
+            { id: "userManagement", label: t("user_management") },
+            { id: "headerSettings", label: t("header_settings") },
+            { id: "loginOptions", label: t("login_options") },
+            { id: "webdav", label: "WebDAV Access" },
+            { id: "upload", label: t("shared_max_upload_size_bytes_title") },
+            { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
+            { id: "shareLinks", label: t("manage_shared_links") },
+            { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Sponsor / Donations") : "Sponsor / Donations") }
+          ].map(sec => `
+              <div id="${sec.id}Header" class="section-header collapsed">
+                ${sec.label} <i class="material-icons">expand_more</i>
+              </div>
+              <div id="${sec.id}Content" class="section-content"></div>
+            `).join("")}
 
               <div class="action-row">
                 <button type="button" id="cancelAdminSettings" class="btn btn-secondary">${t("cancel")}</button>
@@ -453,7 +514,7 @@ export function openAdminPanel() {
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
 
-        ["userManagement", "headerSettings", "loginOptions", "webdav", "upload", "oidc", "shareLinks"]
+        ["userManagement", "headerSettings", "loginOptions", "webdav", "upload", "oidc", "shareLinks", "sponsor"]
           .forEach(id => {
             document.getElementById(id + "Header")
               .addEventListener("click", () => toggleSection(id));
@@ -485,6 +546,7 @@ export function openAdminPanel() {
             <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle || ""}" />
           </div>
         `;
+        wireHeaderTitleLive();
 
         document.getElementById("loginOptionsContent").innerHTML = `
           <div class="form-group"><input type="checkbox" id="disableFormLogin" /> <label for="disableFormLogin">${t("disable_login_form")}</label></div>
@@ -512,16 +574,34 @@ export function openAdminPanel() {
           </div>
         `;
 
+        const hasId = !!(config.oidc && config.oidc.hasClientId);
+        const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
+
         document.getElementById("oidcContent").innerHTML = `
-          <div class="form-text text-muted" style="margin-top:8px;">
-            <small>Note: OIDC credentials (Client ID/Secret) will show blank here after saving, but remain unchanged until you explicitly edit and save them.</small>
-          </div>
-          <div class="form-group"><label for="oidcProviderUrl">${t("oidc_provider_url")}:</label><input type="text" id="oidcProviderUrl" class="form-control" value="${window.currentOIDCConfig?.providerUrl || ""}" /></div>
-          <div class="form-group"><label for="oidcClientId">${t("oidc_client_id")}:</label><input type="text" id="oidcClientId" class="form-control" value="${window.currentOIDCConfig?.clientId || ""}" /></div>
-          <div class="form-group"><label for="oidcClientSecret">${t("oidc_client_secret")}:</label><input type="text" id="oidcClientSecret" class="form-control" value="${window.currentOIDCConfig?.clientSecret || ""}" /></div>
-          <div class="form-group"><label for="oidcRedirectUri">${t("oidc_redirect_uri")}:</label><input type="text" id="oidcRedirectUri" class="form-control" value="${window.currentOIDCConfig?.redirectUri || ""}" /></div>
-          <div class="form-group"><label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label><input type="text" id="globalOtpauthUrl" class="form-control" value="${window.currentOIDCConfig?.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" /></div>
-        `;
+  <div class="form-text text-muted" style="margin-top:8px;">
+    <small>Client ID/Secret are never shown after saving. A green note indicates a value is saved. Click “Replace” to overwrite.</small>
+  </div>
+
+  <div class="form-group">
+    <label for="oidcProviderUrl">${t("oidc_provider_url")}:</label>
+    <input type="text" id="oidcProviderUrl" class="form-control" value="${(window.currentOIDCConfig?.providerUrl || "")}" />
+  </div>
+
+  ${renderMaskedInput({ id: "oidcClientId", label: t("oidc_client_id"), hasValue: hasId })}
+  ${renderMaskedInput({ id: "oidcClientSecret", label: t("oidc_client_secret"), hasValue: hasSecret, isSecret: true })}
+
+  <div class="form-group">
+    <label for="oidcRedirectUri">${t("oidc_redirect_uri")}:</label>
+    <input type="text" id="oidcRedirectUri" class="form-control" value="${(window.currentOIDCConfig?.redirectUri || "")}" />
+  </div>
+
+  <div class="form-group">
+    <label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label>
+    <input type="text" id="globalOtpauthUrl" class="form-control" value="${window.currentOIDCConfig?.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
+  </div>
+`;
+
+        wireReplaceButtons(document.getElementById("oidcContent"));
 
         document.getElementById("shareLinksContent").textContent = t("loading") + "…";
 
@@ -544,6 +624,60 @@ export function openAdminPanel() {
               .forEach(i => document.getElementById(i).checked = false);
           }
         });
+
+        // --- Sponsor (fixed, non-editable) ---
+        const SPONSOR_GH = "https://github.com/sponsors/error311";
+        const SPONSOR_KOFI = "https://ko-fi.com/error311";
+
+        document.getElementById("sponsorContent").innerHTML = `
+  <div class="form-group" style="margin-bottom:12px;">
+    <label for="sponsorGitHub">${(typeof tf === 'function' ? tf("github_sponsors_url", "GitHub Sponsors URL") : "GitHub Sponsors URL")}:</label>
+    <div class="input-group">
+      <input type="url"
+             id="sponsorGitHub"
+             class="form-control"
+             value="${SPONSOR_GH}"
+             readonly
+             data-ignore-dirty="1" />
+      <button type="button" id="copySponsorGitHub" class="btn btn-outline-primary">Copy</button>
+      <a class="btn btn-outline-secondary" id="openSponsorGitHub" target="_blank" rel="noopener">Open</a>
+    </div>
+  </div>
+
+  <div class="form-group" style="margin-bottom:12px;">
+    <label for="sponsorKoFi">${(typeof tf === 'function' ? tf("ko_fi_url", "Ko-fi URL") : "Ko-fi URL")}:</label>
+    <div class="input-group">
+      <input type="url"
+             id="sponsorKoFi"
+             class="form-control"
+             value="${SPONSOR_KOFI}"
+             readonly
+             data-ignore-dirty="1" />
+      <button type="button" id="copySponsorKoFi" class="btn btn-outline-primary">Copy</button>
+      <a class="btn btn-outline-secondary" id="openSponsorKoFi" target="_blank" rel="noopener">Open</a>
+    </div>
+  </div>
+
+  <small class="text-muted">${(typeof tf === 'function'
+            ? tf("sponsor_note_fixed", "Please consider supporting ongoing development.")
+            : "Please consider supporting ongoing development.")}</small>
+`;
+
+        // Wire copy + open (no changes tracked)
+        const ghInput = document.getElementById("sponsorGitHub");
+        const kfInput = document.getElementById("sponsorKoFi");
+
+        document.getElementById("copySponsorGitHub").addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(ghInput.value); } catch { }
+          showToast(typeof tf === 'function' ? tf("copied", "Copied!") : "Copied!");
+        });
+        document.getElementById("copySponsorKoFi").addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(kfInput.value); } catch { }
+          showToast(typeof tf === 'function' ? tf("copied", "Copied!") : "Copied!");
+        });
+
+        document.getElementById("openSponsorGitHub").href = SPONSOR_GH;
+        document.getElementById("openSponsorKoFi").href = SPONSOR_KOFI;
 
         const userMgmt = document.getElementById("userManagementContent");
         userMgmt?.removeEventListener("click", window.__userMgmtDelegatedClick);
@@ -574,7 +708,11 @@ export function openAdminPanel() {
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig?.providerUrl || "";
-        document.getElementById("oidcClientId").value = window.currentOIDCConfig?.clientId || "";
+        const idEl = document.getElementById("oidcClientId");
+        const secEl = document.getElementById("oidcClientSecret");
+        if (!hasId) idEl.value = window.currentOIDCConfig?.clientId || "";
+        if (!hasSecret) secEl.value = window.currentOIDCConfig?.clientSecret || "";
+        wireReplaceButtons(document.getElementById("oidcContent"));
         document.getElementById("oidcClientSecret").value = window.currentOIDCConfig?.clientSecret || "";
         document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig?.redirectUri || "";
         document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig?.globalOtpauthUrl || '';
@@ -585,57 +723,57 @@ export function openAdminPanel() {
 }
 
 function handleSave() {
-  const dFL = !!document.getElementById("disableFormLogin")?.checked;
-  const dBA = !!document.getElementById("disableBasicAuth")?.checked;
-  const dOIDC = !!document.getElementById("disableOIDCLogin")?.checked;
-  const aBypass = !!document.getElementById("authBypass")?.checked;
-  const aHeader = (document.getElementById("authHeaderName")?.value || "X-Remote-User").trim();
-  const eWD = !!document.getElementById("enableWebDAV")?.checked;
-  const sMax = parseInt(document.getElementById("sharedMaxUploadSize")?.value || "0", 10) || 0;
-  const nHT = (document.getElementById("headerTitle")?.value || "").trim();
-  const nOIDC = {
-    providerUrl: (document.getElementById("oidcProviderUrl")?.value || "").trim(),
-    clientId: (document.getElementById("oidcClientId")?.value || "").trim(),
-    clientSecret: (document.getElementById("oidcClientSecret")?.value || "").trim(),
-    redirectUri: (document.getElementById("oidcRedirectUri")?.value || "").trim()
+  const payload = {
+    header_title: document.getElementById("headerTitle")?.value || "",
+    loginOptions: {
+      disableFormLogin: document.getElementById("disableFormLogin").checked,
+      disableBasicAuth: document.getElementById("disableBasicAuth").checked,
+      disableOIDCLogin: document.getElementById("disableOIDCLogin").checked,
+      authBypass: document.getElementById("authBypass").checked,
+      authHeaderName: document.getElementById("authHeaderName").value.trim() || "X-Remote-User",
+    },
+    enableWebDAV: document.getElementById("enableWebDAV").checked,
+    sharedMaxUploadSize: parseInt(document.getElementById("sharedMaxUploadSize").value || "0", 10) || 0,
+    oidc: {
+      providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
+      redirectUri: document.getElementById("oidcRedirectUri").value.trim(),
+      // clientId/clientSecret: only include when replacing
+    },
+    globalOtpauthUrl: document.getElementById("globalOtpauthUrl").value.trim(),
   };
-  const gURL = (document.getElementById("globalOtpauthUrl")?.value || "").trim();
 
-  if ([dFL, dBA, dOIDC].filter(x => x).length === 3) {
-    showToast(t("at_least_one_login_method"));
-    return;
+  const idEl = document.getElementById("oidcClientId");
+  const scEl = document.getElementById("oidcClientSecret");
+
+  if (idEl?.dataset.replace === '1' && idEl.value.trim() !== '') {
+    payload.oidc.clientId = idEl.value.trim();
+  }
+  if (scEl?.dataset.replace === '1' && scEl.value.trim() !== '') {
+    payload.oidc.clientSecret = scEl.value.trim();
   }
 
-  sendRequest("/api/admin/updateConfig.php", "POST", {
-    header_title: nHT,
-    oidc: nOIDC,
-    loginOptions: {
-      disableFormLogin: dFL,
-      disableBasicAuth: dBA,
-      disableOIDCLogin: dOIDC,
-      authBypass: aBypass,
-      authHeaderName: aHeader
+  fetch('/api/admin/updateConfig.php', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.content || '')
     },
-    enableWebDAV: eWD,
-    sharedMaxUploadSize: sMax,
-    globalOtpauthUrl: gURL
-  }, { "X-CSRF-Token": window.csrfToken })
-    .then(res => {
-      if (res.success) {
-        showToast(t("settings_updated_successfully"), "success");
-        captureInitialAdminConfig();
-        closeAdminPanel();
-        loadAdminConfigFunc();
-      } else {
-        showToast(t("error_updating_settings") + ": " + (res.error || t("unknown_error")), "error");
-      }
-    }).catch(() => {/*noop*/ });
+    body: JSON.stringify(payload)
+  })
+    .then(r => r.json())
+    .then(j => {
+      if (j.error) { showToast('Error: ' + j.error); return; }
+      showToast('Settings saved.');
+      closeAdminPanel();
+    })
+    .catch(() => showToast('Save failed.'));
 }
 
 export async function closeAdminPanel() {
   if (hasUnsavedChanges()) {
-    const ok = await showCustomConfirmModal(t("unsaved_changes_confirm"));
-    if (!ok) return;
+    //const ok = await showCustomConfirmModal(t("unsaved_changes_confirm"));
+    //if (!ok) return;
   }
   const m = document.getElementById("adminPanelModal");
   if (m) m.style.display = "none";
@@ -645,29 +783,29 @@ export async function closeAdminPanel() {
    New: Folder Access (ACL) UI
    =========================== */
 
-   let __allFoldersCache = null;
+let __allFoldersCache = null;
 
-   async function getAllFolders(force = false) {
-     if (!force && __allFoldersCache) return __allFoldersCache.slice();
-   
-     const res = await fetch('/api/folder/getFolderList.php?ts=' + Date.now(), {
-       credentials: 'include',
-       cache: 'no-store',
-       headers: { 'Cache-Control': 'no-store' }
-     });
-     const data = await safeJson(res).catch(() => []);
-     const list = Array.isArray(data)
-       ? data.map(x => (typeof x === 'string' ? x : x.folder)).filter(Boolean)
-       : [];
-   
-     const hidden = new Set(['profile_pics', 'trash']);
-     const cleaned = list
-       .filter(f => f && !hidden.has(f.toLowerCase()))
-       .sort((a, b) => (a === 'root' ? -1 : b === 'root' ? 1 : a.localeCompare(b)));
-   
-     __allFoldersCache = cleaned;
-     return cleaned.slice();
-   }
+async function getAllFolders(force = false) {
+  if (!force && __allFoldersCache) return __allFoldersCache.slice();
+
+  const res = await fetch('/api/folder/getFolderList.php?ts=' + Date.now(), {
+    credentials: 'include',
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-store' }
+  });
+  const data = await safeJson(res).catch(() => []);
+  const list = Array.isArray(data)
+    ? data.map(x => (typeof x === 'string' ? x : x.folder)).filter(Boolean)
+    : [];
+
+  const hidden = new Set(['profile_pics', 'trash']);
+  const cleaned = list
+    .filter(f => f && !hidden.has(f.toLowerCase()))
+    .sort((a, b) => (a === 'root' ? -1 : b === 'root' ? 1 : a.localeCompare(b)));
+
+  __allFoldersCache = cleaned;
+  return cleaned.slice();
+}
 
 async function getUserGrants(username) {
   const res = await fetch(`/api/admin/acl/getGrants.php?user=${encodeURIComponent(username)}`, {
@@ -683,7 +821,7 @@ function renderFolderGrantsUI(username, container, folders, grants) {
   // toolbar
   const toolbar = document.createElement('div');
   toolbar.className = 'folder-access-toolbar';
-toolbar.innerHTML = `
+  toolbar.innerHTML = `
   <input type="text" class="form-control" style="max-width:220px;"
          placeholder="${tf('search_folders', 'Search folders')}" />
 
@@ -717,8 +855,8 @@ toolbar.innerHTML = `
 
   const headerHtml = `
   <div class="folder-access-header">
-    <div class="folder-cell" title="${tf('folder_help','Folder path within FileRise')}">
-      ${tf('folder','Folder')}
+    <div class="folder-cell" title="${tf('folder_help', 'Folder path within FileRise')}">
+      ${tf('folder', 'Folder')}
     </div>
     <div class="perm-col" title="${tf('view_all_help', 'See all files in this folder (everyone’s files)')}">
       ${tf('view_all', 'View (all)')}
@@ -802,7 +940,7 @@ toolbar.innerHTML = `
   }
 
   function refreshInheritance() {
-    const rows = qsa(list, '.folder-access-row').sort((a,b)=> (a.dataset.folder||'').length - (b.dataset.folder||'').length);
+    const rows = qsa(list, '.folder-access-row').sort((a, b) => (a.dataset.folder || '').length - (b.dataset.folder || '').length);
     const managedPrefixes = new Set();
     rows.forEach(row => {
       const folder = row.dataset.folder || "";
@@ -813,13 +951,13 @@ toolbar.innerHTML = `
         if (p && folder !== p && folder.startsWith(p + '/')) { inheritedFrom = p; break; }
       }
       if (inheritedFrom) {
-        const v = qs(row,'input[data-cap="view"]');
-        const w = qs(row,'input[data-cap="write"]');
-        const vo= qs(row,'input[data-cap="viewOwn"]');
+        const v = qs(row, 'input[data-cap="view"]');
+        const w = qs(row, 'input[data-cap="write"]');
+        const vo = qs(row, 'input[data-cap="viewOwn"]');
         if (v) v.checked = true;
         if (w) w.checked = true;
         if (vo) { vo.checked = false; vo.disabled = true; }
-        ['create','upload','edit','rename','copy','delete','extract','shareFile','shareFolder']
+        ['create', 'upload', 'edit', 'rename', 'copy', 'delete', 'extract', 'shareFile', 'shareFolder']
           .forEach(c => { const cb = qs(row, `input[data-cap="${c}"]`); if (cb) cb.checked = true; });
         setRowDisabled(row, true);
         const tag = row.querySelector('.inherited-tag');
@@ -828,8 +966,8 @@ toolbar.innerHTML = `
         setRowDisabled(row, false);
       }
       enforceShareFolderRule(row);
-      const cbView = qs(row,'input[data-cap="view"]');
-      const cbViewOwn = qs(row,'input[data-cap="viewOwn"]');
+      const cbView = qs(row, 'input[data-cap="view"]');
+      const cbViewOwn = qs(row, 'input[data-cap="viewOwn"]');
       if (cbView && cbViewOwn) {
         if (cbView.checked) {
           cbViewOwn.checked = false;
@@ -847,8 +985,8 @@ toolbar.innerHTML = `
     if (!checked && (which === 'view' || which === 'viewOwn')) {
       qsa(row, 'input[type="checkbox"]').forEach(cb => cb.checked = false);
     }
-    const cbView = qs(row,'input[data-cap="view"]');
-    const cbVO = qs(row,'input[data-cap="viewOwn"]');
+    const cbView = qs(row, 'input[data-cap="view"]');
+    const cbVO = qs(row, 'input[data-cap="viewOwn"]');
     if (cbView && cbVO) {
       if (cbView.checked) {
         cbVO.checked = false;
@@ -863,19 +1001,19 @@ toolbar.innerHTML = `
   }
 
   function wireRow(row) {
-    const cbView    = row.querySelector('input[data-cap="view"]');
+    const cbView = row.querySelector('input[data-cap="view"]');
     const cbViewOwn = row.querySelector('input[data-cap="viewOwn"]');
-    const cbWrite   = row.querySelector('input[data-cap="write"]');
-    const cbManage  = row.querySelector('input[data-cap="manage"]');
-    const cbCreate  = row.querySelector('input[data-cap="create"]');
-    const cbUpload  = row.querySelector('input[data-cap="upload"]');
-    const cbEdit    = row.querySelector('input[data-cap="edit"]');
-    const cbRename  = row.querySelector('input[data-cap="rename"]');
-    const cbCopy    = row.querySelector('input[data-cap="copy"]');
-    const cbMove    = row.querySelector('input[data-cap="move"]');
-    const cbDelete  = row.querySelector('input[data-cap="delete"]');
+    const cbWrite = row.querySelector('input[data-cap="write"]');
+    const cbManage = row.querySelector('input[data-cap="manage"]');
+    const cbCreate = row.querySelector('input[data-cap="create"]');
+    const cbUpload = row.querySelector('input[data-cap="upload"]');
+    const cbEdit = row.querySelector('input[data-cap="edit"]');
+    const cbRename = row.querySelector('input[data-cap="rename"]');
+    const cbCopy = row.querySelector('input[data-cap="copy"]');
+    const cbMove = row.querySelector('input[data-cap="move"]');
+    const cbDelete = row.querySelector('input[data-cap="delete"]');
     const cbExtract = row.querySelector('input[data-cap="extract"]');
-    const cbShareF  = row.querySelector('input[data-cap="shareFile"]');
+    const cbShareF = row.querySelector('input[data-cap="shareFile"]');
     const cbShareFo = row.querySelector('input[data-cap="shareFolder"]');
 
     const granular = [cbCreate, cbUpload, cbEdit, cbRename, cbCopy, cbMove, cbDelete, cbExtract];
@@ -885,7 +1023,7 @@ toolbar.innerHTML = `
         if (cbView) cbView.checked = true;
         if (cbWrite) cbWrite.checked = true;
         granular.forEach(cb => { if (cb) cb.checked = true; });
-        if (cbShareF)  cbShareF.checked = true;
+        if (cbShareF) cbShareF.checked = true;
         if (cbShareFo && !cbShareFo.disabled) cbShareFo.checked = true;
       }
     };
@@ -919,7 +1057,7 @@ toolbar.innerHTML = `
         const w = r.querySelector('input[data-cap="write"]');
         const vo = r.querySelector('input[data-cap="viewOwn"]');
         const boxes = [
-          'create','upload','edit','rename','copy','delete','extract','shareFile','shareFolder'
+          'create', 'upload', 'edit', 'rename', 'copy', 'delete', 'extract', 'shareFile', 'shareFolder'
         ].map(c => r.querySelector(`input[data-cap="${c}"]`));
         if (m) m.checked = checked;
         if (v) v.checked = checked;
@@ -932,7 +1070,7 @@ toolbar.innerHTML = `
     };
 
     if (cbManage) cbManage.addEventListener('change', () => { applyManage(); onShareFile(); cascadeManage(cbManage.checked); });
-    if (cbWrite)  cbWrite.addEventListener('change', applyWrite);
+    if (cbWrite) cbWrite.addEventListener('change', applyWrite);
     granular.forEach(cb => { if (cb) cb.addEventListener('change', () => { syncWriteFromGranular(); }); });
     if (cbView) cbView.addEventListener('change', () => { setFromViewChange(row, 'view', cbView.checked); refreshInheritance(); });
     if (cbViewOwn) cbViewOwn.addEventListener('change', () => { setFromViewChange(row, 'viewOwn', cbViewOwn.checked); refreshInheritance(); });
@@ -1004,18 +1142,18 @@ function collectGrantsFrom(container) {
     const folder = row.dataset.folder || row.getAttribute('data-folder');
     if (!folder) return;
     const g = {
-      view:        get(row, 'input[data-cap="view"]'),
-      viewOwn:     get(row, 'input[data-cap="viewOwn"]'),
-      manage:      get(row, 'input[data-cap="manage"]'),
-      create:      get(row, 'input[data-cap="create"]'),
-      upload:      get(row, 'input[data-cap="upload"]'),
-      edit:        get(row, 'input[data-cap="edit"]'),
-      rename:      get(row, 'input[data-cap="rename"]'),
-      copy:        get(row, 'input[data-cap="copy"]'),
-      move:        get(row, 'input[data-cap="move"]'),
-      delete:      get(row, 'input[data-cap="delete"]'),
-      extract:     get(row, 'input[data-cap="extract"]'),
-      shareFile:   get(row, 'input[data-cap="shareFile"]'),
+      view: get(row, 'input[data-cap="view"]'),
+      viewOwn: get(row, 'input[data-cap="viewOwn"]'),
+      manage: get(row, 'input[data-cap="manage"]'),
+      create: get(row, 'input[data-cap="create"]'),
+      upload: get(row, 'input[data-cap="upload"]'),
+      edit: get(row, 'input[data-cap="edit"]'),
+      rename: get(row, 'input[data-cap="rename"]'),
+      copy: get(row, 'input[data-cap="copy"]'),
+      move: get(row, 'input[data-cap="move"]'),
+      delete: get(row, 'input[data-cap="delete"]'),
+      extract: get(row, 'input[data-cap="extract"]'),
+      shareFile: get(row, 'input[data-cap="shareFile"]'),
       shareFolder: get(row, 'input[data-cap="shareFolder"]')
     };
     g.share = !!(g.shareFile || g.shareFolder);
@@ -1074,16 +1212,16 @@ export function openUserPermissionsModal() {
     });
     document.getElementById("saveUserPermissionsBtn").addEventListener("click", async () => {
       const rows = userPermissionsModal.querySelectorAll(".user-permission-row");
-const changes = [];
-rows.forEach(row => {
-  if (row.getAttribute("data-admin") === "1") return; // skip admins
-  const username = String(row.getAttribute("data-username") || "").trim();
-  if (!username) return;
-  const grantsBox = row.querySelector(".folder-grants-box");
-  if (!grantsBox || grantsBox.getAttribute('data-loaded') !== '1') return;
-  const grants = collectGrantsFrom(grantsBox);
-  changes.push({ user: username, grants });
-});
+      const changes = [];
+      rows.forEach(row => {
+        if (row.getAttribute("data-admin") === "1") return; // skip admins
+        const username = String(row.getAttribute("data-username") || "").trim();
+        if (!username) return;
+        const grantsBox = row.querySelector(".folder-grants-box");
+        if (!grantsBox || grantsBox.getAttribute('data-loaded') !== '1') return;
+        const grants = collectGrantsFrom(grantsBox);
+        changes.push({ user: username, grants });
+      });
       try {
         if (changes.length === 0) { showToast(tf("nothing_to_save", "Nothing to save")); return; }
         await sendRequest("/api/admin/acl/saveGrants.php", "POST",
@@ -1284,70 +1422,70 @@ async function loadUserPermissionsList() {
     const folders = await getAllFolders(true);
 
     listContainer.innerHTML = "";
-users.forEach(user => {
-  const isAdmin = (user.role && String(user.role) === "1") || String(user.username).toLowerCase() === "admin";
+    users.forEach(user => {
+      const isAdmin = (user.role && String(user.role) === "1") || String(user.username).toLowerCase() === "admin";
 
-  const row = document.createElement("div");
-  row.classList.add("user-permission-row");
-  row.setAttribute("data-username", user.username);
-  if (isAdmin) row.setAttribute("data-admin", "1"); // mark admins
-  row.style.padding = "6px 0";
+      const row = document.createElement("div");
+      row.classList.add("user-permission-row");
+      row.setAttribute("data-username", user.username);
+      if (isAdmin) row.setAttribute("data-admin", "1"); // mark admins
+      row.style.padding = "6px 0";
 
-  row.innerHTML = `
+      row.innerHTML = `
     <div class="user-perm-header" tabindex="0" role="button" aria-expanded="false"
          style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:6px;">
       <span class="perm-caret" style="display:inline-block; transform: rotate(-90deg); transition: transform 120ms ease;">▸</span>
       <strong>${user.username}</strong>
       ${isAdmin ? `<span class="muted" style="margin-left:auto;">Admin (full access)</span>`
-                : `<span class="muted" style="margin-left:auto;">${tf('click_to_edit', 'Click to edit')}</span>`}
+          : `<span class="muted" style="margin-left:auto;">${tf('click_to_edit', 'Click to edit')}</span>`}
     </div>
     <div class="user-perm-details" style="display:none; margin:8px 0 12px;">
       <div class="folder-grants-box" data-loaded="0"></div>
     </div>
   `;
 
-  const header = row.querySelector(".user-perm-header");
-  const details = row.querySelector(".user-perm-details");
-  const caret = row.querySelector(".perm-caret");
-  const grantsBox = row.querySelector(".folder-grants-box");
+      const header = row.querySelector(".user-perm-header");
+      const details = row.querySelector(".user-perm-details");
+      const caret = row.querySelector(".perm-caret");
+      const grantsBox = row.querySelector(".folder-grants-box");
 
-  async function ensureLoaded() {
-    if (grantsBox.dataset.loaded === "1") return;
-    try {
-      let grants;
-      if (isAdmin) {
-        // synthesize full access
-        const ordered = ["root", ...folders.filter(f => f !== "root")];
-        grants = buildFullGrantsForAllFolders(ordered);
-        renderFolderGrantsUI(user.username, grantsBox, ordered, grants);
-        // disable all inputs
-        grantsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
-      } else {
-        const userGrants = await getUserGrants(user.username);
-        renderFolderGrantsUI(user.username, grantsBox, ["root", ...folders.filter(f => f !== "root")], userGrants);
+      async function ensureLoaded() {
+        if (grantsBox.dataset.loaded === "1") return;
+        try {
+          let grants;
+          if (isAdmin) {
+            // synthesize full access
+            const ordered = ["root", ...folders.filter(f => f !== "root")];
+            grants = buildFullGrantsForAllFolders(ordered);
+            renderFolderGrantsUI(user.username, grantsBox, ordered, grants);
+            // disable all inputs
+            grantsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
+          } else {
+            const userGrants = await getUserGrants(user.username);
+            renderFolderGrantsUI(user.username, grantsBox, ["root", ...folders.filter(f => f !== "root")], userGrants);
+          }
+          grantsBox.dataset.loaded = "1";
+        } catch (e) {
+          console.error(e);
+          grantsBox.innerHTML = `<div class="muted">${tf("error_loading_user_grants", "Error loading user grants")}</div>`;
+        }
       }
-      grantsBox.dataset.loaded = "1";
-    } catch (e) {
-      console.error(e);
-      grantsBox.innerHTML = `<div class="muted">${tf("error_loading_user_grants", "Error loading user grants")}</div>`;
-    }
-  }
 
-  function toggleOpen() {
-    const willShow = details.style.display === "none";
-    details.style.display = willShow ? "block" : "none";
-    header.setAttribute("aria-expanded", willShow ? "true" : "false");
-    caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
-    if (willShow) ensureLoaded();
-  }
+      function toggleOpen() {
+        const willShow = details.style.display === "none";
+        details.style.display = willShow ? "block" : "none";
+        header.setAttribute("aria-expanded", willShow ? "true" : "false");
+        caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
+        if (willShow) ensureLoaded();
+      }
 
-  header.addEventListener("click", toggleOpen);
-  header.addEventListener("keydown", e => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleOpen(); }
-  });
+      header.addEventListener("click", toggleOpen);
+      header.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleOpen(); }
+      });
 
-  listContainer.appendChild(row);
-});
+      listContainer.appendChild(row);
+    });
   } catch (err) {
     console.error(err);
     listContainer.innerHTML = "<p>" + t("error_loading_users") + "</p>";

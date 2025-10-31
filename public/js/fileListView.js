@@ -205,29 +205,84 @@ function wireSelectAll(fileListContent) {
   /**
    * Fuse.js fuzzy search helper
    */
-  function searchFiles(searchTerm) {
-    if (!searchTerm) return fileData;
-  
-    let keys = [
-      { name: 'name', weight: 0.1 },
-      { name: 'uploader', weight: 0.1 },
-      { name: 'tags.name', weight: 0.1 }
-    ];
-    if (window.advancedSearchEnabled) {
-      keys.push({ name: 'content', weight: 0.7 });
-    }
-  
+  // --- Lazy Fuse loader (drop-in, CSP-safe, no inline) ---
+const FUSE_SRC = '/vendor/fuse/6.6.2/fuse.min.js?v={{APP_QVER}}';
+let _fuseLoadingPromise = null;
+
+function loadScriptOnce(src) {
+  // cache by src so we don't append multiple <script> tags
+  if (loadScriptOnce._cache?.has(src)) return loadScriptOnce._cache.get(src);
+  loadScriptOnce._cache = loadScriptOnce._cache || new Map();
+  const p = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+  loadScriptOnce._cache.set(src, p);
+  return p;
+}
+
+function lazyLoadFuse() {
+  if (window.Fuse) return Promise.resolve(window.Fuse);
+  if (!_fuseLoadingPromise) {
+    _fuseLoadingPromise = loadScriptOnce(FUSE_SRC).then(() => window.Fuse);
+  }
+  return _fuseLoadingPromise;
+}
+
+// (Optional) warm-up call you can trigger from main.js after first render:
+//   import { warmUpSearch } from './fileListView.js?v={{APP_QVER}}';
+//   warmUpSearch();
+// This just starts fetching Fuse in the background.
+export function warmUpSearch() {
+  lazyLoadFuse().catch(() => {/* ignore; we’ll fall back */});
+}
+
+// Lazy + backward-compatible search
+function searchFiles(searchTerm) {
+  if (!searchTerm) return fileData;
+
+  // kick off Fuse load in the background, but don't await
+  lazyLoadFuse().catch(() => { /* ignore */ });
+
+  // keys config (matches your original)
+  const fuseKeys = [
+    { name: 'name',      weight: 0.1 },
+    { name: 'uploader',  weight: 0.1 },
+    { name: 'tags.name', weight: 0.1 }
+  ];
+  if (window.advancedSearchEnabled) {
+    fuseKeys.push({ name: 'content', weight: 0.7 });
+  }
+
+  // If Fuse is present, use it right away (synchronous API)
+  if (window.Fuse) {
     const options = {
-      keys: keys,
+      keys: fuseKeys,
       threshold: 0.4,
       minMatchCharLength: 2,
       ignoreLocation: true
     };
-  
-    const fuse = new Fuse(fileData, options);
-    let results = fuse.search(searchTerm);
-    return results.map(result => result.item);
+    const fuse = new window.Fuse(fileData, options);
+    const results = fuse.search(searchTerm);
+    return results.map(r => r.item);
   }
+
+  // Fallback (first keystrokes before Fuse finishes loading):
+  // simple case-insensitive substring match on the same fields
+  const q = String(searchTerm).toLowerCase();
+  const hay = (v) => (v == null ? '' : String(v)).toLowerCase();
+  return fileData.filter(item => {
+    if (hay(item.name).includes(q)) return true;
+    if (hay(item.uploader).includes(q)) return true;
+    if (Array.isArray(item.tags) && item.tags.some(t => hay(t?.name).includes(q))) return true;
+    if (window.advancedSearchEnabled && hay(item.content).includes(q)) return true;
+    return false;
+  });
+}
   
   /**
    * View mode toggle

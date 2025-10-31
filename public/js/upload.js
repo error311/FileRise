@@ -36,6 +36,38 @@ function traverseFileTreePromise(item, path = "") {
   });
 }
 
+// --- Lazy loader for Resumable.js (no CSP inline, cached, safe) ---
+const RESUMABLE_SRC = '/vendor/resumable/1.1.0/resumable.min.js?v={{APP_QVER}}';
+let _resumableLoadPromise = null;
+
+function loadScriptOnce(src) {
+  if (loadScriptOnce._cache?.has(src)) return loadScriptOnce._cache.get(src);
+  loadScriptOnce._cache = loadScriptOnce._cache || new Map();
+  const p = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+  loadScriptOnce._cache.set(src, p);
+  return p;
+}
+
+function lazyLoadResumable() {
+  if (window.Resumable) return Promise.resolve(window.Resumable);
+  if (!_resumableLoadPromise) {
+    _resumableLoadPromise = loadScriptOnce(RESUMABLE_SRC).then(() => window.Resumable);
+  }
+  return _resumableLoadPromise;
+}
+
+// Optional: let main.js prefetch it in the background
+export function warmUpResumable() {
+  lazyLoadResumable().catch(() => {/* ignore warm-up failure */});
+}
+
 // Recursively retrieve files from DataTransfer items.
 function getFilesFromDataTransferItems(items) {
   const promises = [];
@@ -401,36 +433,49 @@ function processFiles(filesInput) {
    Resumable.js Integration for File Picker Uploads
    (Only files chosen via file input use Resumable; folder uploads use original code.)
 ----------------------------------------------------- */
-const useResumable = true; // Enable resumable for file picker uploads
-let resumableInstance;
-function initResumableUpload() {
-  resumableInstance = new Resumable({
-    target: "/api/upload/upload.php",
-    chunkSize: 1.5 * 1024 * 1024,
-    simultaneousUploads: 3,
-    forceChunkSize: true,
-    testChunks: false,
-    withCredentials: true,
-    headers: { 'X-CSRF-Token': window.csrfToken },
-    query: () => ({
-      folder: window.currentFolder || "root",
-      upload_token: window.csrfToken
-    })
+const useResumable = true;
+let resumableInstance = null;
+let _pendingPickedFiles = [];   // files picked before library/instance ready
+let _resumableReady = false;
+
+// Make init async-safe; it resolves when Resumable is constructed
+async function initResumableUpload() {
+  if (resumableInstance) return;
+  // Load the library if needed
+  const ResumableCtor = await lazyLoadResumable().catch(err => {
+    console.error('Failed to load Resumable.js:', err);
+    return null;
   });
+  if (!ResumableCtor) return;
+
+  // Construct the instance once
+  if (!resumableInstance) {
+    resumableInstance = new ResumableCtor({
+      target: "/api/upload/upload.php",
+      chunkSize: 1.5 * 1024 * 1024,
+      simultaneousUploads: 3,
+      forceChunkSize: true,
+      testChunks: false,
+      withCredentials: true,
+      headers: { 'X-CSRF-Token': window.csrfToken },
+      query: () => ({
+        folder: window.currentFolder || "root",
+        upload_token: window.csrfToken
+      })
+    });
+  }
 
   // keep query fresh when folder changes (call this from your folder nav code)
   function updateResumableQuery() {
     if (!resumableInstance) return;
     resumableInstance.opts.headers['X-CSRF-Token'] = window.csrfToken;
-    // if you're not using a function for query, do:
     resumableInstance.opts.query.folder = window.currentFolder || 'root';
     resumableInstance.opts.query.upload_token = window.csrfToken;
   }
 
   const fileInput = document.getElementById("file");
   if (fileInput) {
-    // Assign Resumable to file input for file picker uploads.
-    resumableInstance.assignBrowse(fileInput);
+    
     fileInput.addEventListener("change", function () {
       for (let i = 0; i < fileInput.files.length; i++) {
         resumableInstance.addFile(fileInput.files[i]);
@@ -587,13 +632,24 @@ function initResumableUpload() {
       showToast("Some files failed to upload. Please check the list.");
     }
   });
+
+  _resumableReady = true;
+  if (_pendingPickedFiles.length) {
+    updateResumableQuery();
+    for (const f of _pendingPickedFiles) resumableInstance.addFile(f);
+    _pendingPickedFiles = [];
+  }
+
 }
 
 /* -----------------------------------------------------
    XHR-based submitFiles for Drag–and–Drop (Folder) Uploads
 ----------------------------------------------------- */
 function submitFiles(allFiles) {
-  const folderToUse = window.currentFolder || "root";
+  const folderToUse = (() => {
+    const f = window.currentFolder || "root";
+    try { return decodeURIComponent(f); } catch { return f; }
+  })();
   const progressContainer = document.getElementById("uploadProgressContainer");
   const fileInput = document.getElementById("file");
 
@@ -857,32 +913,48 @@ function initUpload() {
   }
 
   if (fileInput) {
-    fileInput.addEventListener("change", function () {
+    fileInput.addEventListener("change", async function () {
+      const files = Array.from(fileInput.files || []);
+      if (!files.length) return;
+  
       if (useResumable) {
-        // For file picker, if resumable is enabled, let it handle the files.
-        for (let i = 0; i < fileInput.files.length; i++) {
-          resumableInstance.addFile(fileInput.files[i]);
+        // Ensure the lib/instance exists
+        if (!_resumableReady) await initResumableUpload();
+        if (resumableInstance) {
+          for (const f of files) resumableInstance.addFile(f);
+        } else {
+          // If still not ready (load error), fall back to your XHR path
+          processFiles(files);
         }
       } else {
-        processFiles(fileInput.files);
+        processFiles(files);
       }
     });
   }
 
   if (uploadForm) {
-    uploadForm.addEventListener("submit", function (e) {
+    uploadForm.addEventListener("submit", async function (e) {
       e.preventDefault();
       const files = window.selectedFiles || (fileInput ? fileInput.files : []);
-      if (!files || files.length === 0) {
+      if (!files || !files.length) {
         showToast("No files selected.");
         return;
       }
-      // If files come from file picker (no relative path), use Resumable.
-      if (useResumable && (!files[0].customRelativePath || files[0].customRelativePath === "")) {
-        // Ensure current folder is updated.
-        resumableInstance.opts.query.folder = window.currentFolder || "root";
-        resumableInstance.upload();
-        showToast("Resumable upload started...");
+  
+      // Resumable path (only for picked files, not folder uploads)
+      const first = files[0];
+      const isFolderish = !!(first.customRelativePath || first.webkitRelativePath);
+      if (useResumable && !isFolderish) {
+        if (!_resumableReady) await initResumableUpload();
+        if (resumableInstance) {
+          // ensure folder/token fresh
+          resumableInstance.opts.query.folder = window.currentFolder || "root";
+          resumableInstance.upload();
+          showToast("Resumable upload started...");
+        } else {
+          // fallback
+          submitFiles(files);
+        }
       } else {
         submitFiles(files);
       }

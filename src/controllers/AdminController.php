@@ -7,54 +7,59 @@ require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 class AdminController
 { 
     public function getConfig(): void
-{
-    header('Content-Type: application/json');
-
-    // Load raw config (no disclosure yet)
-    $config = AdminModel::getConfig();
-    if (isset($config['error'])) {
-        http_response_code(500);
-        echo json_encode(['error' => $config['error']]);
-        exit;
-    }
-
-    // Minimal, safe subset for all callers (unauth users and regular users)
-    $public = [
-        'header_title'        => $config['header_title'] ?? 'FileRise',
-        'loginOptions'        => [
-            // expose only what the login page / header needs
-            'disableFormLogin'  => (bool)($config['loginOptions']['disableFormLogin']  ?? false),
-            'disableBasicAuth'  => (bool)($config['loginOptions']['disableBasicAuth']  ?? false),
-            'disableOIDCLogin'  => (bool)($config['loginOptions']['disableOIDCLogin']  ?? false),
-        ],
-        'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
-        'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
-        'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
-
-        'oidc' => [
-            'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
-            'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
-            // never expose clientId / clientSecret
-        ],
-    ];
-
-    $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
-
-    if ($isAdmin) {
-        // Add admin-only fields (used by Admin Panel UI)
-        $adminExtra = [
-            'loginOptions' => array_merge($public['loginOptions'], [
-                'authBypass'     => (bool)($config['loginOptions']['authBypass']     ?? false),
-                'authHeaderName' => (string)($config['loginOptions']['authHeaderName'] ?? 'X-Remote-User'),
-            ]),
+    {
+        header('Content-Type: application/json; charset=utf-8');
+    
+        $config = AdminModel::getConfig();
+        if (isset($config['error'])) {
+            http_response_code(500);
+            header('Cache-Control: no-store');
+            echo json_encode(['error' => $config['error']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+    
+        // Whitelisted public subset only
+        $public = [
+            'header_title'        => (string)($config['header_title'] ?? 'FileRise'),
+            'loginOptions'        => [
+                'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
+                'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
+                'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
+            ],
+            'globalOtpauthUrl'    => (string)($config['globalOtpauthUrl'] ?? ''),
+            'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
+            'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
+            'oidc' => [
+                'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
+                'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
+                // never include clientId/clientSecret
+            ],
         ];
-        echo json_encode(array_merge($public, $adminExtra));
+    
+        $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
+    
+        if ($isAdmin) {
+            // admin-only extras: presence flags + proxy options
+            $adminExtra = [
+                'loginOptions' => array_merge($public['loginOptions'], [
+                    'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
+                    'authHeaderName' => (string)($config['loginOptions']['authHeaderName'] ?? 'X-Remote-User'),
+                ]),
+                'oidc' => array_merge($public['oidc'], [
+                    'hasClientId'     => !empty($config['oidc']['clientId']),
+                    'hasClientSecret' => !empty($config['oidc']['clientSecret']),
+                ]),
+            ];
+            header('Cache-Control: no-store'); // don’t cache admin config
+            echo json_encode(array_merge($public, $adminExtra), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+    
+        // Non-admins / unauthenticated: only the public subset
+        header('Cache-Control: no-store');
+        echo json_encode($public, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return;
     }
-
-    // Non-admins / unauthenticated: only the public subset
-    echo json_encode($public);
-}
 
     public function updateConfig(): void
     {

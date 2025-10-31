@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const confirmDelete = document.getElementById("confirmDeleteFiles");
   if (confirmDelete) {
+    confirmDelete.setAttribute("data-default", "");
     confirmDelete.addEventListener("click", function () {
       fetch("/api/file/deleteFiles.php", {
         method: "POST",
@@ -316,6 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 2) Confirm button kicks off the zip+download
   if (confirmZipBtn) {
+    confirmZipBtn.setAttribute("data-default", "");
     confirmZipBtn.addEventListener("click", async () => {
       // a) Validate ZIP filename
       let zipName = document.getElementById("zipFileNameInput").value.trim();
@@ -478,6 +480,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   const confirmCopy = document.getElementById("confirmCopyFiles");
   if (confirmCopy) {
+    confirmCopy.setAttribute("data-default", "");
     confirmCopy.addEventListener("click", function () {
       const targetFolder = document.getElementById("copyTargetFolder").value;
       if (!targetFolder) {
@@ -529,6 +532,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   const confirmMove = document.getElementById("confirmMoveFiles");
   if (confirmMove) {
+    confirmMove.setAttribute("data-default", "");
     confirmMove.addEventListener("click", function () {
       const targetFolder = document.getElementById("moveTargetFolder").value;
       if (!targetFolder) {
@@ -598,6 +602,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const submitBtn = document.getElementById("submitRenameFile");
   if (submitBtn) {
+    submitBtn.setAttribute("data-default", "");
     submitBtn.addEventListener("click", function () {
       const newName = document.getElementById("newFileName").value.trim();
       if (!newName || newName === window.fileToRename) {
