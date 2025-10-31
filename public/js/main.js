@@ -61,6 +61,40 @@ async function ensureToastReady() {
   }
 }
 
+function isDemoHost() {
+  // Handles optional "www." just in case
+  return location.hostname.replace(/^www\./, '') === 'demo.filerise.net';
+}
+
+function showLoginTip(message) {
+  const form = document.getElementById('loginForm');
+  if (!form) return;
+
+  let tip = document.getElementById('fr-login-tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'fr-login-tip';
+    tip.className = 'alert alert-info'; // fine even without Bootstrap
+    tip.style.marginTop = '8px';
+    form.prepend(tip);
+  }
+
+  // Clear & rebuild so we can add the demo hint cleanly
+  tip.textContent = '';
+  tip.append(document.createTextNode(message || ''));
+
+  if (isDemoHost()) {
+    const line = document.createElement('div');
+    line.style.marginTop = '6px';
+    const mk = (txt) => { const k = document.createElement('code'); k.textContent = txt; return k; };
+    line.append(
+      document.createTextNode('Demo login — user: '), mk('demo'),
+      document.createTextNode(' · pass: '), mk('demo')
+    );
+    tip.append(line);
+  }
+}
+
 function wireModalEnterDefault() {
   if (window.__FR_FLAGS.wired.enterDefault) return;
   window.__FR_FLAGS.wired.enterDefault = true;
@@ -908,9 +942,7 @@ function bindDarkMode() {
     wireCreateDropdown();
     keepCreateDropdownWired();
     wireModalEnterDefault();
-
-    await ensureToastReady();
-    window.showToast('please_log_in_to_continue', 6000);
+    showLoginTip('Please log in to continue');
 
   }, { once: true }); // <— important
 })();

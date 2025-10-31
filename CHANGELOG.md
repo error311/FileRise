@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 10/31/2025 (v1.7.4)
+
+release(1.7.4): login hint replace toast + fix unauth boot
+
+main.js
+
+- Added isDemoHost() and showLoginTip(message).
+- In the unauth branch, call showLoginTip('Please log in to continue').
+- Removed ensureToastReady() + showToast('please_log_in_to_continue') in the unauth path to avoid loading toast/DOM utils before auth.
+
+---
+
 ## Changes 10/31/2025 (v1.7.3)
 
 release(v1.7.3): lightweight boot pipeline, dramatically faster first paint, deduped /api writes, sturdier uploads/auth
