@@ -2,7 +2,7 @@
 
 ## Changes 10/31/2025 (v1.7.4)
 
-release(1.7.4): login hint replace toast + fix unauth boot
+release(v1.7.4): login hint replace toast + fix unauth boot
 
 main.js
 
