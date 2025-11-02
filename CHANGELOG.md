@@ -4,6 +4,7 @@
 
 release(v1.7.5): CSP hardening, API-backed previews, flicker-free theming, cache tuning & deploy script (closes #50)
 release(v1.7.5): retrigger CI bump (no code changes)
+release(v1.7.5): retrigger CI bump ensure up to date
 
 ### Security/headers
 
