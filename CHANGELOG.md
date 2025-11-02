@@ -3,6 +3,7 @@
 ## Changes 11/2/2025 (v1.7.5)
 
 release(v1.7.5): CSP hardening, API-backed previews, flicker-free theming, cache tuning & deploy script (closes #50)
+release(v1.7.5): retrigger CI bump (no code changes)
 
 ### Security/headers
 
