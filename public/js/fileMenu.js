@@ -1,7 +1,7 @@
 // fileMenu.js
 import { updateRowHighlight, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { handleDeleteSelected, handleCopySelected, handleMoveSelected, handleDownloadZipSelected, handleExtractZipSelected, renameFile, openCreateFileModal } from './fileActions.js?v={{APP_QVER}}';
-import { previewFile } from './filePreview.js?v={{APP_QVER}}';
+import { previewFile, buildPreviewUrl } from './filePreview.js?v={{APP_QVER}}';
 import { editFile } from './fileEditor.js?v={{APP_QVER}}';
 import { canEditFile, fileData } from './fileListView.js?v={{APP_QVER}}';
 import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
@@ -39,11 +39,11 @@ export function showFileContextMenu(x, y, menuItems) {
     });
     menu.appendChild(menuItem);
   });
-  
+
   menu.style.left = x + "px";
   menu.style.top = y + "px";
   menu.style.display = "block";
-  
+
   const menuRect = menu.getBoundingClientRect();
   const viewportHeight = window.innerHeight;
   if (menuRect.bottom > viewportHeight) {
@@ -62,7 +62,7 @@ export function hideFileContextMenu() {
 
 export function fileListContextMenuHandler(e) {
   e.preventDefault();
-  
+
   let row = e.target.closest("tr");
   if (row) {
     const checkbox = row.querySelector(".file-checkbox");
@@ -71,9 +71,9 @@ export function fileListContextMenuHandler(e) {
       updateRowHighlight(checkbox);
     }
   }
-  
+
   const selected = Array.from(document.querySelectorAll("#fileList .file-checkbox:checked")).map(chk => chk.value);
-  
+
   let menuItems = [
     { label: t("create_file"), action: () => openCreateFileModal() },
     { label: t("delete_selected"), action: () => { handleDeleteSelected(new Event("click")); } },
@@ -81,14 +81,14 @@ export function fileListContextMenuHandler(e) {
     { label: t("move_selected"), action: () => { handleMoveSelected(new Event("click")); } },
     { label: t("download_zip"), action: () => { handleDownloadZipSelected(new Event("click")); } }
   ];
-  
+
   if (selected.some(name => name.toLowerCase().endsWith(".zip"))) {
     menuItems.push({
       label: t("extract_zip"),
       action: () => { handleExtractZipSelected(new Event("click")); }
     });
   }
-  
+
   if (selected.length > 1) {
     menuItems.push({
       label: t("tag_selected"),
@@ -100,36 +100,33 @@ export function fileListContextMenuHandler(e) {
   }
   else if (selected.length === 1) {
     const file = fileData.find(f => f.name === selected[0]);
-    
+
     menuItems.push({
       label: t("preview"),
       action: () => {
         const folder = window.currentFolder || "root";
-        const folderPath = folder === "root"
-          ? "uploads/"
-          : "uploads/" + folder.split("/").map(encodeURIComponent).join("/") + "/";
-        previewFile(folderPath + encodeURIComponent(file.name) + "?t=" + new Date().getTime(), file.name);
+        previewFile(buildPreviewUrl(folder, file.name), file.name);
       }
     });
-    
+
     if (canEditFile(file.name)) {
       menuItems.push({
         label: t("edit"),
         action: () => { editFile(selected[0], window.currentFolder); }
       });
     }
-    
+
     menuItems.push({
       label: t("rename"),
       action: () => { renameFile(selected[0], window.currentFolder); }
     });
-    
+
     menuItems.push({
       label: t("tag_file"),
       action: () => { openTagModal(file); }
     });
   }
-  
+
   showFileContextMenu(e.clientX, e.clientY, menuItems);
 }
 
@@ -140,7 +137,7 @@ export function bindFileListContextMenu() {
   }
 }
 
-document.addEventListener("click", function(e) {
+document.addEventListener("click", function (e) {
   const menu = document.getElementById("fileContextMenu");
   if (menu && menu.style.display === "block") {
     hideFileContextMenu();
@@ -148,9 +145,9 @@ document.addEventListener("click", function(e) {
 });
 
 // Rebind context menu after file table render.
-(function() {
+(function () {
   const originalRenderFileTable = window.renderFileTable;
-  window.renderFileTable = function(folder) {
+  window.renderFileTable = function (folder) {
     originalRenderFileTable(folder);
     bindFileListContextMenu();
   };

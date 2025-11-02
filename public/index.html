@@ -2,65 +2,37 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FileRise</title>
-
-  <!-- Icons -->
-  <link rel="icon" type="image/png" href="/assets/logo.png">
-  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
-
-  <!-- App meta -->
-  <meta name="description" content="FileRise is a fast, self-hosted file manager with granular per-folder ACLs, drag-and-drop folder moves, WebDAV, tagging, and a clean UI.">
-  <meta name="csrf-token" content="">
-  <meta name="share-url" content="">
-  <meta name="theme-color" content="#0b5ed7">
-
-  <!-- Minimal critical CSS only (keeps CSP clean, no inline JS) -->
-  <style>
-    .main-wrapper{display:none}
-    #loadingOverlay{position:fixed;inset:0;background:var(--bg-color,#fff);z-index:9999;display:flex;align-items:center;justify-content:center}
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FileRise</title>
+  <script>(function(){try{var s=localStorage.getItem('darkMode');var isDark=(s===null)?(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches):(s==='1'||s==='true');var root=document.documentElement;root.setAttribute('data-theme',isDark?'dark':'light');root.classList.toggle('dark-mode',isDark);var bg=isDark?'#121212':'#ffffff';root.style.backgroundColor=bg;root.style.colorScheme=isDark?'dark':'light';root.style.setProperty('--pre-bg',bg);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',bg);}catch(e){}})();</script>
+  <style id="pretheme-css">
+    html,body,#loadingOverlay{background:var(--pre-bg,#ffffff) !important;}
   </style>
+  <link rel="icon" type="image/png" href="/assets/logo.png"><link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+  <meta name="description" content="FileRise is a fast, self-hosted file manager with granular per-folder ACLs, drag-and-drop folder moves, WebDAV, tagging, and a clean UI.">
+  <meta name="csrf-token" content=""><meta name="share-url" content=""><meta name="theme-color" content="#0b5ed7"><meta name="color-scheme" content="light dark">
 
-  <!-- CSS: preload, then promote via tiny external JS (no inline onload) -->
-  <link rel="preload" as="style" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
-  <link rel="preload" as="style" href="/css/styles.css?v={{APP_QVER}}">
-
-  <!-- Fonts: preload only those used above the fold -->
-  <link rel="preload" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3KUBHMdazTgWw.woff2?v={{APP_QVER}}" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBHMdazQ.woff2?v={{APP_QVER}}" as="font" type="font/woff2" crossorigin>
-  <!-- Do NOT preload material icons unless needed above the fold -->
-
-  <!-- Non-blocking stylesheet promotion (external to satisfy CSP) -->
-  <script src="/js/defer-css.js?v={{APP_QVER}}" defer></script>
   
-
-  <!-- Base CSS as a fallback if JS is disabled -->
-  <noscript>
-    <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
-    <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
-  </noscript>
-
-  <!-- Preload font CSS (non-blocking) -->
-  <link rel="preload" as="style" href="/css/vendor/roboto.css?v={{APP_QVER}}">
-  <link rel="preload" as="style" href="/css/vendor/material-icons.css?v={{APP_QVER}}">
-
-  <!-- Vendor JS (keep defer; they’re not modules) -->
+<!-- Critical CSS -->
+  <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="/css/vendor/roboto.css?v={{APP_QVER}}">
+  
+  <!-- Fonts (ok to keep as real preloads) -->
+  <link rel="preload" as="font" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3KUBHMdazTgWw.woff2?v={{APP_QVER}}" type="font/woff2" crossorigin>
+  <link rel="preload" as="font" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBHMdazQ.woff2?v={{APP_QVER}}" type="font/woff2" crossorigin>
+  
+  <!-- Vendor & version (deferred) -->
   <script src="/vendor/dompurify/2.4.0/purify.min.js?v={{APP_QVER}}" defer></script>
-
-  <!-- IMPORTANT: Remove CodeMirror here; lazy-load it inside your editor route/module. -->
-
-  <!-- Version marker (non-blocking) -->
   <script src="/js/version.js?v={{APP_QVER}}" defer></script>
- 
-
-  <!-- App entry: start fetching early, execute after parse -->
-  <link rel="modulepreload" href="/js/main.js?v={{APP_QVER}}">
-  <script type="module" src="/js/main.js?v={{APP_QVER}}"></script>
-</head>
+  
+  <!-- App entry -->
+  <link rel="modulepreload" href="/js/main.js?v={{APP_QVER}}"><script type="module" src="/js/main.js?v={{APP_QVER}}"></script>
+  </head>
 
 <body>
+  <div id="appRoot" style="visibility:hidden">
   <header class="header-container">
+   
     <div class="header-left">
       <a href="index.html">
         <div class="header-logo">
@@ -68,19 +40,21 @@
   src="/assets/logo.svg?v={{APP_QVER}}"
   alt="FileRise"
   class="logo"
-  width="50" height="50"
+  width="50"
+  height="50"
   decoding="async"
-  fetchpriority="low"
+  fetchpriority="high"
 />
         </div>
       </a>
     </div>
+    
     <div class="header-title">
-      <h1 data-i18n-key="header_title">FileRise</h1>
+      <h1>FileRise</h1>
     </div>
     <div class="header-right">
       <div class="header-buttons-wrapper" style="display: flex; align-items: center; gap: 10px;">
-        <!-- Your header drop zone -->
+        
         <div id="headerDropArea" class="header-drop-zone"></div>
         <div class="header-buttons">
           <button id="changePasswordBtn" data-i18n-title="change_password" style="display: none;">
@@ -99,7 +73,7 @@
                 <!-- Trash items will be loaded here -->
               </div>
               <div style="text-align: right;">
-                <button id="restoreSelectedBtn" class="btn btn-primary" data-i18n-key="restore_selected">Restore
+                <button id="restoreSelectedBtn" class="btn btn-primary" data-i18n-key="restore_selected"  style="display: none;">Restore
                   Selected</button>
                 <button id="restoreAllBtn" class="btn btn-secondary" data-i18n-key="restore_all">Restore All</button>
                 <button id="deleteTrashSelectedBtn" class="btn btn-warning" data-i18n-key="delete_selected_trash">Delete
@@ -115,7 +89,7 @@
           <button id="removeUserBtn" data-i18n-title="remove_user" style="display: none;">
             <i class="material-icons">person_remove</i>
           </button>
-          <button id="darkModeToggle" class="btn-icon" aria-label="Toggle dark mode">
+          <button id="darkModeToggle" class="btn-icon" aria-label="Toggle dark mode"  hidden>
             <span class="material-icons" id="darkModeIcon">
               dark_mode
             </span>
@@ -124,15 +98,18 @@
       </div>
     </div>
   </header>
-
+  
   <div id="loadingOverlay"></div>
 
   <!-- Custom Toast Container -->
   <div id="customToast"></div>
   <div id="hiddenCardsContainer" style="display:none;"></div>
-  <main id="main">
+  <main id="main" hidden>
   <div class="row mt-4" id="loginForm">
     <div class="col-12">
+      <div id="loginBox" class="login-box">
+        <div id="fr-login-tip" class="alert alert-info login-hint" role="status" aria-live="polite" style="display:none;"></div>
+  
       <form id="authForm" method="post">
         <div class="form-group">
           <label for="loginUsername" data-i18n-key="user">User:</label>
@@ -158,13 +135,14 @@
           HTTP
           Login</a>
       </div>
+      <div>
     </div>
   </div>
 </main>
   
 
   <!-- Main Wrapper: Hidden by default; remove "display: none;" after login -->
-  <div class="main-wrapper">
+  <div class="main-wrapper" hidden>
     <!-- Sidebar Drop Zone: Hidden until you drag a card (display controlled by JS) -->
     <div id="sidebarDropArea" class="drop-target-sidebar"></div>
     <!-- Main Column -->
@@ -505,7 +483,7 @@
       </div>
     </div>
   </div>
-
+</div>
 </body>
 
 </html>

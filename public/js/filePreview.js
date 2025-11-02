@@ -3,6 +3,12 @@ import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { fileData } from './fileListView.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
+// Build a preview URL that always goes through the API layer (respects ACLs/UPLOAD_DIR)
+export function buildPreviewUrl(folder, name) {
+  const f = (!folder || folder === '') ? 'root' : String(folder);
+  return `/api/file/download.php?folder=${encodeURIComponent(f)}&file=${encodeURIComponent(name)}&inline=1&t=${Date.now()}`;
+}
+
 export function openShareModal(file, folder) {
   // Remove any existing modal
   const existing = document.getElementById("shareModal");
@@ -92,10 +98,10 @@ export function openShareModal(file, folder) {
 
       if (sel.value === "custom") {
         value = parseInt(document.getElementById("customExpirationValue").value, 10);
-        unit  = document.getElementById("customExpirationUnit").value;
+        unit = document.getElementById("customExpirationUnit").value;
       } else {
         value = parseInt(sel.value, 10);
-        unit  = "minutes";
+        unit = "minutes";
       }
 
       const password = document.getElementById("sharePassword").value;
@@ -115,20 +121,20 @@ export function openShareModal(file, folder) {
           password
         })
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.token) {
-          const url = `${window.location.origin}/api/file/share.php?token=${encodeURIComponent(data.token)}`;
-          document.getElementById("shareLinkInput").value = url;
-          document.getElementById("shareLinkDisplay").style.display = "block";
-        } else {
-          showToast(t("error_generating_share") + ": " + (data.error||"Unknown"));
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        showToast(t("error_generating_share"));
-      });
+        .then(res => res.json())
+        .then(data => {
+          if (data.token) {
+            const url = `${window.location.origin}/api/file/share.php?token=${encodeURIComponent(data.token)}`;
+            document.getElementById("shareLinkInput").value = url;
+            document.getElementById("shareLinkDisplay").style.display = "block";
+          } else {
+            showToast(t("error_generating_share") + ": " + (data.error || "Unknown"));
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast(t("error_generating_share"));
+        });
     });
 
   // Copy to clipboard
@@ -272,10 +278,7 @@ export function previewFile(fileUrl, fileName) {
         modal.galleryCurrentIndex = (modal.galleryCurrentIndex - 1 + modal.galleryImages.length) % modal.galleryImages.length;
         let newFile = modal.galleryImages[modal.galleryCurrentIndex];
         modal.querySelector("h4").textContent = newFile.name;
-        img.src = ((window.currentFolder === "root")
-          ? "uploads/"
-          : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
-          + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+        img.src = buildPreviewUrl(window.currentFolder || 'root', newFile.name);
         // Reset transforms.
         img.dataset.scale = 1;
         img.dataset.rotate = 0;
@@ -355,10 +358,7 @@ export function previewFile(fileUrl, fileName) {
         modal.galleryCurrentIndex = (modal.galleryCurrentIndex + 1) % modal.galleryImages.length;
         let newFile = modal.galleryImages[modal.galleryCurrentIndex];
         modal.querySelector("h4").textContent = newFile.name;
-        img.src = ((window.currentFolder === "root")
-          ? "uploads/"
-          : "uploads/" + window.currentFolder.split("/").map(encodeURIComponent).join("/") + "/")
-          + encodeURIComponent(newFile.name) + "?t=" + new Date().getTime();
+        img.src = buildPreviewUrl(window.currentFolder || 'root', newFile.name);
         // Reset transforms.
         img.dataset.scale = 1;
         img.dataset.rotate = 0;
@@ -416,26 +416,26 @@ export function previewFile(fileUrl, fileName) {
     }
   } else {
     // Handle non-image file previews.
-  if (extension === "pdf") {
-    // build a cache‐busted URL
-    const separator = fileUrl.includes('?') ? '&' : '?';
-    const urlWithTs = fileUrl + separator + 't=' + Date.now();
-  
-    // open in a new tab (avoids CSP frame-ancestors)
-    window.open(urlWithTs, "_blank");
-  
-    // tear down the just-created modal
-    const modal = document.getElementById("filePreviewModal");
-    if (modal) modal.remove();
-  
-    // stop further preview logic
-    return;
-  } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(fileName)) {
+    if (extension === "pdf") {
+      // build a cache‐busted URL
+      const separator = fileUrl.includes('?') ? '&' : '?';
+      const urlWithTs = fileUrl + separator + 't=' + Date.now();
+
+      // open in a new tab (avoids CSP frame-ancestors)
+      window.open(urlWithTs, "_blank");
+
+      // tear down the just-created modal
+      const modal = document.getElementById("filePreviewModal");
+      if (modal) modal.remove();
+
+      // stop further preview logic
+      return;
+    } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(fileName)) {
       const video = document.createElement("video");
       video.src = fileUrl;
       video.controls = true;
       video.className = "image-modal-img";
-      
+
       const progressKey = 'videoProgress-' + fileUrl;
       video.addEventListener("loadedmetadata", () => {
         const savedTime = localStorage.getItem(progressKey);

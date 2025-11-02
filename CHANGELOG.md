@@ -1,5 +1,43 @@
 # Changelog
 
+## Changes 11/2/2025 (v1.7.5)
+
+release(v1.7.5): CSP hardening, API-backed previews, flicker-free theming, cache tuning & deploy script (closes #50)
+
+### Security/headers
+
+- Tighten CSP: pin the inline pre-theme snippet with a script-src SHA-256 and keep everything else on 'self'.
+- Improve cache policy for versioned assets: force 1y + immutable and add s-maxage for CDNs; also avoid HSTS redirects on local/dev hosts.
+
+### Previews & editor
+
+- Remove hardcoded `/uploads/` paths; always build preview URLs via the API (respects UPLOAD_DIR/ACL).
+- Use the API URL for gallery prev/next and file-menu “Preview” to fix 404s on custom storage roots.
+- Editor now probes size safely (HEAD → Range 0-0 fallback) before fetching, then fetches with credentials.
+
+### Login, theming & UX polish
+
+- Pre-theme inline boot sets `dark-mode` + background early; swap to `[hidden]`/`unhide()` instead of inline `display:none`.
+- Add full-screen loading overlay with quick fade and proper color-scheme; prevent white/black flash on theme flips.
+- Refactor app/login reveal flow in `main.js` (`revealAppAndHideOverlay`, `authed` path, setup wizard).
+
+### HTML/CSS & perf
+
+- Make Bootstrap/Styles/Roboto critical (plain `<link rel="stylesheet">`); keep fonts as true preloads; modulepreload app entry.
+- Export a `__CSS_PROMISE__` from `defer-css.js` for sites that still promote preloads.
+- Header logo marked `fetchpriority="high"` for faster first paint.
+- Normalize dark-mode selectors to `.dark-mode` scope (admin panel, etc.).
+
+### Manual Deploy script
+
+- Add `scripts/filerise-deploy.sh`: idempotent rsync-based deploy with writable dirs preserved, optional Composer install, and PHP-FPM/Apache reloads.
+
+### Notes
+
+- If you change the inline pre-theme snippet, update the CSP hash accordingly.
+
+---
+
 ## Changes 10/31/2025 (v1.7.4)
 
 release(v1.7.4): login hint replace toast + fix unauth boot

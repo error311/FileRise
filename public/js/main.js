@@ -67,32 +67,25 @@ function isDemoHost() {
 }
 
 function showLoginTip(message) {
-  const form = document.getElementById('loginForm');
-  if (!form) return;
-
-  let tip = document.getElementById('fr-login-tip');
-  if (!tip) {
-    tip = document.createElement('div');
-    tip.id = 'fr-login-tip';
-    tip.className = 'alert alert-info'; // fine even without Bootstrap
-    tip.style.marginTop = '8px';
-    form.prepend(tip);
-  }
-
-  // Clear & rebuild so we can add the demo hint cleanly
-  tip.textContent = '';
-  tip.append(document.createTextNode(message || ''));
-
-  if (isDemoHost()) {
-    const line = document.createElement('div');
-    line.style.marginTop = '6px';
-    const mk = (txt) => { const k = document.createElement('code'); k.textContent = txt; return k; };
-    line.append(
-      document.createTextNode('Demo login — user: '), mk('demo'),
-      document.createTextNode(' · pass: '), mk('demo')
-    );
+  const tip = document.getElementById('fr-login-tip');
+  if (!tip) return;
+  tip.innerHTML = '';                           // clear
+  if (message) tip.append(document.createTextNode(message));
+  if (location.hostname.replace(/^www\./, '') === 'demo.filerise.net') {
+    const line = document.createElement('div'); line.style.marginTop = '6px';
+    const mk = t => { const k = document.createElement('code'); k.textContent = t; return k; };
+    line.append(document.createTextNode('Demo login — user: '), mk('demo'),
+      document.createTextNode(' · pass: '), mk('demo'));
     tip.append(line);
   }
+  tip.style.display = 'block';                  // reveal without shifting layout
+}
+
+async function hideOverlaySmoothly(overlay) {
+  if (!overlay) return;
+  try { await document.fonts?.ready; } catch { }
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  overlay.style.display = 'none';
 }
 
 function wireModalEnterDefault() {
@@ -322,7 +315,6 @@ function applyDarkMode({ fromSystemChange = false } = {}) {
   let stored = null;
   try { stored = localStorage.getItem('darkMode'); } catch { }
 
-  // If no stored pref, fall back to system
   let isDark = (stored === null)
     ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
     : (stored === '1' || stored === 'true');
@@ -336,15 +328,26 @@ function applyDarkMode({ fromSystemChange = false } = {}) {
     el.setAttribute('data-theme', isDark ? 'dark' : 'light');
   });
 
+  // keep UA chrome & bg consistent post-toggle
+  const bg = isDark ? '#121212' : '#ffffff';
+  root.style.backgroundColor = bg;
+  root.style.colorScheme = isDark ? 'dark' : 'light';
+  if (body) {
+    body.style.backgroundColor = bg;
+    body.style.colorScheme = isDark ? 'dark' : 'light';
+  }
+  const mt = document.querySelector('meta[name="theme-color"]');
+  if (mt) mt.content = bg;
+  const mcs = document.querySelector('meta[name="color-scheme"]');
+  if (mcs) mcs.content = isDark ? 'dark light' : 'light dark';
+
   const btn = document.getElementById('darkModeToggle');
   const icon = document.getElementById('darkModeIcon');
   if (icon) icon.textContent = isDark ? 'light_mode' : 'dark_mode';
-
   if (btn) {
     const ttOn = (typeof t === 'function' ? t('switch_to_dark_mode') : 'Switch to dark mode');
     const ttOff = (typeof t === 'function' ? t('switch_to_light_mode') : 'Switch to light mode');
     const aria = (typeof t === 'function' ? (isDark ? t('light_mode') : t('dark_mode')) : (isDark ? 'Light mode' : 'Dark mode'));
-
     btn.classList.toggle('active', isDark);
     btn.setAttribute('aria-label', aria);
     btn.setAttribute('title', isDark ? ttOff : ttOn);
@@ -381,6 +384,9 @@ function bindDarkMode() {
   // ---------- tiny utils ----------
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
+  // Safe show/hide that work with both CSS and [hidden]
+  const unhide = (el) => { if (!el) return; el.removeAttribute('hidden'); el.style.display = ''; };
+  const hideEl = (el) => { if (!el) return; el.setAttribute('hidden', ''); el.style.display = 'none'; };
   const show = (el) => {
     if (!el) return;
     el.hidden = false; el.classList?.remove('d-none', 'hidden');
@@ -394,28 +400,88 @@ function bindDarkMode() {
   };
 
   // ---------- site config / auth ----------
-  function applySiteConfig(cfg) {
+  function applySiteConfig(cfg, { phase = 'final' } = {}) {
     try {
       const title = (cfg && cfg.header_title) ? String(cfg.header_title) : 'FileRise';
+  
+      // Always keep <title> correct early (no visual flicker)
       document.title = title;
-      const h1 = document.querySelector('.header-title h1'); if (h1) h1.textContent = title;
-
+  
+      // --- Login options (apply in BOTH phases so login page is correct) ---
       const lo = (cfg && cfg.loginOptions) ? cfg.loginOptions : {};
-      const disableForm = !!lo.disableFormLogin;
-      const disableOIDC = !!lo.disableOIDCLogin;
+      const disableForm  = !!lo.disableFormLogin;
+      const disableOIDC  = !!lo.disableOIDCLogin;
       const disableBasic = !!lo.disableBasicAuth;
-
-      const row = $('#loginForm'); if (row) row.style.display = disableForm ? 'none' : '';
-      const oidc = $('#oidcLoginBtn'); if (oidc) oidc.style.display = disableOIDC ? 'none' : '';
+  
+      const row = $('#loginForm');
+      if (row) {
+        if (disableForm) {
+          row.setAttribute('hidden', '');
+          row.style.display = ''; // don't leave display:none lying around
+        } else {
+          row.removeAttribute('hidden');
+          row.style.display = '';
+        }
+      }
+      const oidc  = $('#oidcLoginBtn'); if (oidc)  oidc.style.display  = disableOIDC ? 'none' : '';
       const basic = document.querySelector('a[href="/api/auth/login_basic.php"]');
       if (basic) basic.style.display = disableBasic ? 'none' : '';
+  
+      // --- Header <h1> only in the FINAL phase (prevents visible flips) ---
+      if (phase === 'final') {
+        const h1 = document.querySelector('.header-title h1');
+        if (h1) {
+          // prevent i18n or legacy from overwriting it
+          if (h1.hasAttribute('data-i18n-key')) h1.removeAttribute('data-i18n-key');
+  
+          if (h1.textContent !== title) h1.textContent = title;
+  
+          // lock it so late code can't stomp it
+          if (!h1.__titleLock) {
+            const mo = new MutationObserver(() => {
+              if (h1.textContent !== title) h1.textContent = title;
+            });
+            mo.observe(h1, { childList: true, characterData: true, subtree: true });
+            h1.__titleLock = mo;
+          }
+        }
+      }
     } catch { }
   }
+
+  async function readyToReveal() {
+    // Wait for CSS + fonts so the first revealed frame is fully styled
+    try { await (window.__CSS_PROMISE__ || Promise.resolve()); } catch { }
+    try { await document.fonts?.ready; } catch { }
+    // Give layout one paint to settle
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  }
+
+  async function revealAppAndHideOverlay() {
+    const appRoot = document.getElementById('appRoot');
+    const overlay = document.getElementById('loadingOverlay');
+    await readyToReveal();
+    if (appRoot) appRoot.style.visibility = 'visible';
+    if (overlay) {
+      overlay.style.transition = 'opacity .18s ease-out';
+      overlay.style.opacity = '0';
+      setTimeout(() => { overlay.style.display = 'none'; }, 220);
+    }
+  }
+
   async function loadSiteConfig() {
     try {
       const r = await fetch('/api/siteConfig.php', { credentials: 'include' });
-      const j = await r.json().catch(() => ({})); applySiteConfig(j);
-    } catch { applySiteConfig({}); }
+      const j = await r.json().catch(() => ({}));
+      window.__FR_SITE_CFG__ = j || {};
+      // Early pass: title + login options (skip touching <h1> to avoid flicker)
+      applySiteConfig(window.__FR_SITE_CFG__, { phase: 'early' });
+      return window.__FR_SITE_CFG__;
+    } catch {
+      window.__FR_SITE_CFG__ = {};
+      applySiteConfig({}, { phase: 'early' });
+      return null;
+    }
   }
   async function primeCsrf() {
     try {
@@ -665,7 +731,6 @@ function bindDarkMode() {
   function forceLoginVisible() {
     show($('#main'));
     show($('#loginForm'));
-    hide($('.main-wrapper'));
     const hb = $('.header-buttons'); if (hb) hb.style.visibility = 'hidden';
     const ov = $('#loadingOverlay'); if (ov) ov.style.display = 'none';
   }
@@ -809,8 +874,7 @@ function bindDarkMode() {
       window.__FR_FLAGS.booted = true;
       ensureToastReady();
       // show chrome
-      const wrap = document.querySelector('.main-wrapper'); if (wrap) { wrap.hidden = false; wrap.classList?.remove('d-none', 'hidden'); wrap.style.display = 'block'; }
-      const lf = document.getElementById('loginForm'); if (lf) lf.style.display = 'none';
+
       const hb = document.querySelector('.header-buttons'); if (hb) hb.style.visibility = 'visible';
       const ov = document.getElementById('loadingOverlay'); if (ov) ov.style.display = 'flex';
 
@@ -824,6 +888,9 @@ function bindDarkMode() {
           if (typeof state.isAdmin !== 'undefined') localStorage.setItem('isAdmin', state.isAdmin ? '1' : '0');
           window.__FR_AUTH_STATE = state;
         } catch { }
+
+        // authed → heavy boot path
+        document.body.classList.add('authed');
 
         // 1) i18n (safe)
         // i18n: honor saved language first, then apply translations
@@ -840,10 +907,20 @@ function bindDarkMode() {
         if (!window.__FR_FLAGS.initialized) {
           if (typeof app.loadCsrfToken === 'function') await app.loadCsrfToken();
           if (typeof app.initializeApp === 'function') app.initializeApp();
+          const darkBtn = document.getElementById('darkModeToggle');
+          if (darkBtn) {
+            darkBtn.removeAttribute('hidden');
+            darkBtn.style.setProperty('display', 'inline-flex', 'important'); // beats any CSS
+            darkBtn.style.visibility = ''; // just in case
+          }
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = '/css/vendor/material-icons.css?v={{APP_QVER}}';
+          document.head.appendChild(link);
+
 
           window.__FR_FLAGS.initialized = true;
 
-          // Show "Welcome back, <username>!" only once per tab-session
           try {
             if (!sessionStorage.getItem('__fr_welcomed')) {
               const name = (window.__FR_AUTH_STATE?.username) || localStorage.getItem('username') || '';
@@ -864,7 +941,7 @@ function bindDarkMode() {
             auth.applyProxyBypassUI && auth.applyProxyBypassUI();
             auth.updateAuthenticatedUI && auth.updateAuthenticatedUI(state);
 
-            // ⬇️ bind ALL the admin / change-password buttons once
+            //  bind ALL the admin / change-password buttons once
             if (!window.__FR_FLAGS.wired.authInit && typeof auth.initAuth === 'function') {
               try { auth.initAuth(); } catch (e) { console.warn('[auth] initAuth failed', e); }
               window.__FR_FLAGS.wired.authInit = true;
@@ -913,36 +990,71 @@ function bindDarkMode() {
 
   // ---------- entry (no flicker: decide state BEFORE showing login) ----------
   document.addEventListener('DOMContentLoaded', async () => {
-
-
     if (window.__FR_FLAGS.entryStarted) return;
     window.__FR_FLAGS.entryStarted = true;
+
+    // Always start clean
+    document.body.classList.remove('authed');
+
+    const overlay = document.getElementById('loadingOverlay');
+    const wrap = document.querySelector('.main-wrapper');   // app shell
+    const mainEl = document.getElementById('main');           // contains loginForm
+    const login = document.getElementById('loginForm');
 
     bindDarkMode();
     await loadSiteConfig();
 
     const { authed, setup } = await checkAuth();
 
-    if (setup) { await bootSetupWizard(); return; }
-    if (authed) { await bootHeavy(); return; }
+    if (setup) {
+      // Setup wizard runs inside app shell
+      unhide(wrap);
+      hideEl(login);
+      await bootSetupWizard();
+      await revealAppAndHideOverlay();
 
-    // login view
-    show(document.querySelector('#main'));
-    show(document.querySelector('#loginForm'));
-    (document.querySelector('.header-buttons') || {}).style && (document.querySelector('.header-buttons').style.visibility = 'hidden');
-    const ov = document.getElementById('loadingOverlay'); if (ov) ov.style.display = 'none';
+      return;
+    }
+
+    if (authed) {
+      // Authenticated path: show app, hide login
+      document.body.classList.add('authed');
+      unhide(wrap);            // works whether CSS or [hidden] was used
+      hideEl(login);
+      await bootHeavy();
+      await revealAppAndHideOverlay();
+      requestAnimationFrame(() => {
+        const pre = document.getElementById('pretheme-css');
+        if (pre) pre.remove();
+      });
+      return;
+    }
+
+    // ---- NOT AUTHED: show only the login view ----
+    hideEl(wrap);              // ensure app shell stays hidden while logged out
+    unhide(mainEl);
+    unhide(login);
+    if (login) login.style.display = '';
+    // …wire stuff…
+    applySiteConfig(window.__FR_SITE_CFG__ || {}, { phase: 'final' });
+    await revealAppAndHideOverlay();
+    const hb = document.querySelector('.header-buttons');
+    if (hb) hb.style.visibility = 'hidden';
+
+    // keep app cards inert while logged out (no layout poke)
     ['uploadCard', 'folderManagementCard'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
-      el.style.display = 'none';
       el.setAttribute('aria-hidden', 'true');
       try { el.inert = true; } catch { }
     });
+
     bindLogin();
     wireCreateDropdown();
     keepCreateDropdownWired();
     wireModalEnterDefault();
     showLoginTip('Please log in to continue');
 
-  }, { once: true }); // <— important
+    if (overlay) overlay.style.display = 'none';
+  }, { once: true });
 })();

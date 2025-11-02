@@ -11,6 +11,9 @@ DirectoryIndex index.html
 </IfModule>
 
 RewriteEngine On
+# Never redirect local/dev hosts
+RewriteCond %{HTTP_HOST} ^(localhost|127\.0\.0\.1|fr\.local|192\.168\.[0-9]+\.[0-9]+)$ [NC]
+RewriteRule ^ - [L]
 
 # --- HTTPS redirect ---
 # Use ONE of these blocks.
@@ -52,7 +55,7 @@ RewriteEngine On
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" "expr=%{HTTPS} == 'on'"
 
   # CSP (modules, blobs, workers, etc.)
-  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'"
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'"
 </IfModule>
 
 # --- Caching (query-string based, no env vars needed) ---
@@ -81,10 +84,15 @@ RewriteEngine On
     Header set Cache-Control "public, max-age=604800" "expr=%{QUERY_STRING} !~ /(^|&)v=/"
   </FilesMatch>
 
-  # Versioned assets (?v=...): 1 year + immutable
-  <FilesMatch "\.(?:m?js|css|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
-    Header setifempty Cache-Control "public, max-age=31536000, immutable" "expr=%{QUERY_STRING} =~ /(^|&)v=/"
-  </FilesMatch>
+  # --- Versioned assets (?v=...) : 1 year + immutable (override anything else) ---
+  <IfModule mod_headers.c>
+    <FilesMatch "\.(?:m?js|css|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
+      # Only when query string has v=
+      Header unset Cache-Control "expr=%{QUERY_STRING} =~ /(^|&)v=/"
+      Header unset Expires       "expr=%{QUERY_STRING} =~ /(^|&)v=/"
+      Header set Cache-Control "public, max-age=31536000, s-maxage=31536000, immutable" "expr=%{QUERY_STRING} =~ /(^|&)v=/"
+    </FilesMatch>
+  </IfModule>
 </IfModule>
 
 # --- Compression ---

@@ -170,9 +170,9 @@ async function safeJson(res) {
         max-width: none !important;
       }
     }
-    body.dark-mode #adminPanelModal .modal-content { background:#2c2c2c !important; color:#e0e0e0 !important; border-color:#555 !important; }
-    body.dark-mode .form-control { background-color:#333; border-color:#555; color:#eee; }
-    body.dark-mode .form-control::placeholder { color:#888; }
+    .dark-mode #adminPanelModal .modal-content { background:#2c2c2c !important; color:#e0e0e0 !important; border-color:#555 !important; }
+    .dark-mode .form-control { background-color:#333; border-color:#555; color:#eee; }
+    .dark-mode .form-control::placeholder { color:#888; }
 
     .section-header {
       background:#f5f5f5; padding:10px 15px; cursor:pointer; border-radius:4px; font-weight:bold;
@@ -181,8 +181,8 @@ async function safeJson(res) {
     .section-header:first-of-type { margin-top:0; }
     .section-header.collapsed .material-icons { transform:rotate(-90deg); }
     .section-header .material-icons { transition:transform .3s; color:#444; }
-    body.dark-mode .section-header { background:#3a3a3a; color:#eee; }
-    body.dark-mode .section-header .material-icons { color:#ccc; }
+    .dark-mode .section-header { background:#3a3a3a; color:#eee; }
+    .dark-mode .section-header .material-icons { color:#ccc; }
 
     .section-content { display:none; margin-left:20px; margin-top:8px; margin-bottom:8px; }
 
@@ -193,7 +193,7 @@ async function safeJson(res) {
       border:2px solid transparent; transition:all .3s;
     }
     #adminPanelModal .editor-close-btn:hover { color:#fff; background:#ff4d4d; box-shadow:0 0 6px rgba(255,77,77,.8); transform:scale(1.05); }
-    body.dark-mode #adminPanelModal .editor-close-btn { background:rgba(0,0,0,0.6); color:#ff4d4d; }
+    .dark-mode #adminPanelModal .editor-close-btn { background:rgba(0,0,0,0.6); color:#ff4d4d; }
 
     .action-row { display:flex; justify-content:space-between; margin-top:15px; }
 
@@ -210,7 +210,7 @@ async function safeJson(res) {
       border-radius: 6px;
       padding: 0;
     }
-    body.dark-mode .folder-access-list { border-color:#555; }
+    .dark-mode .folder-access-list { border-color:#555; }
 
     .folder-access-header,
     .folder-access-row {
@@ -228,7 +228,7 @@ async function safeJson(res) {
       font-weight: 700;
       border-bottom: 1px solid rgba(0,0,0,0.12);
     }
-    body.dark-mode .folder-access-header { background:#2c2c2c; }
+    .dark-mode .folder-access-header { background:#2c2c2c; }
 
     .folder-access-row { border-bottom: 1px solid rgba(0,0,0,0.06); }
     .folder-access-row:last-child { border-bottom: none; }
@@ -257,8 +257,8 @@ async function safeJson(res) {
       color: #2064ff;
       margin-left: 6px;
     }
-    body.dark-mode .inherited-row { background: rgba(32,132,255,0.12); }
-    body.dark-mode .inherited-tag { background: rgba(32,132,255,0.2); color: #89b3ff; }
+    .dark-mode .inherited-row { background: rgba(32,132,255,0.12); }
+    .dark-mode .inherited-tag { background: rgba(32,132,255,0.2); color: #89b3ff; }
 
     @media (max-width: 900px) {
       .folder-access-list { --col-perm: 72px; --col-folder-min: 240px; }
@@ -274,7 +274,7 @@ async function safeJson(res) {
   /* nicer thin scrollbar (supported browsers) */
   .folder-cell::-webkit-scrollbar{ height:8px; }
   .folder-cell::-webkit-scrollbar-thumb{ background:rgba(0,0,0,.25); border-radius:4px; }
-  body.dark-mode .folder-cell::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.25); }
+  .dark-mode .folder-cell::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.25); }
 
   /* Badge now doesn't clip; let the wrapper handle scroll */
   .folder-badge{

@@ -2,6 +2,7 @@
 import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
+import { buildPreviewUrl } from './filePreview.js?v={{APP_QVER}}';
 
 // thresholds for editor behavior
 const EDITOR_PLAIN_THRESHOLD = 5 * 1024 * 1024;  // >5 MiB => force plain text, lighter settings
@@ -14,7 +15,7 @@ const CM_BASE = "/vendor/codemirror/5.65.5/";
 const coreUrl = (p) => `${CM_BASE}${p}?v={{APP_QVER}}`;
 
 const CORE = {
-  js:  coreUrl("codemirror.min.js"),
+  js: coreUrl("codemirror.min.js"),
   css: coreUrl("codemirror.min.css"),
   themeCss: coreUrl("theme/material-darker.min.css"),
 };
@@ -22,30 +23,30 @@ const CORE = {
 // Which mode file to load for a given name/mime
 const MODE_URL = {
   // core/common
-  "xml":        "mode/xml/xml.min.js?v={{APP_QVER}}",
-  "css":        "mode/css/css.min.js?v={{APP_QVER}}",
+  "xml": "mode/xml/xml.min.js?v={{APP_QVER}}",
+  "css": "mode/css/css.min.js?v={{APP_QVER}}",
   "javascript": "mode/javascript/javascript.min.js?v={{APP_QVER}}",
 
   // meta / combos
-  "htmlmixed":  "mode/htmlmixed/htmlmixed.min.js?v={{APP_QVER}}",
+  "htmlmixed": "mode/htmlmixed/htmlmixed.min.js?v={{APP_QVER}}",
   "application/x-httpd-php": "mode/php/php.min.js?v={{APP_QVER}}",
 
   // docs / data
-  "markdown":   "mode/markdown/markdown.min.js?v={{APP_QVER}}",
-  "yaml":       "mode/yaml/yaml.min.js?v={{APP_QVER}}",
+  "markdown": "mode/markdown/markdown.min.js?v={{APP_QVER}}",
+  "yaml": "mode/yaml/yaml.min.js?v={{APP_QVER}}",
   "properties": "mode/properties/properties.min.js?v={{APP_QVER}}",
-  "sql":        "mode/sql/sql.min.js?v={{APP_QVER}}",
+  "sql": "mode/sql/sql.min.js?v={{APP_QVER}}",
 
   // shells
-  "shell":      "mode/shell/shell.min.js?v={{APP_QVER}}",
+  "shell": "mode/shell/shell.min.js?v={{APP_QVER}}",
 
   // languages
-  "python":     "mode/python/python.min.js?v={{APP_QVER}}",
-  "text/x-csrc":    "mode/clike/clike.min.js?v={{APP_QVER}}",
-  "text/x-c++src":  "mode/clike/clike.min.js?v={{APP_QVER}}",
-  "text/x-java":    "mode/clike/clike.min.js?v={{APP_QVER}}",
-  "text/x-csharp":  "mode/clike/clike.min.js?v={{APP_QVER}}",
-  "text/x-kotlin":  "mode/clike/clike.min.js?v={{APP_QVER}}"
+  "python": "mode/python/python.min.js?v={{APP_QVER}}",
+  "text/x-csrc": "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-c++src": "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-java": "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-csharp": "mode/clike/clike.min.js?v={{APP_QVER}}",
+  "text/x-kotlin": "mode/clike/clike.min.js?v={{APP_QVER}}"
 };
 
 // Mode dependency graph
@@ -201,23 +202,37 @@ export function editFile(fileName, folder) {
   if (existingEditor) existingEditor.remove();
 
   const folderUsed = folder || window.currentFolder || "root";
-  const folderPath = folderUsed === "root"
-    ? "uploads/"
-    : "uploads/" + folderUsed.split("/").map(encodeURIComponent).join("/") + "/";
-  const fileUrl = folderPath + encodeURIComponent(fileName) + "?t=" + new Date().getTime();
+  const fileUrl = buildPreviewUrl(folderUsed, fileName);
 
-  fetch(fileUrl, { method: "HEAD" })
-    .then(response => {
-      const lenHeader = response.headers.get("content-length") ?? response.headers.get("Content-Length");
-      const sizeBytes = lenHeader ? parseInt(lenHeader, 10) : null;
+  // Probe size safely via API. Prefer HEAD; if missing Content-Length, fall back to a 1-byte Range GET.
+  async function probeSize(url) {
+    try {
+      const h = await fetch(url, { method: "HEAD", credentials: "include" });
+      const len = h.headers.get("content-length") ?? h.headers.get("Content-Length");
+      if (len && !Number.isNaN(parseInt(len, 10))) return parseInt(len, 10);
+    } catch { }
+    try {
+      const r = await fetch(url, {
+        method: "GET",
+        headers: { Range: "bytes=0-0" },
+        credentials: "include"
+      });
+      // Content-Range: bytes 0-0/12345
+      const cr = r.headers.get("content-range") ?? r.headers.get("Content-Range");
+      const m = cr && cr.match(/\/(\d+)\s*$/);
+      if (m) return parseInt(m[1], 10);
+    } catch { }
+    return null;
+  }
 
+  probeSize(fileUrl)
+    .then(sizeBytes => {
       if (sizeBytes !== null && sizeBytes > EDITOR_BLOCK_THRESHOLD) {
         showToast("This file is larger than 10 MB and cannot be edited in the browser.");
         throw new Error("File too large.");
       }
-      return response;
+      return fetch(fileUrl, { credentials: "include" });
     })
-    .then(() => fetch(fileUrl))
     .then(response => {
       if (!response.ok) throw new Error("HTTP error! Status: " + response.status);
       const lenHeader = response.headers.get("content-length") ?? response.headers.get("Content-Length");
@@ -269,8 +284,8 @@ export function editFile(fileName, folder) {
       // Keep buttons responsive even before editor exists
       const decBtn = document.getElementById("decreaseFont");
       const incBtn = document.getElementById("increaseFont");
-      decBtn.addEventListener("click", () => {});
-      incBtn.addEventListener("click", () => {});
+      decBtn.addEventListener("click", () => { });
+      incBtn.addEventListener("click", () => { });
 
       // Theme + mode selection
       const isDarkMode = document.body.classList.contains("dark-mode");
