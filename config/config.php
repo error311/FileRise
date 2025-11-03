@@ -25,6 +25,13 @@ if (!defined('DEFAULT_CAN_ZIP'))          define('DEFAULT_CAN_ZIP', true);
 if (!defined('DEFAULT_VIEW_OWN_ONLY'))    define('DEFAULT_VIEW_OWN_ONLY', false);
 define('FOLDER_OWNERS_FILE', META_DIR . 'folder_owners.json');
 define('ACL_INHERIT_ON_CREATE', true);
+// ONLYOFFICE integration overrides (uncomment and set as needed)
+/*
+define('ONLYOFFICE_ENABLED', false);
+define('ONLYOFFICE_JWT_SECRET', 'test123456');
+define('ONLYOFFICE_DOCS_ORIGIN', 'http://192.168.1.61'); // your Document Server
+define('ONLYOFFICE_DEBUG', true);
+*/
 
 // Encryption helpers
 function encryptData($data, $encryptionKey)

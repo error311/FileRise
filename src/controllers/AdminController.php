@@ -5,11 +5,11 @@ require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 class AdminController
-{ 
+{
     public function getConfig(): void
     {
         header('Content-Type: application/json; charset=utf-8');
-    
+
         $config = AdminModel::getConfig();
         if (isset($config['error'])) {
             http_response_code(500);
@@ -17,8 +17,24 @@ class AdminController
             echo json_encode(['error' => $config['error']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
-    
-        // Whitelisted public subset only
+
+        // ---- Effective ONLYOFFICE values (constants override adminConfig) ----
+        $ooCfg       = is_array($config['onlyoffice'] ?? null) ? $config['onlyoffice'] : [];
+        $effEnabled  = defined('ONLYOFFICE_ENABLED')
+            ? (bool) ONLYOFFICE_ENABLED
+            : (bool) ($ooCfg['enabled'] ?? false);
+
+        $effDocs     = defined('ONLYOFFICE_DOCS_ORIGIN') && ONLYOFFICE_DOCS_ORIGIN !== ''
+            ? (string) ONLYOFFICE_DOCS_ORIGIN
+            : (string) ($ooCfg['docsOrigin'] ?? '');
+
+        $hasSecret   = defined('ONLYOFFICE_JWT_SECRET')
+            ? (ONLYOFFICE_JWT_SECRET !== '')
+            : (!empty($ooCfg['jwtSecret']));
+
+        $publicOriginCfg = (string) ($ooCfg['publicOrigin'] ?? '');
+
+        // Whitelisted public subset only (+ ONLYOFFICE enabled flag)
         $public = [
             'header_title'        => (string)($config['header_title'] ?? 'FileRise'),
             'loginOptions'        => [
@@ -34,12 +50,16 @@ class AdminController
                 'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
                 // never include clientId/clientSecret
             ],
+            'onlyoffice' => [
+                // Public only needs to know if it’s on; no secrets/origins here.
+                'enabled' => $effEnabled,
+            ],
         ];
-    
+
         $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
-    
+
         if ($isAdmin) {
-            // admin-only extras: presence flags + proxy options
+            // admin-only extras: presence flags + proxy options + ONLYOFFICE effective view
             $adminExtra = [
                 'loginOptions' => array_merge($public['loginOptions'], [
                     'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
@@ -49,12 +69,23 @@ class AdminController
                     'hasClientId'     => !empty($config['oidc']['clientId']),
                     'hasClientSecret' => !empty($config['oidc']['clientSecret']),
                 ]),
+                'onlyoffice' => [
+                    'enabled'      => $effEnabled,
+                    'docsOrigin'   => $effDocs,                // effective (constants win)
+                    'publicOrigin' => $publicOriginCfg,        // optional override from adminConfig
+                    'hasJwtSecret' => (bool)$hasSecret,        // boolean only; never leak secret
+                    'lockedByPhp'  => (
+                        defined('ONLYOFFICE_ENABLED')
+                        || defined('ONLYOFFICE_DOCS_ORIGIN')
+                        || defined('ONLYOFFICE_JWT_SECRET')
+                    ),
+                ],
             ];
             header('Cache-Control: no-store'); // don’t cache admin config
             echo json_encode(array_merge($public, $adminExtra), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
-    
+
         // Non-admins / unauthenticated: only the public subset
         header('Cache-Control: no-store');
         echo json_encode($public, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -221,6 +252,40 @@ class AdminController
         }
 
         // —– persist merged config —–
+                // ---- ONLYOFFICE: merge from payload (unless locked by PHP defines) ----
+                $ooLockedByPhp = (
+                    defined('ONLYOFFICE_ENABLED') ||
+                    defined('ONLYOFFICE_DOCS_ORIGIN') ||
+                    defined('ONLYOFFICE_JWT_SECRET') ||
+                    defined('ONLYOFFICE_PUBLIC_ORIGIN')
+                );
+        
+                if (!$ooLockedByPhp && isset($data['onlyoffice']) && is_array($data['onlyoffice'])) {
+                    $ooExisting = (isset($existing['onlyoffice']) && is_array($existing['onlyoffice']))
+                        ? $existing['onlyoffice'] : [];
+        
+                    $oo = $ooExisting;
+        
+                    if (array_key_exists('enabled', $data['onlyoffice'])) {
+                        $oo['enabled'] = filter_var($data['onlyoffice']['enabled'], FILTER_VALIDATE_BOOLEAN);
+                    }
+                    if (isset($data['onlyoffice']['docsOrigin'])) {
+                        $oo['docsOrigin'] = (string)$data['onlyoffice']['docsOrigin'];
+                    }
+                    if (isset($data['onlyoffice']['publicOrigin'])) {
+                        $oo['publicOrigin'] = (string)$data['onlyoffice']['publicOrigin'];
+                    }
+                    // Allow setting/changing the secret when NOT locked by PHP
+                    if (isset($data['onlyoffice']['jwtSecret'])) {
+                        $js = trim((string)$data['onlyoffice']['jwtSecret']);
+                        if ($js !== '') {
+                            $oo['jwtSecret'] = $js; // stored encrypted by AdminModel
+                        }
+                        // If blank, we leave existing secret unchanged (no implicit wipe).
+                    }
+        
+                    $merged['onlyoffice'] = $oo;
+                }
         $result = AdminModel::updateConfig($merged);
         if (isset($result['error'])) {
             http_response_code(500);

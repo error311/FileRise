@@ -491,6 +491,7 @@ export function openAdminPanel() {
             { id: "headerSettings", label: t("header_settings") },
             { id: "loginOptions", label: t("login_options") },
             { id: "webdav", label: "WebDAV Access" },
+            { id: "onlyoffice", label: "ONLYOFFICE" },
             { id: "upload", label: t("shared_max_upload_size_bytes_title") },
             { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
             { id: "shareLinks", label: t("manage_shared_links") },
@@ -514,7 +515,7 @@ export function openAdminPanel() {
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
 
-        ["userManagement", "headerSettings", "loginOptions", "webdav", "upload", "oidc", "shareLinks", "sponsor"]
+        ["userManagement", "headerSettings", "loginOptions", "webdav", "onlyoffice", "upload", "oidc", "shareLinks", "sponsor"]
           .forEach(id => {
             document.getElementById(id + "Header")
               .addEventListener("click", () => toggleSection(id));
@@ -573,6 +574,268 @@ export function openAdminPanel() {
             <small>${t("max_bytes_shared_uploads_note")}</small>
           </div>
         `;
+
+        // ONLYOFFICE Content
+        const hasOOSecret = !!(config.onlyoffice && config.onlyoffice.hasJwtSecret);
+        window.__HAS_OO_SECRET = hasOOSecret;
+        document.getElementById("onlyofficeContent").innerHTML = `
+  <div class="form-group">
+    <input type="checkbox" id="ooEnabled" />
+    <label for="ooEnabled">Enable ONLYOFFICE integration</label>
+  </div>
+
+  <div class="form-group">
+    <label for="ooDocsOrigin">Document Server Origin:</label>
+    <input type="url" id="ooDocsOrigin" class="form-control" placeholder="e.g. http://192.168.1.61" />
+    <small class="text-muted">Must be reachable by your browser (for API.js) and by FileRise (for callbacks). Avoid “localhost”.</small>
+  </div>
+
+  ${renderMaskedInput({ id: "ooJwtSecret", label: "JWT Secret", hasValue: hasOOSecret, isSecret: true })}
+`;
+
+        wireReplaceButtons(document.getElementById("onlyofficeContent"));
+
+
+
+
+
+               // --- Test ONLYOFFICE block ---
+               const testBox = document.createElement("div");
+               testBox.className = "card";
+               testBox.style.marginTop = "12px";
+               testBox.innerHTML = `
+         <div class="card-body">
+           <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+             <strong>Test ONLYOFFICE connection</strong>
+             <button type="button" id="ooTestBtn" class="btn btn-sm btn-primary">Run tests</button>
+             <span id="ooTestSpinner" style="display:none;">⏳</span>
+           </div>
+           <ul id="ooTestResults" class="list-unstyled" style="margin:0;"></ul>
+           <small class="text-muted">These tests check FileRise config, callback reachability, CSP/script loading, and iframe embedding.</small>
+         </div>
+       `;
+               document.getElementById("onlyofficeContent").appendChild(testBox);
+       
+               // Util: tiny UI helpers for results
+               function ooRow(label, status, detail = "") {
+                 const li = document.createElement("li");
+                 li.style.margin = "6px 0";
+                 const icon = status === "ok" ? "✅" : status === "warn" ? "⚠️" : "❌";
+                 li.innerHTML = `<span style="min-width:1.2em;display:inline-block">${icon}</span> <strong>${label}</strong>${detail ? ` — <span>${detail}</span>` : ""}`;
+                 return li;
+               }
+               function ooClear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+       
+               // Probes that don’t explode your state
+               async function ooProbeScript(docsOrigin) {
+                 return new Promise(resolve => {
+                   const src = docsOrigin.replace(/\/$/, '') + '/web-apps/apps/api/documents/api.js?probe=' + Date.now();
+                   const s = document.createElement('script');
+                   s.id = 'ooProbeScript';
+                   s.async = true;
+                   s.src = src;
+                   s.onload = () => { resolve({ ok: true }); setTimeout(() => s.remove(), 0); };
+                   s.onerror = () => { resolve({ ok: false }); setTimeout(() => s.remove(), 0); };
+                   document.head.appendChild(s);
+                 });
+               }
+               async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
+                 return new Promise(resolve => {
+                   const f = document.createElement('iframe');
+                   f.id = 'ooProbeFrame';
+                   f.src = docsOrigin;
+                   f.style.display = 'none';
+                   let t = setTimeout(() => { cleanup(); resolve({ ok: false, timeout: true }); }, timeoutMs);
+                   function cleanup() { try { f.remove(); } catch { } clearTimeout(t); }
+                   f.onload = () => { cleanup(); resolve({ ok: true }); };
+                   f.onerror = () => { cleanup(); resolve({ ok: false }); };
+                   document.body.appendChild(f);
+                 });
+               }
+       
+               // Main test runner
+               async function runOnlyOfficeTests() {
+                 const spinner = document.getElementById('ooTestSpinner');
+                 const out = document.getElementById('ooTestResults');
+                 const docsOrigin = (document.getElementById('ooDocsOrigin')?.value || '').trim();
+       
+                 spinner.style.display = 'inline';
+                 ooClear(out);
+       
+                 // 1) FileRise status
+                 let statusOk = false, statusJson = null;
+                 try {
+                   const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
+                   statusJson = await r.json().catch(() => ({}));
+                   if (r.ok) {
+                     if (statusJson.enabled) {
+                       out.appendChild(ooRow('FileRise status', 'ok', 'Enabled and ready'));
+                       statusOk = true;
+                     } else {
+                       // Disabled usually means missing secret or origin; we’ll dig deeper below.
+                       out.appendChild(ooRow('FileRise status', 'warn', 'Disabled — check JWT Secret and Document Server Origin'));
+                     }
+                   } else {
+                     out.appendChild(ooRow('FileRise status', 'fail', `HTTP ${r.status}`));
+                   }
+                 } catch (e) {
+                   out.appendChild(ooRow('FileRise status', 'fail', (e && e.message) || 'Network error'));
+                 }
+       
+                 // 2) Secret presence (fresh read)
+                 try {
+                   const cfg = await fetch('/api/admin/getConfig.php', { credentials: 'include', cache: 'no-store' }).then(r => r.json());
+                   const hasSecret = !!(cfg.onlyoffice && cfg.onlyoffice.hasJwtSecret);
+                   out.appendChild(ooRow('JWT secret saved', hasSecret ? 'ok' : 'fail', hasSecret ? 'Present' : 'Missing'));
+                 } catch {
+                   out.appendChild(ooRow('JWT secret saved', 'warn', 'Could not verify'));
+                 }
+       
+                 // 3) Callback reachable (basic ping)
+                 try {
+                   const r = await fetch('/api/onlyoffice/callback.php?ping=1', { credentials: 'include', cache: 'no-store' });
+                   if (r.ok) out.appendChild(ooRow('Callback endpoint', 'ok', 'Reachable'));
+                   else out.appendChild(ooRow('Callback endpoint', 'fail', `HTTP ${r.status}`));
+                 } catch {
+                   out.appendChild(ooRow('Callback endpoint', 'fail', 'Network error'));
+                 }
+       
+                 // Early sanity on origin
+                 if (!/^https?:\/\//i.test(docsOrigin)) {
+                   out.appendChild(ooRow('Document Server Origin', 'fail', 'Enter a valid http(s) origin (e.g., https://docs.example.com)'));
+                   spinner.style.display = 'none';
+                   return;
+                 }
+       
+                 // 4a) Can browser load api.js (also surfaces CSP script-src issues)
+                 const sRes = await ooProbeScript(docsOrigin);
+                 out.appendChild(ooRow('Load api.js', sRes.ok ? 'ok' : 'fail', sRes.ok ? 'Loaded' : 'Blocked (check CSP script-src and origin)'));
+       
+                 // 4b) Can browser embed DS in an iframe (CSP frame-src)
+                 const fRes = await ooProbeFrame(docsOrigin);
+                 out.appendChild(ooRow('Embed DS iframe', fRes.ok ? 'ok' : 'fail', fRes.ok ? 'Allowed' : 'Blocked (check CSP frame-src)'));
+       
+                 // Optional tip if we see common red flags
+                 if (!statusOk || !sRes.ok || !fRes.ok) {
+                   const tip = document.createElement('li');
+                   tip.style.marginTop = '8px';
+                   tip.innerHTML = "💡 <em>Tip:</em> Use the CSP helper above to include your Document Server in <code>script-src</code>, <code>connect-src</code>, and <code>frame-src</code>.";
+                   out.appendChild(tip);
+                 }
+       
+                 spinner.style.display = 'none';
+               }
+       
+               // Wire the button
+               document.getElementById('ooTestBtn')?.addEventListener('click', runOnlyOfficeTests);
+
+               
+
+        // Append CSP help box
+        // --- CSP help box (replace your whole block with this) ---
+        const ooSec = document.getElementById("onlyofficeContent");
+        const cspHelp = document.createElement("div");
+        cspHelp.className = "alert alert-info";
+        cspHelp.style.marginTop = "12px";
+        cspHelp.innerHTML = `
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+    <strong>Content-Security-Policy help</strong>
+    <button type="button" id="copyOoCsp" class="btn btn-sm btn-outline-secondary">Copy</button>
+    <button type="button" id="selectOoCsp" class="btn btn-sm btn-outline-secondary">Select</button>
+  </div>
+  <div class="form-text" style="margin-bottom:8px;">
+    Add/replace this line in <code>public/.htaccess</code> (Apache). It allows loading ONLYOFFICE's <code>api.js</code>,
+    embedding the editor iframe, and letting the script make XHR to your Document Server.
+  </div>
+  <pre id="ooCspSnippet" style="white-space:pre-wrap;user-select:text;padding:8px;border:1px solid #ccc;border-radius:6px;background:#f7f7f7;"></pre>
+  <div class="form-text" style="margin-top:8px;">
+    If you terminate SSL or set CSP at a reverse proxy (e.g. Nginx), update it there instead.
+    Also note: if your site is <code>https://</code>, your ONLYOFFICE server must be <code>https://</code> too,
+    otherwise the browser will block it as mixed content.
+  </div>
+  <details style="margin-top:8px;">
+    <summary>Nginx equivalent</summary>
+    <pre id="ooCspSnippetNginx" style="white-space:pre-wrap;user-select:text;padding:8px;border:1px solid #ccc;border-radius:6px;background:#f7f7f7; margin-top:6px;"></pre>
+  </details>
+`;
+        ooSec.appendChild(cspHelp);
+
+        const INLINE_SHA = "sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM=";
+
+        function buildCspApache(originRaw) {
+          const o = (originRaw || "https://your-onlyoffice-server.example.com").replace(/\/+$/, '');
+          const api = `${o}/web-apps/apps/api/documents/api.js`;
+          return `Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' '${INLINE_SHA}' ${o} ${api}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${o}; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' ${o}"`;
+        }
+        function buildCspNginx(originRaw) {
+          const o = (originRaw || "https://your-onlyoffice-server.example.com").replace(/\/+$/, '');
+          const api = `${o}/web-apps/apps/api/documents/api.js`;
+          return `add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' '${INLINE_SHA}' ${o} ${api}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${o}; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' ${o}" always;`;
+        }
+
+        const ooDocsInput = document.getElementById("ooDocsOrigin");
+        const cspPre = document.getElementById("ooCspSnippet");
+        const cspPreNgx = document.getElementById("ooCspSnippetNginx");
+
+        function refreshCsp() {
+          const val = (ooDocsInput?.value || "").trim();
+          cspPre.textContent = buildCspApache(val);
+          cspPreNgx.textContent = buildCspNginx(val);
+        }
+        ooDocsInput?.addEventListener("input", refreshCsp);
+        refreshCsp();
+
+        // ---- Copy helpers (with robust fallback) ----
+        async function copyToClipboard(text) {
+          // Best path: async clipboard API in a secure context (https/localhost)
+          if (navigator.clipboard && window.isSecureContext) {
+            try { await navigator.clipboard.writeText(text); return true; }
+            catch (_) { /* fall through */ }
+          }
+          // Fallback for http or blocked clipboard: hidden textarea + execCommand
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand('copy'); // deprecated but still widely supported
+            document.body.removeChild(ta);
+            return ok;
+          } catch (_) {
+            return false;
+          }
+        }
+        function selectElementContents(el) {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+
+        document.getElementById("copyOoCsp")?.addEventListener("click", async () => {
+          const txt = (cspPre.textContent || "").trim();
+          const ok = await copyToClipboard(txt);
+          if (ok) {
+            showToast("CSP line copied.");
+          } else {
+            // Auto-select so the user can Ctrl/Cmd+C as a last resort
+            try { selectElementContents(cspPre); } catch { }
+            const reason = window.isSecureContext ? "" : " (page is not HTTPS or localhost)";
+            showToast("Copy failed" + reason + ". Press Ctrl/Cmd+C to copy.");
+          }
+        });
+
+        document.getElementById("selectOoCsp")?.addEventListener("click", () => {
+          try { selectElementContents(cspPre); showToast("Selected — press Ctrl/Cmd+C"); }
+          catch { /* ignore */ }
+        });
+
+        document.getElementById("ooEnabled").checked = !!(config.onlyoffice && config.onlyoffice.enabled);
+        document.getElementById("ooDocsOrigin").value = (config.onlyoffice && config.onlyoffice.docsOrigin) ? config.onlyoffice.docsOrigin : "";
 
         const hasId = !!(config.oidc && config.oidc.hasClientId);
         const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
@@ -696,10 +959,24 @@ export function openAdminPanel() {
         document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
+        // remember lock for handleSave
+        window.__OO_LOCKED = !!(config.onlyoffice && config.onlyoffice.lockedByPhp);
+        if (window.__OO_LOCKED) {
+          const sec = document.getElementById("onlyofficeContent");
+          sec.querySelectorAll("input,button").forEach(el => el.disabled = true);
+          const note = document.createElement("div");
+          note.className = "form-text";
+          note.style.marginTop = "6px";
+          note.textContent = "Managed by config.php — edit ONLYOFFICE_* constants there.";
+          sec.appendChild(note);
+        }
         captureInitialAdminConfig();
 
       } else {
         mdl.style.display = "flex";
+        const hasId = !!(config.oidc && config.oidc.hasClientId);
+        const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
+
         document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
         document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
         document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
@@ -713,6 +990,10 @@ export function openAdminPanel() {
         if (!hasId) idEl.value = window.currentOIDCConfig?.clientId || "";
         if (!hasSecret) secEl.value = window.currentOIDCConfig?.clientSecret || "";
         wireReplaceButtons(document.getElementById("oidcContent"));
+        document.getElementById("ooEnabled").checked = !!(config.onlyoffice && config.onlyoffice.enabled);
+        document.getElementById("ooDocsOrigin").value = (config.onlyoffice && config.onlyoffice.docsOrigin) ? config.onlyoffice.docsOrigin : "";
+        const ooCont = document.getElementById("onlyofficeContent");
+        if (ooCont) wireReplaceButtons(ooCont);
         document.getElementById("oidcClientSecret").value = window.currentOIDCConfig?.clientSecret || "";
         document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig?.redirectUri || "";
         document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig?.globalOtpauthUrl || '';
@@ -750,6 +1031,30 @@ function handleSave() {
   }
   if (scEl?.dataset.replace === '1' && scEl.value.trim() !== '') {
     payload.oidc.clientSecret = scEl.value.trim();
+  }
+
+  const ooSecretEl = document.getElementById("ooJwtSecret");
+
+  payload.onlyoffice = {
+    enabled: document.getElementById("ooEnabled").checked,
+    docsOrigin: document.getElementById("ooDocsOrigin").value.trim()
+  };
+
+  if (ooSecretEl?.dataset.replace === '1' && ooSecretEl.value.trim() !== '') {
+    payload.onlyoffice.jwtSecret = ooSecretEl.value.trim();
+  }
+
+  // ---- ONLYOFFICE payload ----
+  if (!window.__OO_LOCKED) {
+    const ooSecretVal = (document.getElementById("ooJwtSecret")?.value || "").trim();
+    payload.onlyoffice = {
+      enabled: document.getElementById("ooEnabled").checked,
+      docsOrigin: document.getElementById("ooDocsOrigin").value.trim()
+    };
+    // If user typed a secret (non-empty), send it (server keeps it if non-empty)
+    if (ooSecretVal !== "") {
+      payload.onlyoffice.jwtSecret = ooSecretVal;
+    }
   }
 
   fetch('/api/admin/updateConfig.php', {

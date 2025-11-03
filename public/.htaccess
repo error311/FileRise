@@ -1,38 +1,46 @@
 # --------------------------------
-# Base: safe in most environments
+# FileRise portable .htaccess
 # --------------------------------
 Options -Indexes
 DirectoryIndex index.html
 
 <IfModule mod_authz_core.c>
-  <FilesMatch "^\.">
+  # Block dotfiles like .env, .git, etc., but allow ACME under .well-known
+  <FilesMatch "^\.(?!well-known(?:/|$))">
     Require all denied
   </FilesMatch>
 </IfModule>
 
+# ---------------- Rewrites ----------------
+<IfModule mod_rewrite.c>
 RewriteEngine On
+
 # Never redirect local/dev hosts
 RewriteCond %{HTTP_HOST} ^(localhost|127\.0\.0\.1|fr\.local|192\.168\.[0-9]+\.[0-9]+)$ [NC]
 RewriteRule ^ - [L]
 
-# --- HTTPS redirect ---
-# Use ONE of these blocks.
+# Let ACME http-01 pass BEFORE any redirect (needed for auto-renew)
+RewriteCond %{REQUEST_URI} ^/.well-known/acme-challenge/
+RewriteRule - - [L]
 
-# A) Direct TLS on this server (enable this if Apache terminates HTTPS here)
-#RewriteCond %{HTTPS} off
+# HTTPS redirect (enable ONE of these, comment the other)
+
+# A) Direct TLS on this server
+#RewriteCond %{HTTPS} !=on
 #RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# B) Behind a reverse proxy/CDN that sets X-Forwarded-Proto
+# B) Behind reverse proxy that sets X-Forwarded-Proto
 #RewriteCond %{HTTP:X-Forwarded-Proto} =http [OR]
 #RewriteCond %{HTTP:X-Forwarded-Proto} ^$
 #RewriteCond %{HTTPS} !=on
 #RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# Don't interfere with ACME/http-01 if you do your own certs
-#RewriteCond %{REQUEST_URI} ^/.well-known/acme-challenge/
-#RewriteRule - - [L]
+# Mark versioned assets (?v=...) with env flag for caching rules below
+RewriteCond %{QUERY_STRING} (^|&)v= [NC]
+RewriteRule ^ - [E=IS_VER:1]
+</IfModule>
 
-# --- MIME types (fonts/SVG/ESM) ---
+# ---------------- MIME types ----------------
 <IfModule mod_mime.c>
   AddType font/woff2 .woff2
   AddType font/woff  .woff
@@ -40,7 +48,7 @@ RewriteRule ^ - [L]
   AddType application/javascript .mjs
 </IfModule>
 
-# --- Security headers ---
+# ---------------- Security headers ----------------
 <IfModule mod_headers.c>
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set X-XSS-Protection "1; mode=block"
@@ -51,59 +59,54 @@ RewriteRule ^ - [L]
   Header always set Expect-CT "max-age=86400, enforce"
   Header always set Cross-Origin-Resource-Policy "same-origin"
   Header always set X-Permitted-Cross-Domain-Policies "none"
-  # HSTS only when actually on HTTPS
-  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" "expr=%{HTTPS} == 'on'"
 
-  # CSP (modules, blobs, workers, etc.)
+  # HSTS only when HTTPS (safe for .htaccess)
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" env=HTTPS
+
+  # CSP — keep this SHA-256 in sync with your inline pre-theme script
   Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'"
 </IfModule>
 
-# --- Caching (query-string based, no env vars needed) ---
+# ---------------- Caching ----------------
 <IfModule mod_headers.c>
-  # HTML/PHP: no cache (only if PHP didn’t already set it)
+  # HTML/PHP: no cache
   <FilesMatch "\.(html?|php)$">
     Header setifempty Cache-Control "no-cache, no-store, must-revalidate"
     Header setifempty Pragma "no-cache"
     Header setifempty Expires "0"
   </FilesMatch>
 
-  # version.js: always non-cacheable
+  # version.js: never cache
   <FilesMatch "^js/version\.js$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
   </FilesMatch>
 
-  # Unversioned JS/CSS: 1 hour
+  # JS/CSS: long cache if ?v= present, else 1h
   <FilesMatch "\.(?:m?js|css)$">
-    Header set Cache-Control "public, max-age=3600, must-revalidate" "expr=%{QUERY_STRING} !~ /(^|&)v=/"
+    Header set Cache-Control "public, max-age=31536000, immutable" env=IS_VER
+    Header set Cache-Control "public, max-age=3600, must-revalidate" env=!IS_VER
   </FilesMatch>
 
-  # Unversioned static (images/fonts): 7 days
+  # Images/fonts: long cache if ?v= present, else 7d
   <FilesMatch "\.(?:png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
-    Header set Cache-Control "public, max-age=604800" "expr=%{QUERY_STRING} !~ /(^|&)v=/"
+    Header set Cache-Control "public, max-age=31536000, immutable" env=IS_VER
+    Header set Cache-Control "public, max-age=604800" env=!IS_VER
   </FilesMatch>
-
-  # --- Versioned assets (?v=...) : 1 year + immutable (override anything else) ---
-  <IfModule mod_headers.c>
-    <FilesMatch "\.(?:m?js|css|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf)$">
-      # Only when query string has v=
-      Header unset Cache-Control "expr=%{QUERY_STRING} =~ /(^|&)v=/"
-      Header unset Expires       "expr=%{QUERY_STRING} =~ /(^|&)v=/"
-      Header set Cache-Control "public, max-age=31536000, s-maxage=31536000, immutable" "expr=%{QUERY_STRING} =~ /(^|&)v=/"
-    </FilesMatch>
-  </IfModule>
 </IfModule>
 
-# --- Compression ---
+# ---------------- Compression ----------------
 <IfModule mod_brotli.c>
-  BrotliCompressionQuality 5
+  # Do NOT set BrotliCompressionQuality in .htaccess (vhost/server only)
   AddOutputFilterByType BROTLI_COMPRESS text/html text/css application/javascript application/json image/svg+xml
 </IfModule>
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
 </IfModule>
 
-# --- Disable TRACE ---
+# ---------------- Disable TRACE ----------------
+<IfModule mod_rewrite.c>
 RewriteCond %{REQUEST_METHOD} ^TRACE
 RewriteRule .* - [F]
+</IfModule>

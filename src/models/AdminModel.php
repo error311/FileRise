@@ -62,26 +62,58 @@ class AdminModel
         return (int)$val;
     }
 
-    public static function buildPublicSubset(array $config): array
+    /** Allow only http(s) URLs; return '' for invalid input. */
+    private static function sanitizeHttpUrl($url): string
     {
-        return [
-            'header_title'        => $config['header_title'] ?? 'FileRise',
-            'loginOptions'        => [
-                'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
-                'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
-                'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
-                // do NOT include authBypass/authHeaderName here — admin-only
-            ],
-            'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
-            'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
-            'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
-            'oidc' => [
-                'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
-                'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
-                // never include clientId / clientSecret
-            ],
-        ];
+        $url = trim((string)$url);
+        if ($url === '') return '';
+        $valid = filter_var($url, FILTER_VALIDATE_URL);
+        if (!$valid) return '';
+        $scheme = strtolower(parse_url($url, PHP_URL_SCHEME) ?: '');
+        return ($scheme === 'http' || $scheme === 'https') ? $url : '';
     }
+
+    public static function buildPublicSubset(array $config): array
+{
+    $public = [
+        'header_title'        => $config['header_title'] ?? 'FileRise',
+        'loginOptions'        => [
+            'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
+            'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
+            'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
+        ],
+        'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
+        'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
+        'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
+        'oidc' => [
+            'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
+            'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
+        ],
+    ];
+
+    // NEW: include ONLYOFFICE minimal public flag
+    $ooEnabled = null;
+    if (isset($config['onlyoffice']['enabled'])) {
+        $ooEnabled = (bool)$config['onlyoffice']['enabled'];
+    } elseif (defined('ONLYOFFICE_ENABLED')) {
+        $ooEnabled = (bool)ONLYOFFICE_ENABLED;
+    }
+    if ($ooEnabled !== null) {
+        $public['onlyoffice'] = ['enabled' => $ooEnabled];
+    }
+    $locked = defined('ONLYOFFICE_ENABLED') || defined('ONLYOFFICE_JWT_SECRET')
+       || defined('ONLYOFFICE_DOCS_ORIGIN') || defined('ONLYOFFICE_PUBLIC_ORIGIN');
+
+if ($locked) {
+    $ooEnabled = defined('ONLYOFFICE_ENABLED') ? (bool)ONLYOFFICE_ENABLED : false;
+} else {
+    $ooEnabled = isset($config['onlyoffice']['enabled']) ? (bool)$config['onlyoffice']['enabled'] : false;
+}
+
+$public['onlyoffice'] = ['enabled' => $ooEnabled];
+
+    return $public;
+}
 
     /** Write USERS_DIR/siteConfig.json atomically (unencrypted). */
     public static function writeSiteConfig(array $publicSubset): array
@@ -172,6 +204,28 @@ class AdminModel
         } else {
             $configUpdate['loginOptions']['authHeaderName'] = trim($configUpdate['loginOptions']['authHeaderName']);
         }
+
+                // ---- ONLYOFFICE (persist, sanitize; keep secret unless explicitly replaced) ----
+                if (isset($configUpdate['onlyoffice']) && is_array($configUpdate['onlyoffice'])) {
+                    $oo = $configUpdate['onlyoffice'];
+        
+                    $norm = [
+                        'enabled'      => (bool)($oo['enabled'] ?? false),
+                        'docsOrigin'   => self::sanitizeHttpUrl($oo['docsOrigin'] ?? ''),
+                        'publicOrigin' => self::sanitizeHttpUrl($oo['publicOrigin'] ?? ''),
+                    ];
+        
+                    // Only accept a new secret if provided (non-empty). We do NOT clear on empty.
+                    if (array_key_exists('jwtSecret', $oo)) {
+                        $js = trim((string)$oo['jwtSecret']);
+                        if ($js !== '') {
+                            if (strlen($js) > 1024) $js = substr($js, 0, 1024);
+                            $norm['jwtSecret'] = $js; // will be encrypted with encryptData()
+                        }
+                    }
+        
+                    $configUpdate['onlyoffice'] = $norm;
+                }
 
         // Convert configuration to JSON.
         $plainTextConfig = json_encode($configUpdate, JSON_PRETTY_PRINT);
@@ -301,6 +355,19 @@ class AdminModel
                 $config['sharedMaxUploadSize'] = (int)min((int)$config['sharedMaxUploadSize'], $maxBytes);
             }
 
+            // ---- Ensure ONLYOFFICE structure exists, sanitize values ----
+            if (!isset($config['onlyoffice']) || !is_array($config['onlyoffice'])) {
+                $config['onlyoffice'] = [
+                    'enabled'      => false,
+                    'docsOrigin'   => '',
+                    'publicOrigin' => '',
+                ];
+            } else {
+                $config['onlyoffice']['enabled']      = (bool)($config['onlyoffice']['enabled'] ?? false);
+                $config['onlyoffice']['docsOrigin']   = self::sanitizeHttpUrl($config['onlyoffice']['docsOrigin'] ?? '');
+                $config['onlyoffice']['publicOrigin'] = self::sanitizeHttpUrl($config['onlyoffice']['publicOrigin'] ?? '');
+            }
+
             return $config;
         }
 
@@ -320,7 +387,12 @@ class AdminModel
             ],
             'globalOtpauthUrl'      => "",
             'enableWebDAV'          => false,
-            'sharedMaxUploadSize'   => min(50 * 1024 * 1024, self::parseSize(TOTAL_UPLOAD_SIZE))
+            'sharedMaxUploadSize'   => min(50 * 1024 * 1024, self::parseSize(TOTAL_UPLOAD_SIZE)),
+            'onlyoffice'            => [
+                'enabled'      => false,
+                'docsOrigin'   => '',
+                'publicOrigin' => '',
+            ],
         ];
     }
 }

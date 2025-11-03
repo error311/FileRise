@@ -969,7 +969,7 @@ body {
       align-items: stretch;
   }.file-list-actions .action-btn {
   width: 100%;
-  height: 10px !important;
+  
   }.modal-content {
   width: 95%;
       margin: 20% auto;
@@ -996,7 +996,7 @@ body {
   #copySelectedBtn:hover,
   #moveSelectedBtn:hover,
   #downloadZipBtn:hover,
-  #extractZipBtn:hover
+  #extractZipBtn:hover,
   #customChooseBtn:hover {
     transform: scale(1.08);
     box-shadow: 0 2px 10px rgba(0,0,0,.12);

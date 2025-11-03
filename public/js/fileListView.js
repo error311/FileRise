@@ -34,6 +34,25 @@ import {
   
   export let fileData = [];
   export let sortOrder = { column: "uploaded", ascending: true };
+
+
+
+    // onnlyoffice
+let OO_ENABLED = false;
+let OO_EXTS = new Set();
+
+export async function initOnlyOfficeCaps() {
+  try {
+    const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    OO_ENABLED = !!j.enabled;
+    OO_EXTS = new Set(Array.isArray(j.exts) ? j.exts : []);
+  } catch {
+    OO_ENABLED = false;
+    OO_EXTS = new Set();
+  }
+}
   
   // Hide "Edit" for files >10 MiB
   const MAX_EDIT_BYTES = 10 * 1024 * 1024;
@@ -338,6 +357,7 @@ function searchFiles(searchTerm) {
   window.updateRowHighlight = updateRowHighlight;
   
   export async function loadFileList(folderParam) {
+    await initOnlyOfficeCaps(); 
     const reqId = ++__fileListReqSeq; // latest call wins
     const folder = folderParam || "root";
     const fileListContainer = document.getElementById("fileList");
@@ -1328,46 +1348,34 @@ function searchFiles(searchTerm) {
     if (!fileName || typeof fileName !== "string") return false;
     const dot = fileName.lastIndexOf(".");
     if (dot < 0) return false;
-  
     const ext = fileName.slice(dot + 1).toLowerCase();
   
-    const allowedExtensions = [
-      "txt", "text", "md", "markdown", "rst",
-      "html", "htm", "xhtml", "shtml",
-      "css", "scss", "sass", "less",
-      "js", "mjs", "cjs", "jsx",
-      "ts", "tsx",
-      "json", "jsonc", "ndjson",
-      "yml", "yaml", "toml", "xml", "plist",
-      "ini", "conf", "config", "cfg", "cnf", "properties", "props", "rc",
-      "env", "dotenv",
-      "csv", "tsv", "tab",
+    // Your CodeMirror text-based types
+    const textEditExts = new Set([
+      "txt","text","md","markdown","rst",
+      "html","htm","xhtml","shtml",
+      "css","scss","sass","less",
+      "js","mjs","cjs","jsx",
+      "ts","tsx",
+      "json","jsonc","ndjson",
+      "yml","yaml","toml","xml","plist",
+      "ini","conf","config","cfg","cnf","properties","props","rc",
+      "env","dotenv",
+      "csv","tsv","tab",
       "log",
-      "sh", "bash", "zsh", "ksh", "fish",
-      "bat", "cmd",
-      "ps1", "psm1", "psd1",
-      "py", "pyw",
-      "rb",
-      "pl", "pm",
-      "go",
-      "rs",
-      "java",
-      "kt", "kts",
-      "scala", "sc",
-      "groovy", "gradle",
-      "c", "h", "cpp", "cxx", "cc", "hpp", "hh", "hxx",
-      "m", "mm",
-      "swift",
-      "cs", "fs", "fsx",
-      "dart",
-      "lua",
-      "r", "rmd",
-      "sql",
-      "vue", "svelte",
-      "twig", "mustache", "hbs", "handlebars", "ejs", "pug", "jade"
-    ];
+      "sh","bash","zsh","ksh","fish",
+      "bat","cmd",
+      "ps1","psm1","psd1",
+      "py","pyw","rb","pl","pm","go","rs","java","kt","kts",
+      "scala","sc","groovy","gradle",
+      "c","h","cpp","cxx","cc","hpp","hh","hxx",
+      "m","mm","swift","cs","fs","fsx","dart","lua","r","rmd",
+      "sql","vue","svelte","twig","mustache","hbs","handlebars","ejs","pug","jade"
+    ]);
   
-    return allowedExtensions.includes(ext);
+    if (textEditExts.has(ext)) return true;            // CodeMirror
+    if (OO_ENABLED && OO_EXTS.has(ext)) return true;   // ONLYOFFICE types if enabled
+    return false;
   }
   
   // Expose global functions for pagination and preview.

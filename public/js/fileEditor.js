@@ -65,6 +65,137 @@ function normalizeModeName(modeOption) {
   return name;
 }
 
+// ---- ONLYOFFICE integration -----------------------------------------------
+
+function getExt(name) { const i = name.lastIndexOf('.'); return i >= 0 ? name.slice(i + 1).toLowerCase() : ''; }
+
+// Cache OO capabilities (enabled flag + ext list) from /api/onlyoffice/status.php
+let __ooCaps = { enabled: false, exts: new Set(), fetched: false };
+
+async function fetchOnlyOfficeCapsOnce() {
+  if (__ooCaps.fetched) return __ooCaps;
+  try {
+    const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
+    if (r.ok) {
+      const j = await r.json();
+      __ooCaps.enabled = !!j.enabled;
+      __ooCaps.exts = new Set(Array.isArray(j.exts) ? j.exts : []);
+    }
+  } catch { /* ignore; keep defaults */ }
+  __ooCaps.fetched = true;
+  return __ooCaps;
+}
+
+async function shouldUseOnlyOffice(fileName) {
+  const { enabled, exts } = await fetchOnlyOfficeCapsOnce();
+  return enabled && exts.has(getExt(fileName));
+}
+
+function isAbsoluteHttpUrl(u) { return /^https?:\/\//i.test(u || ''); }
+
+async function ensureOnlyOfficeApi(srcFromConfig, originFromConfig) {
+  let src =
+    srcFromConfig ||
+    (originFromConfig ? originFromConfig.replace(/\/$/, '') + '/web-apps/apps/api/documents/api.js'
+      : (window.ONLYOFFICE_API_SRC || '/onlyoffice/web-apps/apps/api/documents/api.js'));
+  if (window.DocsAPI && typeof window.DocsAPI.DocEditor === 'function') return;
+  await loadScriptOnce(src);
+}
+
+async function openOnlyOffice(fileName, folder) {
+  let editor; // make visible to the whole function
+
+  try {
+    const url = `/api/onlyoffice/config.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(fileName)}`;
+    const resp = await fetch(url, { credentials: 'include' });
+
+    const text = await resp.text();
+    let cfg;
+    try { cfg = JSON.parse(text); } catch {
+      throw new Error(`ONLYOFFICE config parse failed (HTTP ${resp.status}). First 120 chars: ${text.slice(0,120)}`);
+    }
+    if (!resp.ok) throw new Error(cfg.error || `ONLYOFFICE config HTTP ${resp.status}`);
+
+    // Must be absolute
+    const docUrl = cfg?.document?.url;
+    const cbUrl  = cfg?.editorConfig?.callbackUrl;
+    if (!/^https?:\/\//i.test(docUrl || '') || !/^https?:\/\//i.test(cbUrl || '')) {
+      throw new Error(`Config URLs must be absolute. document.url='${docUrl}', callbackUrl='${cbUrl}'`);
+    }
+
+    // Load DocsAPI if needed
+    await ensureOnlyOfficeApi(cfg.docs_api_js, cfg.documentServerOrigin);
+
+    // Modal
+    const modal = document.createElement('div');
+    modal.id = 'ooEditorModal';
+    modal.classList.add('modal', 'editor-modal');
+    modal.setAttribute('tabindex', '-1');
+    modal.innerHTML = `
+      <div class="editor-header">
+        <h3 class="editor-title">
+          ${t("editing")}: ${escapeHTML(fileName)}
+        </h3>
+        <button id="closeEditorX" class="editor-close-btn" aria-label="${t("close") || "Close"}">&times;</button>
+      </div>
+      <div class="editor-body" style="flex:1;min-height:200px">
+        <div id="oo-editor" style="width:100%;height:100%"></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+    modal.focus();
+
+    // We’ll fill this after wiring the toggle, so destroy() can unhook it
+    let removeThemeListener = () => {};
+
+    const destroy = () => {
+      try { editor?.destroyEditor?.(); } catch {}
+      try { removeThemeListener(); } catch {}
+      try { modal.remove(); } catch {}
+    };
+
+    modal.addEventListener('keydown', e => { if (e.key === 'Escape') destroy(); });
+    document.getElementById('closeEditorX')?.addEventListener('click', destroy);
+
+    // Let DS request closing
+    cfg.events = Object.assign({}, cfg.events, { onRequestClose: destroy });
+
+    // Initial theme
+    const isDark =
+    document.documentElement.classList.contains('dark-mode') ||
+    /^(1|true)$/i.test(localStorage.getItem('darkMode') || '');
+  
+  cfg.editorConfig = cfg.editorConfig || {};
+  cfg.editorConfig.customization = Object.assign(
+    {},
+    cfg.editorConfig.customization,
+    { uiTheme: isDark ? 'theme-dark' : 'theme-light' } // <- correct key/value
+  );
+
+    // Launch editor
+    editor = new window.DocsAPI.DocEditor('oo-editor', cfg);
+
+    // Live theme switching (ONLYOFFICE v7.2+ supports setTheme)
+    const darkToggle = document.getElementById('darkModeToggle');
+    const onDarkToggle = () => {
+      const nowDark = document.documentElement.classList.contains('dark-mode');
+      if (editor && typeof editor.setTheme === 'function') {
+        editor.setTheme(nowDark ? 'dark' : 'light');
+      }
+    };
+    if (darkToggle) {
+      darkToggle.addEventListener('click', onDarkToggle);
+      removeThemeListener = () => darkToggle.removeEventListener('click', onDarkToggle);
+    }
+  } catch (e) {
+    console.error('[ONLYOFFICE] failed to open:', e);
+    showToast((e && e.message) ? e.message : 'Unable to open ONLYOFFICE editor.');
+  }
+}
+// ---- /ONLYOFFICE integration ----------------------------------------------
+
+
 const _loadedScripts = new Set();
 const _loadedCss = new Set();
 let _corePromise = null;
@@ -196,13 +327,18 @@ function observeModalResize(modal) {
 }
 export { observeModalResize };
 
-export function editFile(fileName, folder) {
+export async function editFile(fileName, folder) {
   // destroy any previous editor
   let existingEditor = document.getElementById("editorContainer");
   if (existingEditor) existingEditor.remove();
 
   const folderUsed = folder || window.currentFolder || "root";
   const fileUrl = buildPreviewUrl(folderUsed, fileName);
+
+  if (await shouldUseOnlyOffice(fileName)) {
+    await openOnlyOffice(fileName, folderUsed);
+    return;
+  }
 
   // Probe size safely via API. Prefer HEAD; if missing Content-Length, fall back to a 1-byte Range GET.
   async function probeSize(url) {

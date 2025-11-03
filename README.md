@@ -10,7 +10,7 @@
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-❤-red)](https://github.com/sponsors/error311)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
 
-**Quick links:** [Demo](#live-demo) • [Install](#installation--setup) • [Docker](#1-running-with-docker-recommended) • [Unraid](#unraid) • [WebDAV](#quick-start-mount-via-webdav) • [FAQ](#faq--troubleshooting)
+**Quick links:** [Demo](#live-demo) • [Install](#installation--setup) • [Docker](#1-running-with-docker-recommended) • [Unraid](#unraid) • [WebDAV](#quick-start-mount-via-webdav) • [ONLYOFFICE](#quick-start-onlyoffice-optional) • [FAQ](#faq--troubleshooting)
 
 **Elevate your File Management** – A modern, self-hosted web file manager.  
 Upload, organize, and share files or folders through a sleek, responsive web interface.  
@@ -20,6 +20,8 @@ Now featuring **Granular Access Control (ACL)** with per-folder permissions, inh
 Grant precise capabilities like *view*, *upload*, *rename*, *delete*, or *manage* on a per-user, per-folder basis — enforced across the UI, API, and WebDAV.  
 
 With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2FA), and one-click public sharing, **FileRise** brings professional-grade file management to your own server — simple to deploy, easy to scale, and fully self-hosted.
+
+New: Open and edit Office documents — **Word (DOCX)**, **Excel (XLSX)**, **PowerPoint (PPTX)** — directly in **FileRise** using your self-hosted **ONLYOFFICE Document Server** (optional). Open **ODT/ODS/ODP**, and view **PDFs** inline. Where supported by your Document Server, users can add **comments/annotations** to documents (and PDFs). Everything is enforced by the same per-folder ACLs across the UI and WebDAV.
 
 > ⚠️ **Security fix in v1.5.0** — ACL hardening. If you’re on ≤1.4.x, please upgrade.
 
@@ -73,6 +75,8 @@ With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2
 - 📚 **API Documentation:** Auto-generated OpenAPI spec (`openapi.json`) with interactive HTML docs (`api.html`) via Redoc.
 
 - 📝 **Built-in Editor & Preview:** Inline preview for images, video, audio, and PDFs. CodeMirror-based editor for text/code with syntax highlighting and line numbers.
+
+- - 🧩 **Office Docs (ONLYOFFICE, optional):** View/edit DOCX, XLSX, PPTX (and ODT/ODS/ODP, PDF view) using your self-hosted ONLYOFFICE Document Server. Enforced by the same ACLs as the web UI & WebDAV.
 
 - 🏷️ **Tags & Search:** Add color-coded tags and search by name, tag, uploader, or content. Advanced fuzzy search indexes metadata and file contents.
 
@@ -342,7 +346,47 @@ https://your-host/webdav.php/
 
 ---
 
+## Quick start: ONLYOFFICE (optional)
+
+FileRise can open & edit office docs using your **self-hosted ONLYOFFICE Document Server**.
+
+**What you need**  
+
+- A reachable ONLYOFFICE Document Server (Community/Enterprise).  
+- A shared **JWT secret** used by FileRise and your Document Server.
+
+**Setup (2–3 minutes)**  
+
+1. In FileRise go to **Admin → ONLYOFFICE** and:
+   - ✅ Enable ONLYOFFICE
+   - 🔗 Set **Document Server Origin** (e.g., `https://docs.example.com`)
+   - 🔑 Enter **JWT Secret** (click “Replace” to set)
+2. (Recommended) Click **Run tests** in the ONLYOFFICE card:
+   - Checks FileRise status, callback reachability, `api.js` load, and iframe embed.
+3. Update your **Content-Security-Policy** to allow the DS origin.  
+   The Admin panel shows a ready-to-copy line for Apache & Nginx. Example:
+
+   **Apache**
+
+   ```apache
+   Header always set Content-Security-Policy "default-src 'self'; frame-src 'self' https://docs.example.com; script-src 'self' https://docs.example.com https://docs.example.com/web-apps/apps/api/documents/api.js; connect-src 'self' https://docs.example.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'"
+   ```
+
+   **Nginx**
+
+   ```add_header Content-Security-Policy "default-src 'self'; frame-src 'self' https://docs.example.com; script-src 'self' https://docs.example.com https://docs.example.com/web-apps/apps/api/documents/api.js; connect-src 'self' https://docs.example.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'" always;
+   ```
+
+   **Notes**
+   - If your site is https://, your Document Server must also be https:// (or the browser will block it as mixed content).
+   - Editor access respects FileRise ACLs (view/edit/share) exactly like the rest of the app.
+
+---
+
 ## FAQ / Troubleshooting
+
+- **ONLYOFFICE editor won’t load / blank frame:** Verify CSP allows your DS origin (`script-src`, `frame-src`, `connect-src`) and that the DS is reachable over HTTPS if your site is HTTPS.
+- **“Disabled — check JWT Secret / Origin” in tests:** In **Admin → ONLYOFFICE**, set the Document Server Origin and click “Replace” to save a JWT secret. Then re-run tests.
 
 - **“Upload failed” or large files not uploading:** Ensure `TOTAL_UPLOAD_SIZE` in config and PHP’s `post_max_size` / `upload_max_filesize` are set high enough. For extremely large files, you might need to increase `max_execution_time` or rely on resumable uploads in smaller chunks.
 
@@ -398,6 +442,20 @@ Every bit helps me keep FileRise fast, polished, and well-maintained. Thank you!
 ---
 
 ## Dependencies
+
+### ONLYOFFICE integration
+
+FileRise can open office documents using a self-hosted ONLYOFFICE Document Server.
+
+- **We do not bundle ONLYOFFICE.** Admins point FileRise to an existing ONLYOFFICE Docs server and (optionally) set a JWT secret in **Admin > ONLYOFFICE**.
+- **Licensing:** ONLYOFFICE Document Server (Community Edition) is released under the GNU AGPL v3. Enterprise editions are commercially licensed. When you deploy ONLYOFFICE, you are responsible for complying with the license of the edition you use.  
+  – Project page & license: <https://github.com/ONLYOFFICE/DocumentServer> (AGPL-3.0)  
+- **FileRise license unaffected:** FileRise communicates with ONLYOFFICE over standard HTTP and loads `api.js` from the configured Document Server at runtime; FileRise does not redistribute ONLYOFFICE code.
+- **Trademarks:** ONLYOFFICE is a trademark of Ascensio System SIA. FileRise is not affiliated with or endorsed by ONLYOFFICE.
+
+#### Security / CSP
+
+If you enable ONLYOFFICE, allow its origin in your CSP (`script-src`, `frame-src`, `connect-src`). The Admin panel shows a ready-to-copy line for Apache/Nginx.
 
 ### PHP Libraries
 

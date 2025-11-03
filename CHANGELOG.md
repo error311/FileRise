@@ -1,5 +1,45 @@
 # Changelog
 
+## Changes 11/3/2025 (v1.8.0)
+
+release(v1.8.0): feat(onlyoffice): first-class ONLYOFFICE integration (view/edit), admin UI, API, CSP helpers
+
+Refs #37 — implements ONLYOFFICE integration suggested in the discussion; video progress saving will be tracked separately.
+
+Adds secure, ACL-aware ONLYOFFICE support throughout FileRise:
+
+- **Backend / API**
+  - New OnlyOfficeController with supported extensions (doc/xls/ppt/pdf etc.), status/config endpoints, and signed download flow.
+  - New endpoints:
+    - GET /api/onlyoffice/status.php — reports availability + supported exts.  
+    - GET /api/onlyoffice/config.php — returns DocEditor config (signed URLs, callback).  
+    - GET /api/onlyoffice/signed-download.php — serves signed blobs to DS.  
+  - Effective config/overrides: env/constant wins; supports docsOrigin, publicOrigin, and jwtSecret; status gated on presence of origin+secret.
+  - Public origin resolution (BASE_URL/proxy aware) for absolute URLs.
+
+- **Admin config / UI**
+  - AdminPanel gets a new “ONLYOFFICE” section with Enable toggle, Document Server Origin, masked JWT Secret, and “Replace” control.
+  - Built-in connection tester (status, secret presence, callback ping, api.js load, iframe embed) + CSP helper (Apache & Nginx snippets)
+
+- **Frontend integration**
+  - fileEditor detects OO capability via /api/onlyoffice/status and routes supported types to the DocEditor; loads DocsAPI dynamically.
+  - editFile() short-circuits to openOnlyOffice when applicable; includes live dark/light theme sync where supported.
+  - fileListView pulls status once on load to drive UI decisions (e.g., editing affordances).
+
+- **AdminModel / config**
+  - Adds onlyoffice {enabled, docsOrigin, publicOrigin} defaults and update path, with jwtSecret persisted (kept unless explicitly replaced).
+  - Optional constants in config.php to override and debug.
+
+- **Security & UX notes**
+  - Editor access remains ACL-checked (read/edit) and uses absolute, signed URLs surfaced via controller.  
+  - Admin UI never echoes secrets; “Replace” toggles explicit updates only.  
+  - CSP helper makes it straightforward to permit api.js + iframe + XHR to your DS.  
+
+- **Docs/Styling**
+  - Minor CSS touch-ups around hover states and modal layout.
+
+---
+
 ## Changes 11/2/2025 (v1.7.5)
 
 release(v1.7.5): CSP hardening, API-backed previews, flicker-free theming, cache tuning & deploy script (closes #50)
