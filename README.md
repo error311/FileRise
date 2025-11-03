@@ -76,7 +76,7 @@ New: Open and edit Office documents — **Word (DOCX)**, **Excel (XLSX)**, **Pow
 
 - 📝 **Built-in Editor & Preview:** Inline preview for images, video, audio, and PDFs. CodeMirror-based editor for text/code with syntax highlighting and line numbers.
 
-- - 🧩 **Office Docs (ONLYOFFICE, optional):** View/edit DOCX, XLSX, PPTX (and ODT/ODS/ODP, PDF view) using your self-hosted ONLYOFFICE Document Server. Enforced by the same ACLs as the web UI & WebDAV.
+- 🧩 **Office Docs (ONLYOFFICE, optional):** View/edit DOCX, XLSX, PPTX (and ODT/ODS/ODP, PDF view) using your self-hosted ONLYOFFICE Document Server. Enforced by the same ACLs as the web UI & WebDAV.
 
 - 🏷️ **Tags & Search:** Add color-coded tags and search by name, tag, uploader, or content. Advanced fuzzy search indexes metadata and file contents.
 

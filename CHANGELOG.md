@@ -1,5 +1,26 @@
 # Changelog
 
+## Changes 11/3/2025 (V1.8.1)
+
+release(v1.8.1): fix(security,onlyoffice): sanitize DS origin; safe api.js/iframe probes; better UX placeholder
+
+- Add ONLYOFFICE URL sanitizers:
+  - getTrustedDocsOrigin(): enforce http/https, strip creds, normalize to origin
+  - buildOnlyOfficeApiUrl(): construct fixed /web-apps/.../api.js via URL()
+- Probe hardening (addresses CodeQL js/xss-through-dom):
+  - ooProbeScript/ooProbeFrame now use sanitized origins and fixed paths
+  - optional CSP nonce support for injected script
+  - optional iframe sandbox; robust cleanup/timeout handling
+- CSP helper now renders lines based on validated origin (fallback to raw for visibility)
+- Admin UI UX: placeholder switched to HTTPS example (`https://docs.example.com`)
+- Comments added to justify safety to static analyzers
+
+Files: public/js/adminPanel.js
+
+Refs: #37
+
+---
+
 ## Changes 11/3/2025 (v1.8.0)
 
 release(v1.8.0): feat(onlyoffice): first-class ONLYOFFICE integration (view/edit), admin UI, API, CSP helpers

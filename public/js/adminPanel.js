@@ -586,7 +586,7 @@ export function openAdminPanel() {
 
   <div class="form-group">
     <label for="ooDocsOrigin">Document Server Origin:</label>
-    <input type="url" id="ooDocsOrigin" class="form-control" placeholder="e.g. http://192.168.1.61" />
+    <input type="url" id="ooDocsOrigin" class="form-control" placeholder="e.g. https://docs.example.com" />
     <small class="text-muted">Must be reachable by your browser (for API.js) and by FileRise (for callbacks). Avoid “localhost”.</small>
   </div>
 
@@ -625,34 +625,77 @@ export function openAdminPanel() {
                  return li;
                }
                function ooClear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+
+               // --- ONLYOFFICE URL sanitizers ---
+function getTrustedDocsOrigin(raw) {
+  try {
+    const u = new URL(String(raw || "").trim());
+    if (!/^https?:$/.test(u.protocol)) return null;     // only http/https
+    if (u.username || u.password) return null;          // no creds in URL
+    return u.origin;                                    // scheme://host[:port]
+  } catch {
+    return null;
+  }
+}
+
+function buildOnlyOfficeApiUrl(origin) {
+  // fixed path; caller already validated/normalized origin
+  const u = new URL('/web-apps/apps/api/documents/api.js', origin);
+  u.searchParams.set('probe', String(Date.now()));
+  return u.toString();
+}
        
-               // Probes that don’t explode your state
-               async function ooProbeScript(docsOrigin) {
-                 return new Promise(resolve => {
-                   const src = docsOrigin.replace(/\/$/, '') + '/web-apps/apps/api/documents/api.js?probe=' + Date.now();
-                   const s = document.createElement('script');
-                   s.id = 'ooProbeScript';
-                   s.async = true;
-                   s.src = src;
-                   s.onload = () => { resolve({ ok: true }); setTimeout(() => s.remove(), 0); };
-                   s.onerror = () => { resolve({ ok: false }); setTimeout(() => s.remove(), 0); };
-                   document.head.appendChild(s);
-                 });
-               }
-               async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
-                 return new Promise(resolve => {
-                   const f = document.createElement('iframe');
-                   f.id = 'ooProbeFrame';
-                   f.src = docsOrigin;
-                   f.style.display = 'none';
-                   let t = setTimeout(() => { cleanup(); resolve({ ok: false, timeout: true }); }, timeoutMs);
-                   function cleanup() { try { f.remove(); } catch { } clearTimeout(t); }
-                   f.onload = () => { cleanup(); resolve({ ok: true }); };
-                   f.onerror = () => { cleanup(); resolve({ ok: false }); };
-                   document.body.appendChild(f);
-                 });
-               }
-       
+              
+              // Probes that don’t explode your state
+async function ooProbeScript(docsOrigin) {
+  return new Promise(resolve => {
+    const base = getTrustedDocsOrigin(docsOrigin);
+    if (!base) { resolve({ ok: false }); return; }
+
+    const src = buildOnlyOfficeApiUrl(base);
+    const s = document.createElement('script');
+    s.id = 'ooProbeScript';
+    s.async = true;
+    s.src = src;
+
+    // If you set a CSP nonce in a <meta name="csp-nonce" content="...">, attach it:
+    const nonce = document.querySelector('meta[name="csp-nonce"]')?.content;
+    if (nonce) s.setAttribute('nonce', nonce);
+
+    const cleanup = () => { try { s.remove(); } catch {} };
+
+    s.onload  = () => { cleanup(); resolve({ ok: true  }); };
+    s.onerror = () => { cleanup(); resolve({ ok: false }); };
+
+    // codeql[js/xss-through-dom]: the origin is validated (http/https, no creds),
+    // and the path is fixed to ONLYOFFICE api.js via URL(), so this is safe.
+    document.head.appendChild(s);
+  });
+}
+async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
+  return new Promise(resolve => {
+    const base = getTrustedDocsOrigin(docsOrigin);
+    if (!base) { resolve({ ok: false }); return; }
+
+    const f = document.createElement('iframe');
+    f.id = 'ooProbeFrame';
+    f.src = base;                 // only the sanitized origin
+    f.style.display = 'none';
+
+    // Optional: keep it extra constrained while probing.
+    // If your DS needs broader privileges, you can drop sandbox.
+    // f.sandbox = 'allow-same-origin allow-scripts';
+
+    const cleanup = () => { try { f.remove(); } catch {} };
+    const t = setTimeout(() => { cleanup(); resolve({ ok: false, timeout: true }); }, timeoutMs);
+
+    f.onload  = () => { clearTimeout(t); cleanup(); resolve({ ok: true  }); };
+    f.onerror = () => { clearTimeout(t); cleanup(); resolve({ ok: false }); };
+
+    // codeql[js/xss-through-dom]: src is constrained to a validated http/https origin.
+    document.body.appendChild(f);
+  });
+}
                // Main test runner
                async function runOnlyOfficeTests() {
                  const spinner = document.getElementById('ooTestSpinner');
@@ -778,9 +821,10 @@ export function openAdminPanel() {
         const cspPreNgx = document.getElementById("ooCspSnippetNginx");
 
         function refreshCsp() {
-          const val = (ooDocsInput?.value || "").trim();
-          cspPre.textContent = buildCspApache(val);
-          cspPreNgx.textContent = buildCspNginx(val);
+          const raw = (ooDocsInput?.value || "").trim();
+          const base = getTrustedDocsOrigin(raw) || raw; // fall back to raw so users see their input
+          cspPre.textContent    = buildCspApache(base);
+          cspPreNgx.textContent = buildCspNginx(base);
         }
         ooDocsInput?.addEventListener("input", refreshCsp);
         refreshCsp();
