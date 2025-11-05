@@ -3,7 +3,7 @@ name: Release on version.js update
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master"] # keep as-is; change to ["master","main"] if you use main too
     paths:
       - public/js/version.js
   workflow_run:
@@ -23,19 +23,56 @@ jobs:
   release:
     needs: delay
     runs-on: ubuntu-latest
+
+    # Guard: Only run on trusted workflow_run events (pushes from this repo)
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+
     concurrency:
-      group: release-${{ github.ref }}-${{ github.sha }}
+      # Ensure concurrency key follows the actual source ref
+      group: release-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || github.sha }}
       cancel-in-progress: false
 
     steps:
+      - name: Resolve correct ref
+        id: pickref
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "ref=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Using ref: $(cat $GITHUB_OUTPUT)"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ steps.pickref.outputs.ref }}
 
       - name: Ensure tags available
+        run: git fetch --tags --force --prune --quiet
+
+      # Guard: refuse if the ref isn’t contained in master
+      - name: Assert ref is on master
+        shell: bash
         run: |
-          git fetch --tags --force --prune --quiet
+          set -euo pipefail
+          REF="${{ steps.pickref.outputs.ref }}"
+          git fetch origin master --quiet
+          if ! git merge-base --is-ancestor "$REF" origin/master; then
+            echo "Ref $REF is not on master; refusing to release."
+            exit 78  # neutral exit
+          fi
+
+      - name: Debug version.js origin
+        run: |
+          echo "version.js at commit: $(git log -n1 --pretty=%h -- public/js/version.js)"
+          sed -n '1,20p' public/js/version.js || true
 
       - name: Read version from version.js
         id: ver
@@ -62,7 +99,6 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # Ensure the stamper is executable and has LF endings (helps if edited on Windows)
       - name: Prep stamper script
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
@@ -76,18 +112,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VER="${{ steps.ver.outputs.version }}"  # e.g. v1.6.12
-          ZIP="FileRise-${VER}.zip"
-
-          # Clean staging copy (exclude dotfiles you don’t want)
+          VER="${{ steps.ver.outputs.version }}"
           rm -rf staging
           rsync -a \
             --exclude '.git' --exclude '.github' \
             --exclude 'resources' \
             --exclude '.dockerignore' --exclude '.gitattributes' --exclude '.gitignore' \
             ./ staging/
-
-          # Stamp IN THE STAGING COPY (invoke via bash to avoid exec-bit issues)
           bash ./scripts/stamp-assets.sh "${VER}" "$(pwd)/staging"
 
       - name: Verify placeholders are gone (staging)
@@ -116,8 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           VER="${{ steps.ver.outputs.version }}"
-          ZIP="FileRise-${VER}.zip"
-          (cd staging && zip -r "../$ZIP" . >/dev/null)
+          (cd staging && zip -r "../FileRise-${VER}.zip" . >/dev/null)
 
       - name: Compute SHA-256 checksum
         if: steps.tagcheck.outputs.exists == 'false'
@@ -177,7 +207,6 @@ jobs:
           COMPARE_URL="https://github.com/${REPO}/compare/${PREV}...${VER}"
           ZIP="FileRise-${VER}.zip"
           SHA="${{ steps.sum.outputs.sha }}"
-
           {
             echo
             if [[ -s CHANGELOG_SNIPPET.md ]]; then
@@ -193,8 +222,6 @@ jobs:
             echo "${SHA}  ${ZIP}"
             echo '```'
           } > RELEASE_BODY.md
-
-          echo "Release body:"
           sed -n '1,200p' RELEASE_BODY.md
 
       - name: Create GitHub Release
@@ -202,7 +229,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.version }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ steps.pickref.outputs.ref }}
           name: ${{ steps.ver.outputs.version }}
           body_path: RELEASE_BODY.md
           generate_release_notes: false
