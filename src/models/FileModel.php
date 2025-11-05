@@ -557,59 +557,96 @@ class FileModel {
      * @return array An associative array with either an "error" key or a "zipPath" key.
      */
     public static function createZipArchive($folder, $files) {
-        // Validate and build folder path.
-        $folder = trim($folder) ?: 'root';
+        // Normalize and validate target folder
+        $folder = trim((string)$folder) ?: 'root';
         $baseDir = realpath(UPLOAD_DIR);
         if ($baseDir === false) {
             return ["error" => "Uploads directory not configured correctly."];
         }
+    
         if (strtolower($folder) === 'root' || $folder === "") {
             $folderPathReal = $baseDir;
         } else {
-            // Prevent path traversal.
+            // Prevent traversal and validate each segment against folder regex
             if (strpos($folder, '..') !== false) {
                 return ["error" => "Invalid folder name."];
             }
-            $folderPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
+            $parts = explode('/', trim($folder, "/\\ "));
+            foreach ($parts as $part) {
+                if ($part === '' || !preg_match(REGEX_FOLDER_NAME, $part)) {
+                    return ["error" => "Invalid folder name."];
+                }
+            }
+            $folderPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
             $folderPathReal = realpath($folderPath);
             if ($folderPathReal === false || strpos($folderPathReal, $baseDir) !== 0) {
                 return ["error" => "Folder not found."];
             }
         }
-
-        // Validate each file and build an array of files to zip.
+    
+        // Collect files to zip (only regular files in the chosen folder)
         $filesToZip = [];
         foreach ($files as $fileName) {
-            // Validate file name using REGEX_FILE_NAME.
-            $fileName = basename(trim($fileName));
+            $fileName = basename(trim((string)$fileName));
             if (!preg_match(REGEX_FILE_NAME, $fileName)) {
                 continue;
             }
             $fullPath = $folderPathReal . DIRECTORY_SEPARATOR . $fileName;
-            if (file_exists($fullPath)) {
+            if (is_file($fullPath)) {
                 $filesToZip[] = $fullPath;
             }
         }
         if (empty($filesToZip)) {
             return ["error" => "No valid files found to zip."];
         }
-
-        // Create a temporary ZIP file.
-        $tempZip = tempnam(sys_get_temp_dir(), 'zip');
-        unlink($tempZip); // Remove the temp file so that ZipArchive can create a new file.
-        $tempZip .= '.zip';
-
-        $zip = new ZipArchive();
-        if ($zip->open($tempZip, ZipArchive::CREATE) !== TRUE) {
+    
+        // Workspace on the big disk: META_DIR/ziptmp
+        $work = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+        if (!is_dir($work)) {
+            @mkdir($work, 0775, true);
+        }
+        if (!is_dir($work) || !is_writable($work)) {
+            return ["error" => "ZIP temp dir not writable: " . $work];
+        }
+    
+        // Optional sanity: ensure there is roughly enough free space
+        $totalSize = 0;
+        foreach ($filesToZip as $fp) {
+            $sz = @filesize($fp);
+            if ($sz !== false) $totalSize += (int)$sz;
+        }
+        $free = @disk_free_space($work);
+        // Add ~20MB overhead and a 5% cushion
+        if ($free !== false && $totalSize > 0) {
+            $needed = (int)ceil($totalSize * 1.05) + (20 * 1024 * 1024);
+            if ($free < $needed) {
+                return ["error" => "Insufficient free space in ZIP workspace."];
+            }
+        }
+    
+        @set_time_limit(0);
+    
+        // Create the ZIP path inside META_DIR/ziptmp
+        $zipName = 'download-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.zip';
+        $zipPath = $work . DIRECTORY_SEPARATOR . $zipName;
+    
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
             return ["error" => "Could not create zip archive."];
         }
-        // Add each file using its base name.
+    
         foreach ($filesToZip as $filePath) {
+            // Add using basename at the root of the zip (matches your current behavior)
             $zip->addFile($filePath, basename($filePath));
         }
-        $zip->close();
-
-        return ["zipPath" => $tempZip];
+    
+        if (!$zip->close()) {
+            // Commonly indicates disk full at finalize
+            return ["error" => "Failed to finalize ZIP (disk full?)."];
+        }
+    
+        // Success: controller will readfile() and unlink()
+        return ["zipPath" => $zipPath];
     }
 
     /**
@@ -623,15 +660,23 @@ class FileModel {
         $errors = [];
         $allSuccess = true;
         $extractedFiles = [];
-
+    
+        // Config toggles
+        $SKIP_DOTFILES = defined('SKIP_DOTFILES_ON_EXTRACT') ? (bool)SKIP_DOTFILES_ON_EXTRACT : true;
+    
+        // Hard limits to mitigate zip-bombs (tweak via defines if you like)
+        $MAX_UNZIP_BYTES = defined('MAX_UNZIP_BYTES') ? (int)MAX_UNZIP_BYTES : (200 * 1024 * 1024 * 1024); // 200 GiB
+        $MAX_UNZIP_FILES = defined('MAX_UNZIP_FILES') ? (int)MAX_UNZIP_FILES : 20000;
+    
         $baseDir = realpath(UPLOAD_DIR);
         if ($baseDir === false) {
             return ["error" => "Uploads directory not configured correctly."];
         }
-
+    
         // Build target dir
         if (strtolower(trim($folder) ?: '') === "root") {
             $relativePath = "";
+            $folderNorm = "root";
         } else {
             $parts = explode('/', trim($folder, "/\\"));
             foreach ($parts as $part) {
@@ -640,9 +685,10 @@ class FileModel {
                 }
             }
             $relativePath = implode(DIRECTORY_SEPARATOR, $parts) . DIRECTORY_SEPARATOR;
+            $folderNorm   = implode('/', $parts); // normalized with forward slashes for metadata helpers
         }
-
-        $folderPath     = $baseDir . DIRECTORY_SEPARATOR . $relativePath;
+    
+        $folderPath = $baseDir . DIRECTORY_SEPARATOR . $relativePath;
         if (!is_dir($folderPath) && !mkdir($folderPath, 0775, true)) {
             return ["error" => "Folder not found and cannot be created."];
         }
@@ -650,17 +696,74 @@ class FileModel {
         if ($folderPathReal === false || strpos($folderPathReal, $baseDir) !== 0) {
             return ["error" => "Folder not found."];
         }
-
-        // Prepare metadata container
-        $metadataFile  = self::getMetadataFilePath($folder);
-        $destMetadata  = file_exists($metadataFile) ? (json_decode(file_get_contents($metadataFile), true) ?: []) : [];
-
+    
+        // Metadata cache per folder to avoid many reads/writes
+        $metaCache = [];
+        $getMeta = function(string $folderStr) use (&$metaCache) {
+            if (!isset($metaCache[$folderStr])) {
+                $mf = self::getMetadataFilePath($folderStr);
+                $metaCache[$folderStr] = file_exists($mf) ? (json_decode(file_get_contents($mf), true) ?: []) : [];
+            }
+            return $metaCache[$folderStr];
+        };
+        $putMeta = function(string $folderStr, array $meta) use (&$metaCache) {
+            $metaCache[$folderStr] = $meta;
+        };
+    
         $safeFileNamePattern = REGEX_FILE_NAME;
         $actor = $_SESSION['username'] ?? 'Unknown';
         $now   = date(DATE_TIME_FORMAT);
-
+    
+        // --- Helpers ---
+    
+        // Reject absolute paths, traversal, drive letters
+        $isUnsafeEntryPath = function(string $entry) : bool {
+            $e = str_replace('\\', '/', $entry);
+            if ($e === '' || str_contains($e, "\0")) return true;
+            if (str_starts_with($e, '/')) return true;                 // absolute nix path
+            if (preg_match('/^[A-Za-z]:[\\/]/', $e)) return true;      // Windows drive
+            if (str_contains($e, '../') || str_contains($e, '..\\')) return true;
+            return false;
+        };
+    
+        // Validate each subfolder name in the path using REGEX_FOLDER_NAME
+        $validEntrySubdirs = function(string $entry) : bool {
+            $e = trim(str_replace('\\', '/', $entry), '/');
+            if ($e === '') return true;
+            $dirs = explode('/', $e);
+            array_pop($dirs); // remove basename; we only validate directories here
+            foreach ($dirs as $d) {
+                if ($d === '' || !preg_match(REGEX_FOLDER_NAME, $d)) return false;
+            }
+            return true;
+        };
+    
+        // NEW: hidden path detector — true if ANY segment starts with '.'
+        $isHiddenDotPath = function(string $entry) : bool {
+            $e = trim(str_replace('\\', '/', $entry), '/');
+            if ($e === '') return false;
+            foreach (explode('/', $e) as $seg) {
+                if ($seg !== '' && $seg[0] === '.') return true;
+            }
+            return false;
+        };
+    
+        // Generalized metadata stamper: writes to the specified folder's metadata.json
+        $stampMeta = function(string $folderStr, string $basename) use (&$getMeta, &$putMeta, $actor, $now) {
+            $meta = $getMeta($folderStr);
+            $meta[$basename] = [
+                'uploaded' => $now,
+                'modified' => $now,
+                'uploader' => $actor,
+            ];
+            $putMeta($folderStr, $meta);
+        };
+    
+        // No PHP execution time limit during heavy work
+        @set_time_limit(0);
+    
         foreach ($files as $zipFileName) {
-            $zipBase = basename(trim($zipFileName));
+            $zipBase = basename(trim((string)$zipFileName));
             if (strtolower(substr($zipBase, -4)) !== '.zip') {
                 continue;
             }
@@ -669,76 +772,135 @@ class FileModel {
                 $allSuccess = false;
                 continue;
             }
-
+    
             $zipFilePath = $folderPathReal . DIRECTORY_SEPARATOR . $zipBase;
             if (!file_exists($zipFilePath)) {
                 $errors[] = "$zipBase does not exist in folder.";
                 $allSuccess = false;
                 continue;
             }
-
-            $zip = new ZipArchive();
-            if ($zip->open($zipFilePath) !== TRUE) {
+    
+            $zip = new \ZipArchive();
+            if ($zip->open($zipFilePath) !== true) {
                 $errors[] = "Could not open $zipBase as a zip file.";
                 $allSuccess = false;
                 continue;
             }
-
-            // Minimal Zip Slip guard: fail if any entry looks unsafe
+    
+            // ---- Pre-scan: safety and size limits + build allow-list (skip dotfiles) ----
             $unsafe = false;
+            $totalUncompressed = 0;
+            $fileCount = 0;
+            $allowedEntries = [];   // names to extract (files and/or directories)
+            $allowedFiles   = [];   // only files (for metadata stamping)
+    
             for ($i = 0; $i < $zip->numFiles; $i++) {
-                $entryName = $zip->getNameIndex($i);
-                if ($entryName === false) { $unsafe = true; break; }
-                // Absolute paths, parent traversal, or Windows drive paths
-                if (strpos($entryName, '../') !== false || strpos($entryName, '..\\') !== false ||
-                    str_starts_with($entryName, '/') || preg_match('/^[A-Za-z]:[\\\\\\/]/', $entryName)) {
+                $stat = $zip->statIndex($i);
+                $name = $zip->getNameIndex($i);
+                if ($name === false || !$stat) { $unsafe = true; break; }
+    
+                $isDir = str_ends_with($name, '/');
+    
+                // Basic path checks
+                if ($isUnsafeEntryPath($name) || !$validEntrySubdirs($name)) { $unsafe = true; break; }
+    
+                // Skip hidden entries (any segment starts with '.')
+                if ($SKIP_DOTFILES && $isHiddenDotPath($name)) {
+                    continue; // just ignore; do not treat as unsafe
+                }
+    
+                // Detect symlinks via external attributes (best-effort)
+                $mode = (isset($stat['external_attributes']) ? (($stat['external_attributes'] >> 16) & 0xF000) : 0);
+                if ($mode === 0120000) { // S_IFLNK
                     $unsafe = true; break;
                 }
+    
+                // Track limits only for files we're going to extract
+                if (!$isDir) {
+                    $fileCount++;
+                    $sz = isset($stat['size']) ? (int)$stat['size'] : 0;
+                    $totalUncompressed += $sz;
+                    if ($fileCount > $MAX_UNZIP_FILES || $totalUncompressed > $MAX_UNZIP_BYTES) {
+                        $unsafe = true; break;
+                    }
+                    $allowedFiles[] = $name;
+                }
+    
+                $allowedEntries[] = $name;
             }
+    
             if ($unsafe) {
                 $zip->close();
-                $errors[] = "$zipBase contains unsafe paths; extraction aborted.";
+                $errors[] = "$zipBase contains unsafe or oversized contents; extraction aborted.";
                 $allSuccess = false;
                 continue;
             }
-
-            // Extract safely (whole archive) after precheck
-            if (!$zip->extractTo($folderPathReal)) {
+    
+            // Nothing to extract after filtering?
+            if (empty($allowedEntries)) {
+                $zip->close();
+                // Treat as success (nothing visible to extract), but informatively note it
+                $errors[] = "$zipBase contained only hidden or unsupported entries.";
+                $allSuccess = false; // or keep true if you'd rather not mark as failure
+                continue;
+            }
+    
+            // ---- Extract ONLY the allowed entries ----
+            if (!$zip->extractTo($folderPathReal, $allowedEntries)) {
                 $errors[] = "Failed to extract $zipBase.";
                 $allSuccess = false;
                 $zip->close();
                 continue;
             }
-
-            // Stamp metadata for extracted regular files
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-                $entryName = $zip->getNameIndex($i);
-                if ($entryName === false) continue;
-
-                $basename = basename($entryName);
+    
+            // ---- Stamp metadata for files in the target folder AND nested subfolders (allowed files only) ----
+            foreach ($allowedFiles as $entryName) {
+                // Normalize entry path for filesystem checks
+                $entryFsRel = str_replace(['\\'], '/', $entryName);
+                $entryFsRel = ltrim($entryFsRel, '/'); // ensure relative
+    
+                // Skip any directories (shouldn't be listed here, but defend anyway)
+                if ($entryFsRel === '' || str_ends_with($entryFsRel, '/')) continue;
+    
+                $basename = basename($entryFsRel);
                 if ($basename === '' || !preg_match($safeFileNamePattern, $basename)) continue;
-
-                // Only stamp files that actually exist after extraction
-                $target = $folderPathReal . DIRECTORY_SEPARATOR . $entryName;
-                $isDir  = str_ends_with($entryName, '/') || is_dir($target);
-                if ($isDir) continue;
-
-                $extractedFiles[] = $basename;
-                $destMetadata[$basename] = [
-                    'uploaded' => $now,
-                    'modified' => $now,
-                    'uploader' => $actor,
-                    // no tags by default
-                ];
+    
+                // Decide which folder's metadata to update:
+                // - top-level files -> $folderNorm
+                // - nested files    -> corresponding "<folderNorm>/<sub/dir>" (or "sub/dir" if folderNorm is 'root')
+                $relDir = str_replace('\\', '/', trim(dirname($entryFsRel), '.'));
+                $relDir = ($relDir === '.' ? '' : trim($relDir, '/'));
+    
+                $targetFolderNorm = ($relDir === '' || $relDir === '.')
+                    ? $folderNorm
+                    : (($folderNorm === 'root') ? $relDir : ($folderNorm . '/' . $relDir));
+    
+                // Only stamp if the file actually exists on disk after extraction
+                $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                if (is_file($targetAbs)) {
+                    // Preserve list behavior: only include top-level extracted names
+                    if ($relDir === '' || $relDir === '.') {
+                        $extractedFiles[] = $basename;
+                    }
+                    $stampMeta($targetFolderNorm, $basename);
+                }
             }
+    
             $zip->close();
         }
-
-        if (file_put_contents($metadataFile, json_encode($destMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
-            $errors[] = "Failed to update metadata.";
-            $allSuccess = false;
+    
+        // Persist metadata for any touched folder(s)
+        foreach ($metaCache as $folderStr => $meta) {
+            $metadataFile = self::getMetadataFilePath($folderStr);
+            if (!is_dir(dirname($metadataFile))) {
+                @mkdir(dirname($metadataFile), 0775, true);
+            }
+            if (file_put_contents($metadataFile, json_encode($meta, JSON_PRETTY_PRINT), LOCK_EX) === false) {
+                $errors[] = "Failed to update metadata for {$folderStr}.";
+                $allSuccess = false;
+            }
         }
-
+    
         return $allSuccess
             ? ["success" => true, "extractedFiles" => $extractedFiles]
             : ["success" => false, "error" => implode(" ", $errors)];

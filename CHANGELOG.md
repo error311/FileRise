@@ -1,5 +1,30 @@
 # Changelog
 
+## Changes 11/4/2025 (v1.8.6)
+
+release(v1.8.6): fix large ZIP downloads + safer extract; close #60
+
+- Zip creation
+  - Write archives to META_DIR/ziptmp (on large/writable disk) instead of system tmp.
+  - Auto-create ziptmp (0775) and verify writability.
+  - Free-space sanity check (~files total +5% +20MB); clearer error on low space.
+  - Normalize/validate folder segments; include only regular files.
+  - set_time_limit(0); use CREATE|OVERWRITE; improved error handling.
+
+- Zip extraction
+  - New: stamp metadata for files in nested subfolders (per-folder metadata.json).
+  - Skip hidden “dot” paths (files/dirs with any segment starting with “.”) by default
+    via SKIP_DOTFILES_ON_EXTRACT=true; only extract allow-listed entries.
+  - Hardenings: zip-slip guard, reject symlinks (external_attributes), zip-bomb limits
+    (MAX_UNZIP_BYTES default 200GiB, MAX_UNZIP_FILES default 20k).
+  - Persist metadata for all touched folders; keep extractedFiles list for top-level names.
+
+Ops note: ensure /var/www/metadata/ziptmp exists & is writable (or mount META_DIR to a large volume).
+
+Closes #60.
+
+---
+
 ## Changes 11/4/2025 (v1.8.5)
 
 release(v1.8.5): ci: reduce pre-run delay to 2-min and add missing `needs: delay`, final test
