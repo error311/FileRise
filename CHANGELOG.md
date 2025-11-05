@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 11/4/2025 (v1.8.2)
+
+release(v1.8.2): media progress tracking + watched badges; PWA scaffolding; mobile switcher (closes #37)
+
+- **Highlights**
+  - Video: auto-save playback progress and mark “Watched”, with resume-on-open and inline status chips on list/gallery.
+  - Mobile: introduced FileRise Mobile (Capacitor) companion repo + in-app server switcher and PWA bits.
+
+- **Details**
+  - API (new):
+    - POST /api/media/updateProgress.php — persist per-user progress (seconds/duration/completed).
+    - GET  /api/media/getProgress.php — fetch per-file progress.
+    - GET  /api/media/getViewedMap.php — folder map for badges.
+
+- **Frontend (media):**
+  - Video previews now resume from last position, periodically save progress, and mark completed on end, with toasts.
+  - Added status badges (“Watched” / %-complete) in table & gallery; CSS polish for badges.
+  - Badges render during list/gallery refresh; safer filename wrapping for badge injection.
+
+- **Mobile & PWA:**
+  - New in-app server switcher (Capacitor-aware) loaded only in app/standalone contexts.
+  - Service Worker + manifest added (root scope via /public/sw.js; worker body in /js/pwa/sw.js; manifest icons).
+  - main.js conditionally imports the mobile switcher and registers the SW on web origins only.
+
+- **Notes**
+  - Companion repo: **filerise-mobile** (Capacitor app shell) created for iOS/Android distribution.
+  - No breaking changes expected; endpoints are additive.
+
+Closes #37.
+
+---
+
 ## Changes 11/3/2025 (V1.8.1)
 
 release(v1.8.1): fix(security,onlyoffice): sanitize DS origin; safe api.js/iframe probes; better UX placeholder

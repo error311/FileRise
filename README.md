@@ -369,12 +369,13 @@ FileRise can open & edit office docs using your **self-hosted ONLYOFFICE Documen
    **Apache**
 
    ```apache
-   Header always set Content-Security-Policy "default-src 'self'; frame-src 'self' https://docs.example.com; script-src 'self' https://docs.example.com https://docs.example.com/web-apps/apps/api/documents/api.js; connect-src 'self' https://docs.example.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'"
+   Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM=' https://your-onlyoffice-server.example.com https://your-onlyoffice-server.example.com/web-apps/apps/api/documents/api.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://your-onlyoffice-server.example.com; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' https://your-onlyoffice-server.example.com"
    ```
 
    **Nginx**
 
-   ```add_header Content-Security-Policy "default-src 'self'; frame-src 'self' https://docs.example.com; script-src 'self' https://docs.example.com https://docs.example.com/web-apps/apps/api/documents/api.js; connect-src 'self' https://docs.example.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'" always;
+   ```nginx
+   add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM=' https://your-onlyoffice-server.example.com https://your-onlyoffice-server.example.com/web-apps/apps/api/documents/api.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://your-onlyoffice-server.example.com; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' https://your-onlyoffice-server.example.com" always;
    ```
 
    **Notes**

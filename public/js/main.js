@@ -1058,3 +1058,51 @@ function bindDarkMode() {
     if (overlay) overlay.style.display = 'none';
   }, { once: true });
 })();
+
+
+// --- Mobile switcher + PWA SW (mobile-only) ---
+(() => {
+  // keep it simple + robust
+  const qs = new URLSearchParams(location.search);
+  const hasFrAppHint = qs.get('frapp') === '1';
+
+  const isStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (typeof navigator.standalone === 'boolean' && navigator.standalone);
+
+  const isCapUA = /\bCapacitor\b/i.test(navigator.userAgent);
+  const hasCapBridge = !!(window.Capacitor && window.Capacitor.Plugins);
+
+  // “mobile-ish”: native mobile UAs OR touch + reasonably narrow viewport (covers iPad-on-Mac UA)
+  const isMobileish =
+    /Android|iPhone|iPad|iPod|Mobile|Silk|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) <= 900);
+
+  // load the switcher only in the mobile app, or mobile standalone PWA, or when explicitly hinted
+  const shouldLoadSwitcher =
+    hasCapBridge || isCapUA || (isStandalone && isMobileish) || (hasFrAppHint && isMobileish);
+
+  // expose a flag to inspect later
+  window.FR_APP = !!(hasCapBridge || isCapUA || (isStandalone && isMobileish));
+
+  const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
+
+  if (shouldLoadSwitcher) {
+    import(`/js/mobile/switcher.js?v=${encodeURIComponent(QVER)}`)
+      .then(() => {
+        if (hasFrAppHint && !sessionStorage.getItem('frx_opened_once')) {
+          sessionStorage.setItem('frx_opened_once', '1');
+          window.dispatchEvent(new CustomEvent('frx:openSwitcher'));
+        }
+      })
+      .catch(err => console.info('[FileRise] switcher import failed:', err));
+  }
+
+  // SW only for web (https or localhost), never in Capacitor
+  const onHttps = location.protocol === 'https:' || location.hostname === 'localhost';
+  if ('serviceWorker' in navigator && onHttps && !hasCapBridge && !isCapUA) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register(`/js/pwa/sw.js?v=${encodeURIComponent(QVER)}`).catch(() => {});
+    });
+  }
+})();

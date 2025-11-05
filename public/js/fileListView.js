@@ -157,7 +157,121 @@ function wireSelectAll(fileListContent) {
     }
     return body ?? {};
   }
-  
+  // ---- Viewed badges (table + gallery) ----
+// ---------- Badge factory (center text vertically) ----------
+function makeBadge(state) {
+  if (!state) return null;
+  const el = document.createElement('span');
+  el.className = 'status-badge';
+  el.style.cssText = [
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'vertical-align:middle',
+    'margin-left:6px',
+    'padding:2px 8px',
+    'min-height:18px',
+    'line-height:1',
+    'border-radius:999px',
+    'font-size:.78em',
+    'border:1px solid rgba(0,0,0,.2)',
+    'background:rgba(0,0,0,.06)'
+  ].join(';');
+
+  if (state.completed) {
+    el.classList.add('watched');
+    el.textContent = (t('watched') || t('viewed') || 'Watched');
+    el.style.borderColor = 'rgba(34,197,94,.45)';
+    el.style.background  = 'rgba(34,197,94,.12)';
+    el.style.color       = '#22c55e';
+    return el;
+  }
+
+  if (Number.isFinite(state.seconds) && Number.isFinite(state.duration) && state.duration > 0) {
+    const pct = Math.max(1, Math.min(99, Math.round((state.seconds / state.duration) * 100)));
+    el.classList.add('progress');
+    el.textContent = `${pct}%`;
+    el.style.borderColor = 'rgba(245,158,11,.45)';
+    el.style.background  = 'rgba(245,158,11,.12)';
+    el.style.color       = '#f59e0b';
+    return el;
+  }
+
+  return null;
+}
+
+// ---------- Public: set/clear badges for one file (table + gallery) ----------
+function applyBadgeToDom(name, state) {
+  const safe = CSS.escape(name);
+
+  // Table
+  document.querySelectorAll(`tr[data-file-name="${safe}"] .name-cell, tr[data-file-name="${safe}"] .file-name-cell`)
+    .forEach(cell => {
+      cell.querySelector('.status-badge')?.remove();
+      const b = makeBadge(state);
+      if (b) cell.appendChild(b);
+    });
+
+  // Gallery
+  document.querySelectorAll(`.gallery-card[data-file-name="${safe}"] .gallery-file-name`)
+    .forEach(title => {
+      title.querySelector('.status-badge')?.remove();
+      const b = makeBadge(state);
+      if (b) title.appendChild(b);
+    });
+}
+
+export function setFileWatchedBadge(name, watched = true) {
+  applyBadgeToDom(name, watched ? { completed: true } : null);
+}
+
+export function setFileProgressBadge(name, seconds, duration) {
+  if (duration > 0 && seconds >= 0) {
+    applyBadgeToDom(name, { seconds, duration, completed: seconds >= duration - 1 });
+  } else {
+    applyBadgeToDom(name, null);
+  }
+}
+
+export async function refreshViewedBadges(folder) {
+  let map = null;
+  try {
+    const res = await fetch(`/api/media/getViewedMap.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`, { credentials: 'include' });
+    const j = await res.json();
+    map = j?.map || null;
+  } catch { /* ignore */ }
+
+  // Clear any existing badges
+  document.querySelectorAll(
+    '#fileList tr[data-file-name] .file-name-cell .status-badge, ' +
+    '#fileList tr[data-file-name] .name-cell .status-badge, ' +
+    '.gallery-card[data-file-name] .gallery-file-name .status-badge'
+  ).forEach(n => n.remove());
+
+  if (!map) return;
+
+  // Table rows
+  document.querySelectorAll('#fileList tr[data-file-name]').forEach(tr => {
+    const name = tr.getAttribute('data-file-name');
+    const state = map[name];
+    if (!state) return;
+    const cell = tr.querySelector('.name-cell, .file-name-cell');
+    if (!cell) return;
+    const badge = makeBadge(state);
+    if (badge) cell.appendChild(badge);
+  });
+
+  // Gallery cards
+  document.querySelectorAll('.gallery-card[data-file-name]').forEach(card => {
+    const name = card.getAttribute('data-file-name');
+    const state = map[name];
+    if (!state) return;
+    const title = card.querySelector('.gallery-file-name');
+    if (!title) return;
+    const badge = makeBadge(state);
+    if (badge) title.appendChild(badge);
+  });
+}
   /**
    * Convert a file size string (e.g. "456.9KB", "1.2 MB", "1024") into bytes.
    */
@@ -548,6 +662,7 @@ function searchFiles(searchTerm) {
       }
       updateFileActionButtons();
       fileListContainer.style.visibility = "visible";
+
   
       // ----- FOLDERS NEXT (populate strip when ready; doesn't block rows) -----
       try {
@@ -712,9 +827,14 @@ function searchFiles(searchTerm) {
     if (totalFiles > 0) {
       filteredFiles.slice(startIndex, endIndex).forEach((file, idx) => {
         // Build row with a neutral base, then correct the links/preview below.
-        let rowHTML = buildFileTableRow(file, fakeBase);
         // Give the row an ID so we can patch attributes safely
-        rowHTML = rowHTML.replace("<tr", `<tr id="file-row-${encodeURIComponent(file.name)}-${startIndex + idx}"`);
+        const idSafe = encodeURIComponent(file.name) + "-" + (startIndex + idx);
+        let rowHTML = buildFileTableRow(file, fakeBase);
+        
+        // add row id + data-file-name, and ensure the name cell also has "name-cell"
+        rowHTML = rowHTML
+  .replace("<tr", `<tr id="file-row-${idSafe}" data-file-name="${escapeHTML(file.name)}"`)
+  .replace('class="file-name-cell"', 'class="file-name-cell name-cell"');
   
         let tagBadgesHTML = "";
         if (file.tags && file.tags.length > 0) {
@@ -724,9 +844,13 @@ function searchFiles(searchTerm) {
           });
           tagBadgesHTML += "</div>";
         }
-        rowsHTML += rowHTML.replace(/(<td class="file-name-cell">)(.*?)(<\/td>)/, (match, p1, p2, p3) => {
-          return p1 + p2 + tagBadgesHTML + p3;
-        });
+        rowsHTML += rowHTML.replace(
+          /(<td\s+class="[^"]*\bfile-name-cell\b[^"]*">)([\s\S]*?)(<\/td>)/,
+          (m, open, inner, close) => {
+            // keep the original filename content, then add your tag badges, then close
+            return `${open}<span class="filename-text">${inner}</span>${tagBadgesHTML}${close}`;
+          }
+        );
       });
     } else {
       rowsHTML += `<tr><td colspan="8">No files found.</td></tr>`;
@@ -904,6 +1028,7 @@ function searchFiles(searchTerm) {
       });
     });
     updateFileActionButtons();
+    
     document.querySelectorAll("#fileList tbody tr").forEach(row => {
       row.setAttribute("draggable", "true");
       import('./fileDragDrop.js?v={{APP_QVER}}').then(module => {
@@ -914,6 +1039,7 @@ function searchFiles(searchTerm) {
       btn.addEventListener("click", e => e.stopPropagation());
     });
     bindFileListContextMenu();
+    refreshViewedBadges(folder).catch(() => {});
   }
   
   // A helper to compute the max image height based on the current column count.
@@ -1040,6 +1166,7 @@ function searchFiles(searchTerm) {
       // card with checkbox, preview, info, buttons
       galleryHTML += `
         <div class="gallery-card"
+             data-file-name="${escapeHTML(file.name)}"
              style="position:relative; border:1px solid #ccc; padding:5px; text-align:center;">
           <input type="checkbox"
                  class="file-checkbox"
@@ -1236,7 +1363,7 @@ function searchFiles(searchTerm) {
       if (window.viewMode === "gallery") renderGalleryView(folder);
       else renderFileTable(folder);
     };
-  
+    refreshViewedBadges(folder).catch(() => {});
     updateFileActionButtons();
     createViewToggleButton();
   }

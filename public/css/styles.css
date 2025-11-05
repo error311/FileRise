@@ -1900,4 +1900,29 @@ body {
   background: #fafafa;
     border-color: #e2e2e2;
   }
-  
+  /* media modal polish */
+.media-modal { background: var(--panel-bg, #121212); }
+.media-header-bar .btn { padding: 6px 10px; }
+.gallery-nav-btn { color: #fff; opacity: 0.85; }
+.gallery-nav-btn:hover { opacity: 1; transform: scale(1.05); }
+
+/* badges */
+.status-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(255,255,255,.08);
+  color: #fff;
+}
+.status-badge.watched {
+  border-color: rgba(34,197,94,.35);      /* green-ish */
+  background: rgba(34,197,94,.15);
+}
+.status-badge.progress {
+  border-color: rgba(250,204,21,.35);     /* amber-ish */
+  background: rgba(250,204,21,.15);
+}

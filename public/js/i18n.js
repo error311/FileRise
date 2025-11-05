@@ -302,7 +302,17 @@ const translations = {
     "acl_move_folder_info": "Moving folders is restricted to folder owners or managers. Destination folders must also allow moves in.",
     "context_move_folder": "Move Folder...",
     "context_move_here": "Move Here",
-    "context_move_cancel": "Cancel Move"
+    "context_move_cancel": "Cancel Move",
+    "mark_as_viewed": "Mark as viewed",
+    "viewed": "Viewed",
+    "resumed_from": "Resumed from",
+    "clear_progress": "Clear progress",
+    "marked_viewed": "Marked as viewed",
+    "progress_cleared": "Progress cleared",
+    "previous": "Previous",
+    "next": "Next",
+    "watched": "Watched",
+    "reset_progress": "Reset Progress"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",
