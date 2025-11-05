@@ -557,6 +557,13 @@ class FileModel {
      * @return array An associative array with either an "error" key or a "zipPath" key.
      */
     public static function createZipArchive($folder, $files) {
+
+        // (optional) purge old temp zips > 6h
+        $zipRoot = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+        $now = time();
+        foreach (glob($zipRoot . DIRECTORY_SEPARATOR . 'download-*.zip') ?: [] as $zp) {
+            if (is_file($zp) && ($now - @filemtime($zp)) > 21600) { @unlink($zp); }
+        }
         // Normalize and validate target folder
         $folder = trim((string)$folder) ?: 'root';
         $baseDir = realpath(UPLOAD_DIR);

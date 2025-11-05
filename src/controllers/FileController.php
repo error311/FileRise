@@ -667,75 +667,96 @@ public function deleteFiles()
 
     public function downloadZip()
     {
-        $this->_jsonStart();
         try {
-            if (!$this->_checkCsrf()) return;
-            if (!$this->_requireAuth()) return;
-
+            
+            if (!$this->_checkCsrf()) { http_response_code(400); echo "Bad CSRF"; return; }
+            if (!$this->_requireAuth()) { http_response_code(401); echo "Unauthorized"; return; }
+    
             $data = $this->_readJsonBody();
             if (!is_array($data) || !isset($data['folder'], $data['files']) || !is_array($data['files'])) {
-                $this->_jsonOut(["error" => "Invalid input."], 400); return;
+                http_response_code(400); echo "Invalid input."; return;
             }
-
+    
             $folder = $this->_normalizeFolder($data['folder']);
             $files  = $data['files'];
-            if (!$this->_validFolder($folder)) { $this->_jsonOut(["error"=>"Invalid folder name."], 400); return; }
-
+            if (!$this->_validFolder($folder)) { http_response_code(400); echo "Invalid folder name."; return; }
+    
             $username = $_SESSION['username'] ?? '';
             $perms    = $this->loadPerms($username);
-
+    
             // Optional zip gate by account flag
             if (!$this->isAdmin($perms) && !empty($perms['disableZip'])) {
-                $this->_jsonOut(["error" => "ZIP downloads are not allowed for your account."], 403); return;
+                http_response_code(403); echo "ZIP downloads are not allowed for your account."; return;
             }
-
+    
             $ignoreOwnership = $this->isAdmin($perms)
                 || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
-
+    
             // Ancestor-owner counts as full view
             $fullView = $ignoreOwnership
                 || ACL::canRead($username, $perms, $folder)
                 || $this->ownsFolderOrAncestor($folder, $username, $perms);
             $ownOnly  = !$fullView && ACL::hasGrant($username, $folder, 'read_own');
-
-            if (!$fullView && !$ownOnly) {
-                $this->_jsonOut(["error" => "Forbidden: no view access to this folder."], 403); return;
-            }
-
-            // If own-only, ensure all files are owned by the user
+    
+            if (!$fullView && !$ownOnly) { http_response_code(403); echo "Forbidden: no view access to this folder."; return; }
+    
             if ($ownOnly) {
                 $meta = $this->loadFolderMetadata($folder);
                 foreach ($files as $f) {
                     $bn = basename((string)$f);
                     if (!isset($meta[$bn]['uploader']) || strcasecmp((string)$meta[$bn]['uploader'], $username) !== 0) {
-                        $this->_jsonOut(["error" => "Forbidden: you are not the owner of '{$bn}'."], 403); return;
+                        http_response_code(403); echo "Forbidden: you are not the owner of '{$bn}'."; return;
                     }
                 }
             }
-
+    
             $result = FileModel::createZipArchive($folder, $files);
-            if (isset($result['error'])) {
-                $this->_jsonOut(["error" => $result['error']], 400); return;
-            }
-
+            if (isset($result['error'])) { http_response_code(400); echo $result['error']; return; }
+    
             $zipPath = $result['zipPath'] ?? null;
-            if (!$zipPath || !file_exists($zipPath)) { $this->_jsonOut(["error"=>"ZIP archive not found."], 500); return; }
-
-            // switch to file streaming
+            if (!$zipPath || !is_file($zipPath)) { http_response_code(500); echo "ZIP archive not found."; return; }
+    
+            // ---- Clean binary stream setup ----
+            @session_write_close();
+            @set_time_limit(0);
+            @ignore_user_abort(true);
+            if (function_exists('apache_setenv')) { @apache_setenv('no-gzip', '1'); }
+            @ini_set('zlib.output_compression', '0');
+            @ini_set('output_buffering', 'off');
+            while (ob_get_level() > 0) { @ob_end_clean(); }
+    
+            @clearstatcache(true, $zipPath);
+            $size = (int)@filesize($zipPath);
+    
+            header('X-Accel-Buffering: no');
             header_remove('Content-Type');
             header('Content-Type: application/zip');
+            // Client sets the final name via a.download in your JS; server can be generic
             header('Content-Disposition: attachment; filename="files.zip"');
-            header('Content-Length: ' . filesize($zipPath));
+            if ($size > 0) header('Content-Length: ' . $size);
             header('Cache-Control: no-store, no-cache, must-revalidate');
             header('Pragma: no-cache');
-
-            readfile($zipPath);
+    
+            $fp = fopen($zipPath, 'rb');
+            if ($fp === false) { http_response_code(500); echo "Failed to open ZIP."; return; }
+    
+            $chunk = 1048576; // 1 MiB
+            while (!feof($fp)) {
+                $buf = fread($fp, $chunk);
+                if ($buf === false) break;
+                echo $buf;
+                flush();
+            }
+            fclose($fp);
             @unlink($zipPath);
             exit;
+    
         } catch (Throwable $e) {
             error_log('FileController::downloadZip error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
-            $this->_jsonOut(['error' => 'Internal server error while preparing ZIP.'], 500);
-        } finally { $this->_jsonEnd(); }
+            if (!headers_sent()) http_response_code(500);
+            echo "Internal server error while preparing ZIP.";
+        }
+        
     }
 
     public function extractZip()

@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 11/5/2025 (v1.8.7)
+
+release(v1.8.7): fix(zip-download): stream clean ZIP response and purge stale temp archives
+
+- FileController::downloadZip
+  - Remove _jsonStart/_jsonEnd and JSON wrappers; send a pure binary ZIP
+  - Close session locks, disable gzip/output buffering, set Content-Length when known
+  - Stream in 1MiB chunks; proper HTTP codes/messages on errors
+  - Unlink the temp ZIP after successful send
+  - Preserves all auth/ACL/ownership checks
+
+- FileModel::createZipArchive
+  - Purge META_DIR/ziptmp/download-*.zip older than 6h before creating a new ZIP
+
+Result: fixes “failed to fetch / load failed” with fetch>blob flow and reduces leftover tmp ZIPs.
+
+---
+
 ## Changes 11/4/2025 (v1.8.6)
 
 release(v1.8.6): fix large ZIP downloads + safer extract; close #60
