@@ -1,5 +1,14 @@
 # Changelog
 
+## Changees 11/4/2025 (v1.8.3)
+
+release(v1.8.3): feat(mobile+ci): harden Capacitor switcher & make release-on-version robust
+
+- switcher.js: allow running inside Capacitor; remove innerHTML usage; build nodes safely; normalize/strip creds from URLs; add withParam() for ?frapp=1; drop inline handlers; clamp rename length; minor UX polish.
+- CI: cancel superseded runs per ref; checkout triggering commit (workflow_run head_sha); improve APP_VERSION parsing; point tag to checked-out commit; add recent-tag debug.
+
+---
+
 ## Changes 11/4/2025 (v1.8.2)
 
 release(v1.8.2): media progress tracking + watched badges; PWA scaffolding; mobile switcher (closes #37)

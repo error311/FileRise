@@ -17,26 +17,39 @@ jobs:
   release:
     runs-on: ubuntu-latest
     concurrency:
-      group: release-${{ github.ref }}-${{ github.sha }}
-      cancel-in-progress: false
+      # Cancel older runs for the same branch/ref so only the latest proceeds
+      group: release-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
-      - name: Checkout
+      - name: Checkout correct ref
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # For workflow_run, use the triggering workflow's head_sha; else use the current SHA
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Ensure tags available
         run: |
           git fetch --tags --force --prune --quiet
+
+      - name: Show recent tags (debug)
+        run: git tag --list "v*" --sort=-v:refname | head -n 20
 
       - name: Read version from version.js
         id: ver
         shell: bash
         run: |
           set -euo pipefail
-          VER=$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")
-          if [[ -z "$VER" ]]; then
+          echo "version.js at commit: $(git rev-parse --short HEAD)"
+          sed -n '1,80p' public/js/version.js || true
+
+          VER=$(
+            grep -Eo "APP_VERSION[^\\n]*['\"]v[0-9][^'\"]+['\"]" public/js/version.js \
+            | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/" \
+            | tail -n1
+          )
+          if [[ -z "${VER:-}" ]]; then
             echo "Could not parse APP_VERSION from version.js" >&2
             exit 1
           fi
@@ -69,7 +82,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VER="${{ steps.ver.outputs.version }}"  # e.g. v1.6.12
+          VER="${{ steps.ver.outputs.version }}"  # e.g. v1.8.2
           ZIP="FileRise-${VER}.zip"
 
           # Clean staging copy (exclude dotfiles you don’t want)
@@ -195,7 +208,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.version }}
-          target_commitish: ${{ github.sha }}
+          # Point the tag at the same commit we checked out (handles workflow_run case)
+          target_commitish: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           name: ${{ steps.ver.outputs.version }}
           body_path: RELEASE_BODY.md
           generate_release_notes: false
