@@ -3,12 +3,20 @@ name: Release on version.js update
 
 on:
   push:
-    branches: ["master"] # keep as-is; change to ["master","main"] if you use main too
+    branches: ["master"]
     paths:
       - public/js/version.js
   workflow_run:
     workflows: ["Bump version and sync Changelog to Docker Repo"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref (branch or SHA) to build from (default: origin/master)"
+        required: false
+      version:
+        description: "Explicit version tag to release (e.g., v1.8.6). If empty, auto-detect."
+        required: false
 
 permissions:
   contents: write
@@ -27,37 +35,94 @@ jobs:
     # Guard: Only run on trusted workflow_run events (pushes from this repo)
     if: >
       github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
 
+    # Use run_id for a stable, unique key
     concurrency:
-      # Ensure concurrency key follows the actual source ref
-      group: release-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || github.sha }}
+      group: release-${{ github.run_id }}
       cancel-in-progress: false
 
     steps:
-      - name: Resolve correct ref
+      - name: Checkout (fetch all)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tags + master available
+        shell: bash
+        run: |
+          git fetch --tags --force --prune --quiet
+          git fetch origin master --quiet
+
+      - name: Resolve source ref + (maybe) version
         id: pickref
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "ref=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          fi
-          echo "Using ref: $(cat $GITHUB_OUTPUT)"
+          set -euo pipefail
 
-      - name: Checkout
+          # Defaults
+          REF=""
+          VER=""
+          SRC=""
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # manual run
+            REF_IN="${{ github.event.inputs.ref }}"
+            VER_IN="${{ github.event.inputs.version }}"
+            if [[ -n "$REF_IN" ]]; then
+              # Try branch/sha; fetch branch if needed
+              git fetch origin "$REF_IN" --quiet || true
+              if REF_SHA="$(git rev-parse --verify --quiet "$REF_IN")"; then
+                REF="$REF_SHA"
+              else
+                echo "Provided ref '$REF_IN' not found" >&2
+                exit 1
+              fi
+            else
+              REF="$(git rev-parse origin/master)"
+            fi
+            if [[ -n "$VER_IN" ]]; then
+              VER="$VER_IN"
+              SRC="manual-version"
+            fi
+          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            REF="${{ github.event.workflow_run.head_sha }}"
+          else
+            REF="${{ github.sha }}"
+          fi
+
+          # If no explicit version, try to find the latest bot bump reachable from REF
+          if [[ -z "$VER" ]]; then
+            # Search recent history reachable from REF
+            BOT_SHA="$(git log "$REF" -n 200 --author='github-actions[bot]' --grep='set APP_VERSION to v' --pretty=%H | head -n1 || true)"
+            if [[ -n "$BOT_SHA" ]]; then
+              SUBJ="$(git log -n1 --pretty=%s "$BOT_SHA")"
+              BOT_VER="$(sed -n 's/.*set APP_VERSION to \(v[^ ]*\).*/\1/p' <<<"${SUBJ}")"
+              if [[ -n "$BOT_VER" ]]; then
+                VER="$BOT_VER"
+                REF="$BOT_SHA"   # build/tag from the bump commit
+                SRC="bot-commit"
+              fi
+            fi
+          fi
+
+          # Output
+          REF_SHA="$(git rev-parse "$REF")"
+          echo "ref=$REF_SHA"           >> "$GITHUB_OUTPUT"
+          echo "source=${SRC:-event-ref}" >> "$GITHUB_OUTPUT"
+          echo "preversion=${VER}"      >> "$GITHUB_OUTPUT"
+          echo "Using source=${SRC:-event-ref} ref=$REF_SHA"
+          if [[ -n "$VER" ]]; then echo "Pre-resolved version=$VER"; fi
+
+      - name: Checkout chosen ref
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ steps.pickref.outputs.ref }}
 
-      - name: Ensure tags available
-        run: git fetch --tags --force --prune --quiet
-
-      # Guard: refuse if the ref isn’t contained in master
       - name: Assert ref is on master
         shell: bash
         run: |
@@ -66,26 +131,35 @@ jobs:
           git fetch origin master --quiet
           if ! git merge-base --is-ancestor "$REF" origin/master; then
             echo "Ref $REF is not on master; refusing to release."
-            exit 78  # neutral exit
+            exit 78
           fi
 
-      - name: Debug version.js origin
+      - name: Debug version.js provenance
+        shell: bash
         run: |
-          echo "version.js at commit: $(git log -n1 --pretty=%h -- public/js/version.js)"
+          echo "version.js last-change commit: $(git log -n1 --pretty='%h %s' -- public/js/version.js || echo 'none')"
           sed -n '1,20p' public/js/version.js || true
 
-      - name: Read version from version.js
+      - name: Determine version
         id: ver
         shell: bash
         run: |
           set -euo pipefail
-          VER=$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")
+          # Prefer pre-resolved version (manual input or bot commit)
+          if [[ -n "${{ steps.pickref.outputs.preversion }}" ]]; then
+            VER="${{ steps.pickref.outputs.preversion }}"
+            echo "version=$VER" >> "$GITHUB_OUTPUT"
+            echo "Parsed version (pre-resolved): $VER"
+            exit 0
+          fi
+          # Fallback to version.js
+          VER="$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")"
           if [[ -z "$VER" ]]; then
             echo "Could not parse APP_VERSION from version.js" >&2
             exit 1
           fi
           echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "Parsed version: $VER"
+          echo "Parsed version (file): $VER"
 
       - name: Skip if tag already exists
         id: tagcheck
