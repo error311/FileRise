@@ -14,6 +14,12 @@ permissions:
   contents: write
 
 jobs:
+  delay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delay 3 minutes
+        run: sleep 180
+
   release:
     runs-on: ubuntu-latest
     concurrency:

@@ -1,6 +1,14 @@
 # Changelog
 
-## Changees 11/4/2025 (v1.8.3)
+## Changes 11/4/2025 (v1.8.4)
+
+release(v1.8.4): ci: add 3-min pre-run delay to avoid workflow_run races
+
+- No change release just testing
+
+---
+
+## Changes 11/4/2025 (v1.8.3)
 
 release(v1.8.3): feat(mobile+ci): harden Capacitor switcher & make release-on-version robust
 
