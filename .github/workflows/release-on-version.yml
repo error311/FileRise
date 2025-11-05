@@ -17,10 +17,11 @@ jobs:
   delay:
     runs-on: ubuntu-latest
     steps:
-      - name: Delay 3 minutes
-        run: sleep 180
+      - name: Delay 2 minutes
+        run: sleep 120
 
   release:
+    needs: delay
     runs-on: ubuntu-latest
     concurrency:
       # Cancel older runs for the same branch/ref so only the latest proceeds

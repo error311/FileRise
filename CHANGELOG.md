@@ -1,5 +1,13 @@
 # Changelog
 
+## Changes 11/4/2025 (v1.8.5)
+
+release(v1.8.5): ci: reduce pre-run delay to 2-min and add missing `needs: delay`, final test
+
+- No change release just testing
+
+---
+
 ## Changes 11/4/2025 (v1.8.4)
 
 release(v1.8.4): ci: add 3-min pre-run delay to avoid workflow_run races
