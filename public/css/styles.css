@@ -1926,3 +1926,17 @@ body {
   border-color: rgba(250,204,21,.35);     /* amber-ish */
   background: rgba(250,204,21,.15);
 }
+#downloadProgressModal .modal-body,
+#downloadProgressModal .rise-modal-body,
+#downloadProgressModal .modal-content {
+  min-height: 88px;
+  overflow: hidden;
+}
+
+#downloadProgressText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#downloadProgressBarOuter { height: 10px; }

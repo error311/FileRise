@@ -1,5 +1,55 @@
 # Changelog
 
+## Changes 11/7/2025 (v1.8.8)
+
+release(v1.8.8): background ZIP jobs w/ tokenized download + in‑modal progress bar; robust finalize; janitor cleanup — closes #60
+
+**Summary**
+This release moves ZIP creation off the request thread into a **background worker** and switches the client to a **queue > poll > tokenized GET** download flow. It fixes large multi‑GB ZIP failures caused by request timeouts or cross‑device renames, and provides a resilient in‑modal progress experience. It also adds a 6‑hour janitor for temporary tokens/logs.
+
+**Backend** changes:
+
+- Add **zip status** endpoint that returns progress and readiness, and **tokenized download** endpoint for one‑shot downloads.
+- Update `FileController::downloadZip()` to enqueue a job and return `{ token, statusUrl, downloadUrl }` instead of streaming a blob in the POST response.
+- Implement `spawnZipWorker()` to find a working PHP CLI, set `TMPDIR` on the same filesystem as the final ZIP, spawn with `nohup`, and persist PID/log metadata for diagnostics.
+- Serve finished ZIPs via `downloadZipFile()` with strict token/user checks and streaming headers; unlink the ZIP after successful read.
+
+New **Worker**:
+
+- New `src/cli/zip_worker.php` builds the archive in the background.
+- Writes progress fields (`pct`, `filesDone`, `filesTotal`, `bytesDone`, `bytesTotal`, `current`, `phase`, `startedAt`, `finalizeAt`) to the per‑token JSON.
+- During **finalizing**, publishes `selectedFiles`/`selectedBytes` and clears incremental counters to avoid the confusing “N/N files” display before `close()` returns.
+- Adds a **janitor**: purge `.tokens/*.json` and `.logs/WORKER-*.log` older than **6 hours** on each run.
+
+New **API/Status Payload**:
+
+- `zipStatus()` exposes `ready` (derived from `status=done` + existing `zipPath`), and includes `startedAt`/`finalizeAt` for UI timers.
+- Returns a prebuilt `downloadUrl` for a direct handoff once the ZIP is ready.
+
+**Frontend (UX)** changes:
+
+- Replace blob POST download with **enqueue → poll → tokenized GET** flow.
+- Native `<progress>` bar now renders **inside the modal** (no overflow/jitter).
+- Shows determinate **0–98%** during enumeration, then **locks at 100%** with **“Finalizing… mm:ss — N files, ~Size”** until the download starts.
+- Modal closes just before download; UI resets for the next operation.
+
+Added **CSS**:
+
+- Ensure the progress modal has a minimum height and hidden overflow; ellipsize the status line to prevent scrollbars.
+
+**Why this closes #60**?
+
+- ZIP creation no longer depends on the request lifetime (avoids proxy/Apache timeouts).
+- Temporary files and final ZIP are created on the **same filesystem** (prevents “rename temp file failed” during `ZipArchive::close()`).
+- Users get continuous, truthful feedback for large multi‑GB archives.
+
+Additional **Notes**
+
+- Download tokens are **one‑shot** and are deleted after the GET completes.
+- Temporary artifacts (`META_DIR/ziptmp/.tokens`, `.logs`, and old ZIPs) are cleaned up automatically (≥6h).
+
+---
+
 ## Changes 11/5/2025 (v1.8.7)
 
 release(v1.8.7): fix(zip-download): stream clean ZIP response and purge stale temp archives

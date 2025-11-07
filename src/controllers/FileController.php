@@ -190,6 +190,59 @@ class FileController
         return $ok ? null : "Forbidden: folder scope violation.";
     }
 
+    private function spawnZipWorker(string $token, string $tokFile, string $logDir): array
+    {
+        $worker = realpath(PROJECT_ROOT . '/src/cli/zip_worker.php');
+        if (!$worker || !is_file($worker)) {
+            return ['ok'=>false, 'error'=>'zip_worker.php not found'];
+        }
+    
+        // Find a PHP CLI binary that actually works
+        $candidates = array_values(array_filter([
+            PHP_BINARY ?: null,
+            '/usr/local/bin/php',
+            '/usr/bin/php',
+            '/bin/php'
+        ]));
+        $php = null;
+        foreach ($candidates as $bin) {
+            if (!$bin) continue;
+            $rc = 1;
+            @exec(escapeshellcmd($bin).' -v >/dev/null 2>&1', $o, $rc);
+            if ($rc === 0) { $php = $bin; break; }
+        }
+        if (!$php) {
+            return ['ok'=>false, 'error'=>'No working php CLI found'];
+        }
+    
+        $logFile = $logDir . DIRECTORY_SEPARATOR . 'WORKER-' . $token . '.log';
+    
+        // Ensure TMPDIR is on the same FS as the final zip; actually apply it to the child process.
+        $tmpDir = rtrim((string)META_DIR, '/\\') . '/ziptmp';
+        @mkdir($tmpDir, 0775, true);
+    
+        // Build one sh -c string so env + nohup + echo $! are in the same shell
+        $cmdStr =
+            'export TMPDIR=' . escapeshellarg($tmpDir) . ' ; ' .
+            'nohup ' . escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' ' . escapeshellarg($token) .
+            ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
+    
+        $pid = @shell_exec('/bin/sh -c ' . escapeshellarg($cmdStr));
+        $pid = is_string($pid) ? (int)trim($pid) : 0;
+    
+        // Persist spawn metadata into token (best-effort)
+        $job = json_decode((string)@file_get_contents($tokFile), true) ?: [];
+        $job['spawn'] = [
+            'ts'  => time(),
+            'php' => $php,
+            'pid' => $pid,
+            'log' => $logFile
+        ];
+        @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+    
+        return $pid > 0 ? ['ok'=>true] : ['ok'=>false, 'error'=>'spawn returned no PID'];
+    }
+
     // --- small helpers ---
     private function _jsonStart(): void {
         if (session_status() !== PHP_SESSION_ACTIVE) session_start();
@@ -665,99 +718,214 @@ public function deleteFiles()
         exit;
     }
 
-    public function downloadZip()
-    {
-        try {
-            
-            if (!$this->_checkCsrf()) { http_response_code(400); echo "Bad CSRF"; return; }
-            if (!$this->_requireAuth()) { http_response_code(401); echo "Unauthorized"; return; }
-    
-            $data = $this->_readJsonBody();
-            if (!is_array($data) || !isset($data['folder'], $data['files']) || !is_array($data['files'])) {
-                http_response_code(400); echo "Invalid input."; return;
-            }
-    
-            $folder = $this->_normalizeFolder($data['folder']);
-            $files  = $data['files'];
-            if (!$this->_validFolder($folder)) { http_response_code(400); echo "Invalid folder name."; return; }
-    
-            $username = $_SESSION['username'] ?? '';
-            $perms    = $this->loadPerms($username);
-    
-            // Optional zip gate by account flag
-            if (!$this->isAdmin($perms) && !empty($perms['disableZip'])) {
-                http_response_code(403); echo "ZIP downloads are not allowed for your account."; return;
-            }
-    
-            $ignoreOwnership = $this->isAdmin($perms)
-                || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
-    
-            // Ancestor-owner counts as full view
-            $fullView = $ignoreOwnership
-                || ACL::canRead($username, $perms, $folder)
-                || $this->ownsFolderOrAncestor($folder, $username, $perms);
-            $ownOnly  = !$fullView && ACL::hasGrant($username, $folder, 'read_own');
-    
-            if (!$fullView && !$ownOnly) { http_response_code(403); echo "Forbidden: no view access to this folder."; return; }
-    
-            if ($ownOnly) {
-                $meta = $this->loadFolderMetadata($folder);
-                foreach ($files as $f) {
-                    $bn = basename((string)$f);
-                    if (!isset($meta[$bn]['uploader']) || strcasecmp((string)$meta[$bn]['uploader'], $username) !== 0) {
-                        http_response_code(403); echo "Forbidden: you are not the owner of '{$bn}'."; return;
-                    }
+    public function zipStatus()
+{
+    if (!$this->_requireAuth()) { http_response_code(401); header('Content-Type: application/json'); echo json_encode(["error"=>"Unauthorized"]); return; }
+    $username = $_SESSION['username'] ?? '';
+    $token = isset($_GET['k']) ? preg_replace('/[^a-f0-9]/','',(string)$_GET['k']) : '';
+    if ($token === '' || strlen($token) < 8) { http_response_code(400); header('Content-Type: application/json'); echo json_encode(["error"=>"Bad token"]); return; }
+
+    $tokFile = rtrim((string)META_DIR, '/\\') . '/ziptmp/.tokens/' . $token . '.json';
+    if (!is_file($tokFile)) { http_response_code(404); header('Content-Type: application/json'); echo json_encode(["error"=>"Not found"]); return; }
+    $job = json_decode((string)@file_get_contents($tokFile), true) ?: [];
+    if (($job['user'] ?? '') !== $username) { http_response_code(403); header('Content-Type: application/json'); echo json_encode(["error"=>"Forbidden"]); return; }
+
+    $ready = (($job['status'] ?? '') === 'done') && !empty($job['zipPath']) && is_file($job['zipPath']);
+
+    $out = [
+        'status'      => $job['status']      ?? 'unknown',
+        'error'       => $job['error']       ?? null,
+        'ready'       => $ready,
+        // progress (if present)
+        'pct'         => $job['pct']         ?? null,
+        'filesDone'   => $job['filesDone']   ?? null,
+        'filesTotal'  => $job['filesTotal']  ?? null,
+        'bytesDone'   => $job['bytesDone']   ?? null,
+        'bytesTotal'  => $job['bytesTotal']  ?? null,
+        'current'     => $job['current']     ?? null,
+        'phase'       => $job['phase']       ?? null,
+        // timing (always include for UI)
+        'startedAt'   => $job['startedAt']   ?? null,
+        'finalizeAt'  => $job['finalizeAt']  ?? null,
+    ];
+
+    if ($ready) {
+        $out['size']        = @filesize($job['zipPath']) ?: null;
+        $out['downloadUrl'] = '/api/file/downloadZipFile.php?k=' . urlencode($token);
+    }
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    echo json_encode($out);
+}
+
+public function downloadZipFile()
+{
+    if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) { http_response_code(401); echo "Unauthorized"; return; }
+    $username = $_SESSION['username'] ?? '';
+    $token = isset($_GET['k']) ? preg_replace('/[^a-f0-9]/','',(string)$_GET['k']) : '';
+    if ($token === '' || strlen($token) < 8) { http_response_code(400); echo "Bad token"; return; }
+
+    $tokFile = rtrim((string)META_DIR, '/\\') . '/ziptmp/.tokens/' . $token . '.json';
+    if (!is_file($tokFile)) { http_response_code(404); echo "Not found"; return; }
+    $job = json_decode((string)@file_get_contents($tokFile), true) ?: [];
+    @unlink($tokFile); // one-shot token
+
+    if (($job['user'] ?? '') !== $username) { http_response_code(403); echo "Forbidden"; return; }
+    $zip = (string)($job['zipPath'] ?? '');
+    $zipReal = realpath($zip);
+    $root = realpath(rtrim((string)META_DIR, '/\\') . '/ziptmp');
+    if (!$zipReal || !$root || strpos($zipReal, $root) !== 0 || !is_file($zipReal)) { http_response_code(404); echo "Not found"; return; }
+
+    @session_write_close();
+    @set_time_limit(0);
+    @ignore_user_abort(true);
+    if (function_exists('apache_setenv')) @apache_setenv('no-gzip','1');
+    @ini_set('zlib.output_compression','0');
+    @ini_set('output_buffering','off');
+    while (ob_get_level()>0) @ob_end_clean();
+
+    @clearstatcache(true, $zipReal);
+    $name = isset($_GET['name']) ? preg_replace('/[^A-Za-z0-9._-]/','_', (string)$_GET['name']) : 'files.zip';
+    if ($name === '' || str_ends_with($name,'.')) $name = 'files.zip';
+    $size = (int)@filesize($zipReal);
+
+    header('X-Accel-Buffering: no');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="'.$name.'"');
+    if ($size>0) header('Content-Length: '.$size);
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('Pragma: no-cache');
+
+    readfile($zipReal);
+    @unlink($zipReal);
+}
+
+public function downloadZip()
+{
+    try {
+        if (!$this->_checkCsrf()) { $this->_jsonOut(["error"=>"Bad CSRF"],400); return; }
+        if (!$this->_requireAuth()) { $this->_jsonOut(["error"=>"Unauthorized"],401); return; }
+
+        $data = $this->_readJsonBody();
+        if (!is_array($data) || !isset($data['folder'], $data['files']) || !is_array($data['files'])) {
+            $this->_jsonOut(["error" => "Invalid input."], 400); return;
+        }
+
+        $folder = $this->_normalizeFolder($data['folder']);
+        $files  = $data['files'];
+        if (!$this->_validFolder($folder)) { $this->_jsonOut(["error"=>"Invalid folder name."], 400); return; }
+
+        $username = $_SESSION['username'] ?? '';
+        $perms    = $this->loadPerms($username);
+
+        // Optional zip gate by account flag
+        if (!$this->isAdmin($perms) && !empty($perms['disableZip'])) {
+            $this->_jsonOut(["error" => "ZIP downloads are not allowed for your account."], 403); return;
+        }
+
+        $ignoreOwnership = $this->isAdmin($perms)
+            || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+
+        // Ancestor-owner counts as full view
+        $fullView = $ignoreOwnership
+            || ACL::canRead($username, $perms, $folder)
+            || $this->ownsFolderOrAncestor($folder, $username, $perms);
+        $ownOnly  = !$fullView && ACL::hasGrant($username, $folder, 'read_own');
+
+        if (!$fullView && !$ownOnly) { $this->_jsonOut(["error" => "Forbidden: no view access to this folder."], 403); return; }
+
+        // If own-only, ensure all files are owned by the user
+        if ($ownOnly) {
+            $meta = $this->loadFolderMetadata($folder);
+            foreach ($files as $f) {
+                $bn = basename((string)$f);
+                if (!isset($meta[$bn]['uploader']) || strcasecmp((string)$meta[$bn]['uploader'], $username) !== 0) {
+                    $this->_jsonOut(["error" => "Forbidden: you are not the owner of '{$bn}'."], 403); return;
                 }
             }
-    
-            $result = FileModel::createZipArchive($folder, $files);
-            if (isset($result['error'])) { http_response_code(400); echo $result['error']; return; }
-    
-            $zipPath = $result['zipPath'] ?? null;
-            if (!$zipPath || !is_file($zipPath)) { http_response_code(500); echo "ZIP archive not found."; return; }
-    
-            // ---- Clean binary stream setup ----
-            @session_write_close();
-            @set_time_limit(0);
-            @ignore_user_abort(true);
-            if (function_exists('apache_setenv')) { @apache_setenv('no-gzip', '1'); }
-            @ini_set('zlib.output_compression', '0');
-            @ini_set('output_buffering', 'off');
-            while (ob_get_level() > 0) { @ob_end_clean(); }
-    
-            @clearstatcache(true, $zipPath);
-            $size = (int)@filesize($zipPath);
-    
-            header('X-Accel-Buffering: no');
-            header_remove('Content-Type');
-            header('Content-Type: application/zip');
-            // Client sets the final name via a.download in your JS; server can be generic
-            header('Content-Disposition: attachment; filename="files.zip"');
-            if ($size > 0) header('Content-Length: ' . $size);
-            header('Cache-Control: no-store, no-cache, must-revalidate');
-            header('Pragma: no-cache');
-    
-            $fp = fopen($zipPath, 'rb');
-            if ($fp === false) { http_response_code(500); echo "Failed to open ZIP."; return; }
-    
-            $chunk = 1048576; // 1 MiB
-            while (!feof($fp)) {
-                $buf = fread($fp, $chunk);
-                if ($buf === false) break;
-                echo $buf;
-                flush();
-            }
-            fclose($fp);
-            @unlink($zipPath);
-            exit;
-    
-        } catch (Throwable $e) {
-            error_log('FileController::downloadZip error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
-            if (!headers_sent()) http_response_code(500);
-            echo "Internal server error while preparing ZIP.";
         }
-        
+
+        $root   = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+        $tokDir = $root . DIRECTORY_SEPARATOR . '.tokens';
+        $logDir = $root . DIRECTORY_SEPARATOR . '.logs';
+        if (!is_dir($tokDir)) @mkdir($tokDir, 0700, true);
+        if (!is_dir($logDir)) @mkdir($logDir, 0700, true);
+        @chmod($tokDir, 0700);
+        @chmod($logDir, 0700);
+        if (!is_dir($tokDir) || !is_writable($tokDir)) {
+            $this->_jsonOut(["error"=>"ZIP token dir not writable."],500); return;
+        }
+
+        // Light janitor: purge old tokens/logs > 6h (best-effort)
+        $now = time();
+        foreach ((glob($tokDir . DIRECTORY_SEPARATOR . '*.json') ?: []) as $tf) {
+            if (is_file($tf) && ($now - (int)@filemtime($tf)) > 21600) { @unlink($tf); }
+        }
+        foreach ((glob($logDir . DIRECTORY_SEPARATOR . 'WORKER-*.log') ?: []) as $lf) {
+            if (is_file($lf) && ($now - (int)@filemtime($lf)) > 21600) { @unlink($lf); }
+        }
+
+        // Per-user and global caps (simple anti-DoS)
+        $perUserCap = 2;    // tweak if desired
+        $globalCap  = 8;    // tweak if desired
+
+        $tokens = glob($tokDir . DIRECTORY_SEPARATOR . '*.json') ?: [];
+        $mine   = 0; $all = 0;
+        foreach ($tokens as $tf) {
+            $job = json_decode((string)@file_get_contents($tf), true) ?: [];
+            $st  = $job['status'] ?? 'unknown';
+            if ($st === 'queued' || $st === 'working' || $st === 'finalizing') {
+                $all++;
+                if (($job['user'] ?? '') === $username) $mine++;
+            }
+        }
+        if ($mine >= $perUserCap) { $this->_jsonOut(["error"=>"You already have ZIP jobs running. Try again shortly."], 429); return; }
+        if ($all  >= $globalCap)  { $this->_jsonOut(["error"=>"ZIP queue is busy. Try again shortly."], 429); return; }
+
+        // Create job token
+        $token   = bin2hex(random_bytes(16));
+        $tokFile = $tokDir . DIRECTORY_SEPARATOR . $token . '.json';
+        $job = [
+            'user'       => $username,
+            'folder'     => $folder,
+            'files'      => array_values($files),
+            'status'     => 'queued',
+            'ctime'      => time(),
+            'startedAt'  => null,
+            'finalizeAt' => null,
+            'zipPath'    => null,
+            'error'      => null
+        ];
+        if (file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX) === false) {
+            $this->_jsonOut(["error"=>"Failed to create zip job."],500); return;
+        }
+
+        // Robust spawn (detect php CLI, log, record PID)
+        $spawn = $this->spawnZipWorker($token, $tokFile, $logDir);
+        if (!$spawn['ok']) {
+            $job['status'] = 'error';
+            $job['error']  = 'Spawn failed: '.$spawn['error'];
+            @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+            $this->_jsonOut(["error"=>"Failed to enqueue ZIP: ".$spawn['error']], 500);
+            return;
+        }
+
+        $this->_jsonOut([
+            'ok'          => true,
+            'token'       => $token,
+            'status'      => 'queued',
+            'statusUrl'   => '/api/file/zipStatus.php?k=' . urlencode($token),
+            'downloadUrl' => '/api/file/downloadZipFile.php?k=' . urlencode($token)
+        ]);
+    } catch (Throwable $e) {
+        error_log('FileController::downloadZip enqueue error: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        $this->_jsonOut(['error' => 'Internal error while queuing ZIP.'], 500);
     }
+}
 
     public function extractZip()
     {

@@ -557,13 +557,13 @@ class FileModel {
      * @return array An associative array with either an "error" key or a "zipPath" key.
      */
     public static function createZipArchive($folder, $files) {
-
-        // (optional) purge old temp zips > 6h
+        // Purge old temp zips > 6h (best-effort)
         $zipRoot = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
         $now = time();
-        foreach (glob($zipRoot . DIRECTORY_SEPARATOR . 'download-*.zip') ?: [] as $zp) {
-            if (is_file($zp) && ($now - @filemtime($zp)) > 21600) { @unlink($zp); }
+        foreach ((glob($zipRoot . DIRECTORY_SEPARATOR . 'download-*.zip') ?: []) as $zp) {
+            if (is_file($zp) && ($now - (int)@filemtime($zp)) > 21600) { @unlink($zp); }
         }
+    
         // Normalize and validate target folder
         $folder = trim((string)$folder) ?: 'root';
         $baseDir = realpath(UPLOAD_DIR);
@@ -574,7 +574,6 @@ class FileModel {
         if (strtolower($folder) === 'root' || $folder === "") {
             $folderPathReal = $baseDir;
         } else {
-            // Prevent traversal and validate each segment against folder regex
             if (strpos($folder, '..') !== false) {
                 return ["error" => "Invalid folder name."];
             }
@@ -599,6 +598,10 @@ class FileModel {
                 continue;
             }
             $fullPath = $folderPathReal . DIRECTORY_SEPARATOR . $fileName;
+            // Skip symlinks (avoid archiving outside targets via links)
+            if (is_link($fullPath)) {
+                continue;
+            }
             if (is_file($fullPath)) {
                 $filesToZip[] = $fullPath;
             }
@@ -609,9 +612,7 @@ class FileModel {
     
         // Workspace on the big disk: META_DIR/ziptmp
         $work = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
-        if (!is_dir($work)) {
-            @mkdir($work, 0775, true);
-        }
+        if (!is_dir($work)) { @mkdir($work, 0775, true); }
         if (!is_dir($work) || !is_writable($work)) {
             return ["error" => "ZIP temp dir not writable: " . $work];
         }
@@ -633,7 +634,7 @@ class FileModel {
     
         @set_time_limit(0);
     
-        // Create the ZIP path inside META_DIR/ziptmp
+        // Create the ZIP path inside META_DIR/ziptmp (libzip temp stays on same FS)
         $zipName = 'download-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.zip';
         $zipPath = $work . DIRECTORY_SEPARATOR . $zipName;
     
@@ -643,7 +644,7 @@ class FileModel {
         }
     
         foreach ($filesToZip as $filePath) {
-            // Add using basename at the root of the zip (matches your current behavior)
+            // Add using basename at the root of the zip (matches current behavior)
             $zip->addFile($filePath, basename($filePath));
         }
     

@@ -1,12 +1,13 @@
 # --------------------------------
 # FileRise portable .htaccess
 # --------------------------------
-Options -Indexes
+Options -Indexes -Multiviews
 DirectoryIndex index.html
 
+# ---------------- Security: dotfiles ----------------
 <IfModule mod_authz_core.c>
-  # Block dotfiles like .env, .git, etc., but allow ACME under .well-known
-  <FilesMatch "^\.(?!well-known(?:/|$))">
+  # Block direct access to dotfiles like .env, .gitignore, etc.
+  <FilesMatch "^\..*">
     Require all denied
   </FilesMatch>
 </IfModule>
@@ -15,15 +16,24 @@ DirectoryIndex index.html
 <IfModule mod_rewrite.c>
 RewriteEngine On
 
-# Never redirect local/dev hosts
-RewriteCond %{HTTP_HOST} ^(localhost|127\.0\.0\.1|fr\.local|192\.168\.[0-9]+\.[0-9]+)$ [NC]
-RewriteRule ^ - [L]
-
-# Let ACME http-01 pass BEFORE any redirect (needed for auto-renew)
+# 0) Let ACME http-01 pass BEFORE any other rule (needed for auto-renew)
 RewriteCond %{REQUEST_URI} ^/.well-known/acme-challenge/
 RewriteRule - - [L]
 
-# HTTPS redirect (enable ONE of these, comment the other)
+# 1) Block hidden files/dirs anywhere EXCEPT .well-known (path-aware)
+#    Prevents requests like /.env, /.git/config, /.ssh/id_rsa, etc.
+RewriteRule "(^|/)\.(?!well-known/)" - [F]
+
+# 2) Deny direct access to PHP outside /api/
+#    This stops scanners from hitting /index.php, /admin.php, /wso.php, etc.
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteRule \.php$ - [F]
+
+# 3) Never redirect local/dev hosts
+RewriteCond %{HTTP_HOST} ^(localhost|127\.0\.0\.1|fr\.local|192\.168\.[0-9]+\.[0-9]+)$ [NC]
+RewriteRule ^ - [L]
+
+# 4) HTTPS redirect (enable ONE of these, comment the other)
 
 # A) Direct TLS on this server
 #RewriteCond %{HTTPS} !=on
@@ -35,7 +45,7 @@ RewriteRule - - [L]
 #RewriteCond %{HTTPS} !=on
 #RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# Mark versioned assets (?v=...) with env flag for caching rules below
+# 5) Mark versioned assets (?v=...) with env flag for caching rules below
 RewriteCond %{QUERY_STRING} (^|&)v= [NC]
 RewriteRule ^ - [E=IS_VER:1]
 </IfModule>
@@ -98,7 +108,6 @@ RewriteRule ^ - [E=IS_VER:1]
 
 # ---------------- Compression ----------------
 <IfModule mod_brotli.c>
-  # Do NOT set BrotliCompressionQuality in .htaccess (vhost/server only)
   AddOutputFilterByType BROTLI_COMPRESS text/html text/css application/javascript application/json image/svg+xml
 </IfModule>
 <IfModule mod_deflate.c>

@@ -119,7 +119,7 @@ export async function handleCreateFile(e) {
       method: 'POST',
       credentials: 'include',
       headers: {
-        'Content-Type':'application/json',
+        'Content-Type': 'application/json',
         'X-CSRF-Token': window.csrfToken
       },
       // ⚠️ must send `name`, not `filename`
@@ -139,7 +139,7 @@ export async function handleCreateFile(e) {
 document.addEventListener('DOMContentLoaded', () => {
   const cancel = document.getElementById('cancelCreateFile');
   const confirm = document.getElementById('confirmCreateFile');
-  if (cancel)  cancel.addEventListener('click', () => document.getElementById('createFileModal').style.display = 'none');
+  if (cancel) cancel.addEventListener('click', () => document.getElementById('createFileModal').style.display = 'none');
   if (confirm) confirm.addEventListener('click', handleCreateFile);
 });
 
@@ -265,7 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const cancelZipBtn = document.getElementById("cancelDownloadZip");
   const confirmZipBtn = document.getElementById("confirmDownloadZip");
   const cancelCreate = document.getElementById('cancelCreateFile');
-  
+
   if (cancelCreate) {
     cancelCreate.addEventListener('click', () => {
       document.getElementById('createFileModal').style.display = 'none';
@@ -305,7 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showToast(err.message || t('error_creating_file'));
       }
     });
-    attachEnterKeyListener('createFileModal','confirmCreateFile');
+    attachEnterKeyListener('createFileModal', 'confirmCreateFile');
   }
 
   // 1) Cancel button hides the name modal
@@ -321,63 +321,187 @@ document.addEventListener("DOMContentLoaded", () => {
     confirmZipBtn.addEventListener("click", async () => {
       // a) Validate ZIP filename
       let zipName = document.getElementById("zipFileNameInput").value.trim();
-      if (!zipName) {
-        showToast("Please enter a name for the zip file.");
-        return;
-      }
-      if (!zipName.toLowerCase().endsWith(".zip")) {
-        zipName += ".zip";
-      }
+      if (!zipName) { showToast("Please enter a name for the zip file."); return; }
+      if (!zipName.toLowerCase().endsWith(".zip")) zipName += ".zip";
 
-      // b) Hide the name‐input modal, show the spinner modal
+      // b) Hide the name‐input modal, show the progress modal
       zipNameModal.style.display = "none";
       progressModal.style.display = "block";
 
-      // c) (Optional) update the “Preparing…” text if you gave it an ID
+      // c) Title text (optional)
       const titleEl = document.getElementById("downloadProgressTitle");
       if (titleEl) titleEl.textContent = `Preparing ${zipName}…`;
 
-      try {
-        // d) POST and await the ZIP blob
-        const res = await fetch("/api/file/downloadZip.php", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": window.csrfToken
-          },
-          body: JSON.stringify({
-            folder: window.currentFolder || "root",
-            files: window.filesToDownload
-          })
-        });
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(txt || `Status ${res.status}`);
-        }
-
-        const blob = await res.blob();
-        if (!blob || blob.size === 0) {
-          throw new Error("Received empty ZIP file.");
-        }
-
-        // e) Hand off to the browser’s download manager
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = zipName;
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
-        a.remove();
-
-      } catch (err) {
-        console.error("Error downloading ZIP:", err);
-        showToast("Error: " + err.message);
-      } finally {
-        // f) Always hide spinner modal
-        progressModal.style.display = "none";
+      // d) Queue the job
+      const res = await fetch("/api/file/downloadZip.php", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+        body: JSON.stringify({ folder: window.currentFolder || "root", files: window.filesToDownload })
+      });
+      const jsr = await res.json().catch(() => ({}));
+      if (!res.ok || !jsr.ok) {
+        const msg = (jsr && jsr.error) ? jsr.error : `Status ${res.status}`;
+        throw new Error(msg);
       }
+      const token = jsr.token;
+      const statusUrl = jsr.statusUrl;
+      const downloadUrl = jsr.downloadUrl + "&name=" + encodeURIComponent(zipName);
+
+      // Ensure a progress UI exists in the modal
+      function ensureZipProgressUI() {
+        const modalEl = document.getElementById("downloadProgressModal");
+        if (!modalEl) {
+          // really shouldn't happen, but fall back to body
+          console.warn("downloadProgressModal not found; falling back to document.body");
+        }
+        // Prefer a dedicated content node inside the modal
+        let host =
+          (modalEl && modalEl.querySelector("#downloadProgressContent")) ||
+          (modalEl && modalEl.querySelector(".modal-body")) ||
+          (modalEl && modalEl.querySelector(".rise-modal-body")) ||
+          (modalEl && modalEl.querySelector(".modal-content")) ||
+          (modalEl && modalEl.querySelector(".content")) ||
+          null;
+
+        // If no suitable container, create one inside the modal
+        if (!host) {
+          host = document.createElement("div");
+          host.id = "downloadProgressContent";
+          (modalEl || document.body).appendChild(host);
+        }
+
+        // Helper: ensure/move an element with given id into host
+        function ensureInHost(id, tag, init) {
+          let el = document.getElementById(id);
+          if (el && el.parentElement !== host) host.appendChild(el); // move if it exists elsewhere
+          if (!el) {
+            el = document.createElement(tag);
+            el.id = id;
+            if (typeof init === "function") init(el);
+            host.appendChild(el);
+          }
+          return el;
+        }
+
+        // Title
+        const title = ensureInHost("downloadProgressTitle", "div", (el) => {
+          el.style.marginBottom = "8px";
+          el.textContent = "Preparing…";
+        });
+
+        // Progress bar (native <progress>)
+        const bar = (function () {
+          let el = document.getElementById("downloadProgressBar");
+          if (el && el.parentElement !== host) host.appendChild(el); // move into modal
+          if (!el) {
+            el = document.createElement("progress");
+            el.id = "downloadProgressBar";
+            host.appendChild(el);
+          }
+          el.max = 100;
+          el.value = 0;
+          el.style.display = "";     // override any inline display:none
+          el.style.width = "100%";
+          el.style.height = "1.1em";
+          return el;
+        })();
+
+        // Text line
+        const text = ensureInHost("downloadProgressText", "div", (el) => {
+          el.style.marginTop = "8px";
+          el.style.fontSize = "0.9rem";
+          el.style.whiteSpace = "nowrap";
+          el.style.overflow = "hidden";
+          el.style.textOverflow = "ellipsis";
+        });
+
+        // Optional spinner hider
+        const hideSpinner = () => {
+          const sp = document.getElementById("downloadSpinner");
+          if (sp) sp.style.display = "none";
+        };
+
+        return { bar, text, title, hideSpinner };
+      }
+
+      function humanBytes(n) {
+        if (!Number.isFinite(n) || n < 0) return "";
+        const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0, x = n;
+        while (x >= 1024 && i < u.length - 1) { x /= 1024; i++; }
+        return x.toFixed(x >= 10 || i === 0 ? 0 : 1) + " " + u[i];
+      }
+      function mmss(sec) {
+        sec = Math.max(0, sec | 0);
+        const m = (sec / 60) | 0, s = sec % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+      }
+
+      const ui = ensureZipProgressUI();
+      const t0 = Date.now();
+
+      // e) Poll until ready
+      while (true) {
+        await new Promise(r => setTimeout(r, 1200));
+        const s = await fetch(`${statusUrl}&_=${Date.now()}`, {
+          credentials: "include", cache: "no-store",
+        }).then(r => r.json());
+
+        if (s.error) throw new Error(s.error);
+        if (ui.title) ui.title.textContent = `Preparing ${zipName}…`;
+
+        // --- RENDER PROGRESS ---
+        if (typeof s.pct === "number" && ui.bar && ui.text) {
+          if ((s.phase !== 'finalizing') && (s.pct < 99)) {
+            ui.hideSpinner && ui.hideSpinner();
+            const filesDone = s.filesDone ?? 0;
+            const filesTotal = s.filesTotal ?? 0;
+            const bytesDone = s.bytesDone ?? 0;
+            const bytesTotal = s.bytesTotal ?? 0;
+
+            // Determinate 0–98% while enumerating
+            const pct = Math.max(0, Math.min(98, s.pct | 0));
+            if (!ui.bar.hasAttribute("value")) ui.bar.value = 0;
+            ui.bar.value = pct;
+            ui.text.textContent =
+              `${pct}% — ${filesDone}/${filesTotal} files, ${humanBytes(bytesDone)} / ${humanBytes(bytesTotal)}`;
+          } else {
+            // FINALIZING: keep progress at 100% and show timer + selected totals
+            if (!ui.bar.hasAttribute("value")) ui.bar.value = 100;
+            ui.bar.value = 100; // lock at 100 during finalizing
+            const since = s.finalizeAt ? Math.max(0, (Date.now() / 1000 | 0) - (s.finalizeAt | 0)) : 0;
+            const selF = s.selectedFiles ?? s.filesTotal ?? 0;
+            const selB = s.selectedBytes ?? s.bytesTotal ?? 0;
+            ui.text.textContent = `Finalizing… ${mmss(since)} — ${selF} file${selF === 1 ? '' : 's'}, ~${humanBytes(selB)}`;
+          }
+        } else if (ui.text) {
+          ui.text.textContent = "Still preparing…";
+        }
+        // --- /RENDER ---
+
+        if (s.ready) {
+          // Snap to 100 and close modal just before download
+          if (ui.bar) { ui.bar.max = 100; ui.bar.value = 100; }
+          progressModal.style.display = "none";
+          await new Promise(r => setTimeout(r, 0));
+          break;
+        }
+        if (Date.now() - t0 > 15 * 60 * 1000) throw new Error("Timed out preparing ZIP");
+      }
+
+      // f) Trigger download
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = zipName;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      // g) Reset for next time
+      if (ui.bar) ui.bar.value = 0;
+      if (ui.text) ui.text.textContent = "";
+      if (Array.isArray(window.filesToDownload)) window.filesToDownload = [];
     });
   }
 });
@@ -694,10 +818,10 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-  const btn      = document.getElementById('createBtn');
-  const menu     = document.getElementById('createMenu');
-  const fileOpt  = document.getElementById('createFileOption');
-  const folderOpt= document.getElementById('createFolderOption');
+  const btn = document.getElementById('createBtn');
+  const menu = document.getElementById('createMenu');
+  const fileOpt = document.getElementById('createFileOption');
+  const folderOpt = document.getElementById('createFolderOption');
 
   // Toggle dropdown on click
   btn.addEventListener('click', (e) => {
