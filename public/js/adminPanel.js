@@ -58,7 +58,7 @@ function wireHeaderTitleLive() {
 
 function renderMaskedInput({ id, label, hasValue, isSecret = false }) {
   const type = isSecret ? 'password' : 'text';
-  const disabled = hasValue ? 'disabled data-replace="0" placeholder="•••••• (saved)"' : '';
+  const disabled = hasValue ? 'disabled data-replace="0" placeholder="•••••• (saved)"' : 'data-replace="1"';
   const replaceBtn = hasValue
     ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-replace-for="${id}">Replace</button>`
     : '';
@@ -1070,11 +1070,15 @@ function handleSave() {
   const idEl = document.getElementById("oidcClientId");
   const scEl = document.getElementById("oidcClientSecret");
 
-  if (idEl?.dataset.replace === '1' && idEl.value.trim() !== '') {
-    payload.oidc.clientId = idEl.value.trim();
+  const idVal = idEl?.value.trim() || '';
+  const secVal = scEl?.value.trim() || '';
+  const idFirstTime  = idEl && !idEl.hasAttribute('data-replace');   // no saved value yet
+  const secFirstTime = scEl && !scEl.hasAttribute('data-replace');   // no saved value yet
+  if ((idEl?.dataset.replace === '1' || idFirstTime) && idVal !== '') {
+    payload.oidc.clientId = idVal;
   }
-  if (scEl?.dataset.replace === '1' && scEl.value.trim() !== '') {
-    payload.oidc.clientSecret = scEl.value.trim();
+  if ((scEl?.dataset.replace === '1' || secFirstTime) && secVal !== '') {
+    payload.oidc.clientSecret = secVal;
   }
 
   const ooSecretEl = document.getElementById("ooJwtSecret");

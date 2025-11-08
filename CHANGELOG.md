@@ -1,5 +1,15 @@
 # Changelog
 
+## Changes 11/7/2025 (v1.8.9)
+
+release(v1.8.9): fix(oidc, admin): first-save Client ID/Secret (closes #64)
+
+- adminPanel.js:
+  - Masked inputs without a saved value now start with data-replace="1".
+  - handleSave() now sends oidc.clientId / oidc.clientSecret on first save (no longer requires clicking “Replace” first).
+
+---
+
 ## Changes 11/7/2025 (v1.8.8)
 
 release(v1.8.8): background ZIP jobs w/ tokenized download + in‑modal progress bar; robust finalize; janitor cleanup — closes #60
