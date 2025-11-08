@@ -1,49 +1,84 @@
-<svg version="1.1" id="filingCabinetLogo" xmlns="http://www.w3.org/2000/svg" 
-     xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 64" xml:space="preserve">
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"
+     role="img" aria-labelledby="title desc" preserveAspectRatio="xMidYMid meet">
+  <title id="title">FileRise</title>
+  <desc id="desc">Blue filing cabinet with three drawers and refined handles.</desc>
+
   <defs>
-    <!-- Gradient for the cabinet body -->
+    <!-- Brand blue gradient -->
     <linearGradient id="cabinetGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1976D2;stop-opacity:1" />
+      <stop offset="0%"  stop-color="#2196F3"/>
+      <stop offset="100%" stop-color="#1976D2"/>
     </linearGradient>
-    <!-- Drop shadow filter -->
-    <filter id="shadowFilter" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.2"/>
-    </filter>
+
+    <!-- Gentle top gloss -->
+    <linearGradient id="glossGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity=".20"/>
+      <stop offset="60%"  stop-color="#FFFFFF" stop-opacity=".06"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Inner highlight stroke (top > none) -->
+    <linearGradient id="innerStrokeGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity=".45"/>
+      <stop offset="70%"  stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Bottom edge soft shade -->
+    <linearGradient id="bottomStrokeGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="rgba(0,0,0,0)"/>
+      <stop offset="60%"  stop-color="rgba(0,0,0,0)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,.14)"/>
+    </linearGradient>
+
+    <!-- Drawer face fill (barely tinted) -->
+    <linearGradient id="drawerFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F3F9FF"/>
+    </linearGradient>
+
+    <!-- Clip to prevent any handle bleed into the blue body -->
+    <clipPath id="drawerArea">
+      <rect x="8" y="24" width="48" height="30" rx="2" ry="2"/>
+    </clipPath>
   </defs>
-  <style type="text/css">
-    /* Cabinet with gradient, white outline, and drop shadow */
-    .cabinet { 
-      fill: url(#cabinetGradient); 
-      stroke: white; 
-      stroke-width: 2; 
-    }
-    .divider { 
-      stroke: #1565C0; 
-      stroke-width: 1.5; 
-    }
-    .drawer { 
-      fill: #FFFFFF; 
-    }
-    .handle { 
-      fill: #1565C0; 
-    }
-  </style>
-  <!-- Cabinet Body with rounded corners, white outline, and drop shadow -->
-  <rect x="4" y="4" width="56" height="56" rx="6" ry="6" class="cabinet" filter="url(#shadowFilter)"/>
-  <!-- Divider lines for drawers -->
-  <line x1="5" y1="22" x2="59" y2="22" class="divider"/>
-  <line x1="5" y1="34" x2="59" y2="34" class="divider"/>
-  <!-- Drawers with Handles -->
-  <rect x="8" y="24" width="48" height="6" rx="1" ry="1" class="drawer"/>
-  <circle cx="54" cy="27" r="1.5" class="handle"/>
-  
-  <rect x="8" y="36" width="48" height="6" rx="1" ry="1" class="drawer"/>
-  <circle cx="54" cy="39" r="1.5" class="handle"/>
-  
-  <rect x="8" y="48" width="48" height="6" rx="1" ry="1" class="drawer"/>
-  <circle cx="54" cy="51" r="1.5" class="handle"/>
-  
-  <!-- Additional detail: a small top handle on the cabinet door -->
+
+  <!-- Cabinet body -->
+  <rect x="4" y="4" width="56" height="56" rx="6" ry="6"
+        fill="url(#cabinetGradient)" stroke="#FFFFFF" stroke-width="2"
+        shape-rendering="geometricPrecision"/>
+
+  <!-- Subtle inner highlight + bottom shade (no filters) -->
+  <rect x="5" y="5" width="54" height="54" rx="5" ry="5"
+        fill="none" stroke="url(#innerStrokeGrad)" stroke-width="1"/>
+  <rect x="5" y="5" width="54" height="54" rx="5" ry="5"
+        fill="none" stroke="url(#bottomStrokeGrad)" stroke-width="1"/>
+
+  <!-- Top gloss panel -->
+  <rect x="4" y="4" width="56" height="20" rx="6" ry="6" fill="url(#glossGrad)"/>
+
+  <!-- Drawer separators -->
+  <rect x="6" y="21.5" width="52" height="1.5" fill="#1565C0"/>
+  <rect x="6" y="33.5" width="52" height="1.5" fill="#1565C0"/>
+
+  <!-- Drawers -->
+  <rect x="8" y="24" width="48" height="6" rx="1.5" ry="1.5" fill="url(#drawerFill)"/>
+  <rect x="8" y="36" width="48" height="6" rx="1.5" ry="1.5" fill="url(#drawerFill)"/>
+  <rect x="8" y="48" width="48" height="6" rx="1.5" ry="1.5" fill="url(#drawerFill)"/>
+
+  <!-- Handles (pure white plate + blue dot), clipped to drawer area -->
+  <g clip-path="url(#drawerArea)">
+    <!-- Top -->
+    <circle cx="54" cy="27" r="1.9" fill="#FFFFFF"/>
+    <circle cx="54" cy="27" r="1.4" fill="#1565C0"/>
+    <!-- Middle -->
+    <circle cx="54" cy="39" r="1.9" fill="#FFFFFF"/>
+    <circle cx="54" cy="39" r="1.4" fill="#1565C0"/>
+    <!-- Bottom -->
+    <circle cx="54" cy="51" r="1.9" fill="#FFFFFF"/>
+    <circle cx="54" cy="51" r="1.4" fill="#1565C0"/>
+  </g>
+
+  <!-- Top handle (kept) -->
   <rect x="28" y="10" width="8" height="4" rx="1" ry="1" fill="#1565C0"/>
 </svg>

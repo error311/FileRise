@@ -16,6 +16,23 @@ private const OO_SUPPORTED_EXTS = [
     'ppt','pptx','odp',
     'pdf'
   ];
+
+/** Origin that the Document Server should use to reach FileRise fast (internal URL) */
+private function effectiveFileOriginForDocs(): string
+{
+    $cfg = AdminModel::getConfig();
+    $oo  = is_array($cfg['onlyoffice'] ?? null) ? $cfg['onlyoffice'] : [];
+
+    // 1) explicit constant
+    if (defined('ONLYOFFICE_FILE_ORIGIN_FOR_DOCS') && ONLYOFFICE_FILE_ORIGIN_FOR_DOCS !== '') {
+        return (string)ONLYOFFICE_FILE_ORIGIN_FOR_DOCS;
+    }
+    // 2) admin.json setting
+    if (!empty($oo['fileOriginForDocs'])) return (string)$oo['fileOriginForDocs'];
+
+    // 3) fallback: whatever the public sees (may hairpin, but still works)
+    return $this->effectivePublicOrigin();
+}
   
   // Never editable via OO (we’ll always set edit=false for these)
   private const OO_NEVER_EDIT = ['pdf'];
@@ -127,117 +144,119 @@ private function ooLog(string $level, string $msg): void
 
     /** GET /api/onlyoffice/status.php */
     public function status(): void
-    {
-        header('Content-Type: application/json; charset=utf-8');
-        header('Cache-Control: no-store');
+{
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
 
-        $enabled   = $this->effectiveEnabled();
-        $docsOrig  = $this->effectiveDocsOrigin();
-        $secret    = $this->effectiveSecret();
+    $enabled   = $this->effectiveEnabled();
+    $docsOrig  = $this->effectiveDocsOrigin();
+    $secret    = $this->effectiveSecret();
 
-        // Must have docs origin and secret to actually function
-        $enabled = $enabled && ($docsOrig !== '') && ($secret !== '');
+    // Must have docs origin and secret to actually function
+    $enabled = $enabled && ($docsOrig !== '') && ($secret !== '');
 
-        $exts = self::OO_SUPPORTED_EXTS;
-        // If you want the extras:
-        $exts = array_values(array_unique(array_merge($exts, self::OO_VIEW_ONLY_EXTRAS)));
-        
-        echo json_encode(['enabled' => (bool)$enabled, 'exts' => $exts], JSON_UNESCAPED_SLASHES);
-    }
+    $exts = self::OO_SUPPORTED_EXTS;
+    $exts = array_values(array_unique(array_merge($exts, self::OO_VIEW_ONLY_EXTRAS)));
+
+    echo json_encode([
+        'enabled'      => (bool)$enabled,
+        'exts'         => $exts,
+        'docsOrigin'   => $docsOrig,                     // <-- for preconnect/api.js
+        'publicOrigin' => $this->effectivePublicOrigin() // <-- informational
+    ], JSON_UNESCAPED_SLASHES);
+}
 
     /** GET /api/onlyoffice/config.php?folder=...&file=... */
-    public function config(): void
-    {
-        header('Content-Type: application/json; charset=utf-8');
-        header('Cache-Control: no-store');
+    // --- config(): use the DocServer-facing origin for fileUrl & callbackUrl ---
+public function config(): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
 
-        @session_start();
-        $user   = $_SESSION['username'] ?? 'anonymous';
-        $perms  = [];
-        $isAdmin = \ACL::isAdmin($perms);
+    @session_start();
+    $user   = $_SESSION['username'] ?? 'anonymous';
+    $perms  = [];
+    $isAdmin = \ACL::isAdmin($perms);
 
-        // Effective toggles
-        $enabled    = $this->effectiveEnabled();
-        $docsOrigin = rtrim($this->effectiveDocsOrigin(), '/');
-        $secret     = $this->effectiveSecret();
-        if (!$enabled) { http_response_code(404); echo '{"error":"ONLYOFFICE disabled"}'; return; }
-        if ($secret === '') { http_response_code(500); echo '{"error":"ONLYOFFICE_JWT_SECRET not configured"}'; return; }
-        if ($docsOrigin === '') { http_response_code(500); echo '{"error":"ONLYOFFICE_DOCS_ORIGIN not configured"}'; return; }
-        if (!defined('UPLOAD_DIR')) { http_response_code(500); echo '{"error":"UPLOAD_DIR not defined"}'; return; }
+    $enabled     = $this->effectiveEnabled();
+    $docsOrigin  = rtrim($this->effectiveDocsOrigin(), '/');
+    $secret      = $this->effectiveSecret();
 
-        // Inputs
-        $folder = \ACL::normalizeFolder((string)($_GET['folder'] ?? 'root'));
-        $file   = basename((string)($_GET['file'] ?? ''));
-        if ($file === '') { http_response_code(400); echo '{"error":"Bad request"}'; return; }
+    if (!$enabled) { http_response_code(404); echo '{"error":"ONLYOFFICE disabled"}'; return; }
+    if ($secret === '') { http_response_code(500); echo '{"error":"ONLYOFFICE_JWT_SECRET not configured"}'; return; }
+    if ($docsOrigin === '') { http_response_code(500); echo '{"error":"ONLYOFFICE_DOCS_ORIGIN not configured"}'; return; }
+    if (!defined('UPLOAD_DIR')) { http_response_code(500); echo '{"error":"UPLOAD_DIR not defined"}'; return; }
 
-        // ACL
-        if (!\ACL::canRead($user, $perms, $folder)) { http_response_code(403); echo '{"error":"Forbidden"}'; return; }
-        $canEdit = \ACL::canEdit($user, $perms, $folder);
+    $folder = \ACL::normalizeFolder((string)($_GET['folder'] ?? 'root'));
+    $file   = basename((string)($_GET['file'] ?? ''));
+    if ($file === '') { http_response_code(400); echo '{"error":"Bad request"}'; return; }
 
-        // Path
-        $base = rtrim(UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
-        $rel  = ($folder === 'root') ? '' : ($folder . '/');
-        $abs  = realpath($base . $rel . $file);
-        if (!$abs || !is_file($abs)) { http_response_code(404); echo '{"error":"Not found"}'; return; }
-        if (strpos($abs, realpath($base)) !== 0) { http_response_code(400); echo '{"error":"Invalid path"}'; return; }
+    if (!\ACL::canRead($user, $perms, $folder)) { http_response_code(403); echo '{"error":"Forbidden"}'; return; }
+    $canEdit = \ACL::canEdit($user, $perms, $folder);
 
-        // Public origin
-        $publicOrigin = $this->effectivePublicOrigin();
+    $base = rtrim(UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
+    $rel  = ($folder === 'root') ? '' : ($folder . '/');
+    $abs  = realpath($base . $rel . $file);
+    if (!$abs || !is_file($abs)) { http_response_code(404); echo '{"error":"Not found"}'; return; }
+    if (strpos($abs, realpath($base)) !== 0) { http_response_code(400); echo '{"error":"Invalid path"}'; return; }
 
-        // Signed download
-        $exp  = time() + 10*60;
-        $data = json_encode(['f'=>$folder,'n'=>$file,'u'=>$user,'adm'=>$isAdmin,'exp'=>$exp], JSON_UNESCAPED_SLASHES);
-        $sig  = hash_hmac('sha256', $data, $secret, true);
-        $tok  = $this->b64uEnc($data) . '.' . $this->b64uEnc($sig);
-        $fileUrl = $publicOrigin . '/api/onlyoffice/signed-download.php?tok=' . rawurlencode($tok);
+    // IMPORTANT: use the internal/fast origin for DocServer fetch + callback
+    $fileOriginForDocs = rtrim($this->effectiveFileOriginForDocs(), '/');
 
-        // Callback
-        $cbExp = time() + 10*60;
-        $cbSig = hash_hmac('sha256', $folder.'|'.$file.'|'.$cbExp, $secret);
-        $callbackUrl = $publicOrigin . '/api/onlyoffice/callback.php'
-          . '?folder=' . rawurlencode($folder)
-          . '&file='   . rawurlencode($file)
-          . '&exp='    . $cbExp
-          . '&sig='    . $cbSig;
+    $exp  = time() + 10*60;
+    $data = json_encode(['f'=>$folder,'n'=>$file,'u'=>$user,'adm'=>$isAdmin,'exp'=>$exp], JSON_UNESCAPED_SLASHES);
+    $sig  = hash_hmac('sha256', $data, $secret, true);
+    $tok  = $this->b64uEnc($data) . '.' . $this->b64uEnc($sig);
+    $fileUrl = $fileOriginForDocs . '/api/onlyoffice/signed-download.php?tok=' . rawurlencode($tok);
 
-        // Doc type & key
-        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION) ?: 'docx');
-        $docType = in_array($ext, ['xls','xlsx','ods','csv'], true) ? 'cell'
-                : (in_array($ext, ['ppt','pptx','odp'], true) ? 'slide' : 'word');
-        $key = substr(sha1($abs . '|' . (string)filemtime($abs)), 0, 20);
+    $cbExp = time() + 10*60;
+    $cbSig = hash_hmac('sha256', $folder.'|'.$file.'|'.$cbExp, $secret);
+    $callbackUrl = $fileOriginForDocs . '/api/onlyoffice/callback.php'
+      . '?folder=' . rawurlencode($folder)
+      . '&file='   . rawurlencode($file)
+      . '&exp='    . $cbExp
+      . '&sig='    . $cbSig;
 
-        $docsApiJs  = $docsOrigin . '/web-apps/apps/api/documents/api.js';
+    $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION) ?: 'docx');
+    $docType = in_array($ext, ['xls','xlsx','ods','csv'], true) ? 'cell'
+            : (in_array($ext, ['ppt','pptx','odp'], true) ? 'slide' : 'word');
+    $key = substr(sha1($abs . '|' . (string)filemtime($abs)), 0, 20);
 
-        $cfgOut = [
-          'document' => [
-            'fileType' => $ext,
-            'key'      => $key,
-            'title'    => $file,
-            'url'      => $fileUrl,
-            'permissions' => [
-              'download' => true,
-              'print'    => true,
-              'edit' => $canEdit && !in_array($ext, self::OO_NEVER_EDIT, true),
-            ],
-          ],
-          'documentType' => $docType,
-          'editorConfig' => [
-            'callbackUrl' => $callbackUrl,
-            'user'        => ['id'=>$user, 'name'=>$user],
-            'lang'        => 'en',
-          ],
-          'type' => 'desktop',
-        ];
+    $docsApiJs  = $docsOrigin . '/web-apps/apps/api/documents/api.js';
 
-        // JWT sign cfg
-        $h = $this->b64uEnc(json_encode(['alg'=>'HS256','typ'=>'JWT']));
-        $p = $this->b64uEnc(json_encode($cfgOut, JSON_UNESCAPED_SLASHES));
-        $s = $this->b64uEnc(hash_hmac('sha256', "$h.$p", $secret, true));
-        $cfgOut['token'] = "$h.$p.$s";
-        $cfgOut['docs_api_js'] = $docsApiJs;
+    $cfgOut = [
+      'document' => [
+        'fileType' => $ext,
+        'key'      => $key,
+        'title'    => $file,
+        'url'      => $fileUrl,
+        'permissions' => [
+          'download' => true,
+          'print'    => true,
+          'edit'     => $canEdit && !in_array($ext, self::OO_NEVER_EDIT, true),
+        ],
+      ],
+      'documentType' => $docType,
+      'editorConfig' => [
+        'callbackUrl' => $callbackUrl,
+        'user'        => ['id'=>$user, 'name'=>$user],
+        'lang'        => 'en',
+      ],
+      'type' => 'desktop',
+    ];
 
-        echo json_encode($cfgOut, JSON_UNESCAPED_SLASHES);
-    }
+    // JWT sign cfg
+    $h = $this->b64uEnc(json_encode(['alg'=>'HS256','typ'=>'JWT']));
+    $p = $this->b64uEnc(json_encode($cfgOut, JSON_UNESCAPED_SLASHES));
+    $s = $this->b64uEnc(hash_hmac('sha256', "$h.$p", $secret, true));
+    $cfgOut['token'] = "$h.$p.$s";
+
+    // expose to client for preconnect/script load
+    $cfgOut['docs_api_js']          = $docsApiJs;
+    $cfgOut['documentServerOrigin'] = $docsOrigin;
+
+    echo json_encode($cfgOut, JSON_UNESCAPED_SLASHES);
+}
 
     /** POST /api/onlyoffice/callback.php?folder=...&file=...&exp=...&sig=... */
     public function callback(): void
@@ -343,41 +362,52 @@ private function ooLog(string $level, string $msg): void
 
     /** GET /api/onlyoffice/signed-download.php?tok=... */
     public function signedDownload(): void
-    {
-        header('X-Content-Type-Options: nosniff');
-        header('Cache-Control: no-store');
+{
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: no-store');
 
-        $secret = $this->effectiveSecret();
-        if ($secret === '') { http_response_code(403); return; }
+    $secret = $this->effectiveSecret();
+    if ($secret === '') { http_response_code(403); return; }
 
-        $tok = $_GET['tok'] ?? '';
-        if (!$tok || strpos($tok, '.') === false) { http_response_code(400); return; }
-        [$b64data, $b64sig] = explode('.', $tok, 2);
-        $data = $this->b64uDec($b64data);
-        $sig  = $this->b64uDec($b64sig);
-        if ($data === false || $sig === false) { http_response_code(400); return; }
+    $tok = $_GET['tok'] ?? '';
+    if (!$tok || strpos($tok, '.') === false) { http_response_code(400); return; }
+    [$b64data, $b64sig] = explode('.', $tok, 2);
+    $data = $this->b64uDec($b64data);
+    $sig  = $this->b64uDec($b64sig);
+    if ($data === false || $sig === false) { http_response_code(400); return; }
 
-        $calc = hash_hmac('sha256', $data, $secret, true);
-        if (!hash_equals($calc, $sig)) { http_response_code(403); return; }
+    $calc = hash_hmac('sha256', $data, $secret, true);
+    if (!hash_equals($calc, $sig)) { http_response_code(403); return; }
 
-        $payload = json_decode($data, true);
-        if (!$payload || !isset($payload['f'],$payload['n'],$payload['exp'])) { http_response_code(400); return; }
-        if (time() > (int)$payload['exp']) { http_response_code(403); return; }
+    $payload = json_decode($data, true);
+    if (!$payload || !isset($payload['f'],$payload['n'],$payload['exp'])) { http_response_code(400); return; }
+    if (time() > (int)$payload['exp']) { http_response_code(403); return; }
 
-        $folder = trim(str_replace('\\','/',$payload['f']),"/ \t\r\n");
-        if ($folder === '' || $folder === 'root') $folder = 'root';
-        $file   = basename((string)$payload['n']);
+    $folder = trim(str_replace('\\','/',$payload['f']),"/ \t\r\n");
+    if ($folder === '' || $folder === 'root') $folder = 'root';
+    $file   = basename((string)$payload['n']);
 
-        $base = rtrim(UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
-        $rel  = ($folder === 'root') ? '' : ($folder . '/');
-        $abs  = realpath($base . $rel . $file);
-        if (!$abs || !is_file($abs)) { http_response_code(404); return; }
-        if (strpos($abs, realpath($base)) !== 0) { http_response_code(400); return; }
+    $base = rtrim(UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
+    $rel  = ($folder === 'root') ? '' : ($folder . '/');
+    $abs  = realpath($base . $rel . $file);
+    if (!$abs || !is_file($abs)) { http_response_code(404); return; }
+    if (strpos($abs, realpath($base)) !== 0) { http_response_code(400); return; }
 
-        $mime = mime_content_type($abs) ?: 'application/octet-stream';
-        header('Content-Type: '.$mime);
-        header('Content-Length: '.filesize($abs));
-        header('Content-Disposition: inline; filename="' . rawurlencode($file) . '"');
-        readfile($abs);
+    // Common headers
+    $mime = mime_content_type($abs) ?: 'application/octet-stream';
+    $len  = filesize($abs);
+    header('Content-Type: '.$mime);
+    header('Content-Length: '.$len);
+    header('Content-Disposition: inline; filename="' . rawurlencode($file) . '"');
+    header('Accept-Ranges: none'); // OO doesn’t require ranges; avoids partial edge-cases
+
+    // ---- Key change: for HEAD, do NOT read the file ----
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+        // send headers only; no body
+        return;
     }
+
+    // GET → stream the file
+    readfile($abs);
+}
 }

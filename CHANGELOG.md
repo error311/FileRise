@@ -1,5 +1,44 @@
 # Changelog
 
+## Changes 11/8/2025 (v1.8.10)
+
+release(v1.8.10): theme-aware media modal, stronger file drag-and-drop, unified progress color, and favicon overhaul
+
+UI/UX — Media modal
+
+- Add fixed top bar to avoid filename/controls overlapping native media chrome; keep hover-on-stage look.
+- Show a Material icon by file type next to the filename (image/video/pdf/code/arch/txt, with fallback).
+- Restore “X” behavior and make hover theme-aware (red pill + white ‘X’ in light, red pill + black ‘X’ in dark).
+
+Video/Image controls
+
+- Top-right action icons use theme-aware styles and align with the filename row.
+- Prev/Next paddles remain high-contrast and vertically centered within the stage.
+
+Progress badges (list & modal)
+
+- Standardize “in-progress” to darker orange (#ea580c) for better contrast in light/dark; update CSS and list badge rendering.
+
+Drag & drop
+
+- Support multi-select drags with a clean JSON payload + text fallback; nicer drag ghost.
+- More resilient drops: accept data-dest-folder, safer JSON parse, early guards, and better toasts.
+- POST move now sends Accept header, uses global CSRF, and refreshes the active view on success.
+
+Editor & ONLYOFFICE
+
+- Full-screen OO modal with preconnect, optional hidden warm-up to reduce first-open latency, and live theme sync.
+- CodeMirror path: fix theme/mode setters (use `cm`) and tighten dynamic mode loading.
+
+Assets & polish
+
+- Swap in full favicon stack (SVG + PNG 512/32/16 + ICO) and set theme-color; cache-busted via `{{APP_QVER}}`.
+- Refresh `logo.svg` (accessibility, cleaner handles/gradients).
+
+Also added: refreshed resource images and new logo sizes (logo-16, logo-32, logo-64, etc.) for crisper favicons and embeds.
+
+---
+
 ## Changes 11/7/2025 (v1.8.9)
 
 release(v1.8.9): fix(oidc, admin): first-save Client ID/Secret (closes #64)

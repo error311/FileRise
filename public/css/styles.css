@@ -1919,12 +1919,12 @@ body {
   color: #fff;
 }
 .status-badge.watched {
-  border-color: rgba(34,197,94,.35);      /* green-ish */
+  border-color: rgba(34,197,94,.45);      /* green-ish */
   background: rgba(34,197,94,.15);
 }
 .status-badge.progress {
-  border-color: rgba(250,204,21,.35);     /* amber-ish */
-  background: rgba(250,204,21,.15);
+  border-color: rgba(234,88,12,.55);     /* amber-ish */
+  background: rgba(234,88,12,.18);
 }
 #downloadProgressModal .modal-body,
 #downloadProgressModal .rise-modal-body,

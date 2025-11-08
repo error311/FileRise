@@ -2,124 +2,163 @@
 import { showToast } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 
-export function fileDragStartHandler(event) {
-  const row = event.currentTarget;
-  let fileNames = [];
-
-  const selectedCheckboxes = document.querySelectorAll("#fileList .file-checkbox:checked");
-  if (selectedCheckboxes.length > 1) {
-    selectedCheckboxes.forEach(chk => {
-      const parentRow = chk.closest("tr");
-      if (parentRow) {
-        const cell = parentRow.querySelector("td:nth-child(2)");
-        if (cell) {
-          let rawName = cell.textContent.trim();
-          const tagContainer = cell.querySelector(".tag-badges");
-          if (tagContainer) {
-            const tagText = tagContainer.innerText.trim();
-            if (rawName.endsWith(tagText)) {
-              rawName = rawName.slice(0, -tagText.length).trim();
-            }
-          }
-          fileNames.push(rawName);
-        }
-      }
-    });
-  } else {
-    const fileNameCell = row.querySelector("td:nth-child(2)");
-    if (fileNameCell) {
-      let rawName = fileNameCell.textContent.trim();
-      const tagContainer = fileNameCell.querySelector(".tag-badges");
-      if (tagContainer) {
-        const tagText = tagContainer.innerText.trim();
-        if (rawName.endsWith(tagText)) {
-          rawName = rawName.slice(0, -tagText.length).trim();
-        }
-      }
-      fileNames.push(rawName);
-    }
-  }
-
-  if (fileNames.length === 0) return;
-
-  const dragData = fileNames.length === 1 
-    ? { fileName: fileNames[0], sourceFolder: window.currentFolder || "root" }
-    : { files: fileNames, sourceFolder: window.currentFolder || "root" };
-
-  event.dataTransfer.setData("application/json", JSON.stringify(dragData));
-
-  let dragImage = document.createElement("div");
-  dragImage.style.display = "inline-flex";
-  dragImage.style.width = "auto";
-  dragImage.style.maxWidth = "fit-content";
-  dragImage.style.padding = "6px 10px";
-  dragImage.style.backgroundColor = "#333";
-  dragImage.style.color = "#fff";
-  dragImage.style.border = "1px solid #555";
-  dragImage.style.borderRadius = "4px";
-  dragImage.style.alignItems = "center";
-  dragImage.style.boxShadow = "2px 2px 6px rgba(0,0,0,0.3)";
-  const icon = document.createElement("span");
-  icon.className = "material-icons";
-  icon.textContent = "insert_drive_file";
-  icon.style.marginRight = "4px";
-  const label = document.createElement("span");
-  label.textContent = fileNames.length === 1 ? fileNames[0] : fileNames.length + " files";
-  dragImage.appendChild(icon);
-  dragImage.appendChild(label);
-  
-  document.body.appendChild(dragImage);
-  event.dataTransfer.setDragImage(dragImage, 5, 5);
-  setTimeout(() => {
-    document.body.removeChild(dragImage);
-  }, 0);
+/* ---------------- helpers ---------------- */
+function getRowEl(el) {
+  return el?.closest('tr[data-file-name], .gallery-card[data-file-name]') || null;
+}
+function getNameFromAny(el) {
+  const row = getRowEl(el);
+  if (!row) return null;
+  // 1) canonical
+  const n = row.getAttribute('data-file-name');
+  if (n) return n;
+  // 2) filename-only span
+  const span = row.querySelector('.filename-text');
+  if (span) return span.textContent.trim();
+  return null;
+}
+function getSelectedFileNames() {
+  const boxes = Array.from(document.querySelectorAll('#fileList .file-checkbox:checked'));
+  const names = boxes.map(cb => getNameFromAny(cb)).filter(Boolean);
+  // de-dup just in case
+  return Array.from(new Set(names));
+}
+function makeDragImage(labelText, iconName = 'insert_drive_file') {
+  const wrap = document.createElement('div');
+  Object.assign(wrap.style, {
+    display: 'inline-flex',
+    maxWidth: '420px',
+    padding: '6px 10px',
+    backgroundColor: '#333',
+    color: '#fff',
+    border: '1px solid #555',
+    borderRadius: '6px',
+    alignItems: 'center',
+    gap: '6px',
+    boxShadow: '2px 2px 6px rgba(0,0,0,0.3)',
+    fontSize: '12px',
+    pointerEvents: 'none'
+  });
+  const icon = document.createElement('span');
+  icon.className = 'material-icons';
+  icon.textContent = iconName;
+  const label = document.createElement('span');
+  // trim long single-name labels
+  const txt = String(labelText || '');
+  label.textContent = txt.length > 60 ? (txt.slice(0, 57) + '…') : txt;
+  wrap.appendChild(icon);
+  wrap.appendChild(label);
+  document.body.appendChild(wrap);
+  return wrap;
 }
 
+/* ---------------- drag start (rows/cards) ---------------- */
+export function fileDragStartHandler(event) {
+  const row = getRowEl(event.currentTarget);
+  if (!row) return;
+
+  // Use current selection if present; otherwise drag just this row’s file
+  let names = getSelectedFileNames();
+  if (names.length === 0) {
+    const single = getNameFromAny(row);
+    if (single) names = [single];
+  }
+  if (names.length === 0) return;
+
+  const sourceFolder = window.currentFolder || 'root';
+  const payload = { files: names, sourceFolder };
+
+  // primary payload
+  event.dataTransfer.setData('application/json', JSON.stringify(payload));
+  // fallback (lets some environments read something human)
+  event.dataTransfer.setData('text/plain', names.join('\n'));
+
+  // nicer drag image
+  const dragLabel = (names.length === 1) ? names[0] : `${names.length} files`;
+  const ghost = makeDragImage(dragLabel, names.length === 1 ? 'insert_drive_file' : 'folder');
+  event.dataTransfer.setDragImage(ghost, 6, 6);
+  // clean up the ghost as soon as the browser has captured it
+  setTimeout(() => { try { document.body.removeChild(ghost); } catch { } }, 0);
+}
+
+/* ---------------- folder targets ---------------- */
 export function folderDragOverHandler(event) {
   event.preventDefault();
-  event.currentTarget.classList.add("drop-hover");
+  event.currentTarget.classList.add('drop-hover');
 }
-
 export function folderDragLeaveHandler(event) {
-  event.currentTarget.classList.remove("drop-hover");
+  event.currentTarget.classList.remove('drop-hover');
 }
 
-export function folderDropHandler(event) {
+export async function folderDropHandler(event) {
   event.preventDefault();
-  event.currentTarget.classList.remove("drop-hover");
-  const dropFolder = event.currentTarget.getAttribute("data-folder");
-  let dragData;
+  event.currentTarget.classList.remove('drop-hover');
+
+  const dropFolder = event.currentTarget.getAttribute('data-folder')
+    || event.currentTarget.getAttribute('data-dest-folder')
+    || 'root';
+
+  // parse drag payload
+  let dragData = null;
   try {
-    dragData = JSON.parse(event.dataTransfer.getData("application/json"));
-  } catch (e) {
-    console.error("Invalid drag data");
+    const raw = event.dataTransfer.getData('application/json') || '{}';
+    dragData = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  if (!dragData) {
+    showToast('Invalid drag data.');
     return;
   }
-  if (!dragData || !dragData.fileName) return;
-  fetch("/api/file/moveFiles.php", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
-    },
-    body: JSON.stringify({
-      source: dragData.sourceFolder,
-      files: [dragData.fileName],
-      destination: dropFolder
-    })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        showToast(`File "${dragData.fileName}" moved successfully to ${dropFolder}!`);
-        loadFileList(dragData.sourceFolder);
-      } else {
-        showToast("Error moving file: " + (data.error || "Unknown error"));
-      }
-    })
-    .catch(error => {
-      console.error("Error moving file via drop:", error);
-      showToast("Error moving file.");
+
+  // normalize names
+  let names = Array.isArray(dragData.files) ? dragData.files.slice()
+    : dragData.fileName ? [dragData.fileName]
+      : [];
+  names = names.filter(v => typeof v === 'string' && v.length > 0);
+
+  if (names.length === 0) {
+    showToast('No files to move.');
+    return;
+  }
+
+  const sourceFolder = dragData.sourceFolder || (window.currentFolder || 'root');
+  if (dropFolder === sourceFolder) {
+    showToast('Source and destination are the same.');
+    return;
+  }
+
+  // POST move
+  try {
+    const res = await fetch('/api/file/moveFiles.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-Token': window.csrfToken
+      },
+      body: JSON.stringify({
+        source: sourceFolder,
+        files: names,
+        destination: dropFolder
+      })
     });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data && data.success) {
+      const msg = (names.length === 1)
+        ? `Moved "${names[0]}" to ${dropFolder}.`
+        : `Moved ${names.length} files to ${dropFolder}.`;
+      showToast(msg);
+      // Refresh whatever view the user is currently looking at
+      loadFileList(window.currentFolder || sourceFolder);
+    } else {
+      const err = (data && (data.error || data.message)) || `HTTP ${res.status}`;
+      showToast('Error moving file(s): ' + err);
+    }
+  } catch (e) {
+    console.error('Error moving file(s):', e);
+    showToast('Error moving file(s).');
+  }
 }

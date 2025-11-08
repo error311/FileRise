@@ -3,17 +3,24 @@
 
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FileRise</title>
+  <meta name="theme-color" content="#0b5ed7">
   <script>(function(){try{var s=localStorage.getItem('darkMode');var isDark=(s===null)?(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches):(s==='1'||s==='true');var root=document.documentElement;root.setAttribute('data-theme',isDark?'dark':'light');root.classList.toggle('dark-mode',isDark);var bg=isDark?'#121212':'#ffffff';root.style.backgroundColor=bg;root.style.colorScheme=isDark?'dark':'light';root.style.setProperty('--pre-bg',bg);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',bg);}catch(e){}})();</script>
   <style id="pretheme-css">
     html,body,#loadingOverlay{background:var(--pre-bg,#ffffff) !important;}
   </style>
-  <link rel="icon" type="image/png" href="/assets/logo.png"><link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+  <!-- Favicons (ordered: SVG -> PNGs -> ICO) -->
+  <link rel="icon" href="/assets/logo.svg?v={{APP_QVER}}" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="/assets/logo.png?v={{APP_QVER}}" type="image/png" sizes="512x512">
+  <link rel="icon" href="/assets/logo-32.png?v={{APP_QVER}}" type="image/png" sizes="32x32">
+  <link rel="icon" href="/assets/logo-16.png?v={{APP_QVER}}" type="image/png" sizes="16x16">
+  <link rel="shortcut icon" href="/assets/favicon.ico?v={{APP_QVER}}">
+  
   <meta name="description" content="FileRise is a fast, self-hosted file manager with granular per-folder ACLs, drag-and-drop folder moves, WebDAV, tagging, and a clean UI.">
-  <meta name="csrf-token" content=""><meta name="share-url" content=""><meta name="theme-color" content="#0b5ed7"><meta name="color-scheme" content="light dark">
+  <meta name="csrf-token" content=""><meta name="share-url" content=""><meta name="color-scheme" content="light dark">
   <link rel="manifest" href="/manifest.webmanifest?v={{APP_QVER}}">
   <link rel="apple-touch-icon" href="/assets/icons/icon-192.png?v={{APP_QVER}}">
   
-<!-- Critical CSS -->
+  <!-- Critical CSS -->
   <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
   <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
   <link rel="stylesheet" href="/css/vendor/roboto.css?v={{APP_QVER}}">

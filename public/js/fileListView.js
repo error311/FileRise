@@ -182,7 +182,7 @@ function makeBadge(state) {
     el.classList.add('watched');
     el.textContent = (t('watched') || t('viewed') || 'Watched');
     el.style.borderColor = 'rgba(34,197,94,.45)';
-    el.style.background  = 'rgba(34,197,94,.12)';
+    el.style.background  = 'rgba(34,197,94,.15)';
     el.style.color       = '#22c55e';
     return el;
   }
@@ -191,9 +191,9 @@ function makeBadge(state) {
     const pct = Math.max(1, Math.min(99, Math.round((state.seconds / state.duration) * 100)));
     el.classList.add('progress');
     el.textContent = `${pct}%`;
-    el.style.borderColor = 'rgba(245,158,11,.45)';
-    el.style.background  = 'rgba(245,158,11,.12)';
-    el.style.color       = '#f59e0b';
+    el.style.borderColor = 'rgba(234,88,12,.55)';
+    el.style.background  = 'rgba(234,88,12,.18)';
+    el.style.color       = '#ea580c';
     return el;
   }
 

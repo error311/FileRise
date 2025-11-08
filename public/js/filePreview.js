@@ -123,6 +123,21 @@ export function openShareModal(file, folder) {
 const IMG_RE = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i;
 const VID_RE = /\.(mp4|mkv|webm|mov|ogv)$/i;
 const AUD_RE = /\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i;
+const ARCH_RE = /\.(zip|rar|7z|gz|bz2|xz|tar)$/i;
+const CODE_RE = /\.(js|mjs|ts|tsx|json|yml|yaml|xml|html?|css|scss|less|php|py|rb|go|rs|c|cpp|h|hpp|java|cs|sh|bat|ps1)$/i;
+const TXT_RE  = /\.(txt|rtf|md|log)$/i;
+
+function getIconForFile(name) {
+  const lower = (name || '').toLowerCase();
+  if (IMG_RE.test(lower)) return 'image';
+  if (VID_RE.test(lower)) return 'ondemand_video';
+  if (AUD_RE.test(lower)) return 'audiotrack';
+  if (lower.endsWith('.pdf')) return 'picture_as_pdf';
+  if (ARCH_RE.test(lower)) return 'archive';
+  if (CODE_RE.test(lower)) return 'code';
+  if (TXT_RE.test(lower)) return 'description';
+  return 'insert_drive_file';
+}
 
 function ensureMediaModal() {
   let overlay = document.getElementById("filePreviewModal");
@@ -152,109 +167,166 @@ function ensureMediaModal() {
   const navFg     = '#fff';
   const navBorder = isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)';
 
+  // fixed top bar; pad-right to avoid overlap with absolute close “×”
   overlay.innerHTML = `
     <div class="modal-content media-modal" style="
       position: relative;
       max-width: 92vw;
-      max-height: 92vh;
       width: 92vw;
+      max-height: 92vh;
+      height: 92vh;
       box-sizing: border-box;
-      padding: 12px;
       background: ${panelBg};
       color: ${textCol};
       overflow: hidden;
       border-radius: 10px;
+      display:flex; flex-direction:column;
     ">
-      <div class="media-stage" style="position:relative; display:flex; align-items:center; justify-content:center; height: calc(92vh - 8px);">
-        <!-- filename badge (top-left) -->
-        <div class="media-title-badge" style="
-          position:absolute; top:8px; left:12px; max-width:60vw;
-          padding:4px 10px; border-radius:10px;
-          background: ${isDark ? 'rgba(0,0,0,.55)' : 'rgba(255,255,255,.65)'};
-          color: ${isDark ? '#fff' : '#111'};
-          font-weight:600; font-size:13px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; z-index:1002;">
+      <!-- Top bar -->
+      <div class="media-topbar" style="
+        flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+        height:44px; padding:6px 12px; padding-right:56px; gap:10px;
+        border-bottom:1px solid ${isDark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.08)'};
+        background:${panelBg};
+      ">
+        <div class="media-title" style="display:flex; align-items:center; gap:8px; min-width:0;">
+          <span class="material-icons title-icon" style="
+            width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;
+            font-size:22px; line-height:1; opacity:${isDark ? '0.96' : '0.9'};">
+            insert_drive_file
+          </span>
+          <div class="title-text" style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
         </div>
-
-        <!-- top-right actions row (aligned with your X at top:10px) -->
-        <div class="media-actions-bar" style="
-          position:absolute; top:10px; right:56px; display:flex; gap:6px; align-items:center; z-index:1002;">
+        <div class="media-right" style="display:flex; align-items:center; gap:8px;">
           <span class="status-chip" style="
-            display:none; padding:4px 8px; border-radius:999px; font-size:12px; line-height:1;
-            border:1px solid rgba(250,204,21,.45); background:rgba(250,204,21,.15); color:#facc15;"></span>
-          <div class="action-group" style="display:flex; gap:6px;"></div>
+   display:none; padding:4px 8px; border-radius:999px; font-size:12px; line-height:1;
+   border:1px solid transparent; background:transparent; color:inherit;"></span>
+          <div class="action-group" style="display:flex; gap:8px; align-items:center;"></div>
         </div>
+      </div>
 
-        <!-- your absolute close X -->
-        <span id="closeFileModal" class="close-image-modal" title="${t('close')}">&times;</span>
-
-        <!-- centered media -->
+      <!-- Stage -->
+      <div class="media-stage" style="position:relative; flex:1 1 auto; display:flex; align-items:center; justify-content:center; overflow:hidden;">
         <div class="file-preview-container" style="position:relative; text-align:center; flex:1; min-width:0;"></div>
 
-        <!-- high-contrast prev/next -->
+        <!-- prev/next = rounded rectangles with centered glyphs -->
         <button class="nav-left"  aria-label="${t('previous')||'Previous'}" style="
           position:absolute; left:8px; top:50%; transform:translateY(-50%);
-          height:56px; min-width:44px; padding:0 12px; font-size:42px; line-height:1;
+          height:56px; min-width:48px; padding:0 14px;
+          display:flex; align-items:center; justify-content:center;
+          font-size:38px; line-height:0;
           background:${navBg}; color:${navFg}; border:1px solid ${navBorder};
           text-shadow: 0 1px 2px rgba(0,0,0,.6);
           border-radius:12px; cursor:pointer; display:none; z-index:1001; backdrop-filter: blur(2px);
           box-shadow: 0 2px 8px rgba(0,0,0,.35);">‹</button>
         <button class="nav-right" aria-label="${t('next')||'Next'}" style="
           position:absolute; right:8px; top:50%; transform:translateY(-50%);
-          height:56px; min-width:44px; padding:0 12px; font-size:42px; line-height:1;
+          height:56px; min-width:48px; padding:0 14px;
+          display:flex; align-items:center; justify-content:center;
+          font-size:38px; line-height:0;
           background:${navBg}; color:${navFg}; border:1px solid ${navBorder};
           text-shadow: 0 1px 2px rgba(0,0,0,.6);
           border-radius:12px; cursor:pointer; display:none; z-index:1001; backdrop-filter: blur(2px);
           box-shadow: 0 2px 8px rgba(0,0,0,.35);">›</button>
       </div>
+
+      <!-- Absolute close “×” (like original), themed + hover behavior -->
+      <span id="closeFileModal" class="close-image-modal" title="${t('close')}" style="
+        position:absolute; top:8px; right:10px; z-index:1002;
+        width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center;
+        font-size:22px; cursor:pointer; user-select:none; border-radius:50%; transition:all .15s ease;
+      ">&times;</span>
     </div>`;
 
   document.body.appendChild(overlay);
+
+  // theme the close “×” for visibility + hover rules that match your site:
+  const closeBtn = overlay.querySelector("#closeFileModal");
+  function paintCloseBase() {
+    closeBtn.style.backgroundColor = 'transparent';
+    closeBtn.style.color = '#e11d48'; // base red X
+    closeBtn.style.boxShadow = 'none';
+  }
+  function onCloseHoverEnter() {
+    const dark = document.documentElement.classList.contains('dark-mode');
+    closeBtn.style.backgroundColor = '#ef4444'; // red fill
+    closeBtn.style.color = dark ? '#000' : '#fff'; // X: black in dark / white in light
+    closeBtn.style.boxShadow = '0 0 6px rgba(239,68,68,.6)';
+  }
+  function onCloseHoverLeave() { paintCloseBase(); }
+  paintCloseBase();
+  closeBtn.addEventListener('mouseenter', onCloseHoverEnter);
+  closeBtn.addEventListener('mouseleave', onCloseHoverLeave);
 
   function closeModal() {
     try { overlay.querySelectorAll("video,audio").forEach(m => { try{m.pause()}catch(_){}}); } catch {}
     if (overlay._onKey) window.removeEventListener('keydown', overlay._onKey);
     overlay.remove();
   }
-  overlay.querySelector("#closeFileModal").addEventListener("click", closeModal);
+  closeBtn.addEventListener("click", closeModal);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
 
   return overlay;
 }
 
 function setTitle(overlay, name) {
-  const el = overlay.querySelector('.media-title-badge');
-  if (el) el.textContent = name || '';
+  const textEl = overlay.querySelector('.title-text');
+  const iconEl = overlay.querySelector('.title-icon');
+  if (textEl) {
+    textEl.textContent = name || '';
+    textEl.setAttribute('title', name || '');
+  }
+  if (iconEl) {
+    iconEl.textContent = getIconForFile(name);
+    // keep the icon legible in both themes
+    const dark = document.documentElement.classList.contains('dark-mode');
+    iconEl.style.color = dark ? '#f5f5f5' : '#111111';
+    iconEl.style.opacity = dark ? '0.96' : '0.9';
+  }
 }
 
-function makeMI(name, title) {
+// Topbar icon (theme-aware) used for image tools + video actions
+function makeTopIcon(name, title) {
   const b = document.createElement('button');
-  b.className = `material-icons ${name}`;
-  b.textContent = name; // Material Icons font
+  b.className = 'material-icons';
+  b.textContent = name;
   b.title = title;
+
+  const dark = document.documentElement.classList.contains('dark-mode');
+
   Object.assign(b.style, {
-    width: "32px",
-    height: "32px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "rgba(0,0,0,.25)",
-    border: "1px solid rgba(255,255,255,.25)",
-    cursor: "pointer",
-    userSelect: "none",
-    fontSize: "20px",
-    padding: "0",
-    borderRadius: "8px",
-    color: "#fff",
-    lineHeight: "1"
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: dark ? '1px solid rgba(255,255,255,.25)' : '1px solid rgba(0,0,0,.15)',
+    background: dark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.08)',
+    cursor: 'pointer',
+    fontSize: '20px',
+    lineHeight: '1',
+    color: dark ? '#f5f5f5' : '#111',
+    boxShadow: dark ? '0 1px 2px rgba(0,0,0,.6)' : '0 1px 1px rgba(0,0,0,.08)'
   });
+
+  b.addEventListener('mouseenter', () => {
+    const darkNow = document.documentElement.classList.contains('dark-mode');
+    b.style.background = darkNow ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.14)';
+  });
+  b.addEventListener('mouseleave', () => {
+    const darkNow = document.documentElement.classList.contains('dark-mode');
+    b.style.background = darkNow ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.08)';
+  });
+
   return b;
 }
 
 function setNavVisibility(overlay, showPrev, showNext) {
   const prev = overlay.querySelector('.nav-left');
   const next = overlay.querySelector('.nav-right');
-  prev.style.display = showPrev ? 'inline-flex' : 'none';
-  next.style.display = showNext ? 'inline-flex' : 'none';
+  prev.style.display = showPrev ? 'flex' : 'none';
+  next.style.display = showNext ? 'flex' : 'none';
 }
 
 function setRowWatchedBadge(name, watched) {
@@ -280,8 +352,8 @@ function setRowWatchedBadge(name, watched) {
 export function previewFile(fileUrl, fileName) {
   const overlay    = ensureMediaModal();
   const container  = overlay.querySelector(".file-preview-container");
-  const actionWrap = overlay.querySelector(".media-actions-bar .action-group");
-  const statusChip = overlay.querySelector(".media-actions-bar .status-chip");
+  const actionWrap = overlay.querySelector(".media-right .action-group");
+  const statusChip = overlay.querySelector(".media-right .status-chip");
 
   // replace nav buttons to clear old listeners
   let prevBtn = overlay.querySelector('.nav-left');
@@ -320,10 +392,11 @@ export function previewFile(fileUrl, fileName) {
     img.dataset.rotate = 0;
     container.appendChild(img);
 
-    const zoomInBtn   = makeMI('zoom_in',      t('zoom_in')       || 'Zoom In');
-    const zoomOutBtn  = makeMI('zoom_out',     t('zoom_out')      || 'Zoom Out');
-    const rotateLeft  = makeMI('rotate_left',  t('rotate_left')   || 'Rotate Left');
-    const rotateRight = makeMI('rotate_right', t('rotate_right')  || 'Rotate Right');
+    // topbar-aligned, theme-aware icons
+    const zoomInBtn   = makeTopIcon('zoom_in',      t('zoom_in')       || 'Zoom In');
+    const zoomOutBtn  = makeTopIcon('zoom_out',     t('zoom_out')      || 'Zoom Out');
+    const rotateLeft  = makeTopIcon('rotate_left',  t('rotate_left')   || 'Rotate Left');
+    const rotateRight = makeTopIcon('rotate_right', t('rotate_right')  || 'Rotate Right');
     actionWrap.appendChild(zoomInBtn);
     actionWrap.appendChild(zoomOutBtn);
     actionWrap.appendChild(rotateLeft);
@@ -405,14 +478,11 @@ export function previewFile(fileUrl, fileName) {
     video.style.objectFit = "contain";
     container.appendChild(video);
 
-    const markBtn  = document.createElement('button');
-    const clearBtn = document.createElement('button');
-    markBtn.className  = 'btn btn-sm btn-success';
-    clearBtn.className = 'btn btn-sm btn-secondary';
-    markBtn.textContent  = t("mark_as_viewed") || "Mark as viewed";
-    clearBtn.textContent = t("clear_progress") || "Clear progress";
-    actionWrap.appendChild(markBtn);
-    actionWrap.appendChild(clearBtn);
+    // Top-right action icons (Material icons, theme-aware)
+    const markBtnIcon  = makeTopIcon('check_circle', t("mark_as_viewed") || "Mark as viewed");
+    const clearBtnIcon = makeTopIcon('restart_alt',  t("clear_progress") || "Clear progress");
+    actionWrap.appendChild(markBtnIcon);
+    actionWrap.appendChild(clearBtnIcon);
 
     const videos = (Array.isArray(fileData) ? fileData : []).filter(f => VID_RE.test(f.name));
     overlay.mediaType  = 'video';
@@ -453,15 +523,14 @@ export function previewFile(fileUrl, fileName) {
       if (!statusChip) return;
       // Completed
       if (state && state.completed) {
-        
         statusChip.textContent = (t('viewed') || 'Viewed') + ' ✓';
         statusChip.style.display = 'inline-block';
         statusChip.style.borderColor = 'rgba(34,197,94,.45)';
         statusChip.style.background  = 'rgba(34,197,94,.15)';
         statusChip.style.color       = '#22c55e';
-        markBtn.style.display  = 'none';
-        clearBtn.style.display = '';
-        clearBtn.textContent   = t('reset_progress') || t('clear_progress') || 'Reset';
+        markBtnIcon.style.display  = 'none';
+        clearBtnIcon.style.display = '';
+        clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
         return;
       }
       // In progress
@@ -469,18 +538,20 @@ export function previewFile(fileUrl, fileName) {
         const pct = Math.max(1, Math.min(99, Math.round((state.seconds / state.duration) * 100)));
         statusChip.textContent = `${pct}%`;
         statusChip.style.display = 'inline-block';
-        statusChip.style.borderColor = 'rgba(250,204,21,.45)';
-        statusChip.style.background  = 'rgba(250,204,21,.15)';
-        statusChip.style.color       = '#facc15';
-        markBtn.style.display  = '';
-        clearBtn.style.display = '';
-        clearBtn.textContent   = t('reset_progress') || t('clear_progress') || 'Reset';
+        const dark = document.documentElement.classList.contains('dark-mode');
+ const ORANGE_HEX = '#ea580c'; // darker orange (works in light/dark)
+ statusChip.style.color       = ORANGE_HEX;
+ statusChip.style.borderColor = dark ? 'rgba(234,88,12,.55)' : 'rgba(234,88,12,.45)';  // #ea580c @ different alphas
+ statusChip.style.background  = dark ? 'rgba(234,88,12,.18)' : 'rgba(234,88,12,.12)';
+        markBtnIcon.style.display  = '';
+        clearBtnIcon.style.display = '';
+        clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
         return;
       }
       // No progress
       statusChip.style.display = 'none';
-      markBtn.style.display  = '';
-      clearBtn.style.display = 'none';
+      markBtnIcon.style.display  = '';
+      clearBtnIcon.style.display = 'none';
     }
 
     function bindVideoEvents(nm) {
@@ -494,8 +565,8 @@ export function previewFile(fileUrl, fileName) {
           if (state && Number.isFinite(state.seconds) && state.seconds > 0 && state.seconds < (video.duration || Infinity)) {
             video.currentTime = state.seconds;
             const seconds = Math.floor(video.currentTime || 0);
-const duration = Math.floor(video.duration || 0);
-setFileProgressBadge(nm, seconds, duration);
+            const duration = Math.floor(video.duration || 0);
+            setFileProgressBadge(nm, seconds, duration);
             showToast((t("resumed_from") || "Resumed from") + " " + Math.floor(state.seconds) + "s");
           } else {
             const ls = localStorage.getItem(lsKey(nm));
@@ -528,14 +599,14 @@ setFileProgressBadge(nm, seconds, duration);
         renderStatus({ seconds: duration, duration, completed: true });
       });
 
-      markBtn.onclick = async () => {
+      markBtnIcon.onclick = async () => {
         const duration = Math.floor(video.duration || 0);
         await sendProgress({ nm, seconds: duration, duration, completed: true });
         showToast(t("marked_viewed") || "Marked as viewed");
         setFileWatchedBadge(nm, true);
         renderStatus({ seconds: duration, duration, completed: true });
       };
-      clearBtn.onclick = async () => {
+      clearBtnIcon.onclick = async () => {
         await sendProgress({ nm, seconds: 0, duration: null, completed: false, clear: true });
         try { localStorage.removeItem(lsKey(nm)); } catch {}
         showToast(t("progress_cleared") || "Progress cleared");
