@@ -29,8 +29,9 @@ New: Open and edit Office documents — **Word (DOCX)**, **Excel (XLSX)**, **Pow
 
 <https://github.com/user-attachments/assets/a2240300-6348-4de7-b72f-1b85b7da3a08>
 
-**Dark mode:**
-![Dark Header](https://raw.githubusercontent.com/error311/FileRise/refs/heads/master/resources/dark-header.png)
+**gif:**
+![filerise-v1 8 10-latest](https://github.com/user-attachments/assets/f966d66b-b13b-473b-b266-3ab316740a84)
+
 
 ---
 
