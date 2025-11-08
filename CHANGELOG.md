@@ -2,7 +2,7 @@
 
 ## Changes 11/8/2025 (v1.8.11)
 
-release (v1.8.11): fix(oidc): always send PKCE (S256) and treat empty secret as public client
+release(v1.8.11): fix(oidc): always send PKCE (S256) and treat empty secret as public client
 
 - Force PKCE via setCodeChallengeMethod('S256') so Authelia’s public-client policy is satisfied.
 - Convert empty OIDC client secret to null to correctly signal a public client.
