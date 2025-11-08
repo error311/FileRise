@@ -1,528 +1,385 @@
 // dragAndDrop.js
-// Enhances the dashboard with drag-and-drop functionality for cards:
-// - injects a tiny floating toggle btn
-// - remembers collapsed state in localStorage
-// - keeps the original card DnD + order logic intact
+// Cards can live in 3 places and will persist across refresh:
+//  - Sidebar:     #sidebarDropArea
+//  - Top zone:    #leftCol or #rightCol
+//  - Header zone: #headerDropArea (as icons with modal)
+// Responsive rule remains:
+//  - Wide screens default to sidebar.
+//  - Small screens auto-lift sidebar cards into top zone (ephemeral, does NOT overwrite saved layout).
 
-// ---- responsive defaults ----
-const MEDIUM_MIN = 1205;      // matches your small-screen cutoff
-const MEDIUM_MAX = 1600;      
-
+// -------------------- constants --------------------
+const MEDIUM_MIN = 1205;                 // small-screen cutoff
 const TOGGLE_TOP_PX = 8;
-const TOGGLE_LEFT_PX = 50;
-
+const TOGGLE_LEFT_PX = 65;
 const TOGGLE_ICON_OPEN = 'view_sidebar';
 const TOGGLE_ICON_CLOSED = 'menu';
 
-// Cards we manage
-const KNOWN_CARD_IDS = ['uploadCard', 'folderManagementCard'];
-
 const CARD_IDS = ['uploadCard', 'folderManagementCard'];
+const ZONES = {
+  SIDEBAR: 'sidebarDropArea',
+  TOP_LEFT: 'leftCol',
+  TOP_RIGHT: 'rightCol',
+  HEADER: 'headerDropArea',
+};
+const LAYOUT_KEY = 'userZonesSnapshot.v2';          // {cardId: zoneId}
+const RESPONSIVE_STASH_KEY = 'responsiveSidebarSnapshot.v2'; // [cardId]
 
-// --- NEW: separate user snapshot so refresh restores *manual* placements only ---
-const USER_SNAPSHOT_KEY = 'userZonesSnapshot';   // { cardId: 'sidebarDropArea'|'leftCol'|'rightCol' }
+// -------------------- small helpers --------------------
+function $(id) { return document.getElementById(id); }
+function getSidebar() { return $(ZONES.SIDEBAR); }
+function getTopZone() { return $('uploadFolderRow'); }
+function getLeftCol() { return $(ZONES.TOP_LEFT); }
+function getRightCol() { return $(ZONES.TOP_RIGHT); }
+function getHeaderDropArea() { return $(ZONES.HEADER); }
+function isSmallScreen() { return window.innerWidth < MEDIUM_MIN; }
+function getCards() { return CARD_IDS.map(id => $(id)).filter(Boolean); }
 
-function hasUserSnapshot() {
-  try { const s = JSON.parse(localStorage.getItem(USER_SNAPSHOT_KEY) || '{}'); return !!s && Object.keys(s).length > 0; } catch { return false; }
+function readLayout() {
+  try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); }
+  catch { return {}; }
+}
+function writeLayout(layout) {
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout || {}));
 }
 
-function isDarkMode() {
-  return document.body.classList.contains('dark-mode');
+function setLayoutFor(cardId, zoneId) {
+  const layout = readLayout();
+  layout[cardId] = zoneId;
+  writeLayout(layout);
 }
 
 function themeToggleButton(btn) {
   if (!btn) return;
-  if (isDarkMode()) {
-    btn.style.background = '#2c2c2c';
-    btn.style.border = '1px solid #555';
-    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.35)';
-    btn.style.color = '#e0e0e0';       // <- material icon inherits this
-  } else {
-    btn.style.background = '#fff';
-    btn.style.border = '1px solid #ccc';
-    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.15)';
-    btn.style.color = '#222';          // <- material icon inherits this
-  }
+  const dark = document.body.classList.contains('dark-mode');
+  btn.style.background = dark ? '#2c2c2c' : '#fff';
+  btn.style.border = dark ? '1px solid #555' : '1px solid #ccc';
+  btn.style.boxShadow = dark ? '0 2px 6px rgba(0,0,0,.35)' : '0 2px 6px rgba(0,0,0,.15)';
+  btn.style.color = dark ? '#e0e0e0' : '#222';
 }
 
-function getKnownCards() {
-  return CARD_IDS
-    .map(id => document.getElementById(id))
-    .filter(Boolean);
-}
-
-// Save current container for each card so we can restore after refresh.
-function snapshotZoneLocations() {
-  const snap = {};
-  getKnownCards().forEach(card => {
-    const p = card.parentNode;
-    snap[card.id] = p && p.id ? p.id : '';
+function animateVerticalSlide(card) {
+  card.style.transform = 'translateY(30px)';
+  card.style.opacity = '0';
+  card.offsetWidth; // reflow
+  requestAnimationFrame(() => {
+    card.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
+    card.style.transform = 'translateY(0)';
+    card.style.opacity = '1';
   });
-  localStorage.setItem('zonesSnapshot', JSON.stringify(snap));
+  setTimeout(() => {
+    card.style.transition = '';
+    card.style.transform = '';
+    card.style.opacity = '';
+  }, 260);
 }
 
-// NEW: Save where the user *manually* placed cards (used on normal refresh).
-function snapshotUserZones() {
-  const snap = {};
-  getKnownCards().forEach(card => {
-    const p = card.parentNode;
-    snap[card.id] = p && p.id ? p.id : '';
-  });
-  localStorage.setItem(USER_SNAPSHOT_KEY, JSON.stringify(snap));
+// -------------------- header (icon+modal) --------------------
+function saveHeaderOrder() {
+  const host = getHeaderDropArea();
+  if (!host) return;
+  const order = Array.from(host.children).map(btn => btn.cardElement?.id).filter(Boolean);
+  localStorage.setItem('headerOrder', JSON.stringify(order));
 }
 
-// Move a card to default expanded spot (your request: sidebar is default).
-function moveCardToSidebarDefault(card) {
-  const sidebar = getSidebar();
-  if (sidebar) {
-    sidebar.appendChild(card);
-    card.style.width = '100%';
-    animateVerticalSlide(card);
-  }
-}
-
-// Remove any header icon/modal for a card (so it truly leaves header mode).
-function stripHeaderArtifacts(card) {
-  if (card.headerIconButton) {
-    if (card.headerIconButton.modalInstance) {
-      try { card.headerIconButton.modalInstance.remove(); } catch { }
-    }
-    try { card.headerIconButton.remove(); } catch { }
-    card.headerIconButton = null;
-  }
-}
-
-// Kill the 50px ghost gutter when the sidebar isn't participating in layout.
-function clampSidebarWhenEmpty() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-
-  const sidebarHasCards = hasSidebarCards();
-  const collapsed = isZonesCollapsed();
-
-  // Sidebar should not take space if it's collapsed OR has no cards.
-  const shouldHideSidebarSpace = collapsed || !sidebarHasCards;
-
-  if (shouldHideSidebarSpace) {
-    // Make sure it takes absolutely no horizontal space.
-    sidebar.style.display   = 'none'; // don't render at all
-    sidebar.style.width     = '0px';
-    sidebar.style.minWidth  = '0px';
-    sidebar.style.margin    = '0';
-    sidebar.style.padding   = '0';
-    sidebar.style.flex      = '0 0 0px';
-
-    // if you add/remove highlight elsewhere, also ensure it's not forcing size
-    sidebar.classList.remove('active');
-  } else {
-    // Let your CSS control it when it's actually visible/has cards.
-    sidebar.style.width     = '';
-    sidebar.style.minWidth  = '';
-    sidebar.style.margin    = '';
-    sidebar.style.padding   = '';
-    sidebar.style.flex      = '';
-    // display is already decided by updateSidebarVisibility/applyZonesCollapsed
-  }
-}
-
-// Let the sidebar become a real drop target during drag, even if empty.
-function unclampSidebarForDrag() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-  // only un-clamp if panels are not collapsed
-  if (!isZonesCollapsed()) {
-    sidebar.style.display  = 'block';
-    // give it a sensible min width so the highlight looks right
-    sidebar.style.minWidth = '280px';
-    // never force a fixed height here; let CSS layout handle it
-    sidebar.style.width    = '';
-    sidebar.style.flex     = ''; // don't lock flex while dragging
-    sidebar.style.margin   = '';
-    sidebar.style.padding  = '';
-  }
-}
-
-// Restore cards after “expand” (toggle off) or after refresh.
-// - If we have a snapshot, use it.
-// - If not, put all cards in the sidebar (your default).
-function restoreCardsFromSnapshot() {
-  const sidebar = getSidebar();
-  const leftCol = document.getElementById('leftCol');
-  const rightCol = document.getElementById('rightCol');
-
-  let snap = {};
-  try { snap = JSON.parse(localStorage.getItem('zonesSnapshot') || '{}'); } catch { }
-
-  getKnownCards().forEach(card => {
-    stripHeaderArtifacts(card);
-    const destId = snap[card.id] || 'sidebarDropArea'; // fallback to sidebar
-    const dest =
-      destId === 'leftCol' ? leftCol :
-        destId === 'rightCol' ? rightCol :
-          destId === 'sidebarDropArea' ? sidebar :
-            sidebar; // final fallback
-    card.style.width = '';
-    card.style.minWidth = '';
-    if (dest) dest.appendChild(card);
-  });
-
-  // Clear header icons storage because we’re expanded.
-  localStorage.removeItem('headerOrder');
-  const headerDropArea = document.getElementById('headerDropArea');
-  if (headerDropArea) headerDropArea.innerHTML = '';
-
-  updateTopZoneLayout();
-  updateSidebarVisibility();
-  ensureZonesToggle();
-  updateZonesToggleUI();
-}
-
-// Read the saved snapshot (or {} if none)
-function readZonesSnapshot() {
-  try {
-    return JSON.parse(localStorage.getItem('zonesSnapshot') || '{}');
-  } catch {
-    return {};
-  }
-}
-
-// Move a card into the header zone as an icon (uses your existing helper)
-function moveCardToHeader(card) {
-  // If it's already in header icon form, skip
-  if (card.headerIconButton && card.headerIconButton.parentNode) return;
-  insertCardInHeader(card, null);
-}
-
-// Collapse behavior: snapshot locations, then move all known cards to header as icons
-function collapseCardsToHeader() {
-  const headerDropArea = document.getElementById('headerDropArea');
-  if (headerDropArea) headerDropArea.style.display = 'inline-flex'; // NEW
-
-  getKnownCards().forEach(card => {
-    if (!card.headerIconButton) insertCardInHeader(card, null);
-  });
-
-  updateTopZoneLayout();
-  updateSidebarVisibility();
-  ensureZonesToggle();
-  updateZonesToggleUI();
-}
-
-// Clean up any header icon (button + modal) attached to a card
 function removeHeaderIconForCard(card) {
-  if (card.headerIconButton) {
-    const btn = card.headerIconButton;
-    const modal = btn.modalInstance;
-    if (btn.parentNode) btn.parentNode.removeChild(btn);
-    if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
-    card.headerIconButton = null;
-  }
+  if (!card || !card.headerIconButton) return;
+  const btn = card.headerIconButton;
+  const modal = btn.modalInstance;
+  if (btn.parentNode) btn.parentNode.removeChild(btn);
+  if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
+  card.headerIconButton = null;
 }
 
-// Apply *user* snapshot on normal load (not expand) to preserve manual placement.
-function applySnapshotIfPresent() {
-  let snap = {};
-  try { snap = JSON.parse(localStorage.getItem(USER_SNAPSHOT_KEY) || '{}'); } catch { snap = {}; }
-  const keys = Object.keys(snap || {});
-  if (!keys.length) return false;
+function insertCardInHeader(card) {
+  const host = getHeaderDropArea();
+  if (!host) return;
+  // Ensure hidden container exists to park real cards while icon-visible.
+  let hidden = $('hiddenCardsContainer');
+  if (!hidden) {
+    hidden = document.createElement('div');
+    hidden.id = 'hiddenCardsContainer';
+    hidden.style.display = 'none';
+    document.body.appendChild(hidden);
+  }
+  if (card.parentNode?.id !== 'hiddenCardsContainer') hidden.appendChild(card);
 
-  const sidebar = getSidebar();
-  const leftCol  = document.getElementById('leftCol');
-  const rightCol = document.getElementById('rightCol');
+  if (card.headerIconButton && card.headerIconButton.parentNode) return;
 
-  getKnownCards().forEach(card => {
-    const destId = snap[card.id];
-    const dest =
-      destId === 'leftCol' ? leftCol :
-      destId === 'rightCol' ? rightCol :
-      destId === 'sidebarDropArea' ? sidebar : null;
-    if (dest) {
-      // clear sticky widths if coming from sidebar/header
+  const iconButton = document.createElement('button');
+  iconButton.className = 'header-card-icon';
+  iconButton.style.border = 'none';
+  iconButton.style.background = 'none';
+  iconButton.style.cursor = 'pointer';
+  iconButton.innerHTML = `<i class="material-icons" style="font-size:24px;">${card.id === 'uploadCard' ? 'cloud_upload'
+      : card.id === 'folderManagementCard' ? 'folder'
+        : 'insert_drive_file'
+    }</i>`;
+
+  iconButton.cardElement = card;
+  card.headerIconButton = iconButton;
+
+  let modal = null;
+  let isLocked = false;
+  let hoverActive = false;
+
+  function ensureModal() {
+    if (modal) return;
+    modal = document.createElement('div');
+    modal.className = 'header-card-modal';
+    Object.assign(modal.style, {
+      position: 'fixed',
+      top: '55px',
+      right: '80px',
+      zIndex: '11000',
+      display: 'block',
+      visibility: 'hidden',
+      opacity: '0',
+      background: 'none',
+      border: 'none',
+      padding: '0',
+      boxShadow: 'none',
+      maxWidth: '440px',
+      width: 'max-content'
+    });
+    document.body.appendChild(modal);
+    iconButton.modalInstance = modal;
+    modal.addEventListener('mouseover', () => { hoverActive = true; showModal(); });
+    modal.addEventListener('mouseout', () => { hoverActive = false; maybeHide(); });
+  }
+
+  function showModal() {
+    ensureModal();
+    if (!modal.contains(card)) {
+      let hidden = $('hiddenCardsContainer');
+      if (hidden && hidden.contains(card)) hidden.removeChild(card);
       card.style.width = '';
       card.style.minWidth = '';
-      dest.appendChild(card);
+      modal.appendChild(card);
     }
+    modal.style.visibility = 'visible';
+    modal.style.opacity = '1';
+  }
+  function hideModal() {
+    if (!modal) return;
+    modal.style.visibility = 'hidden';
+    modal.style.opacity = '0';
+    const hidden = $('hiddenCardsContainer');
+    if (hidden && modal.contains(card)) hidden.appendChild(card);
+  }
+  function maybeHide() {
+    setTimeout(() => {
+      if (!hoverActive && !isLocked) hideModal();
+    }, 200);
+  }
+
+  iconButton.addEventListener('mouseover', () => { hoverActive = true; showModal(); });
+  iconButton.addEventListener('mouseout', () => { hoverActive = false; maybeHide(); });
+  iconButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isLocked = !isLocked;
+    if (isLocked) showModal(); else hideModal();
   });
 
-  // prevent first-run default from stomping this on reload
-  localStorage.setItem('layoutDefaultApplied_v1', '1');
-  return true;
+  host.appendChild(iconButton);
+  saveHeaderOrder();
 }
 
-// New: small-screen detector
-function isSmallScreen() { return window.innerWidth < MEDIUM_MIN; }
+// -------------------- placement --------------------
+function placeCardInZone(card, zoneId, { animate = true } = {}) {
+  if (!card) return;
 
-// New: remember which cards were in the sidebar right before we go small
-const RESPONSIVE_SNAPSHOT_KEY = 'responsiveSidebarSnapshot';
+  // If moving out of header, remove header artifacts
+  if (zoneId !== ZONES.HEADER) removeHeaderIconForCard(card);
 
-function snapshotSidebarCardsForResponsive() {
+  switch (zoneId) {
+    case ZONES.SIDEBAR: {
+      const sb = getSidebar();
+      if (!sb) return;
+      card.style.width = '100%';
+      card.style.minWidth = '';
+      sb.appendChild(card);
+      if (animate) animateVerticalSlide(card);
+      card.dataset.originalContainerId = ZONES.SIDEBAR;
+      break;
+    }
+    case ZONES.TOP_LEFT: {
+      const col = getLeftCol();
+      if (!col) return;
+      card.style.width = '';
+      card.style.minWidth = '';
+      col.appendChild(card);
+      if (animate) animateVerticalSlide(card);
+      card.dataset.originalContainerId = ZONES.TOP_LEFT;
+      break;
+    }
+    case ZONES.TOP_RIGHT: {
+      const col = getRightCol();
+      if (!col) return;
+      card.style.width = '';
+      card.style.minWidth = '';
+      col.appendChild(card);
+      if (animate) animateVerticalSlide(card);
+      card.dataset.originalContainerId = ZONES.TOP_RIGHT;
+      break;
+    }
+    case ZONES.HEADER: {
+      insertCardInHeader(card);
+      break;
+    }
+  }
+}
+
+function currentZoneForCard(card) {
+  if (!card || !card.parentNode) return null;
+  const pid = card.parentNode.id || '';
+  if (pid === 'hiddenCardsContainer' && card.headerIconButton) return ZONES.HEADER;
+  if ([ZONES.SIDEBAR, ZONES.TOP_LEFT, ZONES.TOP_RIGHT, ZONES.HEADER].includes(pid)) return pid;
+  // If card is temporarily in modal (header), treat as header
+  if (card.headerIconButton && card.headerIconButton.modalInstance?.contains(card)) return ZONES.HEADER;
+  return pid || null;
+}
+
+function saveCurrentLayout() {
+  const layout = {};
+  getCards().forEach(card => {
+    const zone = currentZoneForCard(card);
+    if (zone) layout[card.id] = zone;
+  });
+  writeLayout(layout);
+}
+
+function applyUserLayoutOrDefault() {
+  const layout = readLayout();
+  const hasAny = Object.keys(layout).length > 0;
+
+  // If we have saved user layout, honor it
+  if (hasAny) {
+    getCards().forEach(card => {
+      const targetZone = layout[card.id];
+      if (!targetZone) return;
+      // On small screens: if saved zone is the sidebar, temporarily place in top cols
+      if (isSmallScreen() && targetZone === ZONES.SIDEBAR) {
+        const target = (card.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+        placeCardInZone(card, target, { animate: false });
+      } else {
+        placeCardInZone(card, targetZone, { animate: false });
+      }
+    });
+    updateTopZoneLayout();
+    updateSidebarVisibility();
+    return;
+  }
+
+  // No saved layout yet: apply defaults
+  if (!isSmallScreen()) {
+    // Wide: default both to sidebar (if not already)
+    getCards().forEach(c => placeCardInZone(c, ZONES.SIDEBAR, { animate: false }));
+  } else {
+    // Small: deterministic mapping
+    getCards().forEach(c => {
+      const zone = (c.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+      placeCardInZone(c, zone, { animate: false });
+    });
+  }
+  updateTopZoneLayout();
+  updateSidebarVisibility();
+  saveCurrentLayout(); // initialize baseline so future moves persist
+}
+
+// -------------------- responsive stash --------------------
+function stashSidebarCardsBeforeSmall() {
   const sb = getSidebar();
   if (!sb) return;
-  const ids = Array.from(sb.querySelectorAll('#uploadCard, #folderManagementCard'))
-    .map(el => el.id);
-  localStorage.setItem(RESPONSIVE_SNAPSHOT_KEY, JSON.stringify(ids));
+  const ids = Array.from(sb.querySelectorAll('#uploadCard, #folderManagementCard')).map(el => el.id);
+  localStorage.setItem(RESPONSIVE_STASH_KEY, JSON.stringify(ids));
 }
-
-function readResponsiveSnapshot() {
-  try { return JSON.parse(localStorage.getItem(RESPONSIVE_SNAPSHOT_KEY) || '[]'); }
+function readSidebarStash() {
+  try { return JSON.parse(localStorage.getItem(RESPONSIVE_STASH_KEY) || '[]'); }
   catch { return []; }
 }
+function clearSidebarStash() { localStorage.removeItem(RESPONSIVE_STASH_KEY); }
 
-function clearResponsiveSnapshot() {
-  localStorage.removeItem(RESPONSIVE_SNAPSHOT_KEY);
-}
-
-// New: deterministic mapping from card -> top column
-function moveCardToTopByMapping(card) {
-  const leftCol = document.getElementById('leftCol');
-  const rightCol = document.getElementById('rightCol');
-  if (!leftCol || !rightCol) return;
-
-  const target = (card.id === 'uploadCard') ? leftCol :
-    (card.id === 'folderManagementCard') ? rightCol : leftCol;
-
-  // clear any sticky widths from sidebar/header
-  card.style.width = '';
-  card.style.minWidth = '';
-  target.appendChild(card);
-  card.dataset.originalContainerId = target.id;
-  animateVerticalSlide(card);
-}
-
-// New: move all sidebar cards to top (used when we cross into small)
-function moveAllSidebarCardsToTop() {
+function moveAllSidebarCardsToTopEphemeral() {
   const sb = getSidebar();
   if (!sb) return;
-  const cards = Array.from(sb.querySelectorAll('#uploadCard, #folderManagementCard'));
-  cards.forEach(moveCardToTopByMapping);
+  Array.from(sb.querySelectorAll('#uploadCard, #folderManagementCard')).forEach(card => {
+    const target = (card.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+    placeCardInZone(card, target, { animate: true });
+  });
+  // do NOT save layout here (ephemeral)
   updateTopZoneLayout();
   updateSidebarVisibility();
 }
 
-// New: enforce responsive behavior (sidebar disabled on small screens)
-// Add hysteresis to avoid flapping near threshold
-let __lastIsSmall = null;
-let __lastWidth = null;
-const SMALL_ENTER = MEDIUM_MIN - 16;  // enter small below this
-const SMALL_EXIT  = MEDIUM_MIN + 16;  // leave small above this
-
+let __wasSmall = null;
 function enforceResponsiveZones() {
-  const w = window.innerWidth;
-  const prevSmall = __lastIsSmall;
-  let nowSmall;
+  const nowSmall = isSmallScreen();
+  if (__wasSmall === null) { __wasSmall = nowSmall; }
 
-  if (__lastWidth == null) {
-    nowSmall = w < MEDIUM_MIN;
-  } else if (prevSmall === true) {
-    nowSmall = !(w >= SMALL_EXIT);
-  } else if (prevSmall === false) {
-    nowSmall = (w < SMALL_ENTER);
-  } else {
-    nowSmall = w < MEDIUM_MIN;
-  }
-  __lastWidth = w;
-
-  const sidebar = getSidebar();
-  const topZone = getTopZone();
-
-  if (nowSmall && prevSmall !== true) {
-    // entering small: remember what was in sidebar, move them up, hide sidebar
-    snapshotSidebarCardsForResponsive();
-    moveAllSidebarCardsToTop();
-    if (sidebar) sidebar.style.display = 'none';
-    if (topZone) topZone.style.display = ''; // ensure visible
-    __lastIsSmall = true;
-  } else if (!nowSmall && prevSmall !== false) {
-    // leaving small: restore only what used to be in the sidebar
-    const ids = readResponsiveSnapshot();
+  if (nowSmall && __wasSmall === false) {
+    // entering small: remember what was in sidebar, then lift them
+    stashSidebarCardsBeforeSmall();
+    moveAllSidebarCardsToTopEphemeral();
+    const sb = getSidebar();
+    if (sb) sb.style.display = 'none';
+  } else if (!nowSmall && __wasSmall === true) {
+    // leaving small: restore only those that used to be in sidebar *if* saved layout says sidebar
+    const ids = readSidebarStash();
+    const layout = readLayout();
     const sb = getSidebar();
     ids.forEach(id => {
-      const card = document.getElementById(id);
-      if (card && sb && !sb.contains(card)) {
-        sb.appendChild(card);
-        card.style.width = '100%';
+      const card = $(id);
+      if (!card) return;
+      if (layout[id] === ZONES.SIDEBAR && sb && !sb.contains(card)) {
+        placeCardInZone(card, ZONES.SIDEBAR, { animate: true });
       }
     });
-    clearResponsiveSnapshot();
-    // show sidebar again if panels aren’t collapsed
-    if (sidebar) sidebar.style.display = isZonesCollapsed() ? 'none' : 'block';
-    updateTopZoneLayout();
-    updateSidebarVisibility();
-    __lastIsSmall = false;
+    clearSidebarStash();
   }
+  __wasSmall = nowSmall;
+  updateTopZoneLayout();
+  updateSidebarVisibility();
 }
 
-
-function updateSidebarToggleUI() {
-  const btn = document.getElementById('sidebarToggleFloating');
-  const sidebar = getSidebar();
-  if (!btn || !sidebar) return;
-
-  if (!hasSidebarCards()) { btn.remove(); return; }
-
-  const collapsed = isSidebarCollapsed();
-  btn.innerHTML = `<i class="material-icons" aria-hidden="true">${collapsed ? TOGGLE_ICON_CLOSED : TOGGLE_ICON_OPEN
-    }</i>`;
-  btn.title = collapsed ? 'Show sidebar' : 'Hide sidebar';
-  btn.style.display = 'block';
-  btn.classList.toggle('toggle-ping', collapsed);
-}
-
-
-function hasSidebarCards() {
-  const sb = getSidebar();
-  return !!sb && sb.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
-}
-
-function hasTopZoneCards() {
-  const tz = getTopZone();
-  return !!tz && tz.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
-}
-
-// Both cards are in the top zone (upload + folder)
-function allCardsInTopZone() {
-  const tz = getTopZone();
-  if (!tz) return false;
-  const hasUpload = !!tz.querySelector('#uploadCard');
-  const hasFolder = !!tz.querySelector('#folderManagementCard');
-  return hasUpload && hasFolder;
-}
-
-function isZonesCollapsed() {
-  return localStorage.getItem('zonesCollapsed') === '1';
-}
+// -------------------- zones toggle (collapse to header) --------------------
+function isZonesCollapsed() { return localStorage.getItem('zonesCollapsed') === '1'; }
 function setZonesCollapsed(collapsed) {
   localStorage.setItem('zonesCollapsed', collapsed ? '1' : '0');
-
   if (collapsed) {
-    // Remember where cards were, then show them as header icons
-    snapshotZoneLocations();   // original snapshot used only for collapse/expand
-    collapseCardsToHeader();   // your existing helper that calls insertCardInHeader(...)
+    // Move ALL cards to header icons (transient). Do not overwrite saved layout.
+    getCards().forEach(insertCardInHeader);
   } else {
-    // Expand: bring cards back (from the collapse snapshot)
-    restoreCardsFromSnapshot();
-
-    // Ensure zones are visible right away after expand
-    const sidebar = getSidebar();
-    const topZone = getTopZone();
-    if (sidebar) sidebar.style.display = 'block';
-    if (topZone) topZone.style.display = '';
+    // Restore the saved user layout.
+    applyUserLayoutOrDefault();
   }
-
   ensureZonesToggle();
   updateZonesToggleUI();
-  clampSidebarWhenEmpty();
-}
-
-function applyZonesCollapsed() {
-  const collapsed = isZonesCollapsed();
-  const sidebar = getSidebar();
-  const topZone = getTopZone();
-
-  if (sidebar) sidebar.style.display = collapsed ? 'none' : (hasSidebarCards() ? 'block' : 'none');
-  if (topZone) topZone.style.display = collapsed ? 'none' : (hasTopZoneCards() ? '' : '');
-}
-
-function isMediumScreen() {
-  const w = window.innerWidth;
-  return w >= MEDIUM_MIN && w < MEDIUM_MAX;
-}
-
-// ----- Sidebar collapse state helpers -----
-function getSidebar() {
-  return document.getElementById('sidebarDropArea');
-}
-function getTopZone() {
-  return document.getElementById('uploadFolderRow');
-}
-
-function isSidebarCollapsed() {
-  return localStorage.getItem('sidebarCollapsed') === '1';
-}
-
-function setSidebarCollapsed(collapsed) {
-  localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
-  applySidebarCollapsed();
-  updateSidebarToggleUI();
-}
-
-function applySidebarCollapsed() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-
-  // We avoid hard-coding layout assumptions: simply hide/show the sidebar area.
-  // If you want a sliding effect, add CSS later; JS will just toggle display.
-  const collapsed = isSidebarCollapsed();
-  sidebar.style.display = collapsed ? 'none' : 'block';
 }
 
 function getHeaderHost() {
-  // 1) exact structure you shared
   let host = document.querySelector('.header-container .header-left');
-  // 2) fallback to header root
   if (!host) host = document.querySelector('.header-container');
-  // 3) last resort
   if (!host) host = document.querySelector('header');
   return host || document.body;
 }
 
-function mountHeaderToggle(btn) {
-  const host = document.querySelector('.header-left');
-  const logoA = host?.querySelector('a');
-  if (!host) return;
-
-  // ensure positioning context
-  if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
-
-  if (logoA) {
-    logoA.insertAdjacentElement('afterend', btn);  // sibling of <a>, not inside it
-  } else {
-    host.appendChild(btn);
-  }
-
-  Object.assign(btn.style, {
-    position: 'absolute',
-    left: TOGGLE_LEFT_PX,  // adjust position beside the logo
-    top:  TOGGLE_TOP_PX,
-    zIndex: '10010',
-    pointerEvents: 'auto'
-  });
-}
-
-
 function ensureZonesToggle() {
-  let btn = document.getElementById('sidebarToggleFloating');
   const host = getHeaderHost();
   if (!host) return;
 
-  // ensure the host is a positioning context
-  const hostStyle = getComputedStyle(host);
-  if (hostStyle.position === 'static') {
-    host.style.position = 'relative';
-  }
+  if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
 
+  let btn = $('sidebarToggleFloating');
   if (!btn) {
     btn = document.createElement('button');
     btn.id = 'sidebarToggleFloating';
     btn.type = 'button';
     btn.setAttribute('aria-label', 'Toggle panels');
-
-    // Prevent accidental navigations / bubbling
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setSidebarCollapsed(!isSidebarCollapsed());
-      updateSidebarToggleUI();
-    });
-    ['mousedown','mouseup','pointerdown','pointerup'].forEach(evt =>
-      btn.addEventListener(evt, (e) => e.stopPropagation())
-    );
-
     Object.assign(btn.style, {
       position: 'absolute',
-      top: '8px',
-      left: '65px',
-      zIndex: '1000',
+      top: `${TOGGLE_TOP_PX}px`,
+      left: `${TOGGLE_LEFT_PX}px`,
+      zIndex: '10010',
       width: '38px',
       height: '38px',
       borderRadius: '19px',
@@ -537,63 +394,50 @@ function ensureZonesToggle() {
       lineHeight: '0'
     });
     btn.classList.add('zones-toggle');
-
-    // Dark mode polish
-    if (document.body.classList.contains('dark-mode')) {
-      btn.style.background = '#2c2c2c';
-      btn.style.border = '1px solid #555';
-      btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.35)';
-      btn.style.color = '#e0e0e0';
-    }
-
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       setZonesCollapsed(!isZonesCollapsed());
     });
 
-    // Insert right after the logo if present, else append to host
     const afterLogo = host.querySelector('.header-logo');
     if (afterLogo && afterLogo.parentNode) {
       afterLogo.parentNode.insertBefore(btn, afterLogo.nextSibling);
     } else {
       host.appendChild(btn);
     }
-
-    themeToggleButton(btn);
   }
-
+  themeToggleButton(btn);
   updateZonesToggleUI();
 }
 
 function updateZonesToggleUI() {
-  const btn = document.getElementById('sidebarToggleFloating');
+  const btn = $('sidebarToggleFloating');
   if (!btn) return;
-
-  // Never remove the button just because cards are in header.
   const collapsed = isZonesCollapsed();
   const iconName = collapsed ? TOGGLE_ICON_CLOSED : TOGGLE_ICON_OPEN;
   btn.innerHTML = `<i class="material-icons toggle-icon" aria-hidden="true">${iconName}</i>`;
   btn.title = collapsed ? 'Show panels' : 'Hide panels';
-  btn.style.display = 'block';
 
   const iconEl = btn.querySelector('.toggle-icon');
   if (iconEl) {
     iconEl.style.transition = 'transform 0.2s ease';
     iconEl.style.display = 'inline-flex';
     iconEl.style.alignItems = 'center';
-    if (!collapsed && allCardsInTopZone()) {
-      iconEl.style.transform = 'rotate(90deg)';
-    } else {
-      iconEl.style.transform = 'rotate(0deg)';
-    }
+    // fun rotate if both cards are in top zone
+    const tz = getTopZone();
+    const allTop = !!tz?.querySelector('#uploadCard') && !!tz?.querySelector('#folderManagementCard');
+    iconEl.style.transform = (!collapsed && allTop) ? 'rotate(90deg)' : 'rotate(0deg)';
   }
   themeToggleButton(btn);
 }
 
+// Keep the button styled when theme flips
 (function watchThemeChanges() {
   const obs = new MutationObserver((muts) => {
     for (const m of muts) {
       if (m.type === 'attributes' && m.attributeName === 'class') {
-        const btn = document.getElementById('sidebarToggleFloating');
+        const btn = $('sidebarToggleFloating');
         if (btn) themeToggleButton(btn);
       }
     }
@@ -601,371 +445,68 @@ function updateZonesToggleUI() {
   obs.observe(document.body, { attributes: true });
 })();
 
-// create a small floating toggle button (no HTML edits needed)
-function ensureSidebarToggle() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-
-  // Only show if there are cards
-  if (!hasSidebarCards()) {
-    const existing = document.getElementById('sidebarToggleFloating');
-    if (existing) existing.remove();
-    return;
-  }
-
-  let btn = document.getElementById('sidebarToggleFloating');
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.id = 'sidebarToggleFloating';
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Toggle sidebar');
-
-    Object.assign(btn.style, {
-      position: 'fixed',
-      left: `${TOGGLE_LEFT_PX}px`,
-      top: `${TOGGLE_TOP_PX}px`,
-      zIndex: '10010',
-      width: '38px',
-      height: '38px',
-      borderRadius: '19px',
-      border: '1px solid #ccc',
-      background: '#fff',
-      cursor: 'pointer',
-      boxShadow: '0 2px 6px rgba(0,0,0,.15)',
-      display: 'block',
-    });
-
-    btn.addEventListener('click', () => {
-      setSidebarCollapsed(!isSidebarCollapsed());
-      // icon/title/animation update after state change
-      updateSidebarToggleUI();
-    });
-
-    document.body.appendChild(btn);
-  }
-
-  // set correct icon/title right away
-  //updateSidebarToggleUI();
-  //applySidebarCollapsed();
-  updateZonesToggleUI();
-  applyZonesCollapsed();
+// -------------------- layout polish --------------------
+function hasSidebarCards() {
+  const sb = getSidebar();
+  return !!sb && sb.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
 }
-
-// Moves cards into the sidebar based on the saved order in localStorage.
-export function loadSidebarOrder() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-
-  const defaultAppliedKey = 'layoutDefaultApplied_v1';
-  const defaultAlready = localStorage.getItem(defaultAppliedKey) === '1';
-
-  const orderStr = localStorage.getItem('sidebarOrder');
-  const headerOrderStr = localStorage.getItem('headerOrder');
-
-  // Restore user's last manual placement on normal load
-  if (applySnapshotIfPresent()) {
-    updateTopZoneLayout();
-    updateSidebarVisibility();
-    applyZonesCollapsed();
-    ensureZonesToggle();
-    return;
-  }
-  // If no user snapshot exists and we're not on small screens,
-  // but the cards are currently in the top zone, default them to the sidebar once.
-  if (!hasUserSnapshot() && !isSmallScreen() && hasTopZoneCards() && !hasSidebarCards()) {
-    const sb = getSidebar();
-    if (sb) {
-      ['uploadCard','folderManagementCard'].forEach(id => {
-        const c = document.getElementById(id);
-        if (c && !sb.contains(c)) {
-          sb.appendChild(c);
-          c.style.width = '100%';
-        }
-      });
-      snapshotUserZones();      // persist this as the user's baseline
-      updateSidebarVisibility();
-      updateTopZoneLayout();
-    }
-  }
-
-  // Only apply the one-time default if *not* initialized yet
-  if (!defaultAlready &&
-      ((!orderStr || !JSON.parse(orderStr || '[]').length) &&
-       (!headerOrderStr || !JSON.parse(headerOrderStr || '[]').length))) {
-
-    const isLargeEnough = window.innerWidth >= MEDIUM_MIN;
-    if (isLargeEnough) {
-      const mainWrapper = document.querySelector('.main-wrapper');
-      if (mainWrapper) mainWrapper.style.display = 'flex';
-
-      const moved = [];
-      ['uploadCard', 'folderManagementCard'].forEach(id => {
-        const card = document.getElementById(id);
-        if (card && card.parentNode?.id !== 'sidebarDropArea') {
-          card.style.width = '';
-          card.style.minWidth = '';
-          getSidebar().appendChild(card);
-          animateVerticalSlide(card);
-          moved.push(id);
-        }
-      });
-
-      if (moved.length) {
-        localStorage.setItem('sidebarOrder', JSON.stringify(moved));
-      }
-    }
-
-    // Mark initialized so this default never fires again
-    localStorage.setItem(defaultAppliedKey, '1');
-  }
-
-  // If user has header icons saved, honor that and bail
-  const headerOrder = JSON.parse(headerOrderStr || '[]');
-  if (Array.isArray(headerOrder) && headerOrder.length > 0) {
-    updateSidebarVisibility();
-    applyZonesCollapsed();
-    ensureZonesToggle();
-    return;
-  }
-
-  if (!defaultAlready && isMediumScreen()) {
-    const mainWrapper = document.querySelector('.main-wrapper');
-    if (mainWrapper) mainWrapper.style.display = 'flex';
-
-    const candidates = ['uploadCard', 'folderManagementCard'];
-    const moved = [];
-    candidates.forEach(id => {
-      const card = document.getElementById(id);
-      if (card && card.parentNode?.id !== 'sidebarDropArea') {
-        sidebar.appendChild(card);
-        animateVerticalSlide(card);
-        moved.push(id);
-      }
-    });
-
-    if (moved.length) {
-      localStorage.setItem('sidebarOrder', JSON.stringify(moved));
-      localStorage.setItem(defaultAppliedKey, '1');  // mark initialized
-    }
-  }
-
-  updateSidebarVisibility();
-  applyZonesCollapsed();
-  ensureZonesToggle();
+function hasTopZoneCards() {
+  const tz = getTopZone();
+  return !!tz && tz.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
 }
-
-export function loadHeaderOrder() {
-  const headerDropArea = document.getElementById('headerDropArea');
-  if (!headerDropArea) return;
-
-  // If panels are expanded, do not re-create header icons.
-  if (!isZonesCollapsed()) {
-    headerDropArea.innerHTML = '';
-    localStorage.removeItem('headerOrder');
-    return;
-  }
-
-  headerDropArea.innerHTML = '';
-  let stored;
-  try { stored = JSON.parse(localStorage.getItem('headerOrder') || '[]'); } catch { stored = []; }
-  const uniqueIds = Array.from(new Set(stored));
-  uniqueIds.forEach(id => {
-    const card = document.getElementById(id);
-    if (card) insertCardInHeader(card, null);
-  });
-  localStorage.setItem('headerOrder', JSON.stringify(uniqueIds));
-}
-
-// Internal helper: update sidebar visibility based on its content.
-// NOTE: do NOT auto-hide if user manually collapsed; that is separate.
 function updateSidebarVisibility() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-
-  const anyCards = hasSidebarCards();
-
-  // clear any leftover drag height
-  sidebar.style.height = '';
-
-  if (anyCards) {
-    sidebar.classList.add('active');
-    // respect the unified zones-collapsed switch
-    sidebar.style.display = isZonesCollapsed() ? 'none' : 'block';
-  } else {
-    sidebar.classList.remove('active');
-    sidebar.style.display = 'none';
-  }
-
-  // Save order and update toggle visibility
-  saveSidebarOrder();
-  // Mark layout initialized so the first-run default won't fire on reload
-  localStorage.setItem('layoutDefaultApplied_v1', '1');
-
-  ensureZonesToggle();
-  clampSidebarWhenEmpty(); 
+  const sb = getSidebar();
+  if (!sb) return;
+  const any = hasSidebarCards();
+  sb.style.display = (isZonesCollapsed() || !any) ? 'none' : 'block';
 }
-
-// NEW: Save header order to localStorage.
-function saveHeaderOrder() {
-  const headerDropArea = document.getElementById('headerDropArea');
-  if (headerDropArea) {
-    const icons = Array.from(headerDropArea.children);
-    // Each header icon stores its associated card in the property cardElement.
-    const order = icons.map(icon => icon.cardElement.id);
-    localStorage.setItem('headerOrder', JSON.stringify(order));
-  }
-}
-
-// Internal helper: update top zone layout (center a card if one column is empty).
 function updateTopZoneLayout() {
-  const topZone = getTopZone();
-  const leftCol = document.getElementById('leftCol');
-  const rightCol = document.getElementById('rightCol');
+  const top = getTopZone();
+  const left = getLeftCol();
+  const right = getRightCol();
+  const hasUpload = !!top?.querySelector('#uploadCard');
+  const hasFolder = !!top?.querySelector('#folderManagementCard');
 
-  const hasUpload = !!topZone?.querySelector('#uploadCard');
-  const hasFolder = !!topZone?.querySelector('#folderManagementCard');
-
-  if (leftCol && rightCol) {
+  if (left && right) {
     if (hasUpload && !hasFolder) {
-      rightCol.style.display = 'none';
-      leftCol.style.margin = '0 auto';
-      leftCol.style.display = '';
+      right.style.display = 'none';
+      left.style.display = '';
+      left.style.margin = '0 auto';
     } else if (!hasUpload && hasFolder) {
-      leftCol.style.display = 'none';
-      rightCol.style.margin = '0 auto';
-      rightCol.style.display = '';
+      left.style.display = 'none';
+      right.style.display = '';
+      right.style.margin = '0 auto';
     } else {
-      leftCol.style.display = '';
-      rightCol.style.display = '';
-      leftCol.style.margin = '';
-      rightCol.style.margin = '';
+      left.style.display = '';
+      right.style.display = '';
+      left.style.margin = '';
+      right.style.margin = '';
     }
   }
-
-  // hide whole top row when empty (kills the gap)
-  if (topZone) topZone.style.display = (hasUpload || hasFolder) ? '' : 'none';
-  clampSidebarWhenEmpty(); 
+  if (top) top.style.display = (hasUpload || hasFolder) ? '' : 'none';
 }
 
-// When a card is being dragged, if the top drop zone is empty, set its min-height.
+// drag visual helpers
 function addTopZoneHighlight() {
-  const topZone = document.getElementById('uploadFolderRow');
-  if (topZone) {
-    topZone.classList.add('highlight');
-    if (topZone.querySelectorAll('#uploadCard, #folderManagementCard').length === 0) {
-      topZone.style.minHeight = '375px';
-    }
+  const top = getTopZone();
+  if (!top) return;
+  top.classList.add('highlight');
+  if (top.querySelectorAll('#uploadCard, #folderManagementCard').length === 0) {
+    top.style.minHeight = '375px';
   }
 }
-
-// When the drag ends, remove the extra min-height.
 function removeTopZoneHighlight() {
-  const topZone = document.getElementById('uploadFolderRow');
-  if (topZone) {
-    topZone.classList.remove('highlight');
-    topZone.style.minHeight = '';
-  }
+  const top = getTopZone();
+  if (!top) return;
+  top.classList.remove('highlight');
+  top.style.minHeight = '';
 }
-
-// Vertical slide/fade animation helper.
-function animateVerticalSlide(card) {
-  card.style.transform = 'translateY(30px)';
-  card.style.opacity = '0';
-  // Force reflow.
-  card.offsetWidth;
-  requestAnimationFrame(() => {
-    card.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
-    card.style.transform = 'translateY(0)';
-    card.style.opacity = '1';
-  });
-  setTimeout(() => {
-    card.style.transition = '';
-    card.style.transform = '';
-    card.style.opacity = '';
-  }, 310);
-}
-
-// Internal helper: insert card into sidebar at a proper position based on event.clientY.
-function insertCardInSidebar(card, event) {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-
-  const existingCards = Array.from(sidebar.querySelectorAll('#uploadCard, #folderManagementCard'));
-  let inserted = false;
-  for (const currentCard of existingCards) {
-    const rect = currentCard.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    if (event.clientY < midY) {
-      sidebar.insertBefore(card, currentCard);
-      inserted = true;
-      break;
-    }
-  }
-  if (!inserted) sidebar.appendChild(card);
-
-  // Make it fill the sidebar and clear any sticky width from header/top zone.
-  card.style.width = '100%';
-  removeHeaderIconForCard(card);           // NEW: remove any header artifacts
-  card.dataset.originalContainerId = 'sidebarDropArea';
-  animateVerticalSlide(card);
-
-  // SAVE order & refresh minimal UI, but DO NOT collapse/restore here:
-  saveSidebarOrder();
-
-  // NEW: persist user manual placement (used on normal refresh)
-  snapshotUserZones();
-
-  updateSidebarVisibility();
-  ensureZonesToggle();
-  updateZonesToggleUI();
-}
-
-// Internal helper: save the current sidebar card order to localStorage.
-function saveSidebarOrder() {
-  const sidebar = getSidebar();
-  if (sidebar) {
-    const cards = sidebar.querySelectorAll('#uploadCard, #folderManagementCard');
-    const order = Array.from(cards).map(card => card.id);
-    localStorage.setItem('sidebarOrder', JSON.stringify(order));
-  }
-}
-
-// Helper: move cards from sidebar back to the top drop area when on small screens.
-function moveSidebarCardsToTop() {
-  if (window.innerWidth < 1205) {
-    const sidebar = getSidebar();
-    if (!sidebar) return;
-    const cards = Array.from(sidebar.querySelectorAll('#uploadCard, #folderManagementCard'));
-    cards.forEach(card => {
-      const orig = document.getElementById(card.dataset.originalContainerId);
-      if (orig) {
-        orig.appendChild(card);
-        animateVerticalSlide(card);
-      }
-    });
-    updateSidebarVisibility();
-    updateTopZoneLayout();
-  }
-}
-
-// Listen for window resize to automatically move sidebar cards back to top on small screens.
-(function () {
-  let rAF = null;
-  window.addEventListener('resize', () => {
-    if (rAF) cancelAnimationFrame(rAF);
-    rAF = requestAnimationFrame(() => {
-      enforceResponsiveZones();
-    });
-  });
-})();
-
 function showTopZoneWhileDragging() {
-  const topZone = getTopZone();
-  if (!topZone) return;
-  topZone.style.display = '';                 // make it droppable
-  // add a temporary placeholder only if empty
-  if (topZone.querySelectorAll('#uploadCard, #folderManagementCard').length === 0) {
-    let ph = topZone.querySelector('.placeholder');
+  const top = getTopZone();
+  if (!top) return;
+  top.style.display = '';
+  if (top.querySelectorAll('#uploadCard, #folderManagementCard').length === 0) {
+    let ph = top.querySelector('.placeholder');
     if (!ph) {
       ph = document.createElement('div');
       ph.className = 'placeholder';
@@ -973,426 +514,233 @@ function showTopZoneWhileDragging() {
       ph.style.display = 'block';
       ph.style.width = '100%';
       ph.style.height = '375px';
-      topZone.appendChild(ph);
+      top.appendChild(ph);
     }
   }
 }
-
 function cleanupTopZoneAfterDrop() {
-  const topZone = getTopZone();
-  if (!topZone) return;
-
-  // remove placeholder and highlight/minHeight no matter what
-  const ph = topZone.querySelector('.placeholder');
+  const top = getTopZone();
+  if (!top) return;
+  const ph = top.querySelector('.placeholder');
   if (ph) ph.remove();
-  topZone.classList.remove('highlight');
-  topZone.style.minHeight = '';
-
-  // if no cards left, hide the whole row to remove the gap
-  const hasAny = topZone.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
-  topZone.style.display = hasAny ? '' : 'none';
+  top.classList.remove('highlight');
+  top.style.minHeight = '';
+  const hasAny = top.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
+  top.style.display = hasAny ? '' : 'none';
 }
-
-// This function ensures the top drop zone (#uploadFolderRow) has a stable width when empty.
-function ensureTopZonePlaceholder() {
-  const topZone = document.getElementById('uploadFolderRow');
-  if (!topZone) return;
-  topZone.style.display = '';
-  if (topZone.querySelectorAll('#uploadCard, #folderManagementCard').length === 0) {
-    let placeholder = topZone.querySelector('.placeholder');
-    if (!placeholder) {
-      placeholder = document.createElement('div');
-      placeholder.className = 'placeholder';
-      placeholder.style.visibility = 'hidden';
-      placeholder.style.display = 'block';
-      placeholder.style.width = '100%';
-      placeholder.style.height = '375px';
-      topZone.appendChild(placeholder);
-    }
-  } else {
-    const placeholder = topZone.querySelector('.placeholder');
-    if (placeholder) placeholder.remove();
-  }
-}
-
-// --- Header drop zone helpers ---
-
 function showHeaderDropZone() {
-  const headerDropArea = document.getElementById('headerDropArea');
-  if (headerDropArea) {
-    headerDropArea.style.display = 'inline-flex';
-    headerDropArea.classList.add('drag-active');
+  const h = getHeaderDropArea();
+  if (h) {
+    h.style.display = 'inline-flex';
+    h.classList.add('drag-active');
   }
 }
-
 function hideHeaderDropZone() {
-  const headerDropArea = document.getElementById('headerDropArea');
-  if (headerDropArea) {
-    headerDropArea.classList.remove('drag-active');
-    if (headerDropArea.children.length === 0) {
-      headerDropArea.style.display = 'none';
-    }
+  const h = getHeaderDropArea();
+  if (h) {
+    h.classList.remove('drag-active');
+    if (h.children.length === 0) h.style.display = 'none';
   }
 }
 
-// Insert card into header drop zone as a material icon
-function insertCardInHeader(card, event) {
-  const headerDropArea = document.getElementById('headerDropArea');
-  if (!headerDropArea) return;
+// -------------------- DnD core --------------------
+function makeCardDraggable(card) {
+  if (!card) return;
+  const header = card.querySelector('.card-header');
+  if (header) header.classList.add('drag-header');
 
-  // Preserve the original by moving it to a hidden container.
-  if (card.id === 'folderManagementCard' || card.id === 'uploadCard') {
-    let hiddenContainer = document.getElementById('hiddenCardsContainer');
-    if (!hiddenContainer) {
-      hiddenContainer = document.createElement('div');
-      hiddenContainer.id = 'hiddenCardsContainer';
-      hiddenContainer.style.display = 'none';
-      document.body.appendChild(hiddenContainer);
+  let isDragging = false;
+  let dragTimer = null;
+  let offsetX = 0, offsetY = 0;
+  let initialLeft, initialTop;
+
+  if (header) {
+    header.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      const c = this.closest('.card');
+      const rect = c.getBoundingClientRect();
+      const originX = ((e.clientX - rect.left) / rect.width) * 100;
+      const originY = ((e.clientY - rect.top) / rect.height) * 100;
+      c.style.transformOrigin = `${originX}% ${originY}%`;
+
+      dragTimer = setTimeout(() => {
+        isDragging = true;
+        c.classList.add('dragging');
+        c.style.pointerEvents = 'none';
+
+        addTopZoneHighlight();
+        showTopZoneWhileDragging();
+
+        const sb = getSidebar();
+        if (sb) {
+          sb.classList.add('active');
+          sb.classList.add('highlight');
+          if (!isZonesCollapsed()) sb.style.display = 'block';
+          sb.style.removeProperty('height');
+          sb.style.minWidth = '280px';
+        }
+
+        showHeaderDropZone();
+
+        initialLeft = rect.left + window.pageXOffset;
+        initialTop = rect.top + window.pageYOffset;
+        offsetX = e.pageX - initialLeft;
+        offsetY = e.pageY - initialTop;
+
+        // If represented in header, remove its icon so we can move freely
+        removeHeaderIconForCard(c);
+
+        document.body.appendChild(c);
+        Object.assign(c.style, {
+          position: 'absolute',
+          left: initialLeft + 'px',
+          top: initialTop + 'px',
+          width: rect.width + 'px',
+          height: rect.height + 'px',
+          minWidth: rect.width + 'px',
+          flexShrink: '0',
+          zIndex: '10000'
+        });
+      }, 450);
+    });
+
+    header.addEventListener('mouseup', function () { clearTimeout(dragTimer); });
+  }
+
+  document.addEventListener('mousemove', function (e) {
+    if (isDragging) {
+      card.style.left = (e.pageX - offsetX) + 'px';
+      card.style.top = (e.pageY - offsetY) + 'px';
     }
-    if (card.parentNode?.id !== 'hiddenCardsContainer') {
-      hiddenContainer.appendChild(card);
-    }
-  } else if (card.parentNode) {
-    card.parentNode.removeChild(card);
-  }
-
-  const iconButton = document.createElement('button');
-  iconButton.className = 'header-card-icon';
-  iconButton.style.border = 'none';
-  iconButton.style.background = 'none';
-  iconButton.style.outline = 'none';
-  iconButton.style.cursor = 'pointer';
-
-  if (card.id === 'uploadCard') {
-    iconButton.innerHTML = '<i class="material-icons" style="font-size:24px;">cloud_upload</i>';
-  } else if (card.id === 'folderManagementCard') {
-    iconButton.innerHTML = '<i class="material-icons" style="font-size:24px;">folder</i>';
-  } else {
-    iconButton.innerHTML = '<i class="material-icons" style="font-size:24px;">insert_drive_file</i>';
-  }
-
-  iconButton.cardElement = card;
-  card.headerIconButton = iconButton;
-
-  let modal = null;
-  let isLocked = false;
-  let hoverActive = false;
-
-  function showModal() {
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.className = 'header-card-modal';
-      Object.assign(modal.style, {
-        position: 'fixed',
-        top: '55px',
-        right: '80px',
-        zIndex: '11000',
-        display: 'block',
-        visibility: 'hidden',
-        opacity: '0',
-        background: 'none',
-        border: 'none',
-        padding: '0',
-        boxShadow: 'none',
-        maxWidth: '440px',   // NEW: keep card from overflowing center content
-        width: 'max-content' // NEW
-      });
-      document.body.appendChild(modal);
-      modal.addEventListener('mouseover', handleMouseOver);
-      modal.addEventListener('mouseout', handleMouseOut);
-      iconButton.modalInstance = modal;
-    }
-    if (!modal.contains(card)) {
-      const hiddenContainer = document.getElementById('hiddenCardsContainer');
-      if (hiddenContainer && hiddenContainer.contains(card)) hiddenContainer.removeChild(card);
-      // Clear sticky widths before placing in modal
-      card.style.width = '';
-      card.style.minWidth = '';
-      modal.appendChild(card);
-    }
-    modal.style.visibility = 'visible';
-    modal.style.opacity = '1';
-  }
-
-  function hideModal() {
-    if (modal && !isLocked && !hoverActive) {
-      modal.style.visibility = 'hidden';
-      modal.style.opacity = '0';
-      const hiddenContainer = document.getElementById('hiddenCardsContainer');
-      if (hiddenContainer && modal.contains(card)) {
-        hiddenContainer.appendChild(card);
-      }
-    }
-  }
-
-  function handleMouseOver() {
-    hoverActive = true;
-    showModal();
-  }
-
-  function handleMouseOut() {
-    hoverActive = false;
-    setTimeout(() => {
-      if (!hoverActive && !isLocked) {
-        hideModal();
-      }
-    }, 300);
-  }
-
-  iconButton.addEventListener('mouseover', handleMouseOver);
-  iconButton.addEventListener('mouseout', handleMouseOut);
-
-  iconButton.addEventListener('click', (e) => {
-    isLocked = !isLocked;
-    if (isLocked) showModal();
-    else hideModal();
-    e.stopPropagation();
   });
 
-  headerDropArea.appendChild(iconButton);
+  document.addEventListener('mouseup', function (e) {
+    if (!isDragging) return;
+    isDragging = false;
+    card.style.pointerEvents = '';
+    card.classList.remove('dragging');
+
+    const sb = getSidebar();
+    if (sb) {
+      sb.classList.remove('highlight');
+      sb.style.height = '';
+      sb.style.minWidth = '';
+    }
+
+    let dropped = null;
+
+    // Sidebar drop?
+    if (sb) {
+      const r = sb.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        placeCardInZone(card, ZONES.SIDEBAR);
+        dropped = ZONES.SIDEBAR;
+      }
+    }
+
+    // Top zone drop?
+    if (!dropped) {
+      const top = getTopZone();
+      if (top) {
+        const r = top.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+          const dest = (card.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+          placeCardInZone(card, dest);
+          dropped = dest;
+        }
+      }
+    }
+
+    // Header drop?
+    if (!dropped) {
+      const h = getHeaderDropArea();
+      if (h) {
+        const r = h.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+          placeCardInZone(card, ZONES.HEADER);
+          dropped = ZONES.HEADER;
+        }
+      }
+    }
+
+    // If not dropped anywhere, return to original container
+    if (!dropped) {
+      const orig = $(card.dataset.originalContainerId);
+      if (orig) {
+        orig.appendChild(card);
+        card.style.removeProperty('width');
+        animateVerticalSlide(card);
+        // keep previous zone in layout (no change)
+      }
+    } else {
+      // Persist user layout on manual move (including header)
+      setLayoutFor(card.id, dropped);
+    }
+
+    // Clear inline drag styles
+    ['position', 'left', 'top', 'z-index', 'height', 'min-width', 'flex-shrink', 'transition', 'transform', 'opacity', 'width']
+      .forEach(prop => card.style.removeProperty(prop));
+
+    removeTopZoneHighlight();
+    hideHeaderDropZone();
+    cleanupTopZoneAfterDrop();
+    updateTopZoneLayout();
+    updateSidebarVisibility();
+  });
+}
+
+// -------------------- public API --------------------
+export function loadSidebarOrder() {
+  // Backward compat: act as "apply layout"
+  applyUserLayoutOrDefault();
+  ensureZonesToggle();
+  updateZonesToggleUI();
+}
+
+export function loadHeaderOrder() {
+  const header = getHeaderDropArea();
+  if (!header) return;
+  header.innerHTML = '';
+
+  const layout = readLayout();
+
+  // If collapsed: all cards appear as header icons
+  if (isZonesCollapsed()) {
+    getCards().forEach(insertCardInHeader);
+    saveHeaderOrder();
+    return;
+  }
+
+  // Not collapsed: only cards saved to header zone appear as icons
+  getCards().forEach(card => {
+    if (layout[card.id] === ZONES.HEADER) insertCardInHeader(card);
+  });
   saveHeaderOrder();
 }
 
-// === Main Drag and Drop Initialization ===
 export function initDragAndDrop() {
   function run() {
-    // make sure toggle exists even if user hasn't dragged yet
-    loadSidebarOrder();
+    // 1) Layout on first paint
+    applyUserLayoutOrDefault();
     loadHeaderOrder();
 
-    // 2) Then paint visibility/toggle
-    applyZonesCollapsed();
+    // 2) Paint controls/UI
     ensureZonesToggle();
     updateZonesToggleUI();
 
-    const draggableCards = document.querySelectorAll('#uploadCard, #folderManagementCard');
-    draggableCards.forEach(card => {
-      if (!card.dataset.originalContainerId && card.parentNode) {
-        card.dataset.originalContainerId = card.parentNode.id;
-      }
-      const header = card.querySelector('.card-header');
-      if (header) {
-        header.classList.add('drag-header');
-      }
+    // 3) Make cards draggable
+    getCards().forEach(makeCardDraggable);
 
-      let isDragging = false;
-      let dragTimer = null;
-      let offsetX = 0, offsetY = 0;
-      let initialLeft, initialTop;
-
-      if (header) {
-        header.addEventListener('mousedown', function (e) {
-          e.preventDefault();
-          const card = this.closest('.card');
-          const initialRect = card.getBoundingClientRect();
-          const originX = ((e.clientX - initialRect.left) / initialRect.width) * 100;
-          const originY = ((e.clientY - initialRect.top) / initialRect.height) * 100;
-          card.style.transformOrigin = `${originX}% ${originY}%`;
-
-          dragTimer = setTimeout(() => {
-            isDragging = true;
-            card.classList.add('dragging');
-            card.style.pointerEvents = 'none';
-            addTopZoneHighlight();
-            showTopZoneWhileDragging();
-
-            const sidebar = getSidebar();
-if (sidebar) {
-  unclampSidebarForDrag();                // <— NEW
-  sidebar.classList.add('active');
-  sidebar.classList.add('highlight');
-  // keep it visible, but don't force a fixed height
-  sidebar.style.removeProperty('height'); // <— no 800px box
-  // ensure it's actually visible if not collapsed
-  if (!isZonesCollapsed()) sidebar.style.display = 'block';
-}
-
-            showHeaderDropZone();
-            const topZone = getTopZone();
-            if (topZone) {
-              topZone.style.display = '';
-              ensureTopZonePlaceholder();
-            }
-
-            initialLeft = initialRect.left + window.pageXOffset;
-            initialTop = initialRect.top + window.pageYOffset;
-            offsetX = e.pageX - initialLeft;
-            offsetY = e.pageY - initialTop;
-
-            if (card.headerIconButton) {
-              if (card.headerIconButton.parentNode) {
-                card.headerIconButton.parentNode.removeChild(card.headerIconButton);
-              }
-              if (card.headerIconButton.modalInstance && card.headerIconButton.modalInstance.parentNode) {
-                card.headerIconButton.modalInstance.parentNode.removeChild(card.headerIconButton.modalInstance);
-              }
-              card.headerIconButton = null;
-              saveHeaderOrder();
-            }
-
-            document.body.appendChild(card);
-            card.style.position = 'absolute';
-            card.style.left = initialLeft + 'px';
-            card.style.top = initialTop + 'px';
-            card.style.width = initialRect.width + 'px';
-            card.style.height = initialRect.height + 'px';
-            card.style.minWidth = initialRect.width + 'px';
-            card.style.flexShrink = '0';
-            card.style.zIndex = '10000';
-          }, 500);
-        });
-
-        header.addEventListener('mouseup', function () {
-          clearTimeout(dragTimer);
-        });
-      }
-
-      document.addEventListener('mousemove', function (e) {
-        if (isDragging) {
-          card.style.left = (e.pageX - offsetX) + 'px';
-          card.style.top = (e.pageY - offsetY) + 'px';
-        }
+    // 4) Enforce responsive (and keep doing so)
+    let raf = null;
+    const onResize = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        enforceResponsiveZones();
       });
-
-      document.addEventListener('mouseup', function (e) {
-        if (isDragging) {
-          isDragging = false;
-          card.style.pointerEvents = '';
-          card.classList.remove('dragging');
-
-
-          const sidebar = getSidebar();
-          if (sidebar) {
-            sidebar.classList.remove('highlight');
-            sidebar.style.height = '';
-            sidebar.style.minWidth = '';
-          }
-
-          if (card.headerIconButton) {
-            if (card.headerIconButton.parentNode) {
-              card.headerIconButton.parentNode.removeChild(card.headerIconButton);
-            }
-            if (card.headerIconButton.modalInstance && card.headerIconButton.modalInstance.parentNode) {
-              card.headerIconButton.modalInstance.parentNode.removeChild(card.headerIconButton.modalInstance);
-            }
-            card.headerIconButton = null;
-            saveHeaderOrder();
-          }
-
-          let droppedInSidebar = false;
-          let droppedInTop = false;
-          let droppedInHeader = false;
-
-          // Check if dropped in sidebar drop zone.
-          const sidebarElem = getSidebar();
-          if (sidebarElem) {
-            const rect = sidebarElem.getBoundingClientRect();
-            if (
-              e.clientX >= rect.left &&
-              e.clientX <= rect.right &&
-              e.clientY >= rect.top &&
-              e.clientY <= rect.bottom
-            ) {
-              insertCardInSidebar(card, e);
-              droppedInSidebar = true;
-            }
-          }
-
-          // Check the top drop zone.
-          const topRow = document.getElementById('uploadFolderRow');
-          if (!droppedInSidebar && topRow) {
-            const rect = topRow.getBoundingClientRect();
-            if (
-              e.clientX >= rect.left &&
-              e.clientX <= rect.right &&
-              e.clientY >= rect.top &&
-              e.clientY <= rect.bottom
-            ) {
-              let container;
-              if (card.id === 'uploadCard') {
-                container = document.getElementById('leftCol');
-              } else if (card.id === 'folderManagementCard') {
-                container = document.getElementById('rightCol');
-              }
-              if (container) {
-                ensureTopZonePlaceholder();
-                updateTopZoneLayout();
-                container.appendChild(card);
-                card.dataset.originalContainerId = container.id;
-                droppedInTop = true;
-                card.style.width = "363px";
-                animateVerticalSlide(card);
-                setTimeout(() => {
-                  card.style.removeProperty('width');
-                }, 210);
-
-                // NEW: persist user manual placement
-                snapshotUserZones();
-              }
-            }
-          }
-
-          // Check the header drop zone.
-          const headerDropArea = document.getElementById('headerDropArea');
-          if (!droppedInSidebar && !droppedInTop && headerDropArea) {
-            const rect = headerDropArea.getBoundingClientRect();
-            if (
-              e.clientX >= rect.left &&
-              e.clientX <= rect.right &&
-              e.clientY >= rect.top &&
-              e.clientY <= rect.bottom
-            ) {
-              insertCardInHeader(card, e);
-              droppedInHeader = true;
-              // header mode is transient; do not overwrite userZones here
-            }
-          }
-
-          // If card was not dropped in any zone, return it to its original container.
-          if (!droppedInSidebar && !droppedInTop && !droppedInHeader) {
-            const orig = document.getElementById(card.dataset.originalContainerId);
-            if (orig) {
-              orig.appendChild(card);
-              card.style.removeProperty('width');
-            }
-          }
-
-          // Clear inline drag-related styles.
-          [
-            'position',
-            'left',
-            'top',
-            'z-index',
-            'height',
-            'min-width',
-            'flex-shrink',
-            'transition',
-            'transform',
-            'opacity'
-          ].forEach(prop => card.style.removeProperty(prop));
-
-          // For sidebar drops, force width to 100%.
-          if (droppedInSidebar) {
-            card.style.width = '100%';
-          }
-
-          updateTopZoneLayout();
-          updateSidebarVisibility();
-          clampSidebarWhenEmpty();
-          if (sidebar) {
-            sidebar.classList.remove('highlight');
-            sidebar.style.height = '';
-            sidebar.style.minWidth = '';
-          }
-          hideHeaderDropZone();
-
-          cleanupTopZoneAfterDrop();
-          snapshotZoneLocations();   // keep original (collapse/expand)
-          const tz = getTopZone();
-          if (tz) tz.style.minHeight = '';
-        }
-      });
-    });
+    };
+    window.addEventListener('resize', onResize);
+    enforceResponsiveZones();
   }
 
   if (document.readyState === 'loading') {

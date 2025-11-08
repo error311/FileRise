@@ -403,39 +403,57 @@ function bindDarkMode() {
   function applySiteConfig(cfg, { phase = 'final' } = {}) {
     try {
       const title = (cfg && cfg.header_title) ? String(cfg.header_title) : 'FileRise';
-  
+
       // Always keep <title> correct early (no visual flicker)
       document.title = title;
-  
+
       // --- Login options (apply in BOTH phases so login page is correct) ---
       const lo = (cfg && cfg.loginOptions) ? cfg.loginOptions : {};
-      const disableForm  = !!lo.disableFormLogin;
-      const disableOIDC  = !!lo.disableOIDCLogin;
-      const disableBasic = !!lo.disableBasicAuth;
-  
-      const row = $('#loginForm');
-      if (row) {
-        if (disableForm) {
-          row.setAttribute('hidden', '');
-          row.style.display = ''; // don't leave display:none lying around
+
+
+      // be tolerant to key variants just in case
+      const disableForm = !!(lo.disableFormLogin ?? lo.disable_form_login ?? lo.disableForm);
+      const disableOIDC = !!(lo.disableOIDCLogin ?? lo.disable_oidc_login ?? lo.disableOIDC);
+      const disableBasic = !!(lo.disableBasicAuth ?? lo.disable_basic_auth ?? lo.disableBasic);
+
+      const showForm = !disableForm;
+      const showOIDC = !disableOIDC;
+      const showBasic = !disableBasic;
+
+      const loginWrap = $('#loginForm');         // outer wrapper that contains buttons + form
+      const authForm = $('#authForm');          // inner username/password form
+      const oidcBtn = $('#oidcLoginBtn');      // OIDC button
+      const basicLink = document.querySelector('a[href="/api/auth/login_basic.php"]');
+
+      // 1) Show the wrapper if ANY method is enabled (form OR OIDC OR basic)
+      if (loginWrap) {
+        const anyMethod = showForm || showOIDC || showBasic;
+        if (anyMethod) {
+          loginWrap.removeAttribute('hidden');   // remove [hidden], which beats display:
+          loginWrap.style.display = '';          // let CSS decide
         } else {
-          row.removeAttribute('hidden');
-          row.style.display = '';
+          loginWrap.setAttribute('hidden', '');
+          loginWrap.style.display = '';
         }
       }
-      const oidc  = $('#oidcLoginBtn'); if (oidc)  oidc.style.display  = disableOIDC ? 'none' : '';
+
+      // 2) Toggle the pieces inside the wrapper
+      if (authForm) authForm.style.display = showForm ? '' : 'none';
+      if (oidcBtn) oidcBtn.style.display = showOIDC ? '' : 'none';
+      if (basicLink) basicLink.style.display = showBasic ? '' : 'none';
+      const oidc = $('#oidcLoginBtn'); if (oidc) oidc.style.display = disableOIDC ? 'none' : '';
       const basic = document.querySelector('a[href="/api/auth/login_basic.php"]');
       if (basic) basic.style.display = disableBasic ? 'none' : '';
-  
+
       // --- Header <h1> only in the FINAL phase (prevents visible flips) ---
       if (phase === 'final') {
         const h1 = document.querySelector('.header-title h1');
         if (h1) {
           // prevent i18n or legacy from overwriting it
           if (h1.hasAttribute('data-i18n-key')) h1.removeAttribute('data-i18n-key');
-  
+
           if (h1.textContent !== title) h1.textContent = title;
-  
+
           // lock it so late code can't stomp it
           if (!h1.__titleLock) {
             const mo = new MutationObserver(() => {
@@ -1037,6 +1055,21 @@ function bindDarkMode() {
     if (login) login.style.display = '';
     // …wire stuff…
     applySiteConfig(window.__FR_SITE_CFG__ || {}, { phase: 'final' });
+    // Auto-SSO if OIDC is the only enabled method (add ?noauto=1 to skip)
+    (() => {
+      const lo = (window.__FR_SITE_CFG__ && window.__FR_SITE_CFG__.loginOptions) || {};
+      const disableForm = !!(lo.disableFormLogin ?? lo.disable_form_login ?? lo.disableForm);
+      const disableBasic = !!(lo.disableBasicAuth ?? lo.disable_basic_auth ?? lo.disableBasic);
+      const disableOIDC = !!(lo.disableOIDCLogin ?? lo.disable_oidc_login ?? lo.disableOIDC);
+
+      const onlyOIDC = disableForm && disableBasic && !disableOIDC;
+      const qp = new URLSearchParams(location.search);
+
+      if (onlyOIDC && qp.get('noauto') !== '1') {
+        const btn = document.getElementById('oidcLoginBtn');
+        if (btn) setTimeout(() => btn.click(), 250);
+      }
+    })();
     await revealAppAndHideOverlay();
     const hb = document.querySelector('.header-buttons');
     if (hb) hb.style.visibility = 'hidden';
@@ -1102,7 +1135,7 @@ function bindDarkMode() {
   const onHttps = location.protocol === 'https:' || location.hostname === 'localhost';
   if ('serviceWorker' in navigator && onHttps && !hasCapBridge && !isCapUA) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register(`/js/pwa/sw.js?v=${encodeURIComponent(QVER)}`).catch(() => {});
+      navigator.serviceWorker.register(`/js/pwa/sw.js?v=${encodeURIComponent(QVER)}`).catch(() => { });
     });
   }
 })();

@@ -1,5 +1,33 @@
 # Changelog
 
+## Changes 11/8/2025 (v1.8.12)
+
+release(v1.8.12): auth UI & DnD polish — show OIDC, auto-SSO, right-aligned header icons
+
+- auth (public/js/main.js)
+  - Robust login options: tolerate key variants (disableFormLogin/disable_form_login, etc.).
+  - Correctly show/hide wrapper + individual methods (form/OIDC/basic).
+  - Auto-SSO when OIDC is the only enabled method; add opt-out with `?noauto=1`.
+  - Minor cleanup (SW register catch spacing).
+
+- drag & drop (public/js/dragAndDrop.js)
+  - Reworked zones model: Sidebar / Top (left/right) / Header (icon+modal).
+  - Persist user layout with `userZonesSnapshot.v2` and responsive stash for small screens.
+  - Live UI sync: toggle icon (`material-icons`) updates immediately after moves.
+  - Smarter small-screen behavior: lift sidebar cards ephemerally; restore only what belonged to sidebar.
+  - Cleaner header icon modal plumbing; remove legacy/dead code.
+
+- styles (public/css/styles.css)
+  - Header drop zone fills remaining space and right-aligns its icons.
+
+UX:
+
+- OIDC button reliably appears when form/basic are disabled.
+- If OIDC is the sole method, users are taken straight to the provider (unless `?noauto=1`).
+- Header icons sit with the other header actions (right-aligned), and the toggle icon reflects layout changes instantly.
+
+---
+
 ## Changes 11/8/2025 (v1.8.11)
 
 release(v1.8.11): fix(oidc): always send PKCE (S256) and treat empty secret as public client
