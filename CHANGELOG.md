@@ -1,5 +1,16 @@
 # Changelog
 
+## Changes 11/8/2025 (v1.8.11)
+
+release (v1.8.11): fix(oidc): always send PKCE (S256) and treat empty secret as public client
+
+- Force PKCE via setCodeChallengeMethod('S256') so Authelia’s public-client policy is satisfied.
+- Convert empty OIDC client secret to null to correctly signal a public client.
+- Optional commented hook to switch token endpoint auth to client_secret_post if desired.
+- OIDC_TOKEN_ENDPOINT_AUTH_METHOD added to config.php
+
+---
+
 ## Changes 11/8/2025 (v1.8.10)
 
 release(v1.8.10): theme-aware media modal, stronger file drag-and-drop, unified progress color, and favicon overhaul

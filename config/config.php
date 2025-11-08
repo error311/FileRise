@@ -33,6 +33,10 @@ define('ONLYOFFICE_DOCS_ORIGIN', 'http://192.168.1.61'); // your Document Server
 define('ONLYOFFICE_DEBUG', true);
 */
 
+if (!defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD')) {
+    define('OIDC_TOKEN_ENDPOINT_AUTH_METHOD', 'client_secret_basic'); // default
+}
+
 // Encryption helpers
 function encryptData($data, $encryptionKey)
 {

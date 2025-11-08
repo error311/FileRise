@@ -57,12 +57,26 @@ class AuthController
             $oidcAction = 'callback';
         }
         if ($oidcAction) {
-            $cfg = AdminModel::getConfig();
+            $cfg          = AdminModel::getConfig();
+            $clientId     = $cfg['oidc']['clientId']     ?? null;
+            $clientSecret = $cfg['oidc']['clientSecret'] ?? null;
+            // When configured as a public client (no secret), pass null, not an empty string.
+            if ($clientSecret === '') { $clientSecret = null; }
+
             $oidc = new OpenIDConnectClient(
                 $cfg['oidc']['providerUrl'],
-                $cfg['oidc']['clientId'],
-                $cfg['oidc']['clientSecret']
+                $clientId ?: null,
+                $clientSecret
             );
+
+            // Always send PKCE (S256). Required by Authelia for public clients, safe for confidential ones.
+            if (method_exists($oidc, 'setCodeChallengeMethod')) {
+                $oidc->setCodeChallengeMethod('S256');
+            }
+            // client_secret_post with Authelia using config.php
+            if (method_exists($oidc, 'setTokenEndpointAuthMethod') && OIDC_TOKEN_ENDPOINT_AUTH_METHOD) {
+                $oidc->setTokenEndpointAuthMethod(OIDC_TOKEN_ENDPOINT_AUTH_METHOD);
+            }
             $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
             $oidc->addScope(['openid','profile','email']);
 
