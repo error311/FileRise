@@ -142,13 +142,13 @@ body {
   border-radius: 4px !important;
     padding: 6px 10px !important;
   }
-  /* make the drop zone fill leftover space and right-align its own icons */
-#headerDropArea.header-drop-zone{
-  display: flex;
-    justify-content: flex-end;
-    min-width: 100px;
 
-}
+  #headerDropArea.header-drop-zone{
+    display: flex;
+    justify-content: flex-end;   /* buttons to the right */
+    align-items: center;
+    min-height: 40px;            /* so the label has room */
+  }
   .header-buttons button:hover {
   background-color: rgba(255, 255, 255, 0.2);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -1532,7 +1532,16 @@ body {
   .drag-header.active {
   width: 350px;
   height: 750px;
-  }.main-column {
+  }
+  /* Fixed-width sidebar (always 350px) */
+#sidebarDropArea{
+  width: 350px;
+  min-width: 350px;
+  max-width: 350px;
+  flex: 0 0 350px;
+  box-sizing: border-box;
+}
+  .main-column {
   flex: 1;
     transition: margin-left 0.3s ease;
   }#uploadFolderRow {
@@ -1600,8 +1609,8 @@ body {
   }#sidebarDropArea,
   #uploadFolderRow {
   background-color: transparent;
-  
-  }.dark-mode #sidebarDropArea,
+  }
+  .dark-mode #sidebarDropArea,
   .dark-mode #uploadFolderRow {
   background-color: transparent;
   }.dark-mode #sidebarDropArea.highlight,
@@ -1615,8 +1624,6 @@ body {
   border: none !important;
   }.dragging:focus {
   outline: none;
-  }#sidebarDropArea > .card {
-  margin-bottom: 1rem;
   }.card {
   background-color: #fff;
     color: #000;
@@ -1713,8 +1720,9 @@ body {
     border: 2px dashed #555; 
     color: #fff;
   }.header-drop-zone.drag-active:empty::before {
-  content: "Drop";
+  content: "Drop Zone";
     font-size: 10px;
+    padding-right: 6px;
     color: #aaa;
   }/* Disable text selection on rows to prevent accidental copying when shift-clicking */
   #fileList tbody tr.clickable-row {

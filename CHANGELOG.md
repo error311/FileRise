@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 11/8/2025 (v1.8.13)
+
+release(v1.8.13): ui(dnd): stabilize zones, lock sidebar width, and keep header dock in sync
+
+- dnd: fix disappearing/overlapping cards when moving between sidebar/top; return to origin on failed drop
+- layout: placeCardInZone now live-updates top layout, sidebar visibility, and toggle icon
+- toggle/collapse: move ALL cards to header on collapse, restore saved layout on expand; keep icon state synced; add body.sidebar-hidden for proper file list expansion; emit `zones:collapsed-changed`
+- header dock: show dock whenever icons exist (and on collapse); hide when empty
+- responsive: enforceResponsiveZones also updates toggle icon; stash/restore behavior unchanged
+- sidebar: hard-lock width to 350px (CSS) and remove runtime 280px minWidth; add placeholder when empty to make dropping back easy
+- CSS: right-align header dock buttons, centered “Drop Zone” label, sensible min-height; dark-mode safe
+- refactor: small renames/ordering; remove redundant z-index on toggle; minor formatting
+
+---
+
 ## Changes 11/8/2025 (v1.8.12)
 
 release(v1.8.12): auth UI & DnD polish — show OIDC, auto-SSO, right-aligned header icons

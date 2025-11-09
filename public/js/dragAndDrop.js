@@ -41,7 +41,6 @@ function readLayout() {
 function writeLayout(layout) {
   localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout || {}));
 }
-
 function setLayoutFor(cardId, zoneId) {
   const layout = readLayout();
   layout[cardId] = zoneId;
@@ -93,6 +92,7 @@ function removeHeaderIconForCard(card) {
 function insertCardInHeader(card) {
   const host = getHeaderDropArea();
   if (!host) return;
+
   // Ensure hidden container exists to park real cards while icon-visible.
   let hidden = $('hiddenCardsContainer');
   if (!hidden) {
@@ -110,10 +110,10 @@ function insertCardInHeader(card) {
   iconButton.style.border = 'none';
   iconButton.style.background = 'none';
   iconButton.style.cursor = 'pointer';
-  iconButton.innerHTML = `<i class="material-icons" style="font-size:24px;">${card.id === 'uploadCard' ? 'cloud_upload'
-      : card.id === 'folderManagementCard' ? 'folder'
-        : 'insert_drive_file'
-    }</i>`;
+  iconButton.innerHTML = `<i class="material-icons" style="font-size:24px;">${
+    card.id === 'uploadCard' ? 'cloud_upload' :
+    card.id === 'folderManagementCard' ? 'folder' : 'insert_drive_file'
+  }</i>`;
 
   iconButton.cardElement = card;
   card.headerIconButton = iconButton;
@@ -150,8 +150,8 @@ function insertCardInHeader(card) {
   function showModal() {
     ensureModal();
     if (!modal.contains(card)) {
-      let hidden = $('hiddenCardsContainer');
-      if (hidden && hidden.contains(card)) hidden.removeChild(card);
+      const hiddenNow = $('hiddenCardsContainer');
+      if (hiddenNow && hiddenNow.contains(card)) hiddenNow.removeChild(card);
       card.style.width = '';
       card.style.minWidth = '';
       modal.appendChild(card);
@@ -163,8 +163,8 @@ function insertCardInHeader(card) {
     if (!modal) return;
     modal.style.visibility = 'hidden';
     modal.style.opacity = '0';
-    const hidden = $('hiddenCardsContainer');
-    if (hidden && modal.contains(card)) hidden.appendChild(card);
+    const hiddenNow = $('hiddenCardsContainer');
+    if (hiddenNow && modal.contains(card)) hiddenNow.appendChild(card);
   }
   function maybeHide() {
     setTimeout(() => {
@@ -181,6 +181,8 @@ function insertCardInHeader(card) {
   });
 
   host.appendChild(iconButton);
+  // make sure the dock is visible when icons exist
+  showHeaderDockPersistent();
   saveHeaderOrder();
 }
 
@@ -227,6 +229,10 @@ function placeCardInZone(card, zoneId, { animate = true } = {}) {
       break;
     }
   }
+
+  updateTopZoneLayout();
+  updateSidebarVisibility();
+  updateZonesToggleUI(); // live update when zones change
 }
 
 function currentZoneForCard(card) {
@@ -234,7 +240,6 @@ function currentZoneForCard(card) {
   const pid = card.parentNode.id || '';
   if (pid === 'hiddenCardsContainer' && card.headerIconButton) return ZONES.HEADER;
   if ([ZONES.SIDEBAR, ZONES.TOP_LEFT, ZONES.TOP_RIGHT, ZONES.HEADER].includes(pid)) return pid;
-  // If card is temporarily in modal (header), treat as header
   if (card.headerIconButton && card.headerIconButton.modalInstance?.contains(card)) return ZONES.HEADER;
   return pid || null;
 }
@@ -246,44 +251,6 @@ function saveCurrentLayout() {
     if (zone) layout[card.id] = zone;
   });
   writeLayout(layout);
-}
-
-function applyUserLayoutOrDefault() {
-  const layout = readLayout();
-  const hasAny = Object.keys(layout).length > 0;
-
-  // If we have saved user layout, honor it
-  if (hasAny) {
-    getCards().forEach(card => {
-      const targetZone = layout[card.id];
-      if (!targetZone) return;
-      // On small screens: if saved zone is the sidebar, temporarily place in top cols
-      if (isSmallScreen() && targetZone === ZONES.SIDEBAR) {
-        const target = (card.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
-        placeCardInZone(card, target, { animate: false });
-      } else {
-        placeCardInZone(card, targetZone, { animate: false });
-      }
-    });
-    updateTopZoneLayout();
-    updateSidebarVisibility();
-    return;
-  }
-
-  // No saved layout yet: apply defaults
-  if (!isSmallScreen()) {
-    // Wide: default both to sidebar (if not already)
-    getCards().forEach(c => placeCardInZone(c, ZONES.SIDEBAR, { animate: false }));
-  } else {
-    // Small: deterministic mapping
-    getCards().forEach(c => {
-      const zone = (c.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
-      placeCardInZone(c, zone, { animate: false });
-    });
-  }
-  updateTopZoneLayout();
-  updateSidebarVisibility();
-  saveCurrentLayout(); // initialize baseline so future moves persist
 }
 
 // -------------------- responsive stash --------------------
@@ -339,21 +306,62 @@ function enforceResponsiveZones() {
   __wasSmall = nowSmall;
   updateTopZoneLayout();
   updateSidebarVisibility();
+  updateZonesToggleUI(); // keep icon in sync when responsive flips
+}
+
+// -------------------- header dock visibility helpers --------------------
+function showHeaderDockPersistent() {
+  const h = getHeaderDropArea();
+  if (h) {
+    h.style.display = 'inline-flex';
+    h.classList.add('dock-visible');
+  }
+}
+function hideHeaderDockPersistent() {
+  const h = getHeaderDropArea();
+  if (h) {
+    h.classList.remove('dock-visible');
+    if (h.children.length === 0) h.style.display = 'none';
+  }
 }
 
 // -------------------- zones toggle (collapse to header) --------------------
 function isZonesCollapsed() { return localStorage.getItem('zonesCollapsed') === '1'; }
+
+function applyCollapsedBodyClass() {
+  // helps grid/containers expand the file list area when sidebar is hidden
+  document.body.classList.toggle('sidebar-hidden', isZonesCollapsed());
+  const main = document.querySelector('.main-wrapper') || document.querySelector('#main') || document.querySelector('main');
+  if (main) {
+    main.style.contain = 'size';
+    void main.offsetHeight;
+    setTimeout(() => { main.style.removeProperty('contain'); }, 0);
+  }
+}
+
 function setZonesCollapsed(collapsed) {
   localStorage.setItem('zonesCollapsed', collapsed ? '1' : '0');
+
   if (collapsed) {
-    // Move ALL cards to header icons (transient). Do not overwrite saved layout.
+    // Move ALL cards to header icons (transient) regardless of where they were.
     getCards().forEach(insertCardInHeader);
+    showHeaderDockPersistent();
+    const sb = getSidebar();
+    if (sb) sb.style.display = 'none';
   } else {
-    // Restore the saved user layout.
+    // Restore saved layout + rebuild header icons only for HEADER-assigned cards
     applyUserLayoutOrDefault();
+    loadHeaderOrder();
+    hideHeaderDockPersistent();
   }
+
+  updateSidebarVisibility();
+  updateTopZoneLayout();
   ensureZonesToggle();
   updateZonesToggleUI();
+  applyCollapsedBodyClass();
+
+  document.dispatchEvent(new CustomEvent('zones:collapsed-changed', { detail: { collapsed: isZonesCollapsed() } }));
 }
 
 function getHeaderHost() {
@@ -379,7 +387,6 @@ function ensureZonesToggle() {
       position: 'absolute',
       top: `${TOGGLE_TOP_PX}px`,
       left: `${TOGGLE_LEFT_PX}px`,
-      zIndex: '10010',
       width: '38px',
       height: '38px',
       borderRadius: '19px',
@@ -424,7 +431,7 @@ function updateZonesToggleUI() {
     iconEl.style.transition = 'transform 0.2s ease';
     iconEl.style.display = 'inline-flex';
     iconEl.style.alignItems = 'center';
-    // fun rotate if both cards are in top zone
+    // rotate if both cards are in top zone (only when not collapsed)
     const tz = getTopZone();
     const allTop = !!tz?.querySelector('#uploadCard') && !!tz?.querySelector('#folderManagementCard');
     iconEl.style.transform = (!collapsed && allTop) ? 'rotate(90deg)' : 'rotate(0deg)';
@@ -486,7 +493,31 @@ function updateTopZoneLayout() {
   if (top) top.style.display = (hasUpload || hasFolder) ? '' : 'none';
 }
 
-// drag visual helpers
+// --- sidebar placeholder while dragging (only when empty) ---
+function ensureSidebarPlaceholder() {
+  const sb = getSidebar();
+  if (!sb) return;
+  if (hasSidebarCards()) return; // only when empty
+  let ph = sb.querySelector('.sb-dnd-placeholder');
+  if (!ph) {
+    ph = document.createElement('div');
+    ph.className = 'sb-dnd-placeholder';
+    Object.assign(ph.style, {
+      height: '340px',
+      width: '100%',
+      visibility: 'hidden'
+    });
+    sb.appendChild(ph);
+  }
+}
+function removeSidebarPlaceholder() {
+  const sb = getSidebar();
+  if (!sb) return;
+  const ph = sb.querySelector('.sb-dnd-placeholder');
+  if (ph) ph.remove();
+}
+
+// -------------------- DnD core --------------------
 function addTopZoneHighlight() {
   const top = getTopZone();
   if (!top) return;
@@ -525,6 +556,7 @@ function cleanupTopZoneAfterDrop() {
   if (ph) ph.remove();
   top.classList.remove('highlight');
   top.style.minHeight = '';
+  // ✅ fixed selector string here
   const hasAny = top.querySelectorAll('#uploadCard, #folderManagementCard').length > 0;
   top.style.display = hasAny ? '' : 'none';
 }
@@ -539,11 +571,10 @@ function hideHeaderDropZone() {
   const h = getHeaderDropArea();
   if (h) {
     h.classList.remove('drag-active');
-    if (h.children.length === 0) h.style.display = 'none';
+    if (h.children.length === 0 && !isZonesCollapsed()) h.style.display = 'none';
   }
 }
 
-// -------------------- DnD core --------------------
 function makeCardDraggable(card) {
   if (!card) return;
   const header = card.querySelector('.card-header');
@@ -573,11 +604,9 @@ function makeCardDraggable(card) {
 
         const sb = getSidebar();
         if (sb) {
-          sb.classList.add('active');
-          sb.classList.add('highlight');
+          sb.classList.add('active', 'highlight');
           if (!isZonesCollapsed()) sb.style.display = 'block';
-          sb.style.removeProperty('height');
-          sb.style.minWidth = '280px';
+          ensureSidebarPlaceholder(); // make empty sidebar easy to drop into
         }
 
         showHeaderDropZone();
@@ -597,9 +626,8 @@ function makeCardDraggable(card) {
           top: initialTop + 'px',
           width: rect.width + 'px',
           height: rect.height + 'px',
-          minWidth: rect.width + 'px',
-          flexShrink: '0',
-          zIndex: '10000'
+          zIndex: '10000',
+          pointerEvents: 'none'
         });
       }, 450);
     });
@@ -623,8 +651,7 @@ function makeCardDraggable(card) {
     const sb = getSidebar();
     if (sb) {
       sb.classList.remove('highlight');
-      sb.style.height = '';
-      sb.style.minWidth = '';
+      removeSidebarPlaceholder();
     }
 
     let dropped = null;
@@ -663,22 +690,20 @@ function makeCardDraggable(card) {
       }
     }
 
-    // If not dropped anywhere, return to original container
     if (!dropped) {
+      // return to original container
       const orig = $(card.dataset.originalContainerId);
       if (orig) {
         orig.appendChild(card);
         card.style.removeProperty('width');
         animateVerticalSlide(card);
-        // keep previous zone in layout (no change)
       }
     } else {
-      // Persist user layout on manual move (including header)
       setLayoutFor(card.id, dropped);
     }
 
     // Clear inline drag styles
-    ['position', 'left', 'top', 'z-index', 'height', 'min-width', 'flex-shrink', 'transition', 'transform', 'opacity', 'width']
+    ['position', 'left', 'top', 'z-index', 'height', 'min-width', 'flex-shrink', 'transition', 'transform', 'opacity', 'width', 'pointer-events']
       .forEach(prop => card.style.removeProperty(prop));
 
     removeTopZoneHighlight();
@@ -686,15 +711,52 @@ function makeCardDraggable(card) {
     cleanupTopZoneAfterDrop();
     updateTopZoneLayout();
     updateSidebarVisibility();
+    updateZonesToggleUI();
   });
+}
+
+// -------------------- defaults + layout --------------------
+function applyUserLayoutOrDefault() {
+  const layout = readLayout();
+  const hasAny = Object.keys(layout).length > 0;
+
+  if (hasAny) {
+    getCards().forEach(card => {
+      const targetZone = layout[card.id];
+      if (!targetZone) return;
+      // On small screens: if saved zone is the sidebar, temporarily place in top cols
+      if (isSmallScreen() && targetZone === ZONES.SIDEBAR) {
+        const target = (card.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+        placeCardInZone(card, target, { animate: false });
+      } else {
+        placeCardInZone(card, targetZone, { animate: false });
+      }
+    });
+    updateTopZoneLayout();
+    updateSidebarVisibility();
+    return;
+  }
+
+  // No saved layout yet: apply defaults
+  if (!isSmallScreen()) {
+    getCards().forEach(c => placeCardInZone(c, ZONES.SIDEBAR, { animate: false }));
+  } else {
+    getCards().forEach(c => {
+      const zone = (c.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+      placeCardInZone(c, zone, { animate: false });
+    });
+  }
+  updateTopZoneLayout();
+  updateSidebarVisibility();
+  saveCurrentLayout(); // initialize baseline so future moves persist
 }
 
 // -------------------- public API --------------------
 export function loadSidebarOrder() {
-  // Backward compat: act as "apply layout"
   applyUserLayoutOrDefault();
   ensureZonesToggle();
   updateZonesToggleUI();
+  applyCollapsedBodyClass();
 }
 
 export function loadHeaderOrder() {
@@ -704,9 +766,9 @@ export function loadHeaderOrder() {
 
   const layout = readLayout();
 
-  // If collapsed: all cards appear as header icons
   if (isZonesCollapsed()) {
     getCards().forEach(insertCardInHeader);
+    showHeaderDockPersistent();
     saveHeaderOrder();
     return;
   }
@@ -715,6 +777,7 @@ export function loadHeaderOrder() {
   getCards().forEach(card => {
     if (layout[card.id] === ZONES.HEADER) insertCardInHeader(card);
   });
+  if (header.children.length === 0) header.style.display = 'none';
   saveHeaderOrder();
 }
 
@@ -727,6 +790,7 @@ export function initDragAndDrop() {
     // 2) Paint controls/UI
     ensureZonesToggle();
     updateZonesToggleUI();
+    applyCollapsedBodyClass();
 
     // 3) Make cards draggable
     getCards().forEach(makeCardDraggable);
@@ -735,9 +799,7 @@ export function initDragAndDrop() {
     let raf = null;
     const onResize = () => {
       if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        enforceResponsiveZones();
-      });
+      raf = requestAnimationFrame(() => enforceResponsiveZones());
     };
     window.addEventListener('resize', onResize);
     enforceResponsiveZones();
