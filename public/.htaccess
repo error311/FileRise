@@ -4,6 +4,9 @@
 Options -Indexes -Multiviews
 DirectoryIndex index.html
 
+# Allow PATH_INFO for routes like /webdav.php/foo/bar
+AcceptPathInfo On
+
 # ---------------- Security: dotfiles ----------------
 <IfModule mod_authz_core.c>
   # Block direct access to dotfiles like .env, .gitignore, etc.
@@ -24,10 +27,14 @@ RewriteRule - - [L]
 #    Prevents requests like /.env, /.git/config, /.ssh/id_rsa, etc.
 RewriteRule "(^|/)\.(?!well-known/)" - [F]
 
-# 2) Deny direct access to PHP outside /api/
-#    This stops scanners from hitting /index.php, /admin.php, /wso.php, etc.
-RewriteCond %{REQUEST_URI} !^/api/
-RewriteRule \.php$ - [F]
+# 2) Deny direct access to PHP except the API endpoints and WebDAV front controller
+#    - allow /api/*.php (API endpoints)
+#    - allow /api.php     (ReDoc/spec page)
+#    - allow /webdav.php  (SabreDAV front)
+RewriteCond %{REQUEST_URI} !^/api/ [NC]
+RewriteCond %{REQUEST_URI} !^/api\.php$ [NC]
+RewriteCond %{REQUEST_URI} !^/webdav\.php$ [NC]
+RewriteRule \.php$ - [F,L]
 
 # 3) Never redirect local/dev hosts
 RewriteCond %{HTTP_HOST} ^(localhost|127\.0\.0\.1|fr\.local|192\.168\.[0-9]+\.[0-9]+)$ [NC]

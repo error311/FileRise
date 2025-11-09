@@ -1,5 +1,45 @@
 # Changelog
 
+## Changes 11/9/2025 (v1.9.0)
+
+release(v1.9.0): folder tree UX overhaul, fast ACL-aware counts, and .htaccess hardening
+
+feat(ui): modern folder tree
+
+- New crisp folder SVG with clear paper insert; unified yellow/orange palette for light & dark
+- Proper ARIA tree semantics (role=treeitem, aria-expanded), cleaner chevrons, better alignment
+- Breadcrumb tweaks (› separators), hover/selected polish
+- Prime icons locally, then confirm via counts for accurate “empty vs non-empty”
+
+feat(api): add /api/folder/isEmpty.php via controller/model
+
+- public/api/folder/isEmpty.php delegates to FolderController::stats()
+- FolderModel::countVisible() enforces ACL, path safety, and short-circuits after first entry
+- Releases PHP session lock early to avoid parallel-request pileups
+
+perf: cap concurrent “isEmpty” requests + timeouts
+
+- Small concurrency limiter + fetch timeouts
+- In-memory result & inflight caches for fewer network hits
+
+fix(state): preserve user expand/collapse choices
+
+- Respect saved folderTreeState; don’t auto-expand unopened nodes
+- Only show ancestors for visibility when navigating (no unwanted persists)
+
+security: tighten .htaccess while enabling WebDAV
+
+- Deny direct PHP except /api/*.php, /api.php, and /webdav.php
+- AcceptPathInfo On; keep path-aware dotfile denial
+
+refactor: move count logic to model; thin controller action
+
+chore(css): add unified “folder tree” block with variables (sizes, gaps, colors)
+
+Files touched: FolderModel.php, FolderController.php, public/js/folderManager.js, public/css/styles.css, public/api/folder/isEmpty.php (new), public/.htaccess
+
+---
+
 ## Changes 11/8/2025 (v1.8.13)
 
 release(v1.8.13): ui(dnd): stabilize zones, lock sidebar width, and keep header dock in sync

@@ -30,6 +30,13 @@ class FolderController
         return $headers;
     }
 
+    /** Stats for a folder (currently: empty/non-empty via folders/files counts). */
+    public static function stats(string $folder, string $user, array $perms): array
+    {
+        // Normalize inside model; this is a thin action
+        return FolderModel::countVisible($folder, $user, $perms);
+    }
+
     private static function requireCsrf(): void
     {
         self::ensureSession();

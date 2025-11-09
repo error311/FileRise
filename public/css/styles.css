@@ -1132,7 +1132,7 @@ body {
     border-radius: 4px;
   }.folder-tree {
   list-style-type: none;
-    padding-left: 10px;
+    padding-left: 5px;
     margin: 0;
   }.folder-tree.collapsed {
   display: none;
@@ -1149,7 +1149,7 @@ body {
     text-align: right;
   }.folder-indent-placeholder {
   display: inline-block;
-    width: 30px;
+    width: 5px;
   }#folderTreeContainer {
   display: block;
   }.folder-option {
@@ -1956,3 +1956,170 @@ body {
 }
 
 #downloadProgressBarOuter { height: 10px; }
+
+/* ===== FileRise Folder Tree: unified, crisp, aligned ===== */
+
+/* Knobs (size, spacing, colors) */
+#folderTreeContainer {
+  /* Colors (used in BOTH themes) */
+  --filr-folder-front: #f6b84e;    /* front/lip */
+  --filr-folder-back:  #ffd36e;    /* back body */
+  --filr-folder-stroke:#a87312;    /* outline */
+  --filr-paper-fill:   #ffffff;    /* paper */
+  --filr-paper-stroke: #b2c2db;    /* paper edges/lines */
+
+  /* Size & spacing */
+  --row-h: 28px;       /* row height */
+  --twisty: 24px;      /* chevron hit-area size */
+  --twisty-gap: -5px;   /* gap between chevron and row content */
+  --icon-size: 24px;   /* 22–26 look good */
+  --icon-gap: 6px;     /* space between icon and label */
+  --indent: 10px;      /* subtree indent */
+}
+
+/* Keep the same yellow/orange in dark mode; boost paper contrast a touch */
+.dark-mode #folderTreeContainer {
+  --filr-folder-front: #f6b84e;
+  --filr-folder-back:  #ffd36e;
+  --filr-folder-stroke:#a87312;
+  --filr-paper-fill:   #ffffff;
+  --filr-paper-stroke: #d0def7; /* brighter so it pops on dark */
+}
+
+#folderTreeContainer .folder-item { position: static; padding-left: 0; }
+
+/* visible “row” for each node */
+#folderTreeContainer .folder-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--row-h);
+  padding-left: calc(var(--twisty) + var(--twisty-gap));
+}
+
+/* children indent */
+#folderTreeContainer .folder-item > .folder-tree { margin-left: var(--indent); }
+
+/* ---------- Chevron toggle (twisty) ---------- */
+
+#folderTreeContainer .folder-row > button.folder-toggle {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: var(--twisty); height: var(--twisty);
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; cursor: pointer;
+}
+
+#folderTreeContainer .folder-row > button.folder-toggle::before {
+  content: "▸"; /* closed */
+  font-size: calc(var(--twisty) * 0.8);
+  line-height: 1;
+}
+
+#folderTreeContainer li[role="treeitem"][aria-expanded="true"]
+  > .folder-row > button.folder-toggle::before { content: "▾"; }
+
+/* root row (it's a <div>) */
+#rootRow[aria-expanded="true"] > button.folder-toggle::before { content: "▾"; }
+
+#folderTreeContainer .folder-row > button.folder-toggle:hover {
+  border-color: color-mix(in srgb, #7ab3ff 35%, transparent);
+}
+
+/* spacer for leaves so labels align with parents that have a button */
+#folderTreeContainer .folder-row > .folder-spacer {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: var(--twisty); height: var(--twisty); display: inline-block;
+}
+
+#folderTreeContainer .folder-option {
+  display: inline-flex;
+  align-items: center;
+  height: var(--row-h);
+  line-height: 1.2;                /* avoids baseline weirdness */
+  padding: 0 8px;
+  border-radius: 8px;
+  user-select: none;
+  white-space: nowrap;
+  max-width: 100%;
+  gap: var(--icon-gap);
+}
+
+#folderTreeContainer .folder-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateY(0.5px);    /* tiny optical nudge for text */
+}
+
+/* ---------- Icon box (size & alignment) ---------- */
+
+#folderTreeContainer .folder-icon {
+  flex: 0 0 var(--icon-size);
+  width: var(--icon-size);
+  height: var(--icon-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(0.5px);    /* tiny optical nudge for SVG */
+}
+
+#folderTreeContainer .folder-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  shape-rendering: geometricPrecision;
+}
+
+/* ---------- Crisp colors & strokes for the SVG parts ---------- */
+
+#folderTreeContainer .folder-icon .folder-front,
+#folderTreeContainer .folder-icon .folder-back {
+  fill: currentColor;
+  stroke: var(--filr-folder-stroke);
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+  paint-order: stroke fill;
+}
+
+#folderTreeContainer .folder-icon .folder-front { color: var(--filr-folder-front); }
+#folderTreeContainer .folder-icon .folder-back  { color: var(--filr-folder-back);  }
+
+#folderTreeContainer .folder-icon .paper {
+  fill: var(--filr-paper-fill);
+  stroke: var(--filr-paper-stroke);
+  stroke-width: 1.5;              /* thick so it reads at 24px */
+  paint-order: stroke fill;
+}
+
+#folderTreeContainer .folder-icon .paper-fold {
+  fill: var(--filr-paper-stroke);
+}
+
+#folderTreeContainer .folder-icon .paper-line {
+  stroke: var(--filr-paper-stroke);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  fill: none;
+  opacity: 0.95;
+}
+
+/* subtle highlight along lip to add depth */
+#folderTreeContainer .folder-icon .lip-highlight {
+  stroke: #ffffff;
+  stroke-opacity: .35;
+  stroke-width: 0.9;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ---------- Hover / Selected ---------- */
+
+#folderTreeContainer .folder-option:hover {
+  background: rgba(122,179,255,.14);
+}
+
+#folderTreeContainer .folder-option.selected {
+  background: rgba(122,179,255,.24);
+  box-shadow: inset 0 0 0 1px rgba(122,179,255,.45);
+}

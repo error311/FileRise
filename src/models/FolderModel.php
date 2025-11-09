@@ -10,6 +10,45 @@ class FolderModel
      * Ownership mapping helpers (stored in META_DIR/folder_owners.json)
      * ============================================================ */
 
+     public static function countVisible(string $folder, string $user, array $perms): array
+     {
+         // Normalize
+         $folder = ACL::normalizeFolder($folder);
+ 
+         // ACL gate: if you can’t read, report empty (no leaks)
+         if (!$user || !ACL::canRead($user, $perms, $folder)) {
+             return ['folders' => 0, 'files' => 0];
+         }
+ 
+         // Resolve paths under UPLOAD_DIR
+         $root = rtrim((string)UPLOAD_DIR, '/\\');
+         $path = ($folder === 'root') ? $root : ($root . '/' . $folder);
+ 
+         $realRoot = @realpath($root);
+         $realPath = @realpath($path);
+         if ($realRoot === false || $realPath === false || strpos($realPath, $realRoot) !== 0) {
+             return ['folders' => 0, 'files' => 0];
+         }
+ 
+         // Count quickly, skipping UI-internal dirs
+         $folders = 0; $files = 0;
+         try {
+             foreach (new DirectoryIterator($realPath) as $f) {
+                 if ($f->isDot()) continue;
+                 $name = $f->getFilename();
+                 if ($name === 'trash' || $name === 'profile_pics') continue;
+ 
+                 if ($f->isDir()) $folders++; else $files++;
+                 if ($folders > 0 || $files > 0) break; // short-circuit: we only care if empty vs not
+             }
+         } catch (\Throwable $e) {
+             // Stay quiet + safe
+             $folders = 0; $files = 0;
+         }
+ 
+         return ['folders' => $folders, 'files' => $files];
+     }
+
     /** Load the folder → owner map. */
     public static function getFolderOwners(): array
     {

@@ -86,7 +86,7 @@ export function getParentFolder(folder) {
     Breadcrumb Functions
  ----------------------*/
 
- function setControlEnabled(el, enabled) {
+function setControlEnabled(el, enabled) {
   if (!el) return;
   if ('disabled' in el) el.disabled = !enabled;
   el.classList.toggle('disabled', !enabled);
@@ -101,7 +101,7 @@ async function applyFolderCapabilities(folder) {
   const caps = await res.json();
   window.currentFolderCaps = caps;
 
-  const isRoot   = (folder === 'root');
+  const isRoot = (folder === 'root');
   setControlEnabled(document.getElementById('createFolderBtn'), !!caps.canCreate);
   setControlEnabled(document.getElementById('moveFolderBtn'), !!caps.canMoveFolder);
   setControlEnabled(document.getElementById('renameFolderBtn'), !isRoot && !!caps.canRename);
@@ -143,7 +143,7 @@ function breadcrumbClickHandler(e) {
 
   updateBreadcrumbTitle(folder);
   applyFolderCapabilities(folder);
-  expandTreePath(folder);
+  expandTreePath(folder, { persist: false, includeLeaf: false });
   document.querySelectorAll(".folder-option").forEach(el => el.classList.remove("selected"));
   const target = document.querySelector(`.folder-option[data-folder="${folder}"]`);
   if (target) target.classList.add("selected");
@@ -184,7 +184,7 @@ function breadcrumbDropHandler(e) {
   /* FOLDER MOVE FALLBACK */
   if (!dragData) {
     const plain = (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
-                  (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
+      (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
     if (plain) {
       const sourceFolder = String(plain).trim();
       if (sourceFolder && sourceFolder !== "root") {
@@ -208,7 +208,7 @@ function breadcrumbDropHandler(e) {
                 window.currentFolder = newPath;
               }
               return loadFolderTree().then(() => {
-                try { expandTreePath(window.currentFolder || "root"); } catch (_) {}
+                try { expandTreePath(window.currentFolder || "root", { persist: false, includeLeaf: false }); } catch (_) { }
                 loadFileList(window.currentFolder || "root");
               });
             } else {
@@ -268,8 +268,8 @@ async function checkUserFolderPermission() {
 
     const isFolderOnly =
       !!(permissionsData &&
-         permissionsData[username] &&
-         permissionsData[username].folderOnly);
+        permissionsData[username] &&
+        permissionsData[username].folderOnly);
 
     window.userFolderOnly = isFolderOnly;
     localStorage.setItem("folderOnly", isFolderOnly ? "true" : "false");
@@ -287,58 +287,216 @@ async function checkUserFolderPermission() {
   }
 }
 
+// ---------------- SVG icons + icon helpers ----------------
+const _nonEmptyCache = new Map();
+
+/** Return inline SVG string for either an empty folder or folder-with-paper */
+/* ----------------------
+   Folder icon (SVG + fetch + cache)
+----------------------*/
+
+// Crisp emoji-like folder (empty / with paper)
+function folderSVG(kind = 'empty') {
+  return `
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <!-- Angled back body -->
+    <path class="folder-back"
+      d="M3 7.4h7.6l1.6 1.8H20.3c1.1 0 2 .9 2 2v7.6c0 1.1-.9 2-2 2H5
+         c-1.1 0-2-.9-2-2V9.4c0-1.1.9-2 2-2z"/>
+
+    ${kind === 'paper'
+      ? `
+          <!-- Paper raised so it peeks above the lip -->
+          <rect class="paper" x="6.1" y="5.7" width="11.8" height="10.8" rx="1.2"/>
+          <!-- Bigger fold -->
+          <path class="paper-fold" d="M18.0 5.7h-3.2l3.2 3.2z"/>
+          <!-- Content lines -->
+          <path class="paper-line" d="M7.7 8.2h8.3"/>
+          <path class="paper-line" d="M7.7 9.8h7.2"/>
+          <path class="paper-line" d="M7.7 11.3h6.0"/>
+        `
+      : ''
+    }
+
+    <!-- Front lip (angled) -->
+    <path class="folder-front"
+      d="M2.3 10.1H10.9l2.0-2.1h7.4c.94 0 1.7.76 1.7 1.7v7.3c0 .94-.76 1.7-1.7 1.7H4
+         c-.94 0-1.7-.76-1.7-1.7v-6.9z"/>
+
+    <!-- Subtle highlight along the lip to add depth -->
+    <path class="lip-highlight"
+      d="M3.3 10.2H11.2l1.7-1.8h7.0"
+    />
+  </svg>`;
+}
+
+const _folderCountCache = new Map();
+const _inflightCounts = new Map();
+
+// --- tiny fetch helper with timeout
+function fetchJSONWithTimeout(url, ms = 3000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { credentials: 'include', signal: ctrl.signal })
+    .then(r => r.ok ? r.json() : { folders: 0, files: 0 })
+    .catch(() => ({ folders: 0, files: 0 }))
+    .finally(() => clearTimeout(tid));
+}
+
+// --- simple concurrency limiter (prevents 100 simultaneous requests)
+const MAX_CONCURRENT_COUNT_REQS = 6;
+let _activeCountReqs = 0;
+const _countReqQueue = [];
+
+function _runCount(url) {
+  return new Promise(resolve => {
+    const start = () => {
+      _activeCountReqs++;
+      fetchJSONWithTimeout(url, 2500)
+        .then(resolve)
+        .finally(() => {
+          _activeCountReqs--;
+          const next = _countReqQueue.shift();
+          if (next) next();
+        });
+    };
+    if (_activeCountReqs < MAX_CONCURRENT_COUNT_REQS) start();
+    else _countReqQueue.push(start);
+  });
+}
+
+async function fetchFolderCounts(folder) {
+  if (_folderCountCache.has(folder)) return _folderCountCache.get(folder);
+  if (_inflightCounts.has(folder)) return _inflightCounts.get(folder);
+
+  const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}`;
+  const p = _runCount(url).then(data => {
+    const result = {
+      folders: Number(data?.folders || 0),
+      files: Number(data?.files || 0),
+    };
+    _folderCountCache.set(folder, result);
+    _inflightCounts.delete(folder);
+    return result;
+  });
+
+  _inflightCounts.set(folder, p);
+  return p;
+}
+
+function setFolderIconForOption(optEl, kind) {
+  const iconEl = optEl.querySelector('.folder-icon');
+  if (!iconEl) return;
+  iconEl.dataset.kind = kind;
+  iconEl.innerHTML = folderSVG(kind);
+}
+
+function ensureFolderIcon(folder) {
+  const opt = document.querySelector(`.folder-option[data-folder="${CSS.escape(folder)}"]`);
+  if (!opt) return;
+  // Set a neutral default first so layout is stable
+  setFolderIconForOption(opt, 'empty');
+
+  fetchFolderCounts(folder).then(({ folders, files }) => {
+    setFolderIconForOption(opt, (folders + files) > 0 ? 'paper' : 'empty');
+  });
+}
+/** Set a folder row’s icon to 'empty' or 'paper' */
+function setFolderIcon(folderPath, kind) {
+  const iconEl = document.querySelector(`.folder-option[data-folder="${folderPath}"] .folder-icon`);
+  if (!iconEl) return;
+  if (iconEl.dataset.icon === kind) return;
+  iconEl.dataset.icon = kind;
+  iconEl.innerHTML = folderSVG(kind);
+}
+
+/** Fast local heuristic: mark 'paper' if we can see any subfolders under this LI */
+function markNonEmptyIfHasChildren(folderPath) {
+  const option = document.querySelector(`.folder-option[data-folder="${folderPath}"]`);
+  if (!option) return false;
+  const li = option.closest('li[role="treeitem"]');
+  const childUL = li ? li.querySelector(':scope > ul') : null;
+  const hasChildNodes = !!(childUL && childUL.querySelector('li'));
+  if (hasChildNodes) { setFolderIcon(folderPath, 'paper'); _nonEmptyCache.set(folderPath, true); }
+  return hasChildNodes;
+}
+
+/** ACL-aware check for files: call a tiny stats endpoint (see part C) */
+async function fetchFolderNonEmptyACL(folderPath) {
+  if (_nonEmptyCache.has(folderPath)) return _nonEmptyCache.get(folderPath);
+  const { folders, files } = await fetchFolderCounts(folderPath);
+  const nonEmpty = (folders + files) > 0;
+  _nonEmptyCache.set(folderPath, nonEmpty);
+  return nonEmpty;
+}
+
+
 /* ----------------------
    DOM Building Functions for Folder Tree
 ----------------------*/
 function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
   const state = loadFolderTreeState();
-  let html = `<ul class="folder-tree ${defaultDisplay === 'none' ? 'collapsed' : 'expanded'}">`;
+  let html = `<ul class="folder-tree ${defaultDisplay === 'none' ? 'collapsed' : 'expanded'}" role="group">`;
+
   for (const folder in tree) {
     const name = folder.toLowerCase();
     if (name === "trash" || name === "profile_pics") continue;
+
     const fullPath = parentPath ? parentPath + "/" + folder : folder;
     const hasChildren = Object.keys(tree[folder]).length > 0;
     const displayState = state[fullPath] !== undefined ? state[fullPath] : defaultDisplay;
-    html += `<li class="folder-item">`;
+    const isOpen = displayState !== 'none';
+
+    html += `<li class="folder-item" role="treeitem" aria-expanded="${hasChildren ? String(isOpen) : 'false'}">`;
+
+    html += `<div class="folder-row">`;
     if (hasChildren) {
-      const toggleSymbol = (displayState === 'none') ? '[+]' : '[' + '<span class="custom-dash">-</span>' + ']';
-      html += `<span class="folder-toggle" data-folder="${fullPath}">${toggleSymbol}</span>`;
+      html += `<button type="button" class="folder-toggle" aria-label="${isOpen ? 'Collapse' : 'Expand'}" data-folder="${fullPath}"></button>`;
     } else {
-      html += `<span class="folder-indent-placeholder"></span>`;
+      html += `<span class="folder-spacer" aria-hidden="true"></span>`;
     }
-    html += `<span class="folder-option" draggable="true" data-folder="${fullPath}">${escapeHTML(folder)}</span>`;
-    if (hasChildren) {
-      html += renderFolderTree(tree[folder], fullPath, displayState);
-    }
+    html += `
+  <span class="folder-option" draggable="true" data-folder="${fullPath}">
+    <span class="folder-icon" aria-hidden="true" data-icon="${hasChildren ? 'paper' : 'empty'}">
+  ${folderSVG(hasChildren ? 'paper' : 'empty')}
+</span>
+    <span class="folder-label">${escapeHTML(folder)}</span>
+  </span>
+`;
+    html += `</div>`; // /.folder-row
+
+    if (hasChildren) html += renderFolderTree(tree[folder], fullPath, displayState);
     html += `</li>`;
   }
+
   html += `</ul>`;
   return html;
 }
 
-function expandTreePath(path) {
-  const parts = path.split("/");
-  let cumulative = "";
-  parts.forEach((part, index) => {
-    cumulative = index === 0 ? part : cumulative + "/" + part;
-    const option = document.querySelector(`.folder-option[data-folder="${cumulative}"]`);
-    if (option) {
-      const li = option.parentNode;
-      const nestedUl = li.querySelector("ul");
-      if (nestedUl && (nestedUl.classList.contains("collapsed") || !nestedUl.classList.contains("expanded"))) {
-        nestedUl.classList.remove("collapsed");
-        nestedUl.classList.add("expanded");
-        const toggle = li.querySelector(".folder-toggle");
-        if (toggle) {
-          toggle.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
-          const state = loadFolderTreeState();
-          state[cumulative] = "block";
-          saveFolderTreeState(state);
-        }
-      }
-    }
+// replace your current expandTreePath with this version
+function expandTreePath(path, opts = {}) {
+  const { force = false } = opts;
+  const state = loadFolderTreeState();
+  const parts = (path || '').split('/').filter(Boolean);
+  let cumulative = '';
+
+  parts.forEach((part, i) => {
+    cumulative = i === 0 ? part : `${cumulative}/${part}`;
+    const option = document.querySelector(`.folder-option[data-folder="${CSS.escape(cumulative)}"]`);
+    if (!option) return;
+
+    const li = option.closest('li[role="treeitem"]');
+    const nestedUl = li ? li.querySelector(':scope > ul') : null;
+    if (!nestedUl) return;
+
+    // Only expand if caller forces it OR saved state says "block"
+    const shouldExpand = force || state[cumulative] === 'block';
+    nestedUl.classList.toggle('expanded', shouldExpand);
+    nestedUl.classList.toggle('collapsed', !shouldExpand);
+    li.setAttribute('aria-expanded', String(!!shouldExpand));
   });
 }
+
 
 /* ----------------------
    Drag & Drop Support for Folder Tree Nodes
@@ -360,15 +518,15 @@ function folderDropHandler(event) {
   try {
     const jsonStr = event.dataTransfer.getData("application/json") || "";
     if (jsonStr) dragData = JSON.parse(jsonStr);
-  } 
- catch (e) {
+  }
+  catch (e) {
     console.error("Invalid drag data", e);
     return;
   }
   /* FOLDER MOVE FALLBACK */
   if (!dragData) {
     const plain = (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
-                  (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
+      (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
     if (plain) {
       const sourceFolder = String(plain).trim();
       if (sourceFolder && sourceFolder !== "root") {
@@ -392,7 +550,7 @@ function folderDropHandler(event) {
                 window.currentFolder = newPath;
               }
               return loadFolderTree().then(() => {
-                try { expandTreePath(window.currentFolder || "root"); } catch (_) {}
+                try { expandTreePath(window.currentFolder || "root", { persist: false, includeLeaf: false }); } catch (_) { }
                 loadFileList(window.currentFolder || "root");
               });
             } else {
@@ -442,22 +600,29 @@ function folderDropHandler(event) {
 // Safe breadcrumb DOM builder
 function renderBreadcrumbFragment(folderPath) {
   const frag = document.createDocumentFragment();
-  const parts = folderPath.split("/");
-  let acc = "";
 
-  parts.forEach((part, idx) => {
-    acc = idx === 0 ? part : acc + "/" + part;
+  // Defensive normalize
+  const path = (typeof folderPath === 'string' && folderPath.length) ? folderPath : 'root';
+  const crumbs = path.split('/').filter(s => s !== ''); // no empty segments
 
-    const span = document.createElement("span");
-    span.classList.add("breadcrumb-link");
+  let acc = '';
+  for (let i = 0; i < crumbs.length; i++) {
+    const part = crumbs[i];
+    acc = (i === 0) ? part : (acc + '/' + part);
+
+    const span = document.createElement('span');
+    span.className = 'breadcrumb-link';
     span.dataset.folder = acc;
     span.textContent = part;
     frag.appendChild(span);
 
-    if (idx < parts.length - 1) {
-      frag.appendChild(document.createTextNode(" / "));
+    if (i < crumbs.length - 1) {
+      const sep = document.createElement('span');
+      sep.className = 'file-breadcrumb-sep';
+      sep.textContent = '›';
+      frag.appendChild(sep);
     }
-  });
+  }
 
   return frag;
 }
@@ -536,23 +701,61 @@ export async function loadFolderTree(selectedFolder) {
       return;
     }
 
-    let html = `<div id="rootRow" class="root-row">
-      <span class="folder-toggle" data-folder="${effectiveRoot}">[<span class="custom-dash">-</span>]</span>
-      <span class="folder-option root-folder-option" data-folder="${effectiveRoot}">${effectiveLabel}</span>
-    </div>`;
+    const state0 = loadFolderTreeState();
+    const rootOpen = state0[effectiveRoot] !== 'none';
+
+    let html = `
+  <div id="rootRow" class="folder-row" role="treeitem" aria-expanded="${String(rootOpen)}">
+    <button type="button" class="folder-toggle" data-folder="${effectiveRoot}" aria-label="${rootOpen ? 'Collapse' : 'Expand'}"></button>
+    <span class="folder-option root-folder-option" data-folder="${effectiveRoot}">
+      <span class="folder-icon" aria-hidden="true"></span>
+      <span class="folder-label">${effectiveLabel}</span>
+    </span>
+  </div>
+`;
+
     if (folders.length > 0) {
       const tree = buildFolderTree(folders);
-      html += renderFolderTree(tree, "", "block");
+      // 👇 pass the root's saved state down to first level
+      html += renderFolderTree(tree, "", rootOpen ? "block" : "none");
     }
     container.innerHTML = html;
 
+    const st = loadFolderTreeState();
+    const rootUl = container.querySelector('#rootRow + ul');
+    if (rootUl) {
+      const expanded = (st[effectiveRoot] ?? 'block') === 'block';
+      rootUl.classList.toggle('expanded', expanded);
+      rootUl.classList.toggle('collapsed', !expanded);
+      const rr = container.querySelector('#rootRow');
+      if (rr) rr.setAttribute('aria-expanded', String(expanded));
+    }
+
+    // Prime icons for everything visible
+    primeFolderIcons(container);
+
+    function primeFolderIcons(scopeEl) {
+      const opts = scopeEl.querySelectorAll('.folder-option[data-folder]');
+      opts.forEach(opt => {
+        const f = opt.getAttribute('data-folder');
+        // Optional: if there are obvious children in DOM, show 'paper' immediately as a hint
+        const li = opt.closest('li[role="treeitem"]');
+        const hasChildren = !!(li && li.querySelector(':scope > ul > li'));
+        setFolderIconForOption(opt, hasChildren ? 'paper' : 'empty');
+        // Then confirm with server (files count)
+        ensureFolderIcon(f);
+      });
+    }
+
     // Attach drag/drop event listeners.
     container.querySelectorAll(".folder-option").forEach(el => {
+      const fp = el.getAttribute('data-folder');
+      markNonEmptyIfHasChildren(fp);
       // Provide folder path payload for folder->folder DnD
       el.addEventListener("dragstart", (ev) => {
         const src = el.getAttribute("data-folder");
-        try { ev.dataTransfer.setData("application/x-filerise-folder", src); } catch (e) {}
-        try { ev.dataTransfer.setData("text/plain", src); } catch (e) {}
+        try { ev.dataTransfer.setData("application/x-filerise-folder", src); } catch (e) { }
+        try { ev.dataTransfer.setData("text/plain", src); } catch (e) { }
         ev.dataTransfer.effectAllowed = "move";
       });
 
@@ -569,11 +772,12 @@ export async function loadFolderTree(selectedFolder) {
     // Initial breadcrumb + file list
     updateBreadcrumbTitle(window.currentFolder);
     applyFolderCapabilities(window.currentFolder);
+    ensureFolderIcon(window.currentFolder);
     loadFileList(window.currentFolder);
 
-    const folderState = loadFolderTreeState();
-    if (window.currentFolder !== effectiveRoot && folderState[window.currentFolder] !== "none") {
-      expandTreePath(window.currentFolder);
+    // Show ancestors so the current selection is visible, but don't persist
+    if (window.currentFolder && window.currentFolder !== effectiveRoot) {
+      expandTreePath(window.currentFolder, { persist: false, includeLeaf: false });
     }
 
     const selectedEl = container.querySelector(`.folder-option[data-folder="${window.currentFolder}"]`);
@@ -587,8 +791,8 @@ export async function loadFolderTree(selectedFolder) {
       // Provide folder path payload for folder->folder DnD
       el.addEventListener("dragstart", (ev) => {
         const src = el.getAttribute("data-folder");
-        try { ev.dataTransfer.setData("application/x-filerise-folder", src); } catch (e) {}
-        try { ev.dataTransfer.setData("text/plain", src); } catch (e) {}
+        try { ev.dataTransfer.setData("application/x-filerise-folder", src); } catch (e) { }
+        try { ev.dataTransfer.setData("text/plain", src); } catch (e) { }
         ev.dataTransfer.effectAllowed = "move";
       });
 
@@ -602,55 +806,48 @@ export async function loadFolderTree(selectedFolder) {
 
         updateBreadcrumbTitle(selected);
         applyFolderCapabilities(selected);
+        ensureFolderIcon(selected);
         loadFileList(selected);
       });
     });
 
-    // Root toggle handler
+    // Root toggle
     const rootToggle = container.querySelector("#rootRow .folder-toggle");
     if (rootToggle) {
       rootToggle.addEventListener("click", function (e) {
         e.stopPropagation();
         const nestedUl = container.querySelector("#rootRow + ul");
-        if (nestedUl) {
-          const state = loadFolderTreeState();
-          if (nestedUl.classList.contains("collapsed") || !nestedUl.classList.contains("expanded")) {
-            nestedUl.classList.remove("collapsed");
-            nestedUl.classList.add("expanded");
-            this.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
-            state[effectiveRoot] = "block";
-          } else {
-            nestedUl.classList.remove("expanded");
-            nestedUl.classList.add("collapsed");
-            this.textContent = "[+]";
-            state[effectiveRoot] = "none";
-          }
-          saveFolderTreeState(state);
-        }
+        if (!nestedUl) return;
+
+        const state = loadFolderTreeState();
+        const expanded = !(nestedUl.classList.contains("expanded"));
+        nestedUl.classList.toggle("expanded", expanded);
+        nestedUl.classList.toggle("collapsed", !expanded);
+
+        document.getElementById("rootRow").setAttribute("aria-expanded", String(expanded));
+        state[effectiveRoot] = expanded ? "block" : "none";
+        saveFolderTreeState(state);
       });
     }
 
-    // Other folder-toggle handlers
-    container.querySelectorAll(".folder-toggle").forEach(toggle => {
+    // Other toggles
+
+    container.querySelectorAll("button.folder-toggle").forEach(toggle => {
       toggle.addEventListener("click", function (e) {
         e.stopPropagation();
-        const siblingUl = this.parentNode.querySelector("ul");
+        const li = this.closest('li[role="treeitem"]');
+        const siblingUl = li ? li.querySelector(':scope > ul') : null;
         const folderPath = this.getAttribute("data-folder");
+        if (!siblingUl) return;
+
         const state = loadFolderTreeState();
-        if (siblingUl) {
-          if (siblingUl.classList.contains("collapsed") || !siblingUl.classList.contains("expanded")) {
-            siblingUl.classList.remove("collapsed");
-            siblingUl.classList.add("expanded");
-            this.innerHTML = "[" + '<span class="custom-dash">-</span>' + "]";
-            state[folderPath] = "block";
-          } else {
-            siblingUl.classList.remove("expanded");
-            siblingUl.classList.add("collapsed");
-            this.textContent = "[+]";
-            state[folderPath] = "none";
-          }
-          saveFolderTreeState(state);
-        }
+        const expanded = !(siblingUl.classList.contains("expanded"));
+        siblingUl.classList.toggle("expanded", expanded);
+        siblingUl.classList.toggle("collapsed", !expanded);
+        li.setAttribute("aria-expanded", String(expanded));
+        state[folderPath] = expanded ? "block" : "none";
+        saveFolderTreeState(state);
+        ensureFolderIcon(folderPath);
       });
     });
 
@@ -749,7 +946,7 @@ if (submitRename) {
 
 // === Move Folder Modal helper (shared by button + context menu) ===
 function openMoveFolderUI(sourceFolder) {
-  const modal     = document.getElementById('moveFolderModal');
+  const modal = document.getElementById('moveFolderModal');
   const targetSel = document.getElementById('moveFolderTarget');
 
   // If you right-clicked a different folder than currently selected, use that
@@ -779,7 +976,7 @@ function openMoveFolderUI(sourceFolder) {
             targetSel.appendChild(o);
           });
       })
-      .catch(()=>{ /* no-op */ });
+      .catch(() => { /* no-op */ });
   }
 
   if (modal) modal.style.display = 'block';
@@ -1073,11 +1270,11 @@ document.addEventListener("DOMContentLoaded", function () {
 bindFolderManagerContextMenu();
 
 document.addEventListener("DOMContentLoaded", () => {
-  const moveBtn   = document.getElementById('moveFolderBtn');
-  const modal     = document.getElementById('moveFolderModal');
+  const moveBtn = document.getElementById('moveFolderBtn');
+  const modal = document.getElementById('moveFolderModal');
   const targetSel = document.getElementById('moveFolderTarget');
   const cancelBtn = document.getElementById('cancelMoveFolder');
-  const confirmBtn= document.getElementById('confirmMoveFolder');
+  const confirmBtn = document.getElementById('confirmMoveFolder');
 
   if (moveBtn) {
     moveBtn.addEventListener('click', () => {
@@ -1092,7 +1289,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (confirmBtn) confirmBtn.addEventListener('click', async () => {
     if (!targetSel) return;
     const destination = targetSel.value;
-    const source      = window.currentFolder;
+    const source = window.currentFolder;
 
     if (!destination) { showToast('Pick a destination'); return; }
     if (destination === source || (destination + '/').startsWith(source + '/')) {
@@ -1108,7 +1305,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await safeJson(res);
       if (res.ok && data && !data.error) {
         showToast('Folder moved');
-        if (modal) modal.style.display='none';
+        if (modal) modal.style.display = 'none';
         await loadFolderTree();
         const base = source.split('/').pop();
         const newPath = (destination === 'root' ? '' : destination + '/') + base;
