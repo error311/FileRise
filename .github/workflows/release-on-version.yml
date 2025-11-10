@@ -6,160 +6,89 @@ on:
     branches: ["master"]
     paths:
       - public/js/version.js
-  workflow_run:
-    workflows: ["Bump version and sync Changelog to Docker Repo"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       ref:
-        description: "Ref (branch or SHA) to build from (default: origin/master)"
+        description: "Ref (branch/sha) to build from (default: master)"
         required: false
       version:
-        description: "Explicit version tag to release (e.g., v1.8.6). If empty, auto-detect."
+        description: "Explicit version tag to release (e.g., v1.8.12). If empty, parse from public/js/version.js."
         required: false
 
 permissions:
   contents: write
 
 jobs:
-  delay:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delay 10 minutes
-        run: sleep 600
-
   release:
-    needs: delay
     runs-on: ubuntu-latest
 
-    # Guard: Only run on trusted workflow_run events (pushes from this repo)
-    if: >
+    # Only run on:
+    #  - push (master + version.js path filter already enforces that)
+    #  - manual dispatch
+    if: |
       github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+      github.event_name == 'workflow_dispatch'
 
-    # Use run_id for a stable, unique key
+    # Duplicate safety; also step "Skip if tag exists" will no-op if already released.
     concurrency:
-      group: release-${{ github.run_id }}
+      group: release-${{ github.event_name }}-${{ github.run_id }}
       cancel-in-progress: false
 
     steps:
-      - name: Checkout (fetch all)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Ensure tags + master available
-        shell: bash
-        run: |
-          git fetch --tags --force --prune --quiet
-          git fetch origin master --quiet
-
-      - name: Resolve source ref + (maybe) version
+      - name: Resolve source ref
         id: pickref
         shell: bash
         run: |
           set -euo pipefail
-
-          # Defaults
-          REF=""
-          VER=""
-          SRC=""
-
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # manual run
-            REF_IN="${{ github.event.inputs.ref }}"
-            VER_IN="${{ github.event.inputs.version }}"
-            if [[ -n "$REF_IN" ]]; then
-              # Try branch/sha; fetch branch if needed
-              git fetch origin "$REF_IN" --quiet || true
-              if REF_SHA="$(git rev-parse --verify --quiet "$REF_IN")"; then
-                REF="$REF_SHA"
-              else
-                echo "Provided ref '$REF_IN' not found" >&2
-                exit 1
-              fi
+            if [[ -n "${{ github.event.inputs.ref }}" ]]; then
+              REF_IN="${{ github.event.inputs.ref }}"
             else
-              REF="$(git rev-parse origin/master)"
+              REF_IN="master"
             fi
-            if [[ -n "$VER_IN" ]]; then
-              VER="$VER_IN"
-              SRC="manual-version"
+            # Resolve to a commit sha (allow branches or shas)
+            if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git "$REF_IN" >/dev/null 2>&1; then
+              REF="$REF_IN"
+            else
+              # Accept SHAs too; we’ll let checkout validate
+              REF="$REF_IN"
             fi
-          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            REF="${{ github.event.workflow_run.head_sha }}"
           else
             REF="${{ github.sha }}"
           fi
 
-          # If no explicit version, try to find the latest bot bump reachable from REF
-          if [[ -z "$VER" ]]; then
-            # Search recent history reachable from REF
-            BOT_SHA="$(git log "$REF" -n 200 --author='github-actions[bot]' --grep='set APP_VERSION to v' --pretty=%H | head -n1 || true)"
-            if [[ -n "$BOT_SHA" ]]; then
-              SUBJ="$(git log -n1 --pretty=%s "$BOT_SHA")"
-              BOT_VER="$(sed -n 's/.*set APP_VERSION to \(v[^ ]*\).*/\1/p' <<<"${SUBJ}")"
-              if [[ -n "$BOT_VER" ]]; then
-                VER="$BOT_VER"
-                REF="$BOT_SHA"   # build/tag from the bump commit
-                SRC="bot-commit"
-              fi
-            fi
-          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Using ref=$REF"
 
-          # Output
-          REF_SHA="$(git rev-parse "$REF")"
-          echo "ref=$REF_SHA"           >> "$GITHUB_OUTPUT"
-          echo "source=${SRC:-event-ref}" >> "$GITHUB_OUTPUT"
-          echo "preversion=${VER}"      >> "$GITHUB_OUTPUT"
-          echo "Using source=${SRC:-event-ref} ref=$REF_SHA"
-          if [[ -n "$VER" ]]; then echo "Pre-resolved version=$VER"; fi
-
-      - name: Checkout chosen ref
+      - name: Checkout chosen ref (full history + tags, no persisted token)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: ${{ steps.pickref.outputs.ref }}
-
-      - name: Assert ref is on master
-        shell: bash
-        run: |
-          set -euo pipefail
-          REF="${{ steps.pickref.outputs.ref }}"
-          git fetch origin master --quiet
-          if ! git merge-base --is-ancestor "$REF" origin/master; then
-            echo "Ref $REF is not on master; refusing to release."
-            exit 78
-          fi
-
-      - name: Debug version.js provenance
-        shell: bash
-        run: |
-          echo "version.js last-change commit: $(git log -n1 --pretty='%h %s' -- public/js/version.js || echo 'none')"
-          sed -n '1,20p' public/js/version.js || true
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Determine version
         id: ver
         shell: bash
         run: |
           set -euo pipefail
-          # Prefer pre-resolved version (manual input or bot commit)
-          if [[ -n "${{ steps.pickref.outputs.preversion }}" ]]; then
-            VER="${{ steps.pickref.outputs.preversion }}"
-            echo "version=$VER" >> "$GITHUB_OUTPUT"
-            echo "Parsed version (pre-resolved): $VER"
-            exit 0
+          if [[ -n "${{ github.event.inputs.version || '' }}" ]]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            # Parse APP_VERSION from public/js/version.js (expects vX.Y.Z)
+            if [[ ! -f public/js/version.js ]]; then
+              echo "public/js/version.js not found; cannot auto-detect version." >&2
+              exit 1
+            fi
+            VER="$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")"
+            if [[ -z "$VER" ]]; then
+              echo "Could not parse APP_VERSION from public/js/version.js" >&2
+              exit 1
+            fi
           fi
-          # Fallback to version.js
-          VER="$(grep -Eo "APP_VERSION\s*=\s*['\"]v[^'\"]+['\"]" public/js/version.js | sed -E "s/.*['\"](v[^'\"]+)['\"].*/\1/")"
-          if [[ -z "$VER" ]]; then
-            echo "Could not parse APP_VERSION from version.js" >&2
-            exit 1
-          fi
+
           echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "Parsed version (file): $VER"
+          echo "Detected version: $VER"
 
       - name: Skip if tag already exists
         id: tagcheck
@@ -173,7 +102,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Prep stamper script
+      - name: Prepare stamp script
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |
@@ -181,7 +110,7 @@ jobs:
           sed -i 's/\r$//' scripts/stamp-assets.sh || true
           chmod +x scripts/stamp-assets.sh
 
-      - name: Build zip artifact (stamped)
+      - name: Build stamped staging tree
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |
@@ -195,7 +124,7 @@ jobs:
             ./ staging/
           bash ./scripts/stamp-assets.sh "${VER}" "$(pwd)/staging"
 
-      - name: Verify placeholders are gone (staging)
+      - name: Verify placeholders removed
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |
@@ -203,19 +132,12 @@ jobs:
           ROOT="$(pwd)/staging"
           if grep -R -n -E "{{APP_QVER}}|{{APP_VER}}" "$ROOT" \
               --include='*.html' --include='*.php' --include='*.css' --include='*.js' 2>/dev/null; then
-            echo "---- DEBUG (show 10 hits with context) ----"
-            grep -R -n -E "{{APP_QVER}}|{{APP_VER}}" "$ROOT" \
-              --include='*.html' --include='*.php' --include='*.css' --include='*.js' \
-              | head -n 10 | while IFS=: read -r file line _; do
-                  echo ">>> $file:$line"
-                  nl -ba "$file" | sed -n "$((line-3)),$((line+3))p" || true
-                  echo "----------------------------------------"
-                done
+            echo "Unreplaced placeholders found in staging." >&2
             exit 1
           fi
-          echo "OK: No unreplaced placeholders in staging."
+          echo "OK: No unreplaced placeholders."
 
-      - name: Zip stamped staging
+      - name: Zip artifact
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |
@@ -223,7 +145,7 @@ jobs:
           VER="${{ steps.ver.outputs.version }}"
           (cd staging && zip -r "../FileRise-${VER}.zip" . >/dev/null)
 
-      - name: Compute SHA-256 checksum
+      - name: Compute SHA-256
         if: steps.tagcheck.outputs.exists == 'false'
         id: sum
         shell: bash
@@ -268,9 +190,9 @@ jobs:
             PREV=$(git rev-list --max-parents=0 HEAD | tail -n1)
           fi
           echo "prev=$PREV" >> "$GITHUB_OUTPUT"
-          echo "Previous tag or baseline: $PREV"
+          echo "Previous tag/baseline: $PREV"
 
-      - name: Build release body (snippet + full changelog + checksum)
+      - name: Build release body
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |
