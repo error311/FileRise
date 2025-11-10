@@ -21,9 +21,7 @@ Grant precise capabilities like *view*, *upload*, *rename*, *delete*, or *manage
 
 With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2FA), and one-click public sharing, **FileRise** brings professional-grade file management to your own server — simple to deploy, easy to scale, and fully self-hosted.
 
-New: Open and edit Office documents — **Word (DOCX)**, **Excel (XLSX)**, **PowerPoint (PPTX)** — directly in **FileRise** using your self-hosted **ONLYOFFICE Document Server** (optional). Open **ODT/ODS/ODP**, and view **PDFs** inline. Where supported by your Document Server, users can add **comments/annotations** to documents (and PDFs). Everything is enforced by the same per-folder ACLs across the UI and WebDAV.
-
-> ⚠️ **Security fix in v1.5.0** — ACL hardening. If you’re on ≤1.4.x, please upgrade.
+Open and edit Office documents — **Word (DOCX)**, **Excel (XLSX)**, **PowerPoint (PPTX)** — directly in **FileRise** using your self-hosted **ONLYOFFICE Document Server** (optional). Open **ODT/ODS/ODP**, and view **PDFs** inline. Everything is enforced by the same per-folder ACLs across the UI and WebDAV.
 
 **10/25/2025 Video demo:**
 
@@ -326,21 +324,6 @@ https://your-host/webdav.php/
 - Check **Connect using different credentials**, then enter your FileRise username/password.
 - Click **Finish**.
 
-> **Important:**  
-> Windows requires HTTPS (SSL) for WebDAV connections by default.  
-> If your server uses plain HTTP, you must adjust a registry setting:
->
-> 1. Open **Registry Editor** (`regedit.exe`).
-> 2. Navigate to:
->
->    ```text
->    HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WebClient\Parameters
->    ```
->
-> 3. Find or create a `DWORD` value named **BasicAuthLevel**.
-> 4. Set its value to `2`.
-> 5. Restart the **WebClient** service or reboot.
-
 📖 See the full [WebDAV Usage Wiki](https://github.com/error311/FileRise/wiki/WebDAV) for SSL setup, HTTP workaround, and troubleshooting.
 
 ---
@@ -403,6 +386,8 @@ For more Q&A or to ask for help, open a Discussion or Issue.
 ---
 
 ## Security posture
+
+> ⚠️ **Security fix in v1.5.0** — ACL hardening. If you’re on ≤1.4.x, please upgrade.
 
 We practice responsible disclosure. All known security issues are fixed in **v1.5.0** (ACL hardening).
 Advisories: [GHSA-6p87-q9rh-95wh](https://github.com/error311/FileRise/security/advisories/GHSA-6p87-q9rh-95wh) (≤ 1.3.15), [GHSA-jm96-2w52-5qjj](https://github.com/error311/FileRise/security/advisories/GHSA-jm96-2w52-5qjj) (v1.4.0). Fixed in **v1.5.0**. Thanks to [@kiwi865](https://github.com/kiwi865) for reporting.
@@ -471,7 +456,7 @@ Every bit helps me keep FileRise fast, polished, and well-maintained. Thank you!
 
 ## Acknowledgments
 
-- Based on [uploader](https://github.com/sensboston/uploader) by @sensboston.
+- [uploader](https://github.com/sensboston/uploader) by @sensboston.
 
 ---
 
