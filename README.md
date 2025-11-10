@@ -445,17 +445,10 @@ Every bit helps me keep FileRise fast, polished, and well-maintained. Thank you!
 
 ### ONLYOFFICE integration
 
-FileRise can open office documents using a self-hosted ONLYOFFICE Document Server.
-
 - **We do not bundle ONLYOFFICE.** Admins point FileRise to an existing ONLYOFFICE Docs server and (optionally) set a JWT secret in **Admin > ONLYOFFICE**.
 - **Licensing:** ONLYOFFICE Document Server (Community Edition) is released under the GNU AGPL v3. Enterprise editions are commercially licensed. When you deploy ONLYOFFICE, you are responsible for complying with the license of the edition you use.  
   – Project page & license: <https://github.com/ONLYOFFICE/DocumentServer> (AGPL-3.0)  
-- **FileRise license unaffected:** FileRise communicates with ONLYOFFICE over standard HTTP and loads `api.js` from the configured Document Server at runtime; FileRise does not redistribute ONLYOFFICE code.
 - **Trademarks:** ONLYOFFICE is a trademark of Ascensio System SIA. FileRise is not affiliated with or endorsed by ONLYOFFICE.
-
-#### Security / CSP
-
-If you enable ONLYOFFICE, allow its origin in your CSP (`script-src`, `frame-src`, `connect-src`). The Admin panel shows a ready-to-copy line for Apache/Nginx.
 
 ### PHP Libraries
 
