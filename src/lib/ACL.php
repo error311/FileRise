@@ -10,23 +10,38 @@ class ACL
     private static $path  = null;
 
     private const BUCKETS = [
-        'owners','read','write','share','read_own',
-        'create','upload','edit','rename','copy','move','delete','extract',
-        'share_file','share_folder'
+        'owners',
+        'read',
+        'write',
+        'share',
+        'read_own',
+        'create',
+        'upload',
+        'edit',
+        'rename',
+        'copy',
+        'move',
+        'delete',
+        'extract',
+        'share_file',
+        'share_folder'
     ];
 
-    private static function path(): string {
+    private static function path(): string
+    {
         if (!self::$path) self::$path = rtrim(META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'folder_acl.json';
         return self::$path;
     }
 
-    public static function normalizeFolder(string $f): string {
+    public static function normalizeFolder(string $f): string
+    {
         $f = trim(str_replace('\\', '/', $f), "/ \t\r\n");
         if ($f === '' || $f === 'root') return 'root';
         return $f;
     }
 
-    public static function purgeUser(string $user): bool {
+    public static function purgeUser(string $user): bool
+    {
         $user = (string)$user;
         $acl  = self::$cache ?? self::loadFresh();
         $changed = false;
@@ -41,49 +56,107 @@ class ACL
         return $changed ? self::save($acl) : true;
     }
     public static function ownsFolderOrAncestor(string $user, array $perms, string $folder): bool
-{
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    if (self::hasGrant($user, $folder, 'owners')) return true;
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        if (self::hasGrant($user, $folder, 'owners')) return true;
 
-    $folder = trim($folder, "/\\ ");
-    if ($folder === '' || $folder === 'root') return false;
+        $folder = trim($folder, "/\\ ");
+        if ($folder === '' || $folder === 'root') return false;
 
-    $parts = explode('/', $folder);
-    while (count($parts) > 1) {
-        array_pop($parts);
-        $parent = implode('/', $parts);
-        if (self::hasGrant($user, $parent, 'owners')) return true;
+        $parts = explode('/', $folder);
+        while (count($parts) > 1) {
+            array_pop($parts);
+            $parent = implode('/', $parts);
+            if (self::hasGrant($user, $parent, 'owners')) return true;
+        }
+        return false;
     }
-    return false;
-}
+
+    public static function migrateSubtree(string $source, string $target): array
+    {
+        // PHP <8 polyfill
+        if (!function_exists('str_starts_with')) {
+            function str_starts_with(string $h, string $n): bool
+            {
+                return $n === '' || strncmp($h, $n, strlen($n)) === 0;
+            }
+        }
+
+        $src = self::normalizeFolder($source);
+        $dst = self::normalizeFolder($target);
+        if ($src === 'root') return ['changed' => false, 'moved' => 0];
+
+        $file = self::path(); // e.g. META_DIR/folder_acl.json
+        $raw  = @file_get_contents($file);
+        $map  = is_string($raw) ? json_decode($raw, true) : [];
+        if (!is_array($map)) $map = [];
+
+        $prefix = $src;
+        $needle = $src . '/';
+
+        $new = $map;
+        $changed = false;
+        $moved = 0;
+
+        foreach ($map as $key => $entry) {
+            $isMatch = ($key === $prefix) || str_starts_with($key . '/', $needle);
+            if (!$isMatch) continue;
+
+            unset($new[$key]);
+
+            $suffix = substr($key, strlen($prefix)); // '' or '/sub/...'
+            $newKey = ($dst === 'root') ? ltrim($suffix, '/\\') : rtrim($dst, '/\\') . $suffix;
+
+            // keep only known buckets (defensive)
+            if (is_array($entry)) {
+                $clean = [];
+                foreach (self::BUCKETS as $b) if (array_key_exists($b, $entry)) $clean[$b] = $entry[$b];
+                $entry = $clean ?: $entry;
+            }
+
+            // overwrite any existing entry at destination path (safer than union)
+            $new[$newKey] = $entry;
+            $changed = true;
+            $moved++;
+        }
+
+        if ($changed) {
+            @file_put_contents($file, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+            @chmod($file, 0664);
+            self::$cache = $new; // keep in-process cache fresh if you use it
+        }
+
+        return ['changed' => $changed, 'moved' => $moved];
+    }
 
     /** Re-key explicit ACL entries for an entire subtree: old/... → new/... */
-public static function renameTree(string $oldFolder, string $newFolder): void
-{
-    $old = self::normalizeFolder($oldFolder);
-    $new = self::normalizeFolder($newFolder);
-    if ($old === '' || $old === 'root') return; // nothing to re-key for root
+    public static function renameTree(string $oldFolder, string $newFolder): void
+    {
+        $old = self::normalizeFolder($oldFolder);
+        $new = self::normalizeFolder($newFolder);
+        if ($old === '' || $old === 'root') return; // nothing to re-key for root
 
-    $acl = self::$cache ?? self::loadFresh();
-    if (!isset($acl['folders']) || !is_array($acl['folders'])) return;
+        $acl = self::$cache ?? self::loadFresh();
+        if (!isset($acl['folders']) || !is_array($acl['folders'])) return;
 
-    $rebased = [];
-    foreach ($acl['folders'] as $k => $rec) {
-        if ($k === $old || strpos($k, $old . '/') === 0) {
-            $suffix = substr($k, strlen($old));
-            $suffix = ltrim((string)$suffix, '/');
-            $newKey = $new . ($suffix !== '' ? '/' . $suffix : '');
-            $rebased[$newKey] = $rec;
-        } else {
-            $rebased[$k] = $rec;
+        $rebased = [];
+        foreach ($acl['folders'] as $k => $rec) {
+            if ($k === $old || strpos($k, $old . '/') === 0) {
+                $suffix = substr($k, strlen($old));
+                $suffix = ltrim((string)$suffix, '/');
+                $newKey = $new . ($suffix !== '' ? '/' . $suffix : '');
+                $rebased[$newKey] = $rec;
+            } else {
+                $rebased[$k] = $rec;
+            }
         }
+        $acl['folders'] = $rebased;
+        self::save($acl);
     }
-    $acl['folders'] = $rebased;
-    self::save($acl);
-}
 
-    private static function loadFresh(): array {
+    private static function loadFresh(): array
+    {
         $path = self::path();
         if (!is_file($path)) {
             @mkdir(dirname($path), 0755, true);
@@ -94,7 +167,7 @@ public static function renameTree(string $oldFolder, string $newFolder): void
                         'read'    => ['admin'],
                         'write'   => ['admin'],
                         'share'   => ['admin'],
-                        'read_own'=> [],
+                        'read_own' => [],
                         'create'       => [],
                         'upload'       => [],
                         'edit'         => [],
@@ -130,12 +203,21 @@ public static function renameTree(string $oldFolder, string $newFolder): void
 
         $healed = false;
         foreach ($data['folders'] as $folder => &$rec) {
-            if (!is_array($rec)) { $rec = []; $healed = true; }
+            if (!is_array($rec)) {
+                $rec = [];
+                $healed = true;
+            }
             foreach (self::BUCKETS as $k) {
                 $v = $rec[$k] ?? [];
-                if (!is_array($v)) { $v = []; $healed = true; }
+                if (!is_array($v)) {
+                    $v = [];
+                    $healed = true;
+                }
                 $v = array_values(array_unique(array_map('strval', $v)));
-                if (($rec[$k] ?? null) !== $v) { $rec[$k] = $v; $healed = true; }
+                if (($rec[$k] ?? null) !== $v) {
+                    $rec[$k] = $v;
+                    $healed = true;
+                }
             }
         }
         unset($rec);
@@ -145,19 +227,22 @@ public static function renameTree(string $oldFolder, string $newFolder): void
         return $data;
     }
 
-    private static function save(array $acl): bool {
+    private static function save(array $acl): bool
+    {
         $ok = @file_put_contents(self::path(), json_encode($acl, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX) !== false;
         if ($ok) self::$cache = $acl;
         return $ok;
     }
 
-    private static function listFor(string $folder, string $key): array {
+    private static function listFor(string $folder, string $key): array
+    {
         $acl = self::$cache ?? self::loadFresh();
         $f   = $acl['folders'][$folder] ?? null;
         return is_array($f[$key] ?? null) ? $f[$key] : [];
     }
 
-    public static function ensureFolderRecord(string $folder, string $owner = 'admin'): void {
+    public static function ensureFolderRecord(string $folder, string $owner = 'admin'): void
+    {
         $folder = self::normalizeFolder($folder);
         $acl = self::$cache ?? self::loadFresh();
         if (!isset($acl['folders'][$folder])) {
@@ -182,19 +267,23 @@ public static function renameTree(string $oldFolder, string $newFolder): void
         }
     }
 
-    public static function isAdmin(array $perms = []): bool {
+    public static function isAdmin(array $perms = []): bool
+    {
         if (!empty($_SESSION['isAdmin'])) return true;
         if (!empty($perms['admin']) || !empty($perms['isAdmin'])) return true;
         if (isset($perms['role']) && (string)$perms['role'] === '1') return true;
         if (!empty($_SESSION['role']) && (string)$_SESSION['role'] === '1') return true;
-        if (defined('DEFAULT_ADMIN_USER') && !empty($_SESSION['username'])
-            && strcasecmp((string)$_SESSION['username'], (string)DEFAULT_ADMIN_USER) === 0) {
+        if (
+            defined('DEFAULT_ADMIN_USER') && !empty($_SESSION['username'])
+            && strcasecmp((string)$_SESSION['username'], (string)DEFAULT_ADMIN_USER) === 0
+        ) {
             return true;
         }
         return false;
     }
 
-    public static function hasGrant(string $user, string $folder, string $cap): bool {
+    public static function hasGrant(string $user, string $folder, string $cap): bool
+    {
         $folder = self::normalizeFolder($folder);
         $capKey = ($cap === 'owner') ? 'owners' : $cap;
         $arr    = self::listFor($folder, $capKey);
@@ -202,35 +291,41 @@ public static function renameTree(string $oldFolder, string $newFolder): void
         return false;
     }
 
-    public static function isOwner(string $user, array $perms, string $folder): bool {
+    public static function isOwner(string $user, array $perms, string $folder): bool
+    {
         if (self::isAdmin($perms)) return true;
         return self::hasGrant($user, $folder, 'owners');
     }
 
-    public static function canManage(string $user, array $perms, string $folder): bool {
+    public static function canManage(string $user, array $perms, string $folder): bool
+    {
         return self::isOwner($user, $perms, $folder);
     }
 
-    public static function canRead(string $user, array $perms, string $folder): bool {
+    public static function canRead(string $user, array $perms, string $folder): bool
+    {
         $folder = self::normalizeFolder($folder);
         if (self::isAdmin($perms)) return true;
         return self::hasGrant($user, $folder, 'owners')
             || self::hasGrant($user, $folder, 'read');
     }
 
-    public static function canReadOwn(string $user, array $perms, string $folder): bool {
+    public static function canReadOwn(string $user, array $perms, string $folder): bool
+    {
         if (self::canRead($user, $perms, $folder)) return true;
         return self::hasGrant($user, $folder, 'read_own');
     }
 
-    public static function canWrite(string $user, array $perms, string $folder): bool {
+    public static function canWrite(string $user, array $perms, string $folder): bool
+    {
         $folder = self::normalizeFolder($folder);
         if (self::isAdmin($perms)) return true;
         return self::hasGrant($user, $folder, 'owners')
             || self::hasGrant($user, $folder, 'write');
     }
 
-    public static function canShare(string $user, array $perms, string $folder): bool {
+    public static function canShare(string $user, array $perms, string $folder): bool
+    {
         $folder = self::normalizeFolder($folder);
         if (self::isAdmin($perms)) return true;
         return self::hasGrant($user, $folder, 'owners')
@@ -238,7 +333,8 @@ public static function renameTree(string $oldFolder, string $newFolder): void
     }
 
     // Legacy-only explicit (to avoid breaking existing callers)
-    public static function explicit(string $folder): array {
+    public static function explicit(string $folder): array
+    {
         $folder = self::normalizeFolder($folder);
         $acl = self::$cache ?? self::loadFresh();
         $rec = $acl['folders'][$folder] ?? [];
@@ -257,7 +353,8 @@ public static function renameTree(string $oldFolder, string $newFolder): void
     }
 
     // New: full explicit including granular
-    public static function explicitAll(string $folder): array {
+    public static function explicitAll(string $folder): array
+    {
         $folder = self::normalizeFolder($folder);
         $acl = self::$cache ?? self::loadFresh();
         $rec = $acl['folders'][$folder] ?? [];
@@ -285,7 +382,8 @@ public static function renameTree(string $oldFolder, string $newFolder): void
         ];
     }
 
-    public static function upsert(string $folder, array $owners, array $read, array $write, array $share): bool {
+    public static function upsert(string $folder, array $owners, array $read, array $write, array $share): bool
+    {
         $folder = self::normalizeFolder($folder);
         $acl = self::$cache ?? self::loadFresh();
         $existing = $acl['folders'][$folder] ?? ['read_own' => []];
@@ -314,19 +412,23 @@ public static function renameTree(string $oldFolder, string $newFolder): void
         return self::save($acl);
     }
 
-    public static function applyUserGrantsAtomic(string $user, array $grants): array {
+    public static function applyUserGrantsAtomic(string $user, array $grants): array
+    {
         $user = (string)$user;
         $path = self::path();
 
         $fh = @fopen($path, 'c+');
         if (!$fh) throw new RuntimeException('Cannot open ACL storage');
-        if (!flock($fh, LOCK_EX)) { fclose($fh); throw new RuntimeException('Cannot lock ACL storage'); }
+        if (!flock($fh, LOCK_EX)) {
+            fclose($fh);
+            throw new RuntimeException('Cannot lock ACL storage');
+        }
 
         try {
             $raw = stream_get_contents($fh);
             if ($raw === false) $raw = '';
             $acl = json_decode($raw, true);
-            if (!is_array($acl)) $acl = ['folders'=>[], 'groups'=>[]];
+            if (!is_array($acl)) $acl = ['folders' => [], 'groups' => []];
             if (!isset($acl['folders']) || !is_array($acl['folders'])) $acl['folders'] = [];
             if (!isset($acl['groups'])  || !is_array($acl['groups']))  $acl['groups']  = [];
 
@@ -335,7 +437,7 @@ public static function renameTree(string $oldFolder, string $newFolder): void
             foreach ($grants as $folder => $caps) {
                 $ff = self::normalizeFolder((string)$folder);
                 if (!isset($acl['folders'][$ff]) || !is_array($acl['folders'][$ff])) $acl['folders'][$ff] = [];
-                $rec =& $acl['folders'][$ff];
+                $rec = &$acl['folders'][$ff];
 
                 foreach (self::BUCKETS as $k) {
                     if (!isset($rec[$k]) || !is_array($rec[$k])) $rec[$k] = [];
@@ -365,10 +467,16 @@ public static function renameTree(string $oldFolder, string $newFolder): void
                 $sf  = !empty($caps['shareFile'])   || !empty($caps['share_file']);
                 $sfo = !empty($caps['shareFolder']) || !empty($caps['share_folder']);
 
-                if ($m) { $v = true; $w = true; $u = $c = $ed = $rn = $cp = $dl = $ex = $sf = $sfo = true; }
+                if ($m) {
+                    $v = true;
+                    $w = true;
+                    $u = $c = $ed = $rn = $cp = $dl = $ex = $sf = $sfo = true;
+                }
                 if ($u && !$v && !$vo) $vo = true;
                 //if ($s && !$v) $v = true;
-                if ($w) { $c = $u = $ed = $rn = $cp = $dl = $ex = true; }
+                if ($w) {
+                    $c = $u = $ed = $rn = $cp = $dl = $ex = true;
+                }
 
                 if ($m)  $rec['owners'][]       = $user;
                 if ($v)  $rec['read'][]         = $user;
@@ -385,7 +493,7 @@ public static function renameTree(string $oldFolder, string $newFolder): void
                 if ($dl) $rec['delete'][]       = $user;
                 if ($ex) $rec['extract'][]      = $user;
                 if ($sf) $rec['share_file'][]   = $user;
-                if ($sfo)$rec['share_folder'][] = $user;
+                if ($sfo) $rec['share_folder'][] = $user;
 
                 foreach (self::BUCKETS as $k) {
                     $rec[$k] = array_values(array_unique(array_map('strval', $rec[$k])));
@@ -409,90 +517,102 @@ public static function renameTree(string $oldFolder, string $newFolder): void
         }
     }
 
-// --- Granular write family -----------------------------------------------
+    // --- Granular write family -----------------------------------------------
 
-public static function canCreate(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'create')
-        || self::hasGrant($user, $folder, 'write');
-}
+    public static function canCreate(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::hasGrant($user, $folder, 'owners')
+            || self::hasGrant($user, $folder, 'create')
+            || self::hasGrant($user, $folder, 'write');
+    }
 
-public static function canCreateFolder(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    // Only owners/managers can create subfolders under $folder
-    return self::hasGrant($user, $folder, 'owners');
-}
+    public static function canCreateFolder(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        // Only owners/managers can create subfolders under $folder
+        return self::hasGrant($user, $folder, 'owners');
+    }
 
-public static function canUpload(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'upload')
-        || self::hasGrant($user, $folder, 'write');
-}
+    public static function canUpload(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::hasGrant($user, $folder, 'owners')
+            || self::hasGrant($user, $folder, 'upload')
+            || self::hasGrant($user, $folder, 'write');
+    }
 
-public static function canEdit(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'edit')
-        || self::hasGrant($user, $folder, 'write');
-}
+    public static function canEdit(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::hasGrant($user, $folder, 'owners')
+            || self::hasGrant($user, $folder, 'edit')
+            || self::hasGrant($user, $folder, 'write');
+    }
 
-public static function canRename(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'rename')
-        || self::hasGrant($user, $folder, 'write');
-}
+    public static function canRename(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::hasGrant($user, $folder, 'owners')
+            || self::hasGrant($user, $folder, 'rename')
+            || self::hasGrant($user, $folder, 'write');
+    }
 
-public static function canCopy(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'copy')
-        || self::hasGrant($user, $folder, 'write');
-}
+    public static function canCopy(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::hasGrant($user, $folder, 'owners')
+            || self::hasGrant($user, $folder, 'copy')
+            || self::hasGrant($user, $folder, 'write');
+    }
 
-public static function canMove(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::ownsFolderOrAncestor($user, $perms, $folder);
-}
+    public static function canMove(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::ownsFolderOrAncestor($user, $perms, $folder);
+    }
 
-public static function canMoveFolder(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::ownsFolderOrAncestor($user, $perms, $folder);
-}
+    public static function canMoveFolder(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::ownsFolderOrAncestor($user, $perms, $folder);
+    }
 
-public static function canDelete(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'delete')
-        || self::hasGrant($user, $folder, 'write');
-}
+    public static function canDelete(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::hasGrant($user, $folder, 'owners')
+            || self::hasGrant($user, $folder, 'delete')
+            || self::hasGrant($user, $folder, 'write');
+    }
 
-public static function canExtract(string $user, array $perms, string $folder): bool {
-    $folder = self::normalizeFolder($folder);
-    if (self::isAdmin($perms)) return true;
-    return self::hasGrant($user, $folder, 'owners')
-        || self::hasGrant($user, $folder, 'extract')
-        || self::hasGrant($user, $folder, 'write');
-}
-    
+    public static function canExtract(string $user, array $perms, string $folder): bool
+    {
+        $folder = self::normalizeFolder($folder);
+        if (self::isAdmin($perms)) return true;
+        return self::hasGrant($user, $folder, 'owners')
+            || self::hasGrant($user, $folder, 'extract')
+            || self::hasGrant($user, $folder, 'write');
+    }
+
     /** Sharing: files use share, folders require share + full-view. */
-    public static function canShareFile(string $user, array $perms, string $folder): bool {
+    public static function canShareFile(string $user, array $perms, string $folder): bool
+    {
         $folder = self::normalizeFolder($folder);
         if (self::isAdmin($perms)) return true;
         return self::hasGrant($user, $folder, 'owners') || self::hasGrant($user, $folder, 'share');
     }
-    public static function canShareFolder(string $user, array $perms, string $folder): bool {
+    public static function canShareFolder(string $user, array $perms, string $folder): bool
+    {
         $folder = self::normalizeFolder($folder);
         if (self::isAdmin($perms)) return true;
         $can = self::hasGrant($user, $folder, 'owners') || self::hasGrant($user, $folder, 'share');

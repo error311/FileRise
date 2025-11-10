@@ -1,5 +1,39 @@
 # Changelog
 
+## Changes 11/9/2025 (v1.9.1)
+
+release(v1.9.1): customizable folder colors + live preview; improved tree persistence; accent button; manual sync script
+
+### Highlights v1.9.1
+
+- 🎨 Per-folder colors with live SVG preview and consistent styling in light/dark modes.
+- 📄 Folder icons auto-refresh when contents change (no full page reload).
+- 🧭 Drag-and-drop breadcrumb fallback for folder→folder moves.
+- 🛠️ Safer upgrade helper script to rsync app files without touching data.
+
+- feat(colors): add per-folder color customization
+  - New endpoints: GET /api/folder/getFolderColors.php and POST /api/folder/saveFolderColor.php
+    - AuthZ: reuse canRename for “customize folder”, validate hex, and write atomically to metadata/folder_colors.json.
+    - Read endpoint filters map by ACL::canRead before returning to the user.
+  - Frontend: load/apply colors to tree rows; persist on move/rename; API helpers saveFolderColor/getFolderColors.
+
+- feat(ui): color-picker modal with live SVG folder preview
+  - Shows preview that updates as you pick; supports Save/Reset; protects against accidental toggle clicks.
+
+- feat(controls): “Color folder” button in Folder Management card
+  - New `.btn-color-folder` with accent palette (#008CB4), hover/active/focus states, dark-mode tuning; event wiring gated by caps.
+
+- i18n: add strings for color UI (color_folder, choose_color, reset_default, save_color, folder_color_saved, folder_color_cleared).
+
+- ux(tree): make expansion state more predictable across refreshes
+  - `expandTreePath(path, {force,persist,includeLeaf})` with persistence; keep ancestors expanded; add click-suppression guard.
+
+- ux(layout): center the folder-actions toolbar; remove left padding hacks; normalize icon sizing.
+
+- chore(ops): add scripts/manual-sync.sh (safe rsync update path, preserves data dirs and public/.htaccess).
+
+---
+
 ## Changes 11/9/2025 (v1.9.0)
 
 release(v1.9.0): folder tree UX overhaul, fast ACL-aware counts, and .htaccess hardening

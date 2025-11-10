@@ -312,7 +312,13 @@ const translations = {
     "previous": "Previous",
     "next": "Next",
     "watched": "Watched",
-    "reset_progress": "Reset Progress"
+    "reset_progress": "Reset Progress",
+    "color_folder": "Color folder",
+    "choose_color": "Choose a color",
+    "reset_default": "Reset",
+    "save_color": "Save",
+    "folder_color_saved": "Folder color saved.",
+    "folder_color_cleared": "Folder color reset."
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

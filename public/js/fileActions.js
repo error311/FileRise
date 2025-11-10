@@ -2,6 +2,7 @@
 import { showToast, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 import { formatFolderName } from './fileListView.js?v={{APP_QVER}}';
+import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
 export function handleDeleteSelected(e) {
@@ -47,6 +48,7 @@ document.addEventListener("DOMContentLoaded", function () {
           if (data.success) {
             showToast("Selected files deleted successfully!");
             loadFileList(window.currentFolder);
+            refreshFolderIcon(window.currentFolder);
           } else {
             showToast("Error: " + (data.error || "Could not delete files"));
           }
@@ -129,6 +131,7 @@ export async function handleCreateFile(e) {
     if (!js.success) throw new Error(js.error);
     showToast(t('file_created'));
     loadFileList(folder);
+    refreshFolderIcon(folder);
   } catch (err) {
     showToast(err.message || t('error_creating_file'));
   } finally {
@@ -300,6 +303,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         showToast(t('file_created_successfully'));
         loadFileList(window.currentFolder);
+        refreshFolderIcon(folder);
       } catch (err) {
         console.error(err);
         showToast(err.message || t('error_creating_file'));
@@ -633,6 +637,7 @@ document.addEventListener("DOMContentLoaded", function () {
           if (data.success) {
             showToast("Selected files copied successfully!", 5000);
             loadFileList(window.currentFolder);
+            refreshFolderIcon(targetFolder);
           } else {
             showToast("Error: " + (data.error || "Could not copy files"), 5000);
           }
@@ -685,6 +690,8 @@ document.addEventListener("DOMContentLoaded", function () {
           if (data.success) {
             showToast("Selected files moved successfully!");
             loadFileList(window.currentFolder);
+            refreshFolderIcon(targetFolder);
+            refreshFolderIcon(window.currentFolder);
           } else {
             showToast("Error: " + (data.error || "Could not move files"));
           }

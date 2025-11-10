@@ -2,7 +2,7 @@
 import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
 import { toggleVisibility, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
-import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
+import { loadFolderTree, refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
 function showConfirm(message, onConfirm) {
@@ -89,6 +89,7 @@ export function setupTrashRestoreDelete() {
                     toggleVisibility("restoreFilesModal", false);
                     loadFileList(window.currentFolder);
                     loadFolderTree(window.currentFolder);
+                    refreshFolderIcon(window.currentFolder);
                 })
                 .catch(err => {
                     console.error("Error restoring files:", err);

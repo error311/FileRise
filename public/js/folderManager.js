@@ -74,6 +74,13 @@ function loadFolderTreeState() {
 function saveFolderTreeState(state) {
   localStorage.setItem("folderTreeState", JSON.stringify(state));
 }
+/* ----------------------
+   Transient UI guards (click suppression)
+----------------------*/
+let _suppressToggleUntil = 0;
+function suppressNextToggle(ms = 300) {
+  _suppressToggleUntil = performance.now() + ms;
+}
 
 // Helper for getting the parent folder.
 export function getParentFolder(folder) {
@@ -102,9 +109,11 @@ async function applyFolderCapabilities(folder) {
   window.currentFolderCaps = caps;
 
   const isRoot = (folder === 'root');
+
   setControlEnabled(document.getElementById('createFolderBtn'), !!caps.canCreate);
   setControlEnabled(document.getElementById('moveFolderBtn'), !!caps.canMoveFolder);
   setControlEnabled(document.getElementById('renameFolderBtn'), !isRoot && !!caps.canRename);
+  setControlEnabled(document.getElementById('colorFolderBtn'), !isRoot && !!caps.canRename);
   setControlEnabled(document.getElementById('deleteFolderBtn'), !isRoot && !!caps.canDelete);
   setControlEnabled(document.getElementById('shareFolderBtn'), !isRoot && !!caps.canShareFolder);
 }
@@ -174,56 +183,71 @@ function breadcrumbDropHandler(e) {
   e.preventDefault();
   link.classList.remove("drop-hover");
   const dropFolder = link.getAttribute("data-folder");
+
   let dragData;
   try {
     dragData = JSON.parse(e.dataTransfer.getData("application/json"));
-  } catch (err) {
-    console.error("Invalid drag data on breadcrumb:", err);
-    return;
-  }
-  /* FOLDER MOVE FALLBACK */
+  } catch (_) { /* noop */ }
+
+  // FOLDER MOVE FALLBACK (folder->folder)
   if (!dragData) {
-    const plain = (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
-      (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
-    if (plain) {
-      const sourceFolder = String(plain).trim();
-      if (sourceFolder && sourceFolder !== "root") {
-        if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
-          showToast("Invalid destination.", 4000);
-          return;
-        }
-        fetchWithCsrf("/api/folder/moveFolder.php", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
-        })
-          .then(safeJson)
-          .then(data => {
-            if (data && !data.error) {
-              showToast(`Folder moved to ${dropFolder}!`);
-              if (window.currentFolder && (window.currentFolder === sourceFolder || window.currentFolder.startsWith(sourceFolder + "/"))) {
-                const base = sourceFolder.split("/").pop();
-                const newPath = (dropFolder === "root" ? "" : dropFolder + "/") + base;
-                window.currentFolder = newPath;
-              }
-              return loadFolderTree().then(() => {
-                try { expandTreePath(window.currentFolder || "root", { persist: false, includeLeaf: false }); } catch (_) { }
-                loadFileList(window.currentFolder || "root");
-              });
-            } else {
-              showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
-            }
-          })
-          .catch(err => {
-            console.error("Error moving folder:", err);
-            showToast("Error moving folder", 5000);
-          });
-      }
+    const plain = (e.dataTransfer && e.dataTransfer.getData("application/x-filerise-folder")) ||
+      (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
+    const sourceFolder = String(plain || "").trim();
+    if (!sourceFolder || sourceFolder === "root") return;
+
+    if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
+      showToast("Invalid destination.", 4000);
+      return;
     }
+
+    fetchWithCsrf("/api/folder/moveFolder.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
+    })
+      .then(safeJson)
+      .then(data => {
+        if (data && !data.error) {
+          showToast(`Folder moved to ${dropFolder}!`);
+          // Make icons reflect new emptiness without reload
+refreshFolderIcon(dragData.sourceFolder);
+refreshFolderIcon(dropFolder);
+
+          if (window.currentFolder &&
+            (window.currentFolder === sourceFolder || window.currentFolder.startsWith(sourceFolder + "/"))) {
+            const base = sourceFolder.split("/").pop();
+            const newPath = (dropFolder === "root" ? "" : dropFolder + "/") + base;
+
+            // carry color without await
+            const oldColor = window.folderColorMap[sourceFolder];
+            if (oldColor) {
+              saveFolderColor(newPath, oldColor)
+                .then(() => saveFolderColor(sourceFolder, ''))
+                .catch(() => { });
+            }
+
+            window.currentFolder = newPath;
+          }
+
+          return loadFolderTree().then(() => {
+            try { expandTreePath(window.currentFolder || "root", { persist: false, includeLeaf: false }); } catch (_) { }
+            loadFileList(window.currentFolder || "root");
+          });
+        } else {
+          showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
+        }
+      })
+      .catch(err => {
+        console.error("Error moving folder:", err);
+        showToast("Error moving folder", 5000);
+      });
+
     return;
   }
 
+  // File(s) drop path (unchanged)
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
 
@@ -242,6 +266,8 @@ function breadcrumbDropHandler(e) {
       if (data.success) {
         showToast(`File(s) moved successfully to ${dropFolder}!`);
         loadFileList(dragData.sourceFolder);
+        refreshFolderIcon(dragData.sourceFolder);
+        refreshFolderIcon(dropFolder);
       } else {
         showToast("Error moving files: " + (data.error || "Unknown error"));
       }
@@ -250,6 +276,230 @@ function breadcrumbDropHandler(e) {
       console.error("Error moving files via drop on breadcrumb:", error);
       showToast("Error moving files.");
     });
+}
+
+// ---- Folder Colors (state + helpers) ----
+window.folderColorMap = {}; // { "path": "#RRGGBB", ... }
+
+async function loadFolderColors() {
+  try {
+    const r = await fetch('/api/folder/getFolderColors.php', { credentials: 'include' });
+    if (!r.ok) return (window.folderColorMap = {});
+    window.folderColorMap = await r.json() || {};
+  } catch { window.folderColorMap = {}; }
+}
+
+// tiny color utils
+function hexToHsl(hex) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const r = parseInt(hex.substr(0, 2), 16) / 255;
+  const g = parseInt(hex.substr(2, 2), 16) / 255;
+  const b = parseInt(hex.substr(4, 2), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+function hslToHex(h, s, l) {
+  h /= 360; s /= 100; l /= 100;
+  const f = n => {
+    const k = (n + h * 12) % 12, a = s * Math.min(l, 1 - l);
+    const c = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+    return Math.round(255 * c).toString(16).padStart(2, '0');
+  };
+  return '#' + f(0) + f(8) + f(4);
+}
+function lighten(hex, amt = 12) {
+  const { h, s, l } = hexToHsl(hex); return hslToHex(h, s, Math.min(100, l + amt));
+}
+function darken(hex, amt = 18) {
+  const { h, s, l } = hexToHsl(hex); return hslToHex(h, s, Math.max(0, l - amt));
+}
+
+function applyFolderColorToOption(folder, hex) {
+  // accepts folder like "root" or "A/B"
+  const sel = folder === 'root'
+    ? '#rootRow .folder-option'
+    : `.folder-option[data-folder="${CSS.escape(folder)}"]`;
+  const el = document.querySelector(sel);
+  if (!el) return;
+
+  if (!hex) {
+    el.style.removeProperty('--filr-folder-front');
+    el.style.removeProperty('--filr-folder-back');
+    el.style.removeProperty('--filr-folder-stroke');
+    return;
+  }
+
+  const front = hex;                 // main
+  const back = lighten(hex, 14);    // body (slightly lighter)
+  const stroke = darken(hex, 22);     // outline
+
+  el.style.setProperty('--filr-folder-front', front);
+  el.style.setProperty('--filr-folder-back', back);
+  el.style.setProperty('--filr-folder-stroke', stroke);
+}
+
+function applyAllFolderColors(scope = document) {
+  Object.entries(window.folderColorMap || {}).forEach(([folder, hex]) => {
+    applyFolderColorToOption(folder, hex);
+  });
+}
+
+async function saveFolderColor(folder, colorHexOrEmpty) {
+  const res = await fetch('/api/folder/saveFolderColor.php', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken },
+    body: JSON.stringify({ folder, color: colorHexOrEmpty })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+  // update local map & apply
+  if (data.color) window.folderColorMap[folder] = data.color;
+  else delete window.folderColorMap[folder];
+  applyFolderColorToOption(folder, data.color || '');
+  return data;
+}
+
+function openColorFolderModal(folder) {
+  const existing = window.folderColorMap[folder] || '';
+  const defaultHex = existing || '#f6b84e';
+
+  const modal = document.createElement('div');
+  modal.id = 'colorFolderModal';
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-content" style="width:460px;max-width:90vw;">
+      <style>
+        /* Scoped styles for the preview only */
+        #colorFolderModal .folder-preview {
+          display:flex; align-items:center; gap:12px;
+          margin-top:12px; padding:10px 12px; border-radius:12px;
+          border:1px solid var(--border-color, #ddd);
+          background: var(--bg, transparent);
+        }
+        body.dark-mode #colorFolderModal .folder-preview {
+          --border-color:#444; --bg: rgba(255,255,255,.02);
+        }
+        #colorFolderModal .folder-preview .folder-icon { width:56px; height:56px; display:inline-block }
+        #colorFolderModal .folder-preview svg { width:56px; height:56px; display:block }
+        /* Use the same variable names you already apply on folder rows */
+        #colorFolderModal .folder-preview .folder-back  { fill:var(--filr-folder-back,  #f0d084) }
+        #colorFolderModal .folder-preview .folder-front { fill:var(--filr-folder-front, #e2b158); stroke:var(--filr-folder-stroke, #996a1e); stroke-width:.6 }
+        #colorFolderModal .folder-preview .lip-highlight { stroke:rgba(255,255,255,.35); fill:none; stroke-width:.9 }
+        #colorFolderModal .folder-preview .paper { fill:#fff; stroke:#d0d0d0; stroke-width:.6 }
+        #colorFolderModal .folder-preview .paper-fold { fill:#ececec }
+        #colorFolderModal .folder-preview .paper-line { stroke:#c8c8c8; stroke-width:.8 }
+        #colorFolderModal .folder-preview .label { font-weight:600; user-select:none }
+
+        /* High-contrast ghost button just for this modal */
+        #colorFolderModal .btn-ghost {
+          background: transparent;
+          border: 1px solid var(--ghost-border, #cfcfcf);
+          color: var(--ghost-fg, #222);
+          padding: 6px 12px;
+          border-radius: 8px;
+        }
+        #colorFolderModal .btn-ghost:hover {
+          background: var(--ghost-hover-bg, #f5f5f5);
+        }
+        #colorFolderModal .btn-ghost:focus-visible {
+          outline: 2px solid #8ab4f8;
+          outline-offset: 2px;
+        }
+        body.dark-mode #colorFolderModal .btn-ghost {
+          --ghost-border: #60636b;
+          --ghost-fg: #f0f0f0;
+          --ghost-hover-bg: rgba(255,255,255,.08);
+        }
+      </style>
+
+      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">${t('color_folder')}: ${escapeHTML(folder)}</h3>
+        <span id="closeColorFolderModal" class="editor-close-btn" role="button" aria-label="Close">&times;</span>
+      </div>
+
+      <div class="modal-body" style="margin-top:10px;">
+        <label for="folderColorInput" style="display:block;margin-bottom:6px;">${t('choose_color')}</label>
+        <input type="color" id="folderColorInput" style="width:100%;padding:6px;" value="${defaultHex}"/>
+
+        <!-- Live preview -->
+        <div class="folder-preview" id="folderColorPreview" aria-label="Preview">
+          <span class="folder-icon" aria-hidden="true">${folderSVG('paper')}</span>
+          <span class="label">${escapeHTML(folder)}</span>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+          <button id="resetFolderColorBtn" class="btn btn-ghost">${t('reset_default')}</button>
+          <button id="saveFolderColorBtn" class="btn btn-primary">${t('save_color')}</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.style.display = 'block';
+
+  // --- live preview wiring
+  const previewEl = modal.querySelector('#folderColorPreview');
+  const inputEl = modal.querySelector('#folderColorInput');
+
+  function applyPreview(hex) {
+    if (!hex || typeof hex !== 'string') return;
+    const front = hex;
+    const back = lighten(hex, 14);
+    const stroke = darken(hex, 22);
+    previewEl.style.setProperty('--filr-folder-front', front);
+    previewEl.style.setProperty('--filr-folder-back', back);
+    previewEl.style.setProperty('--filr-folder-stroke', stroke);
+  }
+  applyPreview(defaultHex);
+  inputEl?.addEventListener('input', () => applyPreview(inputEl.value));
+
+  // --- buttons/close
+  document.getElementById('closeColorFolderModal')?.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    suppressNextToggle(300);
+    setTimeout(() => expandTreePath(folder, { force: true }), 0);
+    modal.remove();
+  });
+
+  document.getElementById('resetFolderColorBtn')?.addEventListener('click', async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try {
+      await saveFolderColor(folder, ''); // clear
+      showToast(t('folder_color_cleared'));
+    } catch (err) {
+      showToast(err.message || 'Error');
+    } finally {
+      suppressNextToggle(300);
+      setTimeout(() => expandTreePath(folder, { force: true }), 0);
+      modal.remove();
+    }
+  });
+
+  document.getElementById('saveFolderColorBtn')?.addEventListener('click', async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try {
+      const hex = String(inputEl.value || '').trim();
+      await saveFolderColor(folder, hex);
+      showToast(t('folder_color_saved'));
+    } finally {
+      suppressNextToggle(300);
+      setTimeout(() => expandTreePath(folder, { force: true }), 0);
+      modal.remove();
+    }
+  });
 }
 
 /* ----------------------
@@ -285,6 +535,20 @@ async function checkUserFolderPermission() {
     localStorage.setItem("folderOnly", "false");
     return false;
   }
+}
+
+// Invalidate client-side folder "non-empty" caches
+function invalidateFolderCaches(folder) {
+  if (!folder) return;
+  _folderCountCache.delete(folder);
+  _nonEmptyCache.delete(folder);
+  _inflightCounts.delete(folder);
+}
+
+// Public: force a fresh count + icon for a folder row
+export function refreshFolderIcon(folder) {
+  invalidateFolderCaches(folder);
+  ensureFolderIcon(folder);
 }
 
 // ---------------- SVG icons + icon helpers ----------------
@@ -369,7 +633,9 @@ async function fetchFolderCounts(folder) {
   if (_folderCountCache.has(folder)) return _folderCountCache.get(folder);
   if (_inflightCounts.has(folder)) return _inflightCounts.get(folder);
 
-  const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}`;
+  // cache-bust query param to avoid any proxy/cdn caching
+  const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`;
+
   const p = _runCount(url).then(data => {
     const result = {
       folders: Number(data?.folders || 0),
@@ -473,15 +739,18 @@ function renderFolderTree(tree, parentPath = "", defaultDisplay = "block") {
   return html;
 }
 
-// replace your current expandTreePath with this version
 function expandTreePath(path, opts = {}) {
-  const { force = false } = opts;
+  const { force = false, persist = false, includeLeaf = false } = opts;
   const state = loadFolderTreeState();
   const parts = (path || '').split('/').filter(Boolean);
   let cumulative = '';
 
+  const lastIndex = includeLeaf ? parts.length - 1 : Math.max(0, parts.length - 2);
+
   parts.forEach((part, i) => {
     cumulative = i === 0 ? part : `${cumulative}/${part}`;
+    if (i > lastIndex) return; // skip leaf unless asked
+
     const option = document.querySelector(`.folder-option[data-folder="${CSS.escape(cumulative)}"]`);
     if (!option) return;
 
@@ -489,12 +758,17 @@ function expandTreePath(path, opts = {}) {
     const nestedUl = li ? li.querySelector(':scope > ul') : null;
     if (!nestedUl) return;
 
-    // Only expand if caller forces it OR saved state says "block"
     const shouldExpand = force || state[cumulative] === 'block';
     nestedUl.classList.toggle('expanded', shouldExpand);
     nestedUl.classList.toggle('collapsed', !shouldExpand);
     li.setAttribute('aria-expanded', String(!!shouldExpand));
+
+    if (persist && shouldExpand) {
+      state[cumulative] = 'block';
+    }
   });
+
+  if (persist) saveFolderTreeState(state);
 }
 
 
@@ -514,58 +788,72 @@ function folderDropHandler(event) {
   event.preventDefault();
   event.currentTarget.classList.remove("drop-hover");
   const dropFolder = event.currentTarget.getAttribute("data-folder");
+
   let dragData = null;
   try {
     const jsonStr = event.dataTransfer.getData("application/json") || "";
     if (jsonStr) dragData = JSON.parse(jsonStr);
-  }
-  catch (e) {
+  } catch (e) {
     console.error("Invalid drag data", e);
     return;
   }
-  /* FOLDER MOVE FALLBACK */
+
+  // FOLDER MOVE FALLBACK (folder->folder)
   if (!dragData) {
     const plain = (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
       (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
-    if (plain) {
-      const sourceFolder = String(plain).trim();
-      if (sourceFolder && sourceFolder !== "root") {
-        if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
-          showToast("Invalid destination.", 4000);
-          return;
-        }
-        fetchWithCsrf("/api/folder/moveFolder.php", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
-        })
-          .then(safeJson)
-          .then(data => {
-            if (data && !data.error) {
-              showToast(`Folder moved to ${dropFolder}!`);
-              if (window.currentFolder && (window.currentFolder === sourceFolder || window.currentFolder.startsWith(sourceFolder + "/"))) {
-                const base = sourceFolder.split("/").pop();
-                const newPath = (dropFolder === "root" ? "" : dropFolder + "/") + base;
-                window.currentFolder = newPath;
-              }
-              return loadFolderTree().then(() => {
-                try { expandTreePath(window.currentFolder || "root", { persist: false, includeLeaf: false }); } catch (_) { }
-                loadFileList(window.currentFolder || "root");
-              });
-            } else {
-              showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
-            }
-          })
-          .catch(err => {
-            console.error("Error moving folder:", err);
-            showToast("Error moving folder", 5000);
-          });
-      }
+    const sourceFolder = String(plain || "").trim();
+    if (!sourceFolder || sourceFolder === "root") return;
+
+    if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
+      showToast("Invalid destination.", 4000);
+      return;
     }
+
+    fetchWithCsrf("/api/folder/moveFolder.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
+    })
+      .then(safeJson)
+      .then(data => {
+        if (data && !data.error) {
+          showToast(`Folder moved to ${dropFolder}!`);
+
+          if (window.currentFolder &&
+            (window.currentFolder === sourceFolder || window.currentFolder.startsWith(sourceFolder + "/"))) {
+            const base = sourceFolder.split("/").pop();
+            const newPath = (dropFolder === "root" ? "" : dropFolder + "/") + base;
+
+            // carry color without await
+            const oldColor = window.folderColorMap[sourceFolder];
+            if (oldColor) {
+              saveFolderColor(newPath, oldColor)
+                .then(() => saveFolderColor(sourceFolder, ''))
+                .catch(() => { });
+            }
+
+            window.currentFolder = newPath;
+          }
+
+          return loadFolderTree().then(() => {
+            try { expandTreePath(window.currentFolder || "root", { persist: false, includeLeaf: false }); } catch (_) { }
+            loadFileList(window.currentFolder || "root");
+          });
+        } else {
+          showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
+        }
+      })
+      .catch(err => {
+        console.error("Error moving folder:", err);
+        showToast("Error moving folder", 5000);
+      });
+
     return;
   }
 
+  // File(s) drop path (unchanged)
   const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
   if (filesToMove.length === 0) return;
 
@@ -584,6 +872,8 @@ function folderDropHandler(event) {
       if (data.success) {
         showToast(`File(s) moved successfully to ${dropFolder}!`);
         loadFileList(dragData.sourceFolder);
+        refreshFolderIcon(dragData.sourceFolder);
+        refreshFolderIcon(dropFolder);
       } else {
         showToast("Error moving files: " + (data.error || "Unknown error"));
       }
@@ -721,6 +1011,11 @@ export async function loadFolderTree(selectedFolder) {
     }
     container.innerHTML = html;
 
+    await loadFolderColors();
+    try { applyAllFolderColors(container); } catch (e) {
+      console.warn('applyAllFolderColors failed:', e);
+    }
+
     const st = loadFolderTreeState();
     const rootUl = container.querySelector('#rootRow + ul');
     if (rootUl) {
@@ -777,7 +1072,7 @@ export async function loadFolderTree(selectedFolder) {
 
     // Show ancestors so the current selection is visible, but don't persist
     if (window.currentFolder && window.currentFolder !== effectiveRoot) {
-      expandTreePath(window.currentFolder, { persist: false, includeLeaf: false });
+      expandTreePath(window.currentFolder, { force: true, persist: true, includeLeaf: false });
     }
 
     const selectedEl = container.querySelector(`.folder-option[data-folder="${window.currentFolder}"]`);
@@ -811,45 +1106,48 @@ export async function loadFolderTree(selectedFolder) {
       });
     });
 
-    // Root toggle
-    const rootToggle = container.querySelector("#rootRow .folder-toggle");
-    if (rootToggle) {
-      rootToggle.addEventListener("click", function (e) {
+    // --- One delegated toggle handler (robust) ---
+    (function bindToggleDelegation() {
+      const container = document.getElementById('folderTreeContainer');
+      if (!container || container._toggleBound) return;
+      container._toggleBound = true;
+
+      container.addEventListener('click', (e) => {
+        if (performance.now() < _suppressToggleUntil) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
+        const btn = e.target.closest('button.folder-toggle');
+        if (!btn || !container.contains(btn)) return;
         e.stopPropagation();
-        const nestedUl = container.querySelector("#rootRow + ul");
-        if (!nestedUl) return;
 
-        const state = loadFolderTreeState();
-        const expanded = !(nestedUl.classList.contains("expanded"));
-        nestedUl.classList.toggle("expanded", expanded);
-        nestedUl.classList.toggle("collapsed", !expanded);
+        const folderPath = btn.getAttribute('data-folder');
+        let siblingUl = null;
+        let expandedTarget = null;
 
-        document.getElementById("rootRow").setAttribute("aria-expanded", String(expanded));
-        state[effectiveRoot] = expanded ? "block" : "none";
-        saveFolderTreeState(state);
-      });
-    }
-
-    // Other toggles
-
-    container.querySelectorAll("button.folder-toggle").forEach(toggle => {
-      toggle.addEventListener("click", function (e) {
-        e.stopPropagation();
-        const li = this.closest('li[role="treeitem"]');
-        const siblingUl = li ? li.querySelector(':scope > ul') : null;
-        const folderPath = this.getAttribute("data-folder");
+        // Root toggle?
+        if (btn.closest('#rootRow')) {
+          siblingUl = container.querySelector('#rootRow + ul');
+          expandedTarget = document.getElementById('rootRow');
+        } else {
+          const li = btn.closest('li[role="treeitem"]');
+          if (!li) return;
+          siblingUl = li.querySelector(':scope > ul');
+          expandedTarget = li;
+        }
         if (!siblingUl) return;
 
+        const expanded = !siblingUl.classList.contains('expanded');
+        siblingUl.classList.toggle('expanded', expanded);
+        siblingUl.classList.toggle('collapsed', !expanded);
+        if (expandedTarget) expandedTarget.setAttribute('aria-expanded', String(expanded));
+
         const state = loadFolderTreeState();
-        const expanded = !(siblingUl.classList.contains("expanded"));
-        siblingUl.classList.toggle("expanded", expanded);
-        siblingUl.classList.toggle("collapsed", !expanded);
-        li.setAttribute("aria-expanded", String(expanded));
-        state[folderPath] = expanded ? "block" : "none";
+        state[folderPath] = expanded ? 'block' : 'none';
         saveFolderTreeState(state);
-        ensureFolderIcon(folderPath);
-      });
-    });
+      }, true);
+    })();
 
   } catch (error) {
     console.error("Error loading folder tree:", error);
@@ -928,6 +1226,16 @@ if (submitRename) {
         if (data.success) {
           showToast("Folder renamed successfully!");
           window.currentFolder = newFolderFull;
+
+          // carry color without await
+          const oldPath = selectedFolder;
+          const oldColor = window.folderColorMap[oldPath];
+          if (oldColor) {
+            saveFolderColor(newFolderFull, oldColor)
+              .then(() => saveFolderColor(oldPath, ''))
+              .catch(() => { });
+          }
+
           localStorage.setItem("lastOpenedFolder", newFolderFull);
           loadFolderList(newFolderFull);
         } else {
@@ -1020,6 +1328,8 @@ if (confirmDelete) {
         if (data.success) {
           showToast("Folder deleted successfully!");
           window.currentFolder = getParentFolder(selectedFolder);
+          const parentForIcon = getParentFolder(selectedFolder);
+refreshFolderIcon(parentForIcon);
           localStorage.setItem("lastOpenedFolder", window.currentFolder);
           loadFolderList(window.currentFolder);
         } else {
@@ -1083,6 +1393,8 @@ if (submitCreate) {
       .then(data => {
         if (!data.success) throw new Error(data.error || "Server rejected the request");
         showToast("Folder created!");
+        const parentForIcon = parent || 'root';
+refreshFolderIcon(parentForIcon);
         const full = parent ? `${parent}/${folderInput}` : folderInput;
         window.currentFolder = full;
         localStorage.setItem("lastOpenedFolder", full);
@@ -1101,6 +1413,45 @@ if (submitCreate) {
 }
 
 // ---------- CONTEXT MENU SUPPORT FOR FOLDER MANAGER ----------
+async function folderManagerContextMenuHandler(e) {
+  const target = e.target.closest(".folder-option, .breadcrumb-link");
+  if (!target) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const folder = target.getAttribute("data-folder");
+  if (!folder) return;
+
+  window.currentFolder = folder;
+  await applyFolderCapabilities(folder); // <-- await ensures fresh caps
+
+  // Visual selection
+  document.querySelectorAll(".folder-option, .breadcrumb-link")
+    .forEach(el => el.classList.remove("selected"));
+  target.classList.add("selected");
+
+  const canColor = !!(window.currentFolderCaps && window.currentFolderCaps.canRename);
+
+  const menuItems = [
+    {
+      label: t("create_folder"), action: () => {
+        const modal = document.getElementById("createFolderModal");
+        const input = document.getElementById("newFolderName");
+        if (modal) modal.style.display = "block";
+        if (input) input.focus();
+      }
+    },
+    { label: t("move_folder"), action: () => openMoveFolderUI(folder) },
+    { label: t("rename_folder"), action: () => openRenameFolderModal() },
+    ...(canColor ? [{ label: t("color_folder"), action: () => openColorFolderModal(folder) }] : []),
+    { label: t("folder_share"), action: () => openFolderShareModal(folder) },
+    { label: t("delete_folder"), action: () => openDeleteFolderModal() }
+  ];
+
+  showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+}
+
 export function showFolderManagerContextMenu(x, y, menuItems) {
   let menu = document.getElementById("folderManagerContextMenu");
   if (!menu) {
@@ -1112,6 +1463,7 @@ export function showFolderManagerContextMenu(x, y, menuItems) {
     menu.style.zIndex = "9999";
     document.body.appendChild(menu);
   }
+
   if (document.body.classList.contains("dark-mode")) {
     menu.style.backgroundColor = "#2c2c2c";
     menu.style.border = "1px solid #555";
@@ -1121,18 +1473,16 @@ export function showFolderManagerContextMenu(x, y, menuItems) {
     menu.style.border = "1px solid #ccc";
     menu.style.color = "#000";
   }
+
   menu.innerHTML = "";
   menuItems.forEach(item => {
     const menuItem = document.createElement("div");
     menuItem.textContent = item.label;
     menuItem.style.padding = "5px 15px";
     menuItem.style.cursor = "pointer";
+
     menuItem.addEventListener("mouseover", () => {
-      if (document.body.classList.contains("dark-mode")) {
-        menuItem.style.backgroundColor = "#444";
-      } else {
-        menuItem.style.backgroundColor = "#f0f0f0";
-      }
+      menuItem.style.backgroundColor = document.body.classList.contains("dark-mode") ? "#444" : "#f0f0f0";
     });
     menuItem.addEventListener("mouseout", () => {
       menuItem.style.backgroundColor = "";
@@ -1141,75 +1491,26 @@ export function showFolderManagerContextMenu(x, y, menuItems) {
       item.action();
       hideFolderManagerContextMenu();
     });
+
     menu.appendChild(menuItem);
   });
-  menu.style.left = x + "px";
-  menu.style.top = y + "px";
+
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
   menu.style.display = "block";
 }
 
 export function hideFolderManagerContextMenu() {
   const menu = document.getElementById("folderManagerContextMenu");
-  if (menu) {
-    menu.style.display = "none";
-  }
-}
-
-function folderManagerContextMenuHandler(e) {
-  const target = e.target.closest(".folder-option, .breadcrumb-link");
-  if (!target) return;
-
-  e.preventDefault();
-  e.stopPropagation();
-
-  const folder = target.getAttribute("data-folder");
-  if (!folder) return;
-  window.currentFolder = folder;
-  applyFolderCapabilities(window.currentFolder);
-
-  // Visual selection
-  document.querySelectorAll(".folder-option, .breadcrumb-link").forEach(el => el.classList.remove("selected"));
-  target.classList.add("selected");
-
-  const menuItems = [
-    {
-      label: t("create_folder"),
-      action: () => {
-        const modal = document.getElementById("createFolderModal");
-        const input = document.getElementById("newFolderName");
-        if (modal) modal.style.display = "block";
-        if (input) input.focus();
-      }
-    },
-    {
-      label: t("move_folder"),
-      action: () => { openMoveFolderUI(folder); }
-    },
-    {
-      label: t("rename_folder"),
-      action: () => { openRenameFolderModal(); }
-    },
-    {
-      label: t("folder_share"),
-      action: () => { openFolderShareModal(folder); }
-    },
-    {
-      label: t("delete_folder"),
-      action: () => { openDeleteFolderModal(); }
-    }
-  ];
-  showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+  if (menu) menu.style.display = "none";
 }
 
 // Delegate contextmenu so it works with dynamically re-rendered breadcrumbs
 function bindFolderManagerContextMenu() {
   const tree = document.getElementById("folderTreeContainer");
   if (tree) {
-    // remove old bound handler if present
-    if (tree._ctxHandler) {
-      tree.removeEventListener("contextmenu", tree._ctxHandler, false);
-    }
-    tree._ctxHandler = function (e) {
+    if (tree._ctxHandler) tree.removeEventListener("contextmenu", tree._ctxHandler, false);
+    tree._ctxHandler = (e) => {
       const onOption = e.target.closest(".folder-option");
       if (!onOption) return;
       folderManagerContextMenuHandler(e);
@@ -1219,10 +1520,8 @@ function bindFolderManagerContextMenu() {
 
   const title = document.getElementById("fileListTitle");
   if (title) {
-    if (title._ctxHandler) {
-      title.removeEventListener("contextmenu", title._ctxHandler, false);
-    }
-    title._ctxHandler = function (e) {
+    if (title._ctxHandler) title.removeEventListener("contextmenu", title._ctxHandler, false);
+    title._ctxHandler = (e) => {
       const onCrumb = e.target.closest(".breadcrumb-link");
       if (!onCrumb) return;
       folderManagerContextMenuHandler(e);
@@ -1263,6 +1562,22 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   } else {
     console.warn("shareFolderBtn element not found in the DOM.");
+  }
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+  const colorFolderBtn = document.getElementById("colorFolderBtn");
+  if (colorFolderBtn) {
+    colorFolderBtn.addEventListener("click", () => {
+      const selectedFolder = window.currentFolder || "root";
+      if (!selectedFolder || selectedFolder === "root") {
+        showToast(t('please_select_valid_folder') || "Please select a valid folder.");
+        return;
+      }
+      openColorFolderModal(selectedFolder);
+    });
+  } else {
+    console.warn("colorFolderBtn element not found in the DOM.");
   }
 });
 
@@ -1309,6 +1624,13 @@ document.addEventListener("DOMContentLoaded", () => {
         await loadFolderTree();
         const base = source.split('/').pop();
         const newPath = (destination === 'root' ? '' : destination + '/') + base;
+        const oldColor = window.folderColorMap[source];
+        if (oldColor) {
+          try {
+            await saveFolderColor(newPath, oldColor);
+            await saveFolderColor(source, '');
+          } catch (_) { }
+        }
         window.currentFolder = newPath;
         loadFileList(window.currentFolder || 'root');
       } else {

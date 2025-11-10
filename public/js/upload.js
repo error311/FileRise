@@ -3,6 +3,7 @@ import { displayFilePreview } from './filePreview.js?v={{APP_QVER}}';
 import { showToast, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
 /* -----------------------------------------------------
@@ -588,7 +589,7 @@ async function initResumableUpload() {
       if (removeBtn) removeBtn.style.display = "none";
       setTimeout(() => li.remove(), 5000);
     }
-
+    refreshFolderIcon(window.currentFolder);
     loadFileList(window.currentFolder);
   });
 
