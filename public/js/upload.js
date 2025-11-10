@@ -896,7 +896,8 @@ function initUpload() {
     dropArea.addEventListener("drop", function (e) {
       e.preventDefault();
       dropArea.style.backgroundColor = "";
-      const dt = e.dataTransfer;
+      const dt = e.dataTransfer || window.__pendingDropData || null;
+       window.__pendingDropData = null;
       if (dt.items && dt.items.length > 0) {
         getFilesFromDataTransferItems(dt.items).then(files => {
           if (files.length > 0) {

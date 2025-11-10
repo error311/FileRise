@@ -5,9 +5,23 @@ import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
 import { setupTrashRestoreDelete } from './trashRestoreDelete.js?v={{APP_QVER}}';
 import { initDragAndDrop, loadSidebarOrder, loadHeaderOrder } from './dragAndDrop.js?v={{APP_QVER}}';
 import { initTagSearch } from './fileTags.js?v={{APP_QVER}}';
-import { initFileActions } from './fileActions.js?v={{APP_QVER}}';
+import { initFileActions, openUploadModal } from './fileActions.js?v={{APP_QVER}}';
 import { initUpload } from './upload.js?v={{APP_QVER}}';
 import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
+
+window.__pendingDropData = null;
+
+function waitFor(selector, timeout = 1200) {
+  return new Promise(resolve => {
+    const t0 = performance.now();
+    (function tick() {
+      const el = document.querySelector(selector);
+      if (el) return resolve(el);
+      if (performance.now() - t0 >= timeout) return resolve(null);
+      requestAnimationFrame(tick);
+    })();
+  });
+}
 
 // Keep a bound handle to the native fetch so wrappers elsewhere never recurse
 const _nativeFetch = window.fetch.bind(window);
@@ -84,25 +98,53 @@ export function initializeApp() {
   // Enable tag search UI; initial file list load is controlled elsewhere
   initTagSearch();
 
+
   // Hook DnD relay from fileList area into upload area
   const fileListArea = document.getElementById('fileListContainer');
-  const uploadArea = document.getElementById('uploadDropArea');
-  if (fileListArea && uploadArea) {
+
+  if (fileListArea) {
+    let hoverTimer = null;
+
     fileListArea.addEventListener('dragover', e => {
       e.preventDefault();
       fileListArea.classList.add('drop-hover');
+      // (optional) auto-open after brief hover so users see the drop target
+      if (!hoverTimer) {
+        hoverTimer = setTimeout(() => {
+          if (typeof window.openUploadModal === 'function') window.openUploadModal();
+        }, 400);
+      }
     });
+
     fileListArea.addEventListener('dragleave', () => {
       fileListArea.classList.remove('drop-hover');
+      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
     });
-    fileListArea.addEventListener('drop', e => {
+
+    fileListArea.addEventListener('drop', async e => {
       e.preventDefault();
       fileListArea.classList.remove('drop-hover');
-      uploadArea.dispatchEvent(new DragEvent('drop', {
-        dataTransfer: e.dataTransfer,
-        bubbles: true,
-        cancelable: true
-      }));
+      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+
+      // 1) open the same modal that the Create menu uses
+      openUploadModal();
+      // 2) wait until the upload area exists *in the modal*, then relay the drop
+      //    Prefer a scoped selector first to avoid duplicate IDs.
+      const uploadArea =
+        (await waitFor('#uploadModal #uploadDropArea')) ||
+        (await waitFor('#uploadDropArea'));
+      if (!uploadArea) return;
+
+      try {
+        // Many browsers make dataTransfer read-only; we try the direct attach first
+        const relay = new DragEvent('drop', { bubbles: true, cancelable: true });
+        Object.defineProperty(relay, 'dataTransfer', { value: e.dataTransfer });
+        uploadArea.dispatchEvent(relay);
+      } catch {
+        // Fallback: stash DataTransfer and fire a plain event; handler will read the stash
+        window.__pendingDropData = e.dataTransfer || null;
+        uploadArea.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
+      }
     });
   }
 

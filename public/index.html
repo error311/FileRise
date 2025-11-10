@@ -355,6 +355,10 @@
                   <li id="createFolderOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
                     <span data-i18n-key="create_folder">Create folder</span>
                   </li>
+                  <li id="uploadOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
+                    <span data-i18n-key="upload">Upload file(s)</span>
+                  </li>
+                  
                 </ul>
               </div>
             <!-- Create File Modal -->
@@ -494,6 +498,19 @@
       </div>
     </div>
   </div>
+  <!-- Upload Modal -->
+<div id="uploadModal" class="modal" style="display:none;">
+  <div class="modal-content" style="max-width:900px;width:92vw;">
+    <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">Upload</h3>
+      <span id="closeUploadModal" class="editor-close-btn" role="button" aria-label="Close">&times;</span>
+    </div>
+    <div class="modal-body">
+      <!-- we will MOVE #uploadCard into here while open -->
+      <div id="uploadModalBody"></div>
+    </div>
+  </div>
+</div>
 </div>
 </body>
 </html>

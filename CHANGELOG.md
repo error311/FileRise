@@ -1,5 +1,36 @@
 # Changelog
 
+## Changes 11/10/2025 (v1.9.2)
+
+release(v1.9.2): Upload modal + DnD relay from file list (with robust synthetic-drop fallback)
+
+- New “Upload file(s)” action in Create menu:
+  - Adds `<li id="uploadOption">` to the dropdown.
+  - Opens a reusable Upload modal that *moves* the existing #uploadCard into the modal (no cloning = no lost listeners).
+  - ESC / backdrop / “×” close support; focus jumps to “Choose Files” for fast keyboard flow.
+
+- Drag & Drop from file list → Upload:
+  - Drag-over on #fileListContainer shows drop-hover and auto-opens the Upload modal after a short hover.
+  - On drop, waits until the modal’s #uploadDropArea exists, then relays the drop to it.
+  - Uses a resilient relay: attempts to attach DataTransfer to a synthetic event; falls back to a stash.
+
+- Synthetic drop fallback:
+  - Introduces window.__pendingDropData (cleared after use).
+  - upload.js now reads e.dataTransfer || window.__pendingDropData to accept relayed drops across browsers.
+
+- Implementation details:
+  - fileActions.js: adds openUploadModal()/closeUploadModal() with a hidden sentinel to return #uploadCard to its original place on close.
+  - appCore.js: imports openUploadModal, adds waitFor() helper, and wires dragover/leave/drop logic for the relay.
+  - index.html: adds Upload option to the Create menu and the #uploadModal scaffold.
+
+- UX/Safety:
+  - Defensive checks if modal/card isn’t present.
+  - No backend/API changes; CSRF/auth unchanged.
+
+Files touched: public/js/upload.js, public/js/fileActions.js, public/js/appCore.js, public/index.html
+
+---
+
 ## Changes 11/9/2025 (v1.9.1)
 
 release(v1.9.1): customizable folder colors + live preview; improved tree persistence; accent button; manual sync script

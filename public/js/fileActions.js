@@ -13,13 +13,58 @@ export function handleDeleteSelected(e) {
     showToast("no_files_selected");
     return;
   }
-
   window.filesToDelete = Array.from(checkboxes).map(chk => chk.value);
   const count = window.filesToDelete.length;
   document.getElementById("deleteFilesMessage").textContent = t("confirm_delete_files", { count: count });
   document.getElementById("deleteFilesModal").style.display = "block";
   attachEnterKeyListener("deleteFilesModal", "confirmDeleteFiles");
 }
+
+
+  // --- Upload modal "portal" support ---
+  let _uploadCardSentinel = null;
+
+  export function openUploadModal() {
+    const modal = document.getElementById('uploadModal');
+    const body  = document.getElementById('uploadModalBody');
+    const card  = document.getElementById('uploadCard'); // <-- your existing card
+    window.openUploadModal = openUploadModal;
+    window.__pendingDropData = null;
+    if (!modal || !body || !card) {
+      console.warn('Upload modal or upload card not found');
+      return;
+    }
+  
+    // Create a hidden sentinel so we can put the card back in place later
+    if (!_uploadCardSentinel) {
+      _uploadCardSentinel = document.createElement('div');
+      _uploadCardSentinel.id = 'uploadCardSentinel';
+      _uploadCardSentinel.style.display = 'none';
+      card.parentNode.insertBefore(_uploadCardSentinel, card);
+    }
+  
+    // Move the actual card node into the modal (keeps all existing listeners)
+    body.appendChild(card);
+  
+    // Show modal
+    modal.style.display = 'block';
+  
+    // Focus the chooser for quick keyboard flow
+    setTimeout(() => {
+      const chooseBtn = document.getElementById('customChooseBtn');
+      if (chooseBtn) chooseBtn.focus();
+    }, 50);
+  }
+  
+  export function closeUploadModal() {
+    const modal = document.getElementById('uploadModal');
+    const card  = document.getElementById('uploadCard');
+  
+    if (_uploadCardSentinel && _uploadCardSentinel.parentNode && card) {
+      _uploadCardSentinel.parentNode.insertBefore(card, _uploadCardSentinel);
+    }
+    if (modal) modal.style.display = 'none';
+  }
 
 document.addEventListener("DOMContentLoaded", function () {
   const cancelDelete = document.getElementById("cancelDeleteFiles");
@@ -829,6 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const menu = document.getElementById('createMenu');
   const fileOpt = document.getElementById('createFileOption');
   const folderOpt = document.getElementById('createFolderOption');
+  const uploadOpt = document.getElementById('uploadOption'); // NEW
 
   // Toggle dropdown on click
   btn.addEventListener('click', (e) => {
@@ -852,6 +898,32 @@ document.addEventListener('DOMContentLoaded', () => {
   // Close if you click anywhere else
   document.addEventListener('click', () => {
     menu.style.display = 'none';
+  });
+  if (uploadOpt) {
+    uploadOpt.addEventListener('click', () => {
+      if (menu) menu.style.display = 'none';
+      openUploadModal();
+    });
+  }
+
+  // Close buttons / backdrop
+  const upModal = document.getElementById('uploadModal');
+  const closeX  = document.getElementById('closeUploadModal');
+
+  if (closeX) closeX.addEventListener('click', closeUploadModal);
+
+  // click outside content to close
+  if (upModal) {
+    upModal.addEventListener('click', (e) => {
+      if (e.target === upModal) closeUploadModal();
+    });
+  }
+
+  // ESC to close
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && upModal && upModal.style.display === 'block') {
+      closeUploadModal();
+    }
   });
 });
 
