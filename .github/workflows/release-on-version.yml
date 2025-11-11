@@ -2,10 +2,10 @@
 name: Release on version.js update
 
 on:
-  push:
-    branches: ["master"]
-    paths:
-      - public/js/version.js
+  workflow_run:
+    workflows: ["Bump version and sync Changelog to Docker Repo"]
+    types: [completed]
+    branches: [master]
   workflow_dispatch:
     inputs:
       ref:

@@ -2320,7 +2320,7 @@ body.dark-mode .folder-strip-container .folder-item:hover {
   stroke-linecap: round; fill: none; opacity: .95;
 }
 #folderTreeContainer .folder-icon .lip-highlight {
-  stroke: #ffffff; stroke-opacity: .35; stroke-width: .9;
+  
   fill: none; vector-effect: non-scaling-stroke;
 }
 
@@ -2363,7 +2363,7 @@ body.dark-mode .folder-strip-container .folder-item:hover {
   vector-effect: non-scaling-stroke;
 }
 .folder-strip-container .folder-svg .lip-highlight {
-  stroke: rgba(255,255,255,.45); stroke-width: .8; fill: none;
+  fill: none;
   vector-effect: non-scaling-stroke;
 }
 
