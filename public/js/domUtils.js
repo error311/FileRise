@@ -156,7 +156,7 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
 
 export function buildFileTableHeader(sortOrder) {
   return `
-    <table class="table">
+    <table class="table filr-table table-hover table-striped">
       <thead>
         <tr>
           <th class="checkbox-col"><input type="checkbox" id="selectAll"></th>
@@ -283,9 +283,9 @@ export function updateRowHighlight(checkbox) {
   const row = checkbox.closest('tr');
   if (!row) return;
   if (checkbox.checked) {
-    row.classList.add('row-selected');
+    row.classList.add('row-selected', 'selected');
   } else {
-    row.classList.remove('row-selected');
+    row.classList.remove('row-selected', 'selected');
   }
 }
 

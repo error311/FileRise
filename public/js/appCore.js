@@ -100,7 +100,7 @@ export function initializeApp() {
 
 
   // Hook DnD relay from fileList area into upload area
-  const fileListArea = document.getElementById('fileListContainer');
+  const fileListArea = document.getElementById('fileList');
 
   if (fileListArea) {
     let hoverTimer = null;

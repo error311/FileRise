@@ -739,11 +739,167 @@ body {
     width: 100% !important;
   }#fileList table tr:nth-child(even) {
   background-color: transparent;
-  }#fileList table tr:hover {
-  background-color: #e0e0e0;
-  }.dark-mode #fileList table tr:hover {
-  background-color: #444;
-  }#fileListTitle {
+  }
+/* --- File list rows: match folder-tree hover/selected --- */
+:root {
+  --filr-row-hover-bg: rgba(122,179,255,.14);
+  --filr-row-selected-bg: rgba(122,179,255,.24);
+}
+
+/* Let cell corners round like a pill */
+#fileList table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* ===== Reset any conflicting backgrounds (Bootstrap etc.) inside #fileList only ===== */
+#fileList table tbody tr,
+#fileList table tbody tr > td {
+  background-color: transparent !important;
+}
+
+/* Kill Bootstrap hover/zebra just for this table */
+#fileList table.table-hover tbody tr:hover > * { background-color: transparent !important; }
+#fileList table.table-striped > tbody > tr:nth-of-type(odd) > * { background-color: transparent !important; }
+
+/* ===== Our look, scoped to the table we tagged in JS ===== */
+#fileList table.filr-table tbody tr,
+#fileList table.filr-table tbody td {
+  transition: background-color .12s ease;
+}
+
+/* Hover (when not selected) */
+#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td {
+  background: var(--filr-row-hover-bg) !important;
+}
+
+/* Selected (support a few legacy class names just in case) */
+#fileList table.filr-table tbody tr.selected > td,
+#fileList table.filr-table tbody tr.row-selected > td,
+#fileList table.filr-table tbody tr.selected-row > td,
+#fileList table.filr-table tbody tr.is-selected > td {
+  background: var(--filr-row-selected-bg) !important;
+  box-shadow: inset 0 0 0 1px rgba(122,179,255,.45);
+}
+
+/* Rounded “pill” ends on hover/selected */
+#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:first-child,
+#fileList table.filr-table tbody tr.selected > td:first-child,
+#fileList table.filr-table tbody tr.row-selected > td:first-child,
+#fileList table.filr-table tbody tr.selected-row > td:first-child,
+#fileList table.filr-table tbody tr.is-selected > td:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:last-child,
+#fileList table.filr-table tbody tr.selected > td:last-child,
+#fileList table.filr-table tbody tr.row-selected > td:last-child,
+#fileList table.filr-table tbody tr.selected-row > td:last-child,
+#fileList table.filr-table tbody tr.is-selected > td:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* Keyboard focus visibility */
+#fileList table.filr-table tbody tr:focus-within > td {
+  outline: 2px solid #8ab4f8;
+  outline-offset: -2px;
+  border-top-left-radius: 8px; border-bottom-left-radius: 8px;
+  border-top-right-radius: 8px; border-bottom-right-radius: 8px;
+}
+
+.dark-mode #fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td {
+  background: var(--filr-row-hover-bg) !important;
+}
+.dark-mode #fileList table.filr-table tbody tr.selected > td,
+.dark-mode #fileList table.filr-table tbody tr.row-selected > td,
+.dark-mode #fileList table.filr-table tbody tr.selected-row > td,
+.dark-mode #fileList table.filr-table tbody tr.is-selected > td {
+  background: var(--filr-row-selected-bg) !important;
+}
+
+#fileList table.filr-table {
+  --bs-table-hover-color: inherit;
+  --bs-table-striped-color: inherit;
+}
+
+#fileList table.table-hover tbody tr:hover,
+#fileList table.table-hover tbody tr:hover > td {
+  color: inherit !important;
+}
+
+.dark-mode #fileList table.filr-table tbody td a,
+.dark-mode #fileList table.filr-table tbody td a:hover {
+  color: inherit !important;
+}
+:root{
+  --filr-row-outline: rgba(122,179,255,.45);
+  --filr-row-outline-hover: rgba(122,179,255,.35);
+}
+
+#fileList table.filr-table > :not(caption) > * > * { border: 0 !important; }
+#fileList table.filr-table td,
+#fileList table.filr-table th { box-shadow: none !important; }
+
+#fileList table.filr-table tbody tr.selected > td,
+#fileList table.filr-table tbody tr.row-selected > td,
+#fileList table.filr-table tbody tr.selected-row > td,
+#fileList table.filr-table tbody tr.is-selected > td {
+  background: var(--filr-row-selected-bg) !important;
+  box-shadow:
+    inset 0  1px 0 var(--filr-row-outline),
+    inset 0 -1px 0 var(--filr-row-outline);
+}
+#fileList table.filr-table tbody tr.selected > td:first-child,
+#fileList table.filr-table tbody tr.row-selected > td:first-child,
+#fileList table.filr-table tbody tr.selected-row > td:first-child,
+#fileList table.filr-table tbody tr.is-selected > td:first-child {
+  box-shadow:
+    inset 1px 0  0 var(--filr-row-outline),
+    inset 0  1px 0 var(--filr-row-outline),
+    inset 0 -1px 0 var(--filr-row-outline);
+  border-top-left-radius: 8px; border-bottom-left-radius: 8px;
+}
+#fileList table.filr-table tbody tr.selected > td:last-child,
+#fileList table.filr-table tbody tr.row-selected > td:last-child,
+#fileList table.filr-table tbody tr.selected-row > td:last-child,
+#fileList table.filr-table tbody tr.is-selected > td:last-child {
+  box-shadow:
+    inset -1px 0  0 var(--filr-row-outline),
+    inset  0  1px 0 var(--filr-row-outline),
+    inset  0 -1px 0 var(--filr-row-outline);
+  border-top-right-radius: 8px; border-bottom-right-radius: 8px;
+  
+}
+
+#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td {
+  background: var(--filr-row-hover-bg) !important;
+  box-shadow:
+    inset 0  1px 0 var(--filr-row-outline-hover),
+    inset 0 -1px 0 var(--filr-row-outline-hover);
+}
+#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:first-child {
+  box-shadow:
+    inset 1px 0  0 var(--filr-row-outline-hover),
+    inset 0  1px 0 var(--filr-row-outline-hover),
+    inset 0 -1px 0 var(--filr-row-outline-hover);
+  border-top-left-radius: 8px; border-bottom-left-radius: 8px;
+}
+#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:last-child {
+  box-shadow:
+    inset -1px 0  0 var(--filr-row-outline-hover),
+    inset  0  1px 0 var(--filr-row-outline-hover),
+    inset  0 -1px 0 var(--filr-row-outline-hover);
+  border-top-right-radius: 8px; border-bottom-right-radius: 8px;
+}
+
+#fileList table.filr-table tbody tr:focus-within > td { outline: none; }
+#fileList table.filr-table tbody tr:focus-within > td:first-child,
+#fileList table.filr-table tbody tr:focus-within > td:last-child {
+  outline: 2px solid #8ab4f8; outline-offset: -2px;
+}
+
+  #fileListTitle {
   white-space: normal !important;
     word-wrap: break-word !important;
     overflow-wrap: break-word !important;
@@ -1000,7 +1156,7 @@ body {
   #fileListTitle {
   font-size: 1.8em;
     margin-top: 10px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
   }.file-list-actions {
   display: flex;
     flex-wrap: wrap;
@@ -1185,7 +1341,7 @@ body {
   }.folder-tree.expanded {
   display: block;
   }.folder-item {
-  margin: 4px 0;
+  margin: 2px 0;
     display: block;
   }.folder-toggle {
   cursor: pointer;
@@ -1432,8 +1588,6 @@ body {
   }.dark-mode table {
   background-color: #2c2c2c;
     color: #e0e0e0;
-  }.dark-mode table tr:hover {
-  background-color: #444;
   }.dark-mode #uploadProgressContainer .progress {
   background-color: #333;
   }.dark-mode #uploadProgressContainer .progress-bar {
@@ -1876,34 +2030,74 @@ body {
     font-weight: 500;
     vertical-align: middle;
     white-space: nowrap;
-  }.folder-strip-container {
-  display: flex;
+  }
+
+.folder-strip-container {
+    display: flex;
+    padding-top: 0px !important;
     flex-wrap: wrap;
-    gap: 12px;
-    padding: 8px 0;
-  }.folder-strip-container .folder-item {
-  display: flex;
+    gap: 10px 14px;
+    align-content: flex-start;  /* multi-line wrap stays top-aligned */
+    padding: 6px 4px;
+  }
+
+  .folder-strip-container .folder-item {
+    display: flex;
+    padding-top: 0px !important;
     flex-direction: column;
-    align-items: center;
-    cursor: pointer;
-    width: 80px;
+    align-items: center;        /* horizontal (cross-axis) center */
+    justify-content: center;    /* vertical (main-axis) center */
+    min-width: 0;
+    gap: 2px !important;
+    padding: 6px 8px;
+    box-sizing: border-box;
+    border-radius: 10px;
     color: inherit;
     font-size: 0.85em;
-  }.folder-strip-container .folder-item i.material-icons {
-  font-size: 28px;
-    margin-bottom: 4px;
-  }.folder-strip-container .folder-name {
+    transition: transform .12s ease, box-shadow .12s ease, background-color .12s ease;
+  }
+.folder-strip-container .folder-item .folder-svg {
+  line-height: 0;
+  margin-bottom: 0px;
+}
+.folder-strip-container .folder-item .folder-svg svg {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+.folder-strip-container .folder-name {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
   text-align: center;
-    white-space: normal;
-    word-break: break-word;
-    max-width: 80px;
-    margin-top: 4px;
-  }.folder-strip-container .folder-item i.material-icons {
-  color: currentColor;
-  }.folder-strip-container .folder-item:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  }:root {
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.2;
+}
+
+.folder-strip-container .folder-item:hover {
+  transform: translateY(-1px) scale(1.04);
+  background-color: rgba(0, 0, 0, 0.04);      /* light mode */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, .15);
+}
+
+/* Dark mode hover */
+body.dark-mode .folder-strip-container .folder-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .45);
+}
+
+/* Optional: keyboard focus */
+.folder-strip-container .folder-item:focus-visible {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 2px;
+}
+
+  :root {
   --perm-caret: #444;
   }/* light */
   .dark-mode {
@@ -2005,170 +2199,217 @@ body {
 
 #downloadProgressBarOuter { height: 10px; }
 
-/* ===== FileRise Folder Tree: unified, crisp, aligned ===== */
-
-/* Knobs (size, spacing, colors) */
+/* ===== Folder Tree – theme + structure ===== */
 #folderTreeContainer {
-  /* Colors (used in BOTH themes) */
-  --filr-folder-front: #f6b84e;    /* front/lip */
-  --filr-folder-back:  #ffd36e;    /* back body */
-  --filr-folder-stroke:#a87312;    /* outline */
-  --filr-paper-fill:   #ffffff;    /* paper */
-  --filr-paper-stroke: #b2c2db;    /* paper edges/lines */
-
-  /* Size & spacing */
-  --row-h: 28px;       /* row height */
-  --twisty: 24px;      /* chevron hit-area size */
-  --twisty-gap: -5px;   /* gap between chevron and row content */
-  --icon-size: 24px;   /* 22–26 look good */
-  --icon-gap: 6px;     /* space between icon and label */
-  --indent: 10px;      /* subtree indent */
-}
-
-/* Keep the same yellow/orange in dark mode; boost paper contrast a touch */
-.dark-mode #folderTreeContainer {
+  /* Theme vars (light mode defaults) */
   --filr-folder-front: #f6b84e;
   --filr-folder-back:  #ffd36e;
   --filr-folder-stroke:#a87312;
   --filr-paper-fill:   #ffffff;
-  --filr-paper-stroke: #d0def7; /* brighter so it pops on dark */
+  --filr-paper-stroke: #9fb3d6;   /* slightly darker for sharper paper */
+
+  /* Sizes */
+  --row-h: 28px;
+  --twisty: 24px;
+  --twisty-gap: -5px;
+  --icon-size: 24px;
+  --icon-gap: 6px;
+  --indent: 10px;
 }
 
-#folderTreeContainer .folder-item { position: static; padding-left: 0; }
 
-/* visible “row” for each node */
+#folderTreeContainer .folder-item { position: static; padding-left: 0; }
+#folderTreeContainer .folder-item > .folder-tree { margin-left: var(--indent); }
+
 #folderTreeContainer .folder-row {
   position: relative;
   display: flex;
   align-items: center;
-  height: var(--row-h);
+  min-height: var(--row-h);
+  height: auto;
   padding-left: calc(var(--twisty) + var(--twisty-gap));
 }
 
-/* children indent */
-#folderTreeContainer .folder-item > .folder-tree { margin-left: var(--indent); }
-
-/* ---------- Chevron toggle (twisty) ---------- */
-
-#folderTreeContainer .folder-row > button.folder-toggle {
+/* Chevron + spacer (centered vertically) */
+#folderTreeContainer .folder-row > button.folder-toggle,
+#folderTreeContainer .folder-row > .folder-spacer {
   position: absolute; left: 0; top: 50%; transform: translateY(-50%);
   width: var(--twisty); height: var(--twisty);
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid transparent; border-radius: 6px;
   background: transparent; cursor: pointer;
 }
-
 #folderTreeContainer .folder-row > button.folder-toggle::before {
-  content: "▸"; /* closed */
-  font-size: calc(var(--twisty) * 0.8);
-  line-height: 1;
+  content: "▸"; font-size: calc(var(--twisty) * 0.8); line-height: 1;
 }
-
 #folderTreeContainer li[role="treeitem"][aria-expanded="true"]
-  > .folder-row > button.folder-toggle::before { content: "▾"; }
-
-/* root row (it's a <div>) */
+  > .folder-row > button.folder-toggle::before,
 #rootRow[aria-expanded="true"] > button.folder-toggle::before { content: "▾"; }
-
 #folderTreeContainer .folder-row > button.folder-toggle:hover {
   border-color: color-mix(in srgb, #7ab3ff 35%, transparent);
 }
 
-/* spacer for leaves so labels align with parents that have a button */
-#folderTreeContainer .folder-row > .folder-spacer {
-  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: var(--twisty); height: var(--twisty); display: inline-block;
-}
-
+/* Row "pill" that hugs content and wraps */
 #folderTreeContainer .folder-option {
   display: inline-flex;
+  flex: 0 1 auto;                 /* don't stretch full width */
   align-items: center;
-  height: var(--row-h);
-  line-height: 1.2;                /* avoids baseline weirdness */
+  gap: var(--icon-gap);
+  height: auto;
+  min-height: var(--row-h);
   padding: 0 8px;
   border-radius: 8px;
+  line-height: 1.2;
   user-select: none;
-  white-space: nowrap;
   max-width: 100%;
-  gap: var(--icon-gap);
+  white-space: normal;            /* allow wrapping */
 }
-
-#folderTreeContainer .folder-label {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transform: translateY(0.5px);    /* tiny optical nudge for text */
-}
-
-/* ---------- Icon box (size & alignment) ---------- */
-
-#folderTreeContainer .folder-icon {
-  flex: 0 0 var(--icon-size);
-  width: var(--icon-size);
-  height: var(--icon-size);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transform: translateY(0.5px);    /* tiny optical nudge for SVG */
-}
-
-#folderTreeContainer .folder-icon svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  shape-rendering: geometricPrecision;
-}
-
-/* ---------- Crisp colors & strokes for the SVG parts ---------- */
-
-
-#folderTreeContainer .folder-icon .paper {
-  fill: var(--filr-paper-fill);
-  stroke: var(--filr-paper-stroke);
-  stroke-width: 1.5;              /* thick so it reads at 24px */
-  paint-order: stroke fill;
-}
-
-#folderTreeContainer .folder-icon .paper-fold {
-  fill: var(--filr-paper-stroke);
-}
-
-#folderTreeContainer .folder-icon .paper-line {
-  stroke: var(--filr-paper-stroke);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  fill: none;
-  opacity: 0.95;
-}
-
-/* subtle highlight along lip to add depth */
-#folderTreeContainer .folder-icon .lip-highlight {
-  stroke: #ffffff;
-  stroke-opacity: .35;
-  stroke-width: 0.9;
-  fill: none;
-  vector-effect: non-scaling-stroke;
-}
-
-/* ---------- Hover / Selected ---------- */
-
 #folderTreeContainer .folder-option:hover {
   background: rgba(122,179,255,.14);
 }
-
 #folderTreeContainer .folder-option.selected {
   background: rgba(122,179,255,.24);
   box-shadow: inset 0 0 0 1px rgba(122,179,255,.45);
 }
 
-/* variables will be set inline per .folder-option when user colors a folder */
+/* Label must be shrinkable so wrapping works */
+#folderTreeContainer .folder-label {
+  flex: 1 1 120px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* Icon box */
+#folderTreeContainer .folder-icon {
+  flex: 0 0 var(--icon-size);
+  width: var(--icon-size); height: var(--icon-size);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+#folderTreeContainer .folder-icon svg {
+  width: 100%; height: 100%; display: block;
+  shape-rendering: geometricPrecision;
+}
+
+
+/* Make folder tree outline match folder strip */
 #folderTreeContainer .folder-icon .folder-front,
 #folderTreeContainer .folder-icon .folder-back {
   fill: currentColor;
   stroke: var(--filr-folder-stroke);
-  stroke-width: 1.1;
+  stroke-width: .5;
+  paint-order: fill stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
-  paint-order: stroke fill;
 }
 #folderTreeContainer .folder-icon .folder-front { color: var(--filr-folder-front); }
 #folderTreeContainer .folder-icon .folder-back  { color: var(--filr-folder-back);  }
+
+#folderTreeContainer .folder-icon .paper {
+  fill: var(--filr-paper-fill);
+  stroke: var(--filr-paper-stroke);
+  stroke-width: 1.5;
+  paint-order: stroke fill;
+}
+#folderTreeContainer .folder-icon .paper-fold  { fill: var(--filr-paper-stroke); }
+#folderTreeContainer .folder-icon .paper-line  {
+  stroke: var(--filr-paper-stroke); stroke-width: 1.5;
+  stroke-linecap: round; fill: none; opacity: .95;
+}
+#folderTreeContainer .folder-icon .lip-highlight {
+  stroke: #ffffff; stroke-opacity: .35; stroke-width: .9;
+  fill: none; vector-effect: non-scaling-stroke;
+}
+
+#folderTreeContainer .folder-icon,
+#folderTreeContainer .folder-label { transform: none !important; }
+
+/* ===== File List Strip – color the shared folderSVG() ===== */
+.folder-strip-container .folder-svg svg {
+  display: block;
+  shape-rendering: crispEdges;
+}
+.folder-strip-container .folder-item {
+  /* defaults — overridden per-tile via inline CSS vars set in JS */
+  --filr-folder-front:  #f6b84e;
+  --filr-folder-back:   #ffd36e;
+  --filr-folder-stroke: #a87312;
+}
+.folder-strip-container .folder-svg .folder-front,
+.folder-strip-container .folder-svg .folder-back {
+  fill: currentColor;
+  stroke: var(--filr-folder-stroke);
+  stroke-width: .5;
+  paint-order: fill stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.folder-strip-container .folder-svg .folder-front { color: var(--filr-folder-front); }
+.folder-strip-container .folder-svg .folder-back  { color: var(--filr-folder-back);  }
+
+.folder-strip-container .folder-svg .paper {
+  fill: #fff;
+  stroke: #b2c2db;   /* light mode */
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.folder-strip-container .folder-svg .paper-fold {  fill: #b2c2db; }
+.folder-strip-container .folder-svg .paper-line {
+  stroke: #b2c2db; stroke-width: 1; stroke-linecap: round; fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.folder-strip-container .folder-svg .lip-highlight {
+  stroke: rgba(255,255,255,.45); stroke-width: .8; fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+#folderTreeContainer .folder-icon .folder-front,
+#folderTreeContainer .folder-icon .folder-back,
+.folder-strip-container .folder-svg .folder-front,
+.folder-strip-container .folder-svg .folder-back,
+#folderTreeContainer .folder-icon .lip-highlight,
+.folder-strip-container .folder-svg .lip-highlight {
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* Make sure we’re not forcing crispEdges anywhere */
+.folder-strip-container .folder-svg svg,
+#folderTreeContainer .folder-icon svg { shape-rendering: geometricPrecision !important; }
+
+@media (max-resolution: 1.5dppx) {
+  #folderTreeContainer .folder-icon .folder-front,
+  #folderTreeContainer .folder-icon .folder-back { stroke-width: .6; }
+}
+
+
+/* Scribble (the handwriting line) */
+#folderTreeContainer .folder-icon .paper-ink,
+.folder-strip-container .folder-svg .paper-ink {
+  stroke: #4da3ff;
+  stroke-width: .9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  opacity: .85;
+  paint-order: normal;
+
+}
+
+/* tree @ 24px icon */
+#folderTreeContainer .folder-icon .folder-front,
+#folderTreeContainer .folder-icon .folder-back,
+#folderTreeContainer .folder-icon .paper-line,
+#folderTreeContainer .folder-icon .paper-ink,
+#folderTreeContainer .folder-icon .lip-highlight { stroke-width: .6px; }
+
+/* strip @ 48px icon (2× bigger), halve stroke width to look the same */
+.folder-strip-container .folder-svg .folder-front,
+.folder-strip-container .folder-svg .folder-back,
+.folder-strip-container .folder-svg .paper-line,
+.folder-strip-container .folder-svg .paper-ink,
+.folder-strip-container .folder-svg .lip-highlight { stroke-width: 1.1px; }

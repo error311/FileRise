@@ -1,5 +1,42 @@
 # Changelog
 
+## Changes 11/11/2025 (v1.9.3)
+
+release(v1.9.3): unify folder icons across tree & strip, add “paper” lines, live color sync, and vendor-aware release
+
+- UI / Icons
+  - Replace Material icon in folder strip with shared `folderSVG()` and export it for reuse. Adds clipPaths, subtle gradients, and `shape-rendering: geometricPrecision` to eliminate the tiny seam.
+  - Add ruled “paper” lines and blue handwriting dashes; CSS for `.paper-line` and `.paper-ink` included.
+  - Match strokes between tree (24px) and strip (48px) so both look identical; round joins/caps to avoid nicks.
+  - Polish folder strip layout & hover: tighter spacing, centered icon+label, improved wrapping.
+
+- Folder color & non-empty detection
+  - Live color sync: after saving a color we dispatch `folderColorChanged`; strip repaints and tree refreshes.
+  - Async strip icon: paint immediately, then flip to “paper” if the folder has contents. HSL helpers compute front/back/stroke shades.
+
+- FileList strip
+  - Render subfolders with `<span class="folder-svg">` + name, wire context menu actions (move, color, share, etc.), and attach icons for each tile.
+
+- Exports & helpers
+  - Export `openColorFolderModal(...)` and `openMoveFolderUI(...)` for the strip and toolbar; use `refreshFolderIcon(...)` after ops to keep icons current.
+
+- AppCore
+  - Update file upload DnD relay hook to `#fileList` (id rename).
+
+- CSS tweaks
+  - Bring tree icon stroke/paint rules in line with the strip, add scribble styles, and adjust margins/spacing.
+
+- CI/CD (release)
+  - Build PHP dependencies during release: setup PHP 8.3 + Composer, cache downloads, install into `staging/vendor/`, exclude `vendor/` from placeholder checks, and ship artifact including `vendor/`.
+
+- Changelog highlights
+  - Sharper, seam-free folder SVGs shared across tree & strip, with paper lines + handwriting accents.
+  - Real-time folder color propagation between views.
+  - Folder strip switched to SVG tiles with better layout + context actions.
+  - Release pipeline now produces a ready-to-run zip that includes `vendor/`.
+
+---
+
 ## Changes 11/10/2025 (v1.9.2)
 
 release(v1.9.2): Upload modal + DnD relay from file list (with robust synthetic-drop fallback)

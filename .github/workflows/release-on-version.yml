@@ -21,15 +21,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-
-    # Only run on:
-    #  - push (master + version.js path filter already enforces that)
-    #  - manual dispatch
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
 
-    # Duplicate safety; also step "Skip if tag exists" will no-op if already released.
     concurrency:
       group: release-${{ github.event_name }}-${{ github.run_id }}
       cancel-in-progress: false
@@ -46,17 +41,14 @@ jobs:
             else
               REF_IN="master"
             fi
-            # Resolve to a commit sha (allow branches or shas)
             if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git "$REF_IN" >/dev/null 2>&1; then
               REF="$REF_IN"
             else
-              # Accept SHAs too; we’ll let checkout validate
               REF="$REF_IN"
             fi
           else
             REF="${{ github.sha }}"
           fi
-
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "Using ref=$REF"
 
@@ -75,7 +67,6 @@ jobs:
           if [[ -n "${{ github.event.inputs.version || '' }}" ]]; then
             VER="${{ github.event.inputs.version }}"
           else
-            # Parse APP_VERSION from public/js/version.js (expects vX.Y.Z)
             if [[ ! -f public/js/version.js ]]; then
               echo "public/js/version.js not found; cannot auto-detect version." >&2
               exit 1
@@ -86,7 +77,6 @@ jobs:
               exit 1
             fi
           fi
-
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VER"
 
@@ -124,20 +114,67 @@ jobs:
             ./ staging/
           bash ./scripts/stamp-assets.sh "${VER}" "$(pwd)/staging"
 
-      - name: Verify placeholders removed
+      # --- PHP + Composer for vendor/ (production) ---
+      - name: Setup PHP
+        if: steps.tagcheck.outputs.exists == 'false'
+        id: php
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          extensions: mbstring, json, curl, dom, fileinfo, openssl, zip
+          coverage: none
+          ini-values: memory_limit=-1
+
+      - name: Cache Composer downloads
+        if: steps.tagcheck.outputs.exists == 'false'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache
+            ~/.cache/composer
+          key: composer-${{ runner.os }}-php-${{ steps.php.outputs.php-version }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php-${{ steps.php.outputs.php-version }}-
+
+      - name: Install PHP dependencies into staging
+        if: steps.tagcheck.outputs.exists == 'false'
+        env:
+          COMPOSER_MEMORY_LIMIT: -1
+        shell: bash
+        run: |
+          set -euo pipefail
+          pushd staging >/dev/null
+          if [[ -f composer.json ]]; then
+            composer install \
+              --no-dev \
+              --prefer-dist \
+              --no-interaction \
+              --no-progress \
+              --optimize-autoloader \
+              --classmap-authoritative
+            test -f vendor/autoload.php || (echo "Composer install did not produce vendor/autoload.php" >&2; exit 1)
+          else
+            echo "No composer.json in staging; skipping vendor install."
+          fi
+          popd >/dev/null
+      # --- end Composer ---
+
+      - name: Verify placeholders removed (skip vendor/)
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$(pwd)/staging"
           if grep -R -n -E "{{APP_QVER}}|{{APP_VER}}" "$ROOT" \
+              --exclude-dir=vendor --exclude-dir=vendor-bin \
               --include='*.html' --include='*.php' --include='*.css' --include='*.js' 2>/dev/null; then
             echo "Unreplaced placeholders found in staging." >&2
             exit 1
           fi
           echo "OK: No unreplaced placeholders."
 
-      - name: Zip artifact
+      - name: Zip artifact (includes vendor/)
         if: steps.tagcheck.outputs.exists == 'false'
         shell: bash
         run: |

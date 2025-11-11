@@ -367,12 +367,18 @@ async function saveFolderColor(folder, colorHexOrEmpty) {
   if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
   // update local map & apply
   if (data.color) window.folderColorMap[folder] = data.color;
-  else delete window.folderColorMap[folder];
-  applyFolderColorToOption(folder, data.color || '');
-  return data;
+else delete window.folderColorMap[folder];
+applyFolderColorToOption(folder, data.color || '');
+
+//  notify other views (fileListView's strip)
+window.dispatchEvent(new CustomEvent('folderColorChanged', {
+  detail: { folder, color: data.color || '' }
+}));
+
+return data;
 }
 
-function openColorFolderModal(folder) {
+export function openColorFolderModal(folder) {
   const existing = window.folderColorMap[folder] || '';
   const defaultHex = existing || '#f6b84e';
 
@@ -559,39 +565,86 @@ const _nonEmptyCache = new Map();
    Folder icon (SVG + fetch + cache)
 ----------------------*/
 
-// Crisp emoji-like folder (empty / with paper)
-function folderSVG(kind = 'empty') {
+// shared by folder tree + folder strip
+export function folderSVG(kind = 'empty') {
+  const gid = 'g' + Math.random().toString(36).slice(2, 8);
+
+  // tweak these
+  const PAPER_SHIFT_Y = -1.2;   // move paper up (negative = up)
+  const INK_SHIFT_Y   = -0.8;   // extra lift for the blue lines
+
   return `
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <!-- Angled back body -->
+<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+     style="display:block;shape-rendering:geometricPrecision">
+  <defs>
+    <clipPath id="${gid}-clipBack"><path d="M3.5 7.5 H10.5 L12.5 9.5 H20.5
+      C21.6 9.5 22.5 10.4 22.5 11.5 V19.5
+      C22.5 20.6 21.6 21.5 20.5 21.5 H5.5
+      C4.4 21.5 3.5 20.6 3.5 19.5 V9.5
+      C3.5 8.4 4.4 7.5 5.5 7.5 Z"/></clipPath>
+    <clipPath id="${gid}-clipFront"><path d="M2.5 10.5 H11.5 L13.5 8.5 H20.5
+      C21.6 8.5 22.5 9.4 22.5 10.5 V17.5
+      C22.5 18.6 21.6 19.5 20.5 19.5 H4.5
+      C3.4 19.5 2.5 18.6 2.5 17.5 V10.5 Z"/></clipPath>
+    <linearGradient id="${gid}-back" x1="4" y1="20" x2="20" y2="4" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="${gid}-front" x1="6" y1="19" x2="19" y2="7" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".06"/>
+    </linearGradient>
+  </defs>
+
+  <!-- BACK -->
+  <g class="back-group" clip-path="url(#${gid}-clipBack)">
     <path class="folder-back"
-      d="M3 7.4h7.6l1.6 1.8H20.3c1.1 0 2 .9 2 2v7.6c0 1.1-.9 2-2 2H5
-         c-1.1 0-2-.9-2-2V9.4c0-1.1.9-2 2-2z"/>
+      d="M3.5 7.5 H10.5 L12.5 9.5 H20.5
+         C21.6 9.5 22.5 10.4 22.5 11.5 V19.5
+         C22.5 20.6 21.6 21.5 20.5 21.5 H5.5
+         C4.4 21.5 3.5 20.6 3.5 19.5 V9.5
+         C3.5 8.4 4.4 7.5 5.5 7.5 Z"/>
+    <path d="M3.5 7.5 H10.5 L12.5 9.5 H20.5 V21.5 H3.5 Z"
+          fill="url(#${gid}-back)" pointer-events="none"/>
+  </g>
 
-    ${kind === 'paper'
-      ? `
-          <!-- Paper raised so it peeks above the lip -->
-          <rect class="paper" x="6.1" y="5.7" width="11.8" height="10.8" rx="1.2"/>
-          <!-- Bigger fold -->
-          <path class="paper-fold" d="M18.0 5.7h-3.2l3.2 3.2z"/>
-          <!-- Content lines -->
-          <path class="paper-line" d="M7.7 8.2h8.3"/>
-          <path class="paper-line" d="M7.7 9.8h7.2"/>
-          <path class="paper-line" d="M7.7 11.3h6.0"/>
-        `
-      : ''
-    }
+  ${kind === 'paper' ? `
+    <!-- Move the entire paper block up (keep your existing shift if you use it) -->
+    <g class="paper-group" transform="translate(0, -1.2)">
+      <rect class="paper" x="6.5" y="6.5" width="11" height="10" rx="1"/>
+  
+      <!-- Fold aligned to the paper's top-right corner (right edge = 17.5) -->
+      <path class="paper-fold" d="M17.5 6.5 H15.2 L17.5 9.0 Z"/>
 
-    <!-- Front lip (angled) -->
+      <!-- handwriting dashes -->
+<g transform="translate(0, -2.4)">
+  <path class="paper-ink" d="M9 11.3 H14.2"
+        stroke="#4da3ff" stroke-width=".9" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"
+        paint-order="normal" vector-effect="non-scaling-stroke"/>
+  <path class="paper-ink" d="M9 12.8 H16.4"
+        stroke="#4da3ff" stroke-width=".9" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"
+        paint-order="normal" vector-effect="non-scaling-stroke"/>
+</g>
+    </g>
+  ` : ``}
+
+  <!-- FRONT -->
+  <g class="front-group" clip-path="url(#${gid}-clipFront)">
     <path class="folder-front"
-      d="M2.3 10.1H10.9l2.0-2.1h7.4c.94 0 1.7.76 1.7 1.7v7.3c0 .94-.76 1.7-1.7 1.7H4
-         c-.94 0-1.7-.76-1.7-1.7v-6.9z"/>
+      d="M2.5 10.5 H11.5 L13.5 8.5 H20.5
+         C21.6 8.5 22.5 9.4 22.5 10.5 V17.5
+         C22.5 18.6 21.6 19.5 20.5 19.5 H4.5
+         C3.4 19.5 2.5 18.6 2.5 17.5 V10.5 Z"/>
+    <path d="M2.5 10.5 H11.5 L13.5 8.5 H20.5 V19.5 H2.5 Z"
+          fill="url(#${gid}-front)" pointer-events="none"/>
+  </g>
 
-    <!-- Subtle highlight along the lip to add depth -->
-    <path class="lip-highlight"
-      d="M3.3 10.2H11.2l1.7-1.8h7.0"
-    />
-  </svg>`;
+  <!-- Lip highlight -->
+  <path class="lip-highlight" d="M3 10.5 H11.5 L13.5 8.5 H20.3"/>
+</svg>`;
 }
 
 const _folderCountCache = new Map();
@@ -1253,7 +1306,7 @@ if (submitRename) {
 }
 
 // === Move Folder Modal helper (shared by button + context menu) ===
-function openMoveFolderUI(sourceFolder) {
+export function openMoveFolderUI(sourceFolder) {
   const modal = document.getElementById('moveFolderModal');
   const targetSel = document.getElementById('moveFolderTarget');
 
