@@ -1,5 +1,27 @@
 # Changelog
 
+## Changes 11/13/2025 (v1.9.5)
+
+release(v1.9.5): harden folder tree DOM, add a11y to “Load more”, and guard folder paths
+
+- Replace innerHTML-based row construction in folderManager.js with safe DOM APIs
+  (createElement, textContent, dataset). All user-derived strings now use
+  textContent; only locally-generated SVG remains via innerHTML.
+- Add isSafeFolderPath() client-side guard; fail closed on suspicious paths
+  before rendering clickable nodes.
+- “Load more” button rebuilt with proper a11y:
+  - aria-label, optional aria-controls to the UL
+  - aria-busy + disabled during fetch; restore state only if the node is still
+    present (Node.isConnected).
+- Keep lazy tree + cursor pagination behavior intact; chevrons/icons continue to
+  hydrate from server hints (hasSubfolders/nonEmpty) once available.
+- Addresses CodeQL XSS findings by removing unsafe HTML interpolation and
+  avoiding HTML interpretation of extracted text.
+
+No breaking changes; security + UX polish on top of v1.9.4.
+
+---
+
 ## Changes 11/13/2025 (v1.9.4)
 
 release(v1.9.4): lazy folder tree, cursor pagination, ACL-safe chevrons, and “Load more” (closes #66)

@@ -805,25 +805,37 @@ async function ensureChildrenLoaded(folder, ulEl) {
   if (nextCursor && !moreLi) {
     moreLi = document.createElement('li');
     moreLi.className = 'load-more';
-    moreLi.innerHTML = `<button type="button" class="btn btn-ghost">${t('load_more') || 'Load more'}</button>`;
-    moreLi.querySelector('button')?.addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const prev = btn.textContent;
-      btn.disabled = true;
-      btn.setAttribute('aria-busy', 'true');
-      btn.textContent = (t('loading') || 'Loading…');
+  
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost';
+    btn.textContent = t('load_more') || 'Load more';
+    btn.setAttribute('aria-label', t('load_more') || 'Load more');
+    if (ulEl.id) btn.setAttribute('aria-controls', ulEl.id);
+  
+    btn.addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      const prevText = b.textContent;
+      b.disabled = true;
+      b.setAttribute('aria-busy', 'true');
+      b.textContent = t('loading') || 'Loading…';
+  
       try {
         await loadMoreChildren(folder, ulEl, moreLi);
       } finally {
-        // If moreLi still exists (not removed because we reached the end), restore
-        if (document.body.contains(moreLi)) {
-          btn.disabled = false;
-          btn.removeAttribute('aria-busy');
-          btn.textContent = (t('load_more') || 'Load more');
+        // If the "load more" node still exists (wasn't removed because we reached end),
+        // restore the button state.
+        if (moreLi.isConnected) {
+          b.disabled = false;
+          b.removeAttribute('aria-busy');
+          b.textContent = t('load_more') || 'Load more';
         }
       }
     });
+  
+    moreLi.appendChild(btn);
     ulEl.appendChild(moreLi);
+  
   } else if (!nextCursor && moreLi) {
     moreLi.remove();
   }
@@ -1000,53 +1012,81 @@ export function openColorFolderModal(folder) {
 /* ----------------------
    DOM builders & DnD
 ----------------------*/
+function isSafeFolderPath(p) {
+  // Client-side defense-in-depth; server already enforces safe segments.
+  // Allows letters/numbers/space/_-. and slashes between segments.
+  return /^(root|[A-Za-z0-9][A-Za-z0-9 _\-.]*)(\/[A-Za-z0-9][A-Za-z0-9 _\-.]*)*$/.test(String(p || ''));
+}
+
 function makeChildLi(parentPath, item) {
   const it = normalizeItem(item);
   if (!it) return document.createElement('li');
   const { name, locked } = it;
 
   const fullPath = parentPath === 'root' ? name : `${parentPath}/${name}`;
+  if (!isSafeFolderPath(fullPath)) {
+    // Fail closed if something looks odd; don’t render a clickable node.
+    return document.createElement('li');
+  }
+
+  // <li class="folder-item" role="treeitem" aria-expanded="false">
   const li = document.createElement('li');
   li.className = 'folder-item';
   li.setAttribute('role', 'treeitem');
   li.setAttribute('aria-expanded', 'false');
 
-  const optClass = 'folder-option' + (locked ? ' locked' : '');
-  li.innerHTML = `
-    <div class="folder-row">
-      <span class="folder-spacer" aria-hidden="true"></span>
-      <span class="${optClass}" ${locked ? '' : 'draggable="true"'} data-folder="${fullPath}">
-        <span class="folder-icon" aria-hidden="true" data-kind="empty">${folderSVG('empty', { locked })}</span>
-        <span class="folder-label">${escapeHTML(name)}</span>
-      </span>
-    </div>
-    <ul class="folder-tree collapsed" role="group"></ul>
-  `;
+  // <div class="folder-row">
+  const row = document.createElement('div');
+  row.className = 'folder-row';
 
-  const opt = li.querySelector('.folder-option');
-  const ul  = li.querySelector(':scope > ul.folder-tree');
+  // <span class="folder-spacer" aria-hidden="true"></span>
+  const spacer = document.createElement('span');
+  spacer.className = 'folder-spacer';
+  spacer.setAttribute('aria-hidden', 'true');
 
-  // If server told us about subfolders or non-empty, apply immediately
-if (typeof item.hasSubfolders === 'boolean') {
-  updateToggleForOption(fullPath, item.hasSubfolders);
-  // Also stash on DOM so primeChildToggles can see it without refetch
-  opt.dataset.hasSubs = item.hasSubfolders ? '1' : '0';
-}
-if (typeof item.nonEmpty === 'boolean') {
-  setFolderIconForOption(opt, item.nonEmpty ? 'paper' : 'empty');
-  opt.dataset.nonEmpty = item.nonEmpty ? '1' : '0';
-}
+  // <span class="folder-option[ locked]" [draggable]>
+  const opt = document.createElement('span');
+  opt.className = 'folder-option' + (locked ? ' locked' : '');
+  if (!locked) opt.setAttribute('draggable', 'true');
+  // Use dataset instead of attribute string interpolation.
+  opt.dataset.folder = fullPath;
 
+  // <span class="folder-icon" aria-hidden="true" data-kind="empty">[svg]</span>
+  const icon = document.createElement('span');
+  icon.className = 'folder-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.dataset.kind = 'empty';
+  // Safe: SVG is generated locally, not from user input.
+  // nosemgrep: javascript.browser.security.dom-xss.innerhtml
+  icon.innerHTML = folderSVG('empty', { locked });
+
+  // <span class="folder-label">name</span>
+  const label = document.createElement('span');
+  label.className = 'folder-label';
+  // Critical: never innerHTML here — textContent avoids XSS.
+  label.textContent = name;
+
+  opt.append(icon, label);
+  row.append(spacer, opt);
+  li.append(row);
+
+  // <ul class="folder-tree collapsed" role="group"></ul>
+  const ul = document.createElement('ul');
+  ul.className = 'folder-tree collapsed';
+  ul.setAttribute('role', 'group');
+  li.append(ul);
+
+  // Wire DnD / click the same as before
   if (!locked) {
     opt.addEventListener('dragstart', (ev) => {
-      try { ev.dataTransfer.setData("application/x-filerise-folder", fullPath); } catch {}
-      try { ev.dataTransfer.setData("text/plain", fullPath); } catch {}
-      ev.dataTransfer.effectAllowed = "move";
+      try { ev.dataTransfer.setData('application/x-filerise-folder', fullPath); } catch {}
+      try { ev.dataTransfer.setData('text/plain', fullPath); } catch {}
+      ev.dataTransfer.effectAllowed = 'move';
     });
-    opt.addEventListener("dragover", folderDragOverHandler);
-    opt.addEventListener("dragleave", folderDragLeaveHandler);
-    opt.addEventListener("drop", (e) => handleDropOnFolder(e, fullPath));
-    opt.addEventListener("click", () => selectFolder(fullPath));
+    opt.addEventListener('dragover', folderDragOverHandler);
+    opt.addEventListener('dragleave', folderDragLeaveHandler);
+    opt.addEventListener('drop', (e) => handleDropOnFolder(e, fullPath));
+    opt.addEventListener('click', () => selectFolder(fullPath));
   } else {
     opt.addEventListener('click', async (e) => {
       e.preventDefault(); e.stopPropagation();
