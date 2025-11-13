@@ -3,6 +3,7 @@
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
+require_once PROJECT_ROOT . '/src/lib/FS.php';
 
 class FolderModel
 {
@@ -10,44 +11,228 @@ class FolderModel
      * Ownership mapping helpers (stored in META_DIR/folder_owners.json)
      * ============================================================ */
 
-     public static function countVisible(string $folder, string $user, array $perms): array
-     {
-         // Normalize
-         $folder = ACL::normalizeFolder($folder);
- 
-         // ACL gate: if you can’t read, report empty (no leaks)
-         if (!$user || !ACL::canRead($user, $perms, $folder)) {
-             return ['folders' => 0, 'files' => 0];
-         }
- 
-         // Resolve paths under UPLOAD_DIR
-         $root = rtrim((string)UPLOAD_DIR, '/\\');
-         $path = ($folder === 'root') ? $root : ($root . '/' . $folder);
- 
-         $realRoot = @realpath($root);
-         $realPath = @realpath($path);
-         if ($realRoot === false || $realPath === false || strpos($realPath, $realRoot) !== 0) {
-             return ['folders' => 0, 'files' => 0];
-         }
- 
-         // Count quickly, skipping UI-internal dirs
-         $folders = 0; $files = 0;
-         try {
-             foreach (new DirectoryIterator($realPath) as $f) {
-                 if ($f->isDot()) continue;
-                 $name = $f->getFilename();
-                 if ($name === 'trash' || $name === 'profile_pics') continue;
- 
-                 if ($f->isDir()) $folders++; else $files++;
-                 if ($folders > 0 || $files > 0) break; // short-circuit: we only care if empty vs not
-             }
-         } catch (\Throwable $e) {
-             // Stay quiet + safe
-             $folders = 0; $files = 0;
-         }
- 
-         return ['folders' => $folders, 'files' => $files];
-     }
+    public static function countVisible(string $folder, string $user, array $perms): array
+    {
+        $folder = ACL::normalizeFolder($folder);
+
+        // If the user can't view this folder at all, short-circuit (admin/read/read_own)
+        $canViewFolder = ACL::isAdmin($perms)
+            || ACL::canRead($user, $perms, $folder)
+            || ACL::canReadOwn($user, $perms, $folder);
+        if (!$canViewFolder) return ['folders' => 0, 'files' => 0];
+
+        $base = realpath((string)UPLOAD_DIR);
+        if ($base === false) return ['folders' => 0, 'files' => 0];
+
+        // Resolve target dir + ACL-relative prefix
+        if ($folder === 'root') {
+            $dir = $base;
+            $relPrefix = '';
+        } else {
+            $parts = array_filter(explode('/', $folder), fn($p) => $p !== '');
+            foreach ($parts as $seg) {
+                if (!self::isSafeSegment($seg)) return ['folders' => 0, 'files' => 0];
+            }
+            $guess = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+            $dir   = self::safeReal($base, $guess);
+            if ($dir === null || !is_dir($dir)) return ['folders' => 0, 'files' => 0];
+            $relPrefix = implode('/', $parts);
+        }
+
+        // Ignore lists (expandable)
+        $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
+        $SKIP   = ['trash', 'profile_pics'];
+
+        $entries = @scandir($dir);
+        if ($entries === false) return ['folders' => 0, 'files' => 0];
+
+        $hasChildFolder = false;
+        $hasFile        = false;
+
+        // Cap scanning to avoid pathological dirs
+        $MAX_SCAN = 4000;
+        $scanned  = 0;
+
+        foreach ($entries as $name) {
+            if (++$scanned > $MAX_SCAN) break;
+
+            if ($name === '.' || $name === '..') continue;
+            if ($name[0] === '.') continue;
+            if (in_array($name, $IGNORE, true)) continue;
+            if (in_array(strtolower($name), $SKIP, true)) continue;
+            if (!self::isSafeSegment($name)) continue;
+
+            $abs = $dir . DIRECTORY_SEPARATOR . $name;
+
+            if (@is_dir($abs)) {
+                // Symlink defense on children
+                if (@is_link($abs)) {
+                    $safe = self::safeReal($base, $abs);
+                    if ($safe === null || !is_dir($safe)) continue;
+                }
+                // Only count child dirs the user can view (admin/read/read_own)
+                $childRel = ($relPrefix === '' ? $name : $relPrefix . '/' . $name);
+                if (
+                    ACL::isAdmin($perms)
+                    || ACL::canRead($user, $perms, $childRel)
+                    || ACL::canReadOwn($user, $perms, $childRel)
+                ) {
+                    $hasChildFolder = true;
+                }
+            } elseif (@is_file($abs)) {
+                // Any file present is enough for the "files" flag once the folder itself is viewable
+                $hasFile = true;
+            }
+
+            if ($hasChildFolder && $hasFile) break; // early exit
+        }
+
+        return [
+            'folders' => $hasChildFolder ? 1 : 0,
+            'files'   => $hasFile ? 1 : 0,
+        ];
+    }
+
+    /* Helpers (private) */
+    private static function isSafeSegment(string $name): bool
+    {
+        if ($name === '.' || $name === '..') return false;
+        if (strpos($name, '/') !== false || strpos($name, '\\') !== false) return false;
+        if (strpos($name, "\0") !== false) return false;
+        if (preg_match('/[\x00-\x1F]/u', $name)) return false;
+        $len = mb_strlen($name);
+        return $len > 0 && $len <= 255;
+    }
+    private static function safeReal(string $baseReal, string $p): ?string
+    {
+        $rp = realpath($p);
+        if ($rp === false) return null;
+        $base = rtrim($baseReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $rp2  = rtrim($rp, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if (strpos($rp2, $base) !== 0) return null;
+        return rtrim($rp, DIRECTORY_SEPARATOR);
+    }
+
+    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500): array
+    {
+        $folder  = ACL::normalizeFolder($folder);
+        $limit   = max(1, min(2000, $limit));
+        $cursor  = ($cursor !== null && $cursor !== '') ? $cursor : null;
+    
+        $baseReal = realpath((string)UPLOAD_DIR);
+        if ($baseReal === false) return ['items' => [], 'nextCursor' => null];
+    
+        // Resolve target directory
+        if ($folder === 'root') {
+            $dirReal   = $baseReal;
+            $relPrefix = 'root';
+        } else {
+            $parts = array_filter(explode('/', $folder), fn($p) => $p !== '');
+            foreach ($parts as $seg) {
+                if (!FS::isSafeSegment($seg)) return ['items'=>[], 'nextCursor'=>null];
+            }
+            $relPrefix = implode('/', $parts);
+            $dirGuess  = $baseReal . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+            $dirReal   = FS::safeReal($baseReal, $dirGuess);
+            if ($dirReal === null || !is_dir($dirReal)) return ['items'=>[], 'nextCursor'=>null];
+        }
+    
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP(); // lowercased names to skip (e.g. 'trash', 'profile_pics')
+    
+        $entries = @scandir($dirReal);
+        if ($entries === false) return ['items'=>[], 'nextCursor'=>null];
+    
+        $rows = []; // each: ['name'=>..., 'locked'=>bool, 'hasSubfolders'=>bool?, 'nonEmpty'=>bool?]
+        foreach ($entries as $item) {
+            if ($item === '.' || $item === '..') continue;
+            if ($item[0] === '.') continue;
+            if (in_array($item, $IGNORE, true)) continue;
+            if (!FS::isSafeSegment($item)) continue;
+    
+            $lower = strtolower($item);
+            if (in_array($lower, $SKIP, true)) continue;
+    
+            $full = $dirReal . DIRECTORY_SEPARATOR . $item;
+            if (!@is_dir($full)) continue;
+    
+            // Symlink defense
+            if (@is_link($full)) {
+                $safe = FS::safeReal($baseReal, $full);
+                if ($safe === null || !is_dir($safe)) continue;
+                $full = $safe;
+            }
+    
+            // ACL-relative path (for checks)
+            $rel = ($relPrefix === 'root') ? $item : $relPrefix . '/' . $item;
+            $canView = ACL::canRead($user, $perms, $rel) || ACL::canReadOwn($user, $perms, $rel);
+            $locked  = !$canView;
+    
+            // ---- quick per-child stats (single-level scan, early exit) ----
+            $hasSubs  = false; // at least one subdirectory
+            $nonEmpty = false; // any direct entry (file or folder)
+            try {
+                $it = new \FilesystemIterator($full, \FilesystemIterator::SKIP_DOTS);
+                foreach ($it as $child) {
+                    $name = $child->getFilename();
+                    if (!$name) continue;
+                    if ($name[0] === '.') continue;
+                    if (!FS::isSafeSegment($name)) continue;
+                    if (in_array(strtolower($name), $SKIP, true)) continue;
+    
+                    $nonEmpty = true;
+    
+                    $isDir = $child->isDir();
+                    if (!$isDir && $child->isLink()) {
+                        $linkReal = FS::safeReal($baseReal, $child->getPathname());
+                        $isDir = ($linkReal !== null && is_dir($linkReal));
+                    }
+                    if ($isDir) { $hasSubs = true; break; } // early exit once we know there's a subfolder
+                }
+            } catch (\Throwable $e) {
+                // keep defaults
+            }
+            // ---------------------------------------------------------------
+    
+            if ($locked) {
+                // Show a locked row ONLY when this folder has a readable descendant
+                if (FS::hasReadableDescendant($baseReal, $full, $rel, $user, $perms, 2)) {
+                    $rows[] = [
+                        'name'          => $item,
+                        'locked'        => true,
+                        'hasSubfolders' => $hasSubs,   // fine to keep structural chevrons
+                        // nonEmpty intentionally omitted for locked nodes
+                    ];
+                }
+            } else {
+                $rows[] = [
+                    'name'          => $item,
+                    'locked'        => false,
+                    'hasSubfolders' => $hasSubs,
+                    'nonEmpty'      => $nonEmpty,
+                ];
+            }
+        }
+    
+        // natural order + cursor pagination
+        usort($rows, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
+        $start = 0;
+        if ($cursor !== null) {
+            $n = count($rows);
+            for ($i = 0; $i < $n; $i++) {
+                if (strnatcasecmp($rows[$i]['name'], $cursor) > 0) { $start = $i; break; }
+                $start = $i + 1;
+            }
+        }
+        $page = array_slice($rows, $start, $limit);
+        $nextCursor = null;
+        if ($start + count($page) < count($rows)) {
+            $last = $page[count($page)-1];
+            $nextCursor = $last['name'];
+        }
+    
+        return ['items' => $page, 'nextCursor' => $nextCursor];
+    }
 
     /** Load the folder → owner map. */
     public static function getFolderOwners(): array
@@ -213,40 +398,42 @@ class FolderModel
         // -------- Normalize incoming values (use ONLY the parameters) --------
         $folderName = trim((string)$folderName);
         $parentIn   = trim((string)$parent);
-    
+
         // If the client sent a path in folderName (e.g., "bob/new-sub") and parent is root/empty,
         // derive parent = "bob" and folderName = "new-sub" so permission checks hit "bob".
         $normalized = ACL::normalizeFolder($folderName);
-        if ($normalized !== 'root' && strpos($normalized, '/') !== false &&
-            ($parentIn === '' || strcasecmp($parentIn, 'root') === 0)) {
+        if (
+            $normalized !== 'root' && strpos($normalized, '/') !== false &&
+            ($parentIn === '' || strcasecmp($parentIn, 'root') === 0)
+        ) {
             $parentIn  = trim(str_replace('\\', '/', dirname($normalized)), '/');
             $folderName = basename($normalized);
             if ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) $parentIn = 'root';
         }
-    
+
         $parent = ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) ? 'root' : $parentIn;
         $folderName = trim($folderName);
-        if ($folderName === '') return ['success'=>false, 'error' => 'Folder name required'];
-    
+        if ($folderName === '') return ['success' => false, 'error' => 'Folder name required'];
+
         // ACL key for new folder
         $newKey = ($parent === 'root') ? $folderName : ($parent . '/' . $folderName);
-    
+
         // -------- Compose filesystem paths --------
         $base = rtrim((string)UPLOAD_DIR, "/\\");
         $parentRel = ($parent === 'root') ? '' : str_replace('/', DIRECTORY_SEPARATOR, $parent);
         $parentAbs = $parentRel ? ($base . DIRECTORY_SEPARATOR . $parentRel) : $base;
         $newAbs = $parentAbs . DIRECTORY_SEPARATOR . $folderName;
-    
+
         // -------- Exists / sanity checks --------
-        if (!is_dir($parentAbs))   return ['success'=>false, 'error' => 'Parent folder does not exist'];
-        if (is_dir($newAbs))       return ['success'=>false, 'error' => 'Folder already exists'];
-    
+        if (!is_dir($parentAbs))   return ['success' => false, 'error' => 'Parent folder does not exist'];
+        if (is_dir($newAbs))       return ['success' => false, 'error' => 'Folder already exists'];
+
         // -------- Create directory --------
         if (!@mkdir($newAbs, 0775, true)) {
             $err = error_get_last();
-            return ['success'=>false, 'error' => 'Failed to create folder' . (!empty($err['message']) ? (': '.$err['message']) : '')];
+            return ['success' => false, 'error' => 'Failed to create folder' . (!empty($err['message']) ? (': ' . $err['message']) : '')];
         }
-    
+
         // -------- Seed ACL --------
         $inherit = defined('ACL_INHERIT_ON_CREATE') && ACL_INHERIT_ON_CREATE;
         try {
@@ -265,9 +452,9 @@ class FolderModel
         } catch (Throwable $e) {
             // Roll back FS if ACL seeding fails
             @rmdir($newAbs);
-            return ['success'=>false, 'error' => 'Failed to seed ACL: ' . $e->getMessage()];
+            return ['success' => false, 'error' => 'Failed to seed ACL: ' . $e->getMessage()];
         }
-    
+
         return ['success' => true, 'folder' => $newKey];
     }
 
@@ -318,7 +505,7 @@ class FolderModel
 
         // Validate names (per-segment)
         foreach ([$oldFolder, $newFolder] as $f) {
-            $parts = array_filter(explode('/', $f), fn($p)=>$p!=='');
+            $parts = array_filter(explode('/', $f), fn($p) => $p !== '');
             if (empty($parts)) return ["error" => "Invalid folder name(s)."];
             foreach ($parts as $seg) {
                 if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
@@ -333,7 +520,7 @@ class FolderModel
         $base = realpath(UPLOAD_DIR);
         if ($base === false) return ["error" => "Uploads directory not configured correctly."];
 
-        $newParts = array_filter(explode('/', $newFolder), fn($p) => $p!=='');
+        $newParts = array_filter(explode('/', $newFolder), fn($p) => $p !== '');
         $newRel   = implode('/', $newParts);
         $newPath  = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $newParts);
 
@@ -508,7 +695,7 @@ class FolderModel
         return [
             "record"        => $record,
             "folder"        => $relative,
-            "realFolderPath"=> $realFolderPath,
+            "realFolderPath" => $realFolderPath,
             "files"         => $filesOnPage,
             "currentPage"   => $currentPage,
             "totalPages"    => $totalPages
@@ -532,7 +719,7 @@ class FolderModel
         }
 
         $expires       = time() + max(1, $expirationSeconds);
-        $hashedPassword= $password !== "" ? password_hash($password, PASSWORD_DEFAULT) : "";
+        $hashedPassword = $password !== "" ? password_hash($password, PASSWORD_DEFAULT) : "";
 
         $shareFile = META_DIR . "share_folder_links.json";
         $links = file_exists($shareFile)
@@ -560,7 +747,7 @@ class FolderModel
 
         // Build URL
         $https   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                   || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
         $scheme  = $https ? 'https' : 'http';
         $host    = $_SERVER['HTTP_HOST'] ?? gethostbyname(gethostname());
         $baseUrl = $scheme . '://' . rtrim($host, '/');
@@ -587,7 +774,7 @@ class FolderModel
             return ["error" => "This share link has expired."];
         }
 
-        [$realFolderPath, , $err] = self::resolveFolderPath((string)$record['folder'], false);
+        [$realFolderPath,, $err] = self::resolveFolderPath((string)$record['folder'], false);
         if ($err || !is_dir($realFolderPath)) {
             return ["error" => "Shared folder not found."];
         }
@@ -615,8 +802,26 @@ class FolderModel
         // Max size & allowed extensions (mirror FileModel’s common types)
         $maxSize = 50 * 1024 * 1024; // 50 MB
         $allowedExtensions = [
-            'jpg','jpeg','png','gif','pdf','doc','docx','txt','xls','xlsx','ppt','pptx',
-            'mp4','webm','mp3','mkv','csv','json','xml','md'
+            'jpg',
+            'jpeg',
+            'png',
+            'gif',
+            'pdf',
+            'doc',
+            'docx',
+            'txt',
+            'xls',
+            'xlsx',
+            'ppt',
+            'pptx',
+            'mp4',
+            'webm',
+            'mp3',
+            'mkv',
+            'csv',
+            'json',
+            'xml',
+            'md'
         ];
 
         $shareFile = META_DIR . "share_folder_links.json";
@@ -655,7 +860,7 @@ class FolderModel
 
         // New safe filename
         $safeBase   = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $uploadedName);
-        $newFilename= uniqid('', true) . "_" . $safeBase;
+        $newFilename = uniqid('', true) . "_" . $safeBase;
         $targetPath = $targetDir . DIRECTORY_SEPARATOR . $newFilename;
 
         if (!move_uploaded_file($fileUpload['tmp_name'], $targetPath)) {

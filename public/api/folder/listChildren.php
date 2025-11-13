@@ -1,5 +1,4 @@
 <?php
-// Fast ACL-aware peek for tree icons/chevrons
 declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -25,4 +24,8 @@ $folder = isset($_GET['folder']) ? (string)$_GET['folder'] : 'root';
 $folder = str_replace('\\', '/', trim($folder));
 $folder = ($folder === '' || strcasecmp($folder, 'root') === 0) ? 'root' : trim($folder, '/');
 
-echo json_encode(FolderController::stats($folder, $username, $perms), JSON_UNESCAPED_SLASHES);
+$limit  = max(1, min(2000, (int)($_GET['limit'] ?? 500)));
+$cursor = isset($_GET['cursor']) && $_GET['cursor'] !== '' ? (string)$_GET['cursor'] : null;
+
+$res = FolderController::listChildren($folder, $username, $perms, $cursor, $limit);
+echo json_encode($res, JSON_UNESCAPED_SLASHES);

@@ -6,6 +6,7 @@ require_once PROJECT_ROOT . '/src/models/FolderModel.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/FolderMeta.php';
+require_once PROJECT_ROOT . '/src/lib/FS.php';
 
 class FolderController
 {
@@ -31,11 +32,170 @@ class FolderController
         return $headers;
     }
 
+    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500): array {
+        return FolderModel::listChildren($folder, $user, $perms, $cursor, $limit);
+    }
+
     /** Stats for a folder (currently: empty/non-empty via folders/files counts). */
     public static function stats(string $folder, string $user, array $perms): array
     {
         // Normalize inside model; this is a thin action
         return FolderModel::countVisible($folder, $user, $perms);
+    }
+
+    /** Capabilities for UI buttons/menus (unchanged semantics; just centralized). */
+    public static function capabilities(string $folder, string $username): array
+    {
+        $folder = ACL::normalizeFolder($folder);
+        $perms  = self::loadPermsFor($username);
+
+        $isAdmin       = ACL::isAdmin($perms);
+        $folderOnly    = self::boolFrom($perms, 'folderOnly','userFolderOnly','UserFolderOnly');
+        $readOnly      = !empty($perms['readOnly']);
+        $disableUpload = !empty($perms['disableUpload']);
+
+        $isOwner = ACL::isOwner($username, $perms, $folder);
+
+        $inScope = self::inUserFolderScope($folder, $username, $perms, $isAdmin, $folderOnly);
+
+        $canViewBase   = $isAdmin || ACL::canRead($username, $perms, $folder);
+        $canViewOwn    = $isAdmin || ACL::canReadOwn($username, $perms, $folder);
+        $canShareBase  = $isAdmin || ACL::canShare($username, $perms, $folder);
+
+        $gCreateBase   = $isAdmin || ACL::canCreate($username, $perms, $folder);
+        $gRenameBase   = $isAdmin || ACL::canRename($username, $perms, $folder);
+        $gDeleteBase   = $isAdmin || ACL::canDelete($username, $perms, $folder);
+        $gMoveBase     = $isAdmin || ACL::canMove($username, $perms, $folder);
+        $gUploadBase   = $isAdmin || ACL::canUpload($username, $perms, $folder);
+        $gEditBase     = $isAdmin || ACL::canEdit($username, $perms, $folder);
+        $gCopyBase     = $isAdmin || ACL::canCopy($username, $perms, $folder);
+        $gExtractBase  = $isAdmin || ACL::canExtract($username, $perms, $folder);
+        $gShareFile    = $isAdmin || ACL::canShareFile($username, $perms, $folder);
+        $gShareFolder  = $isAdmin || ACL::canShareFolder($username, $perms, $folder);
+
+        $canView       = $canViewBase && $inScope;
+
+        $canUpload     = $gUploadBase && !$readOnly && !$disableUpload && $inScope;
+        $canCreate     = $gCreateBase && !$readOnly && $inScope;
+        $canRename     = $gRenameBase && !$readOnly && $inScope;
+        $canDelete     = $gDeleteBase && !$readOnly && $inScope;
+        $canDeleteFile = $gDeleteBase && !$readOnly && $inScope;
+
+        $canDeleteFolder = !$readOnly && $inScope && (
+            $isAdmin ||
+            $isOwner ||
+            ACL::canManage($username, $perms, $folder) ||
+            $gDeleteBase // if your ACL::canDelete should also allow folder deletes
+        );
+
+        $canReceive    = ($gUploadBase || $gCreateBase || $isAdmin) && !$readOnly && !$disableUpload && $inScope;
+        $canMoveIn     = $canReceive;
+
+        $canEdit       = $gEditBase && !$readOnly && $inScope;
+        $canCopy       = $gCopyBase && !$readOnly && $inScope;
+        $canExtract    = $gExtractBase && !$readOnly && $inScope;
+
+        $canShareEff   = $canShareBase && $inScope;
+        $canShareFile  = $gShareFile   && $inScope;
+        $canShareFold  = $gShareFolder && $inScope;
+
+        $isRoot = ($folder === 'root');
+        $canMoveFolder = false;
+        if ($isRoot) {
+            $canRename     = false;
+            $canDelete     = false;
+            $canShareFold  = false;
+        } else {
+            $canMoveFolder = (ACL::canManage($username, $perms, $folder) || ACL::isOwner($username, $perms, $folder))
+                             && !$readOnly;
+        }
+
+        $owner = null;
+        try { if (class_exists('FolderModel') && method_exists('FolderModel','getOwnerFor')) $owner = FolderModel::getOwnerFor($folder); } catch (\Throwable $e) {}
+
+        return [
+            'user'    => $username,
+            'folder'  => $folder,
+            'isAdmin' => $isAdmin,
+            'flags'   => [
+                'folderOnly'    => $folderOnly,
+                'readOnly'      => $readOnly,
+                'disableUpload' => $disableUpload,
+            ],
+            'owner'          => $owner,
+
+            'canView'        => $canView,
+            'canViewOwn'     => $canViewOwn,
+
+            'canUpload'      => $canUpload,
+            'canCreate'      => $canCreate,
+            'canRename'      => $canRename,
+            'canDelete'      => $canDeleteFile,
+            'canDeleteFolder' => $canDeleteFolder,
+
+            'canMoveIn'      => $canMoveIn,
+            'canMove'        => $canMoveIn,         // legacy alias
+            'canMoveFolder'  => $canMoveFolder,
+
+            'canEdit'        => $canEdit,
+            'canCopy'        => $canCopy,
+            'canExtract'     => $canExtract,
+
+            'canShare'       => $canShareEff,       // legacy umbrella
+            'canShareFile'   => $canShareFile,
+            'canShareFolder' => $canShareFold,
+        ];
+    }
+
+    /* ---------------------------
+       Private helpers (caps)
+    ----------------------------*/
+    private static function loadPermsFor(string $u): array {
+        try {
+            if (function_exists('loadUserPermissions')) {
+                $p = loadUserPermissions($u);
+                return is_array($p) ? $p : [];
+            }
+            if (class_exists('userModel') && method_exists('userModel', 'getUserPermissions')) {
+                $all = userModel::getUserPermissions();
+                if (is_array($all)) {
+                    if (isset($all[$u])) return (array)$all[$u];
+                    $lk = strtolower($u);
+                    if (isset($all[$lk])) return (array)$all[$lk];
+                }
+            }
+        } catch (\Throwable $e) {}
+        return [];
+    }
+
+    private static function boolFrom(array $a, string ...$keys): bool {
+        foreach ($keys as $k) if (!empty($a[$k])) return true;
+        return false;
+    }
+
+    private static function isOwnerOrAncestorOwner(string $user, array $perms, string $folder): bool {
+        $f = ACL::normalizeFolder($folder);
+        if (ACL::isOwner($user, $perms, $f)) return true;
+        while ($f !== '' && strcasecmp($f, 'root') !== 0) {
+            $pos = strrpos($f, '/');
+            if ($pos === false) break;
+            $f = substr($f, 0, $pos);
+            if ($f === '' || strcasecmp($f, 'root') === 0) break;
+            if (ACL::isOwner($user, $perms, $f)) return true;
+        }
+        return false;
+    }
+
+    private static function inUserFolderScope(string $folder, string $u, array $perms, bool $isAdmin, bool $folderOnly): bool {
+        if ($isAdmin) return true;
+        if (!$folderOnly) return true; // normal users: global scope
+
+        $f = ACL::normalizeFolder($folder);
+        if ($f === 'root' || $f === '') {
+            return self::isOwnerOrAncestorOwner($u, $perms, $f);
+        }
+        if ($f === $u || str_starts_with($f, $u . '/')) return true;
+        return self::isOwnerOrAncestorOwner($u, $perms, $f);
     }
 
     private static function requireCsrf(): void
@@ -1123,8 +1283,11 @@ class FolderController
         $map = FolderMeta::getMap();
         $out = [];
         foreach ($map as $folder => $hex) {
-            $folder = FolderMeta::normalizeFolder($folder);
-            if (ACL::canRead($user, $perms, $folder)) $out[$folder] = $hex;
+            $folder = FolderMeta::normalizeFolder((string)$folder);
+            if ($folder === 'root') continue; // don’t bother exposing root
+            if (ACL::canRead($user, $perms, $folder) || ACL::canReadOwn($user, $perms, $folder)) {
+                $out[$folder] = $hex;
+            }
         }
         echo json_encode($out, JSON_UNESCAPED_SLASHES);
     }
@@ -1153,21 +1316,29 @@ class FolderController
 
         $body   = json_decode(file_get_contents('php://input') ?: "{}", true) ?: [];
         $folder = FolderMeta::normalizeFolder((string)($body['folder'] ?? 'root'));
-        $color  = isset($body['color']) ? (string)$body['color'] : '';
+        $raw    = array_key_exists('color', $body) ? (string)$body['color'] : '';
 
-        // Treat “customize color” as rename-level capability (your convention)
-        if (!ACL::canRename($user, $perms, $folder)) {
+        if ($folder === 'root') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Cannot set color on root']);
+            return;
+        }
+
+        // >>> Require canEdit (not canRename) <<<
+        if (!ACL::canEdit($user, $perms, $folder) && !ACL::isAdmin($perms)) {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
 
         try {
-            $res = FolderMeta::setColor($folder, $color === '' ? null : $color);
+            // empty string clears; non-empty must be valid #RGB or #RRGGBB
+            $hex = ($raw === '') ? null : FolderMeta::normalizeHex($raw);
+            $res = FolderMeta::setColor($folder, $hex);
             echo json_encode(['success' => true] + $res, JSON_UNESCAPED_SLASHES);
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
-            echo json_encode(['error' => $e->getMessage()]);
+            echo json_encode(['error' => 'Invalid color']);
         }
     }
 

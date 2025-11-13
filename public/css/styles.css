@@ -2413,3 +2413,67 @@ body.dark-mode .folder-strip-container .folder-item:hover {
 .folder-strip-container .folder-svg .paper-line,
 .folder-strip-container .folder-svg .paper-ink,
 .folder-strip-container .folder-svg .lip-highlight { stroke-width: 1.1px; }
+/* Locked folder look (keep subtle but clear) */
+#folderTreeContainer .folder-option.locked {
+  opacity: .9;
+  font-style: italic;
+}
+
+/* Padlock styling inside the SVG */
+#folderTreeContainer .folder-icon .lock-body {
+  fill: var(--filr-folder-stroke, #6b6b6b);
+  opacity: .95;
+}
+#folderTreeContainer .folder-icon .lock-shackle {
+  fill: none;
+  stroke: var(--filr-folder-stroke, #6b6b6b);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+#folderTreeContainer .folder-icon .lock-keyhole {
+  fill: rgba(0,0,0,.28);
+}
+body.dark-mode #folderTreeContainer .folder-icon .lock-keyhole {
+  fill: rgba(255,255,255,.28);
+}
+
+#folderTreeContainer li.load-more {
+  padding: 4px 0 4px 28px;            /* indent to line up with rows */
+  list-style: none;
+}
+
+#folderTreeContainer li.load-more > .btn.btn-ghost {
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--tree-ghost-border);
+  background: var(--tree-ghost-bg);
+  color: var(--tree-ghost-fg);
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+#folderTreeContainer li.load-more > .btn.btn-ghost:hover {
+  background: var(--tree-ghost-hover-bg);
+}
+
+#folderTreeContainer li.load-more > .btn.btn-ghost:focus-visible {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 2px;
+}
+
+/* tiny spinner when busy */
+#folderTreeContainer li.load-more > .btn[aria-busy="true"]::before {
+  content: "";
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  display: inline-block;
+  animation: filr-spin .8s linear infinite;
+}
+@keyframes filr-spin { to { transform: rotate(360deg); } }

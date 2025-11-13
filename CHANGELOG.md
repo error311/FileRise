@@ -1,5 +1,61 @@
 # Changelog
 
+## Changes 11/13/2025 (v1.9.4)
+
+release(v1.9.4): lazy folder tree, cursor pagination, ACL-safe chevrons, and “Load more” (closes #66)
+
+**Big focus on folder management performance & UX for large libraries.**
+
+feat(folder-tree):
+
+- Lazy-load children on demand with cursor-based pagination (`nextCursor` + `limit`), including inline “Load more” row.
+- BFS-based initial selection: if user can’t view requested/default folder, auto-pick the first accessible folder (but stick to (Root) when user can view it).
+- Persisted expansion state across reloads; restore saved path and last opened folder; prevent navigation into locked folders (shows i18n toast instead).
+- Breadcrumb now respects ACL: clicking a locked crumb toggles expansion only (no navigation).
+- Live chevrons from server truth: `hasSubfolders` is computed server-side to avoid file count probes and show correct expanders (even when a direct child is unreadable).
+- Capabilities-driven toolbar enable/disable for create/move/rename/color/delete/share.
+- Color-carry on move/rename + expansion state migration so moved/renamed nodes keep colors and stay visible.
+- Root DnD honored only when viewable; structural locks disable dragging.
+
+perf(core):
+
+- New `FS.php` helpers: safe path resolution (`safeReal`), segment sanitization, symlink defense, ignore/skip lists, bounded child counting, `hasSubfolders`, and `hasReadableDescendant` (depth-limited).
+- Thin caching for child lists and counts, with targeted cache invalidation on move/rename/create/delete.
+- Bounded concurrency for folder count requests; short timeouts to keep UI snappy.
+
+api/model:
+
+- `FolderModel::listChildren(...)` now returns items shaped like:
+  `{ name, locked, hasSubfolders, nonEmpty? }`
+  - `nonEmpty` included only for unlocked nodes (prevents side-channel leakage).
+  - Locked nodes are only returned when `hasReadableDescendant(...)` is true (preserves legacy “structural visibility without listing the entire tree” behavior).
+- `public/api/folder/listChildren.php` delegates to controller/model; `isEmpty.php` hardened; `capabilities.php` exposes `canView` (or derived) for fast checks.
+- Folder color endpoints gate results by ACL so users only see colors for folders they can at least “own-view”.
+
+ui/ux:
+
+- New “Load more” row (`<li class="load-more">`) with dark-mode friendly ghost button styling; consistent padding, focus ring, hover state.
+- Locked folders render with padlock overlay and no DnD; improved contrast/spacing; icons/chevrons update live as children load.
+- i18n additions: `no_access`, `load_more`, `color_folder(_saved|_cleared)`, `please_select_valid_folder`, etc.
+- When a user has zero access anywhere, tree selects (Root) but shows `no_access` instead of “No files found”.
+
+security:
+
+- Stronger path traversal + symlink protections across folder APIs (all joins normalized, base-anchored).
+- Reduced metadata leakage by omitting `nonEmpty` for locked nodes and depth-limiting descendant checks.
+
+fixes:
+
+- Chevron visibility for unreadable intermediate nodes (e.g., “Files” shows a chevron when it contains a readable “Resources” descendant).
+- Refresh now honors the actively viewed folder (session/localStorage), not the first globally readable folder.
+
+chore:
+
+- CSS additions for locked state, tree rows, and dark-mode ghost buttons.
+- Minor code cleanups and comments across controller/model and JS tree logic.
+
+---
+
 ## Changes 11/11/2025 (v1.9.3)
 
 release(v1.9.3): unify folder icons across tree & strip, add “paper” lines, live color sync, and vendor-aware release

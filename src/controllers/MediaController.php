@@ -44,9 +44,6 @@ class MediaController
         $f = trim((string)$f);
         return ($f==='' || strtolower($f)==='root') ? 'root' : $f;
     }
-    private function validFolder($f): bool {
-        return $f==='root' || (bool)preg_match(REGEX_FOLDER_NAME, $f);
-    }
     private function validFile($f): bool {
         $f = basename((string)$f);
         return $f !== '' && (bool)preg_match(REGEX_FILE_NAME, $f);
@@ -54,6 +51,24 @@ class MediaController
     private function enforceRead(string $folder, string $username): ?string {
         $perms = loadUserPermissions($username) ?: [];
         return ACL::canRead($username, $perms, $folder) ? null : "Forbidden";
+    }
+
+    private function validFolder($f): bool {
+        if ($f === 'root') return true;
+        // Validate per-segment against your REGEX_FOLDER_NAME
+        $parts = array_filter(explode('/', (string)$f), fn($p) => $p !== '');
+        if (!$parts) return false;
+        foreach ($parts as $seg) {
+            if (!preg_match(REGEX_FOLDER_NAME, $seg)) return false;
+        }
+        return true;
+    }
+
+    /** “View” means read OR read_own */
+    private function canViewFolder(string $folder, string $username): bool {
+        $perms = loadUserPermissions($username) ?: [];
+        return ACL::canRead($username, $perms, $folder)
+            || ACL::canReadOwn($username, $perms, $folder);
     }
 
     /** POST /api/media/updateProgress.php */
@@ -67,15 +82,15 @@ class MediaController
             $d = $this->readJson();
             $folder = $this->normalizeFolder($d['folder'] ?? 'root');
             $file   = (string)($d['file'] ?? '');
-            $seconds   = isset($d['seconds'])  ? floatval($d['seconds'])  : 0.0;
-            $duration  = isset($d['duration']) ? floatval($d['duration']) : null;
+            $seconds   = isset($d['seconds'])  ? (float)$d['seconds']  : 0.0;
+            $duration  = isset($d['duration']) ? (float)$d['duration'] : null;
             $completed = isset($d['completed']) ? (bool)$d['completed'] : null;
-            $clear     = isset($d['clear']) ? (bool)$d['clear'] : false;
+            $clear     = !empty($d['clear']);
 
             if (!$this->validFolder($folder) || !$this->validFile($file)) {
                 $this->out(['error'=>'Invalid folder/file'], 400); return;
             }
-            if ($this->enforceRead($folder, $u)) { $this->out(['error'=>'Forbidden'], 403); return; }
+            if (!$this->canViewFolder($folder, $u)) { $this->out(['error'=>'Forbidden'], 403); return; }
 
             if ($clear) {
                 $ok = MediaModel::clearProgress($u, $folder, $file);
@@ -102,7 +117,7 @@ class MediaController
             if (!$this->validFolder($folder) || !$this->validFile($file)) {
                 $this->out(['error'=>'Invalid folder/file'], 400); return;
             }
-            if ($this->enforceRead($folder, $u)) { $this->out(['error'=>'Forbidden'], 403); return; }
+            if (!$this->canViewFolder($folder, $u)) { $this->out(['error'=>'Forbidden'], 403); return; }
 
             $row = MediaModel::getProgress($u, $folder, $file);
             $this->out(['state'=>$row]);
@@ -123,7 +138,12 @@ class MediaController
             if (!$this->validFolder($folder)) {
                 $this->out(['error'=>'Invalid folder'], 400); return;
             }
-            if ($this->enforceRead($folder, $u)) { $this->out(['error'=>'Forbidden'], 403); return; }
+
+            // Soft-fail for restricted users: avoid noisy console 403s
+            if (!$this->canViewFolder($folder, $u)) {
+                $this->out(['map' => []]); // 200 OK, no leakage
+                return;
+            }
 
             $map = MediaModel::getFolderMap($u, $folder);
             $this->out(['map'=>$map]);

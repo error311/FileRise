@@ -318,7 +318,19 @@ const translations = {
     "reset_default": "Reset",
     "save_color": "Save",
     "folder_color_saved": "Folder color saved.",
-    "folder_color_cleared": "Folder color reset."
+    "folder_color_cleared": "Folder color reset.",
+    "load_more": "Load more",
+    "loading": "Loading...",
+    "no_access": "You do not have access to this resource.",
+    "please_select_valid_folder": "Please select a valid folder.",
+    "folder_help_click_view": "Click a folder in the tree to view its files.",
+    "folder_help_expand_chevrons": "Use chevrons to expand/collapse. Locked folders (padlock) can expand but can’t be opened.",
+    "folder_help_context_menu": "Right-click a folder for quick actions: Create, Move, Rename, Share, Color, Delete.",
+    "folder_help_drag_drop": "Drag a folder onto another folder or a breadcrumb to move it.",
+    "folder_help_load_more": "For long lists, click “Load more” to fetch the next page of folders.",
+    "folder_help_last_folder": "Your last opened folder is remembered. If you lose access, we pick the first allowed folder automatically.",
+    "folder_help_breadcrumbs": "Use the breadcrumb to jump up the path. You can also drop onto a breadcrumb.",
+    "folder_help_permissions": "Buttons enable/disable based on your permissions for the selected folder."
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

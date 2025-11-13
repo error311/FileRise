@@ -277,14 +277,24 @@
                       </div>
                     </div>
                     <div id="folderHelpTooltip" class="folder-help-tooltip"
-                      style="display: none; position: absolute; top: 50px; right: 15px; background: #fff; border: 1px solid #ccc; padding: 10px; z-index: 1000; box-shadow: 2px 2px 6px rgba(0,0,0,0.2);">
-                      <ul class="folder-help-list" style="margin: 0; padding-left: 20px;">
-                        <li data-i18n-key="folder_help_item_1">Click on a folder in the tree to view its files.</li>
-                        <li data-i18n-key="folder_help_item_2">Use [-] to collapse and [+] to expand folders.</li>
-                        <li data-i18n-key="folder_help_item_3">Select a folder and click "Create Folder" to add a
-                          subfolder.</li>
-                        <li data-i18n-key="folder_help_item_4">To rename or delete a folder, select it and then click
-                          the appropriate button.</li>
+                      style="display:none;position:absolute;top:50px;right:15px;background:#fff;border:1px solid #ccc;padding:10px;z-index:1000;box-shadow:2px 2px 6px rgba(0,0,0,0.2);border-radius:8px;max-width:320px;line-height:1.35;">
+                    <style>
+                        /* Dark mode polish */
+                        body.dark-mode #folderHelpTooltip {
+                          background:#2c2c2c; border-color:#555; color:#e8e8e8; box-shadow:2px 2px 10px rgba(0,0,0,.5);
+                        }
+                        #folderHelpTooltip .folder-help-list { margin:0; padding-left:18px; }
+                        #folderHelpTooltip .folder-help-list li { margin:6px 0; }
+                      </style>
+                      <ul class="folder-help-list">
+                        <li data-i18n-key="folder_help_click_view">Click a folder in the tree to view its files.</li>
+                        <li data-i18n-key="folder_help_expand_chevrons">Use chevrons to expand/collapse. Locked folders (padlock) can expand but can’t be opened.</li>
+                        <li data-i18n-key="folder_help_context_menu">Right-click a folder for quick actions: Create, Move, Rename, Share, Color, Delete.</li>
+                        <li data-i18n-key="folder_help_drag_drop">Drag a folder onto another folder <em>or</em> a breadcrumb to move it.</li>
+                        <li data-i18n-key="folder_help_load_more">For long lists, click “Load more” to fetch the next page of folders.</li>
+                        <li data-i18n-key="folder_help_last_folder">Your last opened folder is remembered. If you lose access, we pick the first allowed folder automatically.</li>
+                        <li data-i18n-key="folder_help_breadcrumbs">Use the breadcrumb to jump up the path. You can also drop onto a breadcrumb.</li>
+                        <li data-i18n-key="folder_help_permissions">Buttons enable/disable based on your permissions for the selected folder.</li>
                       </ul>
                     </div>
                   </div>
