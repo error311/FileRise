@@ -477,6 +477,26 @@
       </form>
     </div>
   </div>
+
+<div id="fileContextMenu" class="filr-menu" hidden role="menu" aria-label="File actions">
+  <button type="button" class="mi" data-action="create_file"     data-when="always"><i class="material-icons">note_add</i><span>Create file</span></button>
+  <div class="sep" data-when="always"></div>
+
+  <button type="button" class="mi" data-action="delete_selected" data-when="any"><i class="material-icons">delete</i><span>Delete selected</span></button>
+  <button type="button" class="mi" data-action="copy_selected"   data-when="any"><i class="material-icons">content_copy</i><span>Copy selected</span></button>
+  <button type="button" class="mi" data-action="move_selected"   data-when="any"><i class="material-icons">drive_file_move</i><span>Move selected</span></button>
+  <button type="button" class="mi" data-action="download_zip"    data-when="any"><i class="material-icons">archive</i><span>Download as ZIP</span></button>
+  <button type="button" class="mi" data-action="extract_zip"     data-when="zip"><i class="material-icons">unarchive</i><span>Extract ZIP</span></button>
+
+  <div class="sep" data-when="any"></div>
+
+  <button type="button" class="mi" data-action="tag_selected"    data-when="many"><i class="material-icons">sell</i><span>Tag selected</span></button>
+
+  <button type="button" class="mi" data-action="preview"         data-when="one"><i class="material-icons">visibility</i><span>Preview</span></button>
+  <button type="button" class="mi" data-action="edit"            data-when="can-edit"><i class="material-icons">edit</i><span>Edit</span></button>
+  <button type="button" class="mi" data-action="rename"          data-when="one"><i class="material-icons">drive_file_rename_outline</i><span>Rename</span></button>
+  <button type="button" class="mi" data-action="tag_file"        data-when="one"><i class="material-icons">sell</i><span>Tag file</span></button>
+</div>
   <div id="removeUserModal" class="modal" style="display:none;">
     <div class="modal-content">
       <h3 data-i18n-key="remove_user_title">Remove User</h3>

@@ -194,7 +194,13 @@ async function findFirstAccessibleFolder(startFolder = 'root') {
         const name = (typeof it === 'string') ? it : (it && it.name);
         if (!name) continue;
         const lower = String(name).toLowerCase();
-        if (lower === 'trash' || lower === 'profile_pics') continue;
+        if (
+          lower === 'trash' ||
+          lower === 'profile_pics' ||
+          lower.startsWith('resumable_')
+        ) {
+          continue;
+        }
         const child = (f === 'root') ? name : `${f}/${name}`;
         if (!visited.has(child)) q.push(child);
       }
@@ -728,13 +734,17 @@ async function fetchChildrenOnce(folder) {
   const body = await safeJson(res);
 
   const raw = Array.isArray(body.items) ? body.items : [];
-  const items = raw
-    .map(normalizeItem)
-    .filter(Boolean)
-    .filter(it => {
-      const s = it.name.toLowerCase();
-      return s !== 'trash' && s !== 'profile_pics';
-    });
+const items = raw
+  .map(normalizeItem)
+  .filter(Boolean)
+  .filter(it => {
+    const s = it.name.toLowerCase();
+    return (
+      s !== 'trash' &&
+      s !== 'profile_pics' &&
+      !s.startsWith('resumable_')
+    );
+  });
 
   const payload = { items, nextCursor: body.nextCursor ?? null };
   _childCache.set(folder, payload);
@@ -757,7 +767,8 @@ async function loadMoreChildren(folder, ulEl, moreLi) {
     .filter(Boolean)
     .filter(it => {
       const s = it.name.toLowerCase();
-      return s !== 'trash' && s !== 'profile_pics';
+      return s !== 'trash' && s !== 'profile_pics' &&
+      !s.startsWith('resumable_');
     });
 
   const nextCursor = body.nextCursor ?? null;
@@ -1503,15 +1514,107 @@ selectFolder(target);
 export function loadFolderList(selectedFolder) { loadFolderTree(selectedFolder); } // compat
 
 /* ----------------------
-   Context menu (minimal hook)
+   Context menu (file-menu look)
 ----------------------*/
+function iconForFolderLabel(lbl) {
+  if (lbl === t('create_folder'))  return 'create_new_folder';
+  if (lbl === t('move_folder'))    return 'drive_file_move';
+  if (lbl === t('rename_folder'))  return 'drive_file_rename_outline';
+  if (lbl === t('color_folder'))   return 'palette';
+  if (lbl === t('folder_share'))   return 'share';
+  if (lbl === t('delete_folder'))  return 'delete';
+  return 'more_horiz';
+}
+
+function getFolderMenu() {
+  let m = document.getElementById('folderManagerContextMenu');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'folderManagerContextMenu';
+    m.className = 'filr-menu';
+    m.setAttribute('role', 'menu');
+    // position + scroll are inline so it works even before CSS loads
+    m.style.position = 'fixed';
+    m.style.minWidth = '180px';
+    m.style.maxHeight = '420px';
+    m.style.overflowY = 'auto';
+    m.hidden = true;
+
+    // Close on outside click / Esc
+    document.addEventListener('click', (ev) => {
+      if (!m.hidden && !m.contains(ev.target)) hideFolderManagerContextMenu();
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') hideFolderManagerContextMenu();
+    });
+
+    document.body.appendChild(m);
+  }
+  return m;
+}
+
+export function showFolderManagerContextMenu(x, y, menuItems) {
+  const menu = getFolderMenu();
+  menu.innerHTML = '';
+
+  // Build items (same DOM as file menu: <button.mi><i.material-icons/><span/>)
+  menuItems.forEach((item, idx) => {
+    // optional separator after first item (like file menu top block)
+    if (idx === 1) {
+      const sep = document.createElement('div');
+      sep.className = 'sep';
+      menu.appendChild(sep);
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mi';
+    btn.setAttribute('role', 'menuitem');
+
+    const ic = document.createElement('i');
+    ic.className = 'material-icons';
+    ic.textContent = iconForFolderLabel(item.label);
+
+    const tx = document.createElement('span');
+    tx.textContent = item.label;
+
+    btn.append(ic, tx);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideFolderManagerContextMenu();   // close first so it never overlays your modal
+      try { item.action && item.action(); } catch (err) { console.error(err); }
+    });
+
+    menu.appendChild(btn);
+  });
+
+  // Show + clamp to viewport
+  menu.hidden = false;
+  menu.style.left = `${x}px`;
+  menu.style.top  = `${y}px`;
+
+  const r = menu.getBoundingClientRect();
+  let nx = r.left, ny = r.top;
+
+  if (r.right > window.innerWidth)  nx -= (r.right - window.innerWidth + 6);
+  if (r.bottom > window.innerHeight) ny -= (r.bottom - window.innerHeight + 6);
+
+  menu.style.left = `${Math.max(6, nx)}px`;
+  menu.style.top  = `${Math.max(6, ny)}px`;
+}
+
+export function hideFolderManagerContextMenu() {
+  const menu = document.getElementById('folderManagerContextMenu');
+  if (menu) menu.hidden = true;
+}
+
 async function folderManagerContextMenuHandler(e) {
-  const target = e.target.closest(".folder-option, .breadcrumb-link");
+  const target = e.target.closest('.folder-option, .breadcrumb-link');
   if (!target) return;
   e.preventDefault();
   e.stopPropagation();
 
-  // No menu on locked folders; just toggle expansion if it is a tree node
+  // Toggle-only for locked nodes
   if (target.classList && target.classList.contains('locked')) {
     const folder = target.getAttribute('data-folder') || '';
     const ul = getULForFolder(folder);
@@ -1527,89 +1630,59 @@ async function folderManagerContextMenuHandler(e) {
     return;
   }
 
-  const folder = target.getAttribute("data-folder");
+  const folder = target.getAttribute('data-folder');
   if (!folder) return;
 
   window.currentFolder = folder;
   await applyFolderCapabilities(folder);
 
-  document.querySelectorAll(".folder-option, .breadcrumb-link").forEach(el => el.classList.remove("selected"));
-  target.classList.add("selected");
+  document.querySelectorAll('.folder-option, .breadcrumb-link').forEach(el => el.classList.remove('selected'));
+  target.classList.add('selected');
 
   const canColor = !!(window.currentFolderCaps && window.currentFolderCaps.canEdit);
+
   const menuItems = [
-    { label: t("create_folder"), action: () => {
-        const modal = document.getElementById("createFolderModal");
-        const input = document.getElementById("newFolderName");
-        if (modal) modal.style.display = "block";
+    { label: t('create_folder'), action: () => {
+        const modal = document.getElementById('createFolderModal');
+        const input = document.getElementById('newFolderName');
+        if (modal) modal.style.display = 'block';
         if (input) input.focus();
-      } },
-    { label: t("move_folder"), action: () => openMoveFolderUI(folder) },
-    { label: t("rename_folder"), action: () => openRenameFolderModal() },
-    ...(canColor ? [{ label: t("color_folder"), action: () => openColorFolderModal(folder) }] : []),
-    { label: t("folder_share"), action: () => openFolderShareModal(folder) },
-    { label: t("delete_folder"), action: () => openDeleteFolderModal() }
+      }},
+    { label: t('move_folder'),   action: () => openMoveFolderUI(folder) },
+    { label: t('rename_folder'), action: () => openRenameFolderModal()  },
+    ...(canColor ? [{ label: t('color_folder'), action: () => openColorFolderModal(folder) }] : []),
+    { label: t('folder_share'),  action: () => openFolderShareModal(folder) },
+    { label: t('delete_folder'), action: () => openDeleteFolderModal()  },
   ];
-  showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+
+  showFolderManagerContextMenu(e.clientX, e.clientY, menuItems);
 }
-export function showFolderManagerContextMenu(x, y, menuItems) {
-  let menu = document.getElementById("folderManagerContextMenu");
-  if (!menu) {
-    menu = document.createElement("div");
-    menu.id = "folderManagerContextMenu";
-    menu.style.position = "absolute";
-    menu.style.padding = "5px 0";
-    menu.style.minWidth = "150px";
-    menu.style.zIndex = "9999";
-    document.body.appendChild(menu);
-  }
-  if (document.body.classList.contains("dark-mode")) {
-    menu.style.backgroundColor = "#2c2c2c"; menu.style.border = "1px solid #555"; menu.style.color = "#e0e0e0";
-  } else {
-    menu.style.backgroundColor = "#fff"; menu.style.border = "1px solid #ccc"; menu.style.color = "#000";
-  }
-  menu.innerHTML = "";
-  menuItems.forEach(item => {
-    const it = document.createElement("div");
-    it.textContent = item.label;
-    it.style.padding = "5px 15px";
-    it.style.cursor = "pointer";
-    it.addEventListener("mouseover", () => { it.style.backgroundColor = document.body.classList.contains("dark-mode") ? "#444" : "#f0f0f0"; });
-    it.addEventListener("mouseout", () => { it.style.backgroundColor = ""; });
-    it.addEventListener("click", () => { item.action(); hideFolderManagerContextMenu(); });
-    menu.appendChild(it);
-  });
-  menu.style.left = `${x}px`;
-  menu.style.top  = `${y}px`;
-  menu.style.display = "block";
-}
-export function hideFolderManagerContextMenu() {
-  const menu = document.getElementById("folderManagerContextMenu");
-  if (menu) menu.style.display = "none";
-}
+
 function bindFolderManagerContextMenu() {
-  const tree = document.getElementById("folderTreeContainer");
+  const tree = document.getElementById('folderTreeContainer');
   if (tree) {
-    if (tree._ctxHandler) tree.removeEventListener("contextmenu", tree._ctxHandler, false);
+    if (tree._ctxHandler) tree.removeEventListener('contextmenu', tree._ctxHandler, false);
     tree._ctxHandler = (e) => {
-      const onOption = e.target.closest(".folder-option");
+      const onOption = e.target.closest('.folder-option');
       if (!onOption) return;
       folderManagerContextMenuHandler(e);
     };
-    tree.addEventListener("contextmenu", tree._ctxHandler, false);
+    tree.addEventListener('contextmenu', tree._ctxHandler, false);
   }
-  const title = document.getElementById("fileListTitle");
+
+  const title = document.getElementById('fileListTitle');
   if (title) {
-    if (title._ctxHandler) title.removeEventListener("contextmenu", title._ctxHandler, false);
+    if (title._ctxHandler) title.removeEventListener('contextmenu', title._ctxHandler, false);
     title._ctxHandler = (e) => {
-      const onCrumb = e.target.closest(".breadcrumb-link");
+      const onCrumb = e.target.closest('.breadcrumb-link');
       if (!onCrumb) return;
       folderManagerContextMenuHandler(e);
     };
-    title.addEventListener("contextmenu", title._ctxHandler, false);
+    title.addEventListener('contextmenu', title._ctxHandler, false);
   }
 }
-document.addEventListener("click", hideFolderManagerContextMenu);
+
+// document.addEventListener("click", hideFolderManagerContextMenu); // not needed anymore; handled above
 
 /* ----------------------
    Rename / Delete / Create hooks

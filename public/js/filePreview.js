@@ -160,7 +160,7 @@ function ensureMediaModal() {
   const root   = document.documentElement;
   const styles = getComputedStyle(root);
   const isDark = root.classList.contains('dark-mode');
-  const panelBg = styles.getPropertyValue('--panel-bg').trim() || styles.getPropertyValue('--bg-color').trim() || (isDark ? '#121212' : '#ffffff');
+  const panelBg = styles.getPropertyValue('--panel-bg').trim() || styles.getPropertyValue('--bg-color').trim() || (isDark ? '#2c2c2c' : '#ffffff');
   const textCol = styles.getPropertyValue('--text-color').trim() || (isDark ? '#eaeaea' : '#111111');
 
   const navBg     = isDark ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.45)';

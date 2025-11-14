@@ -1,172 +1,214 @@
-// fileTags.js
-// This module provides functions for opening the tag modal,
-// adding tags to files (with a global tag store for reuse),
-// updating the file row display with tag badges,
-// filtering the file list by tag, and persisting tag data.
+// fileTags.js (drop-in fix: single-instance modals, idempotent bindings)
 import { escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { renderFileTable, renderGalleryView } from './fileListView.js?v={{APP_QVER}}';
 
-export function openTagModal(file) {
-  // Create the modal element.
-  let modal = document.createElement('div');
-  modal.id = 'tagModal';
-  modal.className = 'modal';
-  modal.innerHTML = `
-    <div class="modal-content" style="width: 450px; max-width:90vw;">
-      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="
-            margin:0;
-            display:inline-block;
-            max-width: calc(100% - 40px);
-            overflow:hidden;
-            text-overflow:ellipsis;
-            white-space:nowrap;
-          ">
-          ${t("tag_file")}: ${escapeHTML(file.name)}
-        </h3>
-        <span id="closeTagModal" class="editor-close-btn">&times;</span>
-      </div>
-      <div class="modal-body" style="margin-top:10px;">
-        <label for="tagNameInput">${t("tag_name")}</label>
-        <input type="text" id="tagNameInput" placeholder="Enter tag name" style="width:100%; padding:5px;"/>
-        <br><br>
-        <label for="tagColorInput">${t("tag_name")}</label>
-        <input type="color" id="tagColorInput" value="#ff0000" style="width:100%; padding:5px;"/>
-        <br><br>
-        <div id="customTagDropdown" style="max-height:150px; overflow-y:auto; border:1px solid #ccc; margin-top:5px; padding:5px;">
-          <!-- Custom tag options will be populated here -->
-        </div>
-        <br>
-        <div style="text-align:right;">
-          <button id="saveTagBtn" class="btn btn-primary">${t("save_tag")}</button>
-        </div>
-        <div id="currentTags" style="margin-top:10px; font-size:0.9em;">
-          <!-- Existing tags will be listed here -->
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-  modal.style.display = 'block';
+// -------------------- state --------------------
+let __singleInit = false;
+let __multiInit  = false;
+let currentFile = null;
 
-  updateCustomTagDropdown();
-
-  document.getElementById('closeTagModal').addEventListener('click', () => {
-    modal.remove();
-  });
-
-  updateTagModalDisplay(file);
-
-  document.getElementById('tagNameInput').addEventListener('input', (e) => {
-    updateCustomTagDropdown(e.target.value);
-  });
-
-  document.getElementById('saveTagBtn').addEventListener('click', () => {
-    const tagName = document.getElementById('tagNameInput').value.trim();
-    const tagColor = document.getElementById('tagColorInput').value;
-    if (!tagName) {
-      alert('Please enter a tag name.');
-      return;
-    }
-    addTagToFile(file, { name: tagName, color: tagColor });
-    updateTagModalDisplay(file);
-    updateFileRowTagDisplay(file);
-    saveFileTags(file);
-    if (window.viewMode === 'gallery') {
-      renderGalleryView(window.currentFolder);
-    } else {
-      renderFileTable(window.currentFolder);
-    }
-    document.getElementById('tagNameInput').value = '';
-    updateCustomTagDropdown();
-  });
+// Global store (preserve existing behavior)
+window.globalTags = window.globalTags || [];
+if (localStorage.getItem('globalTags')) {
+  try { window.globalTags = JSON.parse(localStorage.getItem('globalTags')); } catch (e) {}
 }
 
-/**
- * Open a modal to tag multiple files.
- * @param {Array} files - Array of file objects to tag.
- */
-export function openMultiTagModal(files) {
-  let modal = document.createElement('div');
-  modal.id = 'multiTagModal';
-  modal.className = 'modal';
-  modal.innerHTML = `
-    <div class="modal-content" style="width: 450px; max-width:90vw;">
-      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0;">Tag Selected Files (${files.length})</h3>
-        <span id="closeMultiTagModal" class="editor-close-btn">&times;</span>
-      </div>
-      <div class="modal-body" style="margin-top:10px;">
-        <label for="multiTagNameInput">Tag Name:</label>
-        <input type="text" id="multiTagNameInput" placeholder="Enter tag name" style="width:100%; padding:5px;"/>
-        <br><br>
-        <label for="multiTagColorInput">Tag Color:</label>
-        <input type="color" id="multiTagColorInput" value="#ff0000" style="width:100%; padding:5px;"/>
-        <br><br>
-        <div id="multiCustomTagDropdown" style="max-height:150px; overflow-y:auto; border:1px solid #ccc; margin-top:5px; padding:5px;">
-          <!-- Custom tag options will be populated here -->
-        </div>
-        <br>
-        <div style="text-align:right;">
-          <button id="saveMultiTagBtn" class="btn btn-primary">Save Tag to Selected</button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-  modal.style.display = 'block';
+// -------------------- ensure DOM (create-once-if-missing) --------------------
+function ensureSingleTagModal() {
+  // de-dupe if something already injected multiples
+  const all = document.querySelectorAll('#tagModal');
+  if (all.length > 1) [...all].slice(0, -1).forEach(n => n.remove());
 
-  updateMultiCustomTagDropdown();
+  let modal = document.getElementById('tagModal');
+  if (!modal) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="tagModal" class="modal" style="display:none">
+        <div class="modal-content" style="width:450px; max-width:90vw;">
+          <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="tagModalTitle" style="margin:0; max-width:calc(100% - 40px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              ${t('tag_file')}
+            </h3>
+            <span id="closeTagModal" class="editor-close-btn">×</span>
+          </div>
+          <div class="modal-body" style="margin-top:10px;">
+            <label for="tagNameInput">${t('tag_name')}</label>
+            <input type="text" id="tagNameInput" placeholder="${t('tag_name')}" style="width:100%; padding:5px;"/>
+            <br><br>
+            <label for="tagColorInput">${t('tag_color') || 'Tag Color'}</label>
+            <input type="color" id="tagColorInput" value="#ff0000" style="width:100%; padding:5px;"/>
+            <br><br>
+            <div id="customTagDropdown" style="max-height:150px; overflow-y:auto; border:1px solid #ccc; margin-top:5px; padding:5px;"></div>
+            <br>
+            <div style="text-align:right;">
+              <button id="saveTagBtn" class="btn btn-primary" type="button">${t('save_tag')}</button>
+            </div>
+            <div id="currentTags" style="margin-top:10px; font-size:.9em;"></div>
+          </div>
+        </div>
+      </div>
+    `);
+    modal = document.getElementById('tagModal');
+  }
+  return modal;
+}
 
-  document.getElementById('closeMultiTagModal').addEventListener('click', () => {
-    modal.remove();
+function ensureMultiTagModal() {
+  const all = document.querySelectorAll('#multiTagModal');
+  if (all.length > 1) [...all].slice(0, -1).forEach(n => n.remove());
+
+  let modal = document.getElementById('multiTagModal');
+  if (!modal) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="multiTagModal" class="modal" style="display:none">
+        <div class="modal-content" style="width:450px; max-width:90vw;">
+          <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="multiTagTitle" style="margin:0;"></h3>
+            <span id="closeMultiTagModal" class="editor-close-btn">×</span>
+          </div>
+          <div class="modal-body" style="margin-top:10px;">
+            <label for="multiTagNameInput">${t('tag_name')}</label>
+            <input type="text" id="multiTagNameInput" placeholder="${t('tag_name')}" style="width:100%; padding:5px;"/>
+            <br><br>
+            <label for="multiTagColorInput">${t('tag_color') || 'Tag Color'}</label>
+            <input type="color" id="multiTagColorInput" value="#ff0000" style="width:100%; padding:5px;"/>
+            <br><br>
+            <div id="multiCustomTagDropdown" style="max-height:150px; overflow-y:auto; border:1px solid #ccc; margin-top:5px; padding:5px;"></div>
+            <br>
+            <div style="text-align:right;">
+              <button id="saveMultiTagBtn" class="btn btn-primary" type="button">${t('save_tag') || 'Save Tag'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+    modal = document.getElementById('multiTagModal');
+  }
+  return modal;
+}
+
+// -------------------- init (bind once) --------------------
+function initSingleModalOnce() {
+  if (__singleInit) return;
+  const modal = ensureSingleTagModal();
+  const closeBtn = document.getElementById('closeTagModal');
+  const saveBtn  = document.getElementById('saveTagBtn');
+  const nameInp  = document.getElementById('tagNameInput');
+
+  // Close handlers
+  closeBtn?.addEventListener('click', hideTagModal);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTagModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideTagModal(); // click backdrop
   });
 
-  document.getElementById('multiTagNameInput').addEventListener('input', (e) => {
-    updateMultiCustomTagDropdown(e.target.value);
+  // Input filter for dropdown
+  nameInp?.addEventListener('input', (e) => updateCustomTagDropdown(e.target.value));
+
+  // Save handler
+  saveBtn?.addEventListener('click', () => {
+    const tagName = (document.getElementById('tagNameInput')?.value || '').trim();
+    const tagColor = document.getElementById('tagColorInput')?.value || '#ff0000';
+    if (!tagName) { alert(t('enter_tag_name') || 'Please enter a tag name.'); return; }
+    if (!currentFile) return;
+
+    addTagToFile(currentFile, { name: tagName, color: tagColor });
+    updateTagModalDisplay(currentFile);
+    updateFileRowTagDisplay(currentFile);
+    saveFileTags(currentFile);
+
+    if (window.viewMode === 'gallery') renderGalleryView(window.currentFolder);
+    else renderFileTable(window.currentFolder);
+
+    const inp = document.getElementById('tagNameInput');
+    if (inp) inp.value = '';
+    updateCustomTagDropdown('');
   });
 
-  document.getElementById('saveMultiTagBtn').addEventListener('click', () => {
-    const tagName = document.getElementById('multiTagNameInput').value.trim();
-    const tagColor = document.getElementById('multiTagColorInput').value;
-    if (!tagName) {
-      alert('Please enter a tag name.');
-      return;
-    }
+  __singleInit = true;
+}
+
+function initMultiModalOnce() {
+  if (__multiInit) return;
+  const modal   = ensureMultiTagModal();
+  const closeBtn = document.getElementById('closeMultiTagModal');
+  const saveBtn  = document.getElementById('saveMultiTagBtn');
+  const nameInp  = document.getElementById('multiTagNameInput');
+
+  closeBtn?.addEventListener('click', hideMultiTagModal);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideMultiTagModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideMultiTagModal();
+  });
+
+  nameInp?.addEventListener('input', (e) => updateMultiCustomTagDropdown(e.target.value));
+
+  saveBtn?.addEventListener('click', () => {
+    const tagName  = (document.getElementById('multiTagNameInput')?.value || '').trim();
+    const tagColor = document.getElementById('multiTagColorInput')?.value || '#ff0000';
+    if (!tagName) { alert(t('enter_tag_name') || 'Please enter a tag name.'); return; }
+
+    const files = (window.__multiTagFiles || []);
     files.forEach(file => {
       addTagToFile(file, { name: tagName, color: tagColor });
       updateFileRowTagDisplay(file);
       saveFileTags(file);
     });
-    modal.remove();
-    if (window.viewMode === 'gallery') {
-      renderGalleryView(window.currentFolder);
-    } else {
-      renderFileTable(window.currentFolder);
-    }
+
+    hideMultiTagModal();
+    if (window.viewMode === 'gallery') renderGalleryView(window.currentFolder);
+    else renderFileTable(window.currentFolder);
   });
+
+  __multiInit = true;
 }
 
-/**
- * Update the custom dropdown for multi-tag modal.
- * Similar to updateCustomTagDropdown but includes a remove icon.
- */
+// -------------------- open/close APIs --------------------
+export function openTagModal(file) {
+  initSingleModalOnce();
+  const modal = document.getElementById('tagModal');
+  const title = document.getElementById('tagModalTitle');
+
+  currentFile = file || null;
+  if (title) title.textContent = `${t('tag_file')}: ${file ? escapeHTML(file.name) : ''}`;
+  updateCustomTagDropdown('');
+  updateTagModalDisplay(file);
+  modal.style.display = 'block';
+}
+
+export function hideTagModal() {
+  const modal = document.getElementById('tagModal');
+  if (modal) modal.style.display = 'none';
+}
+
+export function openMultiTagModal(files) {
+  initMultiModalOnce();
+  const modal = document.getElementById('multiTagModal');
+  const title = document.getElementById('multiTagTitle');
+  window.__multiTagFiles = Array.isArray(files) ? files : [];
+  if (title) title.textContent = `${t('tag_selected') || 'Tag Selected'} (${window.__multiTagFiles.length})`;
+  updateMultiCustomTagDropdown('');
+  modal.style.display = 'block';
+}
+
+export function hideMultiTagModal() {
+  const modal = document.getElementById('multiTagModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// -------------------- dropdown + UI helpers --------------------
 function updateMultiCustomTagDropdown(filterText = "") {
   const dropdown = document.getElementById("multiCustomTagDropdown");
   if (!dropdown) return;
   dropdown.innerHTML = "";
   let tags = window.globalTags || [];
-  if (filterText) {
-    tags = tags.filter(tag => tag.name.toLowerCase().includes(filterText.toLowerCase()));
-  }
+  if (filterText) tags = tags.filter(tag => tag.name.toLowerCase().includes(filterText.toLowerCase()));
   if (tags.length > 0) {
     tags.forEach(tag => {
       const item = document.createElement("div");
       item.style.cursor = "pointer";
       item.style.padding = "5px";
       item.style.borderBottom = "1px solid #eee";
-      // Display colored square and tag name with remove icon.
       item.innerHTML = `
         <span style="display:inline-block; width:16px; height:16px; background-color:${tag.color}; border:1px solid #ccc; margin-right:5px; vertical-align:middle;"></span>
         ${escapeHTML(tag.name)}
@@ -174,8 +216,10 @@ function updateMultiCustomTagDropdown(filterText = "") {
       `;
       item.addEventListener("click", function(e) {
         if (e.target.classList.contains("global-remove")) return;
-        document.getElementById("multiTagNameInput").value = tag.name;
-        document.getElementById("multiTagColorInput").value = tag.color;
+        const n = document.getElementById("multiTagNameInput");
+        const c = document.getElementById("multiTagColorInput");
+        if (n) n.value = tag.name;
+        if (c) c.value = tag.color;
       });
       item.querySelector('.global-remove').addEventListener("click", function(e){
         e.stopPropagation();
@@ -184,7 +228,7 @@ function updateMultiCustomTagDropdown(filterText = "") {
       dropdown.appendChild(item);
     });
   } else {
-    dropdown.innerHTML = "<div style='padding:5px;'>No tags available</div>";
+    dropdown.innerHTML = `<div style="padding:5px;">${t('no_tags_available') || 'No tags available'}</div>`;
   }
 }
 
@@ -193,9 +237,7 @@ function updateCustomTagDropdown(filterText = "") {
   if (!dropdown) return;
   dropdown.innerHTML = "";
   let tags = window.globalTags || [];
-  if (filterText) {
-    tags = tags.filter(tag => tag.name.toLowerCase().includes(filterText.toLowerCase()));
-  }
+  if (filterText) tags = tags.filter(tag => tag.name.toLowerCase().includes(filterText.toLowerCase()));
   if (tags.length > 0) {
     tags.forEach(tag => {
       const item = document.createElement("div");
@@ -209,8 +251,10 @@ function updateCustomTagDropdown(filterText = "") {
       `;
       item.addEventListener("click", function(e){
         if (e.target.classList.contains('global-remove')) return;
-        document.getElementById("tagNameInput").value = tag.name;
-        document.getElementById("tagColorInput").value = tag.color;
+        const n = document.getElementById("tagNameInput");
+        const c = document.getElementById("tagColorInput");
+        if (n) n.value = tag.name;
+        if (c) c.value = tag.color;
       });
       item.querySelector('.global-remove').addEventListener("click", function(e){
         e.stopPropagation();
@@ -219,16 +263,16 @@ function updateCustomTagDropdown(filterText = "") {
       dropdown.appendChild(item);
     });
   } else {
-    dropdown.innerHTML = "<div style='padding:5px;'>No tags available</div>";
+    dropdown.innerHTML = `<div style="padding:5px;">${t('no_tags_available') || 'No tags available'}</div>`;
   }
 }
-    
+
 // Update the modal display to show current tags on the file.
 function updateTagModalDisplay(file) {
   const container = document.getElementById('currentTags');
   if (!container) return;
-  container.innerHTML = '<strong>Current Tags:</strong> ';
-  if (file.tags && file.tags.length > 0) {
+  container.innerHTML = `<strong>${t('current_tags') || 'Current Tags'}:</strong> `;
+  if (file?.tags?.length) {
     file.tags.forEach(tag => {
       const tagElem = document.createElement('span');
       tagElem.textContent = tag.name;
@@ -239,102 +283,65 @@ function updateTagModalDisplay(file) {
       tagElem.style.borderRadius = '3px';
       tagElem.style.display = 'inline-block';
       tagElem.style.position = 'relative';
-      
       const removeIcon = document.createElement('span');
       removeIcon.textContent = ' ✕';
       removeIcon.style.fontWeight = 'bold';
       removeIcon.style.marginLeft = '3px';
       removeIcon.style.cursor = 'pointer';
-      
       removeIcon.addEventListener('click', (e) => {
         e.stopPropagation();
         removeTagFromFile(file, tag.name);
       });
-      
       tagElem.appendChild(removeIcon);
       container.appendChild(tagElem);
     });
   } else {
-    container.innerHTML += 'None';
+    container.innerHTML += (t('none') || 'None');
   }
 }
 
 function removeTagFromFile(file, tagName) {
-  file.tags = file.tags.filter(t => t.name.toLowerCase() !== tagName.toLowerCase());
+  file.tags = (file.tags || []).filter(tg => tg.name.toLowerCase() !== tagName.toLowerCase());
   updateTagModalDisplay(file);
   updateFileRowTagDisplay(file);
   saveFileTags(file);
 }
 
-/**
- * Remove a tag from the global tag store.
- * This function updates window.globalTags and calls the backend endpoint
- * to remove the tag from the persistent store.
- */
 function removeGlobalTag(tagName) {
-  window.globalTags = window.globalTags.filter(t => t.name.toLowerCase() !== tagName.toLowerCase());
+  window.globalTags = (window.globalTags || []).filter(t => t.name.toLowerCase() !== tagName.toLowerCase());
   localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
   updateCustomTagDropdown();
   updateMultiCustomTagDropdown();
   saveGlobalTagRemoval(tagName);
 }
 
-// NEW: Save global tag removal to the server.
 function saveGlobalTagRemoval(tagName) {
   fetch("/api/file/saveFileTag.php", {
     method: "POST",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": window.csrfToken
-    },
-    body: JSON.stringify({
-      folder: "root",
-      file: "global",
-      deleteGlobal: true,
-      tagToDelete: tagName,
-      tags: []
-    })
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+    body: JSON.stringify({ folder: "root", file: "global", deleteGlobal: true, tagToDelete: tagName, tags: [] })
   })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        console.log("Global tag removed:", tagName);
-        if (data.globalTags) {
-          window.globalTags = data.globalTags;
-          localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
-          updateCustomTagDropdown();
-          updateMultiCustomTagDropdown();
-        }
-      } else {
-        console.error("Error removing global tag:", data.error);
-      }
-    })
-    .catch(err => {
-      console.error("Error removing global tag:", err);
-    });
+  .then(r => r.json())
+  .then(data => {
+    if (data.success && data.globalTags) {
+      window.globalTags = data.globalTags;
+      localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
+      updateCustomTagDropdown();
+      updateMultiCustomTagDropdown();
+    } else if (!data.success) {
+      console.error("Error removing global tag:", data.error);
+    }
+  })
+  .catch(err => console.error("Error removing global tag:", err));
 }
-  
-// Global store for reusable tags.
-window.globalTags = window.globalTags || [];
-if (localStorage.getItem('globalTags')) {
-  try {
-    window.globalTags = JSON.parse(localStorage.getItem('globalTags'));
-  } catch (e) { }
-}
-  
-// New function to load global tags from the server's persistent JSON.
+
+// -------------------- exports kept from your original --------------------
 export function loadGlobalTags() {
   fetch("/api/file/getFileTag.php", { credentials: "include" })
-    .then(response => {
-      if (!response.ok) {
-        // If the file doesn't exist, assume there are no global tags.
-        return [];
-      }
-      return response.json();
-    })
+    .then(r => r.ok ? r.json() : [])
     .then(data => {
-      window.globalTags = data;
+      window.globalTags = data || [];
       localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
       updateCustomTagDropdown();
       updateMultiCustomTagDropdown();
@@ -346,142 +353,113 @@ export function loadGlobalTags() {
       updateMultiCustomTagDropdown();
     });
 }
-  
 loadGlobalTags();
-  
-// Add (or update) a tag in the file object.
+
 export function addTagToFile(file, tag) {
-  if (!file.tags) {
-    file.tags = [];
-  }
-  const exists = file.tags.find(t => t.name.toLowerCase() === tag.name.toLowerCase());
-  if (exists) {
-    exists.color = tag.color;
-  } else {
-    file.tags.push(tag);
-  }
-  const globalExists = window.globalTags.find(t => t.name.toLowerCase() === tag.name.toLowerCase());
+  if (!file.tags) file.tags = [];
+  const exists = file.tags.find(tg => tg.name.toLowerCase() === tag.name.toLowerCase());
+  if (exists) exists.color = tag.color; else file.tags.push(tag);
+
+  const globalExists = (window.globalTags || []).find(tg => tg.name.toLowerCase() === tag.name.toLowerCase());
   if (!globalExists) {
     window.globalTags.push(tag);
     localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
   }
 }
-  
-// Update the file row (in table view) to show tag badges.
+
 export function updateFileRowTagDisplay(file) {
   const rows = document.querySelectorAll(`[id^="file-row-${encodeURIComponent(file.name)}"]`);
-  console.log('Updating tags for rows:', rows);
   rows.forEach(row => {
     let cell = row.querySelector('.file-name-cell');
-    if (cell) {
-      let badgeContainer = cell.querySelector('.tag-badges');
-      if (!badgeContainer) {
-        badgeContainer = document.createElement('div');
-        badgeContainer.className = 'tag-badges';
-        badgeContainer.style.display = 'inline-block';
-        badgeContainer.style.marginLeft = '5px';
-        cell.appendChild(badgeContainer);
-      }
-      badgeContainer.innerHTML = '';
-      if (file.tags && file.tags.length > 0) {
-        file.tags.forEach(tag => {
-          const badge = document.createElement('span');
-          badge.textContent = tag.name;
-          badge.style.backgroundColor = tag.color;
-          badge.style.color = '#fff';
-          badge.style.padding = '2px 4px';
-          badge.style.marginRight = '2px';
-          badge.style.borderRadius = '3px';
-          badge.style.fontSize = '0.8em';
-          badge.style.verticalAlign = 'middle';
-          badgeContainer.appendChild(badge);
-        });
-      }
+    if (!cell) return;
+    let badgeContainer = cell.querySelector('.tag-badges');
+    if (!badgeContainer) {
+      badgeContainer = document.createElement('div');
+      badgeContainer.className = 'tag-badges';
+      badgeContainer.style.display = 'inline-block';
+      badgeContainer.style.marginLeft = '5px';
+      cell.appendChild(badgeContainer);
     }
+    badgeContainer.innerHTML = '';
+    (file.tags || []).forEach(tag => {
+      const badge = document.createElement('span');
+      badge.textContent = tag.name;
+      badge.style.backgroundColor = tag.color;
+      badge.style.color = '#fff';
+      badge.style.padding = '2px 4px';
+      badge.style.marginRight = '2px';
+      badge.style.borderRadius = '3px';
+      badge.style.fontSize = '0.8em';
+      badge.style.verticalAlign = 'middle';
+      badgeContainer.appendChild(badge);
+    });
   });
 }
-  
+
 export function initTagSearch() {
   const searchInput = document.getElementById('searchInput');
-  if (searchInput) {
-    let tagSearchInput = document.getElementById('tagSearchInput');
-    if (!tagSearchInput) {
-      tagSearchInput = document.createElement('input');
-      tagSearchInput.id = 'tagSearchInput';
-      tagSearchInput.placeholder = 'Filter by tag';
-      tagSearchInput.style.marginLeft = '10px';
-      tagSearchInput.style.padding = '5px';
-      searchInput.parentNode.insertBefore(tagSearchInput, searchInput.nextSibling);
-      tagSearchInput.addEventListener('input', () => {
-        window.currentTagFilter = tagSearchInput.value.trim().toLowerCase();
-        if (window.currentFolder) {
-          renderFileTable(window.currentFolder);
-        }
-      });
-    }
-  }
-}
-  
-export function filterFilesByTag(files) {
-  if (window.currentTagFilter && window.currentTagFilter !== '') {
-    return files.filter(file => {
-      if (file.tags && file.tags.length > 0) {
-        return file.tags.some(tag => tag.name.toLowerCase().includes(window.currentTagFilter));
-      }
-      return false;
+  if (!searchInput) return;
+  let tagSearchInput = document.getElementById('tagSearchInput');
+  if (!tagSearchInput) {
+    tagSearchInput = document.createElement('input');
+    tagSearchInput.id = 'tagSearchInput';
+    tagSearchInput.placeholder = t('filter_by_tag') || 'Filter by tag';
+    tagSearchInput.style.marginLeft = '10px';
+    tagSearchInput.style.padding = '5px';
+    searchInput.parentNode.insertBefore(tagSearchInput, searchInput.nextSibling);
+    tagSearchInput.addEventListener('input', () => {
+      window.currentTagFilter = tagSearchInput.value.trim().toLowerCase();
+      if (window.currentFolder) renderFileTable(window.currentFolder);
     });
   }
-  return files;
 }
-  
+
+export function filterFilesByTag(files) {
+  const q = (window.currentTagFilter || '').trim().toLowerCase();
+  if (!q) return files;
+  return files.filter(file => (file.tags || []).some(tag => tag.name.toLowerCase().includes(q)));
+}
+
 function updateGlobalTagList() {
   const dataList = document.getElementById("globalTagList");
-  if (dataList) {
-    dataList.innerHTML = "";
-    window.globalTags.forEach(tag => {
-      const option = document.createElement("option");
-      option.value = tag.name;
-      dataList.appendChild(option);
-    });
-  }
+  if (!dataList) return;
+  dataList.innerHTML = "";
+  (window.globalTags || []).forEach(tag => {
+    const option = document.createElement("option");
+    option.value = tag.name;
+    dataList.appendChild(option);
+  });
 }
-  
+
 export function saveFileTags(file, deleteGlobal = false, tagToDelete = null) {
   const folder = file.folder || "root";
-  const payload = {
-    folder: folder,
-    file: file.name,
-    tags: file.tags
-  };
-  if (deleteGlobal && tagToDelete) {
-    payload.file = "global";
-    payload.deleteGlobal = true;
-    payload.tagToDelete = tagToDelete;
-  }
+  const payload = deleteGlobal && tagToDelete ? {
+    folder: "root",
+    file: "global",
+    deleteGlobal: true,
+    tagToDelete,
+    tags: []
+  } : { folder, file: file.name, tags: file.tags };
+
   fetch("/api/file/saveFileTag.php", {
     method: "POST",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": window.csrfToken
-    },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
     body: JSON.stringify(payload)
   })
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
       if (data.success) {
-        console.log("Tags saved:", data);
         if (data.globalTags) {
           window.globalTags = data.globalTags;
           localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
           updateCustomTagDropdown();
           updateMultiCustomTagDropdown();
         }
+        updateGlobalTagList();
       } else {
         console.error("Error saving tags:", data.error);
       }
     })
-    .catch(err => {
-      console.error("Error saving tags:", err);
-    });
+    .catch(err => console.error("Error saving tags:", err));
 }

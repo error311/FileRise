@@ -6,6 +6,176 @@ import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
+// --- Lightweight tracking of in-progress resumable uploads (per user) ---
+const RESUMABLE_DRAFTS_KEY = 'filr_resumable_drafts_v1';
+
+function getCurrentUserKey() {
+  // Try a few globals; fall back to browser profile
+  const u =
+    (window.currentUser && String(window.currentUser)) ||
+    (window.appUser && String(window.appUser)) ||
+    (window.username && String(window.username)) ||
+    '';
+  return u || 'anon';
+}
+
+function loadResumableDraftsAll() {
+  try {
+    const raw = localStorage.getItem(RESUMABLE_DRAFTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    console.warn('Failed to read resumable drafts from localStorage', e);
+    return {};
+  }
+}
+
+function saveResumableDraftsAll(all) {
+  try {
+    localStorage.setItem(RESUMABLE_DRAFTS_KEY, JSON.stringify(all));
+  } catch (e) {
+    console.warn('Failed to persist resumable drafts to localStorage', e);
+  }
+}
+
+function getUserDraftContext() {
+  const all = loadResumableDraftsAll();
+  const userKey = getCurrentUserKey();
+  if (!all[userKey] || typeof all[userKey] !== 'object') {
+    all[userKey] = {};
+  }
+  const drafts = all[userKey];
+  return { all, userKey, drafts };
+}
+
+// Upsert / update a record for this resumable file
+function upsertResumableDraft(file, percent) {
+  if (!file || !file.uniqueIdentifier) return;
+
+  const { all, userKey, drafts } = getUserDraftContext();
+  const id     = file.uniqueIdentifier;
+  const folder = window.currentFolder || 'root';
+  const name   = file.fileName || file.name || 'Unnamed file';
+  const size   = file.size || 0;
+
+  const prev = drafts[id] || {};
+  const p    = Math.max(0, Math.min(100, Math.floor(percent || 0)));
+
+  // Avoid hammering localStorage if nothing substantially changed
+  if (prev.lastPercent !== undefined && Math.abs(p - prev.lastPercent) < 1) {
+    return;
+  }
+
+  drafts[id] = {
+    identifier: id,
+    fileName: name,
+    size,
+    folder,
+    lastPercent: p,
+    updatedAt: Date.now()
+  };
+
+  all[userKey] = drafts;
+  saveResumableDraftsAll(all);
+}
+
+// Remove a single draft by identifier
+function clearResumableDraft(identifier) {
+  if (!identifier) return;
+  const { all, userKey, drafts } = getUserDraftContext();
+  if (drafts[identifier]) {
+    delete drafts[identifier];
+    all[userKey] = drafts;
+    saveResumableDraftsAll(all);
+  }
+}
+
+// Optionally clear all drafts for the current folder (used on full success)
+function clearResumableDraftsForFolder(folder) {
+  const { all, userKey, drafts } = getUserDraftContext();
+  const f = folder || 'root';
+  let changed = false;
+  for (const [id, rec] of Object.entries(drafts)) {
+    if (!rec || typeof rec !== 'object') continue;
+    if (rec.folder === f) {
+      delete drafts[id];
+      changed = true;
+    }
+  }
+  if (changed) {
+    all[userKey] = drafts;
+    saveResumableDraftsAll(all);
+  }
+}
+
+// Show a small banner if there is any in-progress resumable upload for this folder
+function showResumableDraftBanner() {
+  const uploadCard = document.getElementById('uploadCard');
+  if (!uploadCard) return;
+
+  // Remove any existing banner first
+  const existing = document.getElementById('resumableDraftBanner');
+  if (existing && existing.parentNode) {
+    existing.parentNode.removeChild(existing);
+  }
+
+  const { drafts } = getUserDraftContext();
+  const folder = window.currentFolder || 'root';
+
+  const candidates = Object.values(drafts)
+    .filter(d =>
+      d &&
+      d.folder === folder &&
+      typeof d.lastPercent === 'number' &&
+      d.lastPercent > 0 &&
+      d.lastPercent < 100
+    )
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  if (!candidates.length) {
+    return; // nothing to show
+  }
+
+  const latest = candidates[0];
+  const count = candidates.length;
+
+  const countText =
+    count === 1
+      ? 'You have a partially uploaded file'
+      : `You have ${count} partially uploaded files. Latest:`;
+
+  const banner = document.createElement('div');
+  banner.id = 'resumableDraftBanner';
+  banner.className = 'upload-resume-banner';
+  banner.innerHTML = `
+    <div class="upload-resume-banner-inner">
+      <span class="material-icons" style="vertical-align:middle;margin-right:6px;">cloud_upload</span>
+      <span class="upload-resume-text">
+        ${countText}
+        <strong>${escapeHTML(latest.fileName)}</strong>
+        (~${latest.lastPercent}%).
+        Choose it again from your device to resume.
+      </span>
+      <button type="button" class="upload-resume-dismiss-btn">Dismiss</button>
+    </div>
+  `;
+
+  const dismissBtn = banner.querySelector('.upload-resume-dismiss-btn');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', () => {
+      // Clear all resumable hints for this folder when the user dismisses.
+      clearResumableDraftsForFolder(folder);
+      if (banner.parentNode) {
+        banner.parentNode.removeChild(banner);
+      }
+    });
+  }
+
+  // Insert at top of uploadCard
+  uploadCard.insertBefore(banner, uploadCard.firstChild);
+}
+
 /* -----------------------------------------------------
    Helpers for Drag–and–Drop Folder Uploads (Original Code)
 ----------------------------------------------------- */
@@ -456,7 +626,7 @@ async function initResumableUpload() {
       chunkSize: 1.5 * 1024 * 1024,
       simultaneousUploads: 3,
       forceChunkSize: true,
-      testChunks: false,
+      testChunks: true,
       withCredentials: true,
       headers: { 'X-CSRF-Token': window.csrfToken },
       query: () => ({
@@ -493,6 +663,11 @@ async function initResumableUpload() {
       window.selectedFiles = [];
     }
     window.selectedFiles.push(file);
+
+    // Track as in-progress draft at 0%
+    upsertResumableDraft(file, 0);
+    showResumableDraftBanner();
+
     const progressContainer = document.getElementById("uploadProgressContainer");
 
     // Check if a wrapper already exists; if not, create one with a UL inside.
@@ -520,8 +695,40 @@ async function initResumableUpload() {
 
   resumableInstance.on("fileProgress", function (file) {
     const progress = file.progress(); // value between 0 and 1
-    const percent = Math.floor(progress * 100);
-    const li = document.querySelector(`li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`);
+    let percent = Math.floor(progress * 100);
+  
+    // Never persist a full 100% from progress alone.
+    // If the tab dies here, we still want it to look resumable.
+    if (percent >= 100) percent = 99;
+  
+    const li = document.querySelector(
+      `li.upload-progress-item[data-upload-index="${file.uniqueIdentifier}"]`
+    );
+    if (li && li.progressBar) {
+      if (percent < 99) {
+        li.progressBar.style.width = percent + "%";
+  
+        const elapsed = (Date.now() - li.startTime) / 1000;
+        let speed = "";
+        if (elapsed > 0) {
+          const bytesUploaded = progress * file.size;
+          const spd = bytesUploaded / elapsed;
+          if (spd < 1024)      speed = spd.toFixed(0) + " B/s";
+          else if (spd < 1048576) speed = (spd / 1024).toFixed(1) + " KB/s";
+          else                     speed = (spd / 1048576).toFixed(1) + " MB/s";
+        }
+        li.progressBar.innerText = percent + "% (" + speed + ")";
+      } else {
+        li.progressBar.style.width = "100%";
+        li.progressBar.innerHTML =
+          '<i class="material-icons spinning" style="vertical-align: middle;">autorenew</i>';
+      }
+  
+      const pauseResumeBtn = li.querySelector(".pause-resume-btn");
+      if (pauseResumeBtn) {
+        pauseResumeBtn.disabled = false;
+      }
+    }
     if (li && li.progressBar) {
       if (percent < 99) {
         li.progressBar.style.width = percent + "%";
@@ -553,6 +760,7 @@ async function initResumableUpload() {
         pauseResumeBtn.disabled = false;
       }
     }
+    upsertResumableDraft(file, percent);
   });
 
   resumableInstance.on("fileSuccess", function (file, message) {
@@ -591,6 +799,9 @@ async function initResumableUpload() {
     }
     refreshFolderIcon(window.currentFolder);
     loadFileList(window.currentFolder);
+    // This file finished successfully, remove its draft record
+    clearResumableDraft(file.uniqueIdentifier);
+    showResumableDraftBanner();
   });
 
 
@@ -608,18 +819,22 @@ async function initResumableUpload() {
       pauseResumeBtn.disabled = false;
     }
     showToast("Error uploading file: " + file.fileName);
+    // Treat errored file as no longer resumable (for now) and clear its hint
+    showResumableDraftBanner();
   });
 
-  resumableInstance.on("complete", function () {
+    resumableInstance.on("complete", function () {
     // If any file is marked with an error, leave the list intact.
-    const hasError = window.selectedFiles.some(f => f.isError);
+    const hasError = Array.isArray(window.selectedFiles) && window.selectedFiles.some(f => f.isError);
     if (!hasError) {
       // All files succeeded—clear the file input and progress container after 5 seconds.
       setTimeout(() => {
         const fileInput = document.getElementById("file");
         if (fileInput) fileInput.value = "";
         const progressContainer = document.getElementById("uploadProgressContainer");
-        progressContainer.innerHTML = "";
+        if (progressContainer) {
+          progressContainer.innerHTML = "";
+        }
         window.selectedFiles = [];
         adjustFolderHelpExpansionClosed();
         const fileInfoContainer = document.getElementById("fileInfoContainer");
@@ -628,6 +843,15 @@ async function initResumableUpload() {
         }
         const dropArea = document.getElementById("uploadDropArea");
         if (dropArea) setDropAreaDefault();
+
+        // IMPORTANT: clear Resumable's internal file list so the next upload
+        // doesn't think there are still resumable files queued.
+        if (resumableInstance) {
+          // cancel() after completion just resets internal state; no chunks are deleted server-side.
+          resumableInstance.cancel();
+        }
+        clearResumableDraftsForFolder(window.currentFolder || 'root');
+        showResumableDraftBanner();
       }, 5000);
     } else {
       showToast("Some files failed to upload. Please check the list.");
@@ -651,11 +875,34 @@ function submitFiles(allFiles) {
     const f = window.currentFolder || "root";
     try { return decodeURIComponent(f); } catch { return f; }
   })();
+
   const progressContainer = document.getElementById("uploadProgressContainer");
   const fileInput = document.getElementById("file");
+  if (!progressContainer) {
+    console.warn("submitFiles called but #uploadProgressContainer not found");
+    return;
+  }
+
+  // --- Ensure there are progress list items for these files ---
+  let listItems = progressContainer.querySelectorAll("li.upload-progress-item");
+
+  if (!listItems.length) {
+    // Guarantee each file has a stable uploadIndex
+    allFiles.forEach((file, index) => {
+      if (file.uploadIndex === undefined || file.uploadIndex === null) {
+        file.uploadIndex = index;
+      }
+    });
+
+    // Build the UI rows for these files
+    // This will also set window.selectedFiles and fileInfoContainer, etc.
+    processFiles(allFiles);
+
+    // Re-query now that processFiles has populated the DOM
+    listItems = progressContainer.querySelectorAll("li.upload-progress-item");
+  }
 
   const progressElements = {};
-  const listItems = progressContainer.querySelectorAll("li.upload-progress-item");
   listItems.forEach(item => {
     progressElements[item.dataset.uploadIndex] = item;
   });
@@ -681,7 +928,7 @@ function submitFiles(allFiles) {
       if (e.lengthComputable) {
         currentPercent = Math.round((e.loaded / e.total) * 100);
         const li = progressElements[file.uploadIndex];
-        if (li) {
+        if (li && li.progressBar) {
           const elapsed = (Date.now() - li.startTime) / 1000;
           let speed = "";
           if (elapsed > 0) {
@@ -717,12 +964,12 @@ function submitFiles(allFiles) {
         return;  // skip the "finishedCount++" and error/success logic for now
       }
 
-      // ─── Normal success/error handling ────────────────────────────  
+      // ─── Normal success/error handling ────────────────────────────
       const li = progressElements[file.uploadIndex];
 
       if (xhr.status >= 200 && xhr.status < 300 && (!jsonResponse || !jsonResponse.error)) {
         // real success
-        if (li) {
+        if (li && li.progressBar) {
           li.progressBar.style.width = "100%";
           li.progressBar.innerText = "Done";
           if (li.removeBtn) li.removeBtn.style.display = "none";
@@ -731,39 +978,40 @@ function submitFiles(allFiles) {
 
       } else {
         // real failure
-        if (li) {
+        if (li && li.progressBar) {
           li.progressBar.innerText = "Error";
         }
         allSucceeded = false;
       }
+
       if (file.isClipboard) {
         setTimeout(() => {
           window.selectedFiles = [];
           updateFileInfoCount();
-          const progressContainer = document.getElementById("uploadProgressContainer");
-          if (progressContainer) progressContainer.innerHTML = "";
-          const fileInfoContainer = document.getElementById("fileInfoContainer");
-          if (fileInfoContainer) {
-            fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
+          const pc = document.getElementById("uploadProgressContainer");
+          if (pc) pc.innerHTML = "";
+          const fic = document.getElementById("fileInfoContainer");
+          if (fic) {
+            fic.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
           }
         }, 5000);
       }
 
-      // ─── Only now count this chunk as finished ───────────────────
+      // ─── Only now count this upload as finished ───────────────────
       finishedCount++;
-if (finishedCount === allFiles.length) {
-  const succeededCount = uploadResults.filter(Boolean).length;
-  const failedCount = allFiles.length - succeededCount;
+      if (finishedCount === allFiles.length) {
+        const succeededCount = uploadResults.filter(Boolean).length;
+        const failedCount = allFiles.length - succeededCount;
 
-  setTimeout(() => {
-    refreshFileList(allFiles, uploadResults, progressElements);
-  }, 250);
-}
+        setTimeout(() => {
+          refreshFileList(allFiles, uploadResults, progressElements);
+        }, 250);
+      }
     });
 
     xhr.addEventListener("error", function () {
       const li = progressElements[file.uploadIndex];
-      if (li) {
+      if (li && li.progressBar) {
         li.progressBar.innerText = "Error";
       }
       uploadResults[file.uploadIndex] = false;
@@ -779,7 +1027,7 @@ if (finishedCount === allFiles.length) {
 
     xhr.addEventListener("abort", function () {
       const li = progressElements[file.uploadIndex];
-      if (li) {
+      if (li && li.progressBar) {
         li.progressBar.innerText = "Aborted";
       }
       uploadResults[file.uploadIndex] = false;
@@ -809,38 +1057,42 @@ if (finishedCount === allFiles.length) {
           })
           .map(s => s.trim().toLowerCase())
           .filter(Boolean);
+
         let overallSuccess = true;
         let succeeded = 0;
+
         allFiles.forEach(file => {
           const clientFileName = file.name.trim().toLowerCase();
           const li = progressElements[file.uploadIndex];
           const hadRelative = !!(file.webkitRelativePath || file.customRelativePath);
-          if (!uploadResults[file.uploadIndex] || (!hadRelative && !serverFiles.includes(clientFileName))) {
-            if (li) {
+
+          if (!uploadResults[file.uploadIndex] ||
+              (!hadRelative && !serverFiles.includes(clientFileName))) {
+            if (li && li.progressBar) {
               li.progressBar.innerText = "Error";
             }
             overallSuccess = false;
-            
           } else if (li) {
             succeeded++;
-            
+
             // Schedule removal of successful file entry after 5 seconds.
             setTimeout(() => {
               li.remove();
               delete progressElements[file.uploadIndex];
               updateFileInfoCount();
-              const progressContainer = document.getElementById("uploadProgressContainer");
-              if (progressContainer && progressContainer.querySelectorAll("li.upload-progress-item").length === 0) {
-                const fileInput = document.getElementById("file");
-                if (fileInput) fileInput.value = "";
-                progressContainer.innerHTML = "";
+              const pc = document.getElementById("uploadProgressContainer");
+              if (pc && pc.querySelectorAll("li.upload-progress-item").length === 0) {
+                const fi = document.getElementById("file");
+                if (fi) fi.value = "";
+                pc.innerHTML = "";
                 adjustFolderHelpExpansionClosed();
-                const fileInfoContainer = document.getElementById("fileInfoContainer");
-                if (fileInfoContainer) {
-                  fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
+                const fic = document.getElementById("fileInfoContainer");
+                if (fic) {
+                  fic.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
                 }
                 const dropArea = document.getElementById("uploadDropArea");
                 if (dropArea) setDropAreaDefault();
+                window.selectedFiles = [];
               }
             }, 5000);
           }
@@ -850,7 +1102,7 @@ if (finishedCount === allFiles.length) {
           const failed = allFiles.length - succeeded;
           showToast(`${failed} file(s) failed, ${succeeded} succeeded. Please check the list.`);
         } else {
-          showToast(`${succeeded} file succeeded. Please check the list.`);
+          showToast(`${succeeded} file(s) succeeded. Please check the list.`);
         }
       })
       .catch(error => {
@@ -859,7 +1111,6 @@ if (finishedCount === allFiles.length) {
       })
       .finally(() => {
         loadFolderTree(window.currentFolder);
-        
       });
   }
 }
@@ -918,17 +1169,23 @@ function initUpload() {
     fileInput.addEventListener("change", async function () {
       const files = Array.from(fileInput.files || []);
       if (!files.length) return;
-  
+
       if (useResumable) {
+        // New resumable batch: reset selectedFiles so the count is correct
+        window.selectedFiles = [];
+
         // Ensure the lib/instance exists
         if (!_resumableReady) await initResumableUpload();
         if (resumableInstance) {
-          for (const f of files) resumableInstance.addFile(f);
+          for (const f of files) {
+            resumableInstance.addFile(f);
+          }
         } else {
-          // If still not ready (load error), fall back to your XHR path
+          // If Resumable failed to load, fall back to XHR
           processFiles(files);
         }
       } else {
+        // Non-resumable: normal XHR path, drag-and-drop etc.
         processFiles(files);
       }
     });
@@ -937,27 +1194,40 @@ function initUpload() {
   if (uploadForm) {
     uploadForm.addEventListener("submit", async function (e) {
       e.preventDefault();
-      const files = window.selectedFiles || (fileInput ? fileInput.files : []);
+
+      const files =
+        (Array.isArray(window.selectedFiles) && window.selectedFiles.length)
+          ? window.selectedFiles
+          : (fileInput ? Array.from(fileInput.files || []) : []);
+
       if (!files || !files.length) {
         showToast("No files selected.");
         return;
       }
-  
-      // Resumable path (only for picked files, not folder uploads)
-      const first = files[0];
-      const isFolderish = !!(first.customRelativePath || first.webkitRelativePath);
-      if (useResumable && !isFolderish) {
+
+      // If we have any files queued in Resumable, treat this as a resumable upload.
+      const hasResumableFiles =
+        useResumable &&
+        resumableInstance &&
+        Array.isArray(resumableInstance.files) &&
+        resumableInstance.files.length > 0;
+
+      if (hasResumableFiles) {
         if (!_resumableReady) await initResumableUpload();
         if (resumableInstance) {
-          // ensure folder/token fresh
+          // Keep folder/token fresh
           resumableInstance.opts.query.folder = window.currentFolder || "root";
+          resumableInstance.opts.query.upload_token = window.csrfToken;
+          resumableInstance.opts.headers['X-CSRF-Token'] = window.csrfToken;
+
           resumableInstance.upload();
           showToast("Resumable upload started...");
         } else {
-          // fallback
+          // Hard fallback – should basically never happen
           submitFiles(files);
         }
       } else {
+        // No resumable queue → drag-and-drop / paste / simple input → XHR path
         submitFiles(files);
       }
     });
@@ -966,6 +1236,7 @@ function initUpload() {
   if (useResumable) {
     initResumableUpload();
   }
+  showResumableDraftBanner();
 }
 
 export { initUpload };

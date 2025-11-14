@@ -1,5 +1,55 @@
 # Changelog
 
+## Changes 11/14/2025 (v1.9.6)
+
+release(v1.9.6): hardened resumable uploads, menu/tag UI polish and hidden temp folders (closes #67)
+
+- Resumable uploads
+  - Normalize resumable GET “test chunk” handling in `UploadModel` using `resumableChunkNumber` + `resumableIdentifier`, returning explicit `status: "found"|"not found"`.
+  - Skip CSRF checks for resumable GET tests in `UploadController`, but keep strict CSRF validation for real POST uploads with soft-fail `csrf_expired` responses.
+  - Refactor `UploadModel::handleUpload()` for chunked uploads: strict filename validation, safe folder normalization, reliable temp chunk directory creation, and robust merge with clear errors if any chunk is missing.
+  - Add `UploadModel::removeChunks()` + internal `rrmdir()` to safely clean up `resumable_…` temp folders via a dedicated controller endpoint.
+
+- Frontend resumable UX & persistence
+  - Enable `testChunks: true` for Resumable.js and wire GET checks to the new backend status logic.
+  - Track in-progress resumable files per user in `localStorage` (identifier, filename, folder, size, lastPercent, updatedAt) and show a resumable hint banner inside the Upload card with a dismiss button that clears the hints for that folder.
+  - Clamp client-side progress to max `99%` until the server confirms success, so aborted tabs still show resumable state instead of “100% done”.
+  - Improve progress UI: show upload speed, spinner while finalizing, and ensure progress elements exist even for non-standard flows (e.g., submit without prior list build).
+  - On complete success, clear the progress UI, reset the file input, cancel Resumable’s internal queue, clear draft records for the folder, and re-show the resumable banner only when appropriate.
+
+- Hiding resumable temp folders
+  - Hide `resumable_…` folders alongside `trash` and `profile_pics` in:
+    - Folder tree BFS traversal (child discovery / recursion).
+    - `listChildren.php` results and child-cache hydration.
+    - The inline folder strip above the file list (also filtered in `fileListView.js`).
+
+- Folder manager context menu upgrade
+  - Replace the old ad-hoc folder context menu with a unified `filr-menu` implementation that mirrors the file context menu styling.
+  - Add Material icon mapping per action (`create_folder`, `move_folder`, `rename_folder`, `color_folder`, `folder_share`, `delete_folder`) and clamp the menu to viewport with escape/outside-click close behavior.
+  - Wire the new menu from both tree nodes and breadcrumb links, respecting locked folders and current folder capabilities.
+
+- File context menu & selection logic
+  - Define a semantic file context menu in `index.html` (`#fileContextMenu` with `.filr-menu` buttons, icons, `data-action`, and `data-when` visibility flags).
+  - Rebuild `fileMenu.js` to:
+    - Derive the current selection from file checkboxes and map back to real `fileData` entries, handling the encoded row IDs.
+    - Toggle menu items based on selection state (`any`, `one`, `many`, `zip`, `can-edit`) and hide redundant separators.
+    - Position the menu within the viewport, add ESC/outside-click dismissal, and delegate click handling to call the existing file actions (preview, edit, rename, copy/move/delete/download/extract, tag single/multiple).
+
+- Tagging system robustness
+  - Refactor `fileTags.js` to enforce single-instance modals for both single-file and multi-file tagging, preventing duplicate DOM nodes and double bindings.
+  - Centralize global tag storage (`window.globalTags` + `localStorage`) with shared dropdowns for both modals, including “×” removal for global tags that syncs back to the server.
+  - Make the tag modals safer and more idempotent (re-usable DOM, Esc and backdrop-to-close, defensive checks on elements) while keeping the existing file row badge rendering and tag-based filtering behavior.
+  - Localize various tag-related strings where possible and ensure gallery + table views stay in sync after tag changes.
+
+- Visual polish & theming
+  - Introduce a shared `--menu-radius` token and apply it across login form, file list container, restore modal, preview modals, OnlyOffice modal, user dropdown menus, and the Upload / Folder Management cards for consistent rounded corners.
+  - Update header button hover to use the same soft blue hover as other interactive elements and tune card shadows for light vs dark mode.
+  - Adjust media preview modal background to a darker neutral and tweak `filePreview` panel background fallback (`--panel-bg` / `--bg-color`) for better dark mode contrast.
+  - Style `.filr-menu` for both file + folder menus with max-height, scrolling, proper separators, and Material icons inheriting text color in light and dark themes.
+  - Align the user dropdown menu hover/active styles with the new menu hover tokens (`--filr-row-hover-bg`, `--filr-row-outline-hover`) for a consistent interaction feel.
+
+---
+
 ## Changes 11/13/2025 (v1.9.5)
 
 release(v1.9.5): harden folder tree DOM, add a11y to “Load more”, and guard folder paths

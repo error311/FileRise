@@ -798,7 +798,11 @@ export async function loadFileList(folderParam) {
           })
           .map(p => ({ name: p.split("/").pop(), full: p }));
       }
-      subfolders = subfolders.filter(sf => !hidden.has(sf.name));
+
+      subfolders = subfolders.filter(sf => {
+        const lower = (sf.name || "").toLowerCase();
+        return !hidden.has(lower) && !lower.startsWith("resumable_");
+      });
 
       let strip = document.getElementById("folderStripContainer");
       if (!strip) {
@@ -958,7 +962,7 @@ export function renderFileTable(folder, container, subfolders) {
     }
     return `<table class="filr-table"${attrs}>`;
   });
-  
+
   const startIndex = (currentPage - 1) * itemsPerPageSetting;
   const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
   let rowsHTML = "<tbody>";
