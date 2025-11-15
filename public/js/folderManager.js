@@ -1026,7 +1026,7 @@ export function openColorFolderModal(folder) {
 function isSafeFolderPath(p) {
   // Client-side defense-in-depth; server already enforces safe segments.
   // Allows letters/numbers/space/_-. and slashes between segments.
-  return /^(root|[A-Za-z0-9][A-Za-z0-9 _\-.]*)(\/[A-Za-z0-9][A-Za-z0-9 _\-.]*)*$/.test(String(p || ''));
+  return /^(root|(?!\.)[^/\0]+)(\/(?!\.)[^/\0]+)*$/.test(String(p || ''));
 }
 
 function makeChildLi(parentPath, item) {

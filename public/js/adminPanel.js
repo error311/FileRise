@@ -465,7 +465,7 @@ export function openAdminPanel() {
         background:${dark ? "#2c2c2c" : "#fff"};
         color:${dark ? "#e0e0e0" : "#000"};
         padding:20px; max-width:1100px; width:50%;
-        border-radius:8px; position:relative;
+        position:relative;
         max-height:90vh; overflow:auto;
         border:1px solid ${dark ? "#555" : "#ccc"};
       `;
@@ -1525,7 +1525,6 @@ export function openUserPermissionsModal() {
   padding: 20px;
   width: clamp(980px, 92vw, 1280px);
   max-width: none;
-  border-radius: 8px;
   position: relative;
   max-height: 90vh;
   overflow: auto;
@@ -1654,7 +1653,7 @@ export async function openUserFlagsModal() {
       <div class="modal-content"
            style="background:${contentBg}; color:${contentFg};
                   padding:16px; max-width:900px; width:95%;
-                  border-radius:8px; position:relative;
+                  position:relative;
                   border:1px solid ${borderCol};">
         <span id="closeUserFlagsModal"
               class="editor-close-btn"

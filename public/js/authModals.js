@@ -195,7 +195,6 @@ export async function openUserPanel() {
     color:      ${isDark ? '#e0e0e0' : '#000'};
     padding: 20px;
     max-width: 600px; width:90%;
-    border-radius: 8px;
     overflow-y: auto; max-height: 500px;
     border: ${isDark ? '1px solid #444' : '1px solid #ccc'};
     box-sizing: border-box;

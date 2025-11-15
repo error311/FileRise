@@ -1,5 +1,18 @@
 # Changelog
 
+## Changes 11/14/2025 (v1.9.7)
+
+release(v1.9.7): harden client path guard and refine header/folder strip CSS
+
+- Tighten isSafeFolderPath() to reject dot-prefixed/invalid segments (client-side defense-in-depth on folder paths).
+- Rework header layout: consistent logo sizing, centered title, cleaner button alignment, and better small-screen stacking.
+- Polish user dropdown and icon buttons: improved hover/focus states, dark-mode colors, and rounded menu corners.
+- Update folder strip tiles: cap tile width, allow long folder names to wrap neatly, and fine-tune text/icon alignment.
+- Tweak folder tree rows: better label wrapping, vertical alignment, and consistent SVG folder icon rendering.
+- Small CSS cleanup and normalization (body, main wrapper, media modal/progress styles) without changing behavior.
+
+---
+
 ## Changes 11/14/2025 (v1.9.6)
 
 release(v1.9.6): hardened resumable uploads, menu/tag UI polish and hidden temp folders (closes #67)
