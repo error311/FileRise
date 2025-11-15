@@ -23,9 +23,7 @@ With drag-and-drop uploads, in-browser editing, secure user logins (SSO & TOTP 2
 
 Open and edit Office documents — **Word (DOCX)**, **Excel (XLSX)**, **PowerPoint (PPTX)** — directly in **FileRise** using your self-hosted **ONLYOFFICE Document Server** (optional). Open **ODT/ODS/ODP**, and view **PDFs** inline. Everything is enforced by the same per-folder ACLs across the UI and WebDAV.
 
-**10/25/2025 Video demo:**
-
-<https://github.com/user-attachments/assets/a2240300-6348-4de7-b72f-1b85b7da3a08>
+![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v1.9.7.png)
 
 ![filerise-v1 9 0](https://github.com/user-attachments/assets/a346dd8a-eef1-4180-8140-4c1c08e6026e)
 
