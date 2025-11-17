@@ -1,5 +1,75 @@
 # Changelog
 
+## Changes 11/16/2025 (v1.9.8)
+
+release(v1.9.8): feat(pro): wire core to Pro licensing + branding hooks
+
+- Add Pro feature flags + bootstrap wiring
+  - Define FR_PRO_ACTIVE/FR_PRO_TYPE/FR_PRO_EMAIL/FR_PRO_VERSION/FR_PRO_LICENSE_FILE
+    in config.php and optionally require src/pro/bootstrap_pro.php.
+  - Expose a `pro` block from AdminController::getConfig() so the UI can show
+    license status, type, email, and bundle version without leaking the raw key.
+
+- Implement license save endpoint
+  - Add AdminController::setLicense() and /api/admin/setLicense.php to accept a
+    FRP1 license string via JSON, validate basic shape, and persist it to
+    FR_PRO_LICENSE_FILE with strict 0600 permissions.
+  - Return structured JSON success/error responses for the admin UI.
+
+- Extend admin config model with branding + safer validation
+  - Add `branding.customLogoUrl`, `branding.headerBgLight`, and
+    `branding.headerBgDark` fields to AdminModel defaults and updateConfig().
+  - Introduce AdminModel::sanitizeLogoUrl() to allow only site-relative /uploads
+    paths or http(s) URLs; reject absolute filesystem paths, data: URLs, and
+    javascript: URLs.
+  - Continue to validate ONLYOFFICE docsOrigin as http(s) only, keeping core
+    config hardening intact.
+
+- New Pro-aware Admin Panel UI
+  - Rework User Management section to group:
+    - Add user / Remove user
+    - Folder Access (per-folder ACL)
+    - User Permissions (account-level flags)
+  - Add Pro-only actions with clear gating:
+    - “User groups” button (Pro)
+    - “Client upload portal” button with “Pro · Coming soon” pill
+  - Add “FileRise Pro” section:
+    - Show current Pro status (Free vs Active) + license metadata.
+    - Textarea for pasting license key, file upload helper, and “Save license”
+      action wired to /api/admin/setLicense.php.
+    - Optional “Copy current license” button when a license is present.
+  - Add “Sponsor / Donations” section with fixed GitHub Sponsors and Ko-fi URLs
+    and one-click copy/open buttons.
+
+- Header branding controls (Pro)
+  - Add Header Logo + Header Colors controls under Header Settings, gated by
+    `config.pro.active`.
+  - Allow uploading a logo via /api/pro/uploadBrandLogo.php and auto-filling the
+    normalized /uploads path.
+  - Add live-preview helpers to update the header logo and header background
+    colors in the running UI after saving.
+
+- Apply branding on app boot
+  - Update main.js to read branding config on load and apply:
+    - Custom header logo (or fallback to /assets/logo.svg).
+    - Light/dark header background colors via CSS variables.
+  - Keeps header consistent with saved branding across reloads and before
+    opening the admin panel.
+
+- Styling + UX polish
+  - Add styles for new admin sections: collapsible headers, dark-mode aware
+    modal content, and refined folder access grid.
+  - Introduce .btn-pro-admin and .btn-pro-pill classes to render “Pro” and
+    “Pro · Coming soon” pills overlayed on buttons, matching the existing
+    header “Core/Pro” badge treatment.
+  - Minor spacing/typography tweaks in admin panel and ACL UI.
+
+Note: Core code remains MIT-licensed; Pro functionality is enabled via optional
+runtime hooks and separate closed-source bundle, without changing the core
+license text.
+
+---
+
 ## Changes 11/14/2025 (v1.9.7)
 
 release(v1.9.7): harden client path guard and refine header/folder strip CSS

@@ -239,3 +239,31 @@ if (strpos(BASE_URL, 'yourwebsite') !== false) {
 
 // Final: env var wins, else fallback
 define('SHARE_URL', getenv('SHARE_URL') ?: $defaultShare);
+
+// --------------------------------
+// FileRise Pro (optional add-on)
+// --------------------------------
+
+// Where the Pro license JSON lives
+if (!defined('PRO_LICENSE_FILE')) {
+    define('PRO_LICENSE_FILE', PROJECT_ROOT . '/users/proLicense.json');
+}
+
+// Inline/env license strings (optional)
+if (!defined('FR_PRO_LICENSE')) {
+    define('FR_PRO_LICENSE', getenv('FR_PRO_LICENSE') ?: '');
+}
+if (!defined('FR_PRO_LICENSE_FILE')) {
+    define('FR_PRO_LICENSE_FILE', getenv('FR_PRO_LICENSE_FILE') ?: '');
+}
+
+// Optional Pro bootstrap (shipped only with Pro bundle)
+$proBootstrap = PROJECT_ROOT . '/src/pro/bootstrap_pro.php';
+if (is_file($proBootstrap)) {
+    require_once $proBootstrap;
+}
+
+// Safe default so the rest of the app always has the constant
+if (!defined('FR_PRO_ACTIVE')) {
+    define('FR_PRO_ACTIVE', false);
+}

@@ -406,6 +406,40 @@ function bindDarkMode() {
 
       // Always keep <title> correct early (no visual flicker)
       document.title = title;
+      // --- Header logo (branding) in BOTH phases ---
+      try {
+        const branding = (cfg && cfg.branding) ? cfg.branding : {};
+        const customLogoUrl = branding.customLogoUrl || "";
+        const logoImg = document.querySelector('.header-logo img');
+        if (logoImg) {
+          if (customLogoUrl) {
+            logoImg.setAttribute('src', customLogoUrl);
+            logoImg.setAttribute('alt', 'Site logo');
+          } else {
+            // fall back to default FileRise logo
+            logoImg.setAttribute('src', '/assets/logo.svg?v={{APP_QVER}}');
+            logoImg.setAttribute('alt', 'FileRise');
+          }
+        }
+      } catch (e) {
+        // non-fatal; ignore branding issues
+      }
+      // --- Header colors (branding) in BOTH phases ---
+      try {
+        const branding = (cfg && cfg.branding) ? cfg.branding : {};
+        const root = document.documentElement;
+
+        const light = branding.headerBgLight || '';
+        const dark  = branding.headerBgDark  || '';
+
+        if (light) root.style.setProperty('--header-bg-light', light);
+        else root.style.removeProperty('--header-bg-light');
+
+       if (dark) root.style.setProperty('--header-bg-dark', dark);
+        else root.style.removeProperty('--header-bg-dark');
+      } catch (e) {
+        // non-fatal
+      }
 
       // --- Login options (apply in BOTH phases so login page is correct) ---
       const lo = (cfg && cfg.loginOptions) ? cfg.loginOptions : {};

@@ -6,91 +6,271 @@ require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 class AdminController
 {
-    public function getConfig(): void
-    {
-        header('Content-Type: application/json; charset=utf-8');
 
-        $config = AdminModel::getConfig();
-        if (isset($config['error'])) {
-            http_response_code(500);
-            header('Cache-Control: no-store');
-            echo json_encode(['error' => $config['error']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            /** Enforce authentication (401). */
+            private static function requireAuth(): void
+            {
+                if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+                    http_response_code(401);
+                    header('Content-Type: application/json');
+                    echo json_encode(['error' => 'Unauthorized']);
+                    exit;
+                }
+            }
+        
+            /** Enforce admin (401). */
+            private static function requireAdmin(): void
+        {
+            self::requireAuth();
+        
+            // Prefer the session flag
+            $isAdmin = (!empty($_SESSION['isAdmin']) && $_SESSION['isAdmin'] === true);
+        
+            // Fallback: check the user’s role in storage (e.g., users.txt/DB)
+            if (!$isAdmin) {
+                $u = $_SESSION['username'] ?? '';
+                if ($u) {
+                    try {
+                        // UserModel::getUserRole($u) should return '1' for admins
+                        $isAdmin = (UserModel::getUserRole($u) === '1');
+                        if ($isAdmin) {
+                            // Normalize session so downstream ACL checks see admin
+                            $_SESSION['isAdmin'] = true;
+                        }
+                    } catch (\Throwable $e) {
+                        // ignore and continue to deny
+                    }
+                }
+            }
+        
+            if (!$isAdmin) {
+                http_response_code(403);
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Admin privileges required.']);
+                exit;
+            }
+        }
+            /** Get headers in lowercase, robust across SAPIs. */
+            private static function headersLower(): array
+            {
+                $headers = function_exists('getallheaders') ? getallheaders() : [];
+                $out = [];
+                foreach ($headers as $k => $v) {
+                    $out[strtolower($k)] = $v;
+                }
+                // Fallbacks from $_SERVER if needed
+                foreach ($_SERVER as $k => $v) {
+                    if (strpos($k, 'HTTP_') === 0) {
+                        $h = strtolower(str_replace('_', '-', substr($k, 5)));
+                        if (!isset($out[$h])) $out[$h] = $v;
+                    }
+                }
+                return $out;
+            }
+        
+            /** Enforce CSRF using X-CSRF-Token header (or csrfToken param as fallback). */
+            private static function requireCsrf(): void
+            {
+                $h = self::headersLower();
+                $token = trim($h['x-csrf-token'] ?? ($_POST['csrfToken'] ?? ''));
+                if (empty($_SESSION['csrf_token']) || $token !== $_SESSION['csrf_token']) {
+                    http_response_code(403);
+                    header('Content-Type: application/json');
+                    echo json_encode(['error' => 'Invalid CSRF token']);
+                    exit;
+                }
+            }
+        
+            /** Read JSON body (empty array if not valid). */
+            private static function readJson(): array
+            {
+                $raw = file_get_contents('php://input');
+                $data = json_decode($raw, true);
+                return is_array($data) ? $data : [];
+            }
+
+            public function getConfig(): void
+            {
+                header('Content-Type: application/json; charset=utf-8');
+            
+                $config = AdminModel::getConfig();
+                if (isset($config['error'])) {
+                    http_response_code(500);
+                    header('Cache-Control: no-store');
+                    echo json_encode(['error' => $config['error']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    return;
+                }
+            
+                // ---- Effective ONLYOFFICE values (constants override adminConfig) ----
+                $ooCfg      = is_array($config['onlyoffice'] ?? null) ? $config['onlyoffice'] : [];
+                $effEnabled = defined('ONLYOFFICE_ENABLED')
+                    ? (bool) ONLYOFFICE_ENABLED
+                    : (bool) ($ooCfg['enabled'] ?? false);
+            
+                $effDocs = (defined('ONLYOFFICE_DOCS_ORIGIN') && ONLYOFFICE_DOCS_ORIGIN !== '')
+                    ? (string) ONLYOFFICE_DOCS_ORIGIN
+                    : (string) ($ooCfg['docsOrigin'] ?? '');
+            
+                $hasSecret = defined('ONLYOFFICE_JWT_SECRET')
+                    ? (ONLYOFFICE_JWT_SECRET !== '')
+                    : (!empty($ooCfg['jwtSecret']));
+            
+                $publicOriginCfg = (string) ($ooCfg['publicOrigin'] ?? '');
+            
+                // ---- Pro / license info (all guarded for clean core installs) ----
+                $licenseString = null;
+                if (defined('PRO_LICENSE_FILE') && PRO_LICENSE_FILE && @is_file(PRO_LICENSE_FILE)) {
+                    $json = @file_get_contents(PRO_LICENSE_FILE);
+                    if ($json !== false) {
+                        $decoded = json_decode($json, true);
+                        if (is_array($decoded) && !empty($decoded['license'])) {
+                            $licenseString = (string) $decoded['license'];
+                        }
+                    }
+                }
+            
+                $proActive = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE;
+            
+                // FR_PRO_INFO is only defined when bootstrap_pro.php has run; guard it
+                $proPayload = [];
+                if (defined('FR_PRO_INFO') && is_array(FR_PRO_INFO)) {
+                    $p = FR_PRO_INFO['payload'] ?? null;
+                    if (is_array($p)) {
+                        $proPayload = $p;
+                    }
+                }
+            
+                $proType    = $proPayload['type']  ?? null;
+                $proEmail   = $proPayload['email'] ?? null;
+                $proVersion = defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : null;
+            
+                // Whitelisted public subset only (+ ONLYOFFICE enabled flag)
+                $public = [
+                    'header_title'        => (string)($config['header_title'] ?? 'FileRise'),
+                    'loginOptions'        => [
+                        'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
+                        'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
+                        'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
+                    ],
+                    'globalOtpauthUrl'    => (string)($config['globalOtpauthUrl'] ?? ''),
+                    'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
+                    'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
+                    'oidc' => [
+                        'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
+                        'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
+                        // never include clientId/clientSecret
+                    ],
+                    'onlyoffice' => [
+                        // Public only needs to know if it’s on; no secrets/origins here.
+                        'enabled' => $effEnabled,
+                    ],
+                    'branding' => [
+                        'customLogoUrl' => (string)($config['branding']['customLogoUrl'] ?? ''),
+                        'headerBgLight' => (string)($config['branding']['headerBgLight'] ?? ''),
+                        'headerBgDark'  => (string)($config['branding']['headerBgDark'] ?? ''),
+                    ],
+                    'pro' => [
+                        'active'  => $proActive,
+                        'type'    => $proType,
+                        'email'   => $proEmail,
+                        'version' => $proVersion,
+                        'license' => $licenseString,
+                    ],
+                ];
+            
+                $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
+            
+                if ($isAdmin) {
+                    // admin-only extras: presence flags + proxy options + ONLYOFFICE effective view
+                    $adminExtra = [
+                        'loginOptions' => array_merge($public['loginOptions'], [
+                            'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
+                            'authHeaderName' => (string)($config['loginOptions']['authHeaderName'] ?? 'X-Remote-User'),
+                        ]),
+                        'oidc' => array_merge($public['oidc'], [
+                            'hasClientId'     => !empty($config['oidc']['clientId']),
+                            'hasClientSecret' => !empty($config['oidc']['clientSecret']),
+                        ]),
+                        'onlyoffice' => [
+                            'enabled'      => $effEnabled,
+                            'docsOrigin'   => $effDocs,         // effective (constants win)
+                            'publicOrigin' => $publicOriginCfg, // optional override from adminConfig
+                            'hasJwtSecret' => (bool)$hasSecret, // boolean only; never leak secret
+                            'lockedByPhp'  => (
+                                defined('ONLYOFFICE_ENABLED')
+                                || defined('ONLYOFFICE_DOCS_ORIGIN')
+                                || defined('ONLYOFFICE_JWT_SECRET')
+                                || defined('ONLYOFFICE_PUBLIC_ORIGIN')
+                            ),
+                        ],
+                    ];
+            
+                    header('Cache-Control: no-store'); // don’t cache admin config
+                    echo json_encode(array_merge($public, $adminExtra), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    return;
+                }
+            
+                // Non-admins / unauthenticated: only the public subset
+                header('Cache-Control: no-store');
+                echo json_encode($public, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+
+public function setLicense(): void
+{
+    // Always respond JSON
+    header('Content-Type: application/json; charset=utf-8');
+
+    try {
+        // Same guards as other admin endpoints
+        self::requireAuth();
+        self::requireAdmin();
+        self::requireCsrf();
+
+        $raw = file_get_contents('php://input');
+        $data = json_decode($raw ?: '{}', true);
+        if (!is_array($data)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid JSON body']);
             return;
         }
 
-        // ---- Effective ONLYOFFICE values (constants override adminConfig) ----
-        $ooCfg       = is_array($config['onlyoffice'] ?? null) ? $config['onlyoffice'] : [];
-        $effEnabled  = defined('ONLYOFFICE_ENABLED')
-            ? (bool) ONLYOFFICE_ENABLED
-            : (bool) ($ooCfg['enabled'] ?? false);
+        $license = isset($data['license']) ? trim((string)$data['license']) : '';
 
-        $effDocs     = defined('ONLYOFFICE_DOCS_ORIGIN') && ONLYOFFICE_DOCS_ORIGIN !== ''
-            ? (string) ONLYOFFICE_DOCS_ORIGIN
-            : (string) ($ooCfg['docsOrigin'] ?? '');
+        // Store license + updatedAt in JSON file
+        if (!defined('PRO_LICENSE_FILE')) {
+            // Fallback if constant not defined for some reason
+            define('PRO_LICENSE_FILE', PROJECT_ROOT . '/users/proLicense.json');
+        }
 
-        $hasSecret   = defined('ONLYOFFICE_JWT_SECRET')
-            ? (ONLYOFFICE_JWT_SECRET !== '')
-            : (!empty($ooCfg['jwtSecret']));
-
-        $publicOriginCfg = (string) ($ooCfg['publicOrigin'] ?? '');
-
-        // Whitelisted public subset only (+ ONLYOFFICE enabled flag)
-        $public = [
-            'header_title'        => (string)($config['header_title'] ?? 'FileRise'),
-            'loginOptions'        => [
-                'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
-                'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
-                'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
-            ],
-            'globalOtpauthUrl'    => (string)($config['globalOtpauthUrl'] ?? ''),
-            'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
-            'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
-            'oidc' => [
-                'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
-                'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
-                // never include clientId/clientSecret
-            ],
-            'onlyoffice' => [
-                // Public only needs to know if it’s on; no secrets/origins here.
-                'enabled' => $effEnabled,
-            ],
+        $payload = [
+            'license'   => $license,
+            'updatedAt' => gmdate('c'),
         ];
 
-        $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
-
-        if ($isAdmin) {
-            // admin-only extras: presence flags + proxy options + ONLYOFFICE effective view
-            $adminExtra = [
-                'loginOptions' => array_merge($public['loginOptions'], [
-                    'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
-                    'authHeaderName' => (string)($config['loginOptions']['authHeaderName'] ?? 'X-Remote-User'),
-                ]),
-                'oidc' => array_merge($public['oidc'], [
-                    'hasClientId'     => !empty($config['oidc']['clientId']),
-                    'hasClientSecret' => !empty($config['oidc']['clientSecret']),
-                ]),
-                'onlyoffice' => [
-                    'enabled'      => $effEnabled,
-                    'docsOrigin'   => $effDocs,                // effective (constants win)
-                    'publicOrigin' => $publicOriginCfg,        // optional override from adminConfig
-                    'hasJwtSecret' => (bool)$hasSecret,        // boolean only; never leak secret
-                    'lockedByPhp'  => (
-                        defined('ONLYOFFICE_ENABLED')
-                        || defined('ONLYOFFICE_DOCS_ORIGIN')
-                        || defined('ONLYOFFICE_JWT_SECRET')
-                    ),
-                ],
-            ];
-            header('Cache-Control: no-store'); // don’t cache admin config
-            echo json_encode(array_merge($public, $adminExtra), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $dir = dirname(PRO_LICENSE_FILE);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to create license dir']);
             return;
         }
 
-        // Non-admins / unauthenticated: only the public subset
-        header('Cache-Control: no-store');
-        echo json_encode($public, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        return;
+        $json = json_encode($payload, JSON_PRETTY_PRINT);
+        if ($json === false || file_put_contents(PRO_LICENSE_FILE, $json) === false) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to write license file']);
+            return;
+        }
+
+        echo json_encode(['success' => true]);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Exception: ' . $e->getMessage(),
+        ]);
     }
+}
 
     public function updateConfig(): void
     {
@@ -148,6 +328,11 @@ class AdminController
                 'clientId'    => '',
                 'clientSecret'=> '',
                 'redirectUri' => ''
+            ],
+            'branding'            => [
+                'customLogoUrl' => '',
+                'headerBgLight'   => '',
+                'headerBgDark'    => '',
             ],
         ];
 
@@ -250,6 +435,7 @@ class AdminController
                 exit;
             }
         }
+        
 
         // —– persist merged config —–
                 // ---- ONLYOFFICE: merge from payload (unless locked by PHP defines) ----
@@ -286,6 +472,22 @@ class AdminController
         
                     $merged['onlyoffice'] = $oo;
                 }
+                // Branding: pass through raw strings; AdminModel enforces Pro + sanitization.
+            if (isset($data['branding']) && is_array($data['branding'])) {
+            if (!isset($merged['branding']) || !is_array($merged['branding'])) {
+                $merged['branding'] = [
+                    'customLogoUrl'   => '',
+                    'headerBgLight'   => '',
+                    'headerBgDark'    => '',
+                ];
+            }
+            foreach (['customLogoUrl', 'headerBgLight', 'headerBgDark'] as $key) {
+                if (array_key_exists($key, $data['branding'])) {
+                    $merged['branding'][$key] = (string)$data['branding'][$key];
+                }
+            }
+        }
+
         $result = AdminModel::updateConfig($merged);
         if (isset($result['error'])) {
             http_response_code(500);

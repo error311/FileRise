@@ -4,8 +4,46 @@ import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
 import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
 
+function normalizeLogoPath(raw) {
+  if (!raw) return '';
+  const parts = String(raw).split(':');
+  let pic = parts[parts.length - 1];
+  pic = pic.replace(/^:+/, '');
+  if (pic && !pic.startsWith('/')) pic = '/' + pic;
+  return pic;
+}
+
 const version = window.APP_VERSION || "dev";
-const adminTitle = `${t("admin_panel")} <small style="font-size:12px;color:gray;">${version}</small>`;
+
+function getAdminTitle(isPro, proVersion) {
+  const corePill = `
+    <span class="badge badge-pill badge-secondary admin-core-badge">
+      Core ${version}
+    </span>
+  `;
+
+  if (!isPro) {
+    // Free/core only
+    return `
+      ${t("admin_panel")}
+      ${corePill}
+    `;
+  }
+
+  const pv = proVersion ? `Pro v${proVersion}` : 'Pro';
+
+  const proPill = `
+    <span class="badge badge-pill badge-warning admin-pro-badge">
+      ${pv}
+    </span>
+  `;
+
+  return `
+    ${t("admin_panel")}
+    ${corePill}
+    ${proPill}
+  `;
+}
 
 
 function buildFullGrantsForAllFolders(folders) {
@@ -15,6 +53,49 @@ function buildFullGrantsForAllFolders(folders) {
     shareFile: true, shareFolder: true, share: true
   };
   return folders.reduce((acc, f) => { acc[f] = { ...allTrue }; return acc; }, {});
+}
+function applyHeaderColorsFromAdmin() {
+  try {
+    const lightInput = document.getElementById('brandingHeaderBgLight');
+    const darkInput  = document.getElementById('brandingHeaderBgDark');
+    const root = document.documentElement;
+
+    const light = lightInput ? lightInput.value.trim() : '';
+    const dark  = darkInput ? darkInput.value.trim() : '';
+
+    if (light) root.style.setProperty('--header-bg-light', light);
+    else root.style.removeProperty('--header-bg-light');
+
+    if (dark) root.style.setProperty('--header-bg-dark', dark);
+    else root.style.removeProperty('--header-bg-dark');
+  } catch (e) {
+    console.warn('Failed to live-update header colors from admin panel', e);
+  }
+}
+function updateHeaderLogoFromAdmin() {
+  try {
+    const input = document.getElementById('brandingCustomLogoUrl');
+    const logoImg = document.querySelector('.header-logo img');
+    if (!logoImg) return;
+
+    let url = (input && input.value.trim()) || '';
+
+    // If they used a bare "uploads/..." path, normalize to "/uploads/..."
+    if (url && !url.startsWith('/') && url.startsWith('uploads/')) {
+      url = '/' + url;
+    }
+
+    if (url) {
+      logoImg.setAttribute('src', url);
+      logoImg.setAttribute('alt', 'Site logo');
+    } else {
+      // fall back to default FileRise logo
+      logoImg.setAttribute('src', '/assets/logo.svg?v={{APP_QVER}}');
+      logoImg.setAttribute('alt', 'FileRise');
+    }
+  } catch (e) {
+    console.warn('Failed to live-update header logo from admin panel', e);
+  }
 }
 
 /* === BEGIN: Folder Access helpers (merged + improved) === */
@@ -175,7 +256,7 @@ async function safeJson(res) {
     .dark-mode .form-control::placeholder { color:#888; }
 
     .section-header {
-      background:#f5f5f5; padding:10px 15px; cursor:pointer; border-radius:4px; font-weight:bold;
+      background:#f5f5f5; padding:10px 15px; cursor:pointer; border-radius:12px; font-weight:bold;
       display:flex; align-items:center; justify-content:space-between; margin-top:16px;
     }
     .section-header:first-of-type { margin-top:0; }
@@ -301,7 +382,10 @@ function captureInitialAdminConfig() {
     disableOIDCLogin: !!document.getElementById("disableOIDCLogin")?.checked,
     enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
     sharedMaxUploadSize: (document.getElementById("sharedMaxUploadSize")?.value || "").trim(),
-    globalOtpauthUrl: (document.getElementById("globalOtpauthUrl")?.value || "").trim()
+    globalOtpauthUrl: (document.getElementById("globalOtpauthUrl")?.value || "").trim(),
+    brandingCustomLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
+    brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
+    brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
   };
 }
 function hasUnsavedChanges() {
@@ -319,7 +403,10 @@ function hasUnsavedChanges() {
     getChk("disableOIDCLogin") !== o.disableOIDCLogin ||
     getChk("enableWebDAV") !== o.enableWebDAV ||
     getVal("sharedMaxUploadSize") !== o.sharedMaxUploadSize ||
-    getVal("globalOtpauthUrl") !== o.globalOtpauthUrl
+    getVal("globalOtpauthUrl") !== o.globalOtpauthUrl ||
+    getVal("brandingCustomLogoUrl") !== (o.brandingCustomLogoUrl || "") ||
+    getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
+    getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "")
   );
 }
 
@@ -460,6 +547,16 @@ export function openAdminPanel() {
       if (config.globalOtpauthUrl) window.currentOIDCConfig.globalOtpauthUrl = config.globalOtpauthUrl;
 
       const dark = document.body.classList.contains("dark-mode");
+      const proInfo = config.pro || {};
+      const isPro   = !!proInfo.active;
+      const proType = proInfo.type || '';
+      const proEmail = proInfo.email || '';
+      const proVersion = proInfo.version || 'not installed';
+      const proLicense  = proInfo.license || '';
+      const brandingCfg = config.branding || {};
+      const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
+      const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
+      const brandingHeaderBgDark  = brandingCfg.headerBgDark  || "";
       const bg = dark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
       const inner = `
         background:${dark ? "#2c2c2c" : "#fff"};
@@ -484,7 +581,7 @@ export function openAdminPanel() {
         mdl.innerHTML = `
           <div class="modal-content" style="${inner}">
             <div class="editor-close-btn" id="closeAdminPanel">&times;</div>
-            <h3>${adminTitle}</h3>
+            <h3>${getAdminTitle(isPro, proVersion)}</h3>
             <form id="adminPanelForm">
             ${[
             { id: "userManagement", label: t("user_management") },
@@ -495,6 +592,7 @@ export function openAdminPanel() {
             { id: "upload", label: t("shared_max_upload_size_bytes_title") },
             { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
             { id: "shareLinks", label: t("manage_shared_links") },
+            { id: "pro", label: "FileRise Pro" }, 
             { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Sponsor / Donations") : "Sponsor / Donations") }
           ].map(sec => `
               <div id="${sec.id}Header" class="section-header collapsed">
@@ -515,18 +613,100 @@ export function openAdminPanel() {
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
 
-        ["userManagement", "headerSettings", "loginOptions", "webdav", "onlyoffice", "upload", "oidc", "shareLinks", "sponsor"]
+        ["userManagement", "headerSettings", "loginOptions", "webdav", "onlyoffice", "upload", "oidc", "shareLinks", "pro", "sponsor"]
           .forEach(id => {
             document.getElementById(id + "Header")
               .addEventListener("click", () => toggleSection(id));
           });
 
-        document.getElementById("userManagementContent").innerHTML = `
-          <button type="button" id="adminOpenAddUser" class="btn btn-success me-2">${t("add_user")}</button>
-          <button type="button" id="adminOpenRemoveUser" class="btn btn-danger me-2">${t("remove_user")}</button>
-          <button type="button" id="adminOpenUserPermissions" class="btn btn-secondary">${tf("folder_access", "Folder Access")}</button>
-          <button type="button" id="adminOpenUserFlags" class="btn btn-secondary">${tf("user_permissions", "User Permissions")}</button>
-        `;
+          document.getElementById("userManagementContent").innerHTML = `
+  <div class="admin-user-actions">
+    <!-- Core buttons -->
+    <button type="button" id="adminOpenAddUser" class="btn btn-success btn-sm">
+      <i class="material-icons">person_add</i>
+      <span>${t("add_user")}</span>
+    </button>
+
+    <button type="button" id="adminOpenRemoveUser" class="btn btn-danger btn-sm">
+      <i class="material-icons">person_remove</i>
+      <span>${t("remove_user")}</span>
+    </button>
+
+    <button type="button" id="adminOpenUserPermissions" class="btn btn-secondary btn-sm">
+      <i class="material-icons">folder_shared</i>
+      <span>${tf("folder_access", "Folder Access")}</span>
+    </button>
+
+    <button type="button" id="adminOpenUserFlags" class="btn btn-secondary btn-sm">
+      <i class="material-icons">tune</i>
+      <span>${tf("user_permissions", "User Permissions")}</span>
+    </button>
+
+    <!-- Pro-only: User groups -->
+    ${
+      isPro
+        ? `
+    <div class="btn-pro-wrapper">
+      <button
+        type="button"
+        id="adminOpenUserGroups"
+        class="btn btn-sm btn-pro-admin">
+        <i class="material-icons">groups</i>
+        <span>User groups</span>
+      </button>
+    </div>
+    `
+        : `
+    <div class="btn-pro-wrapper">
+      <button
+        type="button"
+        id="adminOpenUserGroups"
+        class="btn btn-sm btn-pro-admin">
+        <i class="material-icons">groups</i>
+        <span>User groups</span>
+      </button>
+      <span class="btn-pro-pill">Pro · Coming soon</span>
+    </div>
+    `
+    }
+
+    <!-- Pro roadmap: Client portal -->
+    ${
+      isPro
+        ? `
+    <div class="btn-pro-wrapper">
+      <button
+        type="button"
+        id="adminOpenClientPortal"
+        class="btn btn-sm btn-pro-admin"
+        title="Client upload portals are part of FileRise Pro.">
+        <i class="material-icons">cloud_upload</i>
+        <span>Client upload portal</span>
+      </button>
+    </div>
+    `
+        : `
+    <div class="btn-pro-wrapper">
+      <button
+        type="button"
+        id="adminOpenClientPortal"
+        class="btn btn-sm btn-pro-admin"
+        disabled
+        title="Planned FileRise Pro feature: client upload portals">
+        <i class="material-icons">cloud_upload</i>
+        <span>Client upload portal</span>
+      </button>
+      <span class="btn-pro-pill">Pro · Coming soon</span>
+    </div>
+    `
+    }
+  </div>
+
+  <small class="text-muted d-block" style="margin-top:6px;">
+    Use the core tools to manage users and per-folder access.
+    User groups and Client upload portals are planned FileRise Pro features.
+  </small>
+`;
 
         document.getElementById("adminOpenAddUser")
           .addEventListener("click", () => {
@@ -541,13 +721,174 @@ export function openAdminPanel() {
         document.getElementById("adminOpenUserPermissions")
           .addEventListener("click", openUserPermissionsModal);
 
-        document.getElementById("headerSettingsContent").innerHTML = `
-          <div class="form-group">
-            <label for="headerTitle">${t("header_title_text")}:</label>
-            <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle || ""}" />
-          </div>
-        `;
-        wireHeaderTitleLive();
+                  // Pro-only stubs for future features
+        const regBtn   = document.getElementById("adminOpenUserRegistration");
+        const groupsBtn = document.getElementById("adminOpenUserGroups");
+        const clientBtn = document.getElementById("adminOpenClientPortal");
+
+        if (regBtn) {
+          regBtn.addEventListener("click", () => {
+            if (!isPro) {
+              showToast("User registration is a FileRise Pro feature. Visit filerise.net to purchase a license.");
+              window.open("https://filerise.net", "_blank", "noopener");
+              return;
+            }
+            // Placeholder for future Pro UI:
+            showToast("User registration management is coming soon in FileRise Pro.");
+          });
+        }
+
+        if (groupsBtn) {
+          groupsBtn.addEventListener("click", () => {
+            if (!isPro) {
+              showToast("User groups are a FileRise Pro feature. Visit filerise.net to purchase a license.");
+              window.open("https://filerise.net", "_blank", "noopener");
+              return;
+            }
+            // Placeholder for future Pro UI:
+            showToast("User groups management is coming soon in FileRise Pro.");
+          });
+        }
+
+        if (clientBtn) {
+          clientBtn.addEventListener("click", () => {
+            if (!isPro) {
+              showToast("Client portal uploads are a FileRise Pro feature. Visit filerise.net to purchase a license.");
+              window.open("https://filerise.net", "_blank", "noopener");
+              return;
+            }
+            // Placeholder for future Pro UI:
+            showToast("Client portal uploads are coming soon in FileRise Pro.");
+          });
+        }
+
+          document.getElementById("headerSettingsContent").innerHTML = `
+  <div class="form-group">
+    <label for="headerTitle">${t("header_title_text")}:</label>
+    <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle || ""}" />
+  </div>
+
+  <!-- Pro: Logo -->
+  <div class="form-group" style="margin-top:16px;">
+    <label for="brandingCustomLogoUrl">
+      Header Logo
+      ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
+    </label>
+    <small class="text-muted d-block mb-1">
+      ${isPro
+        ? 'Upload a logo image or paste a local path.'
+        : 'Requires FileRise Pro to enable custom header branding.'}
+    </small>
+
+    <div class="input-group mb-2">
+      <input
+        type="text"
+        id="brandingCustomLogoUrl"
+        class="form-control"
+        placeholder="/uploads/profile_pics/logo.png"
+        value="${isPro ? (brandingCustomLogoUrl.replace(/"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+
+    <div class="input-group">
+      <input
+        type="file"
+        id="brandingLogoFile"
+        class="form-control"
+        accept="image/*"
+        ${!isPro ? 'disabled' : ''}
+      />
+      <button
+        type="button"
+        class="btn btn-sm btn-secondary"
+        id="brandingUploadBtn"
+        ${!isPro ? 'disabled' : ''}>
+        Upload logo
+      </button>
+    </div>
+  </div>
+
+  <!-- Pro: Header colors -->
+  <div class="form-group" style="margin-top:16px;">
+    <label>
+      Header Colors
+      ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
+    </label>
+    <div class="d-flex align-items-center" style="gap: 12px; flex-wrap: wrap;">
+      <div>
+        <label for="brandingHeaderBgLight" class="d-block" style="font-size: 12px; margin-bottom: 4px;">Light mode</label>
+        <input
+          type="color"
+          id="brandingHeaderBgLight"
+          value="${brandingHeaderBgLight || '#2196F3'}"
+          ${!isPro ? 'disabled' : ''}
+        />
+      </div>
+      <div>
+        <label for="brandingHeaderBgDark" class="d-block" style="font-size: 12px; margin-bottom: 4px;">Dark mode</label>
+        <input
+          type="color"
+          id="brandingHeaderBgDark"
+          value="${brandingHeaderBgDark || '#1f1f1f'}"
+          ${!isPro ? 'disabled' : ''}
+        />
+      </div>
+    </div>
+    <small class="text-muted d-block mt-1">
+    ${isPro
+      ? 'If left empty, FileRise uses its default blue and dark header colors.'
+      : 'Requires FileRise Pro to enable custom color branding.'}
+      
+    </small>
+  </div>
+`;
+wireHeaderTitleLive();
+
+        // Upload logo -> reuse profile picture endpoint, then fill the logo path
+        if (isPro) {
+          const fileInput = document.getElementById('brandingLogoFile');
+          const uploadBtn = document.getElementById('brandingUploadBtn');
+          const urlInput = document.getElementById('brandingCustomLogoUrl');
+        
+          if (fileInput && uploadBtn && urlInput) {
+            uploadBtn.addEventListener('click', async () => {
+              const f = fileInput.files && fileInput.files[0];
+              if (!f) {
+                showToast('Please choose an image first.');
+                return;
+              }
+        
+              const fd = new FormData();
+              fd.append('brand_logo', f); // <- must match PHP field
+        
+              try {
+                const res = await fetch('/api/pro/uploadBrandLogo.php', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: { 'X-CSRF-Token': window.csrfToken },
+                  body: fd
+                });
+        
+                const text = await res.text();
+                let js = {};
+                try { js = JSON.parse(text || '{}'); } catch (e) { js = {}; }
+        
+                if (!res.ok || !js.url) {
+                  showToast(js.error || 'Error uploading logo');
+                  return;
+                }
+        
+                const normalized = normalizeLogoPath(js.url); // your helper
+                urlInput.value = normalized;
+                showToast('Logo uploaded. Don\'t forget to Save settings.');
+              } catch (e) {
+                console.error(e);
+                showToast('Error uploading logo');
+              }
+            });
+          }
+        }
 
         document.getElementById("loginOptionsContent").innerHTML = `
           <div class="form-group"><input type="checkbox" id="disableFormLogin" /> <label for="disableFormLogin">${t("disable_login_form")}</label></div>
@@ -912,6 +1253,236 @@ async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
 
         document.getElementById("shareLinksContent").textContent = t("loading") + "…";
 
+        document.getElementById("shareLinksContent").textContent = t("loading") + "…";
+
+// --- FileRise Pro / License section ---
+const proContent = document.getElementById("proContent");
+if (proContent) {
+  const proMetaHtml =
+    isPro && (proType || proEmail || proVersion)
+      ? `
+        <div class="pro-license-meta">
+          <div>
+            ✅ ${proType ? `License type: ${proType}` : 'License active'}
+            ${proType && proEmail ? ' • ' : ''}
+            ${proEmail ? `Licensed to: ${proEmail}` : ''}
+          </div>
+          <div>
+            Pro bundle version: v${proVersion}
+          </div>
+        </div>
+      `
+      : '';
+
+  proContent.innerHTML = `
+    <div class="card pro-card" style="padding:12px; border:1px solid #ddd; border-radius:12px; max-width:620px; margin:8px auto;">
+      <div>
+        <!-- Title row with pill aligned to "FileRise Pro" -->
+        <div class="d-flex align-items-center" style="gap:8px;">
+          <strong>FileRise Pro</strong>
+          <span class="badge badge-pill ${isPro ? 'badge-success' : 'badge-secondary'} admin-pro-badge">
+            ${isPro ? 'Active' : 'Free'}
+          </span>
+        </div>
+
+        <!-- Subtitle + meta under the title -->
+        <div style="font-size:12px; color:#777; margin-top:2px;">
+          ${isPro
+            ? 'Pro features are currently enabled on this instance.'
+            : 'You are running the free edition. Enter a license key to activate FileRise Pro.'}
+        </div>
+        ${proMetaHtml}
+      </div>
+
+      ${isPro ? `
+        <div style="margin-top:8px;">
+          <a
+            href="https://filerise.net/pro/update.php"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-sm btn-pro-admin">
+            Download latest Pro bundle
+          </a>
+          <small class="text-muted d-block" style="margin-top:4px;">
+            Opens filerise.net in a new tab where you can enter your Pro license
+            to download the latest FileRise Pro ZIP.
+          </small>
+        </div>
+      ` : `
+        <div style="margin-top:8px;">
+          <a
+            href="https://filerise.net/pro/checkout.php"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-sm btn-pro-admin">
+            Buy FileRise Pro
+          </a>
+          <small class="text-muted d-block" style="margin-top:4px;">
+            Opens filerise.net in a new tab so you can purchase a FileRise Pro license.
+          </small>
+        </div>
+      `}
+
+      <div class="form-group" style="margin-top:10px;">
+        <label for="proLicenseInput" style="font-size:12px;">License key</label>
+        <textarea
+          id="proLicenseInput"
+          class="form-control"
+          rows="3"
+          placeholder="Paste your FileRise Pro license key here..."></textarea>
+        <small class="text-muted">
+          You can purchase a license at
+          <a href="https://filerise.net" target="_blank" rel="noopener noreferrer">filerise.net</a>.
+        </small>
+      </div>
+
+      ${isPro && proLicense ? `
+        <div style="margin-top:6px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="proCopyLicenseBtn">
+            Copy current license
+          </button>
+          <small class="text-muted d-block" style="margin-top:4px;">
+            Copies the saved license so you can reuse it for upgrades or downloads on filerise.net.
+          </small>
+        </div>
+      ` : ''}
+
+      <div class="form-group" style="margin-top:6px;">
+        <label style="font-size:12px;">Or upload license file</label>
+        <div class="input-group">
+          <input
+            type="file"
+            id="proLicenseFile"
+            class="form-control"
+            accept=".lic,.json,.txt,.filerise-lic"
+          />
+          <button type="button" class="btn btn-sm btn-secondary" id="proLoadLicenseFileBtn">
+            Load from file
+          </button>
+        </div>
+        <small class="text-muted">
+          Supported: FileRise.lic, plain text with FRP1... or JSON containing a <code>license</code> field.
+        </small>
+      </div>
+
+      <button type="button" class="btn btn-primary btn-sm" id="proSaveLicenseBtn" style="margin-top:8px;">
+        Save license
+      </button>
+    </div>
+  `;
+
+  // Pre-fill textarea with saved license if present
+  const licenseTextarea = document.getElementById('proLicenseInput');
+  if (licenseTextarea && proLicense) {
+    licenseTextarea.value = proLicense;
+  }
+
+  // File upload → fill textarea (unchanged)
+  const fileInput = document.getElementById('proLicenseFile');
+  const fileBtn   = document.getElementById('proLoadLicenseFileBtn');
+
+  if (fileInput && fileBtn && licenseTextarea) {
+    fileBtn.addEventListener('click', () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        showToast('Please choose a license file first.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        let raw = String(e.target.result || '').trim();
+        let license = raw;
+
+        try {
+          const js = JSON.parse(raw);
+          if (js && typeof js.license === 'string') {
+            license = js.license.trim();
+          }
+        } catch (_) {
+          // not JSON, treat as plain text
+        }
+
+        if (!license || !license.startsWith('FRP1.')) {
+          showToast('Could not find a valid FRP1 license in that file.');
+          return;
+        }
+
+        licenseTextarea.value = license;
+        showToast('License loaded from file. Click "Save license" to apply.');
+      };
+
+      reader.onerror = () => {
+        showToast('Error reading license file.');
+      };
+
+      reader.readAsText(file);
+    });
+  }
+
+  // Copy current license button
+  const proCopyBtn = document.getElementById('proCopyLicenseBtn');
+  if (proCopyBtn && proLicense) {
+    proCopyBtn.addEventListener('click', async () => {
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(proLicense);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = proLicense;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        showToast('License copied to clipboard.');
+      } catch {
+        showToast('Could not copy license. Please copy it manually.');
+      }
+    });
+  }
+
+  // Save license handler (unchanged)
+  const proSaveBtn = document.getElementById('proSaveLicenseBtn');
+  if (proSaveBtn) {
+    proSaveBtn.addEventListener('click', async () => {
+      const ta = document.getElementById('proLicenseInput');
+      const license = (ta && ta.value.trim()) || '';
+
+      try {
+        const res = await fetch('/api/admin/setLicense.php', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.content || '')
+          },
+          body: JSON.stringify({ license }),
+        });
+
+        const text = await res.text();
+        let data = {};
+        try { data = JSON.parse(text || '{}'); } catch (e) { data = {}; }
+
+        if (!res.ok || !data.success) {
+          console.error('setLicense error:', res.status, text);
+          showToast(data.error || 'Error saving license');
+          return;
+        }
+
+        showToast('License saved. Reloading…');
+        window.location.reload();
+      } catch (e) {
+        console.error(e);
+        showToast('Error saving license');
+      }
+    });
+  }
+}
+// --- end FileRise Pro section ---
+
         document.getElementById("saveAdminSettings")
           .addEventListener("click", handleSave);
         ["disableFormLogin", "disableBasicAuth", "disableOIDCLogin"].forEach(id => {
@@ -1065,6 +1636,11 @@ function handleSave() {
       // clientId/clientSecret: only include when replacing
     },
     globalOtpauthUrl: document.getElementById("globalOtpauthUrl").value.trim(),
+    branding: {
+      customLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
+      headerBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
+      headerBgDark:  (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
+    },
   };
 
   const idEl = document.getElementById("oidcClientId");
@@ -1119,6 +1695,8 @@ function handleSave() {
       if (j.error) { showToast('Error: ' + j.error); return; }
       showToast('Settings saved.');
       closeAdminPanel();
+      applyHeaderColorsFromAdmin();
+      updateHeaderLogoFromAdmin();
     })
     .catch(() => showToast('Save failed.'));
 }

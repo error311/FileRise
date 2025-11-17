@@ -649,8 +649,16 @@ class UserController
             exit;
         }
 
-        // Assuming /uploads maps to UPLOAD_DIR publicly
-        $url = '/uploads/profile_pics/' . $filename;
+        $fsPath = rtrim(UPLOAD_DIR, '/\\') . '/profile_pics/' . $filename;
+
+        // Remove the filesystem root (PROJECT_ROOT) so we get a web-relative path
+        $root   = rtrim(PROJECT_ROOT, '/\\');
+        $url    = preg_replace('#^' . preg_quote($root, '#') . '#', '', $fsPath);
+
+        // Ensure it starts with /
+        if ($url === '' || $url[0] !== '/') {
+            $url = '/' . $url;
+        }
 
         $result = UserModel::setProfilePicture($_SESSION['username'], $url);
         if (!($result['success'] ?? false)) {
@@ -661,6 +669,76 @@ class UserController
                 'error'   => 'Failed to save profile picture setting'
             ]);
             exit;
+        }
+
+        echo json_encode(['success' => true, 'url' => $url]);
+        exit;
+    }
+
+    /**
+     * Upload branding logo (Pro-only; admin, CSRF).
+     * Reuses the profile_pics directory but does NOT change the user's avatar.
+     */
+    public function uploadBrandLogo()
+    {
+        self::jsonHeaders();
+
+        // Auth, admin & CSRF
+        self::requireAuth();
+        self::requireAdmin();
+        self::requireCsrf();
+
+        if (empty($_FILES['brand_logo']) || $_FILES['brand_logo']['error'] !== UPLOAD_ERR_OK) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No file uploaded or error']);
+            exit;
+        }
+        $file = $_FILES['brand_logo'];
+
+        // Validate MIME & size (same rules as uploadPicture)
+        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif'];
+        $finfo   = finfo_open(FILEINFO_MIME_TYPE);
+        $mime    = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+        if (!isset($allowed[$mime])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid file type']);
+            exit;
+        }
+        if ($file['size'] > 2 * 1024 * 1024) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'File too large']);
+            exit;
+        }
+
+        // Destination: reuse profile_pics directory
+        $uploadDir = rtrim(UPLOAD_DIR, '/\\') . '/profile_pics';
+        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Cannot create upload folder']);
+            exit;
+        }
+
+        $ext      = $allowed[$mime];
+        $user     = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_SESSION['username'] ?? 'logo');
+        $filename = 'branding_' . $user . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $dest     = $uploadDir . '/' . $filename;
+        if (!move_uploaded_file($file['tmp_name'], $dest)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to save file']);
+            exit;
+        }
+
+        
+        $fsPath = rtrim(UPLOAD_DIR, '/\\') . '/profile_pics/' . $filename;
+
+        // Remove the filesystem root (PROJECT_ROOT) so we get a web-relative path
+        $root   = rtrim(PROJECT_ROOT, '/\\');
+        $url    = preg_replace('#^' . preg_quote($root, '#') . '#', '', $fsPath);
+
+        // Ensure it starts with /
+        if ($url === '' || $url[0] !== '/') {
+            $url = '/' . $url;
         }
 
         echo json_encode(['success' => true, 'url' => $url]);

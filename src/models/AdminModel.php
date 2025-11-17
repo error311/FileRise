@@ -73,6 +73,27 @@ class AdminModel
         return ($scheme === 'http' || $scheme === 'https') ? $url : '';
     }
 
+    /** Allow logo URLs that are either site-relative (/uploads/…) or http(s). */
+private static function sanitizeLogoUrl($url): string
+{
+    $url = trim((string)$url);
+    if ($url === '') return '';
+
+    // 1) Site-relative like "/uploads/profile_pics/branding_foo.png"
+    if ($url[0] === '/') {
+        // Strip CRLF just in case
+        $url = preg_replace('~[\r\n]+~', '', $url);
+        // Don’t allow sneaky schemes embedded in a relative path
+        if (strpos($url, '://') !== false) {
+            return '';
+        }
+        return $url;
+    }
+
+    // 2) Fallback to plain http(s) validation
+    return self::sanitizeHttpUrl($url);
+}
+
     public static function buildPublicSubset(array $config): array
 {
     $public = [
@@ -88,6 +109,17 @@ class AdminModel
         'oidc' => [
             'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
             'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
+        ],
+        'branding' => [
+            'customLogoUrl' => self::sanitizeLogoUrl(
+                $config['branding']['customLogoUrl'] ?? ''
+            ),
+            'headerBgLight' => self::sanitizeColorHex(
+                $config['branding']['headerBgLight'] ?? ''
+            ),
+            'headerBgDark'  => self::sanitizeColorHex(
+                $config['branding']['headerBgDark'] ?? ''
+            ),
         ],
     ];
 
@@ -226,6 +258,30 @@ $public['onlyoffice'] = ['enabled' => $ooEnabled];
         
                     $configUpdate['onlyoffice'] = $norm;
                 }
+        
+        // Branding (Pro-only). Normalize and only persist when Pro is active.
+        if (!isset($configUpdate['branding']) || !is_array($configUpdate['branding'])) {
+            $configUpdate['branding'] = [
+                'customLogoUrl'   => '',
+                'headerBgLight'   => '',
+                'headerBgDark'    => '',
+            ];
+        } else {
+            $logo  = self::sanitizeLogoUrl($configUpdate['branding']['customLogoUrl'] ?? '');
+            $light = self::sanitizeColorHex($configUpdate['branding']['headerBgLight'] ?? '');
+            $dark  = self::sanitizeColorHex($configUpdate['branding']['headerBgDark'] ?? '');
+
+            if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) {
+                $configUpdate['branding']['customLogoUrl'] = $logo;
+                $configUpdate['branding']['headerBgLight'] = $light;
+                $configUpdate['branding']['headerBgDark']  = $dark;
+            } else {
+                // Free mode: always clear branding customizations
+                $configUpdate['branding']['customLogoUrl'] = '';
+                $configUpdate['branding']['headerBgLight'] = '';
+                $configUpdate['branding']['headerBgDark']  = '';
+            }
+        }
 
         // Convert configuration to JSON.
         $plainTextConfig = json_encode($configUpdate, JSON_PRETTY_PRINT);
@@ -266,6 +322,18 @@ $public['onlyoffice'] = ['enabled' => $ooEnabled];
 
         return ["success" => "Configuration updated successfully."];
     }
+
+    private static function sanitizeColorHex($value): string
+{
+    $value = trim((string)$value);
+    if ($value === '') return '';
+
+    // allow #RGB or #RRGGBB
+    if (preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $value)) {
+        return strtoupper($value);
+    }
+    return '';
+}
 
     /**
      * Retrieves the current configuration.
@@ -368,6 +436,25 @@ $public['onlyoffice'] = ['enabled' => $ooEnabled];
                 $config['onlyoffice']['publicOrigin'] = self::sanitizeHttpUrl($config['onlyoffice']['publicOrigin'] ?? '');
             }
 
+            // Branding
+            if (!isset($config['branding']) || !is_array($config['branding'])) {
+                $config['branding'] = [
+                    'customLogoUrl' => '',
+                    'headerBgLight' => '',
+                    'headerBgDark'  => '',
+                ];
+            } else {
+                $config['branding']['customLogoUrl'] = self::sanitizeLogoUrl(
+                    $config['branding']['customLogoUrl'] ?? ''
+                );
+                $config['branding']['headerBgLight'] = self::sanitizeColorHex(
+                    $config['branding']['headerBgLight'] ?? ''
+                );
+                $config['branding']['headerBgDark'] = self::sanitizeColorHex(
+                    $config['branding']['headerBgDark'] ?? ''
+                );
+            }
+
             return $config;
         }
 
@@ -392,6 +479,11 @@ $public['onlyoffice'] = ['enabled' => $ooEnabled];
                 'enabled'      => false,
                 'docsOrigin'   => '',
                 'publicOrigin' => '',
+            ],
+            'branding'              => [
+                'customLogoUrl' => '',
+                'headerBgLight'   => '',
+                'headerBgDark'    => '',
             ],
         ];
     }
