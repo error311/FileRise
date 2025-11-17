@@ -1,5 +1,16 @@
 # Changelog
 
+## Changes 11/16/2025 (v1.9.9)
+
+release(v1.9.9): fix(branding): sanitize custom logo URL preview
+
+- Sanitize branding.customLogoUrl on the server before writing siteConfig.json
+- Allow only http/https or site-relative paths; strip invalid/sneaky values
+- Update adminPanel.js live logo preview to set img src/alt safely
+- Addresses CodeQL XSS warning while keeping Pro branding logo overrides working
+
+---
+
 ## Changes 11/16/2025 (v1.9.8)
 
 release(v1.9.8): feat(pro): wire core to Pro licensing + branding hooks

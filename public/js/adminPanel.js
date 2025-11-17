@@ -85,7 +85,15 @@ function updateHeaderLogoFromAdmin() {
       url = '/' + url;
     }
 
-    if (url) {
+    // ---- Sanitize URL (mirror AdminModel::sanitizeLogoUrl) ----
+    const isHttp = /^https?:\/\//i.test(url);
+    const isSiteRelative = url.startsWith('/') && !url.includes('://');
+
+    // Strip any CR/LF just in case
+    url = url.replace(/[\r\n]+/g, '');
+
+    if (url && (isHttp || isSiteRelative)) {
+      // safe enough for <img src="...">
       logoImg.setAttribute('src', url);
       logoImg.setAttribute('alt', 'Site logo');
     } else {
