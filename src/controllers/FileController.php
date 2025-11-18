@@ -643,25 +643,137 @@ public function deleteFiles()
         } finally { $this->_jsonEnd(); }
     }
 
+        /**
+     * Stream a file with proper HTTP Range support so HTML5 video/audio can seek.
+     *
+     * @param string $fullPath     Absolute filesystem path
+     * @param string $downloadName Name shown in Content-Disposition
+     * @param string $mimeType     MIME type (from FileModel::getDownloadInfo)
+     * @param bool   $inline       true => inline, false => attachment
+     */
+    private function streamFileWithRange(string $fullPath, string $downloadName, string $mimeType, bool $inline): void
+    {
+        if (!is_file($fullPath) || !is_readable($fullPath)) {
+            http_response_code(404);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'File not found']);
+            exit;
+        }
+
+        $size = (int)@filesize($fullPath);
+        $start = 0;
+        $end   = $size > 0 ? $size - 1 : 0;
+
+        if ($size < 0) {
+            $size = 0;
+            $end  = 0;
+        }
+
+        // Close session + disable output buffering for streaming
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+        if (function_exists('apache_setenv')) {
+            @apache_setenv('no-gzip', '1');
+        }
+        @ini_set('zlib.output_compression', '0');
+        @ini_set('output_buffering', 'off');
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        $disposition = $inline ? 'inline' : 'attachment';
+        $mime = $mimeType ?: 'application/octet-stream';
+
+        header('X-Content-Type-Options: nosniff');
+        header('Accept-Ranges: bytes');
+        header("Content-Type: {$mime}");
+        header("Content-Disposition: {$disposition}; filename=\"" . basename($downloadName) . "\"");
+
+        // Handle HTTP Range header (single range)
+        $length = $size;
+        if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=\s*(\d*)-(\d*)/i', $_SERVER['HTTP_RANGE'], $m)) {
+            if ($m[1] !== '') {
+                $start = (int)$m[1];
+            }
+            if ($m[2] !== '') {
+                $end = (int)$m[2];
+            }
+
+            // clamp to file size
+            if ($start < 0) $start = 0;
+            if ($end < $start) $end = $start;
+            if ($end >= $size) $end = $size - 1;
+
+            $length = $end - $start + 1;
+
+            http_response_code(206);
+            header("Content-Range: bytes {$start}-{$end}/{$size}");
+            header("Content-Length: {$length}");
+        } else {
+            // no range => full file
+            http_response_code(200);
+            if ($size > 0) {
+                header("Content-Length: {$size}");
+            }
+        }
+
+        $fp = @fopen($fullPath, 'rb');
+        if ($fp === false) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Unable to open file.']);
+            exit;
+        }
+
+        if ($start > 0) {
+            @fseek($fp, $start);
+        }
+
+        $bytesToSend = $length;
+        $chunkSize = 8192;
+
+        while ($bytesToSend > 0 && !feof($fp)) {
+            $readSize = ($bytesToSend > $chunkSize) ? $chunkSize : $bytesToSend;
+            $buffer = fread($fp, $readSize);
+            if ($buffer === false) {
+                break;
+            }
+            echo $buffer;
+            flush();
+            $bytesToSend -= strlen($buffer);
+
+            if (connection_aborted()) {
+                break;
+            }
+        }
+
+        fclose($fp);
+        exit;
+    }
+
     public function downloadFile()
     {
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Unauthorized"]);
             exit;
         }
 
-        $file   = isset($_GET['file']) ? basename($_GET['file']) : '';
-        $folder = isset($_GET['folder']) ? trim($_GET['folder']) : 'root';
+        $file   = isset($_GET['file']) ? basename((string)$_GET['file']) : '';
+        $folder = isset($_GET['folder']) ? trim((string)$_GET['folder']) : 'root';
+        $inlineParam = isset($_GET['inline']) && (string)$_GET['inline'] === '1';
 
         if (!preg_match(REGEX_FILE_NAME, $file)) {
             http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Invalid file name."]);
             exit;
         }
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Invalid folder name."]);
             exit;
         }
@@ -681,6 +793,7 @@ public function deleteFiles()
 
         if (!$fullView && !$ownGrant) {
             http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Forbidden: no view access to this folder."]);
             exit;
         }
@@ -690,6 +803,7 @@ public function deleteFiles()
             $meta = $this->loadFolderMetadata($folder);
             if (!isset($meta[$file]['uploader']) || strcasecmp((string)$meta[$file]['uploader'], $username) !== 0) {
                 http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
                 echo json_encode(["error" => "Forbidden: you are not the owner of this file."]);
                 exit;
             }
@@ -697,25 +811,25 @@ public function deleteFiles()
 
         $downloadInfo = FileModel::getDownloadInfo($folder, $file);
         if (isset($downloadInfo['error'])) {
-            http_response_code((in_array($downloadInfo['error'], ["File not found.", "Access forbidden."])) ? 404 : 400);
+            http_response_code(in_array($downloadInfo['error'], ["File not found.", "Access forbidden."]) ? 404 : 400);
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => $downloadInfo['error']]);
             exit;
         }
 
         $realFilePath = $downloadInfo['filePath'];
         $mimeType     = $downloadInfo['mimeType'];
-        header("Content-Type: " . $mimeType);
 
+        // Decide inline vs attachment:
+        //  - if ?inline=1 => always inline (used by filePreview.js)
+        //  - else keep your old behavior: images inline, everything else attachment
         $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
         $inlineImageTypes = ['jpg','jpeg','png','gif','bmp','webp','svg','ico'];
-        if (in_array($ext, $inlineImageTypes, true)) {
-            header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
-        } else {
-            header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
-        }
-        header('Content-Length: ' . filesize($realFilePath));
-        readfile($realFilePath);
-        exit;
+
+        $inline = $inlineParam || in_array($ext, $inlineImageTypes, true);
+
+        // Stream with proper Range support for video/audio seeking
+        $this->streamFileWithRange($realFilePath, basename($realFilePath), $mimeType, $inline);
     }
 
     public function zipStatus()

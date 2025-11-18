@@ -469,102 +469,118 @@ export function previewFile(fileUrl, fileName) {
     return;
   }
 
-  /* -------------------- VIDEOS -------------------- */
-  if (isVideo) {
-    let video = document.createElement("video"); // let so we can rebind
-    video.controls = true;
-    video.style.maxWidth  = "88vw";
-    video.style.maxHeight = "88vh";
-    video.style.objectFit = "contain";
-    container.appendChild(video);
-
-    // Top-right action icons (Material icons, theme-aware)
-    const markBtnIcon  = makeTopIcon('check_circle', t("mark_as_viewed") || "Mark as viewed");
-    const clearBtnIcon = makeTopIcon('restart_alt',  t("clear_progress") || "Clear progress");
-    actionWrap.appendChild(markBtnIcon);
-    actionWrap.appendChild(clearBtnIcon);
-
-    const videos = (Array.isArray(fileData) ? fileData : []).filter(f => VID_RE.test(f.name));
-    overlay.mediaType  = 'video';
-    overlay.mediaList  = videos;
-    overlay.mediaIndex = Math.max(0, videos.findIndex(f => f.name === name));
-    setNavVisibility(overlay, videos.length > 1, videos.length > 1);
-
-    const setVideoSrc = (nm) => { video.src = buildPreviewUrl(folder, nm); setTitle(overlay, nm); };
-
-    const SAVE_INTERVAL_MS = 5000;
-    let lastSaveAt = 0;
-    let pending = false;
-
-    async function getProgress(nm) {
-      try {
-        const res = await fetch(`/api/media/getProgress.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(nm)}&t=${Date.now()}`, { credentials: "include" });
-        const data = await res.json();
-        return data && data.state ? data.state : null;
-      } catch { return null; }
-    }
-    async function sendProgress({nm, seconds, duration, completed, clear}) {
-      try {
-        pending = true;
-        const res = await fetch("/api/media/updateProgress.php", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
-          body: JSON.stringify({ folder, file: nm, seconds, duration, completed, clear })
-        });
-        const data = await res.json();
-        pending = false;
-        return data;
-      } catch (e) { pending = false; console.error(e); return null; }
-    }
-    const lsKey = (nm) => `videoProgress-${folder}/${nm}`;
-
-    function renderStatus(state) {
-      if (!statusChip) return;
-      // Completed
-      if (state && state.completed) {
-        statusChip.textContent = (t('viewed') || 'Viewed') + ' ✓';
-        statusChip.style.display = 'inline-block';
-        statusChip.style.borderColor = 'rgba(34,197,94,.45)';
-        statusChip.style.background  = 'rgba(34,197,94,.15)';
-        statusChip.style.color       = '#22c55e';
-        markBtnIcon.style.display  = 'none';
-        clearBtnIcon.style.display = '';
-        clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
-        return;
+    /* -------------------- VIDEOS -------------------- */
+    if (isVideo) {
+      let video = document.createElement("video");
+      video.controls = true;
+      video.preload  = 'auto'; // hint browser to start fetching quickly
+      video.style.maxWidth  = "88vw";
+      video.style.maxHeight = "88vh";
+      video.style.objectFit = "contain";
+      container.appendChild(video);
+  
+      // Top-right action icons (Material icons, theme-aware)
+      const markBtnIcon  = makeTopIcon('check_circle', t("mark_as_viewed") || "Mark as viewed");
+      const clearBtnIcon = makeTopIcon('restart_alt',  t("clear_progress") || "Clear progress");
+      actionWrap.appendChild(markBtnIcon);
+      actionWrap.appendChild(clearBtnIcon);
+  
+      const videos = (Array.isArray(fileData) ? fileData : []).filter(f => VID_RE.test(f.name));
+      overlay.mediaType  = 'video';
+      overlay.mediaList  = videos;
+      overlay.mediaIndex = Math.max(0, videos.findIndex(f => f.name === name));
+      setNavVisibility(overlay, videos.length > 1, videos.length > 1);
+  
+      // Track which file is currently active
+      let currentName = name;
+  
+      const setVideoSrc = (nm) => {
+        currentName = nm;
+        video.src = buildPreviewUrl(folder, nm);
+        setTitle(overlay, nm);
+      };
+  
+      const SAVE_INTERVAL_MS = 5000;
+      let lastSaveAt = 0;
+      let pending = false;
+  
+      async function getProgress(nm) {
+        try {
+          const res = await fetch(`/api/media/getProgress.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(nm)}&t=${Date.now()}`, { credentials: "include" });
+          const data = await res.json();
+          return data && data.state ? data.state : null;
+        } catch { return null; }
       }
-      // In progress
-      if (state && Number.isFinite(state.seconds) && Number.isFinite(state.duration) && state.duration > 0) {
-        const pct = Math.max(1, Math.min(99, Math.round((state.seconds / state.duration) * 100)));
-        statusChip.textContent = `${pct}%`;
-        statusChip.style.display = 'inline-block';
-        const dark = document.documentElement.classList.contains('dark-mode');
- const ORANGE_HEX = '#ea580c'; // darker orange (works in light/dark)
- statusChip.style.color       = ORANGE_HEX;
- statusChip.style.borderColor = dark ? 'rgba(234,88,12,.55)' : 'rgba(234,88,12,.45)';  // #ea580c @ different alphas
- statusChip.style.background  = dark ? 'rgba(234,88,12,.18)' : 'rgba(234,88,12,.12)';
+  
+      async function sendProgress({nm, seconds, duration, completed, clear}) {
+        try {
+          pending = true;
+          const res = await fetch("/api/media/updateProgress.php", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+            body: JSON.stringify({ folder, file: nm, seconds, duration, completed, clear })
+          });
+          const data = await res.json();
+          pending = false;
+          return data;
+        } catch (e) {
+          pending = false;
+          console.error(e);
+          return null;
+        }
+      }
+  
+      const lsKey = (nm) => `videoProgress-${folder}/${nm}`;
+  
+      function renderStatus(state) {
+        if (!statusChip) return;
+  
+        // Completed
+        if (state && state.completed) {
+          statusChip.textContent = (t('viewed') || 'Viewed') + ' ✓';
+          statusChip.style.display = 'inline-block';
+          statusChip.style.borderColor = 'rgba(34,197,94,.45)';
+          statusChip.style.background  = 'rgba(34,197,94,.15)';
+          statusChip.style.color       = '#22c55e';
+          markBtnIcon.style.display  = 'none';
+          clearBtnIcon.style.display = '';
+          clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
+          return;
+        }
+  
+        // In progress
+        if (state && Number.isFinite(state.seconds) && Number.isFinite(state.duration) && state.duration > 0) {
+          const pct = Math.max(1, Math.min(99, Math.round((state.seconds / state.duration) * 100)));
+          statusChip.textContent = `${pct}%`;
+          statusChip.style.display = 'inline-block';
+  
+          const dark = document.documentElement.classList.contains('dark-mode');
+          const ORANGE_HEX = '#ea580c';
+          statusChip.style.color       = ORANGE_HEX;
+          statusChip.style.borderColor = dark ? 'rgba(234,88,12,.55)' : 'rgba(234,88,12,.45)';
+          statusChip.style.background  = dark ? 'rgba(234,88,12,.18)' : 'rgba(234,88,12,.12)';
+  
+          markBtnIcon.style.display  = '';
+          clearBtnIcon.style.display = '';
+          clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
+          return;
+        }
+  
+        // No progress
+        statusChip.style.display = 'none';
         markBtnIcon.style.display  = '';
-        clearBtnIcon.style.display = '';
-        clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
-        return;
+        clearBtnIcon.style.display = 'none';
       }
-      // No progress
-      statusChip.style.display = 'none';
-      markBtnIcon.style.display  = '';
-      clearBtnIcon.style.display = 'none';
-    }
-
-    function bindVideoEvents(nm) {
-      const nv = video.cloneNode(true);
-      video.replaceWith(nv);
-      video = nv;
-
+  
+      // ---- Event handlers (use currentName instead of rebinding per file) ----
       video.addEventListener("loadedmetadata", async () => {
+        const nm = currentName;
         try {
           const state = await getProgress(nm);
           if (state && Number.isFinite(state.seconds) && state.seconds > 0 && state.seconds < (video.duration || Infinity)) {
             video.currentTime = state.seconds;
-            const seconds = Math.floor(video.currentTime || 0);
+            const seconds  = Math.floor(video.currentTime || 0);
             const duration = Math.floor(video.duration || 0);
             setFileProgressBadge(nm, seconds, duration);
             showToast((t("resumed_from") || "Resumed from") + " " + Math.floor(state.seconds) + "s");
@@ -577,20 +593,24 @@ export function previewFile(fileUrl, fileName) {
           renderStatus(null);
         }
       });
-
+  
       video.addEventListener("timeupdate", async () => {
         const now = Date.now();
         if ((now - lastSaveAt) < SAVE_INTERVAL_MS || pending) return;
         lastSaveAt = now;
-        const seconds = Math.floor(video.currentTime || 0);
+  
+        const nm = currentName;
+        const seconds  = Math.floor(video.currentTime || 0);
         const duration = Math.floor(video.duration || 0);
+  
         sendProgress({ nm, seconds, duration });
         setFileProgressBadge(nm, seconds, duration);
         try { localStorage.setItem(lsKey(nm), String(seconds)); } catch {}
         renderStatus({ seconds, duration, completed: false });
       });
-
+  
       video.addEventListener("ended", async () => {
+        const nm = currentName;
         const duration = Math.floor(video.duration || 0);
         await sendProgress({ nm, seconds: duration, duration, completed: true });
         try { localStorage.removeItem(lsKey(nm)); } catch {}
@@ -598,49 +618,53 @@ export function previewFile(fileUrl, fileName) {
         setFileWatchedBadge(nm, true);
         renderStatus({ seconds: duration, duration, completed: true });
       });
-
+  
       markBtnIcon.onclick = async () => {
+        const nm = currentName;
         const duration = Math.floor(video.duration || 0);
         await sendProgress({ nm, seconds: duration, duration, completed: true });
         showToast(t("marked_viewed") || "Marked as viewed");
         setFileWatchedBadge(nm, true);
         renderStatus({ seconds: duration, duration, completed: true });
       };
+  
       clearBtnIcon.onclick = async () => {
+        const nm = currentName;
         await sendProgress({ nm, seconds: 0, duration: null, completed: false, clear: true });
         try { localStorage.removeItem(lsKey(nm)); } catch {}
         showToast(t("progress_cleared") || "Progress cleared");
         setFileWatchedBadge(nm, false);
         renderStatus(null);
       };
-    }
-
-    const navigate = (dir) => {
-      if (!overlay.mediaList || overlay.mediaList.length < 2) return;
-      overlay.mediaIndex = (overlay.mediaIndex + dir + overlay.mediaList.length) % overlay.mediaList.length;
-      const nm = overlay.mediaList[overlay.mediaIndex].name;
-      setVideoSrc(nm);
-      bindVideoEvents(nm);
-    };
-
-    if (videos.length > 1) {
-      prevBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(-1); });
-      nextBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(+1); });
-      const onKey = (e) => {
-        if (!document.body.contains(overlay)) { window.removeEventListener("keydown", onKey); return; }
-        if (e.key === "ArrowLeft")  navigate(-1);
-        if (e.key === "ArrowRight") navigate(+1);
+  
+      const navigate = (dir) => {
+        if (!overlay.mediaList || overlay.mediaList.length < 2) return;
+        overlay.mediaIndex = (overlay.mediaIndex + dir + overlay.mediaList.length) % overlay.mediaList.length;
+        const nm = overlay.mediaList[overlay.mediaIndex].name;
+        setVideoSrc(nm);
+        renderStatus(null);
       };
-      window.addEventListener("keydown", onKey);
-      overlay._onKey = onKey;
+  
+      if (videos.length > 1) {
+        prevBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(-1); });
+        nextBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(+1); });
+        const onKey = (e) => {
+          if (!document.body.contains(overlay)) {
+            window.removeEventListener("keydown", onKey);
+            return;
+          }
+          if (e.key === "ArrowLeft")  navigate(-1);
+          if (e.key === "ArrowRight") navigate(+1);
+        };
+        window.addEventListener("keydown", onKey);
+        overlay._onKey = onKey;
+      }
+  
+      setVideoSrc(name);
+      renderStatus(null);
+      overlay.style.display = "flex";
+      return;
     }
-
-    setVideoSrc(name);
-    renderStatus(null);
-    bindVideoEvents(name);
-    overlay.style.display = "flex";
-    return;
-  }
 
   /* -------------------- AUDIO / OTHER -------------------- */
   if (isAudio) {

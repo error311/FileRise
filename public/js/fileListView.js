@@ -40,7 +40,7 @@ export let fileData = [];
 export let sortOrder = { column: "uploaded", ascending: true };
 
 
-
+const FOLDER_STRIP_PAGE_SIZE = 50;
 // onnlyoffice
 let OO_ENABLED = false;
 let OO_EXTS = new Set();
@@ -58,6 +58,143 @@ export async function initOnlyOfficeCaps() {
   }
 }
 
+function wireFolderStripItems(strip) {
+  if (!strip) return;
+
+  // Click / DnD / context menu
+  strip.querySelectorAll(".folder-item").forEach(el => {
+    // 1) click to navigate
+    el.addEventListener("click", () => {
+      const dest = el.dataset.folder;
+      if (!dest) return;
+
+      window.currentFolder = dest;
+      localStorage.setItem("lastOpenedFolder", dest);
+      updateBreadcrumbTitle(dest);
+
+      document.querySelectorAll(".folder-option.selected")
+        .forEach(o => o.classList.remove("selected"));
+      document
+        .querySelector(`.folder-option[data-folder="${dest}"]`)
+        ?.classList.add("selected");
+
+      loadFileList(dest);
+    });
+
+    // 2) drag & drop
+    el.addEventListener("dragover", folderDragOverHandler);
+    el.addEventListener("dragleave", folderDragLeaveHandler);
+    el.addEventListener("drop", folderDropHandler);
+
+    // 3) right-click context menu
+    el.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const dest = el.dataset.folder;
+      if (!dest) return;
+
+      window.currentFolder = dest;
+      localStorage.setItem("lastOpenedFolder", dest);
+
+      strip.querySelectorAll(".folder-item.selected")
+        .forEach(i => i.classList.remove("selected"));
+      el.classList.add("selected");
+
+      const menuItems = [
+        {
+          label: t("create_folder"),
+          action: () => document.getElementById("createFolderModal").style.display = "block"
+        },
+        {
+          label: t("move_folder"),
+          action: () => openMoveFolderUI()
+        },
+        {
+          label: t("rename_folder"),
+          action: () => openRenameFolderModal()
+        },
+        {
+          label: t("color_folder"),
+          action: () => openColorFolderModal(dest)
+        },
+        {
+          label: t("folder_share"),
+          action: () => openFolderShareModal(dest)
+        },
+        {
+          label: t("delete_folder"),
+          action: () => openDeleteFolderModal()
+        }
+      ];
+      showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+    });
+  });
+
+  // Close menu when clicking elsewhere
+  document.addEventListener("click", hideFolderManagerContextMenu);
+
+  // Folder icons
+  strip.querySelectorAll(".folder-item").forEach(el => {
+    const full = el.getAttribute('data-folder');
+    if (full) attachStripIconAsync(el, full, 48);
+  });
+}
+
+function renderFolderStripPaged(strip, subfolders) {
+  if (!strip) return;
+
+  if (!window.showFoldersInList || !subfolders.length) {
+    strip.style.display = "none";
+    strip.innerHTML = "";
+    return;
+  }
+
+  const total = subfolders.length;
+  const pageSize = FOLDER_STRIP_PAGE_SIZE;
+  const totalPages = Math.ceil(total / pageSize);
+
+  function drawPage(page) {
+    const endIdx = Math.min(page * pageSize, total);
+    const visible = subfolders.slice(0, endIdx);
+
+    let html = visible.map(sf => `
+      <div class="folder-item"
+           data-folder="${sf.full}"
+           draggable="true">
+        <span class="folder-svg"></span>
+        <div class="folder-name">
+          ${escapeHTML(sf.name)}
+        </div>
+      </div>
+    `).join("");
+
+    if (endIdx < total) {
+      html += `
+        <button type="button"
+                class="folder-strip-load-more">
+          ${t('load_more_folders') || t('load_more') || 'Load more folders'}
+        </button>
+      `;
+    }
+
+    strip.innerHTML = html;
+
+    applyFolderStripLayout(strip);
+    wireFolderStripItems(strip);
+
+    const loadMoreBtn = strip.querySelector(".folder-strip-load-more");
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        drawPage(page + 1);
+      });
+    }
+  }
+
+  drawPage(1);
+}
 
 // helper to repaint one strip item quickly
 function repaintStripIcon(folder) {
@@ -77,6 +214,31 @@ function repaintStripIcon(folder) {
   const kind = iconSpan.dataset.kind || 'empty';
   iconSpan.innerHTML = folderSVG(kind);
 }
+
+function applyFolderStripLayout(strip) {
+  if (!strip) return;
+  const hasItems = strip.querySelector('.folder-item') !== null;
+  if (!hasItems) {
+    strip.style.display = 'none';
+    strip.classList.remove('folder-strip-mobile', 'folder-strip-desktop');
+    return;
+  }
+
+  const isMobile = window.innerWidth <= 640; // tweak breakpoint if you want
+
+  strip.classList.add('folder-strip-container');
+  strip.classList.toggle('folder-strip-mobile', isMobile);
+  strip.classList.toggle('folder-strip-desktop', !isMobile);
+
+  strip.style.display = isMobile ? 'block' : 'flex';
+  strip.style.overflowX = isMobile ? 'visible' : 'auto';
+  strip.style.overflowY = isMobile ? 'auto' : 'hidden';
+}
+
+window.addEventListener('resize', () => {
+  const strip = document.getElementById('folderStripContainer');
+  if (strip) applyFolderStripLayout(strip);
+});
 
 // Listen once: update strip + tree when folder color changes
 window.addEventListener('folderColorChanged', (e) => {
@@ -812,93 +974,8 @@ export async function loadFileList(folderParam) {
         actionsContainer.parentNode.insertBefore(strip, actionsContainer);
       }
 
-      if (window.showFoldersInList && subfolders.length) {
-        strip.innerHTML = subfolders.map(sf => {
-          return `
-              <div class="folder-item"
-                   data-folder="${sf.full}"
-                   draggable="true"
-                   style="display:flex;align-items:center;gap:10px;min-width:0;">
-                <span class="folder-svg" style="flex:0 0 auto;line-height:0;"></span>
-                <div class="folder-name"
-                     style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  ${escapeHTML(sf.name)}
-                </div>
-              </div>
-            `;
-        }).join("");
-        strip.style.display = "flex";
-
-        strip.querySelectorAll(".folder-item").forEach(el => {
-          // 1) click to navigate
-          el.addEventListener("click", () => {
-            const dest = el.dataset.folder;
-            window.currentFolder = dest;
-            localStorage.setItem("lastOpenedFolder", dest);
-            updateBreadcrumbTitle(dest);
-            document.querySelectorAll(".folder-option.selected").forEach(o => o.classList.remove("selected"));
-            document.querySelector(`.folder-option[data-folder="${dest}"]`)?.classList.add("selected");
-            loadFileList(dest);
-          });
-
-          // 2) drag & drop
-          el.addEventListener("dragover", folderDragOverHandler);
-          el.addEventListener("dragleave", folderDragLeaveHandler);
-          el.addEventListener("drop", folderDropHandler);
-
-          // 3) right-click context menu
-          el.addEventListener("contextmenu", e => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const dest = el.dataset.folder;
-            window.currentFolder = dest;
-            localStorage.setItem("lastOpenedFolder", dest);
-
-            strip.querySelectorAll(".folder-item.selected").forEach(i => i.classList.remove("selected"));
-            el.classList.add("selected");
-
-            const menuItems = [
-              {
-                label: t("create_folder"),
-                action: () => document.getElementById("createFolderModal").style.display = "block"
-              },
-              {
-                label: t("move_folder"),
-                action: () => openMoveFolderUI()
-              },
-              {
-                label: t("rename_folder"),
-                action: () => openRenameFolderModal()
-              },
-              {
-                label: t("color_folder"),
-                action: () => openColorFolderModal(dest)
-              },
-              {
-                label: t("folder_share"),
-                action: () => openFolderShareModal(dest)
-              },
-              {
-                label: t("delete_folder"),
-                action: () => openDeleteFolderModal()
-              }
-            ];
-            showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
-          });
-        });
-
-        document.addEventListener("click", hideFolderManagerContextMenu);
-
-        // After wiring events for each .folder-item:
-        strip.querySelectorAll(".folder-item").forEach(el => {
-          const full = el.getAttribute('data-folder');
-          attachStripIconAsync(el, full, 48);
-        });
-
-      } else {
-        strip.style.display = "none";
-      }
+      // NEW: paged + responsive strip
+      renderFolderStripPaged(strip, subfolders);
     } catch {
       // ignore folder errors; rows already rendered
     }

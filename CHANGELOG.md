@@ -1,6 +1,29 @@
 # Changelog
 
-## changes 11/18/2025 (v1.9.10)
+## Changes 11/18/2025 (v1.9.11)
+
+release(v1.9.11): fix(media): HTTP Range streaming; feat(ui): paged folder strip (closes #68)
+
+- media: add proper HTTP Range support to /api/file/download.php so HTML5
+  video/audio can seek correctly across all browsers (Brave/Chrome/Android/Windows).
+- media: avoid buffering the entire file in memory; stream from disk with
+  200/206 responses and Accept-Ranges for smoother playback and faster start times.
+- media: keep video progress tracking, watched badges, and status chip behavior
+  unchanged but now compatible with the new streaming endpoint.
+
+- ui: update the folder strip to be responsive:
+  - desktop: keep the existing "chip" layout with icon above name.
+  - mobile: switch to inline rows `[icon] [name]` with reduced whitespace.
+- ui: add simple lazy-loading for the folder strip so only the first batch of
+  folders is rendered initially, with a "Load more…" button to append chunks for
+  very large folder sets (stays friendly with 100k+ folders).
+
+- misc: small CSS tidy-up around the folder strip classes to remove duplicates
+  and keep mobile/desktop behavior clearly separated.
+
+---
+
+## Changes 11/18/2025 (v1.9.10)
 
 release(v1.9.10): add Pro bundle installer and admin panel polish
 

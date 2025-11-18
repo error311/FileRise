@@ -330,7 +330,8 @@ const translations = {
     "folder_help_load_more": "For long lists, click “Load more” to fetch the next page of folders.",
     "folder_help_last_folder": "Your last opened folder is remembered. If you lose access, we pick the first allowed folder automatically.",
     "folder_help_breadcrumbs": "Use the breadcrumb to jump up the path. You can also drop onto a breadcrumb.",
-    "folder_help_permissions": "Buttons enable/disable based on your permissions for the selected folder."
+    "folder_help_permissions": "Buttons enable/disable based on your permissions for the selected folder.",
+    "load_more_folders": "Load More Folders"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",
