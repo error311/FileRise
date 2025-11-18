@@ -14,6 +14,9 @@ function normalizeLogoPath(raw) {
 }
 
 const version = window.APP_VERSION || "dev";
+// Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
+// Update this when I cut a new Pro ZIP.
+const PRO_LATEST_BUNDLE_VERSION = 'v1.0.0';
 
 function getAdminTitle(isPro, proVersion) {
   const corePill = `
@@ -21,6 +24,23 @@ function getAdminTitle(isPro, proVersion) {
       Core ${version}
     </span>
   `;
+
+  // Normalize versions so "v1.0.1" and "1.0.1" compare cleanly
+  const norm = (v) => String(v || '').trim().replace(/^v/i, '');
+
+  const latestRaw = (typeof PRO_LATEST_BUNDLE_VERSION !== 'undefined'
+    ? PRO_LATEST_BUNDLE_VERSION
+    : ''
+  );
+
+  const currentRaw = (proVersion && proVersion !== 'not installed')
+    ? String(proVersion)
+    : '';
+
+  const hasCurrent = !!norm(currentRaw);
+  const hasLatest  = !!norm(latestRaw);
+  const hasUpdate  = isPro && hasCurrent && hasLatest &&
+                     norm(currentRaw) !== norm(latestRaw);
 
   if (!isPro) {
     // Free/core only
@@ -30,18 +50,32 @@ function getAdminTitle(isPro, proVersion) {
     `;
   }
 
-  const pv = proVersion ? `Pro v${proVersion}` : 'Pro';
+  const pvLabel = hasCurrent ? `Pro v${norm(currentRaw)}` : 'Pro';
 
   const proPill = `
     <span class="badge badge-pill badge-warning admin-pro-badge">
-      ${pv}
+      ${pvLabel}
     </span>
   `;
+
+  const updateHint = hasUpdate
+    ? `
+      <a
+        href="https://filerise.net/pro/update.php"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="badge badge-pill badge-warning admin-pro-badge"
+        style="cursor:pointer; text-decoration:none; margin-left:4px;">
+        Pro update available
+      </a>
+    `
+    : '';
 
   return `
     ${t("admin_panel")}
     ${corePill}
     ${proPill}
+    ${updateHint}
   `;
 }
 
@@ -447,6 +481,81 @@ function toggleSection(id) {
   cnt.style.display = isCollapsedNow ? "none" : "block";
   if (!isCollapsedNow && id === "shareLinks") {
     loadShareLinksSection();
+  }
+}
+
+export function initProBundleInstaller() {
+  try {
+    const fileInput = document.getElementById('proBundleFile');
+    const btn = document.getElementById('btnInstallProBundle');
+    const statusEl = document.getElementById('proBundleStatus');
+
+    if (!fileInput || !btn || !statusEl) return;
+
+    // Allow names like: FileRisePro_v1.0.0.zip or FileRisePro-1.0.0.zip
+    const PRO_ZIP_NAME_RE = /^FileRisePro[_-]v?[0-9]+\.[0-9]+\.[0-9]+\.zip$/i;
+
+    btn.addEventListener('click', async () => {
+      const file = fileInput.files && fileInput.files[0];
+
+      if (!file) {
+        statusEl.textContent = 'Choose a FileRise Pro .zip bundle first.';
+        statusEl.className = 'small text-danger';
+        return;
+      }
+
+      const name = file.name || '';
+      if (!PRO_ZIP_NAME_RE.test(name)) {
+        statusEl.textContent = 'Bundle must be named like "FileRisePro_v1.0.0.zip".';
+        statusEl.className = 'small text-danger';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('bundle', file);
+
+      statusEl.textContent = 'Uploading and installing Pro bundle...';
+      statusEl.className = 'small text-muted';
+
+      try {
+        const resp = await fetch('/api/admin/installProBundle.php', {
+          method: 'POST',
+          headers: {
+            'X-CSRF-Token': window.csrfToken || ''
+          },
+          body: formData
+        });
+
+        let data = null;
+        try {
+          data = await resp.json();
+        } catch (_) {
+          // ignore JSON parse errors; handled below
+        }
+
+        if (!resp.ok || !data || !data.success) {
+          const msg = data && data.error
+            ? data.error
+            : `HTTP ${resp.status}`;
+          statusEl.textContent = 'Install failed: ' + msg;
+          statusEl.className = 'small text-danger';
+          return;
+        }
+
+        const versionText = data.proVersion ? ` (version ${data.proVersion})` : '';
+        statusEl.textContent = 'Pro bundle installed' + versionText + '. Reload the page to apply changes.';
+        statusEl.className = 'small text-success';
+
+        if (typeof loadAdminConfigFunc === 'function') {
+          loadAdminConfigFunc();
+        }
+      } catch (e) {
+        statusEl.textContent = 'Install failed: ' + (e && e.message ? e.message : String(e));
+        statusEl.className = 'small text-danger';
+      }
+    });
+  } catch (e) {
+    console.warn('Failed to init Pro bundle installer', e);
   }
 }
 
@@ -1266,18 +1375,32 @@ async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
 // --- FileRise Pro / License section ---
 const proContent = document.getElementById("proContent");
 if (proContent) {
+  // Normalize versions so "v1.0.1" and "1.0.1" compare cleanly
+  const norm = (v) => (String(v || '').trim().replace(/^v/i, ''));
+
+  const currentVersionRaw = (proVersion && proVersion !== 'not installed') ? String(proVersion) : '';
+  const latestVersionRaw  = PRO_LATEST_BUNDLE_VERSION || '';
+  const hasCurrent        = !!norm(currentVersionRaw);
+  const hasLatest         = !!norm(latestVersionRaw);
+  const hasUpdate         = hasCurrent && hasLatest && norm(currentVersionRaw) !== norm(latestVersionRaw);
+
   const proMetaHtml =
     isPro && (proType || proEmail || proVersion)
       ? `
-        <div class="pro-license-meta">
+        <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
           <div>
             ✅ ${proType ? `License type: ${proType}` : 'License active'}
             ${proType && proEmail ? ' • ' : ''}
             ${proEmail ? `Licensed to: ${proEmail}` : ''}
           </div>
+          ${hasCurrent ? `
           <div>
-            Pro bundle version: v${proVersion}
-          </div>
+            Installed Pro bundle: v${norm(currentVersionRaw)}
+          </div>` : ''}
+          ${hasLatest ? `
+          <div>
+            Latest Pro bundle (UI hint): ${latestVersionRaw}
+          </div>` : ''}
         </div>
       `
       : '';
@@ -1308,8 +1431,13 @@ if (proContent) {
             href="https://filerise.net/pro/update.php"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn btn-sm btn-pro-admin">
-            Download latest Pro bundle
+            class="btn btn-sm btn-pro-admin d-inline-flex align-items-center"
+          >
+            <span>Download latest Pro bundle</span>
+            ${hasUpdate ? `
+              <span class="badge badge-light" style="margin-left:6px;">
+                Update available
+              </span>` : ''}
           </a>
           <small class="text-muted d-block" style="margin-top:4px;">
             Opens filerise.net in a new tab where you can enter your Pro license
@@ -1322,7 +1450,8 @@ if (proContent) {
             href="https://filerise.net/pro/checkout.php"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn btn-sm btn-pro-admin">
+            class="btn btn-sm btn-pro-admin"
+          >
             Buy FileRise Pro
           </a>
           <small class="text-muted d-block" style="margin-top:4px;">
@@ -1332,7 +1461,16 @@ if (proContent) {
       `}
 
       <div class="form-group" style="margin-top:10px;">
-        <label for="proLicenseInput" style="font-size:12px;">License key</label>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <label for="proLicenseInput" style="font-size:12px; margin-bottom:0;">License key</label>
+          ${isPro && proLicense ? `
+            <button type="button"
+                    class="btn btn-link btn-sm p-0"
+                    id="proCopyLicenseBtn">
+              Copy current license
+            </button>
+          ` : ''}
+        </div>
         <textarea
           id="proLicenseInput"
           class="form-control"
@@ -1344,30 +1482,14 @@ if (proContent) {
         </small>
       </div>
 
-      ${isPro && proLicense ? `
-        <div style="margin-top:6px;">
-          <button type="button" class="btn btn-secondary btn-sm" id="proCopyLicenseBtn">
-            Copy current license
-          </button>
-          <small class="text-muted d-block" style="margin-top:4px;">
-            Copies the saved license so you can reuse it for upgrades or downloads on filerise.net.
-          </small>
-        </div>
-      ` : ''}
-
       <div class="form-group" style="margin-top:6px;">
         <label style="font-size:12px;">Or upload license file</label>
-        <div class="input-group">
-          <input
-            type="file"
-            id="proLicenseFile"
-            class="form-control"
-            accept=".lic,.json,.txt,.filerise-lic"
-          />
-          <button type="button" class="btn btn-sm btn-secondary" id="proLoadLicenseFileBtn">
-            Load from file
-          </button>
-        </div>
+        <input
+          type="file"
+          id="proLicenseFile"
+          class="form-control-file"
+          accept=".lic,.json,.txt,.filerise-lic"
+        />
         <small class="text-muted">
           Supported: FileRise.lic, plain text with FRP1... or JSON containing a <code>license</code> field.
         </small>
@@ -1376,8 +1498,31 @@ if (proContent) {
       <button type="button" class="btn btn-primary btn-sm" id="proSaveLicenseBtn" style="margin-top:8px;">
         Save license
       </button>
+
+      <div class="mt-3 border-top pt-3" style="margin-top:14px;">
+        <h6 class="mb-1">Install / update Pro bundle</h6>
+        <p class="text-muted small mb-2">
+          Upload the <code>.zip</code> bundle you downloaded from <a href="https://filerise.net" target="_blank" rel="noopener noreferrer">filerise.net</a>.
+          This runs locally on your server and never contacts an external update service.
+        </p>
+        <div class="d-flex flex-wrap align-items-center gap-2" style="margin-top:4px;">
+          <input type="file"
+                 id="proBundleFile"
+                 accept=".zip"
+                 class="form-control-file mb-2 mb-sm-0" />
+          <button type="button"
+                  id="btnInstallProBundle"
+                  class="btn btn-sm btn-pro-admin">
+            Install Pro bundle
+          </button>
+        </div>
+        <div id="proBundleStatus" class="small mt-2"></div>
+      </div>
     </div>
   `;
+
+  // Wire up local Pro bundle installer (upload .zip into core)
+  initProBundleInstaller();
 
   // Pre-fill textarea with saved license if present
   const licenseTextarea = document.getElementById('proLicenseInput');
@@ -1385,17 +1530,12 @@ if (proContent) {
     licenseTextarea.value = proLicense;
   }
 
-  // File upload → fill textarea (unchanged)
+  // Auto-load license when a file is selected
   const fileInput = document.getElementById('proLicenseFile');
-  const fileBtn   = document.getElementById('proLoadLicenseFileBtn');
-
-  if (fileInput && fileBtn && licenseTextarea) {
-    fileBtn.addEventListener('click', () => {
+  if (fileInput && licenseTextarea) {
+    fileInput.addEventListener('change', () => {
       const file = fileInput.files && fileInput.files[0];
-      if (!file) {
-        showToast('Please choose a license file first.');
-        return;
-      }
+      if (!file) return;
 
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -1428,7 +1568,7 @@ if (proContent) {
     });
   }
 
-  // Copy current license button
+  // Copy current license button (now inline next to the label)
   const proCopyBtn = document.getElementById('proCopyLicenseBtn');
   if (proCopyBtn && proLicense) {
     proCopyBtn.addEventListener('click', async () => {

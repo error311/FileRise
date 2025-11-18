@@ -240,30 +240,57 @@ if (strpos(BASE_URL, 'yourwebsite') !== false) {
 // Final: env var wins, else fallback
 define('SHARE_URL', getenv('SHARE_URL') ?: $defaultShare);
 
-// --------------------------------
-// FileRise Pro (optional add-on)
-// --------------------------------
+// ------------------------------------------------------------
+// FileRise Pro bootstrap wiring
+// ------------------------------------------------------------
 
-// Where the Pro license JSON lives
+// Inline license (optional; usually set via Admin UI and PRO_LICENSE_FILE)
+if (!defined('FR_PRO_LICENSE')) {
+    $envLicense = getenv('FR_PRO_LICENSE');
+    define('FR_PRO_LICENSE', $envLicense !== false ? trim((string)$envLicense) : '');
+}
+
+// JSON license file used by AdminController::setLicense()
 if (!defined('PRO_LICENSE_FILE')) {
     define('PRO_LICENSE_FILE', PROJECT_ROOT . '/users/proLicense.json');
 }
 
-// Inline/env license strings (optional)
-if (!defined('FR_PRO_LICENSE')) {
-    define('FR_PRO_LICENSE', getenv('FR_PRO_LICENSE') ?: '');
-}
+// Optional plain-text license file (used as fallback in bootstrap)
 if (!defined('FR_PRO_LICENSE_FILE')) {
-    define('FR_PRO_LICENSE_FILE', getenv('FR_PRO_LICENSE_FILE') ?: '');
+    $lf = getenv('FR_PRO_LICENSE_FILE');
+    if ($lf === false || $lf === '') {
+        $lf = PROJECT_ROOT . '/users/proLicense.txt';
+    }
+    define('FR_PRO_LICENSE_FILE', $lf);
 }
 
-// Optional Pro bootstrap (shipped only with Pro bundle)
-$proBootstrap = PROJECT_ROOT . '/src/pro/bootstrap_pro.php';
-if (is_file($proBootstrap)) {
+// Where Pro code lives by default → inside users volume
+$proDir = getenv('FR_PRO_BUNDLE_DIR');
+if ($proDir === false || $proDir === '') {
+    $proDir = PROJECT_ROOT . '/users/pro';
+}
+$proDir = rtrim($proDir, "/\\");
+if (!defined('FR_PRO_BUNDLE_DIR')) {
+    define('FR_PRO_BUNDLE_DIR', $proDir);
+}
+
+// Try to load Pro bootstrap if enabled + present
+$proBootstrap = FR_PRO_BUNDLE_DIR . '/bootstrap_pro.php';
+if (@is_file($proBootstrap)) {
     require_once $proBootstrap;
 }
 
-// Safe default so the rest of the app always has the constant
+// If bootstrap didn’t define these, give safe defaults
 if (!defined('FR_PRO_ACTIVE')) {
     define('FR_PRO_ACTIVE', false);
+}
+if (!defined('FR_PRO_INFO')) {
+    define('FR_PRO_INFO', [
+        'valid'   => false,
+        'error'   => null,
+        'payload' => null,
+    ]);
+}
+if (!defined('FR_PRO_BUNDLE_VERSION')) {
+    define('FR_PRO_BUNDLE_VERSION', null);
 }

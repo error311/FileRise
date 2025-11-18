@@ -1,5 +1,17 @@
 # Changelog
 
+## changes 11/18/2025 (v1.9.10)
+
+release(v1.9.10): add Pro bundle installer and admin panel polish
+
+- Add FileRise Pro section in admin panel with license management and bundle upload
+- Persist Pro bundle under users/pro and sync public/api/pro endpoints on container startup
+- Improve admin config API: Pro metadata, license file handling, hardened auth/CSRF helpers
+- Update Pro badge/version UI with “update available” hint and link to filerise.net
+- Change Pro bundle installer to always overwrite existing bundle files for clean upgrades
+
+---
+
 ## Changes 11/16/2025 (v1.9.9)
 
 release(v1.9.9): fix(branding): sanitize custom logo URL preview

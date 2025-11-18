@@ -272,6 +272,265 @@ public function setLicense(): void
     }
 }
 
+public function installProBundle(): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+
+    try {
+        // Guard rails: method + auth + CSRF
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+            return;
+        }
+
+        self::requireAuth();
+        self::requireAdmin();
+        self::requireCsrf();
+
+        // Ensure ZipArchive is available
+        if (!class_exists('\\ZipArchive')) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'ZipArchive extension is required on the server.']);
+            return;
+        }
+
+        // Basic upload validation
+        if (empty($_FILES['bundle']) || !is_array($_FILES['bundle'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Missing uploaded bundle (field "bundle").']);
+            return;
+        }
+
+        $f = $_FILES['bundle'];
+
+        if (!empty($f['error']) && $f['error'] !== UPLOAD_ERR_OK) {
+            $msg = 'Upload error.';
+            switch ($f['error']) {
+                case UPLOAD_ERR_INI_SIZE:
+                case UPLOAD_ERR_FORM_SIZE:
+                    $msg = 'Uploaded file exceeds size limit.';
+                    break;
+                case UPLOAD_ERR_PARTIAL:
+                    $msg = 'Uploaded file was only partially received.';
+                    break;
+                case UPLOAD_ERR_NO_FILE:
+                    $msg = 'No file was uploaded.';
+                    break;
+                default:
+                    $msg = 'Upload failed with error code ' . (int)$f['error'];
+                    break;
+            }
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => $msg]);
+            return;
+        }
+
+        $tmpName = $f['tmp_name'] ?? '';
+        if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid uploaded file.']);
+            return;
+        }
+
+        // Guard against unexpectedly large bundles (e.g., >100MB)
+        $size = isset($f['size']) ? (int)$f['size'] : 0;
+        if ($size <= 0 || $size > 100 * 1024 * 1024) {
+            http_response_code(413);
+            echo json_encode(['success' => false, 'error' => 'Bundle size is invalid or too large (max 100MB).']);
+            return;
+        }
+
+        // Optional: require .zip extension by name (best-effort)
+        $origName = (string)($f['name'] ?? '');
+        if ($origName !== '' && !preg_match('/\.zip$/i', $origName)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Bundle must be a .zip file.']);
+            return;
+        }
+
+        // Prepare temp working dir
+        $tempRoot = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR);
+        $workDir  = $tempRoot . DIRECTORY_SEPARATOR . 'filerise_pro_' . bin2hex(random_bytes(8));
+        if (!@mkdir($workDir, 0700, true)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to prepare temp dir.']);
+            return;
+        }
+
+        $zipPath = $workDir . DIRECTORY_SEPARATOR . 'bundle.zip';
+        if (!@move_uploaded_file($tmpName, $zipPath)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to move uploaded bundle.']);
+            return;
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Failed to open ZIP bundle.']);
+            return;
+        }
+
+        $installed = [
+            'src'    => [],
+            'public' => [],
+            'docs'   => [],
+        ];
+
+        $projectRoot = rtrim(PROJECT_ROOT, DIRECTORY_SEPARATOR);
+
+        // Where Pro bundle code lives (defaults to PROJECT_ROOT . '/users/pro')
+        $bundleRoot = defined('FR_PRO_BUNDLE_DIR')
+            ? rtrim(FR_PRO_BUNDLE_DIR, DIRECTORY_SEPARATOR)
+            : ($projectRoot . DIRECTORY_SEPARATOR . 'users' . DIRECTORY_SEPARATOR . 'pro');
+
+        // Put README-Pro.txt / LICENSE-Pro.txt inside the bundle dir as well
+        $proDocsDir = $bundleRoot;
+        if (!is_dir($proDocsDir)) {
+            @mkdir($proDocsDir, 0755, true);
+        }
+
+        $allowedTopLevel = ['LICENSE-Pro.txt', 'README-Pro.txt'];
+
+        // Iterate entries and selectively extract/copy expected files only
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $zip->getNameIndex($i);
+            if ($name === false) {
+                continue;
+            }
+
+            // Normalise and guard
+            $name = ltrim($name, "/\\");
+            if ($name === '' || substr($name, -1) === '/') {
+                continue; // skip directories
+            }
+            if (strpos($name, '../') !== false || strpos($name, '..\\') !== false) {
+                continue; // path traversal guard
+            }
+
+            // Ignore macOS Finder junk: __MACOSX and "._" resource forks
+            $base = basename($name);
+            if (
+                str_starts_with($name, '__MACOSX/') ||
+                str_contains($name, '/__MACOSX/') ||
+                str_starts_with($base, '._')
+            ) {
+                continue;
+            }
+
+            $targetPath = null;
+            $category   = null;
+
+            if (in_array($name, $allowedTopLevel, true)) {
+                // Docs → bundle dir (under /users/pro)
+                $targetPath = $proDocsDir . DIRECTORY_SEPARATOR . $name;
+                $category   = 'docs';
+
+            } elseif (strpos($name, 'src/pro/') === 0) {
+                // e.g. src/pro/bootstrap_pro.php -> FR_PRO_BUNDLE_DIR/bootstrap_pro.php
+                $relative = substr($name, strlen('src/pro/'));
+                if ($relative === '' || substr($relative, -1) === '/') {
+                    continue;
+                }
+                $targetPath = $bundleRoot . DIRECTORY_SEPARATOR . $relative;
+                $category   = 'src';
+
+            } elseif (strpos($name, 'public/api/pro/') === 0) {
+                // e.g. public/api/pro/uploadBrandLogo.php
+                $relative = substr($name, strlen('public/api/pro/'));
+                if ($relative === '' || substr($relative, -1) === '/') {
+                    continue;
+                }
+
+                // Persist under bundle dir so it survives image rebuilds:
+                // users/pro/public/api/pro/...
+                $targetPath = $bundleRoot
+                    . DIRECTORY_SEPARATOR . 'public'
+                    . DIRECTORY_SEPARATOR . 'api'
+                    . DIRECTORY_SEPARATOR . 'pro'
+                    . DIRECTORY_SEPARATOR . $relative;
+                $category   = 'public';
+            } else {
+                // Skip anything outside these prefixes
+                continue;
+            }
+
+            if (!$targetPath || !$category) {
+                continue;
+            }
+
+            // Track whether we're overwriting an existing file (for reporting only)
+            $wasExisting = is_file($targetPath);
+
+            // Read from ZIP entry
+            $stream = $zip->getStream($name);
+            if (!$stream) {
+                continue;
+            }
+
+            $dir = dirname($targetPath);
+            if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+                fclose($stream);
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to create destination directory for ' . $name]);
+                return;
+            }
+
+            $data = stream_get_contents($stream);
+            fclose($stream);
+            if ($data === false) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to read data for ' . $name]);
+                return;
+            }
+
+            // Always overwrite target file on install/upgrade
+            if (@file_put_contents($targetPath, $data) === false) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to write ' . $name]);
+                return;
+            }
+
+            @chmod($targetPath, 0644);
+
+            // Track what we installed (and whether it was overwritten)
+            if (!isset($installed[$category])) {
+                $installed[$category] = [];
+            }
+            $installed[$category][] = $targetPath . ($wasExisting ? ' (overwritten)' : '');
+        }
+
+        $zip->close();
+
+        // Best-effort cleanup; ignore failures
+        @unlink($zipPath);
+        @rmdir($workDir);
+
+        // Reflect current Pro status in response if bootstrap was loaded
+        $proActive  = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE;
+        $proPayload = defined('FR_PRO_INFO') && is_array(FR_PRO_INFO)
+            ? (FR_PRO_INFO['payload'] ?? null)
+            : null;
+        $proVersion = defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : null;
+
+        echo json_encode([
+            'success'    => true,
+            'message'    => 'Pro bundle installed.',
+            'installed'  => $installed,
+            'proActive'  => (bool)$proActive,
+            'proVersion' => $proVersion,
+            'proPayload' => $proPayload,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (\Throwable $e) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Exception during bundle install: ' . $e->getMessage(),
+        ]);
+    }
+}
+
     public function updateConfig(): void
     {
         header('Content-Type: application/json');
