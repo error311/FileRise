@@ -227,6 +227,166 @@ class ACL
         return $data;
     }
 
+
+    /**
+     * Load Pro user groups from FR_PRO_BUNDLE_DIR/users/pro/groups.json.
+     * Returns a map: groupName => ['name','label','members'=>[],'grants'=>[]]
+     * When Pro is inactive or no file exists, returns an empty array.
+     */
+    private static function loadGroupData(): array
+    {
+        if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) return [];
+        if (!defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) return [];
+
+        static $loaded = false;
+        static $cache  = [];
+        static $mtime  = 0;
+
+        $base = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\");
+        if ($base === '') return [];
+
+        $file = $base . DIRECTORY_SEPARATOR . 'groups.json';
+        $mt   = @filemtime($file) ?: 0;
+
+        if ($loaded && $mtime === $mt) {
+            return $cache;
+        }
+
+        $loaded = true;
+        $mtime  = $mt;
+        if (!$mt || !is_file($file)) {
+            $cache = [];
+            return $cache;
+        }
+
+        $raw = @file_get_contents($file);
+        if ($raw === false || $raw === '') {
+            $cache = [];
+            return $cache;
+        }
+
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            $cache = [];
+            return $cache;
+        }
+
+        $groups = isset($data['groups']) && is_array($data['groups']) ? $data['groups'] : $data;
+        $norm   = [];
+
+        foreach ($groups as $key => $g) {
+            if (!is_array($g)) continue;
+            $name = isset($g['name']) ? (string)$g['name'] : (string)$key;
+            $name = trim($name);
+            if ($name === '') continue;
+
+            $g['name']  = $name;
+            $g['label'] = isset($g['label']) ? (string)$g['label'] : $name;
+
+            if (!isset($g['members']) || !is_array($g['members'])) {
+                $g['members'] = [];
+            } else {
+                $g['members'] = array_values(array_unique(array_map('strval', $g['members'])));
+            }
+
+            if (!isset($g['grants']) || !is_array($g['grants'])) {
+                $g['grants'] = [];
+            }
+
+            $norm[$name] = $g;
+        }
+
+        $cache = $norm;
+        return $cache;
+    }
+
+    /**
+     * Map a group grants record for a single folder to a capability bucket.
+     * Supports both internal bucket keys and the UI-style keys: view, viewOwn,
+     * manage, shareFile, shareFolder.
+     */
+    private static function groupGrantsCap(array $grants, string $capKey): bool
+    {
+        // Direct match (owners, read, write, share, read_own, create, upload, edit, rename, copy, move, delete, extract, share_file, share_folder)
+        if (array_key_exists($capKey, $grants) && $grants[$capKey] === true) {
+            return true;
+        }
+
+        switch ($capKey) {
+            case 'read':
+                return !empty($grants['view']);
+            case 'read_own':
+                // Full view always implies own
+                if (!empty($grants['view'])) return true;
+                return !empty($grants['viewOwn']);
+            case 'share_file':
+                if (!empty($grants['share_file'])) return true;
+                return !empty($grants['shareFile']);
+            case 'share_folder':
+                if (!empty($grants['share_folder'])) return true;
+                return !empty($grants['shareFolder']);
+            case 'write':
+            case 'create':
+            case 'upload':
+            case 'edit':
+            case 'rename':
+            case 'copy':
+            case 'move':
+            case 'delete':
+            case 'extract':
+                if (!empty($grants[$capKey])) return true;
+                // Group "manage" implies all write-ish caps
+                return !empty($grants['manage']);
+            case 'share':
+                if (!empty($grants['share'])) return true;
+                // Manage can optionally imply share; this keeps UI simple
+                return !empty($grants['manage']);
+        }
+
+        return false;
+    }
+
+    /**
+     * Check whether any Pro group the user belongs to grants this cap for folder.
+     * Groups are additive only; they never remove access.
+     */
+    private static function groupHasGrant(string $user, string $folder, string $capKey): bool
+    {
+        if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) return false;
+        $user = (string)$user;
+        if ($user === '') return false;
+
+        $folder = self::normalizeFolder($folder);
+        if ($folder === '') $folder = 'root';
+
+        $groups = self::loadGroupData();
+        if (!$groups) return false;
+
+        foreach ($groups as $g) {
+            if (!is_array($g)) continue;
+
+            $members = $g['members'] ?? [];
+            $isMember = false;
+            if (is_array($members)) {
+                foreach ($members as $m) {
+                    if (strcasecmp((string)$m, $user) === 0) {
+                        $isMember = true;
+                        break;
+                    }
+                }
+            }
+            if (!$isMember) continue;
+
+            $folderGrants = $g['grants'][$folder] ?? null;
+            if (!is_array($folderGrants)) continue;
+
+            if (self::groupGrantsCap($folderGrants, $capKey)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private static function save(array $acl): bool
     {
         $ok = @file_put_contents(self::path(), json_encode($acl, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX) !== false;
@@ -286,8 +446,20 @@ class ACL
     {
         $folder = self::normalizeFolder($folder);
         $capKey = ($cap === 'owner') ? 'owners' : $cap;
-        $arr    = self::listFor($folder, $capKey);
-        foreach ($arr as $u) if (strcasecmp((string)$u, $user) === 0) return true;
+
+        // 1) Core per-folder ACL buckets (folder_acl.json)
+        $arr = self::listFor($folder, $capKey);
+        foreach ($arr as $u) {
+            if (strcasecmp((string)$u, $user) === 0) {
+                return true;
+            }
+        }
+
+        // 2) Pro user groups (if enabled) – additive only
+        if (self::groupHasGrant($user, $folder, $capKey)) {
+            return true;
+        }
+
         return false;
     }
 

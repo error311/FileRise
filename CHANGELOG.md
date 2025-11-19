@@ -1,5 +1,41 @@
 # Changelog
 
+## Changes 11/19/2025 (v1.9.12)
+
+release(v1.9.12): feat(pro-acl): add user groups and group-aware ACL
+
+- Add Pro user groups as a first-class ACL source:
+  - Load group grants from FR_PRO_BUNDLE_DIR/groups.json in ACL::hasGrant().
+  - Treat group grants as additive only; they can never remove access.
+
+- Introduce AclAdminController:
+  - Move getGrants/saveGrants logic into a dedicated controller.
+  - Keep existing ACL normalization and business rules (shareFolder ⇒ view, shareFile ⇒ at least viewOwn).
+  - Refactor public/api/admin/acl/getGrants.php and saveGrants.php to use the controller.
+
+- Implement Pro user group storage and APIs:
+  - Add ProGroups store class under FR_PRO_BUNDLE_DIR (groups.json with {name,label,members,grants}).
+  - Add /api/pro/groups/list.php and /api/pro/groups/save.php, guarded by AdminController::requireAuth/requireAdmin/requireCsrf().
+  - Keep groups and bundle code behind FR_PRO_ACTIVE/FR_PRO_BUNDLE_DIR checks.
+
+- Ship Pro-only endpoints from core instead of the bundle:
+  - Move public/api/pro/uploadBrandLogo.php into core and gate it on FR_PRO_ACTIVE.
+  - Remove start.sh logic that copied public/api/pro from the Pro bundle into the container image.
+
+- Extend admin UI for user groups:
+  - Turn “User groups” into a real Pro-only modal with add/delete groups, multi-select members, and member chips.
+  - Add “Edit folder access” for each group, reusing the existing folder grants grid.
+  - Overlay group grants when editing a user’s ACL:
+    - Show which caps are coming from groups, lock those checkboxes, and update tooltips.
+    - Show group membership badges in the user permissions list.
+  - Add a collapsed “Groups” section at the top of the permissions screen to preview group ACLs (read-only).
+
+- Misc:
+  - Bump PRO_LATEST_BUNDLE_VERSION hint in adminPanel.js to v1.0.1.
+  - Tweak modal border-radius styling to include the new userGroups and groupAcl modals.
+
+---
+
 ## Changes 11/18/2025 (v1.9.11)
 
 release(v1.9.11): fix(media): HTTP Range streaming; feat(ui): paged folder strip (closes #68)

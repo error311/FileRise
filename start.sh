@@ -72,23 +72,6 @@ for d in uploads users metadata; do
   chmod 775 "${tgt}"
 done
 
-# 2.4) Sync FileRise Pro public endpoints from persistent bundle
-BUNDLE_PRO_PUBLIC="/var/www/users/pro/public/api/pro"
-LIVE_PRO_PUBLIC="/var/www/public/api/pro"
-
-if [ -d "${BUNDLE_PRO_PUBLIC}" ]; then
-  echo "[startup] Syncing FileRise Pro public endpoints..."
-  mkdir -p "${LIVE_PRO_PUBLIC}"
-
-  # Copy files from bundle to live api/pro (overwrite for upgrades)
-  cp -R "${BUNDLE_PRO_PUBLIC}/." "${LIVE_PRO_PUBLIC}/" || echo "[startup] Pro sync copy failed (continuing)"
-
-  # Normalize ownership/permissions
-  chown -R www-data:www-data "${LIVE_PRO_PUBLIC}" || echo "[startup] chown api/pro failed (continuing)"
-  find "${LIVE_PRO_PUBLIC}" -type d -exec chmod 755 {} \; 2>/dev/null || true
-  find "${LIVE_PRO_PUBLIC}" -type f -exec chmod 644 {} \; 2>/dev/null || true
-fi
-
 # 3) Ensure PHP conf dir & set upload limits
 mkdir -p /etc/php/8.3/apache2/conf.d
 if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then

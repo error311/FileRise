@@ -16,7 +16,7 @@ function normalizeLogoPath(raw) {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.0.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.0.1';
 
 function getAdminTitle(isPro, proVersion) {
   const corePill = `
@@ -405,6 +405,27 @@ async function safeJson(res) {
     font-weight:600;
     min-width:0; /* allow child to be as wide as needed inside scroller */
   }
+        .group-members-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .group-member-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      background-color: #1e88e5;
+      color: #fff;
+    }
+
+    .dark-mode .group-member-pill {
+      background-color: #1565c0;
+      color: #fff;
+    }
+    
   `;
   document.head.appendChild(style);
 })();
@@ -782,7 +803,7 @@ export function openAdminPanel() {
         <i class="material-icons">groups</i>
         <span>User groups</span>
       </button>
-      <span class="btn-pro-pill">Pro · Coming soon</span>
+      <span class="btn-pro-pill">Pro</span>
     </div>
     `
     }
@@ -821,7 +842,7 @@ export function openAdminPanel() {
 
   <small class="text-muted d-block" style="margin-top:6px;">
     Use the core tools to manage users and per-folder access.
-    User groups and Client upload portals are planned FileRise Pro features.
+    User groups are available in Pro and Client upload portals are coming soon.
   </small>
 `;
 
@@ -862,8 +883,7 @@ export function openAdminPanel() {
               window.open("https://filerise.net", "_blank", "noopener");
               return;
             }
-            // Placeholder for future Pro UI:
-            showToast("User groups management is coming soon in FileRise Pro.");
+            openUserGroupsModal();
           });
         }
 
@@ -1894,6 +1914,97 @@ async function getUserGrants(username) {
   return (data && data.grants) ? data.grants : {};
 }
 
+function computeGroupGrantMaskForUser(username) {
+  const result = {};
+  const uname = (username || "").trim().toLowerCase();
+  if (!uname) return result;
+  if (!__groupsCache || typeof __groupsCache !== "object") return result;
+
+  Object.keys(__groupsCache).forEach(gName => {
+    const g = __groupsCache[gName] || {};
+    const members = Array.isArray(g.members) ? g.members : [];
+    const isMember = members.some(m => String(m || "").trim().toLowerCase() === uname);
+    if (!isMember) return;
+
+    const grants = g.grants && typeof g.grants === "object" ? g.grants : {};
+    Object.keys(grants).forEach(folder => {
+      const fg = grants[folder];
+      if (!fg || typeof fg !== "object") return;
+      if (!result[folder]) result[folder] = {};
+      Object.keys(fg).forEach(capKey => {
+        if (fg[capKey]) {
+          result[folder][capKey] = true;
+        }
+      });
+    });
+  });
+
+  return result;
+}
+
+function applyGroupLocksForUser(username, grantsBox, groupMask, groupsForUser) {
+  if (!grantsBox || !groupMask) return;
+
+  const groupLabels = (groupsForUser || []).map(name => {
+    const g = __groupsCache && __groupsCache[name] || {};
+    return g.label || name;
+  });
+  const labelStr = groupLabels.join(", ");
+
+  const rows = grantsBox.querySelectorAll(".folder-access-row");
+  rows.forEach(row => {
+    const folder = row.dataset.folder || "";
+    const capsForFolder = groupMask[folder];
+    if (!capsForFolder) return;
+
+    Object.keys(capsForFolder).forEach(capKey => {
+      if (!capsForFolder[capKey]) return;
+
+      // Map caps to actual columns we have in the UI
+      let uiCaps = [];
+      switch (capKey) {
+        case "view":
+        case "viewOwn":
+        case "manage":
+        case "create":
+        case "upload":
+        case "edit":
+        case "rename":
+        case "copy":
+        case "move":
+        case "delete":
+        case "extract":
+        case "shareFile":
+        case "shareFolder":
+          uiCaps = [capKey];
+          break;
+        case "write":
+          uiCaps = ["create", "upload", "edit", "rename", "copy", "delete", "extract"];
+          break;
+        case "share":
+          uiCaps = ["shareFile", "shareFolder"];
+          break;
+        default:
+          // unknown / unsupported cap key in UI
+          return;
+      }
+
+      uiCaps.forEach(c => {
+        const cb = row.querySelector(`input[type="checkbox"][data-cap="${c}"]`);
+        if (!cb) return;
+        cb.checked = true;
+        cb.disabled = true;
+        cb.setAttribute("data-hard-disabled", "1");
+
+        let baseTitle = "Granted via group";
+        if (groupLabels.length > 1) baseTitle += "s";
+        if (labelStr) baseTitle += `: ${labelStr}`;
+        cb.title = baseTitle + ". Edit group permissions in User groups to change.";
+      });
+    });
+  });
+}
+
 function renderFolderGrantsUI(username, container, folders, grants) {
   container.innerHTML = "";
 
@@ -2325,6 +2436,430 @@ async function fetchAllUsers() {
   return await r.json();
 }
 
+async function fetchAllGroups() {
+  const res = await fetch('/api/pro/groups/list.php', {
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': window.csrfToken || '' }
+  });
+  const data = await safeJson(res);
+  // backend returns { success, groups: { name: {...} } }
+  return data && typeof data === 'object' && data.groups && typeof data.groups === 'object'
+    ? data.groups
+    : {};
+}
+
+async function saveAllGroups(groups) {
+  const res = await fetch('/api/pro/groups/save.php', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': window.csrfToken || ''
+    },
+    body: JSON.stringify({ groups })
+  });
+  return await safeJson(res);
+}
+
+let __groupsCache = {};
+
+async function openUserGroupsModal() {
+  const isDark = document.body.classList.contains('dark-mode');
+  const overlayBg = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
+  const contentBg = isDark ? '#2c2c2c' : '#fff';
+  const contentFg = isDark ? '#e0e0e0' : '#000';
+  const borderCol = isDark ? '#555' : '#ccc';
+
+  let modal = document.getElementById('userGroupsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'userGroupsModal';
+    modal.style.cssText = `
+      position:fixed; inset:0; background:${overlayBg};
+      display:flex; align-items:center; justify-content:center; z-index:3650;
+    `;
+    modal.innerHTML = `
+      <div class="modal-content"
+           style="background:${contentBg}; color:${contentFg};
+                  padding:16px; max-width:980px; width:95%;
+                  position:relative;
+                  border:1px solid ${borderCol}; max-height:90vh; overflow:auto;">
+        <span id="closeUserGroupsModal"
+              class="editor-close-btn"
+              style="right:8px; top:8px;">&times;</span>
+
+        <h3>User groups</h3>
+        <p class="muted" style="margin-top:-6px;">
+          Define named groups, assign users to them, and attach folder access
+          just like per-user ACL. Group access is additive to user access.
+        </p>
+
+        <div class="d-flex justify-content-between align-items-center" style="margin:8px 0 10px;">
+          <button type="button" id="addGroupBtn" class="btn btn-sm btn-success">
+            <i class="material-icons" style="font-size:16px;">group_add</i>
+            <span style="margin-left:4px;">Add group</span>
+          </button>
+          <span id="userGroupsStatus" class="small text-muted"></span>
+        </div>
+
+        <div id="userGroupsBody" style="max-height:60vh; overflow:auto; margin-bottom:12px;">
+          ${t('loading')}…
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" id="cancelUserGroups" class="btn btn-secondary">${t('cancel')}</button>
+          <button type="button" id="saveUserGroups"   class="btn btn-primary">${t('save_settings')}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('closeUserGroupsModal').onclick = () => (modal.style.display = 'none');
+    document.getElementById('cancelUserGroups').onclick = () => (modal.style.display = 'none');
+    document.getElementById('saveUserGroups').onclick = saveUserGroupsFromUI;
+    document.getElementById('addGroupBtn').onclick = addEmptyGroupRow;
+  } else {
+    modal.style.background = overlayBg;
+    const content = modal.querySelector('.modal-content');
+    if (content) {
+      content.style.background = contentBg;
+      content.style.color = contentFg;
+      content.style.border = `1px solid ${borderCol}`;
+    }
+  }
+
+  modal.style.display = 'flex';
+  await loadUserGroupsList();
+}
+
+async function loadUserGroupsList(useCacheOnly) {
+  const body = document.getElementById('userGroupsBody');
+  const status = document.getElementById('userGroupsStatus');
+  if (!body) return;
+
+  body.textContent = `${t('loading')}…`;
+  if (status) {
+    status.textContent = '';
+    status.className = 'small text-muted';
+  }
+
+  try {
+    // Users always come fresh (or you could cache if you want)
+    const users = await fetchAllUsers();
+
+    let groups;
+    if (useCacheOnly && __groupsCache && Object.keys(__groupsCache).length) {
+      // When we’re just re-rendering after local edits, don’t clobber cache
+      groups = __groupsCache;
+    } else {
+      // Initial load, or explicit refresh – pull from server
+      groups = await fetchAllGroups();
+      __groupsCache = groups || {};
+    }
+
+    const usernames = users
+      .map(u => String(u.username || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    const groupNames = Object.keys(__groupsCache).sort((a, b) => a.localeCompare(b));
+    if (!groupNames.length) {
+      body.innerHTML = `<p class="muted">${tf('no_groups_defined', 'No groups defined yet. Click “Add group” to create one.')}</p>`;
+      return;
+    }
+
+    let html = '';
+    groupNames.forEach(name => {
+      const g = __groupsCache[name] || {};
+      const label = g.label || name;
+      const members = Array.isArray(g.members) ? g.members : [];
+
+      const memberOptions = usernames.map(u => {
+        const sel = members.includes(u) ? 'selected' : '';
+        return `<option value="${u}" ${sel}>${u}</option>`;
+      }).join('');
+
+      html += `
+        <div class="card" data-group-name="${name}" style="margin-bottom:10px; padding:8px 10px; border-radius:8px;">
+          <div class="d-flex justify-content-between align-items-center" style="gap:8px; flex-wrap:wrap;">
+            <div class="d-flex align-items-center" style="gap:6px; flex-wrap:wrap;">
+              <label style="margin:0; font-weight:600;">
+                Group name:
+                <input type="text"
+                       class="form-control form-control-sm"
+                       data-group-field="name"
+                       value="${name}"
+                       style="display:inline-block; width:160px; margin-left:4px;" />
+              </label>
+              <label style="margin:0;">
+                Label:
+                <input type="text"
+                       class="form-control form-control-sm"
+                       data-group-field="label"
+                       value="${(g.label || '').replace(/"/g, '&quot;')}"
+                       style="display:inline-block; width:200px; margin-left:4px;" />
+              </label>
+            </div>
+            <button type="button"
+                    class="btn btn-sm btn-danger"
+                    data-group-action="delete">
+              <i class="material-icons" style="font-size:22px;">delete</i>
+            </button>
+          </div>
+
+          <div style="margin-top:8px;">
+            <label style="font-size:12px; font-weight:600;">Members:</label>
+            <select multiple
+                    class="form-control form-control-sm"
+                    data-group-field="members"
+                    size="${Math.min(Math.max(usernames.length, 3), 8)}">
+              ${memberOptions}
+            </select>
+            <small class="text-muted">
+              Hold Ctrl/Cmd to select multiple users.
+            </small>
+          </div>
+
+          <div style="margin-top:8px;">
+            <button type="button"
+                    class="btn btn-sm btn-secondary"
+                    data-group-action="edit-acl">
+              Edit folder access
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    body.innerHTML = html;
+
+        // After: body.innerHTML = html;
+
+    // Show selected members as chips under each multi-select
+    body.querySelectorAll('select[data-group-field="members"]').forEach(sel => {
+      const chips = document.createElement('div');
+      chips.className = 'group-members-chips';
+      chips.style.marginTop = '4px';
+      sel.insertAdjacentElement('afterend', chips);
+
+      const renderChips = () => {
+        const names = Array.from(sel.selectedOptions).map(o => o.value);
+        if (!names.length) {
+          chips.innerHTML = `<span class="muted" style="font-size:11px;">No members selected</span>`;
+          return;
+        }
+        chips.innerHTML = names.map(n => `
+          <span class="group-member-pill">${n}</span>
+        `).join(' ');
+      };
+
+      sel.addEventListener('change', renderChips);
+      renderChips(); // initial
+    });
+
+    body.querySelectorAll('[data-group-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const card = btn.closest('[data-group-name]');
+        const name = card && card.getAttribute('data-group-name');
+        if (!name) return;
+        if (!confirm(`Delete group "${name}"?`)) return;
+        delete __groupsCache[name];
+        card.remove();
+      });
+    });
+
+    body.querySelectorAll('[data-group-action="edit-acl"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const card = btn.closest('[data-group-name]');
+        if (!card) return;
+        const nameInput = card.querySelector('input[data-group-field="name"]');
+        const name = (nameInput && nameInput.value || '').trim();
+        if (!name) {
+          showToast('Enter a group name first.');
+          return;
+        }
+        await openGroupAclEditor(name);
+      });
+    });
+  } catch (e) {
+    console.error(e);
+    body.innerHTML = `<p class="muted">${tf('error_loading_groups', 'Error loading groups')}</p>`;
+  }
+}
+
+function addEmptyGroupRow() {
+  if (!__groupsCache || typeof __groupsCache !== 'object') {
+    __groupsCache = {};
+  }
+  let idx = 1;
+  let name = `group${idx}`;
+  while (__groupsCache[name]) {
+    idx += 1;
+    name = `group${idx}`;
+  }
+  __groupsCache[name] = { name, label: name, members: [], grants: {} };
+  // Re-render using local cache only; don't clobber with server (which is still empty)
+  loadUserGroupsList(true);
+}
+
+async function saveUserGroupsFromUI() {
+  const body = document.getElementById('userGroupsBody');
+  const status = document.getElementById('userGroupsStatus');
+  if (!body) return;
+
+  const cards = body.querySelectorAll('[data-group-name]');
+  const groups = {};
+
+  cards.forEach(card => {
+    const oldName = card.getAttribute('data-group-name') || '';
+    const nameEl = card.querySelector('input[data-group-field="name"]');
+    const labelEl = card.querySelector('input[data-group-field="label"]');
+    const membersSel = card.querySelector('select[data-group-field="members"]');
+
+    const name = (nameEl && nameEl.value || '').trim();
+    if (!name) return;
+
+    const label = (labelEl && labelEl.value || '').trim() || name;
+    const members = Array.from(membersSel && membersSel.selectedOptions || []).map(o => o.value);
+
+    const existing = __groupsCache[oldName] || __groupsCache[name] || { grants: {} };
+    groups[name] = {
+      name,
+      label,
+      members,
+      grants: existing.grants || {}
+    };
+  });
+
+  if (status) {
+    status.textContent = 'Saving groups…';
+    status.className = 'small text-muted';
+  }
+
+  try {
+    const res = await saveAllGroups(groups);
+    if (!res.success) {
+      showToast(res.error || 'Error saving groups');
+      if (status) {
+        status.textContent = 'Error saving groups.';
+        status.className = 'small text-danger';
+      }
+      return;
+    }
+
+    __groupsCache = groups;
+    if (status) {
+      status.textContent = 'Groups saved.';
+      status.className = 'small text-success';
+    }
+    showToast('Groups saved.');
+  } catch (e) {
+    console.error(e);
+    if (status) {
+      status.textContent = 'Error saving groups.';
+      status.className = 'small text-danger';
+    }
+    showToast('Error saving groups', 'error');
+  }
+}
+
+async function openGroupAclEditor(groupName) {
+  const isDark = document.body.classList.contains('dark-mode');
+  const overlayBg = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
+  const contentBg = isDark ? '#2c2c2c' : '#fff';
+  const contentFg = isDark ? '#e0e0e0' : '#000';
+  const borderCol = isDark ? '#555' : '#ccc';
+
+  let modal = document.getElementById('groupAclModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'groupAclModal';
+    modal.style.cssText = `
+      position:fixed; inset:0; background:${overlayBg};
+      display:flex; align-items:center; justify-content:center; z-index:3700;
+    `;
+    modal.innerHTML = `
+      <div class="modal-content"
+           style="background:${contentBg}; color:${contentFg};
+                  padding:16px; max-width:1300px; width:99%;
+                  position:relative;
+                  border:1px solid ${borderCol}; max-height:90vh; overflow:auto;">
+        <span id="closeGroupAclModal"
+              class="editor-close-btn"
+              style="right:8px; top:8px;">&times;</span>
+
+        <h3 id="groupAclTitle">Group folder access</h3>
+        <div class="muted" style="margin:-4px 0 10px;">
+          Group grants are merged with each member’s own folder access. They never reduce access.
+        </div>
+
+        <div id="groupAclBody" style="max-height:70vh; overflow-y:auto; margin-bottom:12px;"></div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" id="cancelGroupAcl" class="btn btn-secondary">${t('cancel')}</button>
+          <button type="button" id="saveGroupAcl"   class="btn btn-primary">${t('save_permissions')}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('closeGroupAclModal').onclick = () => (modal.style.display = 'none');
+    document.getElementById('cancelGroupAcl').onclick = () => (modal.style.display = 'none');
+    document.getElementById('saveGroupAcl').onclick = saveGroupAclFromUI;
+  } else {
+    modal.style.background = overlayBg;
+    const content = modal.querySelector('.modal-content');
+    if (content) {
+      content.style.background = contentBg;
+      content.style.color = contentFg;
+      content.style.border = `1px solid ${borderCol}`;
+    }
+  }
+
+  const title = document.getElementById('groupAclTitle');
+  if (title) title.textContent = `Group folder access: ${groupName}`;
+
+  const body = document.getElementById('groupAclBody');
+  if (body) body.textContent = `${t('loading')}…`;
+
+  modal.dataset.groupName = groupName;
+  modal.style.display = 'flex';
+
+  const folders = await getAllFolders(true);
+  const grants = (__groupsCache[groupName] && __groupsCache[groupName].grants) || {};
+
+  if (body) {
+    body.textContent = '';
+    const box = document.createElement('div');
+    box.className = 'folder-grants-box';
+    body.appendChild(box);
+
+    renderFolderGrantsUI(groupName, box, ['root', ...folders.filter(f => f !== 'root')], grants);
+  }
+}
+
+function saveGroupAclFromUI() {
+  const modal = document.getElementById('groupAclModal');
+  if (!modal) return;
+  const groupName = modal.dataset.groupName;
+  if (!groupName) return;
+
+  const body = document.getElementById('groupAclBody');
+  if (!body) return;
+  const box = body.querySelector('.folder-grants-box');
+  if (!box) return;
+
+  const grants = collectGrantsFrom(box);
+  if (!__groupsCache[groupName]) {
+    __groupsCache[groupName] = { name: groupName, label: groupName, members: [], grants: {} };
+  }
+  __groupsCache[groupName].grants = grants;
+
+  showToast('Group folder access updated. Remember to Save groups.');
+  modal.style.display = 'none';
+}
+
+
 async function fetchAllUserFlags() {
   const r = await fetch("/api/getUserPermissions.php", { credentials: "include" });
   const data = await r.json();
@@ -2489,31 +3024,194 @@ async function loadUserPermissionsList() {
   listContainer.innerHTML = `<p>${t("loading")}…</p>`;
 
   try {
-    const usersRes = await fetch("/api/getUsers.php", { credentials: "include" });
-    const usersData = await safeJson(usersRes);
-    const users = Array.isArray(usersData) ? usersData : (usersData.users || []);
-    if (!users.length) {
+    // Load users + groups together (folders separately)
+    const [usersRes, groupsMap] = await Promise.all([
+      fetch("/api/getUsers.php", { credentials: "include" }).then(safeJson),
+      fetchAllGroups().catch(() => ({}))
+    ]);
+
+    const users = Array.isArray(usersRes) ? usersRes : (usersRes.users || []);
+    const groups = groupsMap && typeof groupsMap === "object" ? groupsMap : {};
+
+    if (!users.length && !Object.keys(groups).length) {
       listContainer.innerHTML = "<p>" + t("no_users_found") + "</p>";
       return;
     }
 
-    const folders = await getAllFolders(true);
+    // Keep cache in sync with the groups UI
+    __groupsCache = groups || {};
 
+    const folders = await getAllFolders(true);
+    const orderedFolders = ["root", ...folders.filter(f => f !== "root")];
+
+    // Build map: username -> [groupName, ...]
+    const userGroupMap = {};
+    Object.keys(groups).forEach(gName => {
+      const g = groups[gName] || {};
+      const members = Array.isArray(g.members) ? g.members : [];
+      members.forEach(m => {
+        const u = String(m || "").trim();
+        if (!u) return;
+        if (!userGroupMap[u]) userGroupMap[u] = [];
+        userGroupMap[u].push(gName);
+      });
+    });
+
+    // Clear the container and render sections
     listContainer.innerHTML = "";
-    users.forEach(user => {
-      const isAdmin = (user.role && String(user.role) === "1") || String(user.username).toLowerCase() === "admin";
+
+// ====================
+// Groups section (top)
+// ====================
+const groupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+if (groupNames.length) {
+  const groupHeader = document.createElement("div");
+  groupHeader.className = "muted";
+  groupHeader.style.margin = "4px 0 6px";
+  groupHeader.textContent = tf("groups_header", "Groups");
+  listContainer.appendChild(groupHeader);
+
+  groupNames.forEach(name => {
+    const g = groups[name] || {};
+    const label = g.label || name;
+    const members = Array.isArray(g.members) ? g.members : [];
+    const membersSummary = members.length
+      ? members.join(", ")
+      : tf("no_members", "No members yet");
+
+    const row = document.createElement("div");
+    row.classList.add("user-permission-row", "group-permission-row");
+    row.setAttribute("data-group-name", name);
+    row.style.padding = "6px 0";
+
+    row.innerHTML = `
+      <div class="user-perm-header" tabindex="0" role="button" aria-expanded="false"
+           style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:12px;">
+        <span class="perm-caret" style="display:inline-block; transform: rotate(-90deg); transition: transform 120ms ease;">▸</span>
+        <i class="material-icons" style="font-size:18px;">group</i>
+        <strong class="group-label"></strong>
+        <span class="muted" style="margin-left:4px;font-size:11px;">
+          (${tf("group_label", "group")})
+        </span>
+        <span class="muted members-summary" style="margin-left:auto;font-size:11px;"></span>
+      </div>
+      <div class="user-perm-details" style="display:none; margin:8px 0 12px;">
+        <div class="folder-grants-box" data-loaded="0"></div>
+      </div>
+    `;
+    
+    // Safely inject dynamic text:
+    const labelEl = row.querySelector('.group-label');
+    if (labelEl) {
+      labelEl.textContent = label; // no HTML, just text
+    }
+    
+    const membersEl = row.querySelector('.members-summary');
+    if (membersEl) {
+      membersEl.textContent = `${tf("members_label", "Members")}: ${membersSummary}`;
+    }
+
+    const header = row.querySelector(".user-perm-header");
+    const details = row.querySelector(".user-perm-details");
+    const caret = row.querySelector(".perm-caret");
+    const grantsBox = row.querySelector(".folder-grants-box");
+
+    // Load this group's folder ACL (from __groupsCache) and show it read-only
+    async function ensureLoaded() {
+      if (grantsBox.dataset.loaded === "1") return;
+      try {
+        const group = __groupsCache[name] || {};
+        const grants = group.grants || {};
+
+        renderFolderGrantsUI(
+          name,
+          grantsBox,
+          orderedFolders,
+          grants
+        );
+
+        // Make it clear: edit in User groups → Edit folder access
+        grantsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          cb.disabled = true;
+          cb.title = tf(
+            "edit_group_acl_in_user_groups",
+            "Group ACL is read-only here. Use User groups → Edit folder access to change it."
+          );
+        });
+
+        grantsBox.dataset.loaded = "1";
+      } catch (e) {
+        console.error(e);
+        grantsBox.innerHTML = `<div class="muted">${tf("error_loading_group_grants", "Error loading group grants")}</div>`;
+      }
+    }
+
+    function toggleOpen() {
+      const willShow = details.style.display === "none";
+      details.style.display = willShow ? "block" : "none";
+      header.setAttribute("aria-expanded", willShow ? "true" : "false");
+      caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
+      if (willShow) ensureLoaded();
+    }
+
+    header.addEventListener("click", toggleOpen);
+    header.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleOpen();
+      }
+    });
+
+    listContainer.appendChild(row);
+  });
+
+  // divider between groups and users
+  const hr = document.createElement("hr");
+  hr.style.margin = "6px 0 10px";
+  hr.style.border = "0";
+  hr.style.borderTop = "1px solid rgba(0,0,0,0.08)";
+  listContainer.appendChild(hr);
+}
+
+    // =================
+    // Users section
+    // =================
+    const sortedUsers = users.slice().sort((a, b) => {
+      const ua = String(a.username || "").toLowerCase();
+      const ub = String(b.username || "").toLowerCase();
+      return ua.localeCompare(ub);
+    });
+
+    sortedUsers.forEach(user => {
+      const username = String(user.username || "").trim();
+      const isAdmin =
+        (user.role && String(user.role) === "1") ||
+        username.toLowerCase() === "admin";
+
+      const groupsForUser = userGroupMap[username] || [];
+      const groupBadges = groupsForUser.length
+        ? (() => {
+            const labels = groupsForUser.map(gName => {
+              const g = groups[gName] || {};
+              return g.label || gName;
+            });
+            return `<span class="muted" style="margin-left:8px;font-size:11px;">${tf("member_of_groups", "Groups")}: ${labels.join(", ")}</span>`;
+          })()
+        : "";
 
       const row = document.createElement("div");
       row.classList.add("user-permission-row");
-      row.setAttribute("data-username", user.username);
-      if (isAdmin) row.setAttribute("data-admin", "1"); // mark admins
+      row.setAttribute("data-username", username);
+      if (isAdmin) row.setAttribute("data-admin", "1");
       row.style.padding = "6px 0";
 
       row.innerHTML = `
     <div class="user-perm-header" tabindex="0" role="button" aria-expanded="false"
-         style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:6px;">
+         style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:12px;">
       <span class="perm-caret" style="display:inline-block; transform: rotate(-90deg); transition: transform 120ms ease;">▸</span>
-      <strong>${user.username}</strong>
+      <i class="material-icons" style="font-size:18px;">person</i>
+      <strong>${username}</strong>
+      ${groupBadges}
       ${isAdmin ? `<span class="muted" style="margin-left:auto;">Admin (full access)</span>`
           : `<span class="muted" style="margin-left:auto;">${tf('click_to_edit', 'Click to edit')}</span>`}
     </div>
@@ -2531,17 +3229,36 @@ async function loadUserPermissionsList() {
         if (grantsBox.dataset.loaded === "1") return;
         try {
           let grants;
+          const orderedFolders = ["root", ...folders.filter(f => f !== "root")];
+      
           if (isAdmin) {
             // synthesize full access
-            const ordered = ["root", ...folders.filter(f => f !== "root")];
-            grants = buildFullGrantsForAllFolders(ordered);
-            renderFolderGrantsUI(user.username, grantsBox, ordered, grants);
-            // disable all inputs
+            grants = buildFullGrantsForAllFolders(orderedFolders);
+            renderFolderGrantsUI(user.username, grantsBox, orderedFolders, grants);
             grantsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
           } else {
             const userGrants = await getUserGrants(user.username);
-            renderFolderGrantsUI(user.username, grantsBox, ["root", ...folders.filter(f => f !== "root")], userGrants);
+            renderFolderGrantsUI(user.username, grantsBox, orderedFolders, userGrants);
+      
+            // NEW: overlay group-based grants so you can't uncheck them here
+            const groupMask = computeGroupGrantMaskForUser(user.username);
+      
+            // If you already build a userGroupMap somewhere, you can pass the exact groups;
+            // otherwise we can recompute the list of group names from __groupsCache:
+            const groupsForUser = [];
+            if (__groupsCache && typeof __groupsCache === "object") {
+              Object.keys(__groupsCache).forEach(gName => {
+                const g = __groupsCache[gName] || {};
+                const members = Array.isArray(g.members) ? g.members : [];
+                if (members.some(m => String(m || "").trim().toLowerCase() === String(user.username || "").trim().toLowerCase())) {
+                  groupsForUser.push(gName);
+                }
+              });
+            }
+      
+            applyGroupLocksForUser(user.username, grantsBox, groupMask, groupsForUser);
           }
+      
           grantsBox.dataset.loaded = "1";
         } catch (e) {
           console.error(e);

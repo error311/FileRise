@@ -233,7 +233,7 @@ const translations = {
     "error_generating_recovery_code": "Error generating recovery code",
     "error_loading_qr_code": "Error loading QR code.",
     "error_disabling_totp_setting": "Error disabling TOTP setting",
-    "user_management": "User Management",
+    "user_management": "Users, Groups & Access",
     "add_user": "Add User",
     "remove_user": "Remove User",
     "user_permissions": "User Permissions",

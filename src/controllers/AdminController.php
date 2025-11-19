@@ -8,7 +8,7 @@ class AdminController
 {
 
             /** Enforce authentication (401). */
-            private static function requireAuth(): void
+            public static function requireAuth(): void
             {
                 if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
                     http_response_code(401);
@@ -19,7 +19,7 @@ class AdminController
             }
         
             /** Enforce admin (401). */
-            private static function requireAdmin(): void
+            public static function requireAdmin(): void
         {
             self::requireAuth();
         
@@ -69,7 +69,7 @@ class AdminController
             }
         
             /** Enforce CSRF using X-CSRF-Token header (or csrfToken param as fallback). */
-            private static function requireCsrf(): void
+            public static function requireCsrf(): void
             {
                 $h = self::headersLower();
                 $token = trim($h['x-csrf-token'] ?? ($_POST['csrfToken'] ?? ''));
@@ -272,6 +272,72 @@ public function setLicense(): void
     }
 }
 
+public function getProGroups(): array
+{
+    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
+        throw new RuntimeException('FileRise Pro is not active.');
+    }
+
+    $proGroupsPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . '/ProGroups.php';
+    if (!is_file($proGroupsPath)) {
+        throw new RuntimeException('ProGroups.php not found in Pro bundle.');
+    }
+
+    require_once $proGroupsPath;
+
+    $store  = new ProGroups(FR_PRO_BUNDLE_DIR);
+    $groups = $store->listGroups();
+
+    return $groups;
+}
+
+/**
+ * @param array $groupsPayload Raw "groups" array from JSON body
+ */
+public function saveProGroups(array $groupsPayload): void
+{
+    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
+        throw new RuntimeException('FileRise Pro is not active.');
+    }
+
+    $proGroupsPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . '/ProGroups.php';
+    if (!is_file($proGroupsPath)) {
+        throw new RuntimeException('ProGroups.php not found in Pro bundle.');
+    }
+
+    require_once $proGroupsPath;
+
+    // Normalize / validate the payload into the canonical structure
+    if (!is_array($groupsPayload)) {
+        throw new InvalidArgumentException('Invalid groups format.');
+    }
+
+    $data = ['groups' => []];
+
+    foreach ($groupsPayload as $name => $info) {
+        $name = trim((string)$name);
+        if ($name === '') {
+            continue;
+        }
+
+        $label   = isset($info['label']) ? trim((string)$info['label']) : $name;
+        $members = isset($info['members']) && is_array($info['members']) ? $info['members'] : [];
+        $grants  = isset($info['grants']) && is_array($info['grants']) ? $info['grants'] : [];
+
+        $data['groups'][$name] = [
+            'name'    => $name,
+            'label'   => $label,
+            'members' => array_values(array_unique(array_map('strval', $members))),
+            'grants'  => $grants,
+        ];
+    }
+
+    $store = new ProGroups(FR_PRO_BUNDLE_DIR);
+    if (!$store->save($data)) {
+        throw new RuntimeException('Could not write groups.json');
+    }
+}
+
 public function installProBundle(): void
 {
     header('Content-Type: application/json; charset=utf-8');
@@ -374,7 +440,6 @@ public function installProBundle(): void
 
         $installed = [
             'src'    => [],
-            'public' => [],
             'docs'   => [],
         ];
 
@@ -436,21 +501,6 @@ public function installProBundle(): void
                 $targetPath = $bundleRoot . DIRECTORY_SEPARATOR . $relative;
                 $category   = 'src';
 
-            } elseif (strpos($name, 'public/api/pro/') === 0) {
-                // e.g. public/api/pro/uploadBrandLogo.php
-                $relative = substr($name, strlen('public/api/pro/'));
-                if ($relative === '' || substr($relative, -1) === '/') {
-                    continue;
-                }
-
-                // Persist under bundle dir so it survives image rebuilds:
-                // users/pro/public/api/pro/...
-                $targetPath = $bundleRoot
-                    . DIRECTORY_SEPARATOR . 'public'
-                    . DIRECTORY_SEPARATOR . 'api'
-                    . DIRECTORY_SEPARATOR . 'pro'
-                    . DIRECTORY_SEPARATOR . $relative;
-                $category   = 'public';
             } else {
                 // Skip anything outside these prefixes
                 continue;
