@@ -1,5 +1,19 @@
 # Changelog
 
+## Changes 11/20/2025 (v1.9.13)
+
+release(v1.9.13): style(ui): compact dual-theme polish for lists, inputs, search & modals
+
+- Added compact, unified light/dark theme for core surfaces (file list, upload, folder manager, admin panel).
+- Updated modals, dropdown menus, and editor header to use the same modern panel styling in both themes.
+- Restyled search bar into a pill-shaped control with a dedicated icon chip and better hover states.
+- Refined pagination (Prev/Next) and font size (A-/A+) buttons to be smaller, rounded, and more consistent.
+- Normalized input fields so borders render cleanly and focus states are consistent across the app.
+- Tweaked button shadows so primary actions (Create/Upload) pop without feeling heavy in light mode.
+- Polished dark-mode colors for tables, rows, toasts, and meta text for a more “app-like” feel.
+
+---
+
 ## Changes 11/19/2025 (v1.9.12)
 
 release(v1.9.12): feat(pro-acl): add user groups and group-aware ACL

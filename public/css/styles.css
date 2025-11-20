@@ -824,19 +824,7 @@ label{font-size: 0.9rem;}
 .row-selected{background-color: #f2f2f2 !important;}
 .dark-mode .row-selected{background-color: #444 !important;
     color: #fff !important;}
-.custom-prev-next-btn{background-color: #e0e0e0;
-    color: #000;
-    border: none;
-    padding: 6px 12px;
-    font-size: 14px;
-    border-radius: 4px;
-    margin: 0 4px;
-    cursor: pointer;}
-.custom-prev-next-btn:hover:not(:disabled){background-color: #d5d5d5;}
-.dark-mode .custom-prev-next-btn{background-color: #444;
-    color: #fff;
-    border: none;}
-.dark-mode .custom-prev-next-btn:hover:not(:disabled){background-color: #555;}
+
 #customToast{position: fixed;
     bottom: 20px;
     right: 20px;
@@ -1979,4 +1967,657 @@ body.dark-mode #folderTreeContainer .folder-icon .lock-keyhole{fill: rgba(255,25
   font-size: 0.85rem;
   text-align: center;
   cursor: pointer;
+}
+/* ============================================
+   FileRise polish – compact theme layer
+============================================ */
+
+/* Tokens */
+:root {
+  --filr-radius-lg: 14px;
+  --filr-radius-xl: 18px;
+  --filr-shadow-soft: 0 12px 35px rgba(15,23,42,.14);
+  --filr-shadow-subtle: 0 8px 20px rgba(15,23,42,.10);
+  --filr-header-blur: 18px;
+  --filr-transition-fast: 150ms ease-out;
+  --filr-transition-med: 220ms cubic-bezier(.22,.61,.36,1);
+
+  /* Dark theme */
+  --fr-bg-dark:        #0f0f0f;
+  --fr-surface-dark:   #212121;
+  --fr-surface-dark-2: #181818;
+  --fr-border-dark:    #303030;
+  --fr-muted-dark:     #aaaaaa;
+
+  /* Light theme */
+  --fr-bg-light:        #f9f9f9;
+  --fr-surface-light:   #ffffff;
+  --fr-surface-light-2: #f1f1f1;
+  --fr-border-light:    #e5e5e5;
+  --fr-muted-light:     #606060;
+}
+
+/* Pro badge */
+.btn-pro-admin {
+  background: linear-gradient(135deg, #ff9800, #ff5722);
+  border-color: #ff9800;
+  color: #1b0f00 !important;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(255,152,0,.4);
+}
+
+/* Toast base shape (colors themed below) */
+#customToast {
+  border-radius: 999px;
+}
+
+/* Folder tree row rounding */
+#folderTreeContainer .folder-row { border-radius: 8px; }
+
+/* Buttons – pill style + hover lift */
+.btn,
+#customChooseBtn {
+  border-radius: 999px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition:
+    background-color var(--filr-transition-fast),
+    box-shadow var(--filr-transition-fast),
+    transform var(--filr-transition-fast),
+    border-color var(--filr-transition-fast);
+}
+
+/* Upload / create / primary: shared shadow in light + dark */
+.btn-primary,
+#createBtn,
+#uploadBtn {
+  box-shadow: 0 2px 4px rgba(0,0,0,.6);
+}
+
+.btn-primary:hover,
+#createBtn:hover,
+#uploadBtn:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0,140,180,.28);
+}
+
+/* Destructive buttons */
+#deleteSelectedBtn,
+#deleteAllBtn,
+#deleteTrashSelectedBtn {
+  border-color: rgba(248,113,113,.9);
+  box-shadow: 0 8px 18px rgba(248,113,113,.35);
+}
+
+/* Forms & inputs – base */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="url"],
+select,
+textarea {
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: .92rem;
+  transition:
+    border-color var(--filr-transition-fast),
+    box-shadow var(--filr-transition-fast),
+    background-color var(--filr-transition-fast);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--filr-accent-500);
+  box-shadow: 0 0 0 1px var(--filr-accent-ring);
+}
+
+/* Modals – subtle blur baseline (overridden per theme) */
+.modal {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Core elevated surfaces */
+#fileListContainer,
+#uploadCard,
+#folderManagementCard,
+.card,
+.admin-panel-content {
+  border-radius: var(--filr-radius-xl);
+  border: 1px solid rgba(15,23,42,.06);
+  background: #ffffff;
+  box-shadow: var(--filr-shadow-subtle);
+}
+
+/* Full-height body */
+body { min-height: 100vh; }
+
+/* ============================================
+   Dark theme
+============================================ */
+
+body.dark-mode {
+  background: var(--fr-bg-dark) !important;
+  color: #f1f1f1 !important;
+  background-image: none !important;
+}
+
+/* Main surfaces */
+body.dark-mode #fileListContainer,
+body.dark-mode #uploadCard,
+body.dark-mode #folderManagementCard,
+body.dark-mode .card,
+body.dark-mode .admin-panel-content,
+body.dark-mode .media-topbar {
+  background: var(--fr-surface-dark) !important;
+  border-color: var(--fr-border-dark) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.9) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Remove inner “glass” highlight if present */
+body.dark-mode #fileListContainer::before,
+body.dark-mode #uploadCard::before,
+body.dark-mode #folderManagementCard::before,
+body.dark-mode .card::before,
+body.dark-mode .admin-panel-content::before {
+  box-shadow: none !important;
+}
+
+/* Section headers */
+body.dark-mode .card-header,
+body.dark-mode .custom-folder-card-body .drag-header {
+  background: var(--fr-surface-dark-2) !important;
+  border-bottom: 1px solid var(--fr-border-dark) !important;
+}
+
+/* File list header / rows */
+body.dark-mode #fileList table thead th {
+  background: var(--fr-surface-dark-2) !important;
+  border-bottom: 1px solid var(--fr-border-dark) !important;
+}
+
+body.dark-mode #fileList table.filr-table tbody tr:hover:not(.selected,.row-selected,.selected-row,.is-selected)>td {
+  background: rgba(255,255,255,.04) !important;
+  box-shadow: none !important;
+}
+
+body.dark-mode #fileList table.filr-table tbody tr.selected>td,
+body.dark-mode #fileList table.filr-table tbody tr.row-selected>td,
+body.dark-mode #fileList table.filr-table tbody tr.selected-row>td,
+body.dark-mode #fileList table.filr-table tbody tr.is-selected>td {
+  background: rgba(62,166,255,.16) !important;
+  box-shadow: none !important;
+}
+
+/* Dark modals */
+body.dark-mode .modal {
+  background-color: rgba(0,0,0,.65) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body.dark-mode .modal .modal-content,
+body.dark-mode .editor-modal,
+body.dark-mode .image-preview-modal-content,
+body.dark-mode #restoreFilesModal .modal-content,
+body.dark-mode #downloadProgressModal .modal-content {
+  background: var(--fr-surface-dark) !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--fr-border-dark) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.9) !important;
+}
+
+body.dark-mode .modal .modal-content::before,
+body.dark-mode .editor-modal::before,
+body.dark-mode .image-preview-modal-content::before,
+body.dark-mode #restoreFilesModal .modal-content::before,
+body.dark-mode #downloadProgressModal .modal-content::before {
+  box-shadow: none !important;
+}
+
+/* Dark inputs */
+body.dark-mode input[type="text"],
+body.dark-mode input[type="password"],
+body.dark-mode input[type="email"],
+body.dark-mode input[type="url"],
+body.dark-mode select,
+body.dark-mode textarea {
+  background: #121212 !important;
+  border-color: #3d3d3d !important;
+  color: #f1f1f1 !important;
+}
+
+body.dark-mode input::placeholder,
+body.dark-mode textarea::placeholder { color: #777 !important; }
+
+body.dark-mode input:focus,
+body.dark-mode select:focus,
+body.dark-mode textarea:focus {
+  border-color: #3ea6ff !important;
+  box-shadow: 0 0 0 1px rgba(62,166,255,.7) !important;
+}
+
+/* Dark destructive buttons */
+body.dark-mode #deleteSelectedBtn,
+body.dark-mode #deleteAllBtn,
+body.dark-mode #deleteTrashSelectedBtn {
+  background-color: #b3261e !important;
+  border-color: #b3261e !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,.7) !important;
+}
+
+/* Dark folder strip */
+body.dark-mode .folder-strip-container.folder-strip-mobile {
+  background: var(--fr-surface-dark-2) !important;
+  border: 1px solid var(--fr-border-dark) !important;
+}
+
+/* Dark toast */
+body.dark-mode #customToast {
+  background: #212121 !important;
+  border: 1px solid var(--fr-border-dark) !important;
+  box-shadow: 0 8px 20px rgba(0,0,0,.9) !important;
+}
+
+/* Dark meta text */
+body.dark-mode #fileSummary { color: var(--fr-muted-dark) !important; }
+
+/* Menus & panels (dark) */
+body.dark-mode #createMenu,
+body.dark-mode .user-dropdown .user-menu,
+body.dark-mode #fileContextMenu,
+body.dark-mode #folderContextMenu,
+body.dark-mode #folderManagerContextMenu,
+body.dark-mode #adminPanelModal .modal-content,
+body.dark-mode #userPermissionsModal .modal-content,
+body.dark-mode #userFlagsModal .modal-content,
+body.dark-mode #userGroupsModal .modal-content,
+body.dark-mode #userPanelModal .modal-content,
+body.dark-mode #groupAclModal .modal-content,
+body.dark-mode .editor-modal,
+body.dark-mode #filePreviewModal .modal-content,
+body.dark-mode #loginForm,
+body.dark-mode .editor-header {
+  background: var(--fr-surface-dark) !important;
+  border: 1px solid var(--fr-border-dark) !important;
+  color: #f1f1f1 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.9) !important;
+}
+
+body.dark-mode .user-dropdown .user-menu,
+body.dark-mode #createMenu,
+body.dark-mode #fileContextMenu,
+body.dark-mode #folderContextMenu,
+body.dark-mode #folderManagerContextMenu {
+  background-clip: padding-box;
+}
+
+/* ============================================
+   Light theme
+============================================ */
+
+body:not(.dark-mode) {
+  background: var(--fr-bg-light) !important;
+  color: #111 !important;
+  background-image: none !important;
+}
+
+/* Light surfaces */
+body:not(.dark-mode) #fileListContainer,
+body:not(.dark-mode) #uploadCard,
+body:not(.dark-mode) #folderManagementCard,
+body:not(.dark-mode) .card,
+body:not(.dark-mode) .admin-panel-content {
+  background: var(--fr-surface-light) !important;
+  border-color: var(--fr-border-light) !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,.04) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Remove inner highlight */
+body:not(.dark-mode) #fileListContainer::before,
+body:not(.dark-mode) #uploadCard::before,
+body:not(.dark-mode) #folderManagementCard::before,
+body:not(.dark-mode) .card::before,
+body:not(.dark-mode) .admin-panel-content::before {
+  box-shadow: none !important;
+}
+
+/* Light section headers */
+body:not(.dark-mode) .card-header,
+body:not(.dark-mode) .custom-folder-card-body .drag-header {
+  background: var(--fr-surface-light-2) !important;
+  border-bottom: 1px solid var(--fr-border-light) !important;
+}
+
+/* Light file list */
+body:not(.dark-mode) #fileList table thead th {
+  background: var(--fr-surface-light-2) !important;
+  border-bottom: 1px solid var(--fr-border-light) !important;
+}
+
+body:not(.dark-mode) #fileList table.filr-table tbody tr:hover:not(.selected,.row-selected,.selected-row,.is-selected)>td {
+  background: rgba(0,0,0,.02) !important;
+  box-shadow: none !important;
+}
+
+body:not(.dark-mode) #fileList table.filr-table tbody tr.selected>td,
+body:not(.dark-mode) #fileList table.filr-table tbody tr.row-selected>td,
+body:not(.dark-mode) #fileList table.filr-table tbody tr.selected-row>td,
+body:not(.dark-mode) #fileList table.filr-table tbody tr.is-selected>td {
+  background: rgba(33,150,243,.12) !important;
+  box-shadow: none !important;
+}
+
+/* Light modals */
+body:not(.dark-mode) .modal {
+  background-color: rgba(0,0,0,.4) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body:not(.dark-mode) .modal .modal-content,
+body:not(.dark-mode) .editor-modal,
+body:not(.dark-mode) .image-preview-modal-content,
+body:not(.dark-mode) #restoreFilesModal .modal-content,
+body:not(.dark-mode) #downloadProgressModal .modal-content {
+  background: var(--fr-surface-light) !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--fr-border-light) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18) !important;
+}
+
+body:not(.dark-mode) .modal .modal-content::before,
+body:not(.dark-mode) .editor-modal::before,
+body:not(.dark-mode) .image-preview-modal-content::before,
+body:not(.dark-mode) #restoreFilesModal .modal-content::before,
+body:not(.dark-mode) #downloadProgressModal .modal-content::before {
+  box-shadow: none !important;
+}
+
+/* Light inputs */
+body:not(.dark-mode) input[type="text"],
+body:not(.dark-mode) input[type="password"],
+body:not(.dark-mode) input[type="email"],
+body:not(.dark-mode) input[type="url"],
+body:not(.dark-mode) select,
+body:not(.dark-mode) textarea {
+  background: #fff !important;
+  border-color: #d0d0d0 !important;
+  color: #111 !important;
+}
+
+body:not(.dark-mode) input::placeholder,
+body:not(.dark-mode) textarea::placeholder {
+  color: #9e9e9e !important;
+}
+
+body:not(.dark-mode) input:focus,
+body:not(.dark-mode) select:focus,
+body:not(.dark-mode) textarea:focus {
+  border-color: #2196f3 !important;
+  box-shadow: 0 0 0 1px rgba(33,150,243,.55) !important;
+}
+
+/* Light destructive buttons */
+body:not(.dark-mode) #deleteSelectedBtn,
+body:not(.dark-mode) #deleteAllBtn,
+body:not(.dark-mode) #deleteTrashSelectedBtn {
+  box-shadow: 0 2px 6px rgba(244,67,54,.3) !important;
+}
+
+/* Light folder strip */
+body:not(.dark-mode) .folder-strip-container.folder-strip-mobile {
+  background: #f1f1f1 !important;
+  border: 1px solid var(--fr-border-light) !important;
+}
+
+/* Light toast */
+body:not(.dark-mode) #customToast {
+  background: #212121 !important;
+  color: #fff !important;
+  border: 1px solid #000 !important;
+  box-shadow: 0 8px 18px rgba(0,0,0,.45) !important;
+}
+
+/* Light meta text */
+body:not(.dark-mode) #fileSummary { color: var(--fr-muted-light) !important; }
+
+/* Menus & panels (light) */
+body:not(.dark-mode) #createMenu,
+body:not(.dark-mode) .user-dropdown .user-menu,
+body:not(.dark-mode) #fileContextMenu,
+body:not(.dark-mode) #folderContextMenu,
+body:not(.dark-mode) #folderManagerContextMenu,
+body:not(.dark-mode) #adminPanelModal .modal-content,
+body:not(.dark-mode) #userPermissionsModal .modal-content,
+body:not(.dark-mode) #userFlagsModal .modal-content,
+body:not(.dark-mode) #userGroupsModal .modal-content,
+body:not(.dark-mode) #userPanelModal .modal-content,
+body:not(.dark-mode) #groupAclModal .modal-content,
+body:not(.dark-mode) .editor-modal,
+body:not(.dark-mode) #filePreviewModal .modal-content,
+body:not(.dark-mode) #loginForm
+body:not(.dark-mode) .editor-header{
+  background: var(--fr-surface-light) !important;
+  border: 1px solid var(--fr-border-light) !important;
+  color: #111 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12) !important;
+}
+
+/* ============================================
+   Search group / advanced search / pagination
+============================================ */
+
+/* Search icon + input */
+#searchIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px 0 0 999px;
+  border: 1px solid rgba(0,0,0,.18);
+  border-right: none;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: none;
+  transform: none;
+}
+
+#searchIcon .material-icons {
+  font-size: 20px;
+  line-height: 1;
+  color: #555;
+}
+
+#searchIcon:hover { background: #f5f5f5; }
+
+#searchIcon + #searchInput {
+  height: 36px;
+  border-radius: 0 999px 999px 0;
+  border-left: none;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* Dark search */
+body.dark-mode #searchIcon {
+  background: #212121;
+  border-color: #3d3d3d;
+}
+body.dark-mode #searchIcon .material-icons { color: #f1f1f1; }
+body.dark-mode #searchIcon:hover { background: #303030; }
+body.dark-mode #searchIcon + #searchInput { border-left: none; }
+
+/* Advanced search toggle */
+#advancedSearchToggle {
+  border-radius: 999px;
+  border: 1px solid #d0d0d0;
+  padding: 6px 12px;
+  font-size: .9rem;
+  background: #f5f5f5;
+  color: #333;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+  transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
+}
+#advancedSearchToggle:hover,
+#advancedSearchToggle:focus-visible {
+  background: #e8e8e8;
+  box-shadow: 0 1px 4px rgba(0,0,0,.16);
+  outline: none;
+  transform: translateY(-1px);
+}
+.dark-mode #advancedSearchToggle {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #f1f1f1;
+}
+.dark-mode #advancedSearchToggle:hover,
+.dark-mode #advancedSearchToggle:focus-visible {
+  background: #333;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+
+/* Prev / Next pagination */
+.custom-prev-next-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,.14);
+  background: #f1f1f1;
+  color: #111;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    box-shadow 140ms ease-out,
+    transform 120ms ease-out;
+}
+.custom-prev-next-btn:not(:disabled):hover {
+  background: #e5e5e5;
+  border-color: rgba(0,0,0,.22);
+  box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  transform: translateY(-1px);
+}
+.custom-prev-next-btn:not(:disabled):active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.custom-prev-next-btn:disabled {
+  opacity: .5;
+  cursor: default;
+  box-shadow: none;
+}
+body.dark-mode .custom-prev-next-btn {
+  background: #212121;
+  border-color: #3d3d3d;
+  color: #f1f1f1;
+}
+body.dark-mode .custom-prev-next-btn:not(:disabled):hover {
+  background: #2a2a2a;
+  border-color: #4a4a4a;
+  box-shadow: 0 2px 6px rgba(0,0,0,.7);
+}
+
+/* Normalize normal inputs (everything except the search pill) */
+input[type="text"]:not(#searchInput),
+input[type="password"],
+input[type="email"],
+input[type="url"],
+input[type="number"],
+textarea,
+select {
+  border: 1px solid rgba(148,163,184,.6) !important;
+  border-radius: 10px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+/* Compact font-size controls (A- / A+) */
+#decreaseFont,
+#increaseFont {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 5px;
+  height: 24px;
+  min-width: 30px;
+  padding: 2px 8px;
+
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  border-radius: 999px;
+
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  background: #f5f5f5;
+  color: #222;
+
+  cursor: pointer;
+  margin-left: 4px;
+
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    box-shadow 140ms ease-out,
+    transform 120ms ease-out;
+}
+
+/* Hover / active */
+#decreaseFont:not(:disabled):hover,
+#increaseFont:not(:disabled):hover {
+  background: #e8e8e8;
+  border-color: rgba(0, 0, 0, 0.24);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  transform: translateY(-1px);
+}
+
+#decreaseFont:not(:disabled):active,
+#increaseFont:not(:disabled):active {
+  transform: translateY(5);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+
+/* Disabled */
+#decreaseFont:disabled,
+#increaseFont:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* Dark mode tweaks */
+body.dark-mode #decreaseFont,
+body.dark-mode #increaseFont {
+  background: #212121;
+  border-color: #3d3d3d;
+  color: #f1f1f1;
+}
+
+body.dark-mode #decreaseFont:not(:disabled):hover,
+body.dark-mode #increaseFont:not(:disabled):hover {
+  background: #2a2a2a;
+  border-color: #4a4a4a;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.7);
+}
+#closeEditorX {
+margin-right: 10px;
 }
