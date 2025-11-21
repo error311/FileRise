@@ -160,11 +160,11 @@ export function buildFileTableHeader(sortOrder) {
       <thead>
         <tr>
           <th class="checkbox-col"><input type="checkbox" id="selectAll"></th>
-          <th data-column="name" class="sortable-col">${t("file_name")} ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="modified" class="hide-small sortable-col">${t("date_modified")} ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploaded" class="hide-small hide-medium sortable-col">${t("upload_date")} ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="size" class="hide-small sortable-col">${t("file_size")} ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="uploader" class="hide-small hide-medium sortable-col">${t("uploader")} ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="name" class="sortable-col">${t("name")} ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="modified" class="hide-small sortable-col">${t("modified")} ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploaded" class="hide-small hide-medium sortable-col">${t("created")} ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="size" class="hide-small sortable-col">${t("size")} ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="uploader" class="hide-small hide-medium sortable-col">${t("owner")} ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th>${t("actions")}</th>
         </tr>
       </thead>

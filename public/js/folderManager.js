@@ -928,7 +928,6 @@ export function openColorFolderModal(folder) {
           border: 1px solid var(--ghost-border, #cfcfcf);
           color: var(--ghost-fg, #222);
           padding: 6px 12px;
-          border-radius: 8px;
         }
         #colorFolderModal .btn-ghost:hover {
           background: var(--ghost-hover-bg, #f5f5f5);

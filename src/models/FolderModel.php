@@ -11,87 +11,111 @@ class FolderModel
      * Ownership mapping helpers (stored in META_DIR/folder_owners.json)
      * ============================================================ */
 
-    public static function countVisible(string $folder, string $user, array $perms): array
-    {
-        $folder = ACL::normalizeFolder($folder);
-
-        // If the user can't view this folder at all, short-circuit (admin/read/read_own)
-        $canViewFolder = ACL::isAdmin($perms)
-            || ACL::canRead($user, $perms, $folder)
-            || ACL::canReadOwn($user, $perms, $folder);
-        if (!$canViewFolder) return ['folders' => 0, 'files' => 0];
-
-        $base = realpath((string)UPLOAD_DIR);
-        if ($base === false) return ['folders' => 0, 'files' => 0];
-
-        // Resolve target dir + ACL-relative prefix
-        if ($folder === 'root') {
-            $dir = $base;
-            $relPrefix = '';
-        } else {
-            $parts = array_filter(explode('/', $folder), fn($p) => $p !== '');
-            foreach ($parts as $seg) {
-                if (!self::isSafeSegment($seg)) return ['folders' => 0, 'files' => 0];
-            }
-            $guess = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
-            $dir   = self::safeReal($base, $guess);
-            if ($dir === null || !is_dir($dir)) return ['folders' => 0, 'files' => 0];
-            $relPrefix = implode('/', $parts);
-        }
-
-        // Ignore lists (expandable)
-        $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
-        $SKIP   = ['trash', 'profile_pics'];
-
-        $entries = @scandir($dir);
-        if ($entries === false) return ['folders' => 0, 'files' => 0];
-
-        $hasChildFolder = false;
-        $hasFile        = false;
-
-        // Cap scanning to avoid pathological dirs
-        $MAX_SCAN = 4000;
-        $scanned  = 0;
-
-        foreach ($entries as $name) {
-            if (++$scanned > $MAX_SCAN) break;
-
-            if ($name === '.' || $name === '..') continue;
-            if ($name[0] === '.') continue;
-            if (in_array($name, $IGNORE, true)) continue;
-            if (in_array(strtolower($name), $SKIP, true)) continue;
-            if (!self::isSafeSegment($name)) continue;
-
-            $abs = $dir . DIRECTORY_SEPARATOR . $name;
-
-            if (@is_dir($abs)) {
-                // Symlink defense on children
-                if (@is_link($abs)) {
-                    $safe = self::safeReal($base, $abs);
-                    if ($safe === null || !is_dir($safe)) continue;
-                }
-                // Only count child dirs the user can view (admin/read/read_own)
-                $childRel = ($relPrefix === '' ? $name : $relPrefix . '/' . $name);
-                if (
-                    ACL::isAdmin($perms)
-                    || ACL::canRead($user, $perms, $childRel)
-                    || ACL::canReadOwn($user, $perms, $childRel)
-                ) {
-                    $hasChildFolder = true;
-                }
-            } elseif (@is_file($abs)) {
-                // Any file present is enough for the "files" flag once the folder itself is viewable
-                $hasFile = true;
-            }
-
-            if ($hasChildFolder && $hasFile) break; // early exit
-        }
-
-        return [
-            'folders' => $hasChildFolder ? 1 : 0,
-            'files'   => $hasFile ? 1 : 0,
-        ];
-    }
+     public static function countVisible(string $folder, string $user, array $perms): array
+     {
+         $folder = ACL::normalizeFolder($folder);
+     
+         // If the user can't view this folder at all, short-circuit (admin/read/read_own)
+         $canViewFolder = ACL::isAdmin($perms)
+             || ACL::canRead($user, $perms, $folder)
+             || ACL::canReadOwn($user, $perms, $folder);
+         if (!$canViewFolder) {
+             return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+         }
+     
+         // NEW: distinguish full read vs own-only for this folder
+         $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $folder);
+         // if !$hasFullRead but $canViewFolder is true, they’re effectively "view own" only
+     
+         $base = realpath((string)UPLOAD_DIR);
+         if ($base === false) {
+             return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+         }
+     
+         // Resolve target dir + ACL-relative prefix
+         if ($folder === 'root') {
+             $dir       = $base;
+             $relPrefix = '';
+         } else {
+             $parts = array_filter(explode('/', $folder), fn($p) => $p !== '');
+             foreach ($parts as $seg) {
+                 if (!self::isSafeSegment($seg)) {
+                     return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+                 }
+             }
+             $guess = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+             $dir   = self::safeReal($base, $guess);
+             if ($dir === null || !is_dir($dir)) {
+                 return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+             }
+             $relPrefix = implode('/', $parts);
+         }
+     
+         $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
+         $SKIP   = ['trash', 'profile_pics'];
+     
+         $entries = @scandir($dir);
+         if ($entries === false) {
+             return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+         }
+     
+         $folderCount = 0;
+         $fileCount   = 0;
+         $totalBytes  = 0;
+     
+         $MAX_SCAN = 4000;
+         $scanned  = 0;
+     
+         foreach ($entries as $name) {
+             if (++$scanned > $MAX_SCAN) {
+                 break;
+             }
+     
+             if ($name === '.' || $name === '..') continue;
+             if ($name[0] === '.') continue;
+             if (in_array($name, $IGNORE, true)) continue;
+             if (in_array(strtolower($name), $SKIP, true)) continue;
+             if (!self::isSafeSegment($name)) continue;
+     
+             $abs = $dir . DIRECTORY_SEPARATOR . $name;
+     
+             if (@is_dir($abs)) {
+                 if (@is_link($abs)) {
+                     $safe = self::safeReal($base, $abs);
+                     if ($safe === null || !is_dir($safe)) {
+                         continue;
+                     }
+                 }
+     
+                 $childRel = ($relPrefix === '' ? $name : $relPrefix . '/' . $name);
+                 if (
+                     ACL::isAdmin($perms)
+                     || ACL::canRead($user, $perms, $childRel)
+                     || ACL::canReadOwn($user, $perms, $childRel)
+                 ) {
+                     $folderCount++;
+                 }
+             } elseif (@is_file($abs)) {
+                 // Only count files if the user has full read on *this* folder.
+                 // If they’re view_own-only here, don’t leak or mis-report counts.
+                 if (!$hasFullRead) {
+                     continue;
+                 }
+     
+                 $fileCount++;
+                 $sz = @filesize($abs);
+                 if (is_int($sz) && $sz > 0) {
+                     $totalBytes += $sz;
+                 }
+             }
+         }
+     
+         return [
+             'folders' => $folderCount,
+             'files'   => $fileCount,
+             'bytes'   => $totalBytes,
+         ];
+     }
 
     /* Helpers (private) */
     private static function isSafeSegment(string $name): bool

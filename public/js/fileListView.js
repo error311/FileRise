@@ -240,16 +240,29 @@ window.addEventListener('resize', () => {
   if (strip) applyFolderStripLayout(strip);
 });
 
-// Listen once: update strip + tree when folder color changes
+// Listen once: update strip + tree + inline rows when folder color changes
 window.addEventListener('folderColorChanged', (e) => {
   const { folder } = e.detail || {};
   if (!folder) return;
 
-  // Update the strip (if that folder is currently shown)
+  // 1) Update the strip (if that folder is currently shown)
   repaintStripIcon(folder);
 
-  // And refresh the tree icon too (existing function)
+  // 2) Refresh the tree icon (existing function)
   try { refreshFolderIcon(folder); } catch { }
+
+  // 3) Repaint any inline folder rows in the file table
+  try {
+    const safeFolder = CSS.escape(folder);
+    document
+      .querySelectorAll(`#fileList tr.folder-row[data-folder="${safeFolder}"]`)
+      .forEach(row => {
+        // reuse the same helper we used when injecting inline rows
+        attachStripIconAsync(row, folder, 28);
+      });
+  } catch {
+    // CSS.escape might not exist on very old browsers; fail silently
+  }
 });
 
 // Hide "Edit" for files >10 MiB
@@ -259,11 +272,25 @@ const MAX_EDIT_BYTES = 10 * 1024 * 1024;
 let __fileListReqSeq = 0;
 
 window.itemsPerPage = parseInt(
-  localStorage.getItem('itemsPerPage') || window.itemsPerPage || '10',
+  localStorage.getItem('itemsPerPage') || window.itemsPerPage || '50',
   10
 );
 window.currentPage = window.currentPage || 1;
 window.viewMode = localStorage.getItem("viewMode") || "table";
+window.currentSubfolders = window.currentSubfolders || [];
+
+// Default folder display settings from localStorage
+try {
+  const storedStrip  = localStorage.getItem('showFoldersInList');
+  const storedInline = localStorage.getItem('showInlineFolders');
+
+  window.showFoldersInList = storedStrip === null ? true : storedStrip === 'true';
+  window.showInlineFolders = storedInline === null ? true : storedInline === 'true';
+} catch {
+  // if localStorage blows up, fall back to both enabled
+  window.showFoldersInList = true;
+  window.showInlineFolders = true;
+}
 
 // Global flag for advanced search mode.
 window.advancedSearchEnabled = false;
@@ -387,7 +414,6 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
   const back = _lighten(hex, 14);
   const stroke = _darken(hex, 22);
 
-  // apply vars on the tile (or icon span)
   hostEl.style.setProperty('--filr-folder-front', front);
   hostEl.style.setProperty('--filr-folder-back', back);
   hostEl.style.setProperty('--filr-folder-stroke', stroke);
@@ -395,15 +421,26 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
   const iconSpan = hostEl.querySelector('.folder-svg');
   if (!iconSpan) return;
 
+  // 1) initial "empty" icon
   iconSpan.dataset.kind = 'empty';
-  iconSpan.innerHTML = folderSVG('empty');  // size is baked into viewBox; add a size arg if you prefer
+  iconSpan.innerHTML = folderSVG('empty');
+
+  // make sure this brand-new SVG is sized correctly
+  try { syncFolderIconSizeToRowHeight(); } catch {}
+
   const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(fullPath)}&t=${Date.now()}`;
-  _fetchJSONWithTimeout(url, 2500).then(({ folders = 0, files = 0 }) => {
-    if ((folders + files) > 0 && iconSpan.dataset.kind !== 'paper') {
-      iconSpan.dataset.kind = 'paper';
-      iconSpan.innerHTML = folderSVG('paper');
-    }
-  }).catch(() => { });
+  _fetchJSONWithTimeout(url, 2500)
+    .then(({ folders = 0, files = 0 }) => {
+      if ((folders + files) > 0 && iconSpan.dataset.kind !== 'paper') {
+        // 2) swap to "paper" icon
+        iconSpan.dataset.kind = 'paper';
+        iconSpan.innerHTML = folderSVG('paper');
+
+        // re-apply sizing to this new SVG too
+        try { syncFolderIconSizeToRowHeight(); } catch {}
+      }
+    })
+    .catch(() => { /* ignore */ });
 }
 
 /* -----------------------------
@@ -425,6 +462,56 @@ async function safeJson(res) {
     throw err;
   }
   return body ?? {};
+}
+
+// --- Folder capabilities + owner cache ----------------------
+const _folderCapsCache  = new Map();
+
+async function fetchFolderCaps(folder) {
+  if (!folder) return null;
+  if (_folderCapsCache.has(folder)) {
+    return _folderCapsCache.get(folder);
+  }
+  try {
+    const res  = await fetch(
+      `/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`,
+      { credentials: 'include' }
+    );
+    const data = await safeJson(res);
+    _folderCapsCache.set(folder, data || null);
+
+    if (data && (data.owner || data.user)) {
+      _folderOwnerCache.set(folder, data.owner || data.user || "");
+    }
+    return data || null;
+  } catch {
+    _folderCapsCache.set(folder, null);
+    return null;
+  }
+}
+
+// --- Folder owner cache + helper ----------------------
+const _folderOwnerCache = new Map();
+
+async function fetchFolderOwner(folder) {
+  if (!folder) return "";
+  if (_folderOwnerCache.has(folder)) {
+    return _folderOwnerCache.get(folder);
+  }
+
+  try {
+    const res = await fetch(
+      `/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`,
+      { credentials: 'include' }
+    );
+    const data = await safeJson(res);
+    const owner = data && (data.owner || data.user || "");
+    _folderOwnerCache.set(folder, owner || "");
+    return owner || "";
+  } catch {
+    _folderOwnerCache.set(folder, "");
+    return "";
+  }
 }
 // ---- Viewed badges (table + gallery) ----
 // ---------- Badge factory (center text vertically) ----------
@@ -917,6 +1004,13 @@ export async function loadFileList(folderParam) {
           document.documentElement.style.setProperty("--file-row-height", v + "px");
           localStorage.setItem("rowHeight", v);
           rowValue.textContent = v + "px";
+            // mark compact mode for very low heights
+  if (v <= 32) {
+    document.documentElement.setAttribute('data-row-compact', '1');
+  } else {
+    document.documentElement.removeAttribute('data-row-compact');
+  }
+          syncFolderIconSizeToRowHeight();
         };
       }
     }
@@ -966,6 +1060,9 @@ export async function loadFileList(folderParam) {
         return !hidden.has(lower) && !lower.startsWith("resumable_");
       });
 
+      // Expose for inline folder rows in table view
+      window.currentSubfolders = subfolders;
+
       let strip = document.getElementById("folderStripContainer");
       if (!strip) {
         strip = document.createElement("div");
@@ -976,6 +1073,11 @@ export async function loadFileList(folderParam) {
 
       // NEW: paged + responsive strip
       renderFolderStripPaged(strip, subfolders);
+
+      // Re-render table view once folders are known so they appear inline above files
+      if (window.viewMode === "table" && reqId === __fileListReqSeq) {
+        renderFileTable(folder);
+      }
     } catch {
       // ignore folder errors; rows already rendered
     }
@@ -1000,23 +1102,455 @@ export async function loadFileList(folderParam) {
   }
 }
 
+
+function injectInlineFolderRows(fileListContent, folder, pageSubfolders) {
+  const table = fileListContent.querySelector('table.filr-table');
+
+  // Use the paged subfolders if provided, otherwise fall back to all
+  const subfolders = Array.isArray(pageSubfolders) && pageSubfolders.length
+    ? pageSubfolders
+    : (Array.isArray(window.currentSubfolders) ? window.currentSubfolders : []);
+
+  if (!table || !subfolders.length) return;
+
+  const thead = table.tHead;
+  const tbody = table.tBodies && table.tBodies[0];
+  if (!thead || !tbody) return;
+
+  const headerRow = thead.rows[0];
+  if (!headerRow) return;
+
+  const headerCells = Array.from(headerRow.cells);
+  const colCount = headerCells.length;
+
+  // --- Column indices -------------------------------------------------------
+  let checkboxIdx = headerCells.findIndex(th =>
+    th.classList.contains("checkbox-col") ||
+    th.querySelector('input[type="checkbox"]')
+  );
+
+  let nameIdx = headerCells.findIndex(th =>
+    (th.dataset && th.dataset.column === "name") ||
+    /\bname\b/i.test((th.textContent || "").trim())
+  );
+  if (nameIdx < 0) {
+    nameIdx = Math.min(1, colCount - 1); // fallback to 2nd col
+  }
+
+  let sizeIdx = headerCells.findIndex(th =>
+    (th.dataset && (th.dataset.column === "size" || th.dataset.column === "filesize")) ||
+    /\bsize\b/i.test((th.textContent || "").trim())
+  );
+  if (sizeIdx < 0) sizeIdx = -1;
+
+  let uploaderIdx = headerCells.findIndex(th =>
+    (th.dataset && th.dataset.column === "uploader") ||
+    /\buploader\b/i.test((th.textContent || "").trim())
+  );
+  if (uploaderIdx < 0) uploaderIdx = -1;
+
+  let actionsIdx = headerCells.findIndex(th =>
+    (th.dataset && th.dataset.column === "actions") ||
+    /\bactions?\b/i.test((th.textContent || "").trim()) ||
+    /\bactions?-col\b/i.test(th.className || "")
+  );
+  if (actionsIdx < 0) actionsIdx = -1;
+
+  // Remove any previous folder rows
+  tbody.querySelectorAll("tr.folder-row").forEach(tr => tr.remove());
+
+
+  
+  const firstDataRow = tbody.firstElementChild;
+
+  subfolders.forEach(sf => {
+    const tr = document.createElement("tr");
+    tr.classList.add("folder-row");
+    tr.dataset.folder = sf.full;
+  
+    for (let i = 0; i < colCount; i++) {
+      const td = document.createElement("td");
+
+// *** copy header classes so responsive breakpoints match file rows ***
+// but strip Bootstrap margin helpers (ml-2 / mx-2) so we don't get a big gap
+const headerClass = headerCells[i] && headerCells[i].className;
+if (headerClass) {
+  td.className = headerClass;
+  td.classList.remove("ml-2", "mx-2");
+}
+  
+      // 1) icon / checkbox column
+      if (i === checkboxIdx) {
+        td.classList.add("folder-icon-cell");
+        td.style.textAlign = "left";
+        td.style.verticalAlign = "middle";
+  
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "folder-svg folder-row-icon";
+        td.appendChild(iconSpan);
+  
+      // 2) name column
+      } else if (i === nameIdx) {
+        td.classList.add("name-cell", "file-name-cell", "folder-name-cell");
+  
+        const wrap = document.createElement("div");
+        wrap.className = "folder-row-inner";
+  
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "folder-row-name";
+        nameSpan.textContent = sf.name || sf.full;
+  
+        const metaSpan = document.createElement("span");
+        metaSpan.className = "folder-row-meta";
+        metaSpan.textContent = ""; // "(15 folders, 19 files)" later
+  
+        wrap.appendChild(nameSpan);
+        wrap.appendChild(metaSpan);
+        td.appendChild(wrap);
+  
+      // 3) size column
+      } else if (i === sizeIdx) {
+        td.classList.add("folder-size-cell");
+        td.textContent = "…"; // placeholder until we load stats
+  
+      // 4) uploader / owner column
+      } else if (i === uploaderIdx) {
+        td.classList.add("uploader-cell", "folder-uploader-cell");
+        td.textContent = ""; // filled asynchronously with owner
+  
+      // 5) actions column
+    } else if (i === actionsIdx) {
+      td.classList.add("folder-actions-cell");
+    
+      const group = document.createElement("div");
+      group.className = "btn-group btn-group-sm folder-actions-group";
+      group.setAttribute("role", "group");
+group.setAttribute("aria-label", "File actions"); 
+    
+const makeActionBtn = (iconName, titleKey, btnClass, actionKey, handler) => {
+  const btn = document.createElement("button");
+  btn.type = "button";
+
+  // base classes – same size as file actions
+  btn.className = `btn ${btnClass} py-1`;
+
+  // kill any Bootstrap margin helpers that got passed in
+  btn.classList.remove("ml-2", "mx-2");
+
+  btn.setAttribute("data-folder-action", actionKey);
+  btn.setAttribute("data-i18n-title", titleKey);
+  btn.title = t(titleKey);
+
+  const icon = document.createElement("i");
+  icon.className = "material-icons";
+  icon.textContent = iconName;
+  btn.appendChild(icon);
+
+  btn.addEventListener("click", e => {
+    e.stopPropagation();
+    window.currentFolder = sf.full;
+    try { localStorage.setItem("lastOpenedFolder", sf.full); } catch {}
+    handler();
+  });
+
+  // start disabled; caps logic will enable
+  btn.disabled = true;
+  btn.style.pointerEvents = "none";
+  btn.style.opacity = "0.5";
+
+  group.appendChild(btn);
+};
+    
+makeActionBtn("drive_file_move",            "move_folder",   "btn-warning folder-move-btn",     "move",   () => openMoveFolderUI());
+makeActionBtn("palette",                    "color_folder",  "btn-color-folder","color",  () => openColorFolderModal(sf.full));
+makeActionBtn("drive_file_rename_outline",  "rename_folder", "btn-warning folder-rename-btn",     "rename", () => openRenameFolderModal());
+makeActionBtn("share",                      "share_folder",  "btn-secondary",   "share",  () => openFolderShareModal(sf.full));
+    
+      td.appendChild(group);
+    }
+  
+      // IMPORTANT: always append the cell, no matter which column we're in
+      tr.appendChild(td);
+    }
+  
+    // click → navigate, same as before
+    tr.addEventListener("click", e => {
+      if (e.button !== 0) return;
+      const dest = sf.full;
+      if (!dest) return;
+  
+      window.currentFolder = dest;
+      try { localStorage.setItem("lastOpenedFolder", dest); } catch { }
+  
+      updateBreadcrumbTitle(dest);
+  
+      document.querySelectorAll(".folder-option.selected")
+        .forEach(o => o.classList.remove("selected"));
+      const treeNode = document.querySelector(
+        `.folder-option[data-folder="${CSS.escape(dest)}"]`
+      );
+      if (treeNode) treeNode.classList.add("selected");
+  
+      const strip = document.getElementById("folderStripContainer");
+      if (strip) {
+        strip.querySelectorAll(".folder-item.selected")
+          .forEach(i => i.classList.remove("selected"));
+        const stripItem = strip.querySelector(
+          `.folder-item[data-folder="${CSS.escape(dest)}"]`
+        );
+        if (stripItem) stripItem.classList.add("selected");
+      }
+  
+      loadFileList(dest);
+    });
+  
+    
+        // DnD + context menu – keep existing logic, but also add a visual highlight
+        tr.addEventListener("dragover", e => {
+          folderDragOverHandler(e);
+          tr.classList.add("folder-row-droptarget");
+        });
+    
+        tr.addEventListener("dragleave", e => {
+          folderDragLeaveHandler(e);
+          tr.classList.remove("folder-row-droptarget");
+        });
+    
+        tr.addEventListener("drop", e => {
+          folderDropHandler(e);
+          tr.classList.remove("folder-row-droptarget");
+        });
+  
+    tr.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      e.stopPropagation();
+  
+      const dest = sf.full;
+      if (!dest) return;
+  
+      window.currentFolder = dest;
+      try { localStorage.setItem("lastOpenedFolder", dest); } catch { }
+  
+      const menuItems = [
+        { label: t("create_folder"), action: () => document.getElementById("createFolderModal").style.display = "block" },
+        { label: t("move_folder"),   action: () => openMoveFolderUI() },
+        { label: t("rename_folder"), action: () => openRenameFolderModal() },
+        { label: t("color_folder"),  action: () => openColorFolderModal(dest) },
+        { label: t("folder_share"),  action: () => openFolderShareModal(dest) },
+        { label: t("delete_folder"), action: () => openDeleteFolderModal() }
+      ];
+      showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+    });
+  
+    // insert row above first file row
+    tbody.insertBefore(tr, firstDataRow || null);
+  
+   // ----- ICON: color + alignment (size is driven by row height) -----
+attachStripIconAsync(tr, sf.full);
+const iconSpan = tr.querySelector(".folder-row-icon");
+if (iconSpan) {
+  iconSpan.style.display = "inline-flex";
+  iconSpan.style.alignItems = "center";
+  iconSpan.style.justifyContent = "flex-start";
+  iconSpan.style.marginLeft = "0px";   // small left nudge
+  iconSpan.style.marginTop  = "0px";   // small down nudge
+}
+  
+    // ----- FOLDER STATS + OWNER + CAPS (keep your existing code below here) -----
+    const sizeCellIndex = (sizeIdx >= 0 && sizeIdx < tr.cells.length) ? sizeIdx : -1;
+    const nameCellIndex = (nameIdx >= 0 && nameIdx < tr.cells.length) ? nameIdx : -1;
+  
+    const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(sf.full)}&t=${Date.now()}`;
+    _fetchJSONWithTimeout(url, 2500).then(stats => {
+      if (!stats) return;
+  
+      const foldersCount = Number.isFinite(stats.folders) ? stats.folders : 0;
+      const filesCount   = Number.isFinite(stats.files)   ? stats.files   : 0;
+      const bytes = Number.isFinite(stats.bytes)
+        ? stats.bytes
+        : (Number.isFinite(stats.sizeBytes) ? stats.sizeBytes : null);
+  
+      let pieces = [];
+      if (foldersCount) pieces.push(`${foldersCount} folder${foldersCount === 1 ? "" : "s"}`);
+      if (filesCount)   pieces.push(`${filesCount} file${filesCount === 1 ? "" : "s"}`);
+      if (!pieces.length) pieces.push("0 items");
+      const countLabel = pieces.join(", ");
+  
+      if (nameCellIndex >= 0) {
+        const nameCell = tr.cells[nameCellIndex];
+        if (nameCell) {
+          const metaSpan = nameCell.querySelector(".folder-row-meta");
+          if (metaSpan) metaSpan.textContent = ` (${countLabel})`;
+        }
+      }
+  
+      if (sizeCellIndex >= 0) {
+        const sizeCell = tr.cells[sizeCellIndex];
+        if (sizeCell) {
+          let sizeLabel = "—";
+          if (bytes != null && bytes >= 0) {
+            sizeLabel = formatSize(bytes);
+          }
+          sizeCell.textContent = sizeLabel;
+          sizeCell.title = `${countLabel}${bytes != null && bytes >= 0 ? " • " + sizeLabel : ""}`;
+        }
+      }
+    }).catch(() => {
+      if (sizeCellIndex >= 0) {
+        const sizeCell = tr.cells[sizeCellIndex];
+        if (sizeCell && !sizeCell.textContent) sizeCell.textContent = "—";
+      }
+    });
+  
+    // OWNER + action permissions
+    if (uploaderIdx >= 0 || actionsIdx >= 0) {
+      fetchFolderCaps(sf.full).then(caps => {
+        if (!caps || !document.body.contains(tr)) return;
+  
+        if (uploaderIdx >= 0 && uploaderIdx < tr.cells.length) {
+          const uploaderCell = tr.cells[uploaderIdx];
+          if (uploaderCell) {
+            const owner = caps.owner || caps.user || "";
+            uploaderCell.textContent = owner || "";
+          }
+        }
+  
+        if (actionsIdx >= 0 && actionsIdx < tr.cells.length) {
+          const actCell = tr.cells[actionsIdx];
+          if (!actCell) return;
+  
+          actCell.querySelectorAll('button[data-folder-action]').forEach(btn => {
+            const action = btn.getAttribute('data-folder-action');
+            let enabled = false;
+            switch (action) {
+              case "move":
+                enabled = !!caps.canMoveFolder;
+                break;
+              case "color":
+                enabled = !!caps.canRename;          // same gate as tree “color” button
+                break;
+              case "rename":
+                enabled = !!caps.canRename;
+                break;
+              case "share":
+                enabled = !!caps.canShareFolder;
+                break;
+            }
+            if (enabled === undefined) {
+              enabled = true; // fallback so admin still gets buttons even if a flag is missing
+            }
+            if (enabled) {
+              btn.disabled = false;
+              btn.style.pointerEvents = "";
+              btn.style.opacity = "";
+            } else {
+              btn.disabled = true;
+              btn.style.pointerEvents = "none";
+              btn.style.opacity = "0.5";
+            }
+          });
+        }
+      }).catch(() => { /* ignore */ });
+    }
+  });
+  syncFolderIconSizeToRowHeight();
+}
+function syncFolderIconSizeToRowHeight() {
+  const cs   = getComputedStyle(document.documentElement);
+  const raw  = cs.getPropertyValue('--file-row-height') || '48px';
+  const rowH = parseInt(raw, 10) || 60;
+
+  const FUDGE          = 5;
+  const MAX_GROWTH_ROW = 44;   // after this, stop growing the icon
+
+  const BASE_ROW_FOR_OFFSET = 40; // where icon looks centered
+  const OFFSET_FACTOR       = 0.25;
+
+  // cap growth for size, like you already do
+  const effectiveRow = Math.min(rowH, MAX_GROWTH_ROW);
+
+  const boxSize = Math.max(25, Math.min(35, effectiveRow - 20 + FUDGE));
+  const scale   = 1.20;
+
+  // use your existing offset curve
+  const clampedForOffset = Math.max(30, Math.min(60, rowH));
+  let offsetY = (clampedForOffset - BASE_ROW_FOR_OFFSET) * OFFSET_FACTOR;
+
+  // 30–44: untouched (you said this range is perfect)
+  // 45–60: same curve, but shifted up slightly
+  if (rowH > 53) {
+    offsetY -= 3; 
+  }
+
+  document.querySelectorAll('#fileList .folder-row-icon').forEach(iconSpan => {
+    iconSpan.style.width    = boxSize + 'px';
+    iconSpan.style.height   = boxSize + 'px';
+    iconSpan.style.overflow = 'visible';
+
+    const svg = iconSpan.querySelector('svg');
+    if (!svg) return;
+
+    svg.setAttribute('width',  String(boxSize));
+    svg.setAttribute('height', String(boxSize));
+    svg.style.transformOrigin = 'left center';
+    svg.style.transform       = `translateY(${offsetY}px) scale(${scale})`;
+  });
+}
 /**
  * Render table view
  */
 export function renderFileTable(folder, container, subfolders) {
   const fileListContent = container || document.getElementById("fileList");
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
-  const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "10", 10);
+  const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "50", 10);
   let currentPage = window.currentPage || 1;
 
+  // Files (filtered by search)
   const filteredFiles = searchFiles(searchTerm);
 
-  const totalFiles = filteredFiles.length;
-  const totalPages = Math.ceil(totalFiles / itemsPerPageSetting);
+  // Inline folders: sort once (Explorer-style A→Z)
+  const allSubfolders = Array.isArray(window.currentSubfolders)
+    ? window.currentSubfolders
+    : [];
+  const subfoldersSorted = [...allSubfolders].sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+  );
+
+  const totalFiles   = filteredFiles.length;
+  const totalFolders = subfoldersSorted.length;
+  const totalRows    = totalFiles + totalFolders;
+  const hasFolders   = totalFolders > 0;
+
+  // Pagination is now over (folders + files)
+  const totalPages = totalRows > 0
+    ? Math.ceil(totalRows / itemsPerPageSetting)
+    : 1;
+
   if (currentPage > totalPages) {
-    currentPage = totalPages > 0 ? totalPages : 1;
+    currentPage = totalPages;
     window.currentPage = currentPage;
   }
+
+  const startRow = (currentPage - 1) * itemsPerPageSetting;
+  const endRow   = Math.min(startRow + itemsPerPageSetting, totalRows);
+
+  // Figure out which folders + files belong to THIS page
+  const pageFolders = [];
+  const pageFiles   = [];
+
+  for (let rowIndex = startRow; rowIndex < endRow; rowIndex++) {
+    if (rowIndex < totalFolders) {
+      pageFolders.push(subfoldersSorted[rowIndex]);
+    } else {
+      const fileIdx = rowIndex - totalFolders;
+      const file = filteredFiles[fileIdx];
+      if (file) pageFiles.push(file);
+    }
+  }
+
+  // Stable id per file row on this page
+  const rowIdFor = (file, idx) =>
+    `${encodeURIComponent(file.name)}-p${currentPage}-${idx}`;
 
   // We pass a harmless "base" string to keep buildFileTableRow happy,
   // then we will FIX the preview/thumbnail URLs to the API below.
@@ -1040,19 +1574,16 @@ export function renderFileTable(folder, container, subfolders) {
     return `<table class="filr-table"${attrs}>`;
   });
 
-  const startIndex = (currentPage - 1) * itemsPerPageSetting;
-  const endIndex = Math.min(startIndex + itemsPerPageSetting, totalFiles);
-  let rowsHTML = "<tbody>";
-  if (totalFiles > 0) {
-    filteredFiles.slice(startIndex, endIndex).forEach((file, idx) => {
-      // Build row with a neutral base, then correct the links/preview below.
-      // Give the row an ID so we can patch attributes safely
-      const idSafe = encodeURIComponent(file.name) + "-" + (startIndex + idx);
+    let rowsHTML = "<tbody>";
+
+  if (pageFiles.length > 0) {
+    pageFiles.forEach((file, idx) => {
+      const rowKey = rowIdFor(file, idx);
       let rowHTML = buildFileTableRow(file, fakeBase);
 
       // add row id + data-file-name, and ensure the name cell also has "name-cell"
       rowHTML = rowHTML
-        .replace("<tr", `<tr id="file-row-${idSafe}" data-file-name="${escapeHTML(file.name)}"`)
+        .replace("<tr", `<tr id="file-row-${rowKey}" data-file-name="${escapeHTML(file.name)}"`)
         .replace('class="file-name-cell"', 'class="file-name-cell name-cell"');
 
       let tagBadgesHTML = "";
@@ -1063,54 +1594,63 @@ export function renderFileTable(folder, container, subfolders) {
         });
         tagBadgesHTML += "</div>";
       }
+
       rowsHTML += rowHTML.replace(
         /(<td\s+class="[^"]*\bfile-name-cell\b[^"]*">)([\s\S]*?)(<\/td>)/,
         (m, open, inner, close) => {
-          // keep the original filename content, then add your tag badges, then close
           return `${open}<span class="filename-text">${inner}</span>${tagBadgesHTML}${close}`;
         }
       );
     });
-  } else {
-    rowsHTML += `<tr><td colspan="8">No files found.</td></tr>`;
+  } else if (!hasFolders && totalFiles === 0) {
+    // Only show "No files found" if there are no folders either
+    rowsHTML += `<tr><td colspan="8">${t("no_files_found") || "No files found."}</td></tr>`;
   }
+
   rowsHTML += "</tbody></table>";
+
   const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
 
   fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
+  // Inject inline folder rows for THIS page (Explorer-style)
+  if (window.showInlineFolders !== false && pageFolders.length) {
+    injectInlineFolderRows(fileListContent, folder, pageFolders);
+  }
   wireSelectAll(fileListContent);
 
   // PATCH each row's preview/thumb to use the secure API URLs
-  if (totalFiles > 0) {
-    filteredFiles.slice(startIndex, endIndex).forEach((file, idx) => {
-      const rowEl = document.getElementById(`file-row-${encodeURIComponent(file.name)}-${startIndex + idx}`);
-      if (!rowEl) return;
-
-      const previewUrl = apiFileUrl(file.folder || folder, file.name, true);
-
-      // Preview button dataset
-      const previewBtn = rowEl.querySelector(".preview-btn");
-      if (previewBtn) {
-        previewBtn.dataset.previewUrl = previewUrl;
-        previewBtn.dataset.previewName = file.name;
-      }
-
-      // Thumbnail (if present)
-      const thumbImg = rowEl.querySelector("img");
-      if (thumbImg) {
-        thumbImg.src = previewUrl;
-        thumbImg.setAttribute("data-cache-key", previewUrl);
-      }
-
-      // Any anchor that might have been built to point at a file path
-      rowEl.querySelectorAll('a[href]').forEach(a => {
-        // Only rewrite obvious file anchors (ignore actions with '#', 'javascript:', etc.)
-        if (/^#|^javascript:/i.test(a.getAttribute('href') || '')) return;
-        a.href = previewUrl;
+    // PATCH each row's preview/thumb to use the secure API URLs
+    if (pageFiles.length > 0) {
+      pageFiles.forEach((file, idx) => {
+        const rowKey = rowIdFor(file, idx);
+        const rowEl = document.getElementById(`file-row-${rowKey}`);
+        if (!rowEl) return;
+  
+        const previewUrl = apiFileUrl(file.folder || folder, file.name, true);
+  
+        // Preview button dataset
+        const previewBtn = rowEl.querySelector(".preview-btn");
+        if (previewBtn) {
+          previewBtn.dataset.previewUrl = previewUrl;
+          previewBtn.dataset.previewName = file.name;
+        }
+  
+        // Thumbnail (if present)
+        const thumbImg = rowEl.querySelector("img");
+        if (thumbImg) {
+          thumbImg.src = previewUrl;
+          thumbImg.setAttribute("data-cache-key", previewUrl);
+        }
+  
+        // Any anchor that might have been built to point at a file path
+        rowEl.querySelectorAll('a[href]').forEach(a => {
+          // Only rewrite obvious file anchors (ignore actions with '#', 'javascript:', etc.)
+          if (/^#|^javascript:/i.test(a.getAttribute('href') || '')) return;
+          a.href = previewUrl;
+        });
       });
-    });
-  }
+    }
 
   fileListContent.querySelectorAll('.folder-item').forEach(el => {
     el.addEventListener('click', () => loadFileList(el.dataset.folder));
@@ -1147,7 +1687,7 @@ export function renderFileTable(folder, container, subfolders) {
     renderFileTable(folder, container);
   });
 
-  // Row-select
+  // Row-select (only file rows have checkboxes; folder rows are ignored here)
   fileListContent.querySelectorAll("tbody tr").forEach(row => {
     row.addEventListener("click", e => {
       const cb = row.querySelector(".file-checkbox");
@@ -1155,6 +1695,8 @@ export function renderFileTable(folder, container, subfolders) {
       toggleRowSelection(e, cb.value);
     });
   });
+
+  
 
   // Download buttons
   fileListContent.querySelectorAll(".download-btn").forEach(btn => {
@@ -1248,12 +1790,15 @@ export function renderFileTable(folder, container, subfolders) {
   });
   updateFileActionButtons();
 
+  // Dragstart only for file rows (skip folder rows)
   document.querySelectorAll("#fileList tbody tr").forEach(row => {
+    if (row.classList.contains("folder-row")) return;
     row.setAttribute("draggable", "true");
     import('./fileDragDrop.js?v={{APP_QVER}}').then(module => {
       row.addEventListener("dragstart", module.fileDragStartHandler);
     });
   });
+
   document.querySelectorAll(".download-btn, .edit-btn, .rename-btn").forEach(btn => {
     btn.addEventListener("click", e => e.stopPropagation());
   });

@@ -268,7 +268,7 @@ const translations = {
     "columns": "Columns",
     "row_height": "Row Height",
     "api_docs": "API Docs",
-    "show_folders_above_files": "Show folders above files",
+    "show_folders_above_files": "Show folder strip above list",
     "display": "Display",
     "create_file": "Create File",
     "create_new_file": "Create New File",
@@ -331,7 +331,13 @@ const translations = {
     "folder_help_last_folder": "Your last opened folder is remembered. If you lose access, we pick the first allowed folder automatically.",
     "folder_help_breadcrumbs": "Use the breadcrumb to jump up the path. You can also drop onto a breadcrumb.",
     "folder_help_permissions": "Buttons enable/disable based on your permissions for the selected folder.",
-    "load_more_folders": "Load More Folders"
+    "load_more_folders": "Load More Folders",
+    "show_inline_folders": "Show folders as rows above files",
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "created": "Created",
+    "owner": "Owner"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

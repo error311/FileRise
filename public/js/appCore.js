@@ -90,7 +90,8 @@ export function initializeApp() {
   window.currentFolder = last ? last : "root";
 
   const stored = localStorage.getItem('showFoldersInList');
-  window.showFoldersInList = stored === null ? true : stored === 'true';
+  // default: false (unchecked)
+  window.showFoldersInList = stored === 'true';
 
   // Load public site config early (safe subset)
   loadAdminConfigFunc();
@@ -99,6 +100,7 @@ export function initializeApp() {
   initTagSearch();
 
 
+  /*
   // Hook DnD relay from fileList area into upload area
   const fileListArea = document.getElementById('fileList');
 
@@ -146,7 +148,7 @@ export function initializeApp() {
         uploadArea.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
       }
     });
-  }
+  }*/
 
   // App subsystems
   initDragAndDrop();

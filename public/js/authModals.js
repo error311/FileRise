@@ -351,30 +351,73 @@ export async function openUserPanel() {
     langFs.appendChild(langSel);
     content.appendChild(langFs);
 
-    // --- Display fieldset: “Show folders above files” ---
+    // --- Display fieldset: strip + inline folder rows ---
     const dispFs = document.createElement('fieldset');
     dispFs.style.marginBottom = '15px';
+
     const dispLegend = document.createElement('legend');
     dispLegend.textContent = t('display');
     dispFs.appendChild(dispLegend);
-    const dispLabel = document.createElement('label');
-    dispLabel.style.cursor = 'pointer';
-    const dispCb = document.createElement('input');
-    dispCb.type = 'checkbox';
-    dispCb.id = 'showFoldersInList';
-    dispCb.style.verticalAlign = 'middle';
-    const stored = localStorage.getItem('showFoldersInList');
-    dispCb.checked = stored === null ? true : stored === 'true';
-    dispLabel.appendChild(dispCb);
-    dispLabel.append(` ${t('show_folders_above_files')}`);
-    dispFs.appendChild(dispLabel);
+
+    // 1) Show folder strip above list
+    const stripLabel = document.createElement('label');
+    stripLabel.style.cursor = 'pointer';
+    stripLabel.style.display = 'block';
+    stripLabel.style.marginBottom = '4px';
+
+    const stripCb = document.createElement('input');
+    stripCb.type = 'checkbox';
+    stripCb.id = 'showFoldersInList';
+    stripCb.style.verticalAlign = 'middle';
+
+    {
+      const storedStrip = localStorage.getItem('showFoldersInList');
+      // default: unchecked
+      stripCb.checked = storedStrip === null ? false : storedStrip === 'true';
+    }
+
+    stripLabel.appendChild(stripCb);
+    stripLabel.append(` ${t('show_folders_above_files')}`);
+    dispFs.appendChild(stripLabel);
+
+    // 2) Show inline folder rows above files in table view
+    const inlineLabel = document.createElement('label');
+    inlineLabel.style.cursor = 'pointer';
+    inlineLabel.style.display = 'block';
+
+    const inlineCb = document.createElement('input');
+    inlineCb.type = 'checkbox';
+    inlineCb.id = 'showInlineFolders';
+    inlineCb.style.verticalAlign = 'middle';
+
+    {
+      const storedInline = localStorage.getItem('showInlineFolders');
+      inlineCb.checked = storedInline === null ? true : storedInline === 'true';
+    }
+
+    inlineLabel.appendChild(inlineCb);
+    // you’ll want a string like this in i18n:
+    // "show_inline_folders": "Show folders inline (above files)"
+    inlineLabel.append(` ${t('show_inline_folders') || 'Show folders inline (above files)'}`);
+    dispFs.appendChild(inlineLabel);
+
     content.appendChild(dispFs);
 
-    dispCb.addEventListener('change', () => {
-      window.showFoldersInList = dispCb.checked;
-      localStorage.setItem('showFoldersInList', dispCb.checked);
-      // re‐load the entire file list (and strip) in one go:
-      loadFileList(window.currentFolder);
+    // Handlers: toggle + refresh list
+    stripCb.addEventListener('change', () => {
+      window.showFoldersInList = stripCb.checked;
+      localStorage.setItem('showFoldersInList', stripCb.checked);
+      if (typeof window.loadFileList === 'function') {
+        window.loadFileList(window.currentFolder || 'root');
+      }
+    });
+
+    inlineCb.addEventListener('change', () => {
+      window.showInlineFolders = inlineCb.checked;
+      localStorage.setItem('showInlineFolders', inlineCb.checked);
+      if (typeof window.loadFileList === 'function') {
+        window.loadFileList(window.currentFolder || 'root');
+      }
     });
 
     // wire up image‐input change
@@ -425,6 +468,18 @@ export async function openUserPanel() {
     modal.querySelector('#userTOTPEnabled').checked = totp_enabled;
     modal.querySelector('#languageSelector').value = localStorage.getItem('language') || 'en';
     modal.querySelector('h3').textContent = `${t('user_panel')} (${username})`;
+
+    // sync display toggles from localStorage
+    const stripCb = modal.querySelector('#showFoldersInList');
+    const inlineCb = modal.querySelector('#showInlineFolders');
+    if (stripCb) {
+      const storedStrip = localStorage.getItem('showFoldersInList');
+      stripCb.checked = storedStrip === null ? false : storedStrip === 'true';
+    }
+    if (inlineCb) {
+      const storedInline = localStorage.getItem('showInlineFolders');
+      inlineCb.checked = storedInline === null ? true : storedInline === 'true';
+    }
   }
 
   // show

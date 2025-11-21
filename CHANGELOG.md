@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 11/21/2025 (v1.9.14)
+
+release(v1.9.14): inline folder rows, synced folder icons, and compact theme polish
+
+- Add ACL-aware folder stats and byte counts in FolderModel::countVisible()
+- Show subfolders inline as rows above files in table view (Explorer-style)
+- Page folders + files together and wire folder rows into existing DnD and context menu flows
+- Add folder action buttons (move/rename/color/share) with capability checks from /api/folder/capabilities.php
+- Cache folder capabilities and owners to avoid repeat calls per row
+- Add user settings to toggle folder strip and inline folder rows (stored in localStorage)
+- Default itemsPerPage to 50 and remember current page across renders
+- Sync inline folder icon size to file row height and tweak vertical alignment for different row heights
+- Update table headers + i18n keys to use Name / Size / Modified / Created / Owner labels
+- Compact and consolidate light/dark theme CSS, search pill, pagination, and font-size controls
+- Tighten file action button hit areas and add specific styles for folder move/rename buttons
+
+---
+
 ## Changes 11/20/2025 (v1.9.13)
 
 release(v1.9.13): style(ui): compact dual-theme polish for lists, inputs, search & modals
