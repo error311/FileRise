@@ -1,5 +1,68 @@
 # Changelog
 
+## Changes 11/23/2025 (v2.0.0)
+
+### FileRise Core v2.0.0 & FileRise Pro v1.1.0
+
+```text
+release(v2.0.0): feat(pro): client portals + portal login flow
+```
+
+### Core v2.0.0
+
+- **Portal plumbing in core**
+  - New public pages: `portal.html` and `portal-login.html` for client-facing views.
+  - New portal controller + API endpoints that read portal definitions from the Pro bundle, enforce expiry, and expose safe public metadata.
+  - Login flow now respects a `?redirect=` parameter so portals can bounce through login cleanly and land back on the right slug.
+
+- **Admin UX + styling**
+  - Admin panel CSS pulled into a dedicated `adminPanelStyles.js` helper instead of inline styles.
+  - User Groups and Client Portals modals use the new shared styling and dark-mode tweaks so they match the rest of the UI.
+
+- **Breadcrumb root fix**
+  - Breadcrumbs now always show **root** explicitly and behave correctly when you’re at top level vs nested folders.
+
+- **Routing**
+  - Apache rewrite added for pretty portal URLs:  
+    `https://host/portal/<slug>` → `portal.html?slug=<slug>` without affecting other routes.
+
+### Pro v1.1.0 – Client Portals
+
+- **Client portal definitions (Admin → FileRise Pro → Client Portals)**
+  - Create multiple portals, each with:
+    - Slug + display name
+    - Target folder
+    - Optional client email
+    - Upload-only / allow-download flags
+    - Per-portal expiry date
+  - Portal-level copy and branding:
+    - Optional title + instructions
+    - Accent color used throughout the portal UI
+    - Footer text at bottom of the portal page
+
+- **Optional intake form before uploads**
+  - Enable a form per portal with fields: name, email, reference, notes.
+  - Per-field “default value” and “required” toggles.
+  - Form must be completed before uploads when enabled.
+
+- **Submissions log**
+  - Each portal keeps a submissions list showing:
+    - Date/time, folder, submitting user, IP address
+    - The intake form values (name, email, reference, notes).
+
+- **Client-facing experience**
+  - New portal UI with:
+    - Branded header (title + accent color)
+    - Optional intake form
+    - Drag-and-drop upload dropzone
+  - If downloads are enabled, a clean list/grid of files already in that portal’s folder with download buttons.
+
+- **Portal login page**
+  - Minimal login screen that pulls title/accent/footer from portal metadata.
+  - After successful login, user is redirected back to the original portal URL.
+
+---
+
 ## Changes 11/21/2025 (v1.9.14)
 
 release(v1.9.14): inline folder rows, synced folder icons, and compact theme polish

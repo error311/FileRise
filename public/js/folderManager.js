@@ -230,23 +230,47 @@ function showNoAccessEmptyState() {
 function renderBreadcrumbFragment(folderPath) {
   const frag = document.createDocumentFragment();
   const path = (typeof folderPath === 'string' && folderPath.length) ? folderPath : 'root';
+
+  // --- Always start with "Root" crumb ---
+  const rootSpan = document.createElement('span');
+  rootSpan.className = 'breadcrumb-link';
+  rootSpan.dataset.folder = 'root';
+  rootSpan.textContent = 'root';
+  frag.appendChild(rootSpan);
+
+  if (path === 'root') {
+    // You are in root: just "Root"
+    return frag;
+  }
+
+  // Separator after Root
+  let sep = document.createElement('span');
+  sep.className = 'file-breadcrumb-sep';
+  sep.textContent = '›';
+  frag.appendChild(sep);
+
+  // Now add the rest of the path normally (folder1, folder1/subA, etc.)
   const crumbs = path.split('/').filter(Boolean);
   let acc = '';
+
   for (let i = 0; i < crumbs.length; i++) {
     const part = crumbs[i];
     acc = (i === 0) ? part : (acc + '/' + part);
+
     const span = document.createElement('span');
     span.className = 'breadcrumb-link';
     span.dataset.folder = acc;
     span.textContent = part;
     frag.appendChild(span);
+
     if (i < crumbs.length - 1) {
-      const sep = document.createElement('span');
+      sep = document.createElement('span');
       sep.className = 'file-breadcrumb-sep';
       sep.textContent = '›';
       frag.appendChild(sep);
     }
   }
+
   return frag;
 }
 export function updateBreadcrumbTitle(folder) {

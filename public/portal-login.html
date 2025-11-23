@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sign in – Client Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="">
+  <meta name="color-scheme" content="light dark">
+
+  <!-- Favicons / assets -->
+  <link rel="icon" href="/assets/logo.svg?v={{APP_QVER}}" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="/assets/logo.png?v={{APP_QVER}}" type="image/png" sizes="512x512">
+  <link rel="icon" href="/assets/logo-32.png?v={{APP_QVER}}" type="image/png" sizes="32x32">
+  <link rel="icon" href="/assets/logo-16.png?v={{APP_QVER}}" type="image/png" sizes="16x16">
+  <link rel="shortcut icon" href="/assets/favicon.ico?v={{APP_QVER}}">
+
+  <!-- CSS (reuse main app look) -->
+  <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="/css/vendor/roboto.css?v={{APP_QVER}}">
+
+  <!-- Version stamp -->
+  <script src="/js/version.js?v={{APP_QVER}}" defer></script>
+
+  <!-- Portal login JS -->
+  <script type="module" src="/js/portal-login.js?v={{APP_QVER}}"></script>
+
+  <style>
+    html, body {
+      height: 100%;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--pre-bg, #f4f4f7);
+    }
+    .portal-login-wrapper {
+      width: 100%;
+      max-width: 420px;
+      padding: 16px;
+    }
+    .portal-login-card {
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      padding: 20px 22px 18px;
+      background: #fff;
+    }
+    [data-theme="dark"] .portal-login-card {
+      background: #1f2933;
+      color: #e5e7eb;
+    }
+    .portal-login-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .portal-login-header img {
+      width: 32px;
+      height: 32px;
+    }
+    .portal-login-title {
+      font-weight: 600;
+      font-size: 1rem;
+      line-height: 1.2;
+    }
+    .portal-login-subtitle {
+      font-size: 0.8rem;
+      color: #6c757d;
+    }
+    [data-theme="dark"] .portal-login-subtitle {
+      color: #9ca3af;
+    }
+    #portalLoginError {
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+      display: none;
+    }
+    #portalLoginError.show {
+      display: block;
+    }
+    .portal-login-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  padding: 20px 22px 18px;
+  background: #fff;
+  border-top: 3px solid var(--filr-accent-500, #0b5ed7);
+}
+  </style>
+</head>
+<body data-theme="light">
+  <div class="portal-login-wrapper">
+    <div class="portal-login-card">
+        <div class="portal-login-header">
+            <img src="/assets/logo.svg?v={{APP_QVER}}" alt="FileRise">
+            <div>
+              <div id="portalLoginTitle" class="portal-login-title">
+                Sign in to Client Portal
+              </div>
+              <div id="portalLoginSubtitle" class="portal-login-subtitle">
+                to access this client portal
+              </div>
+            </div>
+          </div>
+
+      <div id="portalLoginError" class="alert alert-danger"></div>
+
+      <form id="portalLoginForm" novalidate>
+        <div class="form-group">
+          <label for="portalLoginUser">Username or email</label>
+          <input type="text"
+                 class="form-control form-control-sm"
+                 id="portalLoginUser"
+                 autocomplete="username"
+                 required>
+        </div>
+        <div class="form-group">
+          <label for="portalLoginPass">Password</label>
+          <input type="password"
+                 class="form-control form-control-sm"
+                 id="portalLoginPass"
+                 autocomplete="current-password"
+                 required>
+        </div>
+        <button type="submit"
+                id="portalLoginSubmit"
+                class="btn btn-primary btn-sm btn-block">
+          Sign in
+        </button>
+      </form>
+
+      <small id="portalLoginHint"
+             class="text-muted d-block mt-2"
+             style="font-size:0.75rem;">
+        You’ll be sent back to the portal automatically after signing in.
+      </small>
+
+      <small id="portalLoginFooter"
+       class="text-muted d-block mt-1"
+       style="font-size:0.7rem; display:none;">
+</small>
+    </div>
+  </div>
+</body>
+</html>

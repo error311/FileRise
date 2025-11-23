@@ -883,6 +883,18 @@ function bindDarkMode() {
     });
   }
   function afterLogin() {
+    // If index.html was opened with ?redirect=<url>, honor that first
+    try {
+      const url = new URL(window.location.href);
+      const redirect = url.searchParams.get('redirect');
+      if (redirect) {
+        window.location.href = redirect;
+        return;
+      }
+    } catch {
+      // ignore URL/param issues and fall back to normal behavior
+    }
+  
     const start = Date.now();
     (function poll() {
       checkAuth().then(({ authed }) => {

@@ -26,6 +26,7 @@ RewriteRule - - [L]
 # 1) Block hidden files/dirs anywhere EXCEPT .well-known (path-aware)
 #    Prevents requests like /.env, /.git/config, /.ssh/id_rsa, etc.
 RewriteRule "(^|/)\.(?!well-known/)" - [F]
+RewriteRule ^portal/([A-Za-z0-9_-]+)$ portal.html?slug=$1 [L,QSA]
 
 # 2) Deny direct access to PHP except the API endpoints and WebDAV front controller
 #    - allow /api/*.php (API endpoints)

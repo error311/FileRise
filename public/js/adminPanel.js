@@ -16,7 +16,7 @@ function normalizeLogoPath(raw) {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.0.1';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.1.0';
 
 function getAdminTitle(isPro, proVersion) {
   const corePill = `
@@ -425,6 +425,139 @@ async function safeJson(res) {
       background-color: #1565c0;
       color: #fff;
     }
+          /* Client portal cards */
+    #clientPortalsBody .portal-card {
+      position: relative;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      padding: 10px 12px 8px;
+      margin-bottom: 10px;
+    }
+    .dark-mode #clientPortalsBody .portal-card {
+      border-color: #555;
+      background: #1f1f1f;
+    }
+
+    .portal-card-header {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      cursor:pointer;
+      padding:4px 4px 4px 0;
+    }
+    .portal-card-header .portal-card-caret {
+      display:inline-block;
+      font-size:14px;
+      transform:rotate(-90deg);
+      transition:transform .15s ease;
+    }
+    .portal-card-header[aria-expanded="true"] .portal-card-caret {
+      transform:rotate(0deg);
+    }
+    .portal-card-header-main {
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      align-items:baseline;
+    }
+    .portal-card-header-main strong {
+      font-size:.9rem;
+    }
+    .portal-card-header-main .portal-card-slug {
+      font-family:monospace;
+      font-size:.8rem;
+      opacity:.75;
+    }
+
+    .portal-card-delete,
+   .group-card-delete {
+      position:absolute;
+      top:10px;
+      right:6px;
+      width:30px;
+      height:30px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:0;
+    }
+    .group-card-delete {
+
+      top:4px;
+     
+    }
+
+    .portal-card-body {
+      margin-top:6px;
+    }
+
+    #clientPortalsBody .portal-meta-row {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+      margin-top:6px;
+    }
+    #clientPortalsBody .portal-meta-row label {
+      margin:0;
+      font-size:.8rem;
+    }
+
+    /* Make date input look consistent */
+    #clientPortalsBody input[type="date"].form-control-sm {
+      border-radius:.25rem;
+    }
+          /* -------- Client portals: Expires alignment + date styling -------- */
+    #clientPortalsBody .portal-expires-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #clientPortalsBody .portal-expires-group label {
+      margin: 0;
+      font-size: 0.85rem;
+    }
+    #clientPortalsBody .portal-expiry-input {
+      max-width: 170px;
+      border-radius: 6px;
+    }
+    .dark-mode #clientPortalsBody .portal-expiry-input {
+      background-color: #333;
+      border-color: #555;
+      color: #eee;
+    }
+
+        #clientPortalsBody .portal-submissions-block {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed rgba(0,0,0,0.1);
+    }
+    #clientPortalsBody .portal-submissions-list {
+      max-height: 180px;
+      overflow: auto;
+      margin-top: 4px;
+      padding: 4px;
+      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: rgba(0,0,0,0.02);
+      font-size: 0.8rem;
+    }
+    .dark-mode #clientPortalsBody .portal-submissions-list {
+      border-color: #555;
+      background: rgba(255,255,255,0.02);
+    }
+    #clientPortalsBody .portal-submissions-item {
+      padding: 4px 2px;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    #clientPortalsBody .portal-submissions-item:last-child {
+      border-bottom: none;
+    }
+    #clientPortalsBody .portal-submissions-meta {
+      opacity: 0.75;
+      font-size: 0.75rem;
+    }
     
   `;
   document.head.appendChild(style);
@@ -790,7 +923,7 @@ export function openAdminPanel() {
         id="adminOpenUserGroups"
         class="btn btn-sm btn-pro-admin">
         <i class="material-icons">groups</i>
-        <span>User groups</span>
+        <span>User Groups</span>
       </button>
     </div>
     `
@@ -801,7 +934,7 @@ export function openAdminPanel() {
         id="adminOpenUserGroups"
         class="btn btn-sm btn-pro-admin">
         <i class="material-icons">groups</i>
-        <span>User groups</span>
+        <span>User Groups</span>
       </button>
       <span class="btn-pro-pill">Pro</span>
     </div>
@@ -817,9 +950,9 @@ export function openAdminPanel() {
         type="button"
         id="adminOpenClientPortal"
         class="btn btn-sm btn-pro-admin"
-        title="Client upload portals are part of FileRise Pro.">
+        title="Client portals are part of FileRise Pro.">
         <i class="material-icons">cloud_upload</i>
-        <span>Client upload portal</span>
+        <span>Client Portals</span>
       </button>
     </div>
     `
@@ -830,19 +963,19 @@ export function openAdminPanel() {
         id="adminOpenClientPortal"
         class="btn btn-sm btn-pro-admin"
         disabled
-        title="Planned FileRise Pro feature: client upload portals">
+        title="Client portals are part of FileRise Pro.">
         <i class="material-icons">cloud_upload</i>
-        <span>Client upload portal</span>
+        <span>Client Portals</span>
       </button>
-      <span class="btn-pro-pill">Pro · Coming soon</span>
+      <span class="btn-pro-pill">Pro</span>
     </div>
     `
     }
   </div>
 
   <small class="text-muted d-block" style="margin-top:6px;">
-    Use the core tools to manage users and per-folder access.
-    User groups are available in Pro and Client upload portals are coming soon.
+    Use the core tools to manage users, permissions and per-folder access.
+    User Groups and Client Portals are only available in FileRise Pro.
   </small>
 `;
 
@@ -879,7 +1012,7 @@ export function openAdminPanel() {
         if (groupsBtn) {
           groupsBtn.addEventListener("click", () => {
             if (!isPro) {
-              showToast("User groups are a FileRise Pro feature. Visit filerise.net to purchase a license.");
+              showToast("User Groups are a FileRise Pro feature. Visit filerise.net to purchase a license.");
               window.open("https://filerise.net", "_blank", "noopener");
               return;
             }
@@ -890,12 +1023,12 @@ export function openAdminPanel() {
         if (clientBtn) {
           clientBtn.addEventListener("click", () => {
             if (!isPro) {
-              showToast("Client portal uploads are a FileRise Pro feature. Visit filerise.net to purchase a license.");
+              showToast("Client Portals are a FileRise Pro feature. Visit filerise.net to purchase a license.");
               window.open("https://filerise.net", "_blank", "noopener");
               return;
             }
-            // Placeholder for future Pro UI:
-            showToast("Client portal uploads are coming soon in FileRise Pro.");
+        
+            openClientPortalsModal();
           });
         }
 
@@ -1827,23 +1960,19 @@ function handleSave() {
 
   const ooSecretEl = document.getElementById("ooJwtSecret");
 
-  payload.onlyoffice = {
-    enabled: document.getElementById("ooEnabled").checked,
-    docsOrigin: document.getElementById("ooDocsOrigin").value.trim()
-  };
 
   if (ooSecretEl?.dataset.replace === '1' && ooSecretEl.value.trim() !== '') {
     payload.onlyoffice.jwtSecret = ooSecretEl.value.trim();
   }
 
   // ---- ONLYOFFICE payload ----
+  payload.onlyoffice = {
+    enabled: document.getElementById("ooEnabled").checked,
+    docsOrigin: document.getElementById("ooDocsOrigin").value.trim()
+  };
+  
   if (!window.__OO_LOCKED) {
     const ooSecretVal = (document.getElementById("ooJwtSecret")?.value || "").trim();
-    payload.onlyoffice = {
-      enabled: document.getElementById("ooEnabled").checked,
-      docsOrigin: document.getElementById("ooDocsOrigin").value.trim()
-    };
-    // If user typed a secret (non-empty), send it (server keeps it if non-empty)
     if (ooSecretVal !== "") {
       payload.onlyoffice.jwtSecret = ooSecretVal;
     }
@@ -2448,6 +2577,33 @@ async function fetchAllGroups() {
     : {};
 }
 
+async function fetchAllPortals() {
+  const res = await fetch('/api/pro/portals/list.php', {
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': window.csrfToken || '' }
+  });
+  const data = await safeJson(res);
+  // backend returns { success, portals: { slug: {...} } }
+  return data && typeof data === 'object' && data.portals && typeof data.portals === 'object'
+    ? data.portals
+    : {};
+}
+
+async function saveAllPortals(portals) {
+  const res = await fetch('/api/pro/portals/save.php', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': window.csrfToken || ''
+    },
+    body: JSON.stringify({ portals })
+  });
+  return await safeJson(res);
+}
+
+let __portalsCache = {};
+
 async function saveAllGroups(groups) {
   const res = await fetch('/api/pro/groups/save.php', {
     method: 'POST',
@@ -2459,6 +2615,718 @@ async function saveAllGroups(groups) {
     body: JSON.stringify({ groups })
   });
   return await safeJson(res);
+}
+
+async function openClientPortalsModal() {
+  const isDark   = document.body.classList.contains('dark-mode');
+  const overlayBg = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
+  const contentBg = isDark ? '#2c2c2c' : '#fff';
+  const contentFg = isDark ? '#e0e0e0' : '#000';
+  const borderCol = isDark ? '#555' : '#ccc';
+
+  let modal = document.getElementById('clientPortalsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'clientPortalsModal';
+    modal.style.cssText = `
+      position:fixed; inset:0; background:${overlayBg};
+      display:flex; align-items:center; justify-content:center; z-index:3650;
+    `;
+    modal.innerHTML = `
+      <div class="modal-content"
+           style="background:${contentBg}; color:${contentFg};
+                  padding:16px; max-width:980px; width:95%;
+                  position:relative;
+                  border:1px solid ${borderCol}; max-height:90vh; overflow:auto;">
+        <span id="closeClientPortalsModal"
+              class="editor-close-btn"
+              style="right:8px; top:8px;">&times;</span>
+
+        <h3>Client Portals</h3>
+        <p class="muted" style="margin-top:-6px;">
+          Create upload portals that point to specific folders. Clients can upload
+          (and optionally download) files without seeing your full FileRise UI.
+        </p>
+
+        <div class="d-flex justify-content-between align-items-center" style="margin:8px 0 10px;">
+          <button type="button" id="addPortalBtn" class="btn btn-sm btn-success">
+            <i class="material-icons" style="font-size:16px;">cloud_upload</i>
+            <span style="margin-left:4px;">Add portal</span>
+          </button>
+          <span id="clientPortalsStatus" class="small text-muted"></span>
+        </div>
+
+        <div id="clientPortalsBody" style="max-height:60vh; overflow:auto; margin-bottom:12px;">
+          ${t('loading')}…
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" id="cancelClientPortals" class="btn btn-secondary">${t('cancel')}</button>
+          <button type="button" id="saveClientPortals"   class="btn btn-primary">${t('save_settings')}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('closeClientPortalsModal').onclick = () => (modal.style.display = 'none');
+    document.getElementById('cancelClientPortals').onclick     = () => (modal.style.display = 'none');
+    document.getElementById('saveClientPortals').onclick       = saveClientPortalsFromUI;
+    document.getElementById('addPortalBtn').onclick            = addEmptyPortalRow;
+  } else {
+    modal.style.background = overlayBg;
+    const content = modal.querySelector('.modal-content');
+    if (content) {
+      content.style.background = contentBg;
+      content.style.color      = contentFg;
+      content.style.border     = `1px solid ${borderCol}`;
+    }
+  }
+
+  modal.style.display = 'flex';
+  await loadClientPortalsList();
+}
+
+async function loadClientPortalsList(useCacheOnly) {
+  const body   = document.getElementById('clientPortalsBody');
+  const status = document.getElementById('clientPortalsStatus');
+  if (!body) return;
+
+  body.textContent = `${t('loading')}…`;
+  if (status) {
+    status.textContent = '';
+    status.className   = 'small text-muted';
+  }
+
+  try {
+    let portals;
+    if (useCacheOnly && __portalsCache && Object.keys(__portalsCache).length) {
+      portals = __portalsCache;
+    } else {
+      portals = await fetchAllPortals();
+      __portalsCache = portals || {};
+    }
+
+    const slugs = Object.keys(__portalsCache).sort((a, b) => a.localeCompare(b));
+    if (!slugs.length) {
+      body.innerHTML = `<p class="muted">No client portals defined yet. Click “Add portal” to create one.</p>`;
+      return;
+    }
+
+    let html = '';
+    slugs.forEach(slug => {
+
+      const origin     = window.location.origin || '';
+      const portalPath = '/portal/'+ encodeURIComponent(slug);
+      const portalUrl  = origin ? origin + portalPath : portalPath;
+
+      const p = __portalsCache[slug] || {};
+      const label        = p.label || slug;
+      const folder       = p.folder || '';
+      const clientEmail  = p.clientEmail || '';
+      const uploadOnly   = !!p.uploadOnly;
+      const allowDownload = p.allowDownload !== false; // default true
+      const expiresAt    = p.expiresAt ? String(p.expiresAt).slice(0, 10) : '';
+      const brandColor   = p.brandColor || '';
+      const footerText   = p.footerText || '';
+      const formDefaults = p.formDefaults || {};
+      const formRequired = p.formRequired || {};
+      const defName      = formDefaults.name || '';
+      const defEmail     = formDefaults.email || '';
+      const defRef       = formDefaults.reference || '';
+      const defNotes     = formDefaults.notes || '';
+
+      const title      = p.title || '';
+      const introText  = p.introText || '';
+      const requireForm = !!p.requireForm;
+
+      html += `
+    <div class="card portal-card" data-portal-slug="${slug}">
+      <div class="portal-card-header" tabindex="0" role="button" aria-expanded="true">
+        <span class="portal-card-caret">▸</span>
+        <div class="portal-card-header-main">
+          <strong>${label}</strong>
+          <span class="portal-card-slug">${slug}</span>
+        </div>
+      </div>
+
+      <button type="button"
+              class="btn btn-sm btn-danger portal-card-delete"
+              data-portal-action="delete"
+              title="Delete portal">
+        <i class="material-icons" style="font-size:22px;">delete</i>
+      </button>
+
+      <div class="portal-card-body">
+        <div class="portal-meta-row">
+          <label style="font-weight:600;">
+            Portal slug:
+            <input type="text"
+                   class="form-control form-control-sm"
+                   data-portal-field="slug"
+                   value="${slug}"
+                   style="display:inline-block; width:160px; margin-left:4px;">
+          </label>
+          <label>
+            Display name:
+            <input type="text"
+                   class="form-control form-control-sm"
+                   data-portal-field="label"
+                   value="${label}"
+                   style="display:inline-block; width:220px; margin-left:4px;">
+          </label>
+        </div>
+
+        
+
+        <div class="portal-meta-row">
+          <label>
+            Folder:
+            <input type="text"
+                   class="form-control form-control-sm"
+                   data-portal-field="folder"
+                   value="${folder}"
+                   placeholder="e.g. Clients/Smith-Law-1234"
+                   style="display:inline-block; width:260px; margin-left:4px;">
+          </label>
+          <small class="text-muted" style="font-size:0.8rem;">
+            URL:
+            <a href="${portalPath}" target="_blank" rel="noopener">
+              ${portalUrl}
+            </a>
+          </small>
+        </div>
+
+        <div class="portal-meta-row">
+          <label>
+            Client email (optional):
+            <input type="email"
+                   class="form-control form-control-sm"
+                   data-portal-field="clientEmail"
+                   value="${clientEmail}"
+                   style="display:inline-block; width:220px; margin-left:4px;" />
+          </label>
+
+         <div class="portal-expires-group">
+  <label for="portal-exp-${slug}" class="mb-0">Expires:</label>
+  <input
+    id="portal-exp-${slug}"
+    type="date"
+    class="form-control form-control-sm portal-expiry-input"
+    data-portal-field="expiresAt"
+    value="${expiresAt}"
+  />
+</div>
+
+          <label style="display:flex; align-items:center; gap:4px;">
+            <input type="checkbox"
+                   data-portal-field="uploadOnly"
+                   ${uploadOnly ? 'checked' : ''} />
+            <span>Upload only</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:4px;">
+            <input type="checkbox"
+                   data-portal-field="allowDownload"
+                   ${allowDownload ? 'checked' : ''} />
+            <span>Allow download</span>
+          </label>
+        </div>
+
+        <div style="margin-top:8px;">
+          <div class="form-group" style="margin-bottom:6px;">
+            <label style="margin:0;">
+              Portal title (optional):
+              <input type="text"
+                     class="form-control form-control-sm"
+                     data-portal-field="title"
+                     value="${title}"
+                     placeholder="e.g. Acme Corp – Secure Upload"
+                     style="display:inline-block; width:260px; margin-left:4px;" />
+            </label>
+          </div>
+          <div class="form-group" style="margin-bottom:6px;">
+            <label style="margin:0; display:block;">
+              Instructions (shown on portal page):
+              <textarea class="form-control form-control-sm"
+                        data-portal-field="introText"
+                        rows="2"
+                        placeholder="Describe what the client should upload, deadlines, etc.">${introText}</textarea>
+            </label>
+          </div>
+          <label style="margin:0; display:flex; align-items:center; gap:4px;">
+            <input type="checkbox"
+                   data-portal-field="requireForm"
+                   ${requireForm ? 'checked' : ''} />
+            <span>Require info form before upload</span>
+          </label>
+        </div>
+
+        <div style="margin-top:8px;">
+          <div class="form-group" style="margin-bottom:6px;">
+            <label style="margin:0;">
+              Accent color:
+              <input type="text"
+                     class="form-control form-control-sm"
+                     data-portal-field="brandColor"
+                     value="${brandColor}"
+                     placeholder="#0b5ed7"
+                     style="display:inline-block; width:120px; margin-left:4px;" />
+            </label>
+          </div>
+
+          <div class="form-group" style="margin-bottom:6px;">
+            <label style="margin:0; display:block;">
+              Footer text (shown at bottom of portal):
+              <textarea class="form-control form-control-sm"
+                        data-portal-field="footerText"
+                        rows="2"
+                        placeholder="e.g. Confidential – do not share this link.">${footerText}</textarea>
+            </label>
+          </div>
+
+          <div class="form-group" style="margin-bottom:4px;">
+            <strong style="font-size:0.85rem;">Form defaults</strong>
+            <div class="form-row" style="margin-top:4px;">
+              <div class="col-sm-6" style="margin-bottom:4px;">
+                <label style="margin:0; font-size:0.8rem;">Name default</label>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       data-portal-field="defName"
+                       value="${defName}">
+                <label style="margin:0; font-size:0.75rem;">
+                  <input type="checkbox"
+                         data-portal-field="reqName"
+                         ${formRequired.name ? 'checked' : ''}>
+                  required
+                </label>
+              </div>
+              <div class="col-sm-6" style="margin-bottom:4px;">
+                <label style="margin:0; font-size:0.8rem;">Email default</label>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       data-portal-field="defEmail"
+                       value="${defEmail}">
+                <label style="margin:0; font-size:0.75rem;">
+                  <input type="checkbox"
+                         data-portal-field="reqEmail"
+                         ${formRequired.email ? 'checked' : ''}>
+                  required
+                </label>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="col-sm-6" style="margin-bottom:4px;">
+                <label style="margin:0; font-size:0.8rem;">Reference default</label>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       data-portal-field="defRef"
+                       value="${defRef}">
+                <label style="margin:0; font-size:0.75rem;">
+                  <input type="checkbox"
+                         data-portal-field="reqRef"
+                         ${formRequired.reference ? 'checked' : ''}>
+                  required
+                </label>
+              </div>
+              <div class="col-sm-6" style="margin-bottom:4px;">
+                <label style="margin:0; font-size:0.8rem;">Notes default</label>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       data-portal-field="defNotes"
+                       value="${defNotes}">
+                <label style="margin:0; font-size:0.75rem;">
+                  <input type="checkbox"
+                         data-portal-field="reqNotes"
+                         ${formRequired.notes ? 'checked' : ''}>
+                  required
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> <!-- /.portal-card-body -->
+    </div>
+      `;
+    });
+    body.innerHTML = html;
+
+        // Wire collapse / expand for each portal card
+        body.querySelectorAll('.portal-card').forEach(card => {
+          const header = card.querySelector('.portal-card-header');
+          const bodyEl = card.querySelector('.portal-card-body');
+          const caret  = card.querySelector('.portal-card-caret');
+          if (!header || !bodyEl) return;
+    
+          const setExpanded = (expanded) => {
+            header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            bodyEl.style.display = expanded ? 'block' : 'none';
+            if (caret) {
+              caret.textContent = expanded ? '▾' : '▸';
+            }
+          };
+    
+          setExpanded(false);
+    
+          const toggle = () => {
+            const expanded = header.getAttribute('aria-expanded') === 'true';
+            setExpanded(!expanded);
+          };
+    
+          header.addEventListener('click', toggle);
+          header.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggle();
+            }
+          });
+        });
+
+    // Wire delete buttons
+    body.querySelectorAll('[data-portal-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const card = btn.closest('.card');
+        if (!card) return;
+        const slug = card.getAttribute('data-portal-slug');
+        if (slug && __portalsCache[slug]) {
+          delete __portalsCache[slug];
+        }
+        card.remove();
+      });
+    });
+    attachPortalSubmissionsUI();
+  } catch (e) {
+    console.error(e);
+    body.innerHTML = `<p class="text-danger">Error loading client portals.</p>`;
+    if (status) {
+      status.textContent = 'Error loading client portals.';
+      status.className   = 'small text-danger';
+    }
+  }
+}
+
+function addEmptyPortalRow() {
+  if (!__portalsCache || typeof __portalsCache !== 'object') {
+    __portalsCache = {};
+  }
+
+  // Simple slug generator
+  let base = 'portal-' + Math.random().toString(36).slice(2, 8);
+  let slug = base;
+  let i = 1;
+  while (__portalsCache[slug]) {
+    slug = `${base}-${i++}`;
+  }
+
+  __portalsCache[slug] = {
+    label: 'New client portal',
+    folder: '',
+    clientEmail: '',
+    uploadOnly: true,
+    allowDownload: false,
+    expiresAt: ''
+  };
+
+  loadClientPortalsList(true);
+}
+
+async function fetchPortalSubmissions(slug) {
+  const res = await fetch('/api/pro/portals/submissions.php?slug=' + encodeURIComponent(slug), {
+    credentials: 'include',
+    headers: {
+      'X-CSRF-Token': window.csrfToken || ''
+    }
+  });
+  const data = await safeJson(res);
+  if (!data || data.success === false) {
+    throw new Error((data && data.error) || 'Failed to load submissions');
+  }
+  const submissions = Array.isArray(data.submissions) ? data.submissions : [];
+  return submissions;
+}
+
+function renderPortalSubmissionsList(listEl, countEl, submissions) {
+  listEl.textContent = '';
+
+  if (!Array.isArray(submissions) || submissions.length === 0) {
+    countEl.textContent = 'No submissions';
+    const empty = document.createElement('div');
+    empty.className = 'portal-submissions-item portal-submissions-empty';
+    empty.textContent = 'No submissions yet.';
+    listEl.appendChild(empty);
+    return;
+  }
+
+  countEl.textContent = submissions.length === 1
+    ? '1 submission'
+    : submissions.length + ' submissions';
+
+  submissions.forEach(sub => {
+    const item = document.createElement('div');
+    item.className = 'portal-submissions-item';
+
+    // -------- Line 1: date • Folder • Submitted by • IP --------
+    const header = document.createElement('div');
+    header.className = 'portal-submissions-header';
+
+    const headerParts = [];
+
+    // Date (supports createdAt, created_at, timestamp, time)
+    const created = sub.createdAt || sub.created_at || sub.timestamp || sub.time;
+    if (created) {
+      try {
+        const d = typeof created === 'number'
+          ? new Date(created * 1000)
+          : new Date(created);
+
+        if (!isNaN(d.getTime())) {
+          headerParts.push(d.toLocaleString(undefined, {
+            year:   'numeric',
+            month:  '2-digit',
+            day:    '2-digit',
+            hour:   '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          }));
+        }
+      } catch {
+        headerParts.push(String(created));
+      }
+    }
+
+    // We try both top-level and raw payload, so this works with:
+    // {
+    //   "slug": "...",
+    //   "portalLabel": "...",
+    //   "folder": "test",
+    //   "form": {...},
+    //   "submittedBy": "admin",
+    //   "ip": "1.2.3.4",
+    //   ...
+    // }
+    const raw = sub.raw || sub;
+    const folder      = sub.folder      || (raw && raw.folder)      || '';
+    const submittedBy = sub.submittedBy || (raw && raw.submittedBy) || '';
+    const ip          = sub.ip          || (raw && raw.ip)          || '';
+
+    if (folder) {
+      headerParts.push('Folder: ' + folder);
+    }
+    if (submittedBy) {
+      headerParts.push('Submitted by: ' + submittedBy);
+    }
+    if (ip) {
+      headerParts.push('IP: ' + ip);
+    }
+
+    header.textContent = headerParts.join(' • ');
+
+    // -------- Line 2: Name • Email • Ref • Notes --------
+    const summary = document.createElement('div');
+    summary.className = 'portal-submissions-summary';
+
+    // Prefer form fields if present
+    const form = raw.form || sub.form || raw;
+
+    const summaryParts = [];
+    const name  = form.name      || sub.name      || '';
+    const email = form.email     || sub.email     || '';
+    const ref   = form.reference || form.ref      || sub.reference || sub.ref || '';
+    const notes = form.notes     || form.message  || sub.notes     || sub.message || '';
+
+    if (name)  summaryParts.push('Name: ' + name);
+    if (email) summaryParts.push('Email: ' + email);
+    if (ref)   summaryParts.push('Ref: ' + ref);
+    if (notes) summaryParts.push('Notes: ' + notes);
+
+    summary.textContent = summaryParts.join(' • ');
+
+    item.appendChild(header);
+    if (summaryParts.length) {
+      item.appendChild(summary);
+    }
+
+    listEl.appendChild(item);
+  });
+}
+
+function attachPortalSubmissionsUI() {
+  const body = document.getElementById('clientPortalsBody');
+  if (!body) return;
+
+  body.querySelectorAll('.portal-card').forEach(card => {
+    // Don't double-build if we reload the list
+    if (card.querySelector('.portal-submissions-block')) {
+      return;
+    }
+
+    const slug = card.getAttribute('data-portal-slug') || '';
+    if (!slug) return;
+
+    const container = document.createElement('div');
+    container.className = 'portal-submissions-block';
+
+    const headerRow = document.createElement('div');
+    headerRow.className = 'd-flex align-items-center justify-content-between mb-1';
+
+    const title = document.createElement('strong');
+    title.textContent = 'Submissions';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-outline-secondary';
+    btn.textContent = 'Load submissions';
+    btn.setAttribute('data-portal-action', 'load-submissions');
+
+    headerRow.appendChild(title);
+    headerRow.appendChild(btn);
+    container.appendChild(headerRow);
+
+    const countEl = document.createElement('small');
+    countEl.className = 'text-muted portal-submissions-count';
+    countEl.textContent = 'No submissions';
+    container.appendChild(countEl);
+
+    const listEl = document.createElement('div');
+    listEl.className = 'portal-submissions-list';
+    container.appendChild(listEl);
+
+    const bodyEl = card.querySelector('.portal-card-body') || card;
+    bodyEl.appendChild(container);
+
+    // Shared loader for this card (used by button + initial auto-load)
+    const loadSubmissions = async () => {
+      countEl.textContent = 'Loading...';
+      listEl.textContent = '';
+
+      try {
+        const submissions = await fetchPortalSubmissions(slug);
+        renderPortalSubmissionsList(listEl, countEl, submissions);
+      } catch (err) {
+        console.error(err);
+        countEl.textContent = 'Error loading submissions';
+        showToast('Error loading submissions: ' + (err && err.message ? err.message : err));
+      }
+    };
+
+    // Button = manual refresh
+    btn.addEventListener('click', loadSubmissions);
+
+    // Auto-load immediately when the card is attached
+    loadSubmissions();
+  });
+}
+
+async function saveClientPortalsFromUI(modal) {
+  const body   = document.getElementById('clientPortalsBody');
+  const status = document.getElementById('clientPortalsStatus');
+  if (!body) return;
+
+  const cards = body.querySelectorAll('.card[data-portal-slug]');
+  const portals = {};
+
+  cards.forEach(card => {
+    const origSlug = card.getAttribute('data-portal-slug') || '';
+    let slug = origSlug.trim();
+  
+    const getVal = (selector) => {
+      const el = card.querySelector(selector);
+      return el ? el.value || '' : '';
+    };
+  
+    const label       = getVal('[data-portal-field="label"]').trim();
+    const folder      = getVal('[data-portal-field="folder"]').trim();
+    const clientEmail = getVal('[data-portal-field="clientEmail"]').trim();
+    const expiresAt   = getVal('[data-portal-field="expiresAt"]').trim();
+    const title       = getVal('[data-portal-field="title"]').trim();
+    const introText   = getVal('[data-portal-field="introText"]').trim();
+  
+    const brandColor  = getVal('[data-portal-field="brandColor"]').trim();
+    const footerText  = getVal('[data-portal-field="footerText"]').trim();
+    const defName     = getVal('[data-portal-field="defName"]').trim();
+    const defEmail    = getVal('[data-portal-field="defEmail"]').trim();
+    const defRef      = getVal('[data-portal-field="defRef"]').trim();
+    const defNotes    = getVal('[data-portal-field="defNotes"]').trim();
+  
+    const uploadOnlyEl    = card.querySelector('[data-portal-field="uploadOnly"]');
+    const allowDownloadEl = card.querySelector('[data-portal-field="allowDownload"]');
+    const requireFormEl   = card.querySelector('[data-portal-field="requireForm"]');
+  
+    const uploadOnly    = uploadOnlyEl ? !!uploadOnlyEl.checked : true;
+    const allowDownload = allowDownloadEl ? !!allowDownloadEl.checked : false;
+    const requireForm   = requireFormEl ? !!requireFormEl.checked : false;
+    const reqNameEl = card.querySelector('[data-portal-field="reqName"]');
+  const reqEmailEl = card.querySelector('[data-portal-field="reqEmail"]');
+  const reqRefEl   = card.querySelector('[data-portal-field="reqRef"]');
+  const reqNotesEl = card.querySelector('[data-portal-field="reqNotes"]');
+
+  const reqName = reqNameEl ? !!reqNameEl.checked : false;
+  const reqEmail = reqEmailEl ? !!reqEmailEl.checked : false;
+  const reqRef   = reqRefEl ? !!reqRefEl.checked : false;
+  const reqNotes = reqNotesEl ? !!reqNotesEl.checked : false;
+  
+    const slugInput = card.querySelector('[data-portal-field="slug"]');
+    if (slugInput) {
+      const rawSlug = slugInput.value.trim();
+      if (rawSlug) slug = rawSlug;
+    }
+  
+    if (!slug || !folder) {
+      // Skip incomplete portals (or show an error if you prefer)
+      return;
+    }
+  
+    portals[slug] = {
+      label,
+      folder,
+      clientEmail,
+      uploadOnly,
+      allowDownload,
+      expiresAt,
+      title,
+      introText,
+      requireForm,
+      brandColor,
+      footerText,
+      formDefaults: {
+        name:      defName,
+        email:     defEmail,
+        reference: defRef,
+        notes:     defNotes
+      },
+      formRequired: {
+        name:      reqName,
+        email:     reqEmail,
+        reference: reqRef,
+        notes:     reqNotes
+      }
+    };
+    
+  });
+
+  if (status) {
+    status.textContent = 'Saving…';
+    status.className   = 'small text-muted';
+  }
+
+  try {
+    const res = await saveAllPortals(portals);
+    if (!res || res.success !== true) {
+      throw new Error(res && res.error ? res.error : 'Unknown error saving client portals');
+    }
+    __portalsCache = portals;
+    if (status) {
+      status.textContent = 'Saved.';
+      status.className   = 'small text-success';
+    }
+    showToast('Client portals saved.');
+  } catch (e) {
+    console.error(e);
+    if (status) {
+      status.textContent = 'Error saving.';
+      status.className   = 'small text-danger';
+    }
+    showToast('Error saving client portals: ' + (e.message || e));
+  }
 }
 
 let __groupsCache = {};
@@ -2488,7 +3356,7 @@ async function openUserGroupsModal() {
               class="editor-close-btn"
               style="right:8px; top:8px;">&times;</span>
 
-        <h3>User groups</h3>
+        <h3>User Groups</h3>
         <p class="muted" style="margin-top:-6px;">
           Define named groups, assign users to them, and attach folder access
           just like per-user ACL. Group access is additive to user access.
@@ -2573,16 +3441,42 @@ async function loadUserGroupsList(useCacheOnly) {
       const g = __groupsCache[name] || {};
       const label = g.label || name;
       const members = Array.isArray(g.members) ? g.members : [];
-
+    
       const memberOptions = usernames.map(u => {
         const sel = members.includes(u) ? 'selected' : '';
         return `<option value="${u}" ${sel}>${u}</option>`;
       }).join('');
-
+    
+      const memberCountLabel = members.length
+        ? `${members.length} member${members.length === 1 ? '' : 's'}`
+        : 'No members yet';
+    
       html += `
-        <div class="card" data-group-name="${name}" style="margin-bottom:10px; padding:8px 10px; border-radius:8px;">
-          <div class="d-flex justify-content-between align-items-center" style="gap:8px; flex-wrap:wrap;">
-            <div class="d-flex align-items-center" style="gap:6px; flex-wrap:wrap;">
+        <div class="card" data-group-name="${name}" style="margin-bottom:10px; border-radius:8px;">
+          <!-- Collapsible header -->
+          <div class="group-card-header d-flex align-items-center"
+               tabindex="0"
+               role="button"
+               aria-expanded="false"
+               style="gap:6px; padding:6px 10px; cursor:pointer; border-radius:8px;">
+            <span class="group-caret"
+                  style="display:inline-block; transform:rotate(-90deg); transition:transform 120ms ease;">▸</span>
+            <i class="material-icons" style="font-size:18px;">group</i>
+            <strong>${(label || name).replace(/"/g, '&quot;')}</strong>
+            <span class="muted" style="font-size:0.8rem; margin-left:4px;">
+              ${memberCountLabel}
+            </span>
+            <button type="button"
+                    class="btn btn-sm btn-danger group-card-delete"
+                    data-group-action="delete">
+              <i class="material-icons" style="font-size:22px;">delete</i>
+            </button>
+          </div>
+    
+          <!-- Collapsible body -->
+          <div class="group-card-body" style="display:none; padding:6px 10px 10px;">
+            <div class="d-flex align-items-center"
+                 style="gap:6px; flex-wrap:wrap; margin-bottom:6px;">
               <label style="margin:0; font-weight:600;">
                 Group name:
                 <input type="text"
@@ -2600,32 +3494,27 @@ async function loadUserGroupsList(useCacheOnly) {
                        style="display:inline-block; width:200px; margin-left:4px;" />
               </label>
             </div>
-            <button type="button"
-                    class="btn btn-sm btn-danger"
-                    data-group-action="delete">
-              <i class="material-icons" style="font-size:22px;">delete</i>
-            </button>
-          </div>
-
-          <div style="margin-top:8px;">
-            <label style="font-size:12px; font-weight:600;">Members:</label>
-            <select multiple
-                    class="form-control form-control-sm"
-                    data-group-field="members"
-                    size="${Math.min(Math.max(usernames.length, 3), 8)}">
-              ${memberOptions}
-            </select>
-            <small class="text-muted">
-              Hold Ctrl/Cmd to select multiple users.
-            </small>
-          </div>
-
-          <div style="margin-top:8px;">
-            <button type="button"
-                    class="btn btn-sm btn-secondary"
-                    data-group-action="edit-acl">
-              Edit folder access
-            </button>
+    
+            <div style="margin-top:4px;">
+              <label style="font-size:12px; font-weight:600;">Members:</label>
+              <select multiple
+                      class="form-control form-control-sm"
+                      data-group-field="members"
+                      size="${Math.min(Math.max(usernames.length, 3), 8)}">
+                ${memberOptions}
+              </select>
+              <small class="text-muted">
+                Hold Ctrl/Cmd to select multiple users.
+              </small>
+            </div>
+    
+            <div style="margin-top:8px;">
+              <button type="button"
+                      class="btn btn-sm btn-secondary"
+                      data-group-action="edit-acl">
+                Edit folder access
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -2633,7 +3522,40 @@ async function loadUserGroupsList(useCacheOnly) {
 
     body.innerHTML = html;
 
-        // After: body.innerHTML = html;
+      // Collapse/expand group cards (default: collapsed)
+body.querySelectorAll('.card[data-group-name]').forEach(card => {
+  const header = card.querySelector('.group-card-header');
+  const bodyEl = card.querySelector('.group-card-body');
+  const caret  = card.querySelector('.group-caret');
+  if (!header || !bodyEl || !caret) return;
+
+  const setExpanded = (expanded) => {
+    header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    bodyEl.style.display = expanded ? 'block' : 'none';
+    caret.textContent = expanded ? '▾' : '▸';
+  };
+
+  // Start collapsed
+  setExpanded(false);
+
+  const toggle = () => {
+    const isOpen = header.getAttribute('aria-expanded') === 'true';
+    setExpanded(!isOpen);
+  };
+
+  header.addEventListener('click', (e) => {
+    // Don’t toggle when clicking the delete button
+    if (e.target.closest('[data-group-action="delete"]')) return;
+    toggle();
+  });
+
+  header.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    }
+  });
+});
 
     // Show selected members as chips under each multi-select
     body.querySelectorAll('select[data-group-field="members"]').forEach(sel => {

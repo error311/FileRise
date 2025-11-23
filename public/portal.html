@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+  <style id="pretheme-css">
+    html, body, #portalRoot { background: var(--pre-bg,#ffffff) !important; }
+  </style>
+  
+ 
+<head>
+  <style>
+    :root {
+      --portal-accent: #0b5ed7;
+    }
+  
+    .portal-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .portal-card {
+      max-width: 640px;
+      width: 100%;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      padding: 20px 20px 16px;
+    }
+    .portal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .portal-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .portal-logo img {
+      width: 32px;
+      height: 32px;
+    }
+    .portal-dropzone {
+      border: 2px dashed rgba(0,0,0,0.2);
+      border-radius: 10px;
+      padding: 18px;
+      text-align: center;
+      margin-top: 10px;
+      transition: background 0.15s, border-color 0.15s;
+      cursor: pointer;
+    }
+    .portal-dropzone.dragover {
+      border-color: var(--portal-accent);
+      background: rgba(11,94,215,0.06);
+    }
+  
+    /* Files list container (scrollable) */
+    .portal-files-list {
+      margin-top: 14px;
+      max-height: 260px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+  
+    /* NEW: grid-style gallery inside the list */
+    .portal-files-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      grid-auto-rows: minmax(48px, auto);
+      gap: 8px;
+    }
+  
+    .portal-file-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: rgba(0,0,0,0.01);
+      font-size: 0.85rem;
+    }
+    .portal-file-card:hover {
+      background: rgba(0,0,0,0.04);
+    }
+  
+    .portal-file-card-icon {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      border: 2px solid var(--portal-accent, #0b5ed7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+  
+    .portal-file-card-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .portal-file-card-name {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .portal-file-card-meta {
+      font-size: 0.78rem;
+    }
+  
+    .portal-file-card-actions {
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+    .portal-file-card-download {
+      font-size: 0.78rem;
+      text-decoration: none;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.16);
+      background: transparent;
+      white-space: nowrap;
+    }
+    .portal-file-card-download:hover {
+      background: var(--portal-accent, #0b5ed7);
+      color: #fff;
+      border-color: var(--portal-accent, #0b5ed7);
+      text-decoration: none;
+    }
+  
+    .portal-status {
+      margin-top: 8px;
+      font-size: 0.85rem;
+    }
+  
+    #customToast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      z-index: 4000;
+      display: none;
+    }
+    #customToast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  
+    /* (Optional) keep old row style around if anything else uses it */
+    .portal-file-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      font-size: 0.9rem;
+    }
+    .portal-file-row:last-child {
+      border-bottom: none;
+    }
+  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Client Portal – FileRise</title>
+  <meta name="theme-color" content="#0b5ed7">
+
+  <style id="pretheme-css">
+    html, body, #portalRoot { background: var(--pre-bg,#ffffff) !important; }
+  </style>
+
+  <!-- Favicons / assets -->
+  <link rel="icon" href="/assets/logo.svg?v={{APP_QVER}}" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="/assets/logo.png?v={{APP_QVER}}" type="image/png" sizes="512x512">
+  <link rel="icon" href="/assets/logo-32.png?v={{APP_QVER}}" type="image/png" sizes="32x32">
+  <link rel="icon" href="/assets/logo-16.png?v={{APP_QVER}}" type="image/png" sizes="16x16">
+  <link rel="shortcut icon" href="/assets/favicon.ico?v={{APP_QVER}}">
+
+  <meta name="csrf-token" content="">
+  <meta name="color-scheme" content="light dark">
+
+  <!-- CSS (reuse main app CSS for look) -->
+  <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="/css/vendor/roboto.css?v={{APP_QVER}}">
+
+  <!-- Version stamp -->
+  <script src="/js/version.js?v={{APP_QVER}}" defer></script>
+
+  <!-- Portal entry -->
+  <script type="module" src="/js/portal.js?v={{APP_QVER}}"></script>
+
+  <style>
+    .portal-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .portal-card {
+  max-width: min(960px, 100%);
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  padding: 20px 20px 16px;
+}
+    .portal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .portal-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .portal-logo img {
+      width: 32px;
+      height: 32px;
+    }
+    .portal-dropzone {
+      border: 2px dashed rgba(0,0,0,0.2);
+      border-radius: 10px;
+      padding: 18px;
+      text-align: center;
+      margin-top: 10px;
+      transition: background 0.15s, border-color 0.15s;
+      cursor: pointer;
+    }
+    .portal-dropzone.dragover {
+      border-color: #0b5ed7;
+      background: rgba(11,94,215,0.06);
+    }
+    .portal-files-list {
+      margin-top: 14px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .portal-file-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      font-size: 0.9rem;
+    }
+    .portal-file-row:last-child {
+      border-bottom: none;
+    }
+    .portal-status {
+      margin-top: 8px;
+      font-size: 0.85rem;
+    }
+    #customToast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      z-index: 4000;
+      display: none;
+    }
+    #customToast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div id="portalRoot" class="portal-wrapper">
+    <div class="portal-card">
+      <div class="portal-header">
+        <div class="portal-logo">
+          <img src="/assets/logo.svg?v={{APP_QVER}}" alt="FileRise">
+          <div>
+            <div id="portalBrandHeading" style="font-weight:600; font-size:1rem;">Client Portal</div>
+            <div id="portalSubtitle" class="text-muted" style="font-size:0.8rem;"></div>
+          </div>
+        </div>
+        <small id="portalUserLabel" class="text-muted"></small>
+      </div>
+      <h3 id="portalTitle" style="margin-bottom:4px;">Loading…</h3>
+      <p id="portalDescription" class="text-muted" style="margin-bottom:10px;"></p>
+
+      <div id="portalFormSection" style="margin-bottom:12px; display:none;">
+        <h5 style="font-size:0.95rem; margin-bottom:4px;">Your details</h5>
+        <p class="text-muted" style="font-size:0.8rem; margin-bottom:8px;">
+          Please fill in your information before uploading files.
+        </p>
+      
+        <div class="form-group" style="margin-bottom:6px;">
+          <label for="portalFormName">Name</label>
+          <input type="text" id="portalFormName" class="form-control form-control-sm">
+        </div>
+      
+        <div class="form-group" style="margin-bottom:6px;">
+          <label for="portalFormEmail">Email</label>
+          <input type="email" id="portalFormEmail" class="form-control form-control-sm">
+        </div>
+      
+        <div class="form-group" style="margin-bottom:6px;">
+          <label for="portalFormReference">Reference / Case / Order #</label>
+          <input type="text" id="portalFormReference" class="form-control form-control-sm">
+        </div>
+      
+        <div class="form-group" style="margin-bottom:8px;">
+          <label for="portalFormNotes">Notes</label>
+          <textarea id="portalFormNotes" class="form-control form-control-sm" rows="3"></textarea>
+        </div>
+      
+        <button type="button" id="portalFormSubmit" class="btn btn-primary btn-sm">
+          Continue
+        </button>
+      </div>
+
+      <div id="portalUploadSection">
+        <div id="portalDropzone" class="portal-dropzone">
+          <div><strong>Drop files here</strong> or click to browse.</div>
+          <div style="font-size:0.8rem;" class="text-muted">
+            Files will be uploaded to this portal only.
+          </div>
+        </div>
+        <input type="file" id="portalFileInput" multiple style="display:none;">
+        <div id="portalStatus" class="portal-status text-muted"></div>
+      </div>
+
+      <div id="portalFilesSection" style="margin-top:12px; display:none;">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong style="font-size:0.95rem;">Files in this portal</strong>
+          <button type="button" id="portalRefreshBtn" class="btn btn-sm btn-outline-secondary">
+            Refresh
+          </button>
+        </div>
+        <div id="portalFilesList" class="portal-files-list"></div>
+      </div>
+      <div id="portalFooter" class="text-muted"
+      style="margin-top:12px; font-size:0.75rem; text-align:center;"></div>
+    </div>
+  </div>
+
+  <div id="customToast"></div>
+</body>
+</html>

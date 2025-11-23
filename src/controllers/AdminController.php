@@ -272,6 +272,126 @@ public function setLicense(): void
     }
 }
 
+public function getProPortals(): array
+{
+    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
+        throw new RuntimeException('FileRise Pro is not active.');
+    }
+
+    $proPortalsPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . '/ProPortals.php';
+    if (!is_file($proPortalsPath)) {
+        throw new RuntimeException('ProPortals.php not found in Pro bundle.');
+    }
+
+    require_once $proPortalsPath;
+
+    // ProPortals is implemented in the Pro bundle and handles JSON storage.
+    $store   = new ProPortals(FR_PRO_BUNDLE_DIR);
+    $portals = $store->listPortals();
+
+    return $portals;
+}
+
+/**
+ * @param array $portalsPayload Raw "portals" array from JSON body
+ */
+public function saveProPortals(array $portalsPayload): void
+{
+    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
+        throw new RuntimeException('FileRise Pro is not active.');
+    }
+
+    $proPortalsPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . '/ProPortals.php';
+    if (!is_file($proPortalsPath)) {
+        throw new RuntimeException('ProPortals.php not found in Pro bundle.');
+    }
+
+    require_once $proPortalsPath;
+
+    if (!is_array($portalsPayload)) {
+        throw new InvalidArgumentException('Invalid portals format.');
+    }
+
+    // Minimal normalization; deeper validation can live inside ProPortals
+    $data = ['portals' => []];
+
+    foreach ($portalsPayload as $slug => $info) {
+        $slug = trim((string)$slug);
+        if ($slug === '') {
+            continue;
+        }
+        if (!is_array($info)) {
+            $info = [];
+        }
+
+        $label        = trim((string)($info['label'] ?? $slug));
+        $folder       = trim((string)($info['folder'] ?? ''));
+        $clientEmail  = trim((string)($info['clientEmail'] ?? ''));
+        $uploadOnly   = !empty($info['uploadOnly']);
+        $allowDownload = array_key_exists('allowDownload', $info)
+            ? !empty($info['allowDownload'])
+            : true;
+        $expiresAt    = trim((string)($info['expiresAt'] ?? ''));
+    
+        // Optional branding + form behavior
+        $title      = trim((string)($info['title'] ?? ''));
+        $introText  = trim((string)($info['introText'] ?? ''));
+        $requireForm = !empty($info['requireForm']);
+        $brandColor = trim((string)($info['brandColor'] ?? ''));
+    $footerText = trim((string)($info['footerText'] ?? ''));
+
+    $formDefaults = isset($info['formDefaults']) && is_array($info['formDefaults'])
+        ? $info['formDefaults']
+        : [];
+
+    // Normalize defaults for known keys
+    $formDefaults = [
+        'name'      => trim((string)($formDefaults['name'] ?? '')),
+        'email'     => trim((string)($formDefaults['email'] ?? '')),
+        'reference' => trim((string)($formDefaults['reference'] ?? '')),
+        'notes'     => trim((string)($formDefaults['notes'] ?? '')),
+    ];
+    $formRequired = isset($info['formRequired']) && is_array($info['formRequired'])
+    ? $info['formRequired']
+    : [];
+
+    $formRequired = [
+    'name'      => !empty($formRequired['name']),
+    'email'     => !empty($formRequired['email']),
+    'reference' => !empty($formRequired['reference']),
+    'notes'     => !empty($formRequired['notes']),
+];
+    
+        if ($folder === '') {
+            continue;
+        }
+    
+        $data['portals'][$slug] = [
+            'label'         => $label,
+            'folder'        => $folder,
+            'clientEmail'   => $clientEmail,
+            'uploadOnly'    => $uploadOnly,
+            'allowDownload' => $allowDownload,
+            'expiresAt'     => $expiresAt,
+            // NEW
+            'title'         => $title,
+            'introText'     => $introText,
+            'requireForm'   => $requireForm,
+            'brandColor'    => $brandColor,
+            'footerText'    => $footerText,
+            'formDefaults'  => $formDefaults,
+            'formRequired'  => $formRequired,
+        ];
+    }
+
+    $store = new ProPortals(FR_PRO_BUNDLE_DIR);
+    $ok    = $store->savePortals($data);
+
+    if (!$ok) {
+        throw new RuntimeException('Could not write portals.json');
+    }
+}
+
 public function getProGroups(): array
 {
     if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
