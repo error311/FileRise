@@ -1,15 +1,54 @@
 // public/js/portal-login.js
 
 // -------- URL helpers --------
-function getRedirectTarget() {
-    try {
-      const url = new URL(window.location.href);
-      const r = url.searchParams.get('redirect');
-      return r && r.trim() ? r.trim() : '/';
-    } catch {
-      return '/';
+function sanitizeRedirect(raw, { fallback = '/' } = {}) {
+  if (!raw) return fallback;
+  try {
+    const str = String(raw).trim();
+    if (!str) return fallback;
+
+    // Resolve against current origin so relative URLs work
+    const candidate = new URL(str, window.location.origin);
+
+    // 1) Must stay on the same origin
+    if (candidate.origin !== window.location.origin) {
+      return fallback;
     }
+
+    // 2) Only allow http/https
+    if (candidate.protocol !== 'http:' && candidate.protocol !== 'https:') {
+      return fallback;
+    }
+
+    // Return a relative URL (prevents host changes)
+    return candidate.pathname + candidate.search + candidate.hash;
+  } catch {
+    return fallback;
   }
+}
+
+function getRedirectTarget() {
+  try {
+    const url = new URL(window.location.href);
+    const raw = url.searchParams.get('redirect');
+
+    // Default fallback: root
+    let target = sanitizeRedirect(raw, { fallback: '/' });
+
+    // If there was no *usable* redirect but we have a portal slug,
+    // send them back to that portal by default.
+    if (!target || target === '/') {
+      const slug = getPortalSlugFromUrl();
+      if (slug) {
+        target = sanitizeRedirect('/portal/' + encodeURIComponent(slug), { fallback: '/' });
+      }
+    }
+
+    return target || '/';
+  } catch {
+    return '/';
+  }
+}
   
   function getPortalSlugFromUrl() {
     try {

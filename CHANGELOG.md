@@ -6,6 +6,7 @@
 
 ```text
 release(v2.0.0): feat(pro): client portals + portal login flow
+release(v2.0.1): fix: harden portal + core login redirects for codeql
 ```
 
 ### Core v2.0.0

@@ -225,6 +225,32 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
     return p.then(r => r.clone());
   };
 
+    // ---- Safe redirect helper (prevents open redirects) ----
+    function sanitizeRedirect(raw, { fallback = '/' } = {}) {
+      if (!raw) return fallback;
+      try {
+        const str = String(raw).trim();
+        if (!str) return fallback;
+  
+        const candidate = new URL(str, window.location.origin);
+  
+        // Enforce same-origin
+        if (candidate.origin !== window.location.origin) {
+          return fallback;
+        }
+  
+        // Limit to http/https
+        if (candidate.protocol !== 'http:' && candidate.protocol !== 'https:') {
+          return fallback;
+        }
+  
+        // Return relative URL
+        return candidate.pathname + candidate.search + candidate.hash;
+      } catch {
+        return fallback;
+      }
+    }
+
   // Gentle toast normalizer (compatible with showToast(message, duration))
   const origToast = window.showToast;
   if (typeof origToast === 'function' && !origToast.__frWrapped) {
@@ -886,15 +912,16 @@ function bindDarkMode() {
     // If index.html was opened with ?redirect=<url>, honor that first
     try {
       const url = new URL(window.location.href);
-      const redirect = url.searchParams.get('redirect');
-      if (redirect) {
-        window.location.href = redirect;
+      const raw = url.searchParams.get('redirect');
+      const safe = sanitizeRedirect(raw, { fallback: null });
+      if (safe) {
+        window.location.href = safe;
         return;
       }
     } catch {
       // ignore URL/param issues and fall back to normal behavior
     }
-  
+
     const start = Date.now();
     (function poll() {
       checkAuth().then(({ authed }) => {
