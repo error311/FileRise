@@ -22,7 +22,7 @@ Drag & drop uploads, ACL‑aware sharing, OnlyOffice integration, and a clean UI
 - 🎨 **Polished UI** – Dark/light mode, responsive layout, in‑browser previews & code editor.
 - 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.).
 
-![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v1.9.7.png)
+![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.0.0.png)
 
 > 💡 Looking for **FileRise Pro** (brandable header, Pro features, license handling)?
 > Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open‑source (MIT).
