@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# === Update FileRise to v1.9.1 (safe rsync) ===
-# shellcheck disable=SC2155  # we intentionally assign 'stamp' with command substitution
-
+# === Update FileRise to v2.0.2 (safe rsync) ===
 set -Eeuo pipefail
 
-VER="v1.9.1"
-ASSET="FileRise-${VER}.zip"          # If the asset name is different, set it exactly (e.g. FileRise-v1.9.0.zip)
+VER="v2.0.2"
+ASSET="FileRise-${VER}.zip"      # matches GitHub release asset name
 WEBROOT="/var/www"
 TMP="/tmp/filerise-update"
 
-# 0) (optional) quick backup of critical bits
+# 0) quick backup of critical bits (include Pro/demo stuff too)
 stamp="$(date +%F-%H%M)"
 mkdir -p /root/backups
 tar -C "$WEBROOT" -czf "/root/backups/filerise-$stamp.tgz" \
-  public/.htaccess config users uploads metadata || true
+  public/.htaccess \
+  config \
+  users \
+  uploads \
+  metadata \
+  filerise-bundles \
+  filerise-config \
+  filerise-site || true
 echo "Backup saved to /root/backups/filerise-$stamp.tgz"
 
 # 1) Fetch the release zip
@@ -29,12 +34,15 @@ STAGE_DIR="$(find "$TMP" -maxdepth 1 -type d -name 'FileRise*' ! -path "$TMP" | 
 # 3) Sync code into /var/www
 #    - keep public/.htaccess
 #    - keep data dirs and current config.php
+#    - DO NOT touch filerise-site / bundles / demo config
 rsync -a --delete \
   --exclude='public/.htaccess' \
   --exclude='uploads/***' \
   --exclude='users/***' \
   --exclude='metadata/***' \
-  --exclude='config/config.php' \
+  --exclude='filerise-bundles/***' \
+  --exclude='filerise-config/***' \
+  --exclude='filerise-site/***' \
   --exclude='.github/***' \
   --exclude='docker-compose.yml' \
   "$STAGE_DIR"/ "$WEBROOT"/
@@ -42,13 +50,23 @@ rsync -a --delete \
 # 4) Ownership (Ubuntu/Debian w/ Apache)
 chown -R www-data:www-data "$WEBROOT"
 
-# 5) (optional) Composer autoload optimization if composer is available
+# 5) Composer autoload optimization if composer is available
 if command -v composer >/dev/null 2>&1; then
   cd "$WEBROOT" || { echo "cd to $WEBROOT failed" >&2; exit 1; }
   composer install --no-dev --optimize-autoloader
 fi
 
-# 6) Reload Apache (don’t fail the whole script if reload isn’t available)
+# 6) Force demo mode ON in config/config.php
+CFG_FILE="$WEBROOT/config/config.php"
+if [[ -f "$CFG_FILE" ]]; then
+  # Make a one-time backup of config.php before editing
+  cp "$CFG_FILE" "${CFG_FILE}.bak.$stamp" || true
+
+  # Flip FR_DEMO_MODE to true if it exists as false
+  sed -i "s/define('FR_DEMO_MODE',[[:space:]]*false);/define('FR_DEMO_MODE', true);/" "$CFG_FILE" || true
+fi
+
+# 7) Reload Apache (don’t fail the whole script if reload isn’t available)
 systemctl reload apache2 2>/dev/null || true
 
-echo "✅ FileRise updated to ${VER} (code). Data and public/.htaccess preserved."
+echo "FileRise updated to ${VER} (code). Demo mode forced ON. Data, Pro bundles, and demo site preserved."

@@ -327,6 +327,14 @@ class UserController
             exit;
         }
 
+        if (defined('FR_DEMO_MODE') && FR_DEMO_MODE && $username === 'demo') {
+            http_response_code(403);
+            echo json_encode([
+                'error' => 'TOTP settings are disabled for the demo account.'
+            ]);
+            exit;
+        }
+
         $totp_enabled = isset($data['totp_enabled']) ? filter_var($data['totp_enabled'], FILTER_VALIDATE_BOOLEAN) : false;
         $result = UserModel::updateUserPanel($username, $totp_enabled);
         echo json_encode($result);
@@ -345,6 +353,14 @@ class UserController
         if ($username === '') {
             http_response_code(400);
             echo json_encode(["error" => "Username not found in session"]);
+            exit;
+        }
+
+        if (defined('FR_DEMO_MODE') && FR_DEMO_MODE && $username === 'demo') {
+            http_response_code(403);
+            echo json_encode([
+                'error' => 'TOTP settings are disabled for the demo account.'
+            ]);
             exit;
         }
 
@@ -412,6 +428,16 @@ class UserController
         }
 
         $userId = $_SESSION['username'];
+
+        if (defined('FR_DEMO_MODE') && FR_DEMO_MODE && $userId === 'demo') {
+            http_response_code(403);
+            echo json_encode([
+                'status'  => 'error',
+                'message' => 'TOTP settings are disabled for the demo account.',
+            ]);
+            exit;
+        }
+
         if (!preg_match(REGEX_USER, $userId)) {
             http_response_code(400);
             echo json_encode(['status' => 'error', 'message' => 'Invalid user identifier']);
@@ -437,6 +463,14 @@ class UserController
             echo json_encode(["error" => "Not authorized to access TOTP setup"]);
             exit;
         }
+
+        $username = $_SESSION['username'] ?? ($_SESSION['pending_login_user'] ?? '');
+        if (defined('FR_DEMO_MODE') && FR_DEMO_MODE && $username === 'demo') {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'TOTP setup is disabled for the demo account.']);
+        }
+     
 
         self::requireCsrf();
 
