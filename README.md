@@ -10,22 +10,23 @@
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-❤-red)](https://github.com/sponsors/error311)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
 
-**FileRise** is a modern, self‑hosted web file manager / WebDAV server.  
-Drag & drop uploads, ACL‑aware sharing, OnlyOffice integration, and a clean UI — all in a single PHP app that you control.
+**FileRise** is a modern, self-hosted web file manager / WebDAV server.  
+Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI — all in a single PHP app that you control.
 
-- 💾 **Self‑hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external DB required.
-- 🔐 **Granular per‑folder ACLs** – View / Own / Upload / Edit / Delete / Share, enforced across UI, API, and WebDAV.
-- 🔄 **Fast drag‑and‑drop uploads** – Chunked, resumable uploads with pause/resume and progress.
+- 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external DB required.
+- 🔐 **Granular per-folder ACLs** – View / Own / Upload / Edit / Delete / Share, enforced across UI, API, and WebDAV.
+- 🔄 **Fast drag-and-drop uploads** – Chunked, resumable uploads with pause/resume and progress.
 - 🌳 **Scales to huge trees** – Tested with **100k+ folders** in the sidebar tree.
 - 🧩 **ONLYOFFICE support (optional)** – Edit DOCX/XLSX/PPTX using your own Document Server.
 - 🌍 **WebDAV** – Mount FileRise as a drive from macOS, Windows, Linux, or Cyberduck/WinSCP.
-- 🎨 **Polished UI** – Dark/light mode, responsive layout, in‑browser previews & code editor.
+- 🎨 **Polished UI** – Dark/light mode, responsive layout, in-browser previews & code editor.
 - 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.).
+- 👥 **User groups & client portals (Pro)** – Group-based ACLs and brandable client upload portals.
 
 ![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.0.0.png)
 
-> 💡 Looking for **FileRise Pro** (brandable header, Pro features, license handling)?
-> Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open‑source (MIT).
+> 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
+> Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open-source (MIT).
 
 ---
 
