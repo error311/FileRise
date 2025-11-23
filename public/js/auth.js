@@ -34,18 +34,19 @@ window.currentOIDCConfig = currentOIDCConfig;
 
 
 (function installToastFilter() {
-  const isDemoHost = location.hostname.toLowerCase() === 'demo.filerise.net';
-
   window.__FR_TOAST_FILTER__ = function (msgKeyOrText) {
+    const isDemoMode = !!window.__FR_DEMO__;
+
     // Suppress the nag while doing TOTP step-up
     if (window.pendingTOTP && (msgKeyOrText === 'please_log_in_to_continue' ||
       /please log in/i.test(String(msgKeyOrText)))) {
       return null; // suppress
     }
 
-    // Demo host
-    if (isDemoHost && (msgKeyOrText === 'please_log_in_to_continue' ||
-      /please log in/i.test(String(msgKeyOrText)))) {
+    // Demo mode: swap login prompt for demo creds
+    if (isDemoMode &&
+        (msgKeyOrText === 'please_log_in_to_continue' ||
+         /please log in/i.test(String(msgKeyOrText)))) {
       return "Demo site — use:\nUsername: demo\nPassword: demo";
     }
 
@@ -81,14 +82,16 @@ window.pendingTOTP = new URLSearchParams(window.location.search).get('totp_requi
 // override showToast to suppress the "Please log in to continue." toast during TOTP
 
 function showToast(msgKeyOrText, type) {
-  const isDemoHost = window.location.hostname.toLowerCase() === "demo.filerise.net";
+  const isDemoMode = !!window.__FR_DEMO__;
 
-  // If it's the pre-login prompt and we're on the demo site, show demo creds instead.
-  if (isDemoHost) {
+  // For the pre-login prompt in demo mode, show demo creds instead
+  if (isDemoMode &&
+      (msgKeyOrText === "please_log_in_to_continue" ||
+       /please log in/i.test(String(msgKeyOrText)))) {
     return originalShowToast("Demo site — use: \nUsername: demo\nPassword: demo", 12000);
   }
 
-  // Don’t nag during pending TOTP, as you already had
+  // Don’t nag during pending TOTP
   if (window.pendingTOTP && msgKeyOrText === "please_log_in_to_continue") {
     return;
   }
@@ -97,11 +100,10 @@ function showToast(msgKeyOrText, type) {
   let msg = msgKeyOrText;
   try {
     const translated = t(msgKeyOrText);
-    // If t() changed it or it's a key-like string, use the translation
     if (typeof translated === "string" && translated !== msgKeyOrText) {
       msg = translated;
     }
-  } catch { /* if t() isn’t available here, just use the original */ }
+  } catch { }
 
   return originalShowToast(msg);
 }
@@ -351,26 +353,8 @@ export async function updateAuthenticatedUI(data) {
     if (r) r.style.display = "none";
   }
 
-  // b) admin panel button only on demo.filerise.net
-  if (data.isAdmin && window.location.hostname === "demo.filerise.net") {
-    let a = document.getElementById("adminPanelBtn");
-    if (!a) {
-      a = document.createElement("button");
-      a.id = "adminPanelBtn";
-      a.classList.add("btn", "btn-info");
-      a.setAttribute("data-i18n-title", "admin_panel");
-      a.innerHTML = '<i class="material-icons">admin_panel_settings</i>';
-      insertAfter(a, document.getElementById("restoreFilesBtn"));
-      a.addEventListener("click", openAdminPanel);
-    }
-    a.style.display = "block";
-  } else {
-    const a = document.getElementById("adminPanelBtn");
-    if (a) a.style.display = "none";
-  }
-
   // c) user dropdown on non-demo
-  if (window.location.hostname !== "demo.filerise.net") {
+{
     let dd = document.getElementById("userDropdown");
 
     // choose icon *or* img
@@ -866,6 +850,10 @@ function initAuth() {
   });
   document.getElementById("cancelRemoveUserBtn").addEventListener("click", closeRemoveUserModal);
   document.getElementById("changePasswordBtn").addEventListener("click", function () {
+    if (window.__FR_DEMO__) {
+      showToast("Password changes are disabled on the public demo.");
+      return;
+    }
     document.getElementById("changePasswordModal").style.display = "block";
     document.getElementById("oldPassword").focus();
   });
@@ -873,6 +861,10 @@ function initAuth() {
     document.getElementById("changePasswordModal").style.display = "none";
   });
   document.getElementById("saveNewPasswordBtn").addEventListener("click", function () {
+    if (window.__FR_DEMO__) {
+      showToast("Password changes are disabled on the public demo.");
+      return;
+    }
     const oldPassword = document.getElementById("oldPassword").value.trim();
     const newPassword = document.getElementById("newPassword").value.trim();
     const confirmPassword = document.getElementById("confirmPassword").value.trim();

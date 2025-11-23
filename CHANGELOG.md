@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 11/23/2025 (v2.0.2)
+
+release(v2.0.2): add config-driven demo mode and lock demo account changes
+
+- Wire FR_DEMO_MODE through AdminModel/siteConfig and admin getConfig (demoMode flag)
+- Drive demo detection in JS from __FR_SITE_CFG__.demoMode instead of hostname
+- Show consistent login tip + toasts for demo using shared __FR_DEMO__ flag
+- Block password changes for the demo user and profile picture uploads when in demo mode
+- Keep normal user dropdown/admin UI visible even on the demo, while still protecting the demo account
+
+---
+
 ## Changes 11/23/2025 (v2.0.0)
 
 ### FileRise Core v2.0.0 & FileRise Pro v1.1.0

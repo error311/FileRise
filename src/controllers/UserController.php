@@ -272,6 +272,15 @@ class UserController
             echo json_encode(["error" => "No username in session"]);
             exit;
         }
+        // Block changing the demo account password when in demo mode
+        if (FR_DEMO_MODE && $username === 'demo') {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => false,
+                'error'   => 'Password changes are disabled on the public demo.'
+            ]);
+            exit;
+        }
 
         $data = self::readJson();
         $oldPassword     = trim($data["oldPassword"] ?? "");
@@ -607,6 +616,15 @@ class UserController
         // Auth & CSRF
         self::requireAuth();
         self::requireCsrf();
+
+        if (defined('FR_DEMO_MODE') && FR_DEMO_MODE) {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'error'   => 'Profile picture changes are disabled in the demo environment.',
+            ]);
+            exit;
+        }
 
         if (empty($_FILES['profile_picture']) || $_FILES['profile_picture']['error'] !== UPLOAD_ERR_OK) {
             http_response_code(400);

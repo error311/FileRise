@@ -176,6 +176,7 @@ class AdminController
                         'version' => $proVersion,
                         'license' => $licenseString,
                     ],
+                    'demoMode' => defined('FR_DEMO_MODE') ? (bool)FR_DEMO_MODE : false,
                 ];
             
                 $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);

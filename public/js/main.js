@@ -62,23 +62,43 @@ async function ensureToastReady() {
 }
 
 function isDemoHost() {
-  // Handles optional "www." just in case
+  try {
+    const cfg = window.__FR_SITE_CFG__ || {};
+    if (typeof cfg.demoMode !== 'undefined') {
+      return !!cfg.demoMode;
+    }
+  } catch {
+    // ignore
+  }
+  // Fallback for older configs / direct demo host:
   return location.hostname.replace(/^www\./, '') === 'demo.filerise.net';
 }
 
 function showLoginTip(message) {
   const tip = document.getElementById('fr-login-tip');
   if (!tip) return;
-  tip.innerHTML = '';                           // clear
-  if (message) tip.append(document.createTextNode(message));
-  if (location.hostname.replace(/^www\./, '') === 'demo.filerise.net') {
-    const line = document.createElement('div'); line.style.marginTop = '6px';
-    const mk = t => { const k = document.createElement('code'); k.textContent = t; return k; };
-    line.append(document.createTextNode('Demo login — user: '), mk('demo'),
-      document.createTextNode(' · pass: '), mk('demo'));
+  tip.innerHTML = ''; // clear
+
+  if (message) {
+    tip.append(document.createTextNode(message));
+  }
+
+  if (isDemoHost()) {
+    const line = document.createElement('div');
+    line.style.marginTop = '6px';
+    const mk = t => {
+      const k = document.createElement('code');
+      k.textContent = t;
+      return k;
+    };
+    line.append(
+      document.createTextNode('Demo login — user: '), mk('demo'),
+      document.createTextNode(' · pass: '), mk('demo')
+    );
     tip.append(line);
   }
-  tip.style.display = 'block';                  // reveal without shifting layout
+
+  tip.style.display = 'block';
 }
 
 async function hideOverlaySmoothly(overlay) {
@@ -552,11 +572,13 @@ function bindDarkMode() {
       const r = await fetch('/api/siteConfig.php', { credentials: 'include' });
       const j = await r.json().catch(() => ({}));
       window.__FR_SITE_CFG__ = j || {};
+      window.__FR_DEMO__ = !!(window.__FR_SITE_CFG__.demoMode);
       // Early pass: title + login options (skip touching <h1> to avoid flicker)
       applySiteConfig(window.__FR_SITE_CFG__, { phase: 'early' });
       return window.__FR_SITE_CFG__;
     } catch {
       window.__FR_SITE_CFG__ = {};
+      window.__FR_DEMO__ = false; 
       applySiteConfig({}, { phase: 'early' });
       return null;
     }

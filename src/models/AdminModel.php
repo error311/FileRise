@@ -121,6 +121,7 @@ private static function sanitizeLogoUrl($url): string
                 $config['branding']['headerBgDark'] ?? ''
             ),
         ],
+        'demoMode' => (defined('FR_DEMO_MODE') && FR_DEMO_MODE),
     ];
 
     // NEW: include ONLYOFFICE minimal public flag
@@ -136,16 +137,17 @@ private static function sanitizeLogoUrl($url): string
     $locked = defined('ONLYOFFICE_ENABLED') || defined('ONLYOFFICE_JWT_SECRET')
        || defined('ONLYOFFICE_DOCS_ORIGIN') || defined('ONLYOFFICE_PUBLIC_ORIGIN');
 
-if ($locked) {
-    $ooEnabled = defined('ONLYOFFICE_ENABLED') ? (bool)ONLYOFFICE_ENABLED : false;
-} else {
-    $ooEnabled = isset($config['onlyoffice']['enabled']) ? (bool)$config['onlyoffice']['enabled'] : false;
-}
+    if ($locked) {
+        $ooEnabled = defined('ONLYOFFICE_ENABLED') ? (bool)ONLYOFFICE_ENABLED : false;
+    } else {
+        $ooEnabled = isset($config['onlyoffice']['enabled']) ? (bool)$config['onlyoffice']['enabled'] : false;
+    }
 
-$public['onlyoffice'] = ['enabled' => $ooEnabled];
+        $public['onlyoffice'] = ['enabled' => $ooEnabled];
+        $public['demoMode'] = defined('FR_DEMO_MODE') ? (bool)FR_DEMO_MODE : false;
 
-    return $public;
-}
+        return $public;
+    }
 
     /** Write USERS_DIR/siteConfig.json atomically (unencrypted). */
     public static function writeSiteConfig(array $publicSubset): array
