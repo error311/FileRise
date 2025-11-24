@@ -76,7 +76,10 @@ http://your-server-ip:8080
 
 On first launch you’ll be guided through creating the **initial admin user**.
 
-**More Docker options (Unraid, docker‑compose, env vars, reverse proxy, etc.)**  
+**More Docker options (Unraid, docker‑compose, env vars, reverse proxy, etc.)**
+[Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)
+[nginx](https://github.com/error311/FileRise/wiki/Nginx-Setup)
+[FAQ](https://github.com/error311/FileRise/wiki/FAQ)
 See the Docker repo: [docker repo](https://github.com/error311/filerise-docker)
 
 ---
