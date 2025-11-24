@@ -23,6 +23,8 @@ Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI �
 - 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.).
 - 👥 **User groups & client portals (Pro)** – Group-based ACLs and brandable client upload portals.
 
+Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
+
 ![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.0.0.png)
 
 > 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
