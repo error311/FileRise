@@ -194,3 +194,8 @@ It bundles a small set of well‑known client and server libraries (Bootstrap, C
 All third‑party code remains under its original licenses.
 
 See `THIRD_PARTY.md` and the `licenses/` folder for full details.
+
+## 8. Press
+
+- [Heise / iX Magazin – “FileRise 2.0: Web-Dateimanager mit Client Portals” (DE)](https://www.heise.de/news/FileRise-2-0-Web-Dateimanager-mit-Client-Portals-11092171.html)
+- [Heise / iX Magazin – “FileRise 2.0: Web File Manager with Client Portals” (EN)](https://www.heise.de/en/news/FileRise-2-0-Web-File-Manager-with-Client-Portals-11092376.html)
