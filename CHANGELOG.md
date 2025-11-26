@@ -1,5 +1,22 @@
 # Changelog
 
+## Changes 11/26/2025 (v2.0.3)
+
+release(v2.0.3): polish uploads, header dock, and panel fly animations
+
+- Rework upload drop area markup to be rebuild-safe and wire a guarded "Choose files" button
+  so only one OS file-picker dialog can open at a time.
+- Centralize file input change handling and reset selectedFiles/_currentResumableIds per batch
+  to avoid duplicate resumable entries and keep the progress list/drafts in sync.
+- Ensure drag-and-drop uploads still support folder drops while file-picker is files-only.
+- Add ghost-based animations when collapsing panels into the header dock and expanding them back
+  to sidebar/top zones, inheriting card background/border/shadow for smooth visuals.
+- Offset sidebar ghosts so upload and folder cards don't stack directly on top of each other.
+- Respect header-pinned cards: cards saved to HEADER stay as icons and no longer fly out on expand.
+- Slightly tighten file summary margin in the file list header for better alignment with actions.
+
+---
+
 ## Changes 11/23/2025 (v2.0.2)
 
 release(v2.0.2): add config-driven demo mode and lock demo account changes

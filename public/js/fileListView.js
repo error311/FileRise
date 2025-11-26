@@ -934,7 +934,7 @@ export async function loadFileList(folderParam) {
       if (!summaryElem) {
         summaryElem = document.createElement("div");
         summaryElem.id = "fileSummary";
-        summaryElem.style.cssText = "float:right; margin:0 60px 0 auto; font-size:0.9em;";
+        summaryElem.style.cssText = "float:right; margin:0 30px 0 auto; font-size:0.9em;";
         actionsContainer.appendChild(summaryElem);
       }
       summaryElem.style.display = "block";

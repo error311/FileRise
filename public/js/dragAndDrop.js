@@ -72,6 +72,41 @@ function animateVerticalSlide(card) {
   }, 260);
 }
 
+function createCardGhost(card, rect, opts) {
+  const options = opts || {};
+  const scale   = typeof options.scale === 'number' ? options.scale : 1;
+  const opacity = typeof options.opacity === 'number' ? options.opacity : 1;
+
+  const ghost = card.cloneNode(true);
+  const cs = window.getComputedStyle(card);
+
+  // Give the ghost the same “card” chrome even though it’s attached to <body>
+  Object.assign(ghost.style, {
+    position: 'fixed',
+    left: rect.left + 'px',
+    top: rect.top + 'px',
+    width: rect.width + 'px',
+    height: rect.height + 'px',
+    margin: '0',
+    zIndex: '12000',
+    pointerEvents: 'none',
+    transformOrigin: 'center center',
+    transform: 'scale(' + scale + ')',
+    opacity: String(opacity),
+
+    // pull key visuals from the real card
+    backgroundColor: cs.backgroundColor || 'rgba(24,24,24,.96)',
+    borderRadius: cs.borderRadius || '',
+    boxShadow: cs.boxShadow || '',
+    borderColor: cs.borderColor || '',
+    borderWidth: cs.borderWidth || '',
+    borderStyle: cs.borderStyle || '',
+    backdropFilter: cs.backdropFilter || '',
+  });
+
+  return ghost;
+}
+
 // -------------------- header (icon+modal) --------------------
 function saveHeaderOrder() {
   const host = getHeaderDropArea();
@@ -325,6 +360,234 @@ function hideHeaderDockPersistent() {
   }
 }
 
+function animateCardsIntoHeaderAndThen(done) {
+  const sb  = getSidebar();
+  const top = getTopZone();
+  const liveCards = [];
+
+  if (sb)  liveCards.push(...sb.querySelectorAll('#uploadCard, #folderManagementCard'));
+  if (top) liveCards.push(...top.querySelectorAll('#uploadCard, #folderManagementCard'));
+
+  if (!liveCards.length) {
+    done();
+    return;
+  }
+
+  // Snapshot their current positions before we move the real DOM
+  const snapshots = liveCards.map(card => {
+    const rect = card.getBoundingClientRect();
+    return { card, rect };
+  });
+
+  // Show dock so icons exist / have positions
+  showHeaderDockPersistent();
+
+  // Move real cards into header (hidden container + icons)
+  snapshots.forEach(({ card }) => {
+    try { insertCardInHeader(card); } catch {}
+  });
+
+  const ghosts = [];
+
+  snapshots.forEach(({ card, rect }) => {
+    // remember the size for the expand animation later
+    card.dataset.lastWidth  = String(rect.width);
+    card.dataset.lastHeight = String(rect.height);
+  
+    const iconBtn = card.headerIconButton;
+    if (!iconBtn) return;
+  
+    const iconRect = iconBtn.getBoundingClientRect();
+  
+    const ghost = createCardGhost(card, rect, { scale: 1, opacity: 1 });
+    ghost.id = card.id + '-ghost-collapse';
+    ghost.classList.add('card-collapse-ghost');
+    ghost.style.transition = 'transform 0.22s ease-out, opacity 0.22s ease-out';
+
+    document.body.appendChild(ghost);
+    ghosts.push({ ghost, from: rect, to: iconRect });
+  });
+
+  if (!ghosts.length) {
+    done();
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    ghosts.forEach(({ ghost, from, to }) => {
+      const fromCx = from.left + from.width  / 2;
+      const fromCy = from.top  + from.height / 2;
+      const toCx   = to.left   + to.width   / 2;
+      const toCy   = to.top    + to.height  / 2;
+
+      const dx = toCx - fromCx;
+      const dy = toCy - fromCy;
+
+      const rawScale = to.width / from.width;
+      const scale = Math.max(0.25, Math.min(0.5, rawScale * 0.9));
+
+      ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+      ghost.style.opacity   = '0';
+    });
+  });
+
+  setTimeout(() => {
+    ghosts.forEach(({ ghost }) => { try { ghost.remove(); } catch {} });
+    done();
+  }, 260);
+}
+
+function resolveTargetZoneForExpand(cardId) {
+  const layout   = readLayout();
+  const saved    = layout[cardId];
+  const isUpload = (cardId === 'uploadCard');
+
+  // 🔒 If the user explicitly pinned this card to the HEADER,
+  // it should remain a header-only icon and NEVER fly out.
+  if (saved === ZONES.HEADER) {
+    return null; // caller will skip animation + placement
+  }
+
+  let zone = saved || null;
+
+  // No saved zone yet: mirror applyUserLayoutOrDefault defaults
+  if (!zone) {
+    if (isSmallScreen()) {
+      zone = isUpload ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+    } else {
+      zone = ZONES.SIDEBAR;
+    }
+  }
+
+  // On small screens, anything targeting SIDEBAR gets lifted into the top cols
+  if (isSmallScreen() && zone === ZONES.SIDEBAR) {
+    zone = isUpload ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;
+  }
+
+  return zone;
+}
+
+function getZoneHost(zoneId) {
+  switch (zoneId) {
+    case ZONES.SIDEBAR:   return getSidebar();
+    case ZONES.TOP_LEFT:  return getLeftCol();
+    case ZONES.TOP_RIGHT: return getRightCol();
+    default:              return null;
+  }
+}
+
+
+// Animate cards "flying out" of header icons back into their zones.
+function animateCardsOutOfHeaderThen(done) {
+  const header = getHeaderDropArea();
+  if (!header) { done(); return; }
+
+  const cards = getCards().filter(c => c && c.headerIconButton);
+  if (!cards.length) { done(); return; }
+
+  // Make sure target containers are visible so their rects are non-zero.
+  const sb  = getSidebar();
+  const top = getTopZone();
+  if (sb)  sb.style.display  = '';
+  if (top) top.style.display = '';
+
+  const SAFE_TOP       = 16;   // minimum distance from top of viewport
+  const START_OFFSET_Y = 40;   // how far BELOW the icon we start the ghost
+  const DEST_EXTRA_Y   = 120;  // how far down into the zone center we aim
+
+  const ghosts = [];
+
+  cards.forEach(card => {
+    const iconBtn = card.headerIconButton;
+    if (!iconBtn) return;
+
+    const zoneId = resolveTargetZoneForExpand(card.id);
+    if (!zoneId) return; // header-only card, stays as icon
+
+    const host = getZoneHost(zoneId);
+    if (!host) return;
+
+    const iconRect = iconBtn.getBoundingClientRect();
+    const zoneRect = host.getBoundingClientRect();
+    if (!zoneRect.width) return;
+
+    // Where the ghost "comes from" (near the icon)
+    const fromCx = iconRect.left + iconRect.width / 2;
+    const fromCy = iconRect.bottom + START_OFFSET_Y; // lower starting point
+
+    // Where we want it to "land" (roughly center of the zone, a bit down)
+    let toCx = zoneRect.left + zoneRect.width / 2;
+    let toCy = zoneRect.top + Math.min(zoneRect.height / 2 || DEST_EXTRA_Y, DEST_EXTRA_Y);
+
+    // 🔹 If both cards are going to the sidebar, offset them so they don't stack
+    if (zoneId === ZONES.SIDEBAR) {
+      if (card.id === 'uploadCard') {
+        toCy -= 48; // a bit higher
+      } else if (card.id === 'folderManagementCard') {
+        toCy += 60; // a bit lower
+      }
+    }
+
+    // Try to match the real card size we captured during collapse
+    const savedW = parseFloat(card.dataset.lastWidth  || '');
+    const savedH = parseFloat(card.dataset.lastHeight || '');
+    const targetWidth  = !Number.isNaN(savedW)
+      ? savedW
+      : Math.min(280, Math.max(220, zoneRect.width * 0.85));
+    const targetHeight = !Number.isNaN(savedH) ? savedH : 190;
+
+    // Make sure the top of the ghost never goes above SAFE_TOP
+    const startTop = Math.max(SAFE_TOP, fromCy - targetHeight / 2);
+
+    // Build a rect for our ghost and use createCardGhost so we KEEP bg/border/shadow.
+    const ghostRect = {
+      left:  fromCx - targetWidth / 2,
+      top:   startTop,
+      width: targetWidth,
+      height: targetHeight
+    };
+
+    const ghost = createCardGhost(card, ghostRect, { scale: 0.7, opacity: 0 });
+    ghost.id = card.id + '-ghost-expand';
+    ghost.classList.add('card-expand-ghost');
+
+    // Override transform/transition for our flight animation
+    ghost.style.transform  = 'translate(0,0) scale(0.7)';
+    ghost.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+
+    document.body.appendChild(ghost);
+    ghosts.push({
+      ghost,
+      from: { cx: fromCx, cy: fromCy },
+      to:   { cx: toCx,   cy: toCy },
+      zoneId
+    });
+  });
+
+  if (!ghosts.length) {
+    done();
+    return;
+  }
+
+  // Kick off the flight on the next frame
+  requestAnimationFrame(() => {
+    ghosts.forEach(({ ghost, from, to }) => {
+      const dx = to.cx - from.cx;
+      const dy = to.cy - from.cy;
+      ghost.style.transform = `translate(${dx}px, ${dy}px) scale(1)`;
+      ghost.style.opacity   = '1';
+    });
+  });
+
+  // Clean up ghosts and then do real layout restore
+  setTimeout(() => {
+    ghosts.forEach(({ ghost }) => {
+      try { ghost.remove(); } catch {}
+    });
+    done();
+  }, 280); // just over the 0.25s transition
+}
+
 // -------------------- zones toggle (collapse to header) --------------------
 function isZonesCollapsed() { return localStorage.getItem('zonesCollapsed') === '1'; }
 
@@ -340,35 +603,108 @@ function applyCollapsedBodyClass() {
 }
 
 function setZonesCollapsed(collapsed) {
-  localStorage.setItem('zonesCollapsed', collapsed ? '1' : '0');
+  const currently = isZonesCollapsed();
+  if (collapsed === currently) return;
 
   if (collapsed) {
-    // Move ALL cards to header icons (transient) regardless of where they were.
-    getCards().forEach(insertCardInHeader);
-    showHeaderDockPersistent();
-    const sb = getSidebar();
-    if (sb) sb.style.display = 'none';
+    // ---- COLLAPSE: immediately expand file area, then animate cards up into header ----
+    localStorage.setItem('zonesCollapsed', '1');
+
+    // File list area expands right away (no delay)
+    applyCollapsedBodyClass();
+    ensureZonesToggle();
+    updateZonesToggleUI();
+
+    document.dispatchEvent(
+      new CustomEvent('zones:collapsed-changed', { detail: { collapsed: true } })
+    );
+
+    try {
+      animateCardsIntoHeaderAndThen(() => {
+        const sb = getSidebar();
+        if (sb) sb.style.display = 'none';
+        updateSidebarVisibility();
+        updateTopZoneLayout();
+        showHeaderDockPersistent();
+      });
+    } catch (e) {
+      console.warn('[zones] collapse animation failed, collapsing instantly', e);
+      // Fallback: old instant behavior
+      getCards().forEach(insertCardInHeader);
+      showHeaderDockPersistent();
+      updateSidebarVisibility();
+      updateTopZoneLayout();
+    }
   } else {
-    // Restore saved layout + rebuild header icons only for HEADER-assigned cards
-    applyUserLayoutOrDefault();
-    loadHeaderOrder();
-    hideHeaderDockPersistent();
+    // ---- EXPAND: immediately shrink file area, then animate cards out of header ----
+    localStorage.setItem('zonesCollapsed', '0');
+
+    // File list shrinks back right away
+    applyCollapsedBodyClass();
+    ensureZonesToggle();
+    updateZonesToggleUI();
+
+    document.dispatchEvent(
+      new CustomEvent('zones:collapsed-changed', { detail: { collapsed: false } })
+    );
+
+    try {
+      animateCardsOutOfHeaderThen(() => {
+        // After ghosts land, put the REAL cards back into their proper zones
+        applyUserLayoutOrDefault();
+        loadHeaderOrder();
+        hideHeaderDockPersistent();
+        updateSidebarVisibility();
+        updateTopZoneLayout();
+      });
+    } catch (e) {
+      console.warn('[zones] expand animation failed, expanding instantly', e);
+      // Fallback: just restore layout
+      applyUserLayoutOrDefault();
+      loadHeaderOrder();
+      hideHeaderDockPersistent();
+      updateSidebarVisibility();
+      updateTopZoneLayout();
+    }
   }
-
-  updateSidebarVisibility();
-  updateTopZoneLayout();
-  ensureZonesToggle();
-  updateZonesToggleUI();
-  applyCollapsedBodyClass();
-
-  document.dispatchEvent(new CustomEvent('zones:collapsed-changed', { detail: { collapsed: isZonesCollapsed() } }));
 }
+
 
 function getHeaderHost() {
   let host = document.querySelector('.header-container .header-left');
   if (!host) host = document.querySelector('.header-container');
   if (!host) host = document.querySelector('header');
   return host || document.body;
+}
+
+function animateZonesCollapseAndThen(done) {
+  const sb = getSidebar();
+  const top = getTopZone();
+  const cards = [];
+
+  if (sb) cards.push(...sb.querySelectorAll('#uploadCard, #folderManagementCard'));
+  if (top) cards.push(...top.querySelectorAll('#uploadCard, #folderManagementCard'));
+
+  if (!cards.length) {
+    done();
+    return;
+  }
+
+  // quick "rise away" animation
+  cards.forEach(card => {
+    card.style.transition = 'transform 0.18s ease-out, opacity 0.18s ease-out';
+    card.style.transform = 'translateY(-10px)';
+    card.style.opacity = '0';
+  });
+
+  setTimeout(() => {
+    cards.forEach(card => {
+      card.style.transition = '';
+      card.style.transform = '';
+      card.style.opacity = '';
+    });
+    done();
+  }, 190);
 }
 
 function ensureZonesToggle() {

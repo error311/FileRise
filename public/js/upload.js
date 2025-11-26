@@ -39,6 +39,70 @@ function saveResumableDraftsAll(all) {
   }
 }
 
+// --- Single file-picker trigger guard (prevents multiple OS dialogs) ---
+let _lastFilePickerOpen = 0;
+
+function triggerFilePickerOnce() {
+  const now = Date.now();
+  // ignore any extra calls within 400ms of the last open
+  if (now - _lastFilePickerOpen < 400) return;
+  _lastFilePickerOpen = now;
+
+  const fi = document.getElementById('file');
+  if (fi) {
+    fi.click();
+  }
+}
+
+// Wire the "Choose files" button so it always uses the guarded trigger
+function wireChooseButton() {
+  const btn = document.getElementById('customChooseBtn');
+  if (!btn || btn.__uploadBound) return;
+  btn.__uploadBound = true;
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // don't let it bubble to the drop-area click handler
+    triggerFilePickerOnce();
+  });
+}
+
+function wireFileInputChange(fileInput) {
+  if (!fileInput || fileInput.__uploadChangeBound) return;
+  fileInput.__uploadChangeBound = true;
+
+  // For file picker, remove directory attributes so only files can be chosen.
+  fileInput.removeAttribute("webkitdirectory");
+  fileInput.removeAttribute("mozdirectory");
+  fileInput.removeAttribute("directory");
+  fileInput.setAttribute("multiple", "");
+
+  fileInput.addEventListener("change", async function () {
+    const files = Array.from(fileInput.files || []);
+    if (!files.length) return;
+  
+    if (useResumable) {
+      // New resumable batch: reset selectedFiles so the count is correct
+      window.selectedFiles = [];
+      _currentResumableIds.clear();   // <--- add this
+  
+      // Ensure the lib/instance exists
+      if (!_resumableReady) await initResumableUpload();
+      if (resumableInstance) {
+        for (const f of files) {
+          resumableInstance.addFile(f);
+        }
+      } else {
+        // If Resumable failed to load, fall back to XHR
+        processFiles(files);
+      }
+    } else {
+      // Non-resumable: normal XHR path, drag-and-drop etc.
+      processFiles(files);
+    }
+  });
+}
+
 function getUserDraftContext() {
   const all = loadResumableDraftsAll();
   const userKey = getCurrentUserKey();
@@ -253,23 +317,35 @@ function getFilesFromDataTransferItems(items) {
 
 function setDropAreaDefault() {
   const dropArea = document.getElementById("uploadDropArea");
-  if (dropArea) {
-    dropArea.innerHTML = `
-      <div id="uploadInstruction" class="upload-instruction">
-       ${t("upload_instruction")}
+  if (!dropArea) return;
+
+  dropArea.innerHTML = `
+    <div id="uploadInstruction" class="upload-instruction">
+     ${t("upload_instruction")}
+    </div>
+    <div id="uploadFileRow" class="upload-file-row">
+      <button id="customChooseBtn" type="button">${t("choose_files")}</button>
+    </div>
+    <div id="fileInfoWrapper" class="file-info-wrapper">
+      <div id="fileInfoContainer" class="file-info-container">
+        <span id="fileInfoDefault"> ${t("no_files_selected_default")}</span>
       </div>
-      <div id="uploadFileRow" class="upload-file-row">
-        <button id="customChooseBtn" type="button">${t("choose_files")}</button>
-      </div>
-      <div id="fileInfoWrapper" class="file-info-wrapper">
-        <div id="fileInfoContainer" class="file-info-container">
-          <span id="fileInfoDefault"> ${t("no_files_selected_default")}</span>
-        </div>
-      </div>
-      <!-- File input for file picker (files only) -->
-      <input type="file" id="file" name="file[]" class="form-control-file" multiple style="opacity:0; position:absolute; width:1px; height:1px;" />
-    `;
-  }
+    </div>
+    <!-- File input for file picker (files only) -->
+    <input
+      type="file"
+      id="file"
+      name="file[]"
+      class="form-control-file"
+      multiple
+      style="opacity:0; position:absolute; width:1px; height:1px;"
+    />
+  `;
+
+  // After rebuilding markup, re-wire controls:
+  const fileInput = dropArea.querySelector('#file');
+  wireFileInputChange(fileInput);
+  wireChooseButton();
 }
 
 function adjustFolderHelpExpansion() {
@@ -608,6 +684,7 @@ const useResumable = true;
 let resumableInstance = null;
 let _pendingPickedFiles = [];   // files picked before library/instance ready
 let _resumableReady = false;
+let _currentResumableIds = new Set();
 
 // Make init async-safe; it resolves when Resumable is constructed
 async function initResumableUpload() {
@@ -644,18 +721,20 @@ async function initResumableUpload() {
     resumableInstance.opts.query.upload_token = window.csrfToken;
   }
 
-  const fileInput = document.getElementById("file");
-  if (fileInput) {
-    
-    fileInput.addEventListener("change", function () {
-      for (let i = 0; i < fileInput.files.length; i++) {
-        resumableInstance.addFile(fileInput.files[i]);
-      }
-    });
-  }
+
 
   resumableInstance.on("fileAdded", function (file) {
-
+    // Build a stable per-file key
+    const id =
+      file.uniqueIdentifier ||
+      ((file.fileName || file.name || '') + ':' + (file.size || 0));
+  
+    // If we've already seen this id in the current batch, skip wiring it again
+    if (_currentResumableIds.has(id)) {
+      return;
+    }
+    _currentResumableIds.add(id);
+  
     // Initialize custom paused flag
     file.paused = false;
     file.uploadIndex = file.uniqueIdentifier;
@@ -663,13 +742,13 @@ async function initResumableUpload() {
       window.selectedFiles = [];
     }
     window.selectedFiles.push(file);
-
+  
     // Track as in-progress draft at 0%
     upsertResumableDraft(file, 0);
     showResumableDraftBanner();
-
+  
     const progressContainer = document.getElementById("uploadProgressContainer");
-
+  
     // Check if a wrapper already exists; if not, create one with a UL inside.
     let listWrapper = progressContainer.querySelector(".upload-progress-wrapper");
     let list;
@@ -685,7 +764,7 @@ async function initResumableUpload() {
     } else {
       list = listWrapper.querySelector("ul.upload-progress-list");
     }
-
+  
     const li = createFileEntry(file);
     li.dataset.uploadIndex = file.uniqueIdentifier;
     list.appendChild(li);
@@ -1119,9 +1198,17 @@ function submitFiles(allFiles) {
    Main initUpload: Sets up file input, drop area, and form submission.
 ----------------------------------------------------- */
 function initUpload() {
-  const fileInput = document.getElementById("file");
-  const dropArea = document.getElementById("uploadDropArea");
+  window.__FR_FLAGS = window.__FR_FLAGS || { wired: {} };
+  window.__FR_FLAGS.wired = window.__FR_FLAGS.wired || {};
+
   const uploadForm = document.getElementById("uploadFileForm");
+  const dropArea   = document.getElementById("uploadDropArea");
+
+  // Always (re)build the inner markup and wire the Choose button
+  setDropAreaDefault();
+  wireChooseButton();
+
+  const fileInput = document.getElementById("file");
 
   // For file picker, remove directory attributes so only files can be chosen.
   if (fileInput) {
@@ -1131,67 +1218,50 @@ function initUpload() {
     fileInput.setAttribute("multiple", "");
   }
 
-  setDropAreaDefault();
-
   // Drag–and–drop events (for folder uploads) use original processing.
-  if (dropArea) {
+  if (dropArea && !dropArea.__uploadBound) {
+    dropArea.__uploadBound = true;
     dropArea.classList.add("upload-drop-area");
+
     dropArea.addEventListener("dragover", function (e) {
       e.preventDefault();
       dropArea.style.backgroundColor = document.body.classList.contains("dark-mode") ? "#333" : "#f8f8f8";
     });
+
     dropArea.addEventListener("dragleave", function (e) {
       e.preventDefault();
       dropArea.style.backgroundColor = "";
     });
+
     dropArea.addEventListener("drop", function (e) {
       e.preventDefault();
       dropArea.style.backgroundColor = "";
       const dt = e.dataTransfer || window.__pendingDropData || null;
-       window.__pendingDropData = null;
-      if (dt.items && dt.items.length > 0) {
+      window.__pendingDropData = null;
+      if (dt && dt.items && dt.items.length > 0) {
         getFilesFromDataTransferItems(dt.items).then(files => {
           if (files.length > 0) {
             processFiles(files);
           }
         });
-      } else if (dt.files && dt.files.length > 0) {
+      } else if (dt && dt.files && dt.files.length > 0) {
         processFiles(dt.files);
       }
     });
-    // Clicking drop area triggers file input.
-    dropArea.addEventListener("click", function () {
-      if (fileInput) fileInput.click();
-    });
-  }
 
-  if (fileInput) {
-    fileInput.addEventListener("change", async function () {
-      const files = Array.from(fileInput.files || []);
-      if (!files.length) return;
-
-      if (useResumable) {
-        // New resumable batch: reset selectedFiles so the count is correct
-        window.selectedFiles = [];
-
-        // Ensure the lib/instance exists
-        if (!_resumableReady) await initResumableUpload();
-        if (resumableInstance) {
-          for (const f of files) {
-            resumableInstance.addFile(f);
-          }
-        } else {
-          // If Resumable failed to load, fall back to XHR
-          processFiles(files);
-        }
-      } else {
-        // Non-resumable: normal XHR path, drag-and-drop etc.
-        processFiles(files);
+    // Only trigger file picker when clicking the *bare* drop area, not controls inside it
+    dropArea.addEventListener("click", function (e) {
+      // If the click originated from the "Choose files" button or the file input itself,
+      // let their handlers deal with it.
+      if (e.target.closest('#customChooseBtn') || e.target.closest('#file')) {
+        return;
       }
+      triggerFilePickerOnce();
     });
   }
 
-  if (uploadForm) {
+  if (uploadForm && !uploadForm.__uploadSubmitBound) {
+    uploadForm.__uploadSubmitBound = true;
     uploadForm.addEventListener("submit", async function (e) {
       e.preventDefault();
 
@@ -1205,7 +1275,6 @@ function initUpload() {
         return;
       }
 
-      // If we have any files queued in Resumable, treat this as a resumable upload.
       const hasResumableFiles =
         useResumable &&
         resumableInstance &&
@@ -1215,7 +1284,6 @@ function initUpload() {
       if (hasResumableFiles) {
         if (!_resumableReady) await initResumableUpload();
         if (resumableInstance) {
-          // Keep folder/token fresh
           resumableInstance.opts.query.folder = window.currentFolder || "root";
           resumableInstance.opts.query.upload_token = window.csrfToken;
           resumableInstance.opts.headers['X-CSRF-Token'] = window.csrfToken;
@@ -1223,11 +1291,9 @@ function initUpload() {
           resumableInstance.upload();
           showToast("Resumable upload started...");
         } else {
-          // Hard fallback – should basically never happen
           submitFiles(files);
         }
       } else {
-        // No resumable queue → drag-and-drop / paste / simple input → XHR path
         submitFiles(files);
       }
     });
