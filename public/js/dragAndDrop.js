@@ -133,7 +133,19 @@ function insertCardInHeader(card) {
   if (!hidden) {
     hidden = document.createElement('div');
     hidden.id = 'hiddenCardsContainer';
-    hidden.style.display = 'none';
+
+    // Park cards off–screen but keep them rendered so modals/layout still work
+    Object.assign(hidden.style, {
+      position: 'absolute',
+      left: '-9999px',
+      top: '0',
+      width: '0',
+      height: '0',
+      overflow: 'visible',
+      pointerEvents: 'none'
+      // **NO** display:none here
+    });
+
     document.body.appendChild(hidden);
   }
   if (card.parentNode?.id !== 'hiddenCardsContainer') hidden.appendChild(card);
@@ -212,7 +224,12 @@ function insertCardInHeader(card) {
   iconButton.addEventListener('click', (e) => {
     e.stopPropagation();
     isLocked = !isLocked;
-    if (isLocked) showModal(); else hideModal();
+    iconButton.classList.toggle('is-locked', isLocked);
+    if (isLocked) {
+      showModal();
+    } else {
+      hideModal();
+    }
   });
 
   host.appendChild(iconButton);
@@ -941,7 +958,8 @@ function makeCardDraggable(card) {
         const sb = getSidebar();
         if (sb) {
           sb.classList.add('active', 'highlight');
-          if (!isZonesCollapsed()) sb.style.display = 'block';
+          // Always show sidebar as a drop target while dragging
+          sb.style.display = 'block';
           ensureSidebarPlaceholder(); // make empty sidebar easy to drop into
         }
 

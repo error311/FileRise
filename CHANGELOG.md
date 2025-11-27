@@ -1,5 +1,48 @@
 # Changelog
 
+## Changes 11/27/2025 (v2.1.0)
+
+🦃🍂 Happy Thanksgiving. 🥧🍁🍽️
+
+release(v2.1.0): add header zoom controls, preview tags & modal/dock polish
+
+- **feat(ux): header zoom controls with persisted app zoom**
+  - Add `zoom.js` with percent-based zoom API (`window.fileriseZoom`) and `--app-zoom` CSS variable.
+  - Wrap the main app in `#appZoomShell` and scale via `transform: scale(var(--app-zoom))` so the whole UI zooms uniformly.
+  - Add header zoom UI (+ / − / 100% reset) and wire it via `data-zoom` buttons.
+  - Persist zoom level in `localStorage` and restore on load.
+
+- **feat(prefs): user toggle to hide header zoom controls**
+  - Add `hide_header_zoom_controls` i18n key.
+  - Extend the Settings → Display fieldset with “Hide header zoom controls”.
+  - Store preference in `localStorage('hideZoomControls')` and respect it from `appCore.js` when initializing header zoom UI.
+
+- **feat(preview): show file tags next to preview title**
+  - Add `.title-tags` container in the media viewer header.
+  - When opening a file, look up its `tags` from `fileData` and render them as pill badges beside the filename in the modal top bar.
+
+- **fix(modals): folder modals always centered above header cards**
+  - Introduce `detachFolderModalsToBody()` in `folderManager.js` and call it on init + before opening create/rename/move/delete modals.
+  - Move those modals under `document.body` with a stable high `z-index`, so they’re not clipped/hidden when the cards live in the header dock.
+
+- **fix(dnd): header dock & hidden cards container**
+  - Change `#hiddenCardsContainer` from `display:none` to an off-screen absolutely positioned container so card internals (modals/layout) still work while represented as header icons.
+  - Ensure sidebar is always visible as a drop target while dragging (even when panels are collapsed), plus improved highlight & placeholder behavior.
+
+- **feat(ux): header dock hover/lock polish**
+  - Make header icon buttons share the same hover style as other header buttons.
+  - Add `.is-locked` state so a pinned header icon stays visually “pressed” while its card modal is locked open.
+
+- **feat(ux): header drop zone and zoom bar layout**
+  - Rework `.header-right` to neatly align zoom controls, header dock, and user buttons.
+  - Add a more flexible `.header-drop-zone` with smooth width/padding transitions and a centered `"Drop Zone"` label when active and empty.
+  - Adjust responsive spacing around zoom controls on smaller screens.
+
+- **tweak(prefs-modal): improve settings modal sizing**
+  - Increase auth/settings modal `max-height` from 500px to 600px to fit the extra display options without excessive scrolling.
+
+---
+
 ## Changes 11/26/2025 (v2.0.4)
 
 release(v2.0.4): harden sessions and align Pro paths with USERS_DIR

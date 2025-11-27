@@ -228,10 +228,7 @@ body{letter-spacing: 0.2px;
     padding: 9px;}
 #userDropdownToggle{border-radius: 4px !important;
     padding: 6px 10px !important;}
-#headerDropArea.header-drop-zone{display: flex;
-    justify-content: flex-end;   
-    align-items: center;
-    min-height: 40px;}
+
 .header-buttons button:hover{background-color: rgba(122,179,255,.14);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     color: #fff;}
@@ -254,6 +251,49 @@ body{letter-spacing: 0.2px;
       justify-content: center;}
 }
 .header-buttons button i{font-size: 24px;}
+
+.header-zoom-controls .zoom-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  border-radius: 50%;
+  padding: 4px; 
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.header-zoom-controls .zoom-btn:hover {
+  background-color: rgba(122,179,255,.14);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: #fff;
+}
+
+.header-zoom-controls .zoom-btn .material-icons {
+  font-size: 16px;
+}
+.header-buttons button,
+#headerDropArea .header-card-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.header-buttons button:not(#userDropdownToggle),
+#headerDropArea .header-card-icon {
+  border-radius: 50%;
+  padding: 9px;
+}
+
+.header-buttons button:hover,
+#headerDropArea .header-card-icon:hover,
+#headerDropArea .header-card-icon.is-locked {
+  background-color: rgba(122,179,255,.14) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: #fff;
+}
+
 .dark-mode-toggle{background-color: #424242;
     border: 1px solid #fff;
     color: #fff;
@@ -1384,6 +1424,7 @@ label{font-size: 0.9rem;}
 }
 #sidebarDropArea.highlight,
   #uploadFolderRow.highlight{border: 2px dashed #1565C0;
+    border-radius: var(--menu-radius);
     background-color: #eef;}
 .drag-header{cursor: grab;
     user-select: none;
@@ -1488,12 +1529,7 @@ body:not(.dark-mode){--download-spinner-color: #000;}
   .collapse-btn:hover{background: rgba(0, 0, 0, 0.1);}
 .toggle-modal-btn:focus,
   .collapse-btn:focus{outline: none;}
-.header-drop-zone{width: 66px;
-    height: 36px;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    display: inline-flex;}
+
 .header-drop-zone.drag-active{border: 2px dashed #1565C0;
     background-color: #eef;
     background-color: transparent;
@@ -1502,10 +1538,23 @@ body:not(.dark-mode){--download-spinner-color: #000;}
 .dark-mode .header-drop-zone.drag-active{background-color: #333; 
     border: 2px dashed #555; 
     color: #fff;}
-.header-drop-zone.drag-active:empty::before{content: "Drop Zone";
-    font-size: 10px;
-    padding-right: 6px;
-    color: #aaa;}
+    .header-drop-zone {
+      position: relative; /* so ::before can absolutely position inside */
+    }
+    
+    .header-drop-zone.drag-active:empty::before {
+      content: "Drop Zone";
+      position: absolute;
+      inset: 0; /* top/right/bottom/left: 0 */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    
+      font-size: 10px;
+      padding-right: 2px;
+      color: #aaa;
+      pointer-events: none; /* optional, so it doesn't block drops */
+    }
 #fileList tbody tr.clickable-row{-webkit-user-select: none; 
     -moz-user-select: none;    
     -ms-user-select: none;     
@@ -2093,3 +2142,117 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
 #fileList table.filr-table tbody tr.folder-row>td{padding-top:0!important;padding-bottom:0!important}
 #fileList table.filr-table tbody tr.folder-row>td.folder-icon-cell{overflow:visible}
 #fileList tr.folder-row .folder-row-inner,#fileList tr.folder-row .folder-row-name{cursor:inherit}
+
+:root {
+  --app-zoom: 1; /* 1.0 = 100% */
+}
+
+#appZoomShell {
+  transform-origin: top left;
+  transform: scale(var(--app-zoom));
+  /* compensate so scaled content still fills the viewport */
+  width: calc(100% / var(--app-zoom));
+  height: calc(100% / var(--app-zoom));
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+
+.header-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px; 
+  margin-right: 10px;
+  display: none;
+}
+
+body:not(.dark-mode) .header-zoom-controls .zoom-vertical,
+body:not(.dark-mode) .header-zoom-controls .zoom-meta,
+body:not(.dark-mode) .header-zoom-controls .btn-icon.zoom-btn,
+body:not(.dark-mode) .header-zoom-controls .btn-icon.zoom-btn .material-icons{
+  color: #fff;
+}
+
+
+.header-zoom-controls .zoom-vertical,
+.header-zoom-controls .zoom-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.header-zoom-controls .btn-icon.zoom-btn {
+  width: 24px; 
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Smaller material icons */
+.header-zoom-controls .btn-icon.zoom-btn .material-icons {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.zoom-display {
+  min-width: 3ch;
+  text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .header-right {
+    gap: 8px;
+  }
+  .header-zoom-controls {
+    border-right: none;
+    padding-right: 4px;
+  }
+}
+
+.header-drop-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px; 
+  padding: 0;
+  margin-right: 0px; 
+  min-width: 0;
+  min-height: 50px;
+  flex: 0 0 auto;
+  transition:
+    min-width 0.15s ease,
+    padding 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.header-card-icon {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-card-icon .material-icons {
+  font-size: 22px;
+}
+
+.header-drop-zone.drag-active {
+  padding: 0 12px;
+  min-width: 100px;
+  border-radius: 16px;
+  background-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+}

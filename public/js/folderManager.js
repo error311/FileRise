@@ -10,6 +10,29 @@ import { fetchWithCsrf } from './auth.js?v={{APP_QVER}}';
 import { loadCsrfToken } from './appCore.js?v={{APP_QVER}}';
 
 
+function detachFolderModalsToBody() {
+  const ids = [
+    'createFolderModal',
+    'deleteFolderModal',
+    'moveFolderModal',
+    'renameFolderModal',
+  ];
+
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (el.parentNode !== document.body) {
+      document.body.appendChild(el);
+    }
+
+    if (!el.style.zIndex) {
+      el.style.zIndex = '13000';
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', detachFolderModalsToBody);
+
 const PAGE_LIMIT = 100;
 
 /* ----------------------
@@ -1711,6 +1734,7 @@ function bindFolderManagerContextMenu() {
    Rename / Delete / Create hooks
 ----------------------*/
 export function openRenameFolderModal() {
+  detachFolderModalsToBody();
   const selectedFolder = window.currentFolder || "root";
   if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to rename."); return; }
   const parts = selectedFolder.split("/");
@@ -1781,6 +1805,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
 });
 
 export function openDeleteFolderModal() {
+  detachFolderModalsToBody();
   const selectedFolder = window.currentFolder || "root";
   if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to delete."); return; }
   const msgEl = document.getElementById("deleteFolderMessage");
@@ -1823,6 +1848,7 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
 
 const createBtn = document.getElementById("createFolderBtn");
 if (createBtn) createBtn.addEventListener("click", function () {
+  detachFolderModalsToBody();
   const modal = document.getElementById("createFolderModal");
   const input = document.getElementById("newFolderName");
   if (modal) modal.style.display = "block";
@@ -1885,6 +1911,7 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
    Move (modal) + Color carry + State migration as well
 ----------------------*/
 export function openMoveFolderUI(sourceFolder) {
+  detachFolderModalsToBody();
   const modal = document.getElementById('moveFolderModal');
   const targetSel = document.getElementById('moveFolderTarget');
   if (sourceFolder && sourceFolder !== 'root') window.currentFolder = sourceFolder;

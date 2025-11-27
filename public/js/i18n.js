@@ -337,7 +337,8 @@ const translations = {
     "size": "Size",
     "modified": "Modified",
     "created": "Created",
-    "owner": "Owner"
+    "owner": "Owner",
+    "hide_header_zoom_controls": "Hide header zoom controls"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

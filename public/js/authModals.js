@@ -195,7 +195,7 @@ export async function openUserPanel() {
     color:      ${isDark ? '#e0e0e0' : '#000'};
     padding: 20px;
     max-width: 600px; width:90%;
-    overflow-y: auto; max-height: 500px;
+    overflow-y: auto; max-height: 600px;
     border: ${isDark ? '1px solid #444' : '1px solid #ccc'};
     box-sizing: border-box;
     scrollbar-width: none;
@@ -351,66 +351,108 @@ export async function openUserPanel() {
     langFs.appendChild(langSel);
     content.appendChild(langFs);
 
-    // --- Display fieldset: strip + inline folder rows ---
-    const dispFs = document.createElement('fieldset');
-    dispFs.style.marginBottom = '15px';
-
-    const dispLegend = document.createElement('legend');
-    dispLegend.textContent = t('display');
-    dispFs.appendChild(dispLegend);
-
-    // 1) Show folder strip above list
-    const stripLabel = document.createElement('label');
-    stripLabel.style.cursor = 'pointer';
-    stripLabel.style.display = 'block';
-    stripLabel.style.marginBottom = '4px';
-
-    const stripCb = document.createElement('input');
-    stripCb.type = 'checkbox';
-    stripCb.id = 'showFoldersInList';
-    stripCb.style.verticalAlign = 'middle';
-
-    {
-      const storedStrip = localStorage.getItem('showFoldersInList');
-      // default: unchecked
-      stripCb.checked = storedStrip === null ? false : storedStrip === 'true';
-    }
-
-    stripLabel.appendChild(stripCb);
-    stripLabel.append(` ${t('show_folders_above_files')}`);
-    dispFs.appendChild(stripLabel);
-
-    // 2) Show inline folder rows above files in table view
-    const inlineLabel = document.createElement('label');
-    inlineLabel.style.cursor = 'pointer';
-    inlineLabel.style.display = 'block';
-
-    const inlineCb = document.createElement('input');
-    inlineCb.type = 'checkbox';
-    inlineCb.id = 'showInlineFolders';
-    inlineCb.style.verticalAlign = 'middle';
-
-    {
-      const storedInline = localStorage.getItem('showInlineFolders');
-      inlineCb.checked = storedInline === null ? true : storedInline === 'true';
-    }
-
-    inlineLabel.appendChild(inlineCb);
-    // you’ll want a string like this in i18n:
-    // "show_inline_folders": "Show folders inline (above files)"
-    inlineLabel.append(` ${t('show_inline_folders') || 'Show folders inline (above files)'}`);
-    dispFs.appendChild(inlineLabel);
-
-    content.appendChild(dispFs);
-
-    // Handlers: toggle + refresh list
-    stripCb.addEventListener('change', () => {
-      window.showFoldersInList = stripCb.checked;
-      localStorage.setItem('showFoldersInList', stripCb.checked);
-      if (typeof window.loadFileList === 'function') {
-        window.loadFileList(window.currentFolder || 'root');
-      }
-    });
+        // --- Display fieldset: strip + inline folder rows ---
+        const dispFs = document.createElement('fieldset');
+        dispFs.style.marginBottom = '15px';
+    
+        const dispLegend = document.createElement('legend');
+        dispLegend.textContent = t('display');
+        dispFs.appendChild(dispLegend);
+    
+        // 1) Show folder strip above list
+        const stripLabel = document.createElement('label');
+        stripLabel.style.cursor = 'pointer';
+        stripLabel.style.display = 'block';
+        stripLabel.style.marginBottom = '4px';
+    
+        const stripCb = document.createElement('input');
+        stripCb.type = 'checkbox';
+        stripCb.id = 'showFoldersInList';
+        stripCb.style.verticalAlign = 'middle';
+    
+        {
+          const storedStrip = localStorage.getItem('showFoldersInList');
+          stripCb.checked = storedStrip === null ? false : storedStrip === 'true';
+        }
+    
+        stripLabel.appendChild(stripCb);
+        stripLabel.append(` ${t('show_folders_above_files')}`);
+        dispFs.appendChild(stripLabel);
+    
+        // 2) Show inline folder rows above files in table view
+        const inlineLabel = document.createElement('label');
+        inlineLabel.style.cursor = 'pointer';
+        inlineLabel.style.display = 'block';
+    
+        const inlineCb = document.createElement('input');
+        inlineCb.type = 'checkbox';
+        inlineCb.id = 'showInlineFolders';
+        inlineCb.style.verticalAlign = 'middle';
+    
+        {
+          const storedInline = localStorage.getItem('showInlineFolders');
+          inlineCb.checked = storedInline === null ? true : storedInline === 'true';
+        }
+    
+        inlineLabel.appendChild(inlineCb);
+        inlineLabel.append(` ${t('show_inline_folders') || 'Show folders inline (above files)'}`);
+        dispFs.appendChild(inlineLabel);
+    
+        // 3) Hide header zoom controls
+        const zoomLabel = document.createElement('label');
+        zoomLabel.style.cursor = 'pointer';
+        zoomLabel.style.display = 'block';
+        zoomLabel.style.marginTop = '4px';
+    
+        const zoomCb = document.createElement('input');
+        zoomCb.type = 'checkbox';
+        zoomCb.id = 'hideHeaderZoomControls';
+        zoomCb.style.verticalAlign = 'middle';
+    
+        {
+          const storedZoom = localStorage.getItem('hideZoomControls');
+          zoomCb.checked = storedZoom === 'true';
+        }
+    
+        zoomLabel.appendChild(zoomCb);
+        zoomLabel.append(` ${t('hide_header_zoom_controls') || 'Hide zoom controls in header'}`);
+        dispFs.appendChild(zoomLabel);
+    
+        content.appendChild(dispFs);
+    
+        // Handlers: toggle + refresh list
+        stripCb.addEventListener('change', () => {
+          window.showFoldersInList = stripCb.checked;
+          localStorage.setItem('showFoldersInList', stripCb.checked);
+          if (typeof window.loadFileList === 'function') {
+            window.loadFileList(window.currentFolder || 'root');
+          }
+        });
+    
+        inlineCb.addEventListener('change', () => {
+          window.showInlineFolders = inlineCb.checked;
+          localStorage.setItem('showInlineFolders', inlineCb.checked);
+          if (typeof window.loadFileList === 'function') {
+            window.loadFileList(window.currentFolder || 'root');
+          }
+        });
+    
+        // NEW: zoom hide/show handler
+        zoomCb.addEventListener('change', () => {
+          const hideZoom = zoomCb.checked;
+          localStorage.setItem('hideZoomControls', hideZoom ? 'true' : 'false');
+    
+          const zoomWrap = document.querySelector('.header-zoom-controls');
+          if (!zoomWrap) return;
+    
+          if (hideZoom) {
+            zoomWrap.style.display = 'none';
+            zoomWrap.setAttribute('aria-hidden', 'true');
+          } else {
+            zoomWrap.style.display = 'flex';
+            zoomWrap.removeAttribute('aria-hidden');
+          }
+        });
 
     inlineCb.addEventListener('change', () => {
       window.showInlineFolders = inlineCb.checked;

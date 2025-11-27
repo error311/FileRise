@@ -239,7 +239,26 @@ function ensureMediaModal() {
     </div>`;
 
   document.body.appendChild(overlay);
+  // Ensure a container for tags next to the title (created once)
+  (function ensureTitleTagsContainer() {
+    const titleRow = overlay.querySelector('.media-title');
+    if (!titleRow) return;
 
+    let tagsEl = overlay.querySelector('.title-tags');
+    if (!tagsEl) {
+      tagsEl = document.createElement('div');
+      tagsEl.className = 'title-tags';
+      Object.assign(tagsEl.style, {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '4px',
+        marginLeft: '6px',
+        maxHeight: '32px',
+        overflow: 'hidden',
+      });
+      titleRow.appendChild(tagsEl);
+    }
+  })();
   // theme the close “×” for visibility + hover rules that match your site:
   const closeBtn = overlay.querySelector("#closeFileModal");
   function paintCloseBase() {
@@ -272,16 +291,45 @@ function ensureMediaModal() {
 function setTitle(overlay, name) {
   const textEl = overlay.querySelector('.title-text');
   const iconEl = overlay.querySelector('.title-icon');
+  const tagsEl = overlay.querySelector('.title-tags');
+
+  // File name + tooltip
   if (textEl) {
     textEl.textContent = name || '';
     textEl.setAttribute('title', name || '');
   }
+
+  // File type icon
   if (iconEl) {
     iconEl.textContent = getIconForFile(name);
-    // keep the icon legible in both themes
     const dark = document.documentElement.classList.contains('dark-mode');
     iconEl.style.color = dark ? '#f5f5f5' : '#111111';
     iconEl.style.opacity = dark ? '0.96' : '0.9';
+  }
+
+  // Tag badges next to the title
+  if (tagsEl) {
+    tagsEl.innerHTML = '';
+
+    let fileObj = null;
+    if (Array.isArray(fileData)) {
+      fileObj = fileData.find(f => f.name === name);
+    }
+
+    if (fileObj && Array.isArray(fileObj.tags) && fileObj.tags.length) {
+      fileObj.tags.forEach(tag => {
+        const badge = document.createElement('span');
+        badge.textContent = tag.name;
+        badge.style.backgroundColor = tag.color || '#444';
+        badge.style.color = '#fff';
+        badge.style.padding = '2px 6px';
+        badge.style.borderRadius = '999px';
+        badge.style.fontSize = '0.75rem';
+        badge.style.lineHeight = '1.2';
+        badge.style.whiteSpace = 'nowrap';
+        tagsEl.appendChild(badge);
+      });
+    }
   }
 }
 

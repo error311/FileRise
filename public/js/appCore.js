@@ -93,6 +93,24 @@ export function initializeApp() {
   // default: false (unchecked)
   window.showFoldersInList = stored === 'true';
 
+  const zoomWrap = document.querySelector('.header-zoom-controls');
+  if (zoomWrap) {
+    const hideZoom = localStorage.getItem('hideZoomControls') === 'true';
+    if (hideZoom) {
+      zoomWrap.style.display = 'none';
+      zoomWrap.setAttribute('aria-hidden', 'true');
+    } else {
+      zoomWrap.style.display = 'flex';
+      zoomWrap.removeAttribute('aria-hidden');
+    }
+
+    // Always load zoom.js once app is running
+    const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
+    import(`/js/zoom.js?v=${encodeURIComponent(QVER)}`).catch(err => {
+      console.warn('[zoom] failed to load zoom.js', err);
+    });
+  }
+
   // Load public site config early (safe subset)
   loadAdminConfigFunc();
 
@@ -175,6 +193,25 @@ export function initializeApp() {
     });
   }
 }
+
+// ---- Zoom controls: load only for logged-in app ----
+(function loadZoomControls() {
+  const zoomWrap = document.querySelector('.header-zoom-controls');
+  if (!zoomWrap) return;
+
+  // show container (keep CSS default = hidden)
+  zoomWrap.style.display = 'flex';
+  zoomWrap.style.alignItems = 'center';
+
+  try {
+    const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
+    import(`/js/zoom.js?v=${encodeURIComponent(QVER)}`)
+      .catch(err => console.warn('[zoom] failed to load:', err));
+  } catch (e) {
+    console.warn('[zoom] load error:', e);
+  }
+})();
+
 
 /* =========================
    LOGOUT (shared)

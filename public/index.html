@@ -61,7 +61,27 @@
       <h1>FileRise</h1>
     </div>
     <div class="header-right">
-      <div class="header-buttons-wrapper" style="display: flex; align-items: center; gap: 10px;">
+      <!-- Zoom controls FIRST on the right -->
+      <div class="header-zoom-controls">
+        <!-- Left stack: + / - -->
+        <div class="zoom-vertical">
+          <button class="btn-icon zoom-btn" data-zoom="in" title="Zoom in">
+            <span class="material-icons">add</span>
+          </button>
+          <button class="btn-icon zoom-btn" data-zoom="out" title="Zoom out">
+            <span class="material-icons">remove</span>
+          </button>
+        </div>
+    
+        <!-- Right stack: 100% / reset -->
+        <div class="zoom-meta">
+          <span id="zoomDisplay" class="zoom-display">100%</span>
+          <button class="btn-icon zoom-btn" data-zoom="reset" title="Reset zoom">
+            <span class="material-icons">refresh</span>
+          </button>
+        </div>
+      </div>
+      <div class="header-buttons-wrapper" style="display: flex; align-items: center;">
         
         <div id="headerDropArea" class="header-drop-zone"></div>
         <div class="header-buttons">
@@ -112,6 +132,7 @@
   <!-- Custom Toast Container -->
   <div id="customToast"></div>
   <div id="hiddenCardsContainer" style="display:none;"></div>
+  <div id="appZoomShell">
   <main id="main" hidden>
   <div class="row mt-4" id="loginForm">
     <div class="col-12">
@@ -401,7 +422,7 @@
       </div> <!-- end container-fluid -->
     </div> <!-- end mainColumn -->
   </div> <!-- end main-wrapper -->
-
+</div>
   <!-- Download Progress Modal -->
   <div id="downloadProgressModal" class="modal" style="display: none;">
     <div class="modal-content" style="text-align: center; padding: 20px;">
