@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 // src/controllers/AdminController.php
 
 require_once __DIR__ . '/../../config/config.php';
@@ -241,7 +242,7 @@ public function setLicense(): void
         // Store license + updatedAt in JSON file
         if (!defined('PRO_LICENSE_FILE')) {
             // Fallback if constant not defined for some reason
-            define('PRO_LICENSE_FILE', PROJECT_ROOT . '/users/proLicense.json');
+            define('PRO_LICENSE_FILE', rtrim(USERS_DIR, "/\\") . '/proLicense.json');
         }
 
         $payload = [
@@ -566,10 +567,11 @@ public function installProBundle(): void
 
         $projectRoot = rtrim(PROJECT_ROOT, DIRECTORY_SEPARATOR);
 
-        // Where Pro bundle code lives (defaults to PROJECT_ROOT . '/users/pro')
+        // Where Pro bundle code lives (defaults to USERS_DIR . '/pro')
+        $projectRoot = rtrim(PROJECT_ROOT, DIRECTORY_SEPARATOR);
         $bundleRoot = defined('FR_PRO_BUNDLE_DIR')
             ? rtrim(FR_PRO_BUNDLE_DIR, DIRECTORY_SEPARATOR)
-            : ($projectRoot . DIRECTORY_SEPARATOR . 'users' . DIRECTORY_SEPARATOR . 'pro');
+            : (rtrim(USERS_DIR, "/\\") . DIRECTORY_SEPARATOR . 'pro');
 
         // Put README-Pro.txt / LICENSE-Pro.txt inside the bundle dir as well
         $proDocsDir = $bundleRoot;

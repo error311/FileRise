@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 // config.php
 
 // Define constants
@@ -101,10 +102,15 @@ $secure = ($envSecure !== false)
     ? filter_var($envSecure, FILTER_VALIDATE_BOOLEAN)
     : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
 
-// Choose session lifetime based on "remember me" cookie
+
+// PHP session lifetime (independent of "remember me")
+// Keep this reasonably short; "remember me" uses its own token.
 $defaultSession  = 7200;              // 2 hours
+$sessionLifetime = $defaultSession;
+
+// "Remember me" window (how long the persistent token itself is valid)
+// This is used in persistent_tokens.json, *not* for PHP session lifetime.
 $persistentDays  = 30 * 24 * 60 * 60; // 30 days
-$sessionLifetime = isset($_COOKIE['remember_me_token']) ? $persistentDays : $defaultSession;
 
 /**
  * Start session idempotently:
@@ -155,6 +161,11 @@ if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) 
     if (!empty($tokens[$token])) {
         $data = $tokens[$token];
         if ($data['expiry'] >= time()) {
+            // NEW: mitigate session fixation
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_regenerate_id(true);
+            }
+
             $_SESSION["authenticated"] = true;
             $_SESSION["username"]      = $data["username"];
             $_SESSION["folderOnly"]    = loadUserPermissions($data["username"]);
@@ -162,7 +173,11 @@ if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) 
         } else {
             // expired — clean up
             unset($tokens[$token]);
-            file_put_contents($tokFile, encryptData(json_encode($tokens, JSON_PRETTY_PRINT), $encryptionKey), LOCK_EX);
+            file_put_contents(
+                $tokFile,
+                encryptData(json_encode($tokens, JSON_PRETTY_PRINT), $encryptionKey),
+                LOCK_EX
+            );
             setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
         }
     }
@@ -253,14 +268,14 @@ if (!defined('FR_PRO_LICENSE')) {
 
 // JSON license file used by AdminController::setLicense()
 if (!defined('PRO_LICENSE_FILE')) {
-    define('PRO_LICENSE_FILE', PROJECT_ROOT . '/users/proLicense.json');
+    define('PRO_LICENSE_FILE', rtrim(USERS_DIR, "/\\") . '/proLicense.json');
 }
 
 // Optional plain-text license file (used as fallback in bootstrap)
 if (!defined('FR_PRO_LICENSE_FILE')) {
     $lf = getenv('FR_PRO_LICENSE_FILE');
     if ($lf === false || $lf === '') {
-        $lf = PROJECT_ROOT . '/users/proLicense.txt';
+        $lf = rtrim(USERS_DIR, "/\\") . '/proLicense.txt';
     }
     define('FR_PRO_LICENSE_FILE', $lf);
 }
@@ -268,7 +283,7 @@ if (!defined('FR_PRO_LICENSE_FILE')) {
 // Where Pro code lives by default → inside users volume
 $proDir = getenv('FR_PRO_BUNDLE_DIR');
 if ($proDir === false || $proDir === '') {
-    $proDir = PROJECT_ROOT . '/users/pro';
+    $proDir = rtrim(USERS_DIR, "/\\") . '/pro';
 }
 $proDir = rtrim($proDir, "/\\");
 if (!defined('FR_PRO_BUNDLE_DIR')) {

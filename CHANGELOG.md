@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 11/26/2025 (v2.0.4)
+
+release(v2.0.4): harden sessions and align Pro paths with USERS_DIR
+
+- Enable strict_types in config.php and AdminController
+- Decouple PHP session lifetime from "remember me" window
+- Regenerate session ID on persistent token auto-login
+- Point Pro license / bundle paths at USERS_DIR instead of hardcoded /users
+- Tweak folder management card drag offset for better alignment
+
+---
+
 ## Changes 11/26/2025 (v2.0.3)
 
 release(v2.0.3): polish uploads, header dock, and panel fly animations

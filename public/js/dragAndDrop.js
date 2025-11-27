@@ -524,7 +524,7 @@ function animateCardsOutOfHeaderThen(done) {
       if (card.id === 'uploadCard') {
         toCy -= 48; // a bit higher
       } else if (card.id === 'folderManagementCard') {
-        toCy += 60; // a bit lower
+        toCy += 48; // a bit lower
       }
     }
 
