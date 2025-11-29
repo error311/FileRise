@@ -19,9 +19,10 @@ Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI �
 - 🌳 **Scales to huge trees** – Tested with **100k+ folders** in the sidebar tree.
 - 🧩 **ONLYOFFICE support (optional)** – Edit DOCX/XLSX/PPTX using your own Document Server.
 - 🌍 **WebDAV** – Mount FileRise as a drive from macOS, Windows, Linux, or Cyberduck/WinSCP.
+- 📊 **Storage / disk usage summary** – CLI scanner with snapshots, total usage, and per-volume breakdowns in the admin panel.
 - 🎨 **Polished UI** – Dark/light mode, responsive layout, in-browser previews & code editor.
 - 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.).
-- 👥 **User groups & client portals (Pro)** – Group-based ACLs and brandable client upload portals.
+- 👥 **Pro: user groups, client portals & storage explorer** – Group-based ACLs, brandable client upload portals, and an ncdu-style explorer to drill into folders, largest files, and clean up storage inline.
 
 Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 

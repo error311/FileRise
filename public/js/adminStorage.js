@@ -868,44 +868,66 @@ function setBreadcrumb(folderKey) {
   const el = document.getElementById('adminStorageBreadcrumb');
   if (!el) return;
 
+  // Clear existing content safely
+  while (el.firstChild) {
+    el.removeChild(el.firstChild);
+  }
+
   let parts = [];
-  if (!folderKey || folderKey === 'root') {
-    parts = [];
-  } else {
+  if (folderKey && folderKey !== 'root') {
     const clean = folderKey.replace(/^\/+|\/+$/g, '');
     parts = clean ? clean.split('/') : [];
   }
 
-  const crumbs = [];
+  // Helper: add a simple separator " / "
+  const appendSeparator = () => {
+    const sep = document.createElement('span');
+    sep.className = 'mx-1';
+    sep.textContent = '/';
+    el.appendChild(sep);
+  };
 
-  // root crumb
-  crumbs.push(`
-    <button type="button" class="btn btn-link btn-sm p-0 admin-storage-bc" data-folder="root">
-      <span class="material-icons" style="font-size:16px;vertical-align:middle;color:currentColor;">home</span>
-      <span style="vertical-align:middle;">${tf('storage_root_label','root')}</span>
-    </button>
-  `);
+  // Root crumb
+  const rootBtn = document.createElement('button');
+  rootBtn.type = 'button';
+  rootBtn.className = 'btn btn-link btn-sm p-0 admin-storage-bc';
+  rootBtn.dataset.folder = 'root';
+
+  const rootIcon = document.createElement('span');
+  rootIcon.className = 'material-icons';
+  rootIcon.style.fontSize = '16px';
+  rootIcon.style.verticalAlign = 'middle';
+  rootIcon.style.color = 'currentColor';
+  rootIcon.textContent = 'home';
+
+  const rootText = document.createElement('span');
+  rootText.style.verticalAlign = 'middle';
+  rootText.textContent = tf('storage_root_label', 'root');
+
+  rootBtn.appendChild(rootIcon);
+  rootBtn.appendChild(rootText);
+  el.appendChild(rootBtn);
 
   let accum = '';
   parts.forEach((p, idx) => {
+    appendSeparator();
     accum = accum ? (accum + '/' + p) : p;
     const isLast = idx === parts.length - 1;
+
     if (isLast) {
-      crumbs.push(`
-        <span class="mx-1">/</span>
-        <span class="fw-semibold">${p}</span>
-      `);
+      const span = document.createElement('span');
+      span.className = 'fw-semibold';
+      span.textContent = p;
+      el.appendChild(span);
     } else {
-      crumbs.push(`
-        <span class="mx-1">/</span>
-        <button type="button" class="btn btn-link btn-sm p-0 admin-storage-bc" data-folder="${accum}">
-          ${p}
-        </button>
-      `);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-link btn-sm p-0 admin-storage-bc';
+      btn.dataset.folder = accum;
+      btn.textContent = p;
+      el.appendChild(btn);
     }
   });
-
-  el.innerHTML = crumbs.join('');
 
   // breadcrumb click handling
   el.querySelectorAll('.admin-storage-bc').forEach(btn => {
@@ -952,288 +974,412 @@ function switchExplorerTab(tab) {
 }
 
 async function loadFolderChildren(folderKey) {
-    currentFolderKey = folderKey || 'root';
-  
-    const inner = document.getElementById('adminStorageExplorerInner');
-    if (!inner) return;
-  
-    inner.innerHTML = `
-      <div class="text-muted small">
-        ${tf('loading','Loading...')}
-      </div>
-    `;
-  
-    setBreadcrumb(currentFolderKey);
-  
-    let data;
-    try {
-      const url = `/api/pro/diskUsageChildren.php?folder=${encodeURIComponent(currentFolderKey)}`;
-      const res = await fetch(url, {
-        credentials: 'include',
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-store' }
-      });
-      const text = await res.text();
-      data = JSON.parse(text || '{}');
-    } catch (e) {
-      console.error('loadFolderChildren error', e);
-      inner.innerHTML = `<div class="text-danger small">
-        ${tf('storage_children_error','Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.')}
+  currentFolderKey = folderKey || 'root';
+
+  const inner = document.getElementById('adminStorageExplorerInner');
+  if (!inner) return;
+
+  inner.innerHTML = `
+    <div class="text-muted small">
+      ${tf('loading','Loading...')}
+    </div>
+  `;
+
+  setBreadcrumb(currentFolderKey);
+
+  let data;
+  try {
+    const url = `/api/pro/diskUsageChildren.php?folder=${encodeURIComponent(currentFolderKey)}`;
+    const res = await fetch(url, {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-store' }
+    });
+    const text = await res.text();
+    data = JSON.parse(text || '{}');
+  } catch (e) {
+    console.error('loadFolderChildren error', e);
+    inner.innerHTML = `<div class="text-danger small">
+      ${tf('storage_children_error','Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.')}
+    </div>`;
+    return;
+  }
+
+  if (!data || !data.ok) {
+    if (data && data.error === 'no_snapshot') {
+      inner.innerHTML = `<div class="text-warning small">
+        ${tf('storage_no_snapshot','No disk usage snapshot found. Run the disk usage scan first.')}
       </div>`;
-      return;
-    }
-  
-    if (!data || !data.ok) {
-        if (data && data.error === 'no_snapshot') {
-          inner.innerHTML = `<div class="text-warning small">
-            ${tf('storage_no_snapshot','No disk usage snapshot found. Run the disk usage scan first.')}
-          </div>`;
-        } else {
-          // Special-case: backend missing ProDiskUsage / outdated Pro bundle
-          let msgKey = 'storage_children_error';
-          let fallback = 'Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.';
-      
-          if (
-            data &&
-            data.error === 'internal_error' &&
-            data.message &&
-            /ProDiskUsage/i.test(String(data.message))
-          ) {
-            msgKey = 'storage_pro_bundle_outdated';
-            fallback = 'Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.';
-          }
-      
-          inner.innerHTML = `<div class="text-danger small">
-            ${tf(msgKey, fallback)}
-          </div>`;
-        }
-        return;
+    } else {
+      // Special-case: backend missing ProDiskUsage / outdated Pro bundle
+      let msgKey = 'storage_children_error';
+      let fallback = 'Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.';
+
+      if (
+        data &&
+        data.error === 'internal_error' &&
+        data.message &&
+        /ProDiskUsage/i.test(String(data.message))
+      ) {
+        msgKey = 'storage_pro_bundle_outdated';
+        fallback = 'Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.';
       }
-  
-    const folders = Array.isArray(data.folders) ? data.folders : [];
-    const files   = Array.isArray(data.files)   ? data.files   : [];
-  
-    const minBytes = folderMinSizeBytes || 0;
-  
-    const filteredFolders = folders.filter(f => Number(f.bytes || 0) >= minBytes);
-    const filteredFiles   = files.filter(f => Number(f.bytes || 0) >= minBytes);
-  
-    const rowChunks = [];
-  
-    // Folder rows first
-    filteredFolders.forEach(f => {
-      const label = f.folder === 'root' ? '/' : `/${f.folder}`;
-      const pct   = f.percentOfTotal || 0;
-      const width = Math.max(3, Math.min(100, Math.round(pct)));
-  
-      rowChunks.push(`
-        <tr
-          class="admin-storage-row admin-storage-row-folder"
-          data-type="folder"
-          data-folder="${f.folder}">
-          <td class="align-middle">
-            <i class="material-icons" style="font-size:16px;vertical-align:middle;color:currentColor;">folder</i>
-            <span class="ms-1 align-middle">${label}</span>
-          </td>
-          <td class="align-middle text-nowrap">
-            ${formatBytes(f.bytes || 0)}
-          </td>
-          <td class="align-middle text-nowrap">
-            ${pct.toFixed(1)}%
-          </td>
-          <td class="align-middle text-nowrap">
-            ${(f.files || 0).toLocaleString()}
-          </td>
-          <td class="align-middle text-nowrap">
-            ${f.latest_mtime ? formatDate(f.latest_mtime) : ''}
-          </td>
-          <td class="align-middle" style="width:1%;white-space:nowrap;">
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-danger admin-storage-delete-folder"
-              title="${tf('delete_folder','Delete folder')}">
-              <i class="material-icons" style="font-size:16px;color:currentColor;">delete</i>
-            </button>
-          </td>
-        </tr>
-      `);
-    });
-  
-    // Then file rows
-    filteredFiles.forEach(file => {
-      const pct   = file.percentOfTotal || 0;
-      const width = Math.max(3, Math.min(100, Math.round(pct)));
-      const folder = file.folder || currentFolderKey;
-      const displayPath = file.path || (folder === 'root'
-        ? `/${file.name}`
-        : `/${folder}/${file.name}`);
-  
-      rowChunks.push(`
-        <tr
-          class="admin-storage-row admin-storage-row-file"
-          data-type="file"
-          data-folder="${folder}"
-          data-name="${file.name}">
-          <td class="align-middle">
-            <i class="material-icons" style="font-size:16px;vertical-align:middle;color:currentColor;">insert_drive_file</i>
-            <span class="ms-1 align-middle"><code>${displayPath}</code></span>
-          </td>
-          <td class="align-middle text-nowrap">
-            ${formatBytes(file.bytes || 0)}
-          </td>
-          <td class="align-middle text-nowrap">
-            ${pct.toFixed(2)}%
-          </td>
-          <td class="align-middle text-nowrap">
-            <!-- files count not meaningful here -->
-          </td>
-          <td class="align-middle text-nowrap">
-            ${file.mtime ? formatDate(file.mtime) : ''}
-          </td>
-          <td class="align-middle" style="width:1%;white-space:nowrap;">
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-danger admin-storage-delete-file"
-              title="${tf('delete_file','Delete file')}">
-              <i class="material-icons" style="font-size:16px;color:currentColor;">delete</i>
-            </button>
-          </td>
-        </tr>
-      `);
-    });
-  
-    const total = rowChunks.length;
-    const pageSize = 100;
-    let shown = Math.min(pageSize, total);
-  
-    function renderPage() {
-      const hasRows = total > 0;
-      const visibleRows = hasRows
-        ? rowChunks.slice(0, shown).join('')
-        : `<tr><td colspan="6" class="text-muted small">
-             ${tf('storage_no_children','No matching items in this folder (for current filter).')}
-           </td></tr>`;
-  
-           const footer = hasRows && shown < total
-           ? `<div class="d-flex justify-content-between align-items-center mt-1 small">
-                <span>${tf('storage_showing','Showing')} ${shown} ${tf('of','of')} ${total}</span>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="adminStorageMoreFolder">
-                  ${tf('storage_load_more','Load more')}
-                </button>
-              </div>`
-           : hasRows
-             ? `<div class="mt-1 small text-muted text-end pe-2">
-                  ${tf('storage_showing_all','Showing all')} ${total} ${tf('items','items')}.
-                </div>`
-             : '';
-  
-      inner.innerHTML = `
-        <div class="table-responsive" style="max-height:340px;overflow:auto;">
-          <table class="table table-sm mb-0">
-            <thead>
-              <tr>
-                <th>${tf('name','Name')}</th>
-                <th>${tf('size','Size')}</th>
-                <th>%</th>
-                <th>${tf('files','Files')}</th>
-                <th>${tf('modified','Modified')}</th>
-                <th style="width:1%;"></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${visibleRows}
-            </tbody>
-          </table>
-        </div>
-        ${footer}
-      `;
-  
-      // Wire folder row clicks (drilldown)
-      inner.querySelectorAll('.admin-storage-row-folder').forEach(row => {
-        row.addEventListener('click', e => {
-          if (e.target.closest('.admin-storage-delete-folder')) return;
-          const folder = row.getAttribute('data-folder') || 'root';
-          currentFolderKey = folder;
-          loadFolderChildren(folder);
-        });
-      });
-  
-      // Wire delete folder/file
-      inner.querySelectorAll('.admin-storage-delete-folder').forEach(btn => {
-        btn.addEventListener('click', async e => {
-          e.stopPropagation();
-          const row = btn.closest('tr');
-          if (!row) return;
-          const folder = row.getAttribute('data-folder') || '';
-          if (!folder) return;
-      
-          const label = folder === 'root' ? '/' : `/${folder}`;
-      
-          if (deepDeleteEnabled) {
-            // SUPER DANGEROUS: deep delete entire subtree
-            const ok = await showConfirmDialog({
-              title: tf('storage_confirm_deep_delete_folder_title', 'Deep delete folder'),
-              message: tf(
-                'storage_confirm_deep_delete_folder_msg',
-                `Permanently delete folder ${label} and ALL files and subfolders under it? This cannot be undone.`
-              ),
-              confirmLabel: tf('deep_delete_folder','Deep delete')
-            });
-            if (!ok) return;
-      
-            await deleteFolderFromInspector(folder, row, { deep: true });
-          } else {
-            // Safe mode: only empty folders, same as existing UI
-            const ok = await showConfirmDialog({
-              title: tf('storage_confirm_delete_folder_title', 'Delete folder'),
-              message: tf(
-                'storage_confirm_delete_folder_msg',
-                `Delete folder ${label}? If the folder is not empty, deletion will fail.`
-              ),
-              confirmLabel: tf('delete_folder','Delete folder')
-            });
-            if (!ok) return;
-      
-            await deleteFolderFromInspector(folder, row, { deep: false });
-          }
-        });
-      });
-  
-      inner.querySelectorAll('.admin-storage-delete-file').forEach(btn => {
-        btn.addEventListener('click', async e => {
-          e.stopPropagation();
-          const row = btn.closest('tr');
-          if (!row) return;
-          const folder = row.getAttribute('data-folder') || currentFolderKey || 'root';
-          const name   = row.getAttribute('data-name') || '';
-          if (!name) return;
-      
-          const display = folder === 'root' ? `/${name}` : `/${folder}/${name}`;
-          const ok = await showConfirmDialog({
-            title: tf('storage_confirm_delete_file_title', 'Permanently delete file'),
-            message: tf(
-              'storage_confirm_delete_file_msg',
-              `Permanently delete file ${display}? This bypasses Trash and cannot be undone.`
-            ),
-            confirmLabel: tf('delete_file','Delete file')
+
+      inner.innerHTML = `<div class="text-danger small">
+        ${tf(msgKey, fallback)}
+      </div>`;
+    }
+    return;
+  }
+
+  const folders = Array.isArray(data.folders) ? data.folders : [];
+  const files   = Array.isArray(data.files)   ? data.files   : [];
+
+  const minBytes = folderMinSizeBytes || 0;
+
+  const filteredFolders = folders.filter(f => Number(f.bytes || 0) >= minBytes);
+  const filteredFiles   = files.filter(f => Number(f.bytes || 0) >= minBytes);
+
+  // Build a unified list for pagination: { kind: 'folder' | 'file', item }
+  const entries = [];
+  filteredFolders.forEach(f => entries.push({ kind: 'folder', item: f }));
+  filteredFiles.forEach(file => entries.push({ kind: 'file', item: file }));
+
+  const total = entries.length;
+  const pageSize = 100;
+  let shown = Math.min(pageSize, total);
+
+  function renderPage() {
+    const hasRows = total > 0;
+    const slice = hasRows ? entries.slice(0, shown) : [];
+
+    // Clear container
+    inner.innerHTML = '';
+
+    // Table wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-responsive';
+    wrapper.style.maxHeight = '340px';
+    wrapper.style.overflow = 'auto';
+
+    const table = document.createElement('table');
+    table.className = 'table table-sm mb-0';
+
+    // ----- thead -----
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+
+    const thName = document.createElement('th');
+    thName.textContent = tf('name','Name');
+    headRow.appendChild(thName);
+
+    const thSize = document.createElement('th');
+    thSize.textContent = tf('size','Size');
+    headRow.appendChild(thSize);
+
+    const thPct = document.createElement('th');
+    thPct.textContent = '%';
+    headRow.appendChild(thPct);
+
+    const thFiles = document.createElement('th');
+    thFiles.textContent = tf('files','Files');
+    headRow.appendChild(thFiles);
+
+    const thMod = document.createElement('th');
+    thMod.textContent = tf('modified','Modified');
+    headRow.appendChild(thMod);
+
+    const thActions = document.createElement('th');
+    thActions.style.width = '1%';
+    headRow.appendChild(thActions);
+
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    // ----- tbody -----
+    const tbody = document.createElement('tbody');
+
+    if (!hasRows) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.className = 'text-muted small';
+      td.textContent = tf(
+        'storage_no_children',
+        'No matching items in this folder (for current filter).'
+      );
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    } else {
+      slice.forEach(entry => {
+        const { kind, item } = entry;
+        const tr = document.createElement('tr');
+        tr.classList.add('admin-storage-row');
+
+        if (kind === 'folder') {
+          // ---- Folder row ----
+          tr.classList.add('admin-storage-row-folder');
+          tr.dataset.type = 'folder';
+          tr.dataset.folder = item.folder;
+
+          const label = item.folder === 'root' ? '/' : `/${item.folder}`;
+          const pct   = item.percentOfTotal || 0;
+
+          // Name cell
+          const tdName = document.createElement('td');
+          tdName.className = 'align-middle';
+
+          const icon = document.createElement('i');
+          icon.className = 'material-icons';
+          icon.style.fontSize = '16px';
+          icon.style.verticalAlign = 'middle';
+          icon.style.color = 'currentColor';
+          icon.textContent = 'folder';
+
+          const span = document.createElement('span');
+          span.className = 'ms-1 align-middle';
+          span.textContent = label;
+
+          tdName.appendChild(icon);
+          tdName.appendChild(span);
+          tr.appendChild(tdName);
+
+          // Size
+          const tdSize = document.createElement('td');
+          tdSize.className = 'align-middle text-nowrap';
+          tdSize.textContent = formatBytes(item.bytes || 0);
+          tr.appendChild(tdSize);
+
+          // Percent
+          const tdPct = document.createElement('td');
+          tdPct.className = 'align-middle text-nowrap';
+          tdPct.textContent = `${pct.toFixed(1)}%`;
+          tr.appendChild(tdPct);
+
+          // Files count
+          const tdFiles = document.createElement('td');
+          tdFiles.className = 'align-middle text-nowrap';
+          tdFiles.textContent = (item.files || 0).toLocaleString();
+          tr.appendChild(tdFiles);
+
+          // Modified
+          const tdMod = document.createElement('td');
+          tdMod.className = 'align-middle text-nowrap';
+          tdMod.textContent = item.latest_mtime ? formatDate(item.latest_mtime) : '';
+          tr.appendChild(tdMod);
+
+          // Actions
+          const tdActions = document.createElement('td');
+          tdActions.className = 'align-middle';
+          tdActions.style.width = '1%';
+          tdActions.style.whiteSpace = 'nowrap';
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-sm btn-outline-danger admin-storage-delete-folder';
+          btn.title = tf('delete_folder','Delete folder');
+
+          const delIcon = document.createElement('i');
+          delIcon.className = 'material-icons';
+          delIcon.style.fontSize = '16px';
+          delIcon.style.color = 'currentColor';
+          delIcon.textContent = 'delete';
+
+          btn.appendChild(delIcon);
+          tdActions.appendChild(btn);
+          tr.appendChild(tdActions);
+
+          // Folder row click: drilldown
+          tr.addEventListener('click', e => {
+            if (e.target.closest('.admin-storage-delete-folder')) return;
+            const folder = tr.getAttribute('data-folder') || 'root';
+            currentFolderKey = folder;
+            loadFolderChildren(folder);
           });
-          if (!ok) return;
-      
-          await deleteFileFromInspectorPermanent(folder, name, row);
-        });
+
+          // Delete folder click
+          btn.addEventListener('click', async e => {
+            e.stopPropagation();
+            const folder = tr.getAttribute('data-folder') || '';
+            if (!folder) return;
+
+            const labelDisp = folder === 'root' ? '/' : `/${folder}`;
+
+            if (deepDeleteEnabled) {
+              // SUPER DANGEROUS: deep delete entire subtree
+              const ok = await showConfirmDialog({
+                title: tf('storage_confirm_deep_delete_folder_title', 'Deep delete folder'),
+                message: tf(
+                  'storage_confirm_deep_delete_folder_msg',
+                  `Permanently delete folder ${labelDisp} and ALL files and subfolders under it? This cannot be undone.`
+                ),
+                confirmLabel: tf('deep_delete_folder','Deep delete')
+              });
+              if (!ok) return;
+
+              await deleteFolderFromInspector(folder, tr, { deep: true });
+            } else {
+              // Safe mode: only empty folders, same as existing UI
+              const ok = await showConfirmDialog({
+                title: tf('storage_confirm_delete_folder_title', 'Delete folder'),
+                message: tf(
+                  'storage_confirm_delete_folder_msg',
+                  `Delete folder ${labelDisp}? If the folder is not empty, deletion will fail.`
+                ),
+                confirmLabel: tf('delete_folder','Delete folder')
+              });
+              if (!ok) return;
+
+              await deleteFolderFromInspector(folder, tr, { deep: false });
+            }
+          });
+        } else {
+          // ---- File row ----
+          tr.classList.add('admin-storage-row-file');
+          tr.dataset.type = 'file';
+
+          const folder = item.folder || currentFolderKey;
+          const displayPath = item.path || (folder === 'root'
+            ? `/${item.name}`
+            : `/${folder}/${item.name}`);
+          const pct   = item.percentOfTotal || 0;
+
+          tr.dataset.folder = folder;
+          tr.dataset.name = item.name;
+
+          // Name cell
+          const tdName = document.createElement('td');
+          tdName.className = 'align-middle';
+
+          const icon = document.createElement('i');
+          icon.className = 'material-icons';
+          icon.style.fontSize = '16px';
+          icon.style.verticalAlign = 'middle';
+          icon.style.color = 'currentColor';
+          icon.textContent = 'insert_drive_file';
+
+          const span = document.createElement('span');
+          span.className = 'ms-1 align-middle';
+
+          const code = document.createElement('code');
+          code.textContent = displayPath;
+
+          span.appendChild(code);
+          tdName.appendChild(icon);
+          tdName.appendChild(span);
+          tr.appendChild(tdName);
+
+          // Size
+          const tdSize = document.createElement('td');
+          tdSize.className = 'align-middle text-nowrap';
+          tdSize.textContent = formatBytes(item.bytes || 0);
+          tr.appendChild(tdSize);
+
+          // Percent
+          const tdPct = document.createElement('td');
+          tdPct.className = 'align-middle text-nowrap';
+          tdPct.textContent = `${pct.toFixed(2)}%`;
+          tr.appendChild(tdPct);
+
+          // Files (blank for files)
+          const tdFiles = document.createElement('td');
+          tdFiles.className = 'align-middle text-nowrap';
+          tdFiles.textContent = '';
+          tr.appendChild(tdFiles);
+
+          // Modified
+          const tdMod = document.createElement('td');
+          tdMod.className = 'align-middle text-nowrap';
+          tdMod.textContent = item.mtime ? formatDate(item.mtime) : '';
+          tr.appendChild(tdMod);
+
+          // Actions
+          const tdActions = document.createElement('td');
+          tdActions.className = 'align-middle';
+          tdActions.style.width = '1%';
+          tdActions.style.whiteSpace = 'nowrap';
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-sm btn-outline-danger admin-storage-delete-file';
+          btn.title = tf('delete_file','Delete file');
+
+          const delIcon = document.createElement('i');
+          delIcon.className = 'material-icons';
+          delIcon.style.fontSize = '16px';
+          delIcon.style.color = 'currentColor';
+          delIcon.textContent = 'delete';
+
+          btn.appendChild(delIcon);
+          tdActions.appendChild(btn);
+          tr.appendChild(tdActions);
+
+          btn.addEventListener('click', async e => {
+            e.stopPropagation();
+            const f = tr.getAttribute('data-folder') || currentFolderKey || 'root';
+            const name = tr.getAttribute('data-name') || '';
+            if (!name) return;
+
+            const display = f === 'root' ? `/${name}` : `/${f}/${name}`;
+            const ok = await showConfirmDialog({
+              title: tf('storage_confirm_delete_file_title', 'Permanently delete file'),
+              message: tf(
+                'storage_confirm_delete_file_msg',
+                `Permanently delete file ${display}? This bypasses Trash and cannot be undone.`
+              ),
+              confirmLabel: tf('delete_file','Delete file')
+            });
+            if (!ok) return;
+
+            await deleteFileFromInspectorPermanent(f, name, tr);
+          });
+        }
+
+        tbody.appendChild(tr);
       });
-  
-      const moreBtn = inner.querySelector('#adminStorageMoreFolder');
-      if (moreBtn) {
+    }
+
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    inner.appendChild(wrapper);
+
+    // ----- Footer: showing X of Y / Load more -----
+    if (hasRows) {
+      if (shown < total) {
+        const footer = document.createElement('div');
+        footer.className = 'd-flex justify-content-between align-items-center mt-1 small';
+
+        const span = document.createElement('span');
+        span.textContent = `${tf('storage_showing','Showing')} ${shown} ${tf('of','of')} ${total}`;
+        footer.appendChild(span);
+
+        const moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'btn btn-sm btn-outline-secondary';
+        moreBtn.id = 'adminStorageMoreFolder';
+        moreBtn.textContent = tf('storage_load_more','Load more');
+
         moreBtn.addEventListener('click', () => {
           shown = Math.min(shown + pageSize, total);
           renderPage();
         });
+
+        footer.appendChild(moreBtn);
+        inner.appendChild(footer);
+      } else {
+        const footer = document.createElement('div');
+        footer.className = 'mt-1 small text-muted text-end pe-2';
+        footer.textContent = `${tf('storage_showing_all','Showing all')} ${total} ${tf('items','items')}.`;
+        inner.appendChild(footer);
       }
     }
-  
-    renderPage();
+
+    // Sync button styles with deep delete toggle
+    updateDeleteButtonsForDeepDelete();
   }
+
+  renderPage();
+}
 
   async function loadTopFiles() {
     const inner = document.getElementById('adminStorageExplorerInner');

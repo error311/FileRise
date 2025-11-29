@@ -1,5 +1,14 @@
 # Changelog
 
+## Changes 11/28/2025 (v2.2.1)
+
+release(v2.2.1): fix(storage-explorer): DOM-safe rendering + docs for disk usage
+
+- Refactor adminStorage breadcrumb builder to construct DOM nodes instead of using innerHTML.
+- Rework Storage explorer folder view to render rows via createElement/textContent, avoiding DOM text reinterpreted as HTML.
+- Keep deep-delete and pagination behavior unchanged while tightening up XSS/CodeQL concerns.
+- Update README feature list to mention disk usage summary and Pro storage explorer (ncdu-style) alongside user groups and client portals.
+
 ## Changes 11/28/2025 (v2.2.0)
 
 release(v2.2.0): add storage explorer + disk usage scanner
