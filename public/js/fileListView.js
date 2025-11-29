@@ -295,6 +295,27 @@ try {
 // Global flag for advanced search mode.
 window.advancedSearchEnabled = false;
 
+// --- Folder stats cache (for isEmpty.php) ---
+const _folderStatsCache = new Map();
+
+function fetchFolderStats(folder) {
+  if (!folder) return Promise.resolve(null);
+
+  if (_folderStatsCache.has(folder)) {
+    return _folderStatsCache.get(folder);
+  }
+
+  const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`;
+  const p = _fetchJSONWithTimeout(url, 2500)
+    .catch(() => ({ folders: 0, files: 0 }))
+    .finally(() => {
+      // keep the resolved value; the Promise itself stays in the map
+    });
+
+  _folderStatsCache.set(folder, p);
+  return p;
+}
+
 /* ===========================================================
    SECURITY: build file URLs only via the API (no /uploads)
    =========================================================== */
@@ -428,19 +449,19 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
   // make sure this brand-new SVG is sized correctly
   try { syncFolderIconSizeToRowHeight(); } catch {}
 
-  const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(fullPath)}&t=${Date.now()}`;
-  _fetchJSONWithTimeout(url, 2500)
-    .then(({ folders = 0, files = 0 }) => {
-      if ((folders + files) > 0 && iconSpan.dataset.kind !== 'paper') {
-        // 2) swap to "paper" icon
-        iconSpan.dataset.kind = 'paper';
-        iconSpan.innerHTML = folderSVG('paper');
+  fetchFolderStats(fullPath)
+  .then(stats => {
+    if (!stats) return;
+    const folders = Number.isFinite(stats.folders) ? stats.folders : 0;
+    const files   = Number.isFinite(stats.files)   ? stats.files   : 0;
 
-        // re-apply sizing to this new SVG too
-        try { syncFolderIconSizeToRowHeight(); } catch {}
-      }
-    })
-    .catch(() => { /* ignore */ });
+    if ((folders + files) > 0 && iconSpan.dataset.kind !== 'paper') {
+      iconSpan.dataset.kind = 'paper';
+      iconSpan.innerHTML = folderSVG('paper');
+      try { syncFolderIconSizeToRowHeight(); } catch {}
+    }
+  })
+  .catch(() => {});
 }
 
 /* -----------------------------
@@ -1156,6 +1177,19 @@ function injectInlineFolderRows(fileListContent, folder, pageSubfolders) {
   );
   if (actionsIdx < 0) actionsIdx = -1;
 
+    // NEW: created / modified column indices (uploaded = created in your header)
+    let createdIdx = headerCells.findIndex(th =>
+      (th.dataset && (th.dataset.column === "uploaded" || th.dataset.column === "created")) ||
+      /\b(uploaded|created)\b/i.test((th.textContent || "").trim())
+    );
+    if (createdIdx < 0) createdIdx = -1;
+  
+    let modifiedIdx = headerCells.findIndex(th =>
+      (th.dataset && th.dataset.column === "modified") ||
+      /\bmodified\b/i.test((th.textContent || "").trim())
+    );
+    if (modifiedIdx < 0) modifiedIdx = -1;
+
   // Remove any previous folder rows
   tbody.querySelectorAll("tr.folder-row").forEach(tr => tr.remove());
 
@@ -1356,19 +1390,32 @@ if (iconSpan) {
   iconSpan.style.marginTop  = "0px";   // small down nudge
 }
   
-    // ----- FOLDER STATS + OWNER + CAPS (keep your existing code below here) -----
-    const sizeCellIndex = (sizeIdx >= 0 && sizeIdx < tr.cells.length) ? sizeIdx : -1;
-    const nameCellIndex = (nameIdx >= 0 && nameIdx < tr.cells.length) ? nameIdx : -1;
+    // ----- FOLDER STATS + OWNER + CAPS -----
+    const sizeCellIndex    = (sizeIdx    >= 0 && sizeIdx    < tr.cells.length) ? sizeIdx    : -1;
+    const nameCellIndex    = (nameIdx    >= 0 && nameIdx    < tr.cells.length) ? nameIdx    : -1;
+    const createdCellIndex = (createdIdx >= 0 && createdIdx < tr.cells.length) ? createdIdx : -1;
+    const modifiedCellIndex = (modifiedIdx >= 0 && modifiedIdx < tr.cells.length) ? modifiedIdx : -1;
   
-    const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(sf.full)}&t=${Date.now()}`;
-    _fetchJSONWithTimeout(url, 2500).then(stats => {
+    fetchFolderStats(sf.full).then(stats => {
       if (!stats) return;
   
       const foldersCount = Number.isFinite(stats.folders) ? stats.folders : 0;
       const filesCount   = Number.isFinite(stats.files)   ? stats.files   : 0;
-      const bytes = Number.isFinite(stats.bytes)
-        ? stats.bytes
-        : (Number.isFinite(stats.sizeBytes) ? stats.sizeBytes : null);
+            // Try multiple possible size keys so backend + JS can drift a bit
+            let bytes = null;
+            const sizeCandidates = [
+              stats.bytes,
+              stats.sizeBytes,
+              stats.size,
+              stats.totalBytes
+            ];
+            for (const v of sizeCandidates) {
+              const n = Number(v);
+              if (Number.isFinite(n) && n >= 0) {
+                bytes = n;
+                break;
+              }
+            }
   
       let pieces = [];
       if (foldersCount) pieces.push(`${foldersCount} folder${foldersCount === 1 ? "" : "s"}`);
@@ -1393,6 +1440,26 @@ if (iconSpan) {
           }
           sizeCell.textContent = sizeLabel;
           sizeCell.title = `${countLabel}${bytes != null && bytes >= 0 ? " • " + sizeLabel : ""}`;
+        }
+      }
+
+      if (createdCellIndex >= 0) {
+        const createdCell = tr.cells[createdCellIndex];
+        if (createdCell) {
+          const txt = (stats && typeof stats.earliest_uploaded === 'string')
+            ? stats.earliest_uploaded
+            : '';
+          createdCell.textContent = txt;
+        }
+      }
+      
+      if (modifiedCellIndex >= 0) {
+        const modCell = tr.cells[modifiedCellIndex];
+        if (modCell) {
+          const txt = (stats && typeof stats.latest_mtime === 'string')
+            ? stats.latest_mtime
+            : '';
+          modCell.textContent = txt;
         }
       }
     }).catch(() => {

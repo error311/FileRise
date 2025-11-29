@@ -12,110 +12,135 @@ class FolderModel
      * ============================================================ */
 
      public static function countVisible(string $folder, string $user, array $perms): array
-     {
-         $folder = ACL::normalizeFolder($folder);
-     
-         // If the user can't view this folder at all, short-circuit (admin/read/read_own)
-         $canViewFolder = ACL::isAdmin($perms)
-             || ACL::canRead($user, $perms, $folder)
-             || ACL::canReadOwn($user, $perms, $folder);
-         if (!$canViewFolder) {
-             return ['folders' => 0, 'files' => 0, 'bytes' => 0];
-         }
-     
-         // NEW: distinguish full read vs own-only for this folder
-         $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $folder);
-         // if !$hasFullRead but $canViewFolder is true, they’re effectively "view own" only
-     
-         $base = realpath((string)UPLOAD_DIR);
-         if ($base === false) {
-             return ['folders' => 0, 'files' => 0, 'bytes' => 0];
-         }
-     
-         // Resolve target dir + ACL-relative prefix
-         if ($folder === 'root') {
-             $dir       = $base;
-             $relPrefix = '';
-         } else {
-             $parts = array_filter(explode('/', $folder), fn($p) => $p !== '');
-             foreach ($parts as $seg) {
-                 if (!self::isSafeSegment($seg)) {
-                     return ['folders' => 0, 'files' => 0, 'bytes' => 0];
-                 }
-             }
-             $guess = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
-             $dir   = self::safeReal($base, $guess);
-             if ($dir === null || !is_dir($dir)) {
-                 return ['folders' => 0, 'files' => 0, 'bytes' => 0];
-             }
-             $relPrefix = implode('/', $parts);
-         }
-     
-         $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
-         $SKIP   = ['trash', 'profile_pics'];
-     
-         $entries = @scandir($dir);
-         if ($entries === false) {
-             return ['folders' => 0, 'files' => 0, 'bytes' => 0];
-         }
-     
-         $folderCount = 0;
-         $fileCount   = 0;
-         $totalBytes  = 0;
-     
-         $MAX_SCAN = 4000;
-         $scanned  = 0;
-     
-         foreach ($entries as $name) {
-             if (++$scanned > $MAX_SCAN) {
-                 break;
-             }
-     
-             if ($name === '.' || $name === '..') continue;
-             if ($name[0] === '.') continue;
-             if (in_array($name, $IGNORE, true)) continue;
-             if (in_array(strtolower($name), $SKIP, true)) continue;
-             if (!self::isSafeSegment($name)) continue;
-     
-             $abs = $dir . DIRECTORY_SEPARATOR . $name;
-     
-             if (@is_dir($abs)) {
-                 if (@is_link($abs)) {
-                     $safe = self::safeReal($base, $abs);
-                     if ($safe === null || !is_dir($safe)) {
-                         continue;
-                     }
-                 }
-     
-                 $childRel = ($relPrefix === '' ? $name : $relPrefix . '/' . $name);
-                 if (
-                     ACL::isAdmin($perms)
-                     || ACL::canRead($user, $perms, $childRel)
-                     || ACL::canReadOwn($user, $perms, $childRel)
-                 ) {
-                     $folderCount++;
-                 }
-             } elseif (@is_file($abs)) {
-                 // Only count files if the user has full read on *this* folder.
-                 // If they’re view_own-only here, don’t leak or mis-report counts.
-                 if (!$hasFullRead) {
-                     continue;
-                 }
-     
-                 $fileCount++;
-                 $sz = @filesize($abs);
-                 if (is_int($sz) && $sz > 0) {
-                     $totalBytes += $sz;
-                 }
-             }
-         }
-     
-         return [
-             'folders' => $folderCount,
-             'files'   => $fileCount,
-             'bytes'   => $totalBytes,
-         ];
-     }
+{
+    $folder = ACL::normalizeFolder($folder);
+
+    // If the user can't view this folder at all, short-circuit (admin/read/read_own)
+    $canViewFolder = ACL::isAdmin($perms)
+        || ACL::canRead($user, $perms, $folder)
+        || ACL::canReadOwn($user, $perms, $folder);
+    if (!$canViewFolder) {
+        return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+    }
+
+    // NEW: distinguish full read vs own-only for this folder
+    $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $folder);
+    // if !$hasFullRead but $canViewFolder is true, they’re effectively "view own" only
+
+    $base = realpath((string)UPLOAD_DIR);
+    if ($base === false) {
+        return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+    }
+
+    // Resolve target dir + ACL-relative prefix
+    if ($folder === 'root') {
+        $dir       = $base;
+        $relPrefix = '';
+    } else {
+        $parts = array_filter(explode('/', $folder), fn($p) => $p !== '');
+        foreach ($parts as $seg) {
+            if (!self::isSafeSegment($seg)) {
+                return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+            }
+        }
+        $guess = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+        $dir   = self::safeReal($base, $guess);
+        if ($dir === null || !is_dir($dir)) {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+        }
+        $relPrefix = implode('/', $parts);
+    }
+
+    $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
+    $SKIP   = ['trash', 'profile_pics'];
+
+    $entries = @scandir($dir);
+    if ($entries === false) {
+        return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+    }
+
+    $folderCount      = 0;
+    $fileCount        = 0;
+    $totalBytes       = 0;
+
+    // NEW: stats for created / modified
+    $earliestUploaded = null; // min mtime
+    $latestMtime      = null; // max mtime
+
+    $MAX_SCAN = 4000;
+    $scanned  = 0;
+
+    foreach ($entries as $name) {
+        if (++$scanned > $MAX_SCAN) {
+            break;
+        }
+
+        if ($name === '.' || $name === '..') continue;
+        if ($name[0] === '.') continue;
+        if (in_array($name, $IGNORE, true)) continue;
+        if (in_array(strtolower($name), $SKIP, true)) continue;
+        if (!self::isSafeSegment($name)) continue;
+
+        $abs = $dir . DIRECTORY_SEPARATOR . $name;
+
+        if (@is_dir($abs)) {
+            if (@is_link($abs)) {
+                $safe = self::safeReal($base, $abs);
+                if ($safe === null || !is_dir($safe)) {
+                    continue;
+                }
+            }
+
+            $childRel = ($relPrefix === '' ? $name : $relPrefix . '/' . $name);
+            if (
+                ACL::isAdmin($perms)
+                || ACL::canRead($user, $perms, $childRel)
+                || ACL::canReadOwn($user, $perms, $childRel)
+            ) {
+                $folderCount++;
+            }
+        } elseif (@is_file($abs)) {
+            // Only count files if the user has full read on *this* folder.
+            // If they’re view_own-only here, don’t leak or mis-report counts.
+            if (!$hasFullRead) {
+                continue;
+            }
+
+            $fileCount++;
+            $sz = @filesize($abs);
+            if (is_int($sz) && $sz > 0) {
+                $totalBytes += $sz;
+            }
+
+            // NEW: track earliest / latest mtime from visible files
+            $mt = @filemtime($abs);
+            if (is_int($mt) && $mt > 0) {
+                if ($earliestUploaded === null || $mt < $earliestUploaded) {
+                    $earliestUploaded = $mt;
+                }
+                if ($latestMtime === null || $mt > $latestMtime) {
+                    $latestMtime = $mt;
+                }
+            }
+        }
+    }
+
+    $result = [
+        'folders' => $folderCount,
+        'files'   => $fileCount,
+        'bytes'   => $totalBytes,
+    ];
+
+    // Only include when we actually saw at least one readable file
+    if ($earliestUploaded !== null) {
+        $result['earliest_uploaded'] = date(DATE_TIME_FORMAT, $earliestUploaded);
+    }
+    if ($latestMtime !== null) {
+        $result['latest_mtime'] = date(DATE_TIME_FORMAT, $latestMtime);
+    }
+
+    return $result;
+}
 
     /* Helpers (private) */
     private static function isSafeSegment(string $name): bool

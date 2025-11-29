@@ -1,5 +1,18 @@
 # Changelog
 
+## Changes 11/29/2025 (v2.2.2)
+
+release(v2.2.2): feat(folders): show inline folder stats & dates
+
+- Extend FolderModel::countVisible() to track earliest and latest file mtimes
+- Format folder created/modified timestamps via DATE_TIME_FORMAT on the backend
+- Add a small folder stats cache in fileListView.js to reuse isEmpty.php responses
+- Use shared fetchFolderStats() for both folder strip icons and inline folder rows
+- Show per-folder item counts, total size, and created/modified dates in inline rows
+- Make size parsing more robust by accepting multiple backend size keys (bytes/sizeBytes/size/totalBytes)
+
+---
+
 ## Changes 11/28/2025 (v2.2.1)
 
 release(v2.2.1): fix(storage-explorer): DOM-safe rendering + docs for disk usage
@@ -8,6 +21,8 @@ release(v2.2.1): fix(storage-explorer): DOM-safe rendering + docs for disk usage
 - Rework Storage explorer folder view to render rows via createElement/textContent, avoiding DOM text reinterpreted as HTML.
 - Keep deep-delete and pagination behavior unchanged while tightening up XSS/CodeQL concerns.
 - Update README feature list to mention disk usage summary and Pro storage explorer (ncdu-style) alongside user groups and client portals.
+
+---
 
 ## Changes 11/28/2025 (v2.2.0)
 
