@@ -1,5 +1,42 @@
 # Changelog
 
+## Changes 11/28/2025 (v2.2.0)
+
+release(v2.2.0): add storage explorer + disk usage scanner
+
+- New **Storage / Disk Usage** admin section with snapshot-based totals and "Top folders by size".
+- Disk usage CLI scanner (`src/cli/disk_usage_scan.php`) and background rescan endpoint.
+
+- New **Storage Explorer** (drilldown, top files view, deep-delete actions) available in FileRise Pro v1.2.0.
+- Non-Pro installsshow a blurred preview of the explorer with upgrade prompts.
+
+Features
+
+- Add new "Storage / Disk Usage" section to the Admin Panel with a summary card and "Top folders by size" table.
+- Introduce CLI disk usage scanner (src/cli/disk_usage_scan.php) that walks UPLOAD_DIR, applies FS::IGNORE()/SKIP(), and persists a structured snapshot to META_DIR/disk_usage.json.
+- Add /api/admin/diskUsageSummary.php and /api/admin/diskUsageTriggerScan.php endpoints to expose the snapshot and trigger background rescans from the UI.
+- Wire the new storage section into adminPanel.js with a Rescan button that launches the CLI worker and polls for a fresh snapshot.
+
+Improvements
+
+- Storage summary now shows total files, folders, scan duration, and last scan time, plus grouped volume usage across Uploads / Users / Metadata when available.
+- "Top folders by size" table supports a Pro-only "show more" interaction, but still provides a clean preview in the core edition.
+- Slight spacing / layout tweaks so the Storage card doesn’t sit flush against the Admin Panel header.
+
+Pro integration
+
+- Keep the full ncdu-style "Storage explorer" (per-folder drilldown + global Top files, deep delete toggle, size filters, etc.) behind FR_PRO_ACTIVE via /api/pro/diskUsageChildren.php and /api/pro/diskUsageTopFiles.php.
+- Pro-only delete-from-explorer actions are exposed via /api/pro/diskUsageDeleteFilePermanent.php and /api/pro/diskUsageDeleteFolderRecursive.php, reusing FileModel and FolderModel admin helpers.
+- Non-Pro instances still see the explorer teaser, but the table body is blurred and padded with "Pro" badges, clearly advertising the upgrade path without exposing the Pro internals.
+
+DX / internals
+
+- Centralize disk usage logic in DiskUsageModel: snapshot builder, summary (including volumes), per-folder children view, and global Top N file listing.
+- Ensure adminStorage.js is idempotent and safe to re-init when the Admin Panel is reopened (guards on data-* flags, re-wires only once).
+- Add robust PHP-CLI discovery and log output for the disk usage worker, mirroring the existing zip worker pattern.
+
+---
+
 ## Changes 11/27/2025 (v2.1.0)
 
 🦃🍂 Happy Thanksgiving. 🥧🍁🍽️

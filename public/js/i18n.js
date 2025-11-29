@@ -35,6 +35,8 @@ const translations = {
     "tag_name": "Tag Name:",
     "tag_color": "Tag Color:",
     "save_tag": "Save Tag",
+    "no_tags_available": "No tags available",
+    "current_tags": "Current Tags",
     "light_mode": "Light Mode",
     "dark_mode": "Dark Mode",
     "upload_instruction": "Drop files/folders here or click 'Choose files'",
@@ -338,7 +340,9 @@ const translations = {
     "modified": "Modified",
     "created": "Created",
     "owner": "Owner",
-    "hide_header_zoom_controls": "Hide header zoom controls"
+    "hide_header_zoom_controls": "Hide header zoom controls",
+    "preview_not_available": "Preview is not available for this file type.",
+    "storage_pro_bundle_outdated": "Please upgrade to the latest FileRise Pro bundle to use the Storage explorer."
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

@@ -20,6 +20,27 @@ export function handleDeleteSelected(e) {
   attachEnterKeyListener("deleteFilesModal", "confirmDeleteFiles");
 }
 
+const FILE_MODAL_IDS = [
+  'deleteFilesModal',
+  'downloadZipModal',
+  'downloadProgressModal',
+  'createFileModal',
+  'downloadFileModal',
+  'copyFilesModal',
+  'moveFilesModal',
+  'renameFileModal',
+  'createFolderModal', // if this exists in your HTML
+];
+
+function portalFileModalsToBody() {
+  FILE_MODAL_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.parentNode !== document.body) {
+      document.body.appendChild(el);
+    }
+  });
+}
+
 
   // --- Upload modal "portal" support ---
   let _uploadCardSentinel = null;
@@ -818,6 +839,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Expose initFileActions so it can be called from fileManager.js
 export function initFileActions() {
+  portalFileModalsToBody();
   const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
   if (deleteSelectedBtn) {
     deleteSelectedBtn.replaceWith(deleteSelectedBtn.cloneNode(true));

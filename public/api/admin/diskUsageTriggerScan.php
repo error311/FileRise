@@ -1,0 +1,102 @@
+<?php
+// public/api/admin/diskUsageTriggerScan.php
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
+
+require_once __DIR__ . '/../../../config/config.php';
+require_once PROJECT_ROOT . '/src/models/DiskUsageModel.php';
+
+// Basic auth / admin check
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+$username = (string)($_SESSION['username'] ?? '');
+$isAdmin  = !empty($_SESSION['isAdmin']) || (!empty($_SESSION['admin']) && $_SESSION['admin'] === '1');
+
+if ($username === '' || !$isAdmin) {
+    http_response_code(403);
+    echo json_encode([
+        'ok'    => false,
+        'error' => 'Forbidden',
+    ]);
+    return;
+}
+
+// Release session lock early so the scanner/other requests aren't blocked
+@session_write_close();
+
+// NOTE: previously this endpoint was Pro-only. Now it works on all instances.
+// Pro-only gate removed so free FileRise can also use the Rescan button.
+
+/*
+if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
+    http_response_code(403);
+    echo json_encode([
+        'ok'    => false,
+        'error' => 'FileRise Pro is not active on this instance.',
+    ]);
+    return;
+}
+*/
+
+try {
+    $worker = realpath(PROJECT_ROOT . '/src/cli/disk_usage_scan.php');
+    if (!$worker || !is_file($worker)) {
+        throw new RuntimeException('disk_usage_scan.php not found.');
+    }
+
+    // Find a PHP CLI binary that actually works (same idea as zip_worker)
+    $candidates = array_values(array_filter([
+        PHP_BINARY ?: null,
+        '/usr/local/bin/php',
+        '/usr/bin/php',
+        '/bin/php',
+    ]));
+
+    $php = null;
+    foreach ($candidates as $bin) {
+        if (!$bin) {
+            continue;
+        }
+        $rc = 1;
+        @exec(escapeshellcmd($bin) . ' -v >/dev/null 2>&1', $out, $rc);
+        if ($rc === 0) {
+            $php = $bin;
+            break;
+        }
+    }
+
+    if (!$php) {
+        throw new RuntimeException('No working php CLI found.');
+    }
+
+    $meta   = rtrim((string)META_DIR, '/\\');
+    $logDir = $meta . DIRECTORY_SEPARATOR . 'logs';
+    @mkdir($logDir, 0775, true);
+    $logFile = $logDir . DIRECTORY_SEPARATOR . 'disk_usage_scan.log';
+
+    // nohup php disk_usage_scan.php >> log 2>&1 & echo $!
+    $cmdStr =
+        'nohup ' . escapeshellcmd($php) . ' ' . escapeshellarg($worker) .
+        ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
+
+    $pid = @shell_exec('/bin/sh -c ' . escapeshellarg($cmdStr));
+    $pid = is_string($pid) ? (int)trim($pid) : 0;
+
+    http_response_code(200);
+    echo json_encode([
+        'ok'      => true,
+        'pid'     => $pid > 0 ? $pid : null,
+        'message' => 'Disk usage scan started in the background.',
+        'logFile' => $logFile,
+    ], JSON_UNESCAPED_SLASHES);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode([
+        'ok'      => false,
+        'error'   => 'internal_error',
+        'message' => $e->getMessage(),
+    ]);
+}

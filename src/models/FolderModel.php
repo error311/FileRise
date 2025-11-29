@@ -483,6 +483,64 @@ class FolderModel
     }
 
 
+    public static function deleteFolderRecursiveAdmin(string $folder): array
+{
+    if (strtolower($folder) === 'root') {
+        return ['error' => 'Cannot delete root folder.'];
+    }
+
+    [$real, $relative, $err] = self::resolveFolderPath($folder, false);
+    if ($err) return ['error' => $err];
+
+    if (!is_dir($real)) {
+        return ['error' => 'Folder not found.'];
+    }
+
+    $errors = [];
+
+    $it = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($real, \FilesystemIterator::SKIP_DOTS),
+        \RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($it as $path => $info) {
+        if ($info->isDir()) {
+            if (!@rmdir($path)) {
+                $errors[] = "Failed to delete directory: {$path}";
+            }
+        } else {
+            if (!@unlink($path)) {
+                $errors[] = "Failed to delete file: {$path}";
+            }
+        }
+    }
+
+    if (!@rmdir($real)) {
+        $errors[] = "Failed to delete directory: {$real}";
+    }
+
+    // Remove metadata JSONs for this subtree
+    $relative = trim($relative, "/\\ ");
+    if ($relative !== '' && $relative !== 'root') {
+        $prefix = str_replace(['/', '\\', ' '], '-', $relative);
+        $globPat = META_DIR . $prefix . '*_metadata.json';
+        $metaFiles = glob($globPat) ?: [];
+        foreach ($metaFiles as $mf) {
+            @unlink($mf);
+        }
+    }
+
+    // Remove ownership mappings for the subtree.
+    self::removeOwnerForTree($relative);
+
+    if ($errors) {
+        return ['error' => implode('; ', $errors)];
+    }
+
+    return ['success' => 'Folder and all contents deleted.'];
+}
+
+
     /**
      * Deletes a folder if it is empty and removes its corresponding metadata.
      * Also removes ownership mappings for this folder and all its descendants.

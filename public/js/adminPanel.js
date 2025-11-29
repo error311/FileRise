@@ -3,6 +3,7 @@ import { t } from './i18n.js?v={{APP_QVER}}';
 import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
 import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
 import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
+import { initAdminStorageSection } from './adminStorage.js?v={{APP_QVER}}';
 
 function normalizeLogoPath(raw) {
   if (!raw) return '';
@@ -16,7 +17,7 @@ function normalizeLogoPath(raw) {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.1.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.2.0';
 
 function getAdminTitle(isPro, proVersion) {
   const corePill = `
@@ -38,9 +39,9 @@ function getAdminTitle(isPro, proVersion) {
     : '';
 
   const hasCurrent = !!norm(currentRaw);
-  const hasLatest  = !!norm(latestRaw);
-  const hasUpdate  = isPro && hasCurrent && hasLatest &&
-                     norm(currentRaw) !== norm(latestRaw);
+  const hasLatest = !!norm(latestRaw);
+  const hasUpdate = isPro && hasCurrent && hasLatest &&
+    norm(currentRaw) !== norm(latestRaw);
 
   if (!isPro) {
     // Free/core only
@@ -91,11 +92,11 @@ function buildFullGrantsForAllFolders(folders) {
 function applyHeaderColorsFromAdmin() {
   try {
     const lightInput = document.getElementById('brandingHeaderBgLight');
-    const darkInput  = document.getElementById('brandingHeaderBgDark');
+    const darkInput = document.getElementById('brandingHeaderBgDark');
     const root = document.documentElement;
 
     const light = lightInput ? lightInput.value.trim() : '';
-    const dark  = darkInput ? darkInput.value.trim() : '';
+    const dark = darkInput ? darkInput.value.trim() : '';
 
     if (light) root.style.setProperty('--header-bg-light', light);
     else root.style.removeProperty('--header-bg-light');
@@ -282,7 +283,7 @@ async function safeJson(res) {
     /* Modal sizing */
     #adminPanelModal .modal-content {
       max-width: 1100px;
-      width: 50%;
+      width: 60% !important;
       background: #fff !important;
       color: #000 !important;
       border: 1px solid #ccc !important;
@@ -819,15 +820,15 @@ export function openAdminPanel() {
 
       const dark = document.body.classList.contains("dark-mode");
       const proInfo = config.pro || {};
-      const isPro   = !!proInfo.active;
+      const isPro = !!proInfo.active;
       const proType = proInfo.type || '';
       const proEmail = proInfo.email || '';
       const proVersion = proInfo.version || 'not installed';
-      const proLicense  = proInfo.license || '';
+      const proLicense = proInfo.license || '';
       const brandingCfg = config.branding || {};
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
-      const brandingHeaderBgDark  = brandingCfg.headerBgDark  || "";
+      const brandingHeaderBgDark = brandingCfg.headerBgDark || "";
       const bg = dark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
       const inner = `
         background:${dark ? "#2c2c2c" : "#fff"};
@@ -863,7 +864,8 @@ export function openAdminPanel() {
             { id: "upload", label: t("shared_max_upload_size_bytes_title") },
             { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
             { id: "shareLinks", label: t("manage_shared_links") },
-            { id: "pro", label: "FileRise Pro" }, 
+            { id: "storage", label: "Storage / Disk Usage" },
+            { id: "pro", label: "FileRise Pro" },
             { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Sponsor / Donations") : "Sponsor / Donations") }
           ].map(sec => `
               <div id="${sec.id}Header" class="section-header collapsed">
@@ -884,13 +886,13 @@ export function openAdminPanel() {
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
 
-        ["userManagement", "headerSettings", "loginOptions", "webdav", "onlyoffice", "upload", "oidc", "shareLinks", "pro", "sponsor"]
+        ["userManagement", "headerSettings", "loginOptions", "webdav", "onlyoffice", "upload", "oidc", "shareLinks", "storage", "pro", "sponsor"]
           .forEach(id => {
             document.getElementById(id + "Header")
               .addEventListener("click", () => toggleSection(id));
           });
 
-          document.getElementById("userManagementContent").innerHTML = `
+        document.getElementById("userManagementContent").innerHTML = `
   <div class="admin-user-actions">
     <!-- Core buttons -->
     <button type="button" id="adminOpenAddUser" class="btn btn-success btn-sm">
@@ -914,9 +916,8 @@ export function openAdminPanel() {
     </button>
 
     <!-- Pro-only: User groups -->
-    ${
-      isPro
-        ? `
+    ${isPro
+            ? `
     <div class="btn-pro-wrapper">
       <button
         type="button"
@@ -927,7 +928,7 @@ export function openAdminPanel() {
       </button>
     </div>
     `
-        : `
+            : `
     <div class="btn-pro-wrapper">
       <button
         type="button"
@@ -939,12 +940,11 @@ export function openAdminPanel() {
       <span class="btn-pro-pill">Pro</span>
     </div>
     `
-    }
+          }
 
     <!-- Pro roadmap: Client portal -->
-    ${
-      isPro
-        ? `
+    ${isPro
+            ? `
     <div class="btn-pro-wrapper">
       <button
         type="button"
@@ -956,7 +956,7 @@ export function openAdminPanel() {
       </button>
     </div>
     `
-        : `
+            : `
     <div class="btn-pro-wrapper">
       <button
         type="button"
@@ -970,7 +970,7 @@ export function openAdminPanel() {
       <span class="btn-pro-pill">Pro</span>
     </div>
     `
-    }
+          }
   </div>
 
   <small class="text-muted d-block" style="margin-top:6px;">
@@ -992,8 +992,8 @@ export function openAdminPanel() {
         document.getElementById("adminOpenUserPermissions")
           .addEventListener("click", openUserPermissionsModal);
 
-                  // Pro-only stubs for future features
-        const regBtn   = document.getElementById("adminOpenUserRegistration");
+        // Pro-only stubs for future features
+        const regBtn = document.getElementById("adminOpenUserRegistration");
         const groupsBtn = document.getElementById("adminOpenUserGroups");
         const clientBtn = document.getElementById("adminOpenClientPortal");
 
@@ -1027,12 +1027,12 @@ export function openAdminPanel() {
               window.open("https://filerise.net", "_blank", "noopener");
               return;
             }
-        
+
             openClientPortalsModal();
           });
         }
 
-          document.getElementById("headerSettingsContent").innerHTML = `
+        document.getElementById("headerSettingsContent").innerHTML = `
   <div class="form-group">
     <label for="headerTitle">${t("header_title_text")}:</label>
     <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle || ""}" />
@@ -1046,8 +1046,8 @@ export function openAdminPanel() {
     </label>
     <small class="text-muted d-block mb-1">
       ${isPro
-        ? 'Upload a logo image or paste a local path.'
-        : 'Requires FileRise Pro to enable custom header branding.'}
+            ? 'Upload a logo image or paste a local path.'
+            : 'Requires FileRise Pro to enable custom header branding.'}
     </small>
 
     <div class="input-group mb-2">
@@ -1107,20 +1107,20 @@ export function openAdminPanel() {
     </div>
     <small class="text-muted d-block mt-1">
     ${isPro
-      ? 'If left empty, FileRise uses its default blue and dark header colors.'
-      : 'Requires FileRise Pro to enable custom color branding.'}
+            ? 'If left empty, FileRise uses its default blue and dark header colors.'
+            : 'Requires FileRise Pro to enable custom color branding.'}
       
     </small>
   </div>
 `;
-wireHeaderTitleLive();
+        wireHeaderTitleLive();
 
         // Upload logo -> reuse profile picture endpoint, then fill the logo path
         if (isPro) {
           const fileInput = document.getElementById('brandingLogoFile');
           const uploadBtn = document.getElementById('brandingUploadBtn');
           const urlInput = document.getElementById('brandingCustomLogoUrl');
-        
+
           if (fileInput && uploadBtn && urlInput) {
             uploadBtn.addEventListener('click', async () => {
               const f = fileInput.files && fileInput.files[0];
@@ -1128,10 +1128,10 @@ wireHeaderTitleLive();
                 showToast('Please choose an image first.');
                 return;
               }
-        
+
               const fd = new FormData();
               fd.append('brand_logo', f); // <- must match PHP field
-        
+
               try {
                 const res = await fetch('/api/pro/uploadBrandLogo.php', {
                   method: 'POST',
@@ -1139,16 +1139,16 @@ wireHeaderTitleLive();
                   headers: { 'X-CSRF-Token': window.csrfToken },
                   body: fd
                 });
-        
+
                 const text = await res.text();
                 let js = {};
                 try { js = JSON.parse(text || '{}'); } catch (e) { js = {}; }
-        
+
                 if (!res.ok || !js.url) {
                   showToast(js.error || 'Error uploading logo');
                   return;
                 }
-        
+
                 const normalized = normalizeLogoPath(js.url); // your helper
                 urlInput.value = normalized;
                 showToast('Logo uploaded. Don\'t forget to Save settings.');
@@ -1210,11 +1210,11 @@ wireHeaderTitleLive();
 
 
 
-               // --- Test ONLYOFFICE block ---
-               const testBox = document.createElement("div");
-               testBox.className = "card";
-               testBox.style.marginTop = "12px";
-               testBox.innerHTML = `
+        // --- Test ONLYOFFICE block ---
+        const testBox = document.createElement("div");
+        testBox.className = "card";
+        testBox.style.marginTop = "12px";
+        testBox.innerHTML = `
          <div class="card-body">
            <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
              <strong>Test ONLYOFFICE connection</strong>
@@ -1225,165 +1225,165 @@ wireHeaderTitleLive();
            <small class="text-muted">These tests check FileRise config, callback reachability, CSP/script loading, and iframe embedding.</small>
          </div>
        `;
-               document.getElementById("onlyofficeContent").appendChild(testBox);
-       
-               // Util: tiny UI helpers for results
-               function ooRow(label, status, detail = "") {
-                 const li = document.createElement("li");
-                 li.style.margin = "6px 0";
-                 const icon = status === "ok" ? "✅" : status === "warn" ? "⚠️" : "❌";
-                 li.innerHTML = `<span style="min-width:1.2em;display:inline-block">${icon}</span> <strong>${label}</strong>${detail ? ` — <span>${detail}</span>` : ""}`;
-                 return li;
-               }
-               function ooClear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+        document.getElementById("onlyofficeContent").appendChild(testBox);
 
-               // --- ONLYOFFICE URL sanitizers ---
-function getTrustedDocsOrigin(raw) {
-  try {
-    const u = new URL(String(raw || "").trim());
-    if (!/^https?:$/.test(u.protocol)) return null;     // only http/https
-    if (u.username || u.password) return null;          // no creds in URL
-    return u.origin;                                    // scheme://host[:port]
-  } catch {
-    return null;
-  }
-}
+        // Util: tiny UI helpers for results
+        function ooRow(label, status, detail = "") {
+          const li = document.createElement("li");
+          li.style.margin = "6px 0";
+          const icon = status === "ok" ? "✅" : status === "warn" ? "⚠️" : "❌";
+          li.innerHTML = `<span style="min-width:1.2em;display:inline-block">${icon}</span> <strong>${label}</strong>${detail ? ` — <span>${detail}</span>` : ""}`;
+          return li;
+        }
+        function ooClear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
 
-function buildOnlyOfficeApiUrl(origin) {
-  // fixed path; caller already validated/normalized origin
-  const u = new URL('/web-apps/apps/api/documents/api.js', origin);
-  u.searchParams.set('probe', String(Date.now()));
-  return u.toString();
-}
-       
-              
-              // Probes that don’t explode your state
-async function ooProbeScript(docsOrigin) {
-  return new Promise(resolve => {
-    const base = getTrustedDocsOrigin(docsOrigin);
-    if (!base) { resolve({ ok: false }); return; }
+        // --- ONLYOFFICE URL sanitizers ---
+        function getTrustedDocsOrigin(raw) {
+          try {
+            const u = new URL(String(raw || "").trim());
+            if (!/^https?:$/.test(u.protocol)) return null;     // only http/https
+            if (u.username || u.password) return null;          // no creds in URL
+            return u.origin;                                    // scheme://host[:port]
+          } catch {
+            return null;
+          }
+        }
 
-    const src = buildOnlyOfficeApiUrl(base);
-    const s = document.createElement('script');
-    s.id = 'ooProbeScript';
-    s.async = true;
-    s.src = src;
+        function buildOnlyOfficeApiUrl(origin) {
+          // fixed path; caller already validated/normalized origin
+          const u = new URL('/web-apps/apps/api/documents/api.js', origin);
+          u.searchParams.set('probe', String(Date.now()));
+          return u.toString();
+        }
 
-    // If you set a CSP nonce in a <meta name="csp-nonce" content="...">, attach it:
-    const nonce = document.querySelector('meta[name="csp-nonce"]')?.content;
-    if (nonce) s.setAttribute('nonce', nonce);
 
-    const cleanup = () => { try { s.remove(); } catch {} };
+        // Probes that don’t explode your state
+        async function ooProbeScript(docsOrigin) {
+          return new Promise(resolve => {
+            const base = getTrustedDocsOrigin(docsOrigin);
+            if (!base) { resolve({ ok: false }); return; }
 
-    s.onload  = () => { cleanup(); resolve({ ok: true  }); };
-    s.onerror = () => { cleanup(); resolve({ ok: false }); };
+            const src = buildOnlyOfficeApiUrl(base);
+            const s = document.createElement('script');
+            s.id = 'ooProbeScript';
+            s.async = true;
+            s.src = src;
 
-    // codeql[js/xss-through-dom]: the origin is validated (http/https, no creds),
-    // and the path is fixed to ONLYOFFICE api.js via URL(), so this is safe.
-    document.head.appendChild(s);
-  });
-}
-async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
-  return new Promise(resolve => {
-    const base = getTrustedDocsOrigin(docsOrigin);
-    if (!base) { resolve({ ok: false }); return; }
+            // If you set a CSP nonce in a <meta name="csp-nonce" content="...">, attach it:
+            const nonce = document.querySelector('meta[name="csp-nonce"]')?.content;
+            if (nonce) s.setAttribute('nonce', nonce);
 
-    const f = document.createElement('iframe');
-    f.id = 'ooProbeFrame';
-    f.src = base;                 // only the sanitized origin
-    f.style.display = 'none';
+            const cleanup = () => { try { s.remove(); } catch { } };
 
-    // Optional: keep it extra constrained while probing.
-    // If your DS needs broader privileges, you can drop sandbox.
-    // f.sandbox = 'allow-same-origin allow-scripts';
+            s.onload = () => { cleanup(); resolve({ ok: true }); };
+            s.onerror = () => { cleanup(); resolve({ ok: false }); };
 
-    const cleanup = () => { try { f.remove(); } catch {} };
-    const t = setTimeout(() => { cleanup(); resolve({ ok: false, timeout: true }); }, timeoutMs);
+            // codeql[js/xss-through-dom]: the origin is validated (http/https, no creds),
+            // and the path is fixed to ONLYOFFICE api.js via URL(), so this is safe.
+            document.head.appendChild(s);
+          });
+        }
+        async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
+          return new Promise(resolve => {
+            const base = getTrustedDocsOrigin(docsOrigin);
+            if (!base) { resolve({ ok: false }); return; }
 
-    f.onload  = () => { clearTimeout(t); cleanup(); resolve({ ok: true  }); };
-    f.onerror = () => { clearTimeout(t); cleanup(); resolve({ ok: false }); };
+            const f = document.createElement('iframe');
+            f.id = 'ooProbeFrame';
+            f.src = base;                 // only the sanitized origin
+            f.style.display = 'none';
 
-    // codeql[js/xss-through-dom]: src is constrained to a validated http/https origin.
-    document.body.appendChild(f);
-  });
-}
-               // Main test runner
-               async function runOnlyOfficeTests() {
-                 const spinner = document.getElementById('ooTestSpinner');
-                 const out = document.getElementById('ooTestResults');
-                 const docsOrigin = (document.getElementById('ooDocsOrigin')?.value || '').trim();
-       
-                 spinner.style.display = 'inline';
-                 ooClear(out);
-       
-                 // 1) FileRise status
-                 let statusOk = false, statusJson = null;
-                 try {
-                   const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
-                   statusJson = await r.json().catch(() => ({}));
-                   if (r.ok) {
-                     if (statusJson.enabled) {
-                       out.appendChild(ooRow('FileRise status', 'ok', 'Enabled and ready'));
-                       statusOk = true;
-                     } else {
-                       // Disabled usually means missing secret or origin; we’ll dig deeper below.
-                       out.appendChild(ooRow('FileRise status', 'warn', 'Disabled — check JWT Secret and Document Server Origin'));
-                     }
-                   } else {
-                     out.appendChild(ooRow('FileRise status', 'fail', `HTTP ${r.status}`));
-                   }
-                 } catch (e) {
-                   out.appendChild(ooRow('FileRise status', 'fail', (e && e.message) || 'Network error'));
-                 }
-       
-                 // 2) Secret presence (fresh read)
-                 try {
-                   const cfg = await fetch('/api/admin/getConfig.php', { credentials: 'include', cache: 'no-store' }).then(r => r.json());
-                   const hasSecret = !!(cfg.onlyoffice && cfg.onlyoffice.hasJwtSecret);
-                   out.appendChild(ooRow('JWT secret saved', hasSecret ? 'ok' : 'fail', hasSecret ? 'Present' : 'Missing'));
-                 } catch {
-                   out.appendChild(ooRow('JWT secret saved', 'warn', 'Could not verify'));
-                 }
-       
-                 // 3) Callback reachable (basic ping)
-                 try {
-                   const r = await fetch('/api/onlyoffice/callback.php?ping=1', { credentials: 'include', cache: 'no-store' });
-                   if (r.ok) out.appendChild(ooRow('Callback endpoint', 'ok', 'Reachable'));
-                   else out.appendChild(ooRow('Callback endpoint', 'fail', `HTTP ${r.status}`));
-                 } catch {
-                   out.appendChild(ooRow('Callback endpoint', 'fail', 'Network error'));
-                 }
-       
-                 // Early sanity on origin
-                 if (!/^https?:\/\//i.test(docsOrigin)) {
-                   out.appendChild(ooRow('Document Server Origin', 'fail', 'Enter a valid http(s) origin (e.g., https://docs.example.com)'));
-                   spinner.style.display = 'none';
-                   return;
-                 }
-       
-                 // 4a) Can browser load api.js (also surfaces CSP script-src issues)
-                 const sRes = await ooProbeScript(docsOrigin);
-                 out.appendChild(ooRow('Load api.js', sRes.ok ? 'ok' : 'fail', sRes.ok ? 'Loaded' : 'Blocked (check CSP script-src and origin)'));
-       
-                 // 4b) Can browser embed DS in an iframe (CSP frame-src)
-                 const fRes = await ooProbeFrame(docsOrigin);
-                 out.appendChild(ooRow('Embed DS iframe', fRes.ok ? 'ok' : 'fail', fRes.ok ? 'Allowed' : 'Blocked (check CSP frame-src)'));
-       
-                 // Optional tip if we see common red flags
-                 if (!statusOk || !sRes.ok || !fRes.ok) {
-                   const tip = document.createElement('li');
-                   tip.style.marginTop = '8px';
-                   tip.innerHTML = "💡 <em>Tip:</em> Use the CSP helper above to include your Document Server in <code>script-src</code>, <code>connect-src</code>, and <code>frame-src</code>.";
-                   out.appendChild(tip);
-                 }
-       
-                 spinner.style.display = 'none';
-               }
-       
-               // Wire the button
-               document.getElementById('ooTestBtn')?.addEventListener('click', runOnlyOfficeTests);
+            // Optional: keep it extra constrained while probing.
+            // If your DS needs broader privileges, you can drop sandbox.
+            // f.sandbox = 'allow-same-origin allow-scripts';
 
-               
+            const cleanup = () => { try { f.remove(); } catch { } };
+            const t = setTimeout(() => { cleanup(); resolve({ ok: false, timeout: true }); }, timeoutMs);
+
+            f.onload = () => { clearTimeout(t); cleanup(); resolve({ ok: true }); };
+            f.onerror = () => { clearTimeout(t); cleanup(); resolve({ ok: false }); };
+
+            // codeql[js/xss-through-dom]: src is constrained to a validated http/https origin.
+            document.body.appendChild(f);
+          });
+        }
+        // Main test runner
+        async function runOnlyOfficeTests() {
+          const spinner = document.getElementById('ooTestSpinner');
+          const out = document.getElementById('ooTestResults');
+          const docsOrigin = (document.getElementById('ooDocsOrigin')?.value || '').trim();
+
+          spinner.style.display = 'inline';
+          ooClear(out);
+
+          // 1) FileRise status
+          let statusOk = false, statusJson = null;
+          try {
+            const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
+            statusJson = await r.json().catch(() => ({}));
+            if (r.ok) {
+              if (statusJson.enabled) {
+                out.appendChild(ooRow('FileRise status', 'ok', 'Enabled and ready'));
+                statusOk = true;
+              } else {
+                // Disabled usually means missing secret or origin; we’ll dig deeper below.
+                out.appendChild(ooRow('FileRise status', 'warn', 'Disabled — check JWT Secret and Document Server Origin'));
+              }
+            } else {
+              out.appendChild(ooRow('FileRise status', 'fail', `HTTP ${r.status}`));
+            }
+          } catch (e) {
+            out.appendChild(ooRow('FileRise status', 'fail', (e && e.message) || 'Network error'));
+          }
+
+          // 2) Secret presence (fresh read)
+          try {
+            const cfg = await fetch('/api/admin/getConfig.php', { credentials: 'include', cache: 'no-store' }).then(r => r.json());
+            const hasSecret = !!(cfg.onlyoffice && cfg.onlyoffice.hasJwtSecret);
+            out.appendChild(ooRow('JWT secret saved', hasSecret ? 'ok' : 'fail', hasSecret ? 'Present' : 'Missing'));
+          } catch {
+            out.appendChild(ooRow('JWT secret saved', 'warn', 'Could not verify'));
+          }
+
+          // 3) Callback reachable (basic ping)
+          try {
+            const r = await fetch('/api/onlyoffice/callback.php?ping=1', { credentials: 'include', cache: 'no-store' });
+            if (r.ok) out.appendChild(ooRow('Callback endpoint', 'ok', 'Reachable'));
+            else out.appendChild(ooRow('Callback endpoint', 'fail', `HTTP ${r.status}`));
+          } catch {
+            out.appendChild(ooRow('Callback endpoint', 'fail', 'Network error'));
+          }
+
+          // Early sanity on origin
+          if (!/^https?:\/\//i.test(docsOrigin)) {
+            out.appendChild(ooRow('Document Server Origin', 'fail', 'Enter a valid http(s) origin (e.g., https://docs.example.com)'));
+            spinner.style.display = 'none';
+            return;
+          }
+
+          // 4a) Can browser load api.js (also surfaces CSP script-src issues)
+          const sRes = await ooProbeScript(docsOrigin);
+          out.appendChild(ooRow('Load api.js', sRes.ok ? 'ok' : 'fail', sRes.ok ? 'Loaded' : 'Blocked (check CSP script-src and origin)'));
+
+          // 4b) Can browser embed DS in an iframe (CSP frame-src)
+          const fRes = await ooProbeFrame(docsOrigin);
+          out.appendChild(ooRow('Embed DS iframe', fRes.ok ? 'ok' : 'fail', fRes.ok ? 'Allowed' : 'Blocked (check CSP frame-src)'));
+
+          // Optional tip if we see common red flags
+          if (!statusOk || !sRes.ok || !fRes.ok) {
+            const tip = document.createElement('li');
+            tip.style.marginTop = '8px';
+            tip.innerHTML = "💡 <em>Tip:</em> Use the CSP helper above to include your Document Server in <code>script-src</code>, <code>connect-src</code>, and <code>frame-src</code>.";
+            out.appendChild(tip);
+          }
+
+          spinner.style.display = 'none';
+        }
+
+        // Wire the button
+        document.getElementById('ooTestBtn')?.addEventListener('click', runOnlyOfficeTests);
+
+
 
         // Append CSP help box
         // --- CSP help box (replace your whole block with this) ---
@@ -1434,7 +1434,7 @@ async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
         function refreshCsp() {
           const raw = (ooDocsInput?.value || "").trim();
           const base = getTrustedDocsOrigin(raw) || raw; // fall back to raw so users see their input
-          cspPre.textContent    = buildCspApache(base);
+          cspPre.textContent = buildCspApache(base);
           cspPreNgx.textContent = buildCspNginx(base);
         }
         ooDocsInput?.addEventListener("input", refreshCsp);
@@ -1525,21 +1525,21 @@ async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
 
         document.getElementById("shareLinksContent").textContent = t("loading") + "…";
 
-// --- FileRise Pro / License section ---
-const proContent = document.getElementById("proContent");
-if (proContent) {
-  // Normalize versions so "v1.0.1" and "1.0.1" compare cleanly
-  const norm = (v) => (String(v || '').trim().replace(/^v/i, ''));
+        // --- FileRise Pro / License section ---
+        const proContent = document.getElementById("proContent");
+        if (proContent) {
+          // Normalize versions so "v1.0.1" and "1.0.1" compare cleanly
+          const norm = (v) => (String(v || '').trim().replace(/^v/i, ''));
 
-  const currentVersionRaw = (proVersion && proVersion !== 'not installed') ? String(proVersion) : '';
-  const latestVersionRaw  = PRO_LATEST_BUNDLE_VERSION || '';
-  const hasCurrent        = !!norm(currentVersionRaw);
-  const hasLatest         = !!norm(latestVersionRaw);
-  const hasUpdate         = hasCurrent && hasLatest && norm(currentVersionRaw) !== norm(latestVersionRaw);
+          const currentVersionRaw = (proVersion && proVersion !== 'not installed') ? String(proVersion) : '';
+          const latestVersionRaw = PRO_LATEST_BUNDLE_VERSION || '';
+          const hasCurrent = !!norm(currentVersionRaw);
+          const hasLatest = !!norm(latestVersionRaw);
+          const hasUpdate = hasCurrent && hasLatest && norm(currentVersionRaw) !== norm(latestVersionRaw);
 
-  const proMetaHtml =
-    isPro && (proType || proEmail || proVersion)
-      ? `
+          const proMetaHtml =
+            isPro && (proType || proEmail || proVersion)
+              ? `
         <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
           <div>
             ✅ ${proType ? `License type: ${proType}` : 'License active'}
@@ -1556,10 +1556,10 @@ if (proContent) {
           </div>` : ''}
         </div>
       `
-      : '';
+              : '';
 
-  proContent.innerHTML = `
-    <div class="card pro-card" style="padding:12px; border:1px solid #ddd; border-radius:12px; max-width:620px; margin:8px auto;">
+          proContent.innerHTML = `
+    <div class="card pro-card" style="padding:12px; border:1px solid #ddd; border-radius:12px; max-width:720px; margin:8px auto;">
       <div>
         <!-- Title row with pill aligned to "FileRise Pro" -->
         <div class="d-flex align-items-center" style="gap:8px;">
@@ -1572,8 +1572,8 @@ if (proContent) {
         <!-- Subtitle + meta under the title -->
         <div style="font-size:12px; color:#777; margin-top:2px;">
           ${isPro
-            ? 'Pro features are currently enabled on this instance.'
-            : 'You are running the free edition. Enter a license key to activate FileRise Pro.'}
+              ? 'Pro features are currently enabled on this instance.'
+              : 'You are running the free edition. Enter a license key to activate FileRise Pro.'}
         </div>
         ${proMetaHtml}
       </div>
@@ -1674,115 +1674,115 @@ if (proContent) {
     </div>
   `;
 
-  // Wire up local Pro bundle installer (upload .zip into core)
-  initProBundleInstaller();
+          // Wire up local Pro bundle installer (upload .zip into core)
+          initProBundleInstaller();
 
-  // Pre-fill textarea with saved license if present
-  const licenseTextarea = document.getElementById('proLicenseInput');
-  if (licenseTextarea && proLicense) {
-    licenseTextarea.value = proLicense;
-  }
-
-  // Auto-load license when a file is selected
-  const fileInput = document.getElementById('proLicenseFile');
-  if (fileInput && licenseTextarea) {
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        let raw = String(e.target.result || '').trim();
-        let license = raw;
-
-        try {
-          const js = JSON.parse(raw);
-          if (js && typeof js.license === 'string') {
-            license = js.license.trim();
+          // Pre-fill textarea with saved license if present
+          const licenseTextarea = document.getElementById('proLicenseInput');
+          if (licenseTextarea && proLicense) {
+            licenseTextarea.value = proLicense;
           }
-        } catch (_) {
-          // not JSON, treat as plain text
+
+          // Auto-load license when a file is selected
+          const fileInput = document.getElementById('proLicenseFile');
+          if (fileInput && licenseTextarea) {
+            fileInput.addEventListener('change', () => {
+              const file = fileInput.files && fileInput.files[0];
+              if (!file) return;
+
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                let raw = String(e.target.result || '').trim();
+                let license = raw;
+
+                try {
+                  const js = JSON.parse(raw);
+                  if (js && typeof js.license === 'string') {
+                    license = js.license.trim();
+                  }
+                } catch (_) {
+                  // not JSON, treat as plain text
+                }
+
+                if (!license || !license.startsWith('FRP1.')) {
+                  showToast('Could not find a valid FRP1 license in that file.');
+                  return;
+                }
+
+                licenseTextarea.value = license;
+                showToast('License loaded from file. Click "Save license" to apply.');
+              };
+
+              reader.onerror = () => {
+                showToast('Error reading license file.');
+              };
+
+              reader.readAsText(file);
+            });
+          }
+
+          // Copy current license button (now inline next to the label)
+          const proCopyBtn = document.getElementById('proCopyLicenseBtn');
+          if (proCopyBtn && proLicense) {
+            proCopyBtn.addEventListener('click', async () => {
+              try {
+                if (navigator.clipboard && window.isSecureContext) {
+                  await navigator.clipboard.writeText(proLicense);
+                } else {
+                  const ta = document.createElement('textarea');
+                  ta.value = proLicense;
+                  ta.style.position = 'fixed';
+                  ta.style.left = '-9999px';
+                  document.body.appendChild(ta);
+                  ta.select();
+                  document.execCommand('copy');
+                  ta.remove();
+                }
+                showToast('License copied to clipboard.');
+              } catch {
+                showToast('Could not copy license. Please copy it manually.');
+              }
+            });
+          }
+
+          // Save license handler (unchanged)
+          const proSaveBtn = document.getElementById('proSaveLicenseBtn');
+          if (proSaveBtn) {
+            proSaveBtn.addEventListener('click', async () => {
+              const ta = document.getElementById('proLicenseInput');
+              const license = (ta && ta.value.trim()) || '';
+
+              try {
+                const res = await fetch('/api/admin/setLicense.php', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.content || '')
+                  },
+                  body: JSON.stringify({ license }),
+                });
+
+                const text = await res.text();
+                let data = {};
+                try { data = JSON.parse(text || '{}'); } catch (e) { data = {}; }
+
+                if (!res.ok || !data.success) {
+                  console.error('setLicense error:', res.status, text);
+                  showToast(data.error || 'Error saving license');
+                  return;
+                }
+
+                showToast('License saved. Reloading…');
+                window.location.reload();
+              } catch (e) {
+                console.error(e);
+                showToast('Error saving license');
+              }
+            });
+          }
         }
-
-        if (!license || !license.startsWith('FRP1.')) {
-          showToast('Could not find a valid FRP1 license in that file.');
-          return;
-        }
-
-        licenseTextarea.value = license;
-        showToast('License loaded from file. Click "Save license" to apply.');
-      };
-
-      reader.onerror = () => {
-        showToast('Error reading license file.');
-      };
-
-      reader.readAsText(file);
-    });
-  }
-
-  // Copy current license button (now inline next to the label)
-  const proCopyBtn = document.getElementById('proCopyLicenseBtn');
-  if (proCopyBtn && proLicense) {
-    proCopyBtn.addEventListener('click', async () => {
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(proLicense);
-        } else {
-          const ta = document.createElement('textarea');
-          ta.value = proLicense;
-          ta.style.position = 'fixed';
-          ta.style.left = '-9999px';
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          ta.remove();
-        }
-        showToast('License copied to clipboard.');
-      } catch {
-        showToast('Could not copy license. Please copy it manually.');
-      }
-    });
-  }
-
-  // Save license handler (unchanged)
-  const proSaveBtn = document.getElementById('proSaveLicenseBtn');
-  if (proSaveBtn) {
-    proSaveBtn.addEventListener('click', async () => {
-      const ta = document.getElementById('proLicenseInput');
-      const license = (ta && ta.value.trim()) || '';
-
-      try {
-        const res = await fetch('/api/admin/setLicense.php', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.content || '')
-          },
-          body: JSON.stringify({ license }),
-        });
-
-        const text = await res.text();
-        let data = {};
-        try { data = JSON.parse(text || '{}'); } catch (e) { data = {}; }
-
-        if (!res.ok || !data.success) {
-          console.error('setLicense error:', res.status, text);
-          showToast(data.error || 'Error saving license');
-          return;
-        }
-
-        showToast('License saved. Reloading…');
-        window.location.reload();
-      } catch (e) {
-        console.error(e);
-        showToast('Error saving license');
-      }
-    });
-  }
-}
-// --- end FileRise Pro section ---
+        // --- end FileRise Pro section ---
 
         document.getElementById("saveAdminSettings")
           .addEventListener("click", handleSave);
@@ -1915,6 +1915,14 @@ if (proContent) {
         document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig?.globalOtpauthUrl || '';
         captureInitialAdminConfig();
       }
+      try {
+               initAdminStorageSection({
+                 isPro,
+                 modalEl: mdl
+               });
+             } catch (e) {
+               console.error('Failed to init Storage / Disk Usage section', e);
+             }
     })
     .catch(() => {/* if even fetching fails, open empty panel */ });
 }
@@ -1940,7 +1948,7 @@ function handleSave() {
     branding: {
       customLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
       headerBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
-      headerBgDark:  (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
+      headerBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
     },
   };
 
@@ -1949,7 +1957,7 @@ function handleSave() {
 
   const idVal = idEl?.value.trim() || '';
   const secVal = scEl?.value.trim() || '';
-  const idFirstTime  = idEl && !idEl.hasAttribute('data-replace');   // no saved value yet
+  const idFirstTime = idEl && !idEl.hasAttribute('data-replace');   // no saved value yet
   const secFirstTime = scEl && !scEl.hasAttribute('data-replace');   // no saved value yet
   if ((idEl?.dataset.replace === '1' || idFirstTime) && idVal !== '') {
     payload.oidc.clientId = idVal;
@@ -1970,7 +1978,7 @@ function handleSave() {
     enabled: document.getElementById("ooEnabled").checked,
     docsOrigin: document.getElementById("ooDocsOrigin").value.trim()
   };
-  
+
   if (!window.__OO_LOCKED) {
     const ooSecretVal = (document.getElementById("ooJwtSecret")?.value || "").trim();
     if (ooSecretVal !== "") {
@@ -2618,7 +2626,7 @@ async function saveAllGroups(groups) {
 }
 
 async function openClientPortalsModal() {
-  const isDark   = document.body.classList.contains('dark-mode');
+  const isDark = document.body.classList.contains('dark-mode');
   const overlayBg = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)';
   const contentBg = isDark ? '#2c2c2c' : '#fff';
   const contentFg = isDark ? '#e0e0e0' : '#000';
@@ -2669,16 +2677,16 @@ async function openClientPortalsModal() {
     document.body.appendChild(modal);
 
     document.getElementById('closeClientPortalsModal').onclick = () => (modal.style.display = 'none');
-    document.getElementById('cancelClientPortals').onclick     = () => (modal.style.display = 'none');
-    document.getElementById('saveClientPortals').onclick       = saveClientPortalsFromUI;
-    document.getElementById('addPortalBtn').onclick            = addEmptyPortalRow;
+    document.getElementById('cancelClientPortals').onclick = () => (modal.style.display = 'none');
+    document.getElementById('saveClientPortals').onclick = saveClientPortalsFromUI;
+    document.getElementById('addPortalBtn').onclick = addEmptyPortalRow;
   } else {
     modal.style.background = overlayBg;
     const content = modal.querySelector('.modal-content');
     if (content) {
       content.style.background = contentBg;
-      content.style.color      = contentFg;
-      content.style.border     = `1px solid ${borderCol}`;
+      content.style.color = contentFg;
+      content.style.border = `1px solid ${borderCol}`;
     }
   }
 
@@ -2687,14 +2695,14 @@ async function openClientPortalsModal() {
 }
 
 async function loadClientPortalsList(useCacheOnly) {
-  const body   = document.getElementById('clientPortalsBody');
+  const body = document.getElementById('clientPortalsBody');
   const status = document.getElementById('clientPortalsStatus');
   if (!body) return;
 
   body.textContent = `${t('loading')}…`;
   if (status) {
     status.textContent = '';
-    status.className   = 'small text-muted';
+    status.className = 'small text-muted';
   }
 
   try {
@@ -2715,28 +2723,28 @@ async function loadClientPortalsList(useCacheOnly) {
     let html = '';
     slugs.forEach(slug => {
 
-      const origin     = window.location.origin || '';
-      const portalPath = '/portal/'+ encodeURIComponent(slug);
-      const portalUrl  = origin ? origin + portalPath : portalPath;
+      const origin = window.location.origin || '';
+      const portalPath = '/portal/' + encodeURIComponent(slug);
+      const portalUrl = origin ? origin + portalPath : portalPath;
 
       const p = __portalsCache[slug] || {};
-      const label        = p.label || slug;
-      const folder       = p.folder || '';
-      const clientEmail  = p.clientEmail || '';
-      const uploadOnly   = !!p.uploadOnly;
+      const label = p.label || slug;
+      const folder = p.folder || '';
+      const clientEmail = p.clientEmail || '';
+      const uploadOnly = !!p.uploadOnly;
       const allowDownload = p.allowDownload !== false; // default true
-      const expiresAt    = p.expiresAt ? String(p.expiresAt).slice(0, 10) : '';
-      const brandColor   = p.brandColor || '';
-      const footerText   = p.footerText || '';
+      const expiresAt = p.expiresAt ? String(p.expiresAt).slice(0, 10) : '';
+      const brandColor = p.brandColor || '';
+      const footerText = p.footerText || '';
       const formDefaults = p.formDefaults || {};
       const formRequired = p.formRequired || {};
-      const defName      = formDefaults.name || '';
-      const defEmail     = formDefaults.email || '';
-      const defRef       = formDefaults.reference || '';
-      const defNotes     = formDefaults.notes || '';
+      const defName = formDefaults.name || '';
+      const defEmail = formDefaults.email || '';
+      const defRef = formDefaults.reference || '';
+      const defNotes = formDefaults.notes || '';
 
-      const title      = p.title || '';
-      const introText  = p.introText || '';
+      const title = p.title || '';
+      const introText = p.introText || '';
       const requireForm = !!p.requireForm;
 
       html += `
@@ -2950,36 +2958,36 @@ async function loadClientPortalsList(useCacheOnly) {
     });
     body.innerHTML = html;
 
-        // Wire collapse / expand for each portal card
-        body.querySelectorAll('.portal-card').forEach(card => {
-          const header = card.querySelector('.portal-card-header');
-          const bodyEl = card.querySelector('.portal-card-body');
-          const caret  = card.querySelector('.portal-card-caret');
-          if (!header || !bodyEl) return;
-    
-          const setExpanded = (expanded) => {
-            header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-            bodyEl.style.display = expanded ? 'block' : 'none';
-            if (caret) {
-              caret.textContent = expanded ? '▾' : '▸';
-            }
-          };
-    
-          setExpanded(false);
-    
-          const toggle = () => {
-            const expanded = header.getAttribute('aria-expanded') === 'true';
-            setExpanded(!expanded);
-          };
-    
-          header.addEventListener('click', toggle);
-          header.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              toggle();
-            }
-          });
-        });
+    // Wire collapse / expand for each portal card
+    body.querySelectorAll('.portal-card').forEach(card => {
+      const header = card.querySelector('.portal-card-header');
+      const bodyEl = card.querySelector('.portal-card-body');
+      const caret = card.querySelector('.portal-card-caret');
+      if (!header || !bodyEl) return;
+
+      const setExpanded = (expanded) => {
+        header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        bodyEl.style.display = expanded ? 'block' : 'none';
+        if (caret) {
+          caret.textContent = expanded ? '▾' : '▸';
+        }
+      };
+
+      setExpanded(false);
+
+      const toggle = () => {
+        const expanded = header.getAttribute('aria-expanded') === 'true';
+        setExpanded(!expanded);
+      };
+
+      header.addEventListener('click', toggle);
+      header.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle();
+        }
+      });
+    });
 
     // Wire delete buttons
     body.querySelectorAll('[data-portal-action="delete"]').forEach(btn => {
@@ -2999,7 +3007,7 @@ async function loadClientPortalsList(useCacheOnly) {
     body.innerHTML = `<p class="text-danger">Error loading client portals.</p>`;
     if (status) {
       status.textContent = 'Error loading client portals.';
-      status.className   = 'small text-danger';
+      status.className = 'small text-danger';
     }
   }
 }
@@ -3080,10 +3088,10 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
 
         if (!isNaN(d.getTime())) {
           headerParts.push(d.toLocaleString(undefined, {
-            year:   'numeric',
-            month:  '2-digit',
-            day:    '2-digit',
-            hour:   '2-digit',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
             minute: '2-digit',
             second: '2-digit'
           }));
@@ -3104,9 +3112,9 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
     //   ...
     // }
     const raw = sub.raw || sub;
-    const folder      = sub.folder      || (raw && raw.folder)      || '';
+    const folder = sub.folder || (raw && raw.folder) || '';
     const submittedBy = sub.submittedBy || (raw && raw.submittedBy) || '';
-    const ip          = sub.ip          || (raw && raw.ip)          || '';
+    const ip = sub.ip || (raw && raw.ip) || '';
 
     if (folder) {
       headerParts.push('Folder: ' + folder);
@@ -3128,14 +3136,14 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
     const form = raw.form || sub.form || raw;
 
     const summaryParts = [];
-    const name  = form.name      || sub.name      || '';
-    const email = form.email     || sub.email     || '';
-    const ref   = form.reference || form.ref      || sub.reference || sub.ref || '';
-    const notes = form.notes     || form.message  || sub.notes     || sub.message || '';
+    const name = form.name || sub.name || '';
+    const email = form.email || sub.email || '';
+    const ref = form.reference || form.ref || sub.reference || sub.ref || '';
+    const notes = form.notes || form.message || sub.notes || sub.message || '';
 
-    if (name)  summaryParts.push('Name: ' + name);
+    if (name) summaryParts.push('Name: ' + name);
     if (email) summaryParts.push('Email: ' + email);
-    if (ref)   summaryParts.push('Ref: ' + ref);
+    if (ref) summaryParts.push('Ref: ' + ref);
     if (notes) summaryParts.push('Notes: ' + notes);
 
     summary.textContent = summaryParts.join(' • ');
@@ -3217,7 +3225,7 @@ function attachPortalSubmissionsUI() {
 }
 
 async function saveClientPortalsFromUI(modal) {
-  const body   = document.getElementById('clientPortalsBody');
+  const body = document.getElementById('clientPortalsBody');
   const status = document.getElementById('clientPortalsStatus');
   if (!body) return;
 
@@ -3227,54 +3235,54 @@ async function saveClientPortalsFromUI(modal) {
   cards.forEach(card => {
     const origSlug = card.getAttribute('data-portal-slug') || '';
     let slug = origSlug.trim();
-  
+
     const getVal = (selector) => {
       const el = card.querySelector(selector);
       return el ? el.value || '' : '';
     };
-  
-    const label       = getVal('[data-portal-field="label"]').trim();
-    const folder      = getVal('[data-portal-field="folder"]').trim();
-    const clientEmail = getVal('[data-portal-field="clientEmail"]').trim();
-    const expiresAt   = getVal('[data-portal-field="expiresAt"]').trim();
-    const title       = getVal('[data-portal-field="title"]').trim();
-    const introText   = getVal('[data-portal-field="introText"]').trim();
-  
-    const brandColor  = getVal('[data-portal-field="brandColor"]').trim();
-    const footerText  = getVal('[data-portal-field="footerText"]').trim();
-    const defName     = getVal('[data-portal-field="defName"]').trim();
-    const defEmail    = getVal('[data-portal-field="defEmail"]').trim();
-    const defRef      = getVal('[data-portal-field="defRef"]').trim();
-    const defNotes    = getVal('[data-portal-field="defNotes"]').trim();
-  
-    const uploadOnlyEl    = card.querySelector('[data-portal-field="uploadOnly"]');
-    const allowDownloadEl = card.querySelector('[data-portal-field="allowDownload"]');
-    const requireFormEl   = card.querySelector('[data-portal-field="requireForm"]');
-  
-    const uploadOnly    = uploadOnlyEl ? !!uploadOnlyEl.checked : true;
-    const allowDownload = allowDownloadEl ? !!allowDownloadEl.checked : false;
-    const requireForm   = requireFormEl ? !!requireFormEl.checked : false;
-    const reqNameEl = card.querySelector('[data-portal-field="reqName"]');
-  const reqEmailEl = card.querySelector('[data-portal-field="reqEmail"]');
-  const reqRefEl   = card.querySelector('[data-portal-field="reqRef"]');
-  const reqNotesEl = card.querySelector('[data-portal-field="reqNotes"]');
 
-  const reqName = reqNameEl ? !!reqNameEl.checked : false;
-  const reqEmail = reqEmailEl ? !!reqEmailEl.checked : false;
-  const reqRef   = reqRefEl ? !!reqRefEl.checked : false;
-  const reqNotes = reqNotesEl ? !!reqNotesEl.checked : false;
-  
+    const label = getVal('[data-portal-field="label"]').trim();
+    const folder = getVal('[data-portal-field="folder"]').trim();
+    const clientEmail = getVal('[data-portal-field="clientEmail"]').trim();
+    const expiresAt = getVal('[data-portal-field="expiresAt"]').trim();
+    const title = getVal('[data-portal-field="title"]').trim();
+    const introText = getVal('[data-portal-field="introText"]').trim();
+
+    const brandColor = getVal('[data-portal-field="brandColor"]').trim();
+    const footerText = getVal('[data-portal-field="footerText"]').trim();
+    const defName = getVal('[data-portal-field="defName"]').trim();
+    const defEmail = getVal('[data-portal-field="defEmail"]').trim();
+    const defRef = getVal('[data-portal-field="defRef"]').trim();
+    const defNotes = getVal('[data-portal-field="defNotes"]').trim();
+
+    const uploadOnlyEl = card.querySelector('[data-portal-field="uploadOnly"]');
+    const allowDownloadEl = card.querySelector('[data-portal-field="allowDownload"]');
+    const requireFormEl = card.querySelector('[data-portal-field="requireForm"]');
+
+    const uploadOnly = uploadOnlyEl ? !!uploadOnlyEl.checked : true;
+    const allowDownload = allowDownloadEl ? !!allowDownloadEl.checked : false;
+    const requireForm = requireFormEl ? !!requireFormEl.checked : false;
+    const reqNameEl = card.querySelector('[data-portal-field="reqName"]');
+    const reqEmailEl = card.querySelector('[data-portal-field="reqEmail"]');
+    const reqRefEl = card.querySelector('[data-portal-field="reqRef"]');
+    const reqNotesEl = card.querySelector('[data-portal-field="reqNotes"]');
+
+    const reqName = reqNameEl ? !!reqNameEl.checked : false;
+    const reqEmail = reqEmailEl ? !!reqEmailEl.checked : false;
+    const reqRef = reqRefEl ? !!reqRefEl.checked : false;
+    const reqNotes = reqNotesEl ? !!reqNotesEl.checked : false;
+
     const slugInput = card.querySelector('[data-portal-field="slug"]');
     if (slugInput) {
       const rawSlug = slugInput.value.trim();
       if (rawSlug) slug = rawSlug;
     }
-  
+
     if (!slug || !folder) {
       // Skip incomplete portals (or show an error if you prefer)
       return;
     }
-  
+
     portals[slug] = {
       label,
       folder,
@@ -3288,24 +3296,24 @@ async function saveClientPortalsFromUI(modal) {
       brandColor,
       footerText,
       formDefaults: {
-        name:      defName,
-        email:     defEmail,
+        name: defName,
+        email: defEmail,
         reference: defRef,
-        notes:     defNotes
+        notes: defNotes
       },
       formRequired: {
-        name:      reqName,
-        email:     reqEmail,
+        name: reqName,
+        email: reqEmail,
         reference: reqRef,
-        notes:     reqNotes
+        notes: reqNotes
       }
     };
-    
+
   });
 
   if (status) {
     status.textContent = 'Saving…';
-    status.className   = 'small text-muted';
+    status.className = 'small text-muted';
   }
 
   try {
@@ -3316,14 +3324,14 @@ async function saveClientPortalsFromUI(modal) {
     __portalsCache = portals;
     if (status) {
       status.textContent = 'Saved.';
-      status.className   = 'small text-success';
+      status.className = 'small text-success';
     }
     showToast('Client portals saved.');
   } catch (e) {
     console.error(e);
     if (status) {
       status.textContent = 'Error saving.';
-      status.className   = 'small text-danger';
+      status.className = 'small text-danger';
     }
     showToast('Error saving client portals: ' + (e.message || e));
   }
@@ -3441,16 +3449,16 @@ async function loadUserGroupsList(useCacheOnly) {
       const g = __groupsCache[name] || {};
       const label = g.label || name;
       const members = Array.isArray(g.members) ? g.members : [];
-    
+
       const memberOptions = usernames.map(u => {
         const sel = members.includes(u) ? 'selected' : '';
         return `<option value="${u}" ${sel}>${u}</option>`;
       }).join('');
-    
+
       const memberCountLabel = members.length
         ? `${members.length} member${members.length === 1 ? '' : 's'}`
         : 'No members yet';
-    
+
       html += `
         <div class="card" data-group-name="${name}" style="margin-bottom:10px; border-radius:8px;">
           <!-- Collapsible header -->
@@ -3522,40 +3530,40 @@ async function loadUserGroupsList(useCacheOnly) {
 
     body.innerHTML = html;
 
-      // Collapse/expand group cards (default: collapsed)
-body.querySelectorAll('.card[data-group-name]').forEach(card => {
-  const header = card.querySelector('.group-card-header');
-  const bodyEl = card.querySelector('.group-card-body');
-  const caret  = card.querySelector('.group-caret');
-  if (!header || !bodyEl || !caret) return;
+    // Collapse/expand group cards (default: collapsed)
+    body.querySelectorAll('.card[data-group-name]').forEach(card => {
+      const header = card.querySelector('.group-card-header');
+      const bodyEl = card.querySelector('.group-card-body');
+      const caret = card.querySelector('.group-caret');
+      if (!header || !bodyEl || !caret) return;
 
-  const setExpanded = (expanded) => {
-    header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    bodyEl.style.display = expanded ? 'block' : 'none';
-    caret.textContent = expanded ? '▾' : '▸';
-  };
+      const setExpanded = (expanded) => {
+        header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        bodyEl.style.display = expanded ? 'block' : 'none';
+        caret.textContent = expanded ? '▾' : '▸';
+      };
 
-  // Start collapsed
-  setExpanded(false);
+      // Start collapsed
+      setExpanded(false);
 
-  const toggle = () => {
-    const isOpen = header.getAttribute('aria-expanded') === 'true';
-    setExpanded(!isOpen);
-  };
+      const toggle = () => {
+        const isOpen = header.getAttribute('aria-expanded') === 'true';
+        setExpanded(!isOpen);
+      };
 
-  header.addEventListener('click', (e) => {
-    // Don’t toggle when clicking the delete button
-    if (e.target.closest('[data-group-action="delete"]')) return;
-    toggle();
-  });
+      header.addEventListener('click', (e) => {
+        // Don’t toggle when clicking the delete button
+        if (e.target.closest('[data-group-action="delete"]')) return;
+        toggle();
+      });
 
-  header.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      toggle();
-    }
-  });
-});
+      header.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle();
+        }
+      });
+    });
 
     // Show selected members as chips under each multi-select
     body.querySelectorAll('select[data-group-field="members"]').forEach(sel => {
@@ -3982,31 +3990,31 @@ async function loadUserPermissionsList() {
     // Clear the container and render sections
     listContainer.innerHTML = "";
 
-// ====================
-// Groups section (top)
-// ====================
-const groupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
-if (groupNames.length) {
-  const groupHeader = document.createElement("div");
-  groupHeader.className = "muted";
-  groupHeader.style.margin = "4px 0 6px";
-  groupHeader.textContent = tf("groups_header", "Groups");
-  listContainer.appendChild(groupHeader);
+    // ====================
+    // Groups section (top)
+    // ====================
+    const groupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+    if (groupNames.length) {
+      const groupHeader = document.createElement("div");
+      groupHeader.className = "muted";
+      groupHeader.style.margin = "4px 0 6px";
+      groupHeader.textContent = tf("groups_header", "Groups");
+      listContainer.appendChild(groupHeader);
 
-  groupNames.forEach(name => {
-    const g = groups[name] || {};
-    const label = g.label || name;
-    const members = Array.isArray(g.members) ? g.members : [];
-    const membersSummary = members.length
-      ? members.join(", ")
-      : tf("no_members", "No members yet");
+      groupNames.forEach(name => {
+        const g = groups[name] || {};
+        const label = g.label || name;
+        const members = Array.isArray(g.members) ? g.members : [];
+        const membersSummary = members.length
+          ? members.join(", ")
+          : tf("no_members", "No members yet");
 
-    const row = document.createElement("div");
-    row.classList.add("user-permission-row", "group-permission-row");
-    row.setAttribute("data-group-name", name);
-    row.style.padding = "6px 0";
+        const row = document.createElement("div");
+        row.classList.add("user-permission-row", "group-permission-row");
+        row.setAttribute("data-group-name", name);
+        row.style.padding = "6px 0";
 
-    row.innerHTML = `
+        row.innerHTML = `
       <div class="user-perm-header" tabindex="0" role="button" aria-expanded="false"
            style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:12px;">
         <span class="perm-caret" style="display:inline-block; transform: rotate(-90deg); transition: transform 120ms ease;">▸</span>
@@ -4021,79 +4029,79 @@ if (groupNames.length) {
         <div class="folder-grants-box" data-loaded="0"></div>
       </div>
     `;
-    
-    // Safely inject dynamic text:
-    const labelEl = row.querySelector('.group-label');
-    if (labelEl) {
-      labelEl.textContent = label; // no HTML, just text
-    }
-    
-    const membersEl = row.querySelector('.members-summary');
-    if (membersEl) {
-      membersEl.textContent = `${tf("members_label", "Members")}: ${membersSummary}`;
-    }
 
-    const header = row.querySelector(".user-perm-header");
-    const details = row.querySelector(".user-perm-details");
-    const caret = row.querySelector(".perm-caret");
-    const grantsBox = row.querySelector(".folder-grants-box");
+        // Safely inject dynamic text:
+        const labelEl = row.querySelector('.group-label');
+        if (labelEl) {
+          labelEl.textContent = label; // no HTML, just text
+        }
 
-    // Load this group's folder ACL (from __groupsCache) and show it read-only
-    async function ensureLoaded() {
-      if (grantsBox.dataset.loaded === "1") return;
-      try {
-        const group = __groupsCache[name] || {};
-        const grants = group.grants || {};
+        const membersEl = row.querySelector('.members-summary');
+        if (membersEl) {
+          membersEl.textContent = `${tf("members_label", "Members")}: ${membersSummary}`;
+        }
 
-        renderFolderGrantsUI(
-          name,
-          grantsBox,
-          orderedFolders,
-          grants
-        );
+        const header = row.querySelector(".user-perm-header");
+        const details = row.querySelector(".user-perm-details");
+        const caret = row.querySelector(".perm-caret");
+        const grantsBox = row.querySelector(".folder-grants-box");
 
-        // Make it clear: edit in User groups → Edit folder access
-        grantsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-          cb.disabled = true;
-          cb.title = tf(
-            "edit_group_acl_in_user_groups",
-            "Group ACL is read-only here. Use User groups → Edit folder access to change it."
-          );
+        // Load this group's folder ACL (from __groupsCache) and show it read-only
+        async function ensureLoaded() {
+          if (grantsBox.dataset.loaded === "1") return;
+          try {
+            const group = __groupsCache[name] || {};
+            const grants = group.grants || {};
+
+            renderFolderGrantsUI(
+              name,
+              grantsBox,
+              orderedFolders,
+              grants
+            );
+
+            // Make it clear: edit in User groups → Edit folder access
+            grantsBox.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+              cb.disabled = true;
+              cb.title = tf(
+                "edit_group_acl_in_user_groups",
+                "Group ACL is read-only here. Use User groups → Edit folder access to change it."
+              );
+            });
+
+            grantsBox.dataset.loaded = "1";
+          } catch (e) {
+            console.error(e);
+            grantsBox.innerHTML = `<div class="muted">${tf("error_loading_group_grants", "Error loading group grants")}</div>`;
+          }
+        }
+
+        function toggleOpen() {
+          const willShow = details.style.display === "none";
+          details.style.display = willShow ? "block" : "none";
+          header.setAttribute("aria-expanded", willShow ? "true" : "false");
+          caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
+          if (willShow) ensureLoaded();
+        }
+
+        header.addEventListener("click", toggleOpen);
+        header.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleOpen();
+          }
         });
 
-        grantsBox.dataset.loaded = "1";
-      } catch (e) {
-        console.error(e);
-        grantsBox.innerHTML = `<div class="muted">${tf("error_loading_group_grants", "Error loading group grants")}</div>`;
-      }
+        listContainer.appendChild(row);
+      });
+
+      // divider between groups and users
+      const hr = document.createElement("hr");
+      hr.style.margin = "6px 0 10px";
+      hr.style.border = "0";
+      hr.style.borderTop = "1px solid rgba(0,0,0,0.08)";
+      listContainer.appendChild(hr);
     }
-
-    function toggleOpen() {
-      const willShow = details.style.display === "none";
-      details.style.display = willShow ? "block" : "none";
-      header.setAttribute("aria-expanded", willShow ? "true" : "false");
-      caret.style.transform = willShow ? "rotate(0deg)" : "rotate(-90deg)";
-      if (willShow) ensureLoaded();
-    }
-
-    header.addEventListener("click", toggleOpen);
-    header.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        toggleOpen();
-      }
-    });
-
-    listContainer.appendChild(row);
-  });
-
-  // divider between groups and users
-  const hr = document.createElement("hr");
-  hr.style.margin = "6px 0 10px";
-  hr.style.border = "0";
-  hr.style.borderTop = "1px solid rgba(0,0,0,0.08)";
-  listContainer.appendChild(hr);
-}
 
     // =================
     // Users section
@@ -4113,12 +4121,12 @@ if (groupNames.length) {
       const groupsForUser = userGroupMap[username] || [];
       const groupBadges = groupsForUser.length
         ? (() => {
-            const labels = groupsForUser.map(gName => {
-              const g = groups[gName] || {};
-              return g.label || gName;
-            });
-            return `<span class="muted" style="margin-left:8px;font-size:11px;">${tf("member_of_groups", "Groups")}: ${labels.join(", ")}</span>`;
-          })()
+          const labels = groupsForUser.map(gName => {
+            const g = groups[gName] || {};
+            return g.label || gName;
+          });
+          return `<span class="muted" style="margin-left:8px;font-size:11px;">${tf("member_of_groups", "Groups")}: ${labels.join(", ")}</span>`;
+        })()
         : "";
 
       const row = document.createElement("div");
@@ -4152,7 +4160,7 @@ if (groupNames.length) {
         try {
           let grants;
           const orderedFolders = ["root", ...folders.filter(f => f !== "root")];
-      
+
           if (isAdmin) {
             // synthesize full access
             grants = buildFullGrantsForAllFolders(orderedFolders);
@@ -4161,10 +4169,10 @@ if (groupNames.length) {
           } else {
             const userGrants = await getUserGrants(user.username);
             renderFolderGrantsUI(user.username, grantsBox, orderedFolders, userGrants);
-      
+
             // NEW: overlay group-based grants so you can't uncheck them here
             const groupMask = computeGroupGrantMaskForUser(user.username);
-      
+
             // If you already build a userGroupMap somewhere, you can pass the exact groups;
             // otherwise we can recompute the list of group names from __groupsCache:
             const groupsForUser = [];
@@ -4177,10 +4185,10 @@ if (groupNames.length) {
                 }
               });
             }
-      
+
             applyGroupLocksForUser(user.username, grantsBox, groupMask, groupsForUser);
           }
-      
+
           grantsBox.dataset.loaded = "1";
         } catch (e) {
           console.error(e);

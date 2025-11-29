@@ -549,6 +549,67 @@ class FileModel {
         ];
     }
 
+    public static function deleteFilesPermanent(string $folder, array $files): array
+{
+    $errors  = [];
+    $deleted = [];
+
+    list($uploadDir, $err) = self::resolveFolderPath($folder, false);
+    if ($err) return ['error' => $err];
+
+    $uploadDir = rtrim($uploadDir, '/\\') . DIRECTORY_SEPARATOR;
+    $safeFileNamePattern = REGEX_FILE_NAME;
+
+    foreach ($files as $fileName) {
+        $originalName = basename(trim((string)$fileName));
+        $basename     = $originalName;
+
+        if ($basename === '') {
+            $errors[] = 'Empty file name.';
+            continue;
+        }
+
+        if (!preg_match($safeFileNamePattern, $basename)) {
+            $errors[] = "$basename has an invalid name.";
+            continue;
+        }
+
+        $filePath = $uploadDir . $basename;
+
+        if (file_exists($filePath)) {
+            if (!@unlink($filePath)) {
+                $errors[] = "Failed to delete {$basename}.";
+                continue;
+            }
+        }
+
+        $deleted[] = $basename;
+
+        // Remove from folder metadata if present
+        $metadataFile = self::getMetadataFilePath($folder);
+        if (file_exists($metadataFile)) {
+            $meta = json_decode(file_get_contents($metadataFile), true);
+            if (is_array($meta) && isset($meta[$basename])) {
+                unset($meta[$basename]);
+                @file_put_contents($metadataFile, json_encode($meta, JSON_PRETTY_PRINT), LOCK_EX);
+            }
+        }
+    }
+
+    if ($errors && !$deleted) {
+        return ['error' => implode('; ', $errors)];
+    }
+
+    if ($errors) {
+        return [
+            'error'   => implode('; ', $errors),
+            'success' => 'Deleted: ' . implode(', ', $deleted),
+        ];
+    }
+
+    return ['success' => 'Deleted: ' . implode(', ', $deleted)];
+}
+
     /**
      * Creates a ZIP archive of the specified files from a given folder.
      *

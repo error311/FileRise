@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# === Update FileRise to v2.0.2 (safe rsync) ===
+# === Update FileRise to v2.1.0 (safe rsync, no composer on demo) ===
 set -Eeuo pipefail
 
-VER="v2.0.2"
+VER="v2.1.0"
 ASSET="FileRise-${VER}.zip"      # matches GitHub release asset name
+
 WEBROOT="/var/www"
 TMP="/tmp/filerise-update"
 
@@ -35,6 +36,7 @@ STAGE_DIR="$(find "$TMP" -maxdepth 1 -type d -name 'FileRise*' ! -path "$TMP" | 
 #    - keep public/.htaccess
 #    - keep data dirs and current config.php
 #    - DO NOT touch filerise-site / bundles / demo config
+#    - DO NOT touch vendor/ so Stripe + other libs stay intact on demo
 rsync -a --delete \
   --exclude='public/.htaccess' \
   --exclude='uploads/***' \
@@ -43,6 +45,7 @@ rsync -a --delete \
   --exclude='filerise-bundles/***' \
   --exclude='filerise-config/***' \
   --exclude='filerise-site/***' \
+  --exclude='vendor/***' \
   --exclude='.github/***' \
   --exclude='docker-compose.yml' \
   "$STAGE_DIR"/ "$WEBROOT"/
@@ -50,23 +53,20 @@ rsync -a --delete \
 # 4) Ownership (Ubuntu/Debian w/ Apache)
 chown -R www-data:www-data "$WEBROOT"
 
-# 5) Composer autoload optimization if composer is available
-if command -v composer >/dev/null 2>&1; then
-  cd "$WEBROOT" || { echo "cd to $WEBROOT failed" >&2; exit 1; }
-  composer install --no-dev --optimize-autoloader
-fi
+# 5) Composer — still disabled on demo
+# if command -v composer >/dev/null 2>&1; then
+#   cd "$WEBROOT" || { echo "cd to $WEBROOT failed" >&2; exit 1; }
+#   composer install --no-dev --optimize-autoloader
+# fi
 
 # 6) Force demo mode ON in config/config.php
 CFG_FILE="$WEBROOT/config/config.php"
 if [[ -f "$CFG_FILE" ]]; then
-  # Make a one-time backup of config.php before editing
   cp "$CFG_FILE" "${CFG_FILE}.bak.$stamp" || true
-
-  # Flip FR_DEMO_MODE to true if it exists as false
   sed -i "s/define('FR_DEMO_MODE',[[:space:]]*false);/define('FR_DEMO_MODE', true);/" "$CFG_FILE" || true
 fi
 
 # 7) Reload Apache (don’t fail the whole script if reload isn’t available)
 systemctl reload apache2 2>/dev/null || true
 
-echo "FileRise updated to ${VER} (code). Demo mode forced ON. Data, Pro bundles, and demo site preserved."
+echo "FileRise updated to ${VER} (code). Demo mode forced ON. Data, Pro bundles, site, and vendor/ (Stripe) preserved."
