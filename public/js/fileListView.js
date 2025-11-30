@@ -1998,7 +1998,7 @@ export function renderGalleryView(folder, container) {
     galleryHTML += `
         <div class="gallery-card"
              data-file-name="${escapeHTML(file.name)}"
-             style="position:relative; border:1px solid #ccc; padding:5px; text-align:center;">
+             style="position:relative; border-radius: 12px; border:1px solid #ccc; padding:5px; text-align:center;">
           <input type="checkbox"
                  class="file-checkbox"
                  id="cb-${idSafe}"

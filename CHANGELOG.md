@@ -3,6 +3,7 @@
 ## Changes 11/29/2025 (v2.2.3)
 
 fix(preview): harden SVG handling and normalize mime type
+release(v2.2.3): round gallery card corners in file grid
 
 - Stop treating SVGs as inline-previewable images in file list and preview modal
 - Show a clear “SVG preview disabled for security reasons” message instead
