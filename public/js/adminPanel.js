@@ -1942,7 +1942,7 @@ function handleSave() {
     oidc: {
       providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
       redirectUri: document.getElementById("oidcRedirectUri").value.trim(),
-      // clientId/clientSecret: only include when replacing
+      // clientId/clientSecret added conditionally below
     },
     globalOtpauthUrl: document.getElementById("globalOtpauthUrl").value.trim(),
     branding: {
@@ -1952,13 +1952,15 @@ function handleSave() {
     },
   };
 
+  // --- OIDC extras (unchanged) ---
   const idEl = document.getElementById("oidcClientId");
   const scEl = document.getElementById("oidcClientSecret");
 
   const idVal = idEl?.value.trim() || '';
   const secVal = scEl?.value.trim() || '';
-  const idFirstTime = idEl && !idEl.hasAttribute('data-replace');   // no saved value yet
-  const secFirstTime = scEl && !scEl.hasAttribute('data-replace');   // no saved value yet
+  const idFirstTime = idEl && !idEl.hasAttribute('data-replace');
+  const secFirstTime = scEl && !scEl.hasAttribute('data-replace');
+
   if ((idEl?.dataset.replace === '1' || idFirstTime) && idVal !== '') {
     payload.oidc.clientId = idVal;
   }
@@ -1966,26 +1968,26 @@ function handleSave() {
     payload.oidc.clientSecret = secVal;
   }
 
+  // ---- ONLYOFFICE payload ----
   const ooSecretEl = document.getElementById("ooJwtSecret");
 
-
-  if (ooSecretEl?.dataset.replace === '1' && ooSecretEl.value.trim() !== '') {
-    payload.onlyoffice.jwtSecret = ooSecretEl.value.trim();
-  }
-
-  // ---- ONLYOFFICE payload ----
   payload.onlyoffice = {
     enabled: document.getElementById("ooEnabled").checked,
     docsOrigin: document.getElementById("ooDocsOrigin").value.trim()
   };
 
-  if (!window.__OO_LOCKED) {
-    const ooSecretVal = (document.getElementById("ooJwtSecret")?.value || "").trim();
-    if (ooSecretVal !== "") {
-      payload.onlyoffice.jwtSecret = ooSecretVal;
+  // Only send JWT secret if NOT locked by PHP and user chose Replace / first-time set
+  if (!window.__OO_LOCKED && ooSecretEl) {
+    const val = ooSecretEl.value.trim();
+    const hasSaved = !!window.__HAS_OO_SECRET;           // set in openAdminPanel
+    const shouldReplace = ooSecretEl.dataset.replace === '1' || !hasSaved;
+
+    if (shouldReplace && val !== "") {
+      payload.onlyoffice.jwtSecret = val;
     }
   }
 
+  // --- save call (unchanged) ---
   fetch('/api/admin/updateConfig.php', {
     method: 'POST',
     credentials: 'include',

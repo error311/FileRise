@@ -1,5 +1,14 @@
 # Changelog
 
+## Changes 11/30/2025 (v2.2.4)
+
+release(v2.2.4): fix(admin): ONLYOFFICE JWT save crash and respect replace/locked flags
+
+- Prevented a JS crash when the ONLYOFFICE JWT field isn’t present by always initializing payload.onlyoffice before touching jwtSecret.
+- Tightened ONLYOFFICE JWT handling so the secret is only sent when config isn’t locked by PHP and the admin explicitly chooses Replace (or is setting it for the first time), instead of always pushing whatever is in the field.
+
+---
+
 ## Changes 11/29/2025 (v2.2.3)
 
 fix(preview): harden SVG handling and normalize mime type
