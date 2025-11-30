@@ -120,7 +120,12 @@ export function openShareModal(file, folder) {
 }
 
 /* -------------------------------- Media modal viewer -------------------------------- */
-const IMG_RE = /\.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/i;
+// Images that are safe to inline in <img> tags:
+const IMG_RE = /\.(jpg|jpeg|png|gif|bmp|webp|ico)$/i;
+
+// SVG handled separately so we *don’t* inline it
+const SVG_RE = /\.svg$/i;
+
 const VID_RE = /\.(mp4|mkv|webm|mov|ogv)$/i;
 const AUD_RE = /\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i;
 const ARCH_RE = /\.(zip|rar|7z|gz|bz2|xz|tar)$/i;
@@ -422,11 +427,19 @@ export function previewFile(fileUrl, fileName) {
   const folder = window.currentFolder || 'root';
   const name   = fileName;
   const lower  = (name || '').toLowerCase();
+  const isSvg  = SVG_RE.test(lower);
   const isImage = IMG_RE.test(lower);
   const isVideo = VID_RE.test(lower);
   const isAudio = AUD_RE.test(lower);
 
   setTitle(overlay, name);
+  if (isSvg) {
+    container.textContent =
+      t("svg_preview_disabled") ||
+      "SVG preview is disabled for security. Use Download to view this file.";
+    overlay.style.display = "flex";
+    return;
+  }
 
   /* -------------------- IMAGES -------------------- */
   if (isImage) {

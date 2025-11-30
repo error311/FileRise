@@ -179,9 +179,22 @@ export function buildFileTableRow(file, folderPath) {
   const safeUploader = escapeHTML(file.uploader || "Unknown");
 
   let previewButton = "";
-  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|mp3|wav|m4a|ogg|flac|aac|wma|opus|mkv|ogv)$/i.test(file.name)) {
+
+  const isSvg = /\.svg$/i.test(file.name);
+
+  // IMPORTANT: do NOT treat SVG as previewable
+  if (
+    !isSvg &&
+    /\.(jpg|jpeg|png|gif|bmp|webp|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|mp3|wav|m4a|ogg|flac|aac|wma|opus|mkv|ogv)$/i
+      .test(file.name)
+  ) {
     let previewIcon = "";
-    if (/\.(jpg|jpeg|png|gif|bmp|webp|svg|ico|tif|tiff|eps|heic)$/i.test(file.name)) {
+
+    // images (SVG explicitly excluded)
+    if (
+      /\.(jpg|jpeg|png|gif|bmp|webp|ico|tif|tiff|eps|heic)$/i
+        .test(file.name)
+    ) {
       previewIcon = `<i class="material-icons">image</i>`;
     } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">videocam</i>`;
@@ -190,14 +203,16 @@ export function buildFileTableRow(file, folderPath) {
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
       previewIcon = `<i class="material-icons">audiotrack</i>`;
     }
-    previewButton = `<button 
-                        type="button"
-                        class="btn btn-sm btn-info preview-btn" 
-                        data-preview-url="${folderPath + encodeURIComponent(file.name)}?t=${Date.now()}" 
-                        data-preview-name="${safeFileName}" 
-                        title="${t('preview')}">
-                       ${previewIcon}
-                     </button>`;
+
+    previewButton = `
+      <button 
+        type="button"
+        class="btn btn-sm btn-info preview-btn" 
+        data-preview-url="${folderPath + encodeURIComponent(file.name)}?t=${Date.now()}" 
+        data-preview-name="${safeFileName}" 
+        title="${t('preview')}">
+        ${previewIcon}
+      </button>`;
   }
 
   return `
@@ -242,13 +257,13 @@ export function buildFileTableRow(file, folderPath) {
           <i class="material-icons">drive_file_rename_outline</i>
         </button>
         <!-- share -->
-       <button 
-         type="button"
-         class="btn btn-secondary btn-sm share-btn ms-1"
-         data-file="${safeFileName}"
-         title="${t('share')}">
-         <i class="material-icons">share</i>
-       </button>
+        <button 
+          type="button"
+          class="btn btn-secondary btn-sm share-btn ms-1"
+          data-file="${safeFileName}"
+          title="${t('share')}">
+          <i class="material-icons">share</i>
+        </button>
       </div>
     </td>
   </tr>

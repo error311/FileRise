@@ -342,7 +342,8 @@ const translations = {
     "owner": "Owner",
     "hide_header_zoom_controls": "Hide header zoom controls",
     "preview_not_available": "Preview is not available for this file type.",
-    "storage_pro_bundle_outdated": "Please upgrade to the latest FileRise Pro bundle to use the Storage explorer."
+    "storage_pro_bundle_outdated": "Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.",
+    "svg_preview_disabled": "SVG preview is disabled for now for security reasons."
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

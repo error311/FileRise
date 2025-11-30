@@ -503,13 +503,13 @@ class FileModel {
         if (!preg_match(REGEX_FILE_NAME, $file)) {
             return ["error" => "Invalid file name."];
         }
-
+    
         // Determine the real upload directory.
         $uploadDirReal = realpath(UPLOAD_DIR);
         if ($uploadDirReal === false) {
             return ["error" => "Server misconfiguration."];
         }
-
+    
         // Determine directory based on folder.
         if (strtolower($folder) === 'root' || trim($folder) === '') {
             $directory = $uploadDirReal;
@@ -524,11 +524,11 @@ class FileModel {
                 return ["error" => "Invalid folder path."];
             }
         }
-
+    
         // Build the file path.
-        $filePath = $directory . DIRECTORY_SEPARATOR . $file;
+        $filePath     = $directory . DIRECTORY_SEPARATOR . $file;
         $realFilePath = realpath($filePath);
-
+    
         // Ensure the file exists and is within the allowed directory.
         if ($realFilePath === false || strpos($realFilePath, $uploadDirReal) !== 0) {
             return ["error" => "Access forbidden."];
@@ -536,13 +536,19 @@ class FileModel {
         if (!file_exists($realFilePath)) {
             return ["error" => "File not found."];
         }
-
+    
         // Get the MIME type with safe fallback.
         $mimeType = function_exists('mime_content_type') ? mime_content_type($realFilePath) : null;
         if (!$mimeType) {
             $mimeType = 'application/octet-stream';
         }
-
+    
+        // OPTIONAL: normalize SVG MIME
+        $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
+        if ($ext === 'svg') {
+            $mimeType = 'image/svg+xml';
+        }
+    
         return [
             "filePath" => $realFilePath,
             "mimeType" => $mimeType

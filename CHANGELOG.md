@@ -1,5 +1,16 @@
 # Changelog
 
+## Changes 11/29/2025 (v2.2.3)
+
+fix(preview): harden SVG handling and normalize mime type
+
+- Stop treating SVGs as inline-previewable images in file list and preview modal
+- Show a clear “SVG preview disabled for security reasons” message instead
+- Keep SVGs downloadable via /api/file/download.php with proper image/svg+xml MIME
+- Add i18n key for svg_preview_disabled
+
+---
+
 ## Changes 11/29/2025 (v2.2.2)
 
 release(v2.2.2): feat(folders): show inline folder stats & dates

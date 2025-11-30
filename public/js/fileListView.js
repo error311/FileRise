@@ -1954,7 +1954,7 @@ export function renderGalleryView(folder, container) {
 
     // thumbnail
     let thumbnail;
-    if (/\.(jpe?g|png|gif|bmp|webp|svg|ico)$/i.test(file.name)) {
+    if (/\.(jpe?g|png|gif|bmp|webp|ico)$/i.test(file.name)) {
       const cacheKey = previewURL; // include folder & file
       if (window.imageCache && window.imageCache[cacheKey]) {
         thumbnail = `<img
