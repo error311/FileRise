@@ -47,15 +47,15 @@ Full list of features available at [Full Feature Wiki](https://github.com/error3
 
 ## 1. What FileRise does
 
-FileRise turns a folder on your server into a **web‑based file explorer** with:
+FileRise turns a folder on your server into a **web-based file explorer** with:
 
 - Folder tree + breadcrumbs for fast navigation
-- Multi‑file/folder drag‑and‑drop uploads
+- Multi-file/folder drag-and-drop uploads
 - Move / copy / rename / delete / extract ZIP
-- Public share links (optionally password‑protected & expiring)
+- Public share links (optionally password-protected & expiring)
 - Tagging and search by name, tag, uploader, and content
 - Trash with restore/purge
-- Inline previews (images, audio, video, PDF) and a built‑in code editor
+- Inline previews (images, audio, video, PDF) and a built-in code editor
 
 Everything flows through a single ACL engine, so permissions are enforced consistently whether users are in the browser UI, using WebDAV, or hitting the API.
 
@@ -65,8 +65,22 @@ Everything flows through a single ACL engine, so permissions are enforced consis
 
 The easiest way to run FileRise is the official Docker image.
 
+### Option A – Quick start (docker run)
+
 ```bash
-docker run -d   --name filerise   -p 8080:80   -e TIMEZONE="America/New_York"   -e PERSISTENT_TOKENS_KEY="change_me_to_a_random_string"   -v ~/filerise/uploads:/var/www/uploads   -v ~/filerise/users:/var/www/users   -v ~/filerise/metadata:/var/www/metadata   error311/filerise-docker:latest
+docker run -d \
+  --name filerise \
+  -p 8080:80 \
+  -e TIMEZONE="America/New_York" \
+  -e TOTAL_UPLOAD_SIZE="10G" \
+  -e SECURE="false" \
+  -e PERSISTENT_TOKENS_KEY="default_please_change_this_key" \
+  -e SCAN_ON_START="true" \
+  -e CHOWN_ON_START="true" \
+  -v ~/filerise/uploads:/var/www/uploads \
+  -v ~/filerise/users:/var/www/users \
+  -v ~/filerise/metadata:/var/www/metadata \
+  error311/filerise-docker:latest
 ```
 
 Then visit:
@@ -77,22 +91,76 @@ http://your-server-ip:8080
 
 On first launch you’ll be guided through creating the **initial admin user**.
 
-**More Docker options (Unraid, docker‑compose, env vars, reverse proxy, etc.)**
-[Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)
-[nginx](https://github.com/error311/FileRise/wiki/Nginx-Setup)
-[FAQ](https://github.com/error311/FileRise/wiki/FAQ)
-See the Docker repo: [docker repo](https://github.com/error311/filerise-docker)
+> 💡 After the first run, you can set `CHOWN_ON_START="false"` if permissions are already correct and you don’t want a recursive `chown` on every start.
+
+---
+
+### Option B – docker-compose.yml
+
+```yaml
+services:
+  filerise:
+    image: error311/filerise-docker:latest
+    container_name: filerise
+    ports:
+      - "8080:80"
+    environment:
+      TIMEZONE: "America/New_York"
+      TOTAL_UPLOAD_SIZE: "10G"
+      SECURE: "false"
+      PERSISTENT_TOKENS_KEY: "default_please_change_this_key"
+      SCAN_ON_START: "true"   # auto-index existing files on startup
+      CHOWN_ON_START: "true"  # fix permissions on uploads/users/metadata on startup
+    volumes:
+      - ./uploads:/var/www/uploads
+      - ./users:/var/www/users
+      - ./metadata:/var/www/metadata
+```
+
+Bring it up with:
+
+```bash
+docker compose up -d
+```
+
+---
+
+### Common environment variables
+
+| Variable                | Required | Example                          | What it does                                                                  |
+|-------------------------|----------|----------------------------------|-------------------------------------------------------------------------------|
+| `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone.                                                     |
+| `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request (e.g. `5G`, `10G`).                         |
+| `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / reverse proxy, else `false`.               |
+| `PERSISTENT_TOKENS_KEY` | ✅       | `default_please_change_this_key` | Secret used to sign “remember me” tokens. **Change this.**                    |
+| `SCAN_ON_START`         | Optional | `true`                           | If `true`, scan `uploads/` on startup and index existing files.               |
+| `CHOWN_ON_START`        | Optional | `true`                           | If `true`, chown `uploads/`, `users/`, `metadata/` on startup.                |
+| `DATE_TIME_FORMAT`      | Optional | `Y-m-d H:i`                      | Overrides `DATE_TIME_FORMAT` in `config.php` (controls how dates are shown).  |
+
+> If `DATE_TIME_FORMAT` is not set, FileRise uses the default from `config/config.php`
+> (currently `m/d/y  h:iA`).
+
+> Volumes:  
+> - `/var/www/uploads` – your actual files  
+> - `/var/www/users` – user & pro jsons  
+> - `/var/www/metadata` – tags, search index, share links, etc.
+
+**More Docker options (Unraid, Portainer, reverse proxy, etc.)**  
+- [Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)  
+- [Nginx](https://github.com/error311/FileRise/wiki/Nginx-Setup)  
+- [FAQ](https://github.com/error311/FileRise/wiki/FAQ)  
+- See also the Docker repo: [error311/filerise-docker](https://github.com/error311/filerise-docker)
 
 ---
 
 ## 3. Manual install (PHP web server)
 
-Prefer bare‑metal or your own stack? FileRise is just PHP + a few extensions.
+Prefer bare-metal or your own stack? FileRise is just PHP + a few extensions.
 
 **Requirements**  
 
 - PHP **8.3+**
-- Web server (Apache / Nginx / Caddy + PHP‑FPM)
+- Web server (Apache / Nginx / Caddy + PHP-FPM)
 - PHP extensions: `json`, `curl`, `zip` (and usual defaults)
 - No database required
 
@@ -146,14 +214,14 @@ See: [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV)
 
 ### ONLYOFFICE integration
 
-If you run an ONLYOFFICE Document Server you can open/edit Office documents directly from FileRise (DOCX, XLSX, PPTX, ODT, ODS, ODP; PDFs view‑only).
+If you run an ONLYOFFICE Document Server you can open/edit Office documents directly from FileRise (DOCX, XLSX, PPTX, ODT, ODS, ODP; PDFs view-only).
 
 Configure it in **Admin → ONLYOFFICE**:
 
 - Enable ONLYOFFICE
 - Set your Document Server origin (e.g. `https://docs.example.com`)
 - Configure a shared JWT secret
-- Copy the suggested Content‑Security‑Policy header into your reverse proxy
+- Copy the suggested Content-Security-Policy header into your reverse proxy
 
 Docs: [ONLYOFFICE](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
 
@@ -174,8 +242,8 @@ Please report vulnerabilities responsibly via the channels listed in **SECURITY.
 ## 6. Community, support & contributing
 
 - 🧵 **GitHub Discussions & Issues:** ask questions, report bugs, suggest features.  
-- 💬 **Unraid forum thread:** for Unraid‑specific setup and tuning.  
-- 🌍 **Reddit / self‑hosting communities:** occasional release posts & feedback threads.
+- 💬 **Unraid forum thread:** for Unraid-specific setup and tuning.  
+- 🌍 **Reddit / self-hosting communities:** occasional release posts & feedback threads.
 
 Contributions are welcome — from bug fixes and docs to translations and UI polish.  
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
@@ -183,16 +251,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 If FileRise saves you time or becomes your daily driver, a ⭐ on GitHub or sponsorship is hugely appreciated:
 
 - ❤️ [GitHub Sponsors](https://github.com/sponsors/error311)
-- ☕ [Ko‑fi](https://ko-fi.com/error311)
+- ☕ [Ko-fi](https://ko-fi.com/error311)
 
 ---
 
-## 7. License & third‑party code
+## 7. License & third-party code
 
 FileRise Core is released under the **MIT License** – see [LICENSE](LICENSE).
 
-It bundles a small set of well‑known client and server libraries (Bootstrap, CodeMirror, DOMPurify, Fuse.js, Resumable.js, sabre/dav, etc.).  
-All third‑party code remains under its original licenses.
+It bundles a small set of well-known client and server libraries (Bootstrap, CodeMirror, DOMPurify, Fuse.js, Resumable.js, sabre/dav, etc.).  
+All third-party code remains under its original licenses.
 
 See `THIRD_PARTY.md` and the `licenses/` folder for full details.
 
