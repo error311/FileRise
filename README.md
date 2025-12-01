@@ -7,6 +7,7 @@
 [![Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://demo.filerise.net)
 [![Release](https://img.shields.io/github/v/release/error311/FileRise?include_prereleases&sort=semver)](https://github.com/error311/FileRise/releases)
 [![License](https://img.shields.io/github/license/error311/FileRise)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-join_chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/7WN6f56X2e)
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-❤-red)](https://github.com/sponsors/error311)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
 
@@ -41,6 +42,7 @@ Full list of features available at [Full Feature Wiki](https://github.com/error3
   - [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV)
   - [ONLYOFFICE](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
 - 🐳 **Docker image:** [Docker](https://github.com/error311/filerise-docker)
+- 💬 **Discord:** [Join the FileRise server](https://discord.gg/YOUR_CODE_HERE)
 - 📝 **Changelog:** [Changes](https://github.com/error311/FileRise/blob/master/CHANGELOG.md)
 
 ---
@@ -214,7 +216,7 @@ Prefer bare-metal or your own stack? FileRise is just PHP + a few extensions.
 
 5. Browse to your FileRise URL and follow the **admin setup** screen.
 
-For detailed examples and reverse proxy snippets, see the **Installation** page in the Wiki.
+For detailed examples and reverse proxy snippets, see the **Installation** page in the Wiki [Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup).
 
 ---
 
