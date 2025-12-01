@@ -163,10 +163,13 @@ docker compose up -d
 > - `/var/www/users` – user & pro jsons  
 > - `/var/www/metadata` – tags, search index, share links, etc.
 
-**More Docker options (Unraid, Portainer, reverse proxy, etc.)**  
+**More Docker / orchestration options (Unraid, Portainer, k8s, reverse proxy, etc.)**  
 - [Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)  
 - [Nginx](https://github.com/error311/FileRise/wiki/Nginx-Setup)  
 - [FAQ](https://github.com/error311/FileRise/wiki/FAQ)  
+- [Kubernetes / k8s deployment](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)  
+- Portainer templates: add this URL in Portainer → Settings → App Templates:  
+  `https://raw.githubusercontent.com/error311/filerise-portainer-templates/refs/heads/main/templates.json` 
 - See also the Docker repo: [error311/filerise-docker](https://github.com/error311/filerise-docker)
 
 ---
