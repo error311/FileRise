@@ -93,6 +93,16 @@ On first launch you’ll be guided through creating the **initial admin user**.
 
 > 💡 After the first run, you can set `CHOWN_ON_START="false"` if permissions are already correct and you don’t want a recursive `chown` on every start.
 
+> ⚠️ **Uploads folder recommendation**
+>
+> It’s strongly recommended to bind `/var/www/uploads` to a **dedicated folder**
+> (for example `~/filerise/uploads` or `/mnt/user/appdata/FileRise/uploads`),
+> not the root of a huge media share.
+>
+> If you really want FileRise to sit “on top of” an existing share, use a
+> subfolder (e.g. `/mnt/user/media/filerise_root`) instead of the share root,
+> so scans and permission changes stay scoped to that folder.
+
 ---
 
 ### Option B – docker-compose.yml
@@ -139,7 +149,15 @@ docker compose up -d
 
 > If `DATE_TIME_FORMAT` is not set, FileRise uses the default from `config/config.php`
 > (currently `m/d/y  h:iA`).
-
+> 🗂 **Using an existing folder tree**
+>
+> - Point `/var/www/uploads` at the folder you want FileRise to manage.
+> - Set `SCAN_ON_START="true"` on the first run to index existing files, then
+>   usually set it to `"false"` so the container doesn’t rescan on every restart.
+> - `CHOWN_ON_START="true"` is handy on first run to fix permissions. If you map
+>   a large share or already manage ownership yourself, set it to `"false"` to
+>   avoid recursive `chown` on every start.
+>
 > Volumes:  
 > - `/var/www/uploads` – your actual files  
 > - `/var/www/users` – user & pro jsons  
