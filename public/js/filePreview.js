@@ -9,6 +9,44 @@ export function buildPreviewUrl(folder, name) {
   return `/api/file/download.php?folder=${encodeURIComponent(f)}&file=${encodeURIComponent(name)}&inline=1&t=${Date.now()}`;
 }
 
+const MEDIA_VOLUME_KEY = 'frMediaVolume';
+const MEDIA_MUTED_KEY  = 'frMediaMuted';
+
+function loadSavedMediaVolume(el) {
+  if (!el) return;
+  try {
+    const v = localStorage.getItem(MEDIA_VOLUME_KEY);
+    if (v !== null) {
+      const vol = parseFloat(v);
+      if (!Number.isNaN(vol)) {
+        el.volume = Math.max(0, Math.min(1, vol));
+      }
+    }
+    const m = localStorage.getItem(MEDIA_MUTED_KEY);
+    if (m !== null) {
+      el.muted = (m === '1');
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function attachVolumePersistence(el) {
+  if (!el) return;
+  try {
+    el.addEventListener('volumechange', () => {
+      try {
+        localStorage.setItem(MEDIA_VOLUME_KEY, String(el.volume));
+        localStorage.setItem(MEDIA_MUTED_KEY, el.muted ? '1' : '0');
+      } catch {
+        // ignore storage errors
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
+
 /* -------------------------------- Share modal (existing) -------------------------------- */
 export function openShareModal(file, folder) {
   const existing = document.getElementById("shareModal");
@@ -539,6 +577,10 @@ export function previewFile(fileUrl, fileName) {
       video.style.maxHeight = "88vh";
       video.style.objectFit = "contain";
       container.appendChild(video);
+    
+      // Apply last-used volume/mute, and persist future changes
+      loadSavedMediaVolume(video);
+      attachVolumePersistence(video);
   
       // Top-right action icons (Material icons, theme-aware)
       const markBtnIcon  = makeTopIcon('check_circle', t("mark_as_viewed") || "Mark as viewed");
@@ -735,6 +777,11 @@ export function previewFile(fileUrl, fileName) {
     audio.className = "audio-modal";
     audio.style.maxWidth = "88vw";
     container.appendChild(audio);
+  
+    // Share the same volume/mute behavior with videos
+    loadSavedMediaVolume(audio);
+    attachVolumePersistence(audio);
+  
     overlay.style.display = "flex";
   } else {
     container.textContent = t("preview_not_available") || "Preview not available for this file type.";

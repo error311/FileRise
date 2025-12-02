@@ -30,6 +30,127 @@ function portalCanDownload() {
   return true;
 }
 
+function getPortalSlug() {
+  return portal && (portal.slug || portal.label || '') || '';
+}
+
+function normalizeExtList(raw) {
+  if (!raw) return [];
+  return String(raw)
+    .split(/[,\s]+/)
+    .map(x => x.trim().replace(/^\./, '').toLowerCase())
+    .filter(Boolean);
+}
+
+function getAllowedExts() {
+  if (!portal || !portal.uploadExtWhitelist) return [];
+  return normalizeExtList(portal.uploadExtWhitelist);
+}
+
+function getMaxSizeBytes() {
+  if (!portal || !portal.uploadMaxSizeMb) return 0;
+  const n = parseInt(portal.uploadMaxSizeMb, 10);
+  if (!n || n <= 0) return 0;
+  return n * 1024 * 1024;
+}
+
+// Simple per-browser-per-day counter; not true IP-based.
+function applyUploadRateLimit(desiredCount) {
+  if (!portal || !portal.uploadMaxPerDay) return desiredCount;
+
+  const maxPerDay = parseInt(portal.uploadMaxPerDay, 10);
+  if (!maxPerDay || maxPerDay <= 0) return desiredCount;
+
+  const slug = getPortalSlug() || 'default';
+  const today = new Date().toISOString().slice(0, 10);
+  const key = 'portalUploadRate:' + slug;
+
+  let state = { date: today, count: 0 };
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.date === today && typeof parsed.count === 'number') {
+        state = parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (state.count >= maxPerDay) {
+    showToast('Daily upload limit reached for this portal.');
+    return 0;
+  }
+
+  const remaining = maxPerDay - state.count;
+  if (desiredCount > remaining) {
+    showToast('You can only upload ' + remaining + ' more file(s) today for this portal.');
+    return remaining;
+  }
+
+  return desiredCount;
+}
+
+function bumpUploadRateCounter(delta) {
+  if (!portal || !portal.uploadMaxPerDay || !delta) return;
+
+  const maxPerDay = parseInt(portal.uploadMaxPerDay, 10);
+  if (!maxPerDay || maxPerDay <= 0) return;
+
+  const slug = getPortalSlug() || 'default';
+  const today = new Date().toISOString().slice(0, 10);
+  const key = 'portalUploadRate:' + slug;
+
+  let state = { date: today, count: 0 };
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.date === today && typeof parsed.count === 'number') {
+        state = parsed.date === today ? parsed : state;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (state.date !== today) {
+    state = { date: today, count: 0 };
+  }
+
+  state.count += delta;
+  if (state.count < 0) state.count = 0;
+
+  try {
+    localStorage.setItem(key, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
+function showThankYouScreen() {
+  if (!portal || !portal.showThankYou) return;
+
+  const section = qs('portalThankYouSection');
+  const msgEl   = document.getElementById('portalThankYouMessage');
+  const upload  = qs('portalUploadSection');
+
+  if (msgEl) {
+    const text =
+      (portal.thankYouText && portal.thankYouText.trim()) ||
+      'Thank you. Your files have been uploaded successfully.';
+    msgEl.textContent = text;
+  }
+
+  if (section) {
+    section.style.display = 'block';
+  }
+  if (upload) {
+    upload.style.opacity = '0.3';
+  }
+}
+
 // ----------------- DOM helpers / status -----------------
 function qs(id) {
   return document.getElementById(id);
@@ -43,6 +164,33 @@ function setStatus(msg, isError = false) {
   if (!isError) {
     el.classList.add('text-muted');
   }
+}
+
+// ----------------- Form labels (custom captions) -----------------
+function applyPortalFormLabels() {
+  if (!portal) return;
+
+  const labels   = portal.formLabels  || {};
+  const required = portal.formRequired || {};
+
+  const defs = [
+    { key: 'name',      forId: 'portalFormName',      defaultLabel: 'Name' },
+    { key: 'email',     forId: 'portalFormEmail',     defaultLabel: 'Email' },
+    { key: 'reference', forId: 'portalFormReference', defaultLabel: 'Reference / Case / Order #' },
+    { key: 'notes',     forId: 'portalFormNotes',     defaultLabel: 'Notes' },
+  ];
+
+  defs.forEach(def => {
+    const labelEl = document.querySelector(`label[for="${def.forId}"]`);
+    if (!labelEl) return;
+
+    const base = (labels[def.key] || def.defaultLabel || '').trim() || def.defaultLabel;
+    const isRequired = !!required[def.key];
+
+    // Add a subtle "*" for required fields; skip if already added
+    const text = isRequired && !base.endsWith('*') ? `${base} *` : base;
+    labelEl.textContent = text;
+  });
 }
 
 // ----------------- Form submit -----------------
@@ -109,7 +257,7 @@ async function sendRequest(url, method = 'GET', data = null, customHeaders = {})
 
 // ----------------- Portal form wiring -----------------
 function setupPortalForm(slug) {
-  const formSection = qs('portalFormSection');
+  const formSection   = qs('portalFormSection');
   const uploadSection = qs('portalUploadSection');
 
   if (!portal || !portal.requireForm) {
@@ -136,39 +284,103 @@ function setupPortalForm(slug) {
   const notesEl   = qs('portalFormNotes');
   const submitBtn = qs('portalFormSubmit');
 
-  const fd = portal.formDefaults || {};
+  const groupName      = qs('portalFormGroupName');
+  const groupEmail     = qs('portalFormGroupEmail');
+  const groupReference = qs('portalFormGroupReference');
+  const groupNotes     = qs('portalFormGroupNotes');
 
-  if (nameEl && fd.name && !nameEl.value) {
+  const labelName      = qs('portalFormLabelName');
+  const labelEmail     = qs('portalFormLabelEmail');
+  const labelReference = qs('portalFormLabelReference');
+  const labelNotes     = qs('portalFormLabelNotes');
+
+  const fd     = portal.formDefaults || {};
+  const labels = portal.formLabels   || {};
+  const visRaw = portal.formVisible  || portal.formVisibility || {};
+  const req    = portal.formRequired || {};
+
+  // default: visible when not specified
+  const visible = {
+    name:      visRaw.name      !== false,
+    email:     visRaw.email     !== false,
+    reference: visRaw.reference !== false,
+    notes:     visRaw.notes     !== false,
+  };
+
+  // Apply labels (fallback to defaults)
+  if (labelName)      labelName.textContent      = labels.name      || 'Name';
+  if (labelEmail)     labelEmail.textContent     = labels.email     || 'Email';
+  if (labelReference) labelReference.textContent = labels.reference || 'Reference / Case / Order #';
+  if (labelNotes)     labelNotes.textContent     = labels.notes     || 'Notes';
+
+  // Helper to (re)add the required star spans
+  const setStar = (labelEl, isVisible, isRequired) => {
+    if (!labelEl) return;
+    // remove any previous star
+    const old = labelEl.querySelector('.portal-required-star');
+    if (old) old.remove();
+    if (isVisible && isRequired) {
+      const s = document.createElement('span');
+      s.className = 'portal-required-star';
+      s.textContent = ' *';
+      labelEl.appendChild(s);
+    }
+  };
+
+  // Show/hide groups
+  if (groupName)      groupName.style.display      = visible.name      ? '' : 'none';
+  if (groupEmail)     groupEmail.style.display     = visible.email     ? '' : 'none';
+  if (groupReference) groupReference.style.display = visible.reference ? '' : 'none';
+  if (groupNotes)     groupNotes.style.display     = visible.notes     ? '' : 'none';
+
+  // Apply stars AFTER labels and visibility
+  setStar(labelName,      visible.name,      !!req.name);
+  setStar(labelEmail,     visible.email,     !!req.email);
+  setStar(labelReference, visible.reference, !!req.reference);
+  setStar(labelNotes,     visible.notes,     !!req.notes);
+
+  // If literally no fields are visible, just treat as no form
+  if (!visible.name && !visible.email && !visible.reference && !visible.notes) {
+    portalFormDone = true;
+    sessionStorage.setItem(key, '1');
+    if (formSection) formSection.style.display = 'none';
+    if (uploadSection) uploadSection.style.opacity = '1';
+    return;
+  }
+
+  // Prefill defaults only for visible fields
+  if (nameEl && visible.name && fd.name && !nameEl.value) {
     nameEl.value = fd.name;
   }
-  if (emailEl && fd.email && !emailEl.value) {
-    emailEl.value = fd.email;
-  } else if (emailEl && portal.clientEmail && !emailEl.value) {
-    // fallback to clientEmail
-    emailEl.value = portal.clientEmail;
+  if (emailEl && visible.email) {
+    if (fd.email && !emailEl.value) {
+      emailEl.value = fd.email;
+    } else if (portal.clientEmail && !emailEl.value) {
+      emailEl.value = portal.clientEmail;
+    }
   }
-  if (refEl && fd.reference && !refEl.value) {
+  if (refEl && visible.reference && fd.reference && !refEl.value) {
     refEl.value = fd.reference;
   }
-  if (notesEl && fd.notes && !notesEl.value) {
+  if (notesEl && visible.notes && fd.notes && !notesEl.value) {
     notesEl.value = fd.notes;
   }
 
   if (!submitBtn) return;
 
   submitBtn.onclick = async () => {
-    const name      = nameEl ? nameEl.value.trim() : '';
+    const name      = nameEl ? nameEl.value.trim()  : '';
     const email     = emailEl ? emailEl.value.trim() : '';
-    const reference = refEl ? refEl.value.trim() : '';
+    const reference = refEl ? refEl.value.trim()    : '';
     const notes     = notesEl ? notesEl.value.trim() : '';
 
-    const req = portal.formRequired || {};
     const missing = [];
 
-    if (req.name && !name)           missing.push('name');
-    if (req.email && !email)         missing.push('email');
-    if (req.reference && !reference) missing.push('reference');
-    if (req.notes && !notes)         missing.push('notes');
+    // Only validate visible fields
+    if (visible.name      && req.name      && !name)      missing.push(labels.name      || 'Name');
+    if (visible.email     && req.email     && !email)     missing.push(labels.email     || 'Email');
+    if (visible.reference && req.reference && !reference) missing.push(labels.reference || 'Reference');
+    if (visible.notes     && req.notes     && !notes)     missing.push(labels.notes     || 'Notes');
 
     if (missing.length) {
       showToast('Please fill in: ' + missing.join(', ') + '.');
@@ -176,8 +388,11 @@ function setupPortalForm(slug) {
     }
 
     // default behavior when no specific required flags:
+    // at least name or email, but only if those fields are visible
     if (!req.name && !req.email && !req.reference && !req.notes) {
-      if (!name && !email) {
+      const hasNameField  = visible.name;
+      const hasEmailField = visible.email;
+      if ((hasNameField || hasEmailField) && !name && !email) {
         showToast('Please provide at least a name or email.');
         return;
       }
@@ -285,6 +500,7 @@ function renderPortalInfo() {
   const footerEl   = document.getElementById('portalFooter');
   const drop       = qs('portalDropzone');
   const card       = document.querySelector('.portal-card');
+  const logoImg = document.querySelector('.portal-logo img');
   const formBtn    = qs('portalFormSubmit');
   const refreshBtn = qs('portalRefreshBtn');
   const filesSection = qs('portalFilesSection');
@@ -303,6 +519,34 @@ function renderPortalInfo() {
       const folder = portalFolder();
       descEl.textContent = 'Files you upload here go directly into: ' + folder;
     }
+
+    const bits = [];
+
+    if (portal.uploadMaxSizeMb) {
+      bits.push('Max file size: ' + portal.uploadMaxSizeMb + ' MB');
+    }
+
+    const exts = getAllowedExts();
+    if (exts.length) {
+      bits.push('Allowed types: ' + exts.join(', '));
+    }
+
+    if (portal.uploadMaxPerDay) {
+      bits.push('Daily upload limit: ' + portal.uploadMaxPerDay + ' file(s)');
+    }
+
+    if (bits.length) {
+      descEl.textContent += ' (' + bits.join(' • ') + ')';
+    }
+  }
+
+  if (logoImg) {
+    if (portal.logoUrl && portal.logoUrl.trim()) {
+      logoImg.src = portal.logoUrl.trim();
+    } else if (portal.logoFile && portal.logoFile.trim()) {
+      // Fallback if backend only supplies logoFile
+      logoImg.src = '/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim());
+    }
   }
 
   if (subtitleEl) {
@@ -317,7 +561,7 @@ function renderPortalInfo() {
       ? portal.footerText.trim()
       : '';
   }
-
+  applyPortalFormLabels();
   const color = portal.brandColor && portal.brandColor.trim();
   if (color) {
     // expose brand color as a CSS variable for gallery styling
@@ -502,7 +746,71 @@ async function uploadFiles(fileList) {
     return;
   }
 
-  const files = Array.from(fileList);
+  let files = Array.from(fileList);
+  if (!files.length) return;
+
+  // 1) Filter by max size
+  const maxBytes = getMaxSizeBytes();
+  if (maxBytes > 0) {
+    const tooBigNames = [];
+    files = files.filter(f => {
+      if (f.size && f.size > maxBytes) {
+        tooBigNames.push(f.name || 'unnamed');
+        return false;
+      }
+      return true;
+    });
+    if (tooBigNames.length) {
+      showToast(
+        'Skipped ' +
+          tooBigNames.length +
+          ' file(s) over ' +
+          portal.uploadMaxSizeMb +
+          ' MB.'
+      );
+    }
+  }
+
+  // 2) Filter by allowed extensions
+  const allowedExts = getAllowedExts();
+  if (allowedExts.length) {
+    const skipped = [];
+    files = files.filter(f => {
+      const name = f.name || '';
+      const parts = name.split('.');
+      const ext = parts.length > 1 ? parts.pop().trim().toLowerCase() : '';
+      if (!ext || !allowedExts.includes(ext)) {
+        skipped.push(name || 'unnamed');
+        return false;
+      }
+      return true;
+    });
+    if (skipped.length) {
+      showToast(
+        'Skipped ' +
+          skipped.length +
+          ' file(s) not matching allowed types: ' +
+          allowedExts.join(', ')
+      );
+    }
+  }
+
+  if (!files.length) {
+    setStatus('No files to upload after applying portal rules.', true);
+    return;
+  }
+
+  // 3) Rate-limit per day (simple per-browser guard)
+  const requestedCount = files.length;
+  const allowedCount = applyUploadRateLimit(requestedCount);
+  if (!allowedCount) {
+    setStatus('Upload blocked by daily limit.', true);
+    return;
+  }
+  if (allowedCount < requestedCount) {
+    files = files.slice(0, allowedCount);
+  }
+
   const folder = portalFolder();
 
   setStatus('Uploading ' + files.length + ' file(s)…');
@@ -575,8 +883,18 @@ async function uploadFiles(fileList) {
     showToast('Upload failed.');
   }
 
+  // Bump local daily counter by successful uploads
+  if (successCount > 0) {
+    bumpUploadRateCounter(successCount);
+  }
+
   if (portalCanDownload()) {
     loadPortalFiles();
+  }
+
+  // Optional thank-you screen
+  if (successCount > 0 && portal.showThankYou) {
+    showThankYouScreen();
   }
 }
 

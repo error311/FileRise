@@ -100,6 +100,7 @@ $public = [
     'introText'  => (string)($portal['introText'] ?? ''),
     'brandColor' => (string)($portal['brandColor'] ?? ''),
     'footerText' => (string)($portal['footerText'] ?? ''),
+    'logoFile'   => (string)($portal['logoFile']    ?? ''),
 ];
 
 echo json_encode([

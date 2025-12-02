@@ -218,6 +218,7 @@ function getRedirectTarget() {
     const headingEl  = document.getElementById('portalLoginTitle');
     const subtitleEl = document.getElementById('portalLoginSubtitle');
     const footerEl   = document.getElementById('portalLoginFooter');
+    const logoEl     = document.getElementById('portalLoginLogo');
   
     if (headingEl) {
       headingEl.textContent = 'Sign in to ' + title;
@@ -237,6 +238,24 @@ function getRedirectTarget() {
         footerEl.style.display = 'none';
       }
     }
+
+      // 🔹 Portal logo: use logoFile from metadata if present
+  if (logoEl) {
+    let logoSrc = null;
+
+    // If you ever decide to store a direct URL:
+    if (portal.logoUrl && portal.logoUrl.trim()) {
+      logoSrc = portal.logoUrl.trim();
+    } else if (portal.logoFile && portal.logoFile.trim()) {
+      // Same convention as portal.html: files live in uploads/profile_pics
+      logoSrc = '/uploads/profile_pics/' + portal.logoFile.trim();
+    }
+
+    if (logoSrc) {
+      logoEl.src = logoSrc;
+      logoEl.alt = title;
+    }
+  }
   
     // Document title
     try {

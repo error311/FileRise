@@ -1,5 +1,62 @@
 # Changelog
 
+## Changes 12/2/2025 (v2.3.0)
+
+release(v2.3.0): feat(portals): branding, intake presets, limits & CSV export
+
+**v2.3.0 – Portal branding, intake presets & upload limits**  
+
+**Client portals (Pro)**  
+
+- Added **per-portal branding**:
+  - Custom accent color and footer text, applied to both the portal page and the login card.  
+  - Optional **portal logo** stored under `uploads/profile_pics`, with a simple upload flow from the Client Portals modal.
+- Upgraded the **intake form**:
+  - Per-field labels, defaults, visibility, and "required" switches for Name, Email, Reference, and Notes.  
+  - New presets for common workflows: **Legal intake**, **Tax client**, and **Order / RMA** that pre-fill labels and hints.
+- New **thank-you screen**:
+  - Optional “Thank you” message shown after successful uploads, configurable per portal.
+- New **upload rules per portal**:
+  - Max file size (MB) override.  
+  - Allowed extensions whitelist (comma-separated).  
+  - Simple per-browser daily upload limit, enforced in the portal UI with clear messaging.
+- Improved **portal description**:
+  - Portal page now shows active rules (max size, allowed types, daily limit) so clients know what’s allowed.
+- **Submissions block** in the Client Portals modal:
+  - Inline list of portal submissions with timestamps, folder, submitter and IP.  
+  - “Load submissions” button with paging-style UI and improved styling in both light and dark mode.  
+  - (New) **Export to CSV** action from the submissions block for easier reporting and audits.
+
+**Portal login**  
+
+- Portal login screen now respects **per-portal branding**:
+  - Uses the portal’s logo (or falls back to the default FileRise logo).  
+  - Reuses accent color and footer text from portal metadata so login matches the portal look.
+
+**Admin panel**  
+
+- Added dedicated **Client Portals** editor section with:
+  - Portal slug / label, folder picker, expiry, upload/download options.  
+  - Branding, logo upload, intake presets, upload limits, thank-you message, and live submissions preview.
+- Wired up new **ONLYOFFICE** admin section:
+  - Toggle, document server origin, JWT secret management, plus built-in connection tests and CSP helper.
+- Wired up **Sponsor** section helper with copy-to-clipboard convenience for support links.
+- Moved a bunch of admin-panel specific styles into `styles.css` for better maintainability (modal sizing, section headers, dark-mode tweaks).
+
+**File Preview**  
+
+- Remember the user’s volume (and mute state) in localStorage and re-apply it for every video preview in browser.
+
+**Security / hardening**  
+
+- New `public/api/pro/portals/uploadLogo.php` endpoint for portal logos:
+  - Pro-only, admin-only, CSRF-protected.  
+  - Accepts JPEG/PNG/GIF up to 2MB and stores them under `UPLOAD_DIR/profile_pics` with randomised names.
+
+_No breaking changes expected; existing portals continue to work with default settings._
+
+---
+
 ## Changes 11/30/2025 (v2.2.4)
 
 release(v2.2.4): fix(admin): ONLYOFFICE JWT save crash and respect replace/locked flags

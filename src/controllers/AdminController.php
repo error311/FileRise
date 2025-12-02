@@ -314,7 +314,6 @@ public function saveProPortals(array $portalsPayload): void
         throw new InvalidArgumentException('Invalid portals format.');
     }
 
-    // Minimal normalization; deeper validation can live inside ProPortals
     $data = ['portals' => []];
 
     foreach ($portalsPayload as $slug => $info) {
@@ -334,55 +333,100 @@ public function saveProPortals(array $portalsPayload): void
             ? !empty($info['allowDownload'])
             : true;
         $expiresAt    = trim((string)($info['expiresAt'] ?? ''));
-    
-        // Optional branding + form behavior
-        $title      = trim((string)($info['title'] ?? ''));
-        $introText  = trim((string)($info['introText'] ?? ''));
-        $requireForm = !empty($info['requireForm']);
-        $brandColor = trim((string)($info['brandColor'] ?? ''));
-    $footerText = trim((string)($info['footerText'] ?? ''));
 
-    $formDefaults = isset($info['formDefaults']) && is_array($info['formDefaults'])
-        ? $info['formDefaults']
-        : [];
+        // Branding + form behavior
+        $title        = trim((string)($info['title'] ?? ''));
+        $introText    = trim((string)($info['introText'] ?? ''));
+        $requireForm  = !empty($info['requireForm']);
+        $brandColor   = trim((string)($info['brandColor'] ?? ''));
+        $footerText   = trim((string)($info['footerText'] ?? ''));
 
-    // Normalize defaults for known keys
-    $formDefaults = [
-        'name'      => trim((string)($formDefaults['name'] ?? '')),
-        'email'     => trim((string)($formDefaults['email'] ?? '')),
-        'reference' => trim((string)($formDefaults['reference'] ?? '')),
-        'notes'     => trim((string)($formDefaults['notes'] ?? '')),
-    ];
-    $formRequired = isset($info['formRequired']) && is_array($info['formRequired'])
-    ? $info['formRequired']
-    : [];
+        // Optional logo info
+        $logoFile = trim((string)($info['logoFile'] ?? ''));
+        $logoUrl  = trim((string)($info['logoUrl']  ?? ''));
 
-    $formRequired = [
-    'name'      => !empty($formRequired['name']),
-    'email'     => !empty($formRequired['email']),
-    'reference' => !empty($formRequired['reference']),
-    'notes'     => !empty($formRequired['notes']),
-];
-    
+        // Upload rules / thank-you behavior
+        $uploadMaxSizeMb    = isset($info['uploadMaxSizeMb']) ? (int)$info['uploadMaxSizeMb'] : 0;
+        $uploadExtWhitelist = trim((string)($info['uploadExtWhitelist'] ?? ''));
+        $uploadMaxPerDay    = isset($info['uploadMaxPerDay']) ? (int)$info['uploadMaxPerDay'] : 0;
+        $showThankYou       = !empty($info['showThankYou']);
+        $thankYouText       = trim((string)($info['thankYouText'] ?? ''));
+
+        // Form defaults
+        $formDefaults = isset($info['formDefaults']) && is_array($info['formDefaults'])
+            ? $info['formDefaults']
+            : [];
+
+        $formDefaults = [
+            'name'      => trim((string)($formDefaults['name'] ?? '')),
+            'email'     => trim((string)($formDefaults['email'] ?? '')),
+            'reference' => trim((string)($formDefaults['reference'] ?? '')),
+            'notes'     => trim((string)($formDefaults['notes'] ?? '')),
+        ];
+
+        // Required flags
+        $formRequired = isset($info['formRequired']) && is_array($info['formRequired'])
+            ? $info['formRequired']
+            : [];
+
+        $formRequired = [
+            'name'      => !empty($formRequired['name']),
+            'email'     => !empty($formRequired['email']),
+            'reference' => !empty($formRequired['reference']),
+            'notes'     => !empty($formRequired['notes']),
+        ];
+
+        // Labels
+        $formLabels = isset($info['formLabels']) && is_array($info['formLabels'])
+            ? $info['formLabels']
+            : [];
+
+        $formLabels = [
+            'name'      => trim((string)($formLabels['name'] ?? 'Name')),
+            'email'     => trim((string)($formLabels['email'] ?? 'Email')),
+            'reference' => trim((string)($formLabels['reference'] ?? 'Reference / Case / Order #')),
+            'notes'     => trim((string)($formLabels['notes'] ?? 'Notes')),
+        ];
+
+        // Visibility
+        $formVisible = isset($info['formVisible']) && is_array($info['formVisible'])
+            ? $info['formVisible']
+            : [];
+
+        $formVisible = [
+            'name'      => !array_key_exists('name', $formVisible)      || !empty($formVisible['name']),
+            'email'     => !array_key_exists('email', $formVisible)     || !empty($formVisible['email']),
+            'reference' => !array_key_exists('reference', $formVisible) || !empty($formVisible['reference']),
+            'notes'     => !array_key_exists('notes', $formVisible)     || !empty($formVisible['notes']),
+        ];
+
         if ($folder === '') {
             continue;
         }
-    
+
         $data['portals'][$slug] = [
-            'label'         => $label,
-            'folder'        => $folder,
-            'clientEmail'   => $clientEmail,
-            'uploadOnly'    => $uploadOnly,
-            'allowDownload' => $allowDownload,
-            'expiresAt'     => $expiresAt,
-            // NEW
-            'title'         => $title,
-            'introText'     => $introText,
-            'requireForm'   => $requireForm,
-            'brandColor'    => $brandColor,
-            'footerText'    => $footerText,
-            'formDefaults'  => $formDefaults,
-            'formRequired'  => $formRequired,
+            'label'              => $label,
+            'folder'             => $folder,
+            'clientEmail'        => $clientEmail,
+            'uploadOnly'         => $uploadOnly,
+            'allowDownload'      => $allowDownload,
+            'expiresAt'          => $expiresAt,
+            'title'              => $title,
+            'introText'          => $introText,
+            'requireForm'        => $requireForm,
+            'brandColor'         => $brandColor,
+            'footerText'         => $footerText,
+            'logoFile'           => $logoFile,
+            'logoUrl'            => $logoUrl,
+            'uploadMaxSizeMb'    => $uploadMaxSizeMb,
+            'uploadExtWhitelist' => $uploadExtWhitelist,
+            'uploadMaxPerDay'    => $uploadMaxPerDay,
+            'showThankYou'       => $showThankYou,
+            'thankYouText'       => $thankYouText,
+            'formDefaults'       => $formDefaults,
+            'formRequired'       => $formRequired,
+            'formLabels'         => $formLabels,
+            'formVisible'        => $formVisible,
         ];
     }
 

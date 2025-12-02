@@ -797,6 +797,90 @@ class UserController
         exit;
     }
 
+        /**
+     * Upload a logo for a specific client portal (Pro-only; admin, CSRF).
+     * Stores the file in UPLOAD_DIR/profile_pics and returns filename + URL.
+     */
+    public function uploadPortalLogo(): void
+    {
+        self::jsonHeaders();
+
+        // Auth, admin & CSRF
+        self::requireAuth();
+        self::requireAdmin();
+        self::requireCsrf();
+
+        if (empty($_FILES['portal_logo']) || $_FILES['portal_logo']['error'] !== UPLOAD_ERR_OK) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No file uploaded or error']);
+            exit;
+        }
+
+        $file = $_FILES['portal_logo'];
+
+        // Optional: which portal (used only for filename prefix)
+        $slugRaw = isset($_POST['slug']) ? (string)$_POST['slug'] : '';
+        $slug    = preg_replace('/[^a-zA-Z0-9_\-]/', '', $slugRaw) ?: 'portal';
+
+        // Validate MIME & size (same rules as uploadPicture / uploadBrandLogo)
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/gif'  => 'gif',
+        ];
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+
+        if (!isset($allowed[$mime])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid file type']);
+            exit;
+        }
+
+        if ($file['size'] > 2 * 1024 * 1024) { // 2MB
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'File too large']);
+            exit;
+        }
+
+        // Destination: reuse profile_pics directory
+        $uploadDir = rtrim(UPLOAD_DIR, '/\\') . '/profile_pics';
+        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Cannot create upload folder']);
+            exit;
+        }
+
+        $ext      = $allowed[$mime];
+        $filename = 'portal_' . $slug . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $dest     = $uploadDir . '/' . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $dest)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to save file']);
+            exit;
+        }
+
+        // Build a web path similar to uploadBrandLogo
+        $fsPath = $uploadDir . '/' . $filename;
+
+        $root = rtrim(PROJECT_ROOT, '/\\');
+        $url  = preg_replace('#^' . preg_quote($root, '#') . '#', '', $fsPath);
+
+        if ($url === '' || $url[0] !== '/') {
+            $url = '/' . ltrim($url, '/\\');
+        }
+
+        echo json_encode([
+            'success'  => true,
+            'fileName' => $filename,
+            'url'      => $url,
+        ]);
+        exit;
+    }
+
     public function siteConfig(): void
     {
         header('Content-Type: application/json');

@@ -11,16 +11,29 @@ final class PortalController
      *
      * Returns:
      * [
-     *   'slug'          => string,
-     *   'label'         => string,
-     *   'folder'        => string,
-     *   'clientEmail'   => string,
-     *   'uploadOnly'    => bool,
-     *   'allowDownload' => bool,
-     *   'expiresAt'     => string,
-     *   'title'         => string,
-     *   'introText'     => string,
-     *   'requireForm'   => bool
+     *   'slug'             => string,
+     *   'label'            => string,
+     *   'folder'           => string,
+     *   'clientEmail'      => string,
+     *   'uploadOnly'       => bool,
+     *   'allowDownload'    => bool,
+     *   'expiresAt'        => string,
+     *   'title'            => string,
+     *   'introText'        => string,
+     *   'requireForm'      => bool,
+     *   'brandColor'       => string,
+     *   'footerText'       => string,
+     *   'formDefaults'     => array,
+     *   'formRequired'     => array,
+     *   'formLabels'       => array,
+     *   'formVisible'      => array,
+     *   'logoFile'         => string,
+     *   'logoUrl'          => string,
+     *   'uploadMaxSizeMb'  => int,
+     *   'uploadExtWhitelist' => string,
+     *   'uploadMaxPerDay'  => int,
+     *   'showThankYou'     => bool,
+     *   'thankYouText'     => string,
      * ]
      */
     public static function getPortalBySlug(string $slug): array
@@ -62,13 +75,14 @@ final class PortalController
             : true;
         $expiresAt     = trim((string)($p['expiresAt'] ?? ''));
 
-        // NEW: optional branding + intake behavior
-        $title       = trim((string)($p['title'] ?? ''));
-        $introText   = trim((string)($p['introText'] ?? ''));
-        $requireForm = !empty($p['requireForm']);
-        $brandColor = trim((string)($p['brandColor'] ?? ''));
-        $footerText = trim((string)($p['footerText'] ?? ''));
+        // Branding + intake behavior
+        $title        = trim((string)($p['title'] ?? ''));
+        $introText    = trim((string)($p['introText'] ?? ''));
+        $requireForm  = !empty($p['requireForm']);
+        $brandColor   = trim((string)($p['brandColor'] ?? ''));
+        $footerText   = trim((string)($p['footerText'] ?? ''));
 
+        // Defaults / required
         $fd = isset($p['formDefaults']) && is_array($p['formDefaults'])
             ? $p['formDefaults']
             : [];
@@ -79,16 +93,52 @@ final class PortalController
             'reference' => trim((string)($fd['reference'] ?? '')),
             'notes'     => trim((string)($fd['notes'] ?? '')),
         ];
-        $fr = isset($p['formRequired']) && is_array($p['formRequired'])
-        ? $p['formRequired']
-        : [];
 
-    $formRequired = [
-        'name'      => !empty($fr['name']),
-        'email'     => !empty($fr['email']),
-        'reference' => !empty($fr['reference']),
-        'notes'     => !empty($fr['notes']),
-    ];
+        $fr = isset($p['formRequired']) && is_array($p['formRequired'])
+            ? $p['formRequired']
+            : [];
+
+        $formRequired = [
+            'name'      => !empty($fr['name']),
+            'email'     => !empty($fr['email']),
+            'reference' => !empty($fr['reference']),
+            'notes'     => !empty($fr['notes']),
+        ];
+
+        // Optional formLabels
+        $fl = isset($p['formLabels']) && is_array($p['formLabels'])
+            ? $p['formLabels']
+            : [];
+
+        $formLabels = [
+            'name'      => trim((string)($fl['name'] ?? 'Name')),
+            'email'     => trim((string)($fl['email'] ?? 'Email')),
+            'reference' => trim((string)($fl['reference'] ?? 'Reference / Case / Order #')),
+            'notes'     => trim((string)($fl['notes'] ?? 'Notes')),
+        ];
+
+        // Optional visibility
+        $fv = isset($p['formVisible']) && is_array($p['formVisible'])
+            ? $p['formVisible']
+            : [];
+
+        $formVisible = [
+            'name'      => !array_key_exists('name', $fv)      || !empty($fv['name']),
+            'email'     => !array_key_exists('email', $fv)     || !empty($fv['email']),
+            'reference' => !array_key_exists('reference', $fv) || !empty($fv['reference']),
+            'notes'     => !array_key_exists('notes', $fv)     || !empty($fv['notes']),
+        ];
+
+        // Optional per-portal logo
+        $logoFile = trim((string)($p['logoFile'] ?? ''));
+        $logoUrl  = trim((string)($p['logoUrl']  ?? ''));
+
+        // Upload rules / thank-you behavior
+        $uploadMaxSizeMb     = isset($p['uploadMaxSizeMb']) ? (int)$p['uploadMaxSizeMb'] : 0;
+        $uploadExtWhitelist  = trim((string)($p['uploadExtWhitelist'] ?? ''));
+        $uploadMaxPerDay     = isset($p['uploadMaxPerDay']) ? (int)$p['uploadMaxPerDay'] : 0;
+        $showThankYou        = !empty($p['showThankYou']);
+        $thankYouText        = trim((string)($p['thankYouText'] ?? ''));
 
         if ($folder === '') {
             throw new RuntimeException('Portal misconfigured: empty folder.');
@@ -103,21 +153,29 @@ final class PortalController
         }
 
         return [
-            'slug'          => $slug,
-            'label'         => $label,
-            'folder'        => $folder,
-            'clientEmail'   => $clientEmail,
-            'uploadOnly'    => $uploadOnly,
-            'allowDownload' => $allowDownload,
-            'expiresAt'     => $expiresAt,
-            
-            'title'         => $title,
-            'introText'     => $introText,
-            'requireForm'   => $requireForm,
-            'brandColor'    => $brandColor,
-            'footerText'    => $footerText,
-            'formDefaults'  => $formDefaults,
-            'formRequired'  => $formRequired,
+            'slug'               => $slug,
+            'label'              => $label,
+            'folder'             => $folder,
+            'clientEmail'        => $clientEmail,
+            'uploadOnly'         => $uploadOnly,
+            'allowDownload'      => $allowDownload,
+            'expiresAt'          => $expiresAt,
+            'title'              => $title,
+            'introText'          => $introText,
+            'requireForm'        => $requireForm,
+            'brandColor'         => $brandColor,
+            'footerText'         => $footerText,
+            'formDefaults'       => $formDefaults,
+            'formRequired'       => $formRequired,
+            'formLabels'         => $formLabels,
+            'formVisible'        => $formVisible,
+            'logoFile'           => $logoFile,
+            'logoUrl'            => $logoUrl,
+            'uploadMaxSizeMb'    => $uploadMaxSizeMb,
+            'uploadExtWhitelist' => $uploadExtWhitelist,
+            'uploadMaxPerDay'    => $uploadMaxPerDay,
+            'showThankYou'       => $showThankYou,
+            'thankYouText'       => $thankYouText,
         ];
     }
 }

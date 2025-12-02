@@ -169,6 +169,9 @@
     .portal-file-row:last-child {
       border-bottom: none;
     }
+    .portal-required-star {
+      color: #dc3545;
+    }
   </style>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -300,37 +303,38 @@
       </div>
       <h3 id="portalTitle" style="margin-bottom:4px;">Loading…</h3>
       <p id="portalDescription" class="text-muted" style="margin-bottom:10px;"></p>
-
-      <div id="portalFormSection" style="margin-bottom:12px; display:none;">
-        <h5 style="font-size:0.95rem; margin-bottom:4px;">Your details</h5>
-        <p class="text-muted" style="font-size:0.8rem; margin-bottom:8px;">
-          Please fill in your information before uploading files.
-        </p>
       
-        <div class="form-group" style="margin-bottom:6px;">
-          <label for="portalFormName">Name</label>
-          <input type="text" id="portalFormName" class="form-control form-control-sm">
+        <div id="portalFormSection" style="margin-bottom:12px; display:none;">
+          <h5 style="font-size:0.95rem; margin-bottom:4px;">Your details</h5>
+          <p class="text-muted" style="font-size:0.8rem; margin-bottom:8px;">
+            Please fill in your information before uploading files.
+          </p>
+        
+          <div id="portalFormGroupName" class="form-group" style="margin-bottom:6px;">
+            <label id="portalFormLabelName" for="portalFormName">Name</label>
+            <input type="text" id="portalFormName" class="form-control form-control-sm">
+          </div>
+        
+          <div id="portalFormGroupEmail" class="form-group" style="margin-bottom:6px;">
+            <label id="portalFormLabelEmail" for="portalFormEmail">Email</label>
+            <input type="email" id="portalFormEmail" class="form-control form-control-sm">
+          </div>
+        
+          <div id="portalFormGroupReference" class="form-group" style="margin-bottom:6px;">
+            <label id="portalFormLabelReference" for="portalFormReference">Reference / Case / Order #</label>
+            <input type="text" id="portalFormReference" class="form-control form-control-sm">
+          </div>
+        
+          <div id="portalFormGroupNotes" class="form-group" style="margin-bottom:8px;">
+            <label id="portalFormLabelNotes" for="portalFormNotes">Notes</label>
+            <textarea id="portalFormNotes" class="form-control form-control-sm" rows="3"></textarea>
+          </div>
+        
+          <button type="button" id="portalFormSubmit" class="btn btn-primary btn-sm">
+            Continue
+          </button>
         </div>
-      
-        <div class="form-group" style="margin-bottom:6px;">
-          <label for="portalFormEmail">Email</label>
-          <input type="email" id="portalFormEmail" class="form-control form-control-sm">
-        </div>
-      
-        <div class="form-group" style="margin-bottom:6px;">
-          <label for="portalFormReference">Reference / Case / Order #</label>
-          <input type="text" id="portalFormReference" class="form-control form-control-sm">
-        </div>
-      
-        <div class="form-group" style="margin-bottom:8px;">
-          <label for="portalFormNotes">Notes</label>
-          <textarea id="portalFormNotes" class="form-control form-control-sm" rows="3"></textarea>
-        </div>
-      
-        <button type="button" id="portalFormSubmit" class="btn btn-primary btn-sm">
-          Continue
-        </button>
-      </div>
+    
 
       <div id="portalUploadSection">
         <div id="portalDropzone" class="portal-dropzone">
@@ -352,6 +356,16 @@
         </div>
         <div id="portalFilesList" class="portal-files-list"></div>
       </div>
+
+      <div id="portalThankYouSection"
+      style="margin-top:12px; display:none;">
+   <div class="alert alert-success" style="font-size:0.9rem; margin-bottom:8px;">
+     <strong>Thank you!</strong>
+     <span id="portalThankYouMessage">
+       Your files have been uploaded.
+     </span>
+   </div>
+ </div>
       <div id="portalFooter" class="text-muted"
       style="margin-top:12px; font-size:0.75rem; text-align:center;"></div>
     </div>
