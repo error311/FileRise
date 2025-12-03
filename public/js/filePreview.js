@@ -503,6 +503,23 @@ export function previewFile(fileUrl, fileName) {
   const isVideo = VID_RE.test(lower);
   const isAudio = AUD_RE.test(lower);
 
+    // Base preview URL from the link we clicked
+    const baseUrl = fileUrl;
+
+    // Use the same preview endpoint, just swap the "file" param.
+    function siblingPreviewUrl(newName) {
+      try {
+        const u = new URL(baseUrl, window.location.origin);
+        u.searchParams.set('file', newName);
+        // cache-bust so we don’t get stale frames
+        u.searchParams.set('t', String(Date.now()));
+        return u.toString();
+      } catch {
+        // Fallback: go through generic download/inline endpoint
+        return buildPreviewUrl(folder, newName);
+      }
+    }
+
   setTitle(overlay, name);
   if (isSvg) {
     const downloadBtn = makeDownloadButton(folder, () => name);
@@ -582,7 +599,7 @@ const navigate = (dir) => {
   img.dataset.scale = 1;
   img.dataset.rotate = 0;
   img.style.transform = 'scale(1) rotate(0deg)';
-  img.src = buildPreviewUrl(folder, newFile);
+  img.src = siblingPreviewUrl(newFile);   // <-- changed
 };
 
     if (images.length > 1) {
@@ -610,211 +627,225 @@ const navigate = (dir) => {
     return;
   }
 
-    /* -------------------- VIDEOS -------------------- */
-    if (isVideo) {
-      let video = document.createElement("video");
-      video.controls = true;
-      video.preload  = 'auto'; // hint browser to start fetching quickly
-      video.style.maxWidth  = "88vw";
-      video.style.maxHeight = "88vh";
-      video.style.objectFit = "contain";
-      container.appendChild(video);
-    
-      // Apply last-used volume/mute, and persist future changes
-      loadSavedMediaVolume(video);
-      attachVolumePersistence(video);
-  
-      const markBtnIcon  = makeTopIcon('check_circle', t("mark_as_viewed") || "Mark as viewed");
-const clearBtnIcon = makeTopIcon('restart_alt',  t("clear_progress") || "Clear progress");
+ /* -------------------- VIDEOS -------------------- */
+if (isVideo) {
+  let video = document.createElement("video");
+  video.controls = true;
+  video.preload  = 'auto'; // hint browser to start fetching quickly
+  video.style.maxWidth  = "88vw";
+  video.style.maxHeight = "88vh";
+  video.style.objectFit = "contain";
+  container.appendChild(video);
 
-// Track which file is currently active
-let currentName = name;
+  // Apply last-used volume/mute, and persist future changes
+  loadSavedMediaVolume(video);
+  attachVolumePersistence(video);
 
-const downloadBtn = makeDownloadButton(folder, () => currentName);
+  // Top-right action icons (Material icons, theme-aware)
+  const markBtnIcon  = makeTopIcon('check_circle', t("mark_as_viewed") || "Mark as viewed");
+  const clearBtnIcon = makeTopIcon('restart_alt',  t("clear_progress") || "Clear progress");
 
-// Order: Download | Mark | Reset
-actionWrap.appendChild(downloadBtn);
-actionWrap.appendChild(markBtnIcon);
-actionWrap.appendChild(clearBtnIcon);
+  // Track which file is currently active
+  let currentName = name;
 
-const videos = (Array.isArray(fileData) ? fileData : []).filter(f => VID_RE.test(f.name));
-overlay.mediaType  = 'video';
-overlay.mediaList  = videos;
-overlay.mediaIndex = Math.max(0, videos.findIndex(f => f.name === name));
-setNavVisibility(overlay, videos.length > 1, videos.length > 1);
-  
-      const setVideoSrc = (nm) => {
-        currentName = nm;
-        video.src = buildPreviewUrl(folder, nm);
-        setTitle(overlay, nm);
-      };
-  
-      const SAVE_INTERVAL_MS = 5000;
-      let lastSaveAt = 0;
-      let pending = false;
-  
-      async function getProgress(nm) {
-        try {
-          const res = await fetch(`/api/media/getProgress.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(nm)}&t=${Date.now()}`, { credentials: "include" });
-          const data = await res.json();
-          return data && data.state ? data.state : null;
-        } catch { return null; }
-      }
-  
-      async function sendProgress({nm, seconds, duration, completed, clear}) {
-        try {
-          pending = true;
-          const res = await fetch("/api/media/updateProgress.php", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
-            body: JSON.stringify({ folder, file: nm, seconds, duration, completed, clear })
-          });
-          const data = await res.json();
-          pending = false;
-          return data;
-        } catch (e) {
-          pending = false;
-          console.error(e);
-          return null;
-        }
-      }
-  
-      const lsKey = (nm) => `videoProgress-${folder}/${nm}`;
-  
-      function renderStatus(state) {
-        if (!statusChip) return;
-  
-        // Completed
-        if (state && state.completed) {
-          statusChip.textContent = (t('viewed') || 'Viewed') + ' ✓';
-          statusChip.style.display = 'inline-block';
-          statusChip.style.borderColor = 'rgba(34,197,94,.45)';
-          statusChip.style.background  = 'rgba(34,197,94,.15)';
-          statusChip.style.color       = '#22c55e';
-          markBtnIcon.style.display  = 'none';
-          clearBtnIcon.style.display = '';
-          clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
-          return;
-        }
-  
-        // In progress
-        if (state && Number.isFinite(state.seconds) && Number.isFinite(state.duration) && state.duration > 0) {
-          const pct = Math.max(1, Math.min(99, Math.round((state.seconds / state.duration) * 100)));
-          statusChip.textContent = `${pct}%`;
-          statusChip.style.display = 'inline-block';
-  
-          const dark = document.documentElement.classList.contains('dark-mode');
-          const ORANGE_HEX = '#ea580c';
-          statusChip.style.color       = ORANGE_HEX;
-          statusChip.style.borderColor = dark ? 'rgba(234,88,12,.55)' : 'rgba(234,88,12,.45)';
-          statusChip.style.background  = dark ? 'rgba(234,88,12,.18)' : 'rgba(234,88,12,.12)';
-  
-          markBtnIcon.style.display  = '';
-          clearBtnIcon.style.display = '';
-          clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
-          return;
-        }
-  
-        // No progress
-        statusChip.style.display = 'none';
-        markBtnIcon.style.display  = '';
-        clearBtnIcon.style.display = 'none';
-      }
-  
-      // ---- Event handlers (use currentName instead of rebinding per file) ----
-      video.addEventListener("loadedmetadata", async () => {
-        const nm = currentName;
-        try {
-          const state = await getProgress(nm);
-          if (state && Number.isFinite(state.seconds) && state.seconds > 0 && state.seconds < (video.duration || Infinity)) {
-            video.currentTime = state.seconds;
-            const seconds  = Math.floor(video.currentTime || 0);
-            const duration = Math.floor(video.duration || 0);
-            setFileProgressBadge(nm, seconds, duration);
-            showToast((t("resumed_from") || "Resumed from") + " " + Math.floor(state.seconds) + "s");
-          } else {
-            const ls = localStorage.getItem(lsKey(nm));
-            if (ls) video.currentTime = parseFloat(ls);
-          }
-          renderStatus(state || null);
-        } catch {
-          renderStatus(null);
-        }
+  // Use the URL we were passed in (old behavior) for the *first* video,
+  // fall back to API URL if for some reason it's empty.
+  const initialUrl = fileUrl && fileUrl.trim()
+    ? fileUrl
+    : buildPreviewUrl(folder, name);
+
+  const downloadBtn = makeDownloadButton(folder, () => currentName);
+
+  // Order: Download | Mark | Reset
+  actionWrap.appendChild(downloadBtn);
+  actionWrap.appendChild(markBtnIcon);
+  actionWrap.appendChild(clearBtnIcon);
+
+  const videos = (Array.isArray(fileData) ? fileData : []).filter(f => VID_RE.test(f.name));
+  overlay.mediaType  = 'video';
+  overlay.mediaList  = videos;
+  overlay.mediaIndex = Math.max(0, videos.findIndex(f => f.name === name));
+  setNavVisibility(overlay, videos.length > 1, videos.length > 1);
+
+  // Helper: set src for a given video name
+  const setVideoSrc = (nm) => {
+    currentName = nm;
+
+    // For the current file, reuse the original working URL.
+    // For other files (next/prev), go through the API.
+    const url = (nm === name) ? initialUrl : buildPreviewUrl(folder, nm);
+
+    video.src = url;
+    video.src = siblingPreviewUrl(nm); 
+    setTitle(overlay, nm);
+  };
+
+  const SAVE_INTERVAL_MS = 5000;
+  let lastSaveAt = 0;
+  let pending = false;
+
+  async function getProgress(nm) {
+    try {
+      const res = await fetch(`/api/media/getProgress.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(nm)}&t=${Date.now()}`, { credentials: "include" });
+      const data = await res.json();
+      return data && data.state ? data.state : null;
+    } catch { return null; }
+  }
+
+  async function sendProgress({nm, seconds, duration, completed, clear}) {
+    try {
+      pending = true;
+      const res = await fetch("/api/media/updateProgress.php", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+        body: JSON.stringify({ folder, file: nm, seconds, duration, completed, clear })
       });
-  
-      video.addEventListener("timeupdate", async () => {
-        const now = Date.now();
-        if ((now - lastSaveAt) < SAVE_INTERVAL_MS || pending) return;
-        lastSaveAt = now;
-  
-        const nm = currentName;
-        const seconds  = Math.floor(video.currentTime || 0);
-        const duration = Math.floor(video.duration || 0);
-  
-        sendProgress({ nm, seconds, duration });
-        setFileProgressBadge(nm, seconds, duration);
-        try { localStorage.setItem(lsKey(nm), String(seconds)); } catch {}
-        renderStatus({ seconds, duration, completed: false });
-      });
-  
-      video.addEventListener("ended", async () => {
-        const nm = currentName;
-        const duration = Math.floor(video.duration || 0);
-        await sendProgress({ nm, seconds: duration, duration, completed: true });
-        try { localStorage.removeItem(lsKey(nm)); } catch {}
-        showToast(t("marked_viewed") || "Marked as viewed");
-        setFileWatchedBadge(nm, true);
-        renderStatus({ seconds: duration, duration, completed: true });
-      });
-  
-      markBtnIcon.onclick = async () => {
-        const nm = currentName;
-        const duration = Math.floor(video.duration || 0);
-        await sendProgress({ nm, seconds: duration, duration, completed: true });
-        showToast(t("marked_viewed") || "Marked as viewed");
-        setFileWatchedBadge(nm, true);
-        renderStatus({ seconds: duration, duration, completed: true });
-      };
-  
-      clearBtnIcon.onclick = async () => {
-        const nm = currentName;
-        await sendProgress({ nm, seconds: 0, duration: null, completed: false, clear: true });
-        try { localStorage.removeItem(lsKey(nm)); } catch {}
-        showToast(t("progress_cleared") || "Progress cleared");
-        setFileWatchedBadge(nm, false);
-        renderStatus(null);
-      };
-  
-      const navigate = (dir) => {
-        if (!overlay.mediaList || overlay.mediaList.length < 2) return;
-        overlay.mediaIndex = (overlay.mediaIndex + dir + overlay.mediaList.length) % overlay.mediaList.length;
-        const nm = overlay.mediaList[overlay.mediaIndex].name;
-        currentName = nm;        // keep download button in sync
-        setVideoSrc(nm);
-        renderStatus(null);
-      };
-  
-      if (videos.length > 1) {
-        prevBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(-1); });
-        nextBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(+1); });
-        const onKey = (e) => {
-          if (!document.body.contains(overlay)) {
-            window.removeEventListener("keydown", onKey);
-            return;
-          }
-          if (e.key === "ArrowLeft")  navigate(-1);
-          if (e.key === "ArrowRight") navigate(+1);
-        };
-        window.addEventListener("keydown", onKey);
-        overlay._onKey = onKey;
-      }
-  
-      setVideoSrc(name);
-      renderStatus(null);
-      overlay.style.display = "flex";
+      const data = await res.json();
+      pending = false;
+      return data;
+    } catch (e) {
+      pending = false;
+      console.error(e);
+      return null;
+    }
+  }
+
+  const lsKey = (nm) => `videoProgress-${folder}/${nm}`;
+
+  function renderStatus(state) {
+    if (!statusChip) return;
+
+    // Completed
+    if (state && state.completed) {
+      statusChip.textContent = (t('viewed') || 'Viewed') + ' ✓';
+      statusChip.style.display = 'inline-block';
+      statusChip.style.borderColor = 'rgba(34,197,94,.45)';
+      statusChip.style.background  = 'rgba(34,197,94,.15)';
+      statusChip.style.color       = '#22c55e';
+      markBtnIcon.style.display  = 'none';
+      clearBtnIcon.style.display = '';
+      clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
       return;
     }
+
+    // In progress
+    if (state && Number.isFinite(state.seconds) && Number.isFinite(state.duration) && state.duration > 0) {
+      const pct = Math.max(1, Math.min(99, Math.round((state.seconds / state.duration) * 100)));
+      statusChip.textContent = `${pct}%`;
+      statusChip.style.display = 'inline-block';
+
+      const dark = document.documentElement.classList.contains('dark-mode');
+      const ORANGE_HEX = '#ea580c';
+      statusChip.style.color       = ORANGE_HEX;
+      statusChip.style.borderColor = dark ? 'rgba(234,88,12,.55)' : 'rgba(234,88,12,.45)';
+      statusChip.style.background  = dark ? 'rgba(234,88,12,.18)' : 'rgba(234,88,12,.12)';
+
+      markBtnIcon.style.display  = '';
+      clearBtnIcon.style.display = '';
+      clearBtnIcon.title = t('reset_progress') || t('clear_progress') || 'Reset';
+      return;
+    }
+
+    // No progress
+    statusChip.style.display = 'none';
+    markBtnIcon.style.display  = '';
+    clearBtnIcon.style.display = 'none';
+  }
+
+  // ---- Event handlers (use currentName instead of rebinding per file) ----
+  video.addEventListener("loadedmetadata", async () => {
+    const nm = currentName;
+    try {
+      const state = await getProgress(nm);
+      if (state && Number.isFinite(state.seconds) && state.seconds > 0 && state.seconds < (video.duration || Infinity)) {
+        video.currentTime = state.seconds;
+        const seconds  = Math.floor(video.currentTime || 0);
+        const duration = Math.floor(video.duration || 0);
+        setFileProgressBadge(nm, seconds, duration);
+        showToast((t("resumed_from") || "Resumed from") + " " + Math.floor(state.seconds) + "s");
+      } else {
+        const ls = localStorage.getItem(lsKey(nm));
+        if (ls) video.currentTime = parseFloat(ls);
+      }
+      renderStatus(state || null);
+    } catch {
+      renderStatus(null);
+    }
+  });
+
+  video.addEventListener("timeupdate", async () => {
+    const now = Date.now();
+    if ((now - lastSaveAt) < SAVE_INTERVAL_MS || pending) return;
+    lastSaveAt = now;
+
+    const nm = currentName;
+    const seconds  = Math.floor(video.currentTime || 0);
+    const duration = Math.floor(video.duration || 0);
+
+    sendProgress({ nm, seconds, duration });
+    setFileProgressBadge(nm, seconds, duration);
+    try { localStorage.setItem(lsKey(nm), String(seconds)); } catch {}
+    renderStatus({ seconds, duration, completed: false });
+  });
+
+  video.addEventListener("ended", async () => {
+    const nm = currentName;
+    const duration = Math.floor(video.duration || 0);
+    await sendProgress({ nm, seconds: duration, duration, completed: true });
+    try { localStorage.removeItem(lsKey(nm)); } catch {}
+    showToast(t("marked_viewed") || "Marked as viewed");
+    setFileWatchedBadge(nm, true);
+    renderStatus({ seconds: duration, duration, completed: true });
+  });
+
+  markBtnIcon.onclick = async () => {
+    const nm = currentName;
+    const duration = Math.floor(video.duration || 0);
+    await sendProgress({ nm, seconds: duration, duration, completed: true });
+    showToast(t("marked_viewed") || "Marked as viewed");
+    setFileWatchedBadge(nm, true);
+    renderStatus({ seconds: duration, duration, completed: true });
+  };
+
+  clearBtnIcon.onclick = async () => {
+    const nm = currentName;
+    await sendProgress({ nm, seconds: 0, duration: null, completed: false, clear: true });
+    try { localStorage.removeItem(lsKey(nm)); } catch {}
+    showToast(t("progress_cleared") || "Progress cleared");
+    setFileWatchedBadge(nm, false);
+    renderStatus(null);
+  };
+
+  const navigate = (dir) => {
+    if (!overlay.mediaList || overlay.mediaList.length < 2) return;
+    overlay.mediaIndex = (overlay.mediaIndex + dir + overlay.mediaList.length) % overlay.mediaList.length;
+    const nm = overlay.mediaList[overlay.mediaIndex].name;
+    setVideoSrc(nm);
+    renderStatus(null);
+  };
+
+  if (videos.length > 1) {
+    prevBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(-1); });
+    nextBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(+1); });
+    const onKey = (e) => {
+      if (!document.body.contains(overlay)) {
+        window.removeEventListener("keydown", onKey);
+        return;
+      }
+      if (e.key === "ArrowLeft")  navigate(-1);
+      if (e.key === "ArrowRight") navigate(+1);
+    };
+    window.addEventListener("keydown", onKey);
+    overlay._onKey = onKey;
+  }
+
+  // Kick off first video using the original working URL
+  setVideoSrc(name);
+  renderStatus(null);
+  overlay.style.display = "flex";
+  return;
+}
 
   /* -------------------- AUDIO / OTHER -------------------- */
   if (isAudio) {

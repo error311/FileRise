@@ -1,5 +1,18 @@
 # Changelog
 
+## Changes 12/3/2025 (v2.3.2)
+
+release(v2.3.2): fix media preview URLs and tighten hover card layout
+
+- Reuse the working preview URL as a base when stepping between images/videos
+  so next/prev navigation keeps using the same inline/download endpoint
+- Preserve video progress tracking and watched badges while fixing black-screen
+  playback issues across browsers
+- Slightly shrink the file hover preview card (width/height, grid columns,
+  gaps, snippet/props heights) for a more compact, less intrusive peek
+
+---
+
 ## Changes 12/3/2025 (v2.3.1)
 
 release(v2.3.1): polish file list actions & hover preview peak

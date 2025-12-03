@@ -393,17 +393,17 @@ function ensureHoverPreviewEl() {
   const propsEl = el.querySelector(".hover-preview-props");
 
   if (card) {
-    card.style.minWidth  = "420px";
-    card.style.maxWidth  = "640px";
-    card.style.minHeight = "220px";
-    card.style.padding   = "10px 12px";
+    card.style.minWidth  = "380px";   // was 420
+    card.style.maxWidth  = "600px";   // was 640
+    card.style.minHeight = "200px";   // was 220
+    card.style.padding   = "8px 10px"; // slightly tighter padding
     card.style.overflow  = "hidden";
   }
 
   if (grid) {
     grid.style.display             = "grid";
-    grid.style.gridTemplateColumns = "220px minmax(260px, 1fr)";
-    grid.style.gap                 = "12px";
+    grid.style.gridTemplateColumns = "200px minmax(240px, 1fr)"; // both columns ~9% smaller
+    grid.style.gap                 = "10px";
     grid.style.alignItems          = "center";
   }
 
@@ -426,13 +426,14 @@ function ensureHoverPreviewEl() {
     thumb.style.display        = "flex";
     thumb.style.alignItems     = "center";
     thumb.style.justifyContent = "center";
-    thumb.style.minHeight      = "140px";
-    thumb.style.marginBottom   = "6px";
+    thumb.style.minHeight      = "120px"; // was 140
+    thumb.style.marginBottom   = "4px";   // slightly tighter
   }
+  
 
   if (snippet) {
     snippet.style.marginTop    = "4px";
-    snippet.style.maxHeight    = "140px";
+    snippet.style.maxHeight    = "120px";
     snippet.style.overflow     = "auto";
     snippet.style.fontSize     = "0.78rem";
     snippet.style.whiteSpace   = "pre-wrap";
@@ -464,9 +465,9 @@ function ensureHoverPreviewEl() {
   }
 
   if (propsEl) {
-    propsEl.style.fontSize   = "0.78rem";
+    propsEl.style.fontSize   = "0.76rem";
     propsEl.style.lineHeight = "1.3";
-    propsEl.style.maxHeight  = "160px";
+    propsEl.style.maxHeight  = "140px";
     propsEl.style.overflow   = "auto";
     propsEl.style.paddingRight = "4px";
     propsEl.style.wordBreak  = "break-word";
