@@ -10,6 +10,15 @@ export function setLastLoginData(data) {
   //window.__lastLoginData = data;
 }
 
+function isHoverPreviewDisabled() {
+  if (window.disableHoverPreview === true) return true;
+  try {
+    return localStorage.getItem('disableHoverPreview') === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export function openTOTPLoginModal() {
   let totpLoginModal = document.getElementById("totpLoginModal");
   const isDarkMode = document.body.classList.contains("dark-mode");
@@ -454,6 +463,43 @@ export async function openUserPanel() {
           }
         });
 
+                // 4) Disable hover preview
+                const hoverLabel = document.createElement('label');
+                hoverLabel.style.cursor = 'pointer';
+                hoverLabel.style.display = 'block';
+                hoverLabel.style.marginTop = '4px';
+        
+                const hoverCb = document.createElement('input');
+                hoverCb.type = 'checkbox';
+                hoverCb.id = 'disableHoverPreview';
+                hoverCb.style.verticalAlign = 'middle';
+        
+                {
+                  const storedHover = localStorage.getItem('disableHoverPreview');
+                  hoverCb.checked = storedHover === 'true';
+                  // also mirror into a global flag for runtime checks
+                  window.disableHoverPreview = hoverCb.checked;
+                }
+        
+                hoverLabel.appendChild(hoverCb);
+                hoverLabel.append(
+                  ` ${t('disable_hover_preview') || 'Disable file hover preview'}`
+                );
+                dispFs.appendChild(hoverLabel);
+        
+                // Handler: toggle hover preview
+                hoverCb.addEventListener('change', () => {
+                  const disabled = hoverCb.checked;
+                  localStorage.setItem('disableHoverPreview', disabled ? 'true' : 'false');
+                  window.disableHoverPreview = disabled;
+        
+                  // Hide any currently-visible preview right away
+                  const preview = document.getElementById('hoverPreview');
+                  if (preview) {
+                    preview.style.display = 'none';
+                  }
+                });
+
     inlineCb.addEventListener('change', () => {
       window.showInlineFolders = inlineCb.checked;
       localStorage.setItem('showInlineFolders', inlineCb.checked);
@@ -522,6 +568,13 @@ export async function openUserPanel() {
       const storedInline = localStorage.getItem('showInlineFolders');
       inlineCb.checked = storedInline === null ? true : storedInline === 'true';
     }
+  }
+
+  const hoverCb = modal.querySelector('#disableHoverPreview');
+  if (hoverCb) {
+    const storedHover = localStorage.getItem('disableHoverPreview');
+    hoverCb.checked = storedHover === 'true';
+    window.disableHoverPreview = hoverCb.checked;
   }
 
   // show

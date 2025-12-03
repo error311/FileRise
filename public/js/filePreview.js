@@ -9,6 +9,18 @@ export function buildPreviewUrl(folder, name) {
   return `/api/file/download.php?folder=${encodeURIComponent(f)}&file=${encodeURIComponent(name)}&inline=1&t=${Date.now()}`;
 }
 
+// New: build a download URL (attachment)
+export function buildDownloadUrl(folder, name) {
+  const f = (!folder || folder === '') ? 'root' : String(folder);
+  const params = new URLSearchParams({
+    folder: f,
+    file: name,
+    inline: '0',
+    t: String(Date.now())
+  });
+  return `/api/file/download.php?${params.toString()}`;
+}
+
 const MEDIA_VOLUME_KEY = 'frMediaVolume';
 const MEDIA_MUTED_KEY  = 'frMediaMuted';
 
@@ -376,6 +388,27 @@ function setTitle(overlay, name) {
   }
 }
 
+// New: Download icon that uses current file name
+function makeDownloadButton(folder, getName) {
+  const btn = makeTopIcon('download', t('download') || 'Download');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const nm = getName && getName();
+    if (!nm) return;
+
+    const url = buildDownloadUrl(folder, nm);
+
+    // Use a temporary <a> with download attribute for nicer behavior
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nm;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+  return btn;
+}
+
 // Topbar icon (theme-aware) used for image tools + video actions
 function makeTopIcon(name, title) {
   const b = document.createElement('button');
@@ -472,6 +505,9 @@ export function previewFile(fileUrl, fileName) {
 
   setTitle(overlay, name);
   if (isSvg) {
+    const downloadBtn = makeDownloadButton(folder, () => name);
+    actionWrap.appendChild(downloadBtn);
+  
     container.textContent =
       t("svg_preview_disabled") ||
       "SVG preview is disabled for security. Use Download to view this file.";
@@ -490,12 +526,17 @@ export function previewFile(fileUrl, fileName) {
     img.dataset.scale = 1;
     img.dataset.rotate = 0;
     container.appendChild(img);
-
+  
+    let currentName = name;
+  
     // topbar-aligned, theme-aware icons
     const zoomInBtn   = makeTopIcon('zoom_in',      t('zoom_in')       || 'Zoom In');
     const zoomOutBtn  = makeTopIcon('zoom_out',     t('zoom_out')      || 'Zoom Out');
     const rotateLeft  = makeTopIcon('rotate_left',  t('rotate_left')   || 'Rotate Left');
     const rotateRight = makeTopIcon('rotate_right', t('rotate_right')  || 'Rotate Right');
+    const downloadBtn = makeDownloadButton(folder, () => currentName);
+  
+    actionWrap.appendChild(downloadBtn);
     actionWrap.appendChild(zoomInBtn);
     actionWrap.appendChild(zoomOutBtn);
     actionWrap.appendChild(rotateLeft);
@@ -527,21 +568,22 @@ export function previewFile(fileUrl, fileName) {
     });
 
     const images = (Array.isArray(fileData) ? fileData : []).filter(f => IMG_RE.test(f.name));
-    overlay.mediaType  = 'image';
-    overlay.mediaList  = images;
-    overlay.mediaIndex = Math.max(0, images.findIndex(f => f.name === name));
-    setNavVisibility(overlay, images.length > 1, images.length > 1);
+overlay.mediaType  = 'image';
+overlay.mediaList  = images;
+overlay.mediaIndex = Math.max(0, images.findIndex(f => f.name === name));
+setNavVisibility(overlay, images.length > 1, images.length > 1);
 
-    const navigate = (dir) => {
-      if (!overlay.mediaList || overlay.mediaList.length < 2) return;
-      overlay.mediaIndex = (overlay.mediaIndex + dir + overlay.mediaList.length) % overlay.mediaList.length;
-      const newFile = overlay.mediaList[overlay.mediaIndex].name;
-      setTitle(overlay, newFile);
-      img.dataset.scale = 1;
-      img.dataset.rotate = 0;
-      img.style.transform = 'scale(1) rotate(0deg)';
-      img.src = buildPreviewUrl(folder, newFile);
-    };
+const navigate = (dir) => {
+  if (!overlay.mediaList || overlay.mediaList.length < 2) return;
+  overlay.mediaIndex = (overlay.mediaIndex + dir + overlay.mediaList.length) % overlay.mediaList.length;
+  const newFile = overlay.mediaList[overlay.mediaIndex].name;
+  currentName = newFile;            // keep download button pointing to the right file
+  setTitle(overlay, newFile);
+  img.dataset.scale = 1;
+  img.dataset.rotate = 0;
+  img.style.transform = 'scale(1) rotate(0deg)';
+  img.src = buildPreviewUrl(folder, newFile);
+};
 
     if (images.length > 1) {
       prevBtn.addEventListener('click', (e) => { e.stopPropagation(); navigate(-1); });
@@ -582,20 +624,24 @@ export function previewFile(fileUrl, fileName) {
       loadSavedMediaVolume(video);
       attachVolumePersistence(video);
   
-      // Top-right action icons (Material icons, theme-aware)
       const markBtnIcon  = makeTopIcon('check_circle', t("mark_as_viewed") || "Mark as viewed");
-      const clearBtnIcon = makeTopIcon('restart_alt',  t("clear_progress") || "Clear progress");
-      actionWrap.appendChild(markBtnIcon);
-      actionWrap.appendChild(clearBtnIcon);
-  
-      const videos = (Array.isArray(fileData) ? fileData : []).filter(f => VID_RE.test(f.name));
-      overlay.mediaType  = 'video';
-      overlay.mediaList  = videos;
-      overlay.mediaIndex = Math.max(0, videos.findIndex(f => f.name === name));
-      setNavVisibility(overlay, videos.length > 1, videos.length > 1);
-  
-      // Track which file is currently active
-      let currentName = name;
+const clearBtnIcon = makeTopIcon('restart_alt',  t("clear_progress") || "Clear progress");
+
+// Track which file is currently active
+let currentName = name;
+
+const downloadBtn = makeDownloadButton(folder, () => currentName);
+
+// Order: Download | Mark | Reset
+actionWrap.appendChild(downloadBtn);
+actionWrap.appendChild(markBtnIcon);
+actionWrap.appendChild(clearBtnIcon);
+
+const videos = (Array.isArray(fileData) ? fileData : []).filter(f => VID_RE.test(f.name));
+overlay.mediaType  = 'video';
+overlay.mediaList  = videos;
+overlay.mediaIndex = Math.max(0, videos.findIndex(f => f.name === name));
+setNavVisibility(overlay, videos.length > 1, videos.length > 1);
   
       const setVideoSrc = (nm) => {
         currentName = nm;
@@ -744,6 +790,7 @@ export function previewFile(fileUrl, fileName) {
         if (!overlay.mediaList || overlay.mediaList.length < 2) return;
         overlay.mediaIndex = (overlay.mediaIndex + dir + overlay.mediaList.length) % overlay.mediaList.length;
         const nm = overlay.mediaList[overlay.mediaIndex].name;
+        currentName = nm;        // keep download button in sync
         setVideoSrc(nm);
         renderStatus(null);
       };
@@ -782,8 +829,14 @@ export function previewFile(fileUrl, fileName) {
     loadSavedMediaVolume(audio);
     attachVolumePersistence(audio);
   
+    const downloadBtn = makeDownloadButton(folder, () => name);
+    actionWrap.appendChild(downloadBtn);
+  
     overlay.style.display = "flex";
   } else {
+    const downloadBtn = makeDownloadButton(folder, () => name);
+    actionWrap.appendChild(downloadBtn);
+  
     container.textContent = t("preview_not_available") || "Preview not available for this file type.";
     overlay.style.display = "flex";
   }

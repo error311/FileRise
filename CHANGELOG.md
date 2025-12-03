@@ -1,5 +1,19 @@
 # Changelog
 
+## Changes 12/3/2025 (v2.3.1)
+
+release(v2.3.1): polish file list actions & hover preview peak
+
+- Replace per-row action button stack with compact 3-dot “More actions” menu in file list and folder tree
+- Add desktop hover preview peak card for files & folders (image thumb, text snippet, quick metadata)
+- Add per-user toggle to disable file hover preview (stored in localStorage)
+- Improve preview overlay: add Download button, Zoom/Rotate labels, keep download target in sync when navigating images/videos
+- Fix mobile table layout so Size column is visible for files & folders
+- Tweak dark/light glassmorphism styles for hover card and action buttons
+- Clean up size parsing and editable flag logic for big/unknown files
+
+---
+
 ## Changes 12/2/2025 (v2.3.0)
 
 release(v2.3.0): feat(portals): branding, intake presets, limits & CSV export

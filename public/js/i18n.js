@@ -343,7 +343,16 @@ const translations = {
     "hide_header_zoom_controls": "Hide header zoom controls",
     "preview_not_available": "Preview is not available for this file type.",
     "storage_pro_bundle_outdated": "Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.",
-    "svg_preview_disabled": "SVG preview is disabled for now for security reasons."
+    "svg_preview_disabled": "SVG preview is disabled for now for security reasons.",
+    "no_files_or_folders": "No files or folders to display.",
+    "no_preview_available": "No preview available.",
+    "more_actions": "More Actions",
+    "folder_actions": "Folder Actions",
+    "disable_hover_preview": "Disable hover preview in file list",
+    "zoom_in": "Zoom In",
+    "zoom_out": "Zoom Out",
+    "rotate_left": "Rotate Left",
+    "rotate_right": "Rotate Right"
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",

@@ -214,6 +214,308 @@ function repaintStripIcon(folder) {
   const kind = iconSpan.dataset.kind || 'empty';
   iconSpan.innerHTML = folderSVG(kind);
 }
+const TEXT_PREVIEW_MAX_BYTES = 120 * 1024; // ~120 KB
+const _fileSnippetCache = new Map();
+
+function getFileExt(name) {
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+async function fillFileSnippet(file, snippetEl) {
+  if (!snippetEl) return;
+  snippetEl.textContent = "";
+  snippetEl.style.display = "none";
+
+  const folder = file.folder || window.currentFolder || "root";
+  const key = `${folder}::${file.name}`;
+
+  if (!canEditFile(file.name)) {
+    // No text preview possible for this type – cache the fact and bail
+    _fileSnippetCache.set(key, "");
+    return;
+  }
+
+  const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+  if (bytes != null && bytes > TEXT_PREVIEW_MAX_BYTES) {
+    // File is too large to safely preview inline
+    const msg = t("no_preview_available") || "No preview available";
+    snippetEl.style.display = "block";
+    snippetEl.textContent = msg;
+    _fileSnippetCache.set(key, msg);
+    return;
+  }
+
+  // Use cache if we have it
+  if (_fileSnippetCache.has(key)) {
+    const cached = _fileSnippetCache.get(key);
+    if (cached) {
+      snippetEl.textContent = cached;
+      snippetEl.style.display = "block";
+    }
+    return;
+  }
+
+  snippetEl.style.display = "block";
+  snippetEl.textContent = t("loading") || "Loading...";
+
+  try {
+    const url = apiFileUrl(folder, file.name, true);
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) throw 0;
+    const text = await res.text();
+
+    const MAX_LINES = 6;
+    const MAX_CHARS = 600;
+
+    const allLines = text.split(/\r?\n/);
+    let visibleLines = allLines.slice(0, MAX_LINES);
+    let snippet = visibleLines.join("\n");
+    let truncated = allLines.length > MAX_LINES;
+
+    if (snippet.length > MAX_CHARS) {
+      snippet = snippet.slice(0, MAX_CHARS);
+      truncated = true;
+    }
+
+    snippet = snippet.trim();
+    let finalSnippet = snippet || "(empty file)";
+    if (truncated) {
+      finalSnippet += "\n…";
+    }
+
+    _fileSnippetCache.set(key, finalSnippet);
+    snippetEl.textContent = finalSnippet;
+  } catch {
+    snippetEl.textContent = "";
+    snippetEl.style.display = "none";
+    _fileSnippetCache.set(key, "");
+  }
+}
+
+function wireEllipsisContextMenu(fileListContent) {
+  if (!fileListContent) return;
+
+  fileListContent
+    .querySelectorAll(".btn-actions-ellipsis")
+    .forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const row = btn.closest("tr");
+        if (!row) return;
+
+        const rect = btn.getBoundingClientRect();
+        const evt = new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.bottom
+        });
+
+        row.dispatchEvent(evt);
+      });
+    });
+}
+
+let hoverPreviewEl = null;
+let hoverPreviewTimer = null;
+let hoverPreviewActiveRow = null;
+let hoverPreviewContext = null;
+let hoverPreviewHoveringCard = false;
+
+// Let other modules (drag/drop) kill the hover card instantly.
+export function cancelHoverPreview() {
+  try {
+    if (hoverPreviewTimer) {
+      clearTimeout(hoverPreviewTimer);
+      hoverPreviewTimer = null;
+    }
+  } catch {}
+
+  hoverPreviewActiveRow = null;
+  hoverPreviewContext = null;
+  hoverPreviewHoveringCard = false;
+
+  if (hoverPreviewEl) {
+    hoverPreviewEl.style.display = 'none';
+  }
+}
+
+function isHoverPreviewDisabled() {
+  // Live flag from user panel
+  if (window.disableHoverPreview === true) return true;
+
+  // Fallback to localStorage (e.g. on first page load)
+  try {
+    return localStorage.getItem('disableHoverPreview') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function ensureHoverPreviewEl() {
+  if (hoverPreviewEl) return hoverPreviewEl;
+
+  const el = document.createElement("div");
+  el.id = "hoverPreview";
+  el.style.position = "fixed";
+  el.style.zIndex = "9999";
+  el.style.display = "none";
+  el.innerHTML = `
+    <div class="hover-preview-card">
+      <div class="hover-preview-grid">
+        <div class="hover-preview-left">
+          <div class="hover-preview-thumb"></div>
+          <pre class="hover-preview-snippet"></pre>
+        </div>
+        <div class="hover-preview-right">
+          <div class="hover-preview-title"></div>
+          <div class="hover-preview-meta"></div>
+          <div class="hover-preview-props"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  hoverPreviewEl = el;
+
+  // ---- Layout + sizing tweaks ---------------------------------
+  const card    = el.querySelector(".hover-preview-card");
+  const grid    = el.querySelector(".hover-preview-grid");
+  const leftCol = el.querySelector(".hover-preview-left");
+  const rightCol = el.querySelector(".hover-preview-right");
+  const thumb   = el.querySelector(".hover-preview-thumb");
+  const snippet = el.querySelector(".hover-preview-snippet");
+  const titleEl = el.querySelector(".hover-preview-title");
+  const metaEl  = el.querySelector(".hover-preview-meta");
+  const propsEl = el.querySelector(".hover-preview-props");
+
+  if (card) {
+    card.style.minWidth  = "420px";
+    card.style.maxWidth  = "640px";
+    card.style.minHeight = "220px";
+    card.style.padding   = "10px 12px";
+    card.style.overflow  = "hidden";
+  }
+
+  if (grid) {
+    grid.style.display             = "grid";
+    grid.style.gridTemplateColumns = "220px minmax(260px, 1fr)";
+    grid.style.gap                 = "12px";
+    grid.style.alignItems          = "center";
+  }
+
+  if (leftCol) {
+    leftCol.style.display        = "flex";
+    leftCol.style.flexDirection  = "column";
+    leftCol.style.justifyContent = "center";
+    leftCol.style.minWidth       = "0";
+  }
+
+  if (rightCol) {
+    rightCol.style.display        = "flex";
+    rightCol.style.flexDirection  = "column";
+    rightCol.style.justifyContent = "center";
+    rightCol.style.minWidth       = "0";
+    rightCol.style.overflow       = "hidden";
+  }
+
+  if (thumb) {
+    thumb.style.display        = "flex";
+    thumb.style.alignItems     = "center";
+    thumb.style.justifyContent = "center";
+    thumb.style.minHeight      = "140px";
+    thumb.style.marginBottom   = "6px";
+  }
+
+  if (snippet) {
+    snippet.style.marginTop    = "4px";
+    snippet.style.maxHeight    = "140px";
+    snippet.style.overflow     = "auto";
+    snippet.style.fontSize     = "0.78rem";
+    snippet.style.whiteSpace   = "pre-wrap";
+    snippet.style.padding      = "6px 8px";
+    snippet.style.borderRadius = "6px";
+    // Dark-mode friendly styling that still looks OK in light mode
+    //snippet.style.backgroundColor = "rgba(39, 39, 39, 0.92)";
+    snippet.style.color           = "#e5e7eb";
+  }
+
+  if (titleEl) {
+    titleEl.style.fontWeight   = "600";
+    titleEl.style.fontSize     = "0.95rem";
+    titleEl.style.marginBottom = "2px";
+    titleEl.style.whiteSpace   = "nowrap";
+    titleEl.style.overflow     = "hidden";
+    titleEl.style.textOverflow = "ellipsis";
+    titleEl.style.maxWidth     = "100%";
+  }
+
+  if (metaEl) {
+    metaEl.style.fontSize   = "0.8rem";
+    metaEl.style.opacity    = "0.8";
+    metaEl.style.marginBottom = "6px";
+    metaEl.style.whiteSpace   = "nowrap";
+    metaEl.style.overflow     = "hidden";
+    metaEl.style.textOverflow = "ellipsis";
+    metaEl.style.maxWidth     = "100%";
+  }
+
+  if (propsEl) {
+    propsEl.style.fontSize   = "0.78rem";
+    propsEl.style.lineHeight = "1.3";
+    propsEl.style.maxHeight  = "160px";
+    propsEl.style.overflow   = "auto";
+    propsEl.style.paddingRight = "4px";
+    propsEl.style.wordBreak  = "break-word";
+  }
+
+  // Allow the user to move onto the card without it vanishing
+  el.addEventListener("mouseenter", () => {
+    hoverPreviewHoveringCard = true;
+  });
+
+  el.addEventListener("mouseleave", () => {
+    hoverPreviewHoveringCard = false;
+    // If we've left both the row and the card, hide after a tiny delay
+    setTimeout(() => {
+      if (!hoverPreviewActiveRow && !hoverPreviewHoveringCard) {
+        hideHoverPreview();
+      }
+    }, 120);
+  });
+
+  // Click anywhere on the card = open preview/editor/folder
+  el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!hoverPreviewContext) return;
+
+    const ctx = hoverPreviewContext;
+
+    // Hide the hover card immediately so it doesn't hang around
+    hideHoverPreview();
+
+    if (ctx.type === "file") {
+      openDefaultFileFromHover(ctx.file);
+    } else if (ctx.type === "folder") {
+      const dest = ctx.folder;
+      if (dest) {
+        window.currentFolder = dest;
+        try { localStorage.setItem("lastOpenedFolder", dest); } catch {}
+        updateBreadcrumbTitle(dest);
+        loadFileList(dest);
+      }
+    }
+  });
+
+  return el;
+}
+
+function hideHoverPreview() {
+  cancelHoverPreview();
+}
 
 function applyFolderStripLayout(strip) {
   if (!strip) return;
@@ -316,6 +618,105 @@ function fetchFolderStats(folder) {
   return p;
 }
 
+// --- Folder "peek" cache (first few child folders/files) ---
+const FOLDER_PEEK_MAX_ITEMS = 6;
+const _folderPeekCache = new Map();
+
+/**
+ * Best-effort peek: first few direct child folders + files for a folder.
+ * Uses existing getFolderList.php + getFileList.php.
+ *
+ * Returns: { items: Array<{type,name}>, truncated: boolean }
+ */
+async function fetchFolderPeek(folder) {
+  if (!folder) return null;
+
+  if (_folderPeekCache.has(folder)) {
+    return _folderPeekCache.get(folder);
+  }
+
+  const p = (async () => {
+    try {
+      // 1) Files in this folder
+      let files = [];
+      try {
+        const res = await fetch(
+          `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`,
+          { credentials: "include" }
+        );
+        const raw = await safeJson(res);
+        if (Array.isArray(raw.files)) {
+          files = raw.files;
+        } else if (raw.files && typeof raw.files === "object") {
+          files = Object.entries(raw.files).map(([name, meta]) => ({
+            ...(meta || {}),
+            name
+          }));
+        }
+      } catch {
+        // ignore file errors; we can still show folders
+      }
+
+      // 2) Direct subfolders
+      let subfolderNames = [];
+      try {
+        const res2 = await fetch(
+          `/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`,
+          { credentials: "include" }
+        );
+        const raw2 = await safeJson(res2);
+
+        if (Array.isArray(raw2)) {
+          const allPaths = raw2.map(item => item.folder ?? item);
+          const depth = folder === "root" ? 1 : folder.split("/").length + 1;
+
+          subfolderNames = allPaths
+            .filter(p => {
+              if (folder === "root") return p.indexOf("/") === -1;
+              if (!p.startsWith(folder + "/")) return false;
+              return p.split("/").length === depth;
+            })
+            .map(p => p.split("/").pop() || p);
+        }
+      } catch {
+        // ignore folder errors
+      }
+
+      const items = [];
+
+      // Folders first
+      for (const name of subfolderNames) {
+        if (!name) continue;
+        items.push({ type: "folder", name });
+        if (items.length >= FOLDER_PEEK_MAX_ITEMS) break;
+      }
+
+      // Then a few files
+      if (items.length < FOLDER_PEEK_MAX_ITEMS && Array.isArray(files)) {
+        for (const f of files) {
+          if (!f || !f.name) continue;
+          items.push({ type: "file", name: f.name });
+          if (items.length >= FOLDER_PEEK_MAX_ITEMS) break;
+        }
+      }
+
+      // Were there more candidates than we showed?
+      const totalCandidates =
+        (Array.isArray(subfolderNames) ? subfolderNames.length : 0) +
+        (Array.isArray(files) ? files.length : 0);
+
+      const truncated = totalCandidates > items.length;
+
+      return { items, truncated };
+    } catch {
+      return null;
+    }
+  })();
+
+  _folderPeekCache.set(folder, p);
+  return p;
+}
+
 /* ===========================================================
    SECURITY: build file URLs only via the API (no /uploads)
    =========================================================== */
@@ -383,6 +784,258 @@ function wireSelectAll(fileListContent) {
   syncHeader();
 }
 
+function fillHoverPreviewForRow(row) {
+  if (isHoverPreviewDisabled()) {
+    hideHoverPreview();
+    return;
+  }
+
+  const el        = ensureHoverPreviewEl();
+  const titleEl   = el.querySelector(".hover-preview-title");
+  const metaEl    = el.querySelector(".hover-preview-meta");
+  const thumbEl   = el.querySelector(".hover-preview-thumb");
+  const propsEl   = el.querySelector(".hover-preview-props");
+  const snippetEl = el.querySelector(".hover-preview-snippet");
+
+  if (!titleEl || !metaEl || !thumbEl || !propsEl || !snippetEl) return;
+
+  // Reset content
+  thumbEl.innerHTML = "";
+  propsEl.innerHTML = "";
+  snippetEl.textContent = "";
+  snippetEl.style.display = "none";
+  metaEl.textContent = "";
+  titleEl.textContent = "";
+
+  // Reset per-row sizing (we only make this tall for images)
+  thumbEl.style.minHeight = "0";
+
+  const isFolder = row.classList.contains("folder-row");
+
+  if (isFolder) {
+    // =========================
+    //   FOLDER HOVER PREVIEW
+    // =========================
+    const folderPath = row.dataset.folder || "";
+    const folderName = folderPath.split("/").pop() || folderPath || "(root)";
+
+    titleEl.textContent = folderName;
+
+    hoverPreviewContext = {
+      type: "folder",
+      folder: folderPath
+    };
+
+    // Right column: icon + path
+    const iconHtml = `
+      <div class="hover-prop-line" style="display:flex;align-items:center;margin-bottom:4px;">
+        <span class="hover-preview-icon material-icons" style="margin-right:6px;">folder</span>
+        <strong>${t("folder") || "Folder"}</strong>
+      </div>
+    `;
+
+    let propsHtml = iconHtml;
+    propsHtml += `
+      <div class="hover-prop-line">
+        <strong>${t("path") || "Path"}:</strong> ${escapeHTML(folderPath || "root")}
+      </div>
+    `;
+    propsEl.innerHTML = propsHtml;
+
+    // Meta: counts + size
+    fetchFolderStats(folderPath).then(stats => {
+      if (!stats || !document.body.contains(el)) return;
+      if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
+
+      const foldersCount = Number.isFinite(stats.folders) ? stats.folders : 0;
+      const filesCount   = Number.isFinite(stats.files)   ? stats.files   : 0;
+
+      let bytes = null;
+      const sizeCandidates = [stats.bytes, stats.sizeBytes, stats.size, stats.totalBytes];
+      for (const v of sizeCandidates) {
+        const n = Number(v);
+        if (Number.isFinite(n) && n >= 0) {
+          bytes = n;
+          break;
+        }
+      }
+
+      const pieces = [];
+      if (foldersCount) pieces.push(`${foldersCount} folder${foldersCount === 1 ? "" : "s"}`);
+      if (filesCount)   pieces.push(`${filesCount} file${filesCount === 1 ? "" : "s"}`);
+      if (!pieces.length) pieces.push("0 items");
+
+      const sizeLabel = bytes != null && bytes >= 0 ? formatSize(bytes) : "";
+      metaEl.textContent = sizeLabel
+        ? `${pieces.join(", ")} • ${sizeLabel}`
+        : pieces.join(", ");
+    }).catch(() => {});
+
+    // Left side: peek inside folder (first few children)
+    // Left side: peek inside folder (first few children)
+fetchFolderPeek(folderPath).then(result => {
+  if (!document.body.contains(el)) return;
+  if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
+
+  if (!result) {
+    snippetEl.style.display = "none";
+    return;
+  }
+
+  const { items, truncated } = result;
+
+  // If nothing inside, show a friendly message like files do
+  if (!items || !items.length) {
+    const msg =
+      t("no_files_or_folders") ||
+      t("no_files_found") ||
+      "No files or folders";
+
+    snippetEl.textContent = msg;
+    snippetEl.style.display = "block";
+    return;
+  }
+
+  const lines = items.map(it => {
+    const prefix = it.type === "folder" ? "📁 " : "📄 ";
+    return prefix + it.name;
+  });
+
+  // If we had to cut the list to FOLDER_PEEK_MAX_ITEMS, turn the LAST line into "…"
+  if (truncated && lines.length) {
+    lines[lines.length - 1] = "…";
+  }
+
+  snippetEl.textContent = lines.join("\n");
+  snippetEl.style.display = "block";
+}).catch(() => {});
+
+  } else {
+    // ======================
+    //   FILE HOVER PREVIEW
+    // ======================
+    const name = row.getAttribute("data-file-name") || "";
+    const file = fileData.find(f => f.name === name) || null;
+
+    hoverPreviewContext = {
+      type: "file",
+      file
+    };
+
+    if (!file) {
+      titleEl.textContent = name || "(unknown)";
+      metaEl.textContent = "";
+      return;
+    }
+
+    titleEl.textContent = file.name;
+
+    // IMPORTANT: no duplicate "size • modified • owner" under the title
+    metaEl.textContent = "";
+
+    const ext   = getFileExt(file.name);
+    const lower = file.name.toLowerCase();
+    const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|ico|tif|tiff|heic)$/i.test(lower);
+    const isVideo = /\.(mp4|mkv|webm|mov|ogv)$/i.test(lower);
+    const isAudio = /\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(lower);
+    const isPdf   = /\.pdf$/i.test(lower);
+
+    const folder = file.folder || window.currentFolder || "root";
+    const url    = apiFileUrl(folder, file.name, true);
+    const canTextPreview = canEditFile(file.name);
+
+    // Left: image preview OR text snippet OR "No preview"
+    if (isImage) {
+      thumbEl.style.minHeight = "140px";
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = file.name;
+      img.style.maxWidth  = "180px";
+      img.style.maxHeight = "120px";
+      img.style.display   = "block";
+      thumbEl.appendChild(img);
+    }
+
+    // Icon type for right column
+    let iconName = "insert_drive_file";
+    if (isImage)      iconName = "image";
+    else if (isVideo) iconName = "movie";
+    else if (isAudio) iconName = "audiotrack";
+    else if (isPdf)   iconName = "picture_as_pdf";
+
+    const props = [];
+
+    // Icon row at the top of the right column
+    props.push(`
+      <div class="hover-prop-line" style="display:flex;align-items:center;margin-bottom:4px;">
+        <span class="hover-preview-icon material-icons" style="margin-right:6px;">${iconName}</span>
+        <strong>${escapeHTML(ext || "").toUpperCase() || t("file") || "File"}</strong>
+      </div>
+    `);
+
+    if (ext) {
+      props.push(`<div class="hover-prop-line"><strong>${t("extension") || "Ext"}:</strong> .${escapeHTML(ext)}</div>`);
+    }
+    if (file.size) {
+      props.push(`<div class="hover-prop-line"><strong>${t("size") || "Size"}:</strong> ${escapeHTML(file.size)}</div>`);
+    }
+    if (file.modified) {
+      props.push(`<div class="hover-prop-line"><strong>${t("modified") || "Modified"}:</strong> ${escapeHTML(file.modified)}</div>`);
+    }
+    if (file.uploaded) {
+      props.push(`<div class="hover-prop-line"><strong>${t("created") || "Created"}:</strong> ${escapeHTML(file.uploaded)}</div>`);
+    }
+    if (file.uploader) {
+      props.push(`<div class="hover-prop-line"><strong>${t("owner") || "Owner"}:</strong> ${escapeHTML(file.uploader)}</div>`);
+    }
+
+    propsEl.innerHTML = props.join("");
+
+    // Text snippet (left) for smaller text/code files
+    if (canTextPreview) {
+      fillFileSnippet(file, snippetEl);
+    } else if (!isImage) {
+      // Non-image, non-text → explicit "No preview"
+      const msg = t("no_preview_available") || "No preview available";
+      thumbEl.innerHTML = `
+        <div style="
+          padding:6px 8px;
+          border-radius:6px;
+          font-size:0.8rem;
+          text-align:center;
+          background-color:rgba(15,23,42,0.92);
+          color:#e5e7eb;
+          max-width:100%;
+        ">
+          ${escapeHTML(msg)}
+        </div>
+      `;
+    }
+  }
+}
+
+function positionHoverPreview(x, y) {
+  const el = ensureHoverPreviewEl();
+  const CARD_OFFSET_X = 16;
+  const CARD_OFFSET_Y = 12;
+
+  let left = x + CARD_OFFSET_X;
+  let top  = y + CARD_OFFSET_Y;
+
+  const rect = el.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  if (left + rect.width > vw - 10) {
+    left = x - rect.width - CARD_OFFSET_X;
+  }
+  if (top + rect.height > vh - 10) {
+    top = y - rect.height - CARD_OFFSET_Y;
+  }
+
+  el.style.left = `${Math.max(4, left)}px`;
+  el.style.top  = `${Math.max(4, top)}px`;
+}
 // ---- Folder-strip icon helpers (same geometry as tree, but colored inline) ----
 function _hexToHsl(hex) {
   hex = String(hex || '').replace('#', '');
@@ -932,15 +1585,22 @@ export async function loadFileList(folderParam) {
 
     data.files = data.files.map(f => {
       f.fullName = (f.path || f.name).trim().toLowerCase();
-
-      // Prefer numeric size if API provides it; otherwise parse the "1.2 MB" string
+    
       let bytes = Number.isFinite(f.sizeBytes)
         ? f.sizeBytes
         : parseSizeToBytes(String(f.size || ""));
-
-      if (!Number.isFinite(bytes)) bytes = Infinity;
-
-      f.editable = canEditFile(f.name) && (bytes <= MAX_EDIT_BYTES);
+    
+      // If we can't parse a sane size, treat as "unknown" instead of Infinity
+      if (!Number.isFinite(bytes) || bytes < 0) {
+        bytes = null;
+      }
+    
+      f.sizeBytes = bytes;
+    
+      // For editing: if size is unknown, assume it's OK and let the editor enforce limits.
+      const safeForEdit = (bytes == null) || (bytes <= MAX_EDIT_BYTES);
+      f.editable = canEditFile(f.name) && safeForEdit;
+    
       f.folder = folder;
       return f;
     });
@@ -1256,51 +1916,17 @@ if (headerClass) {
     } else if (i === actionsIdx) {
       td.classList.add("folder-actions-cell");
     
-      const group = document.createElement("div");
-      group.className = "btn-group btn-group-sm folder-actions-group";
-      group.setAttribute("role", "group");
-group.setAttribute("aria-label", "File actions"); 
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-link btn-actions-ellipsis";
+      btn.title = t("more_actions");
     
-const makeActionBtn = (iconName, titleKey, btnClass, actionKey, handler) => {
-  const btn = document.createElement("button");
-  btn.type = "button";
-
-  // base classes – same size as file actions
-  btn.className = `btn ${btnClass} py-1`;
-
-  // kill any Bootstrap margin helpers that got passed in
-  btn.classList.remove("ml-2", "mx-2");
-
-  btn.setAttribute("data-folder-action", actionKey);
-  btn.setAttribute("data-i18n-title", titleKey);
-  btn.title = t(titleKey);
-
-  const icon = document.createElement("i");
-  icon.className = "material-icons";
-  icon.textContent = iconName;
-  btn.appendChild(icon);
-
-  btn.addEventListener("click", e => {
-    e.stopPropagation();
-    window.currentFolder = sf.full;
-    try { localStorage.setItem("lastOpenedFolder", sf.full); } catch {}
-    handler();
-  });
-
-  // start disabled; caps logic will enable
-  btn.disabled = true;
-  btn.style.pointerEvents = "none";
-  btn.style.opacity = "0.5";
-
-  group.appendChild(btn);
-};
+      const icon = document.createElement("span");
+      icon.className = "material-icons";
+      icon.textContent = "more_vert";
     
-makeActionBtn("drive_file_move",            "move_folder",   "btn-warning folder-move-btn",     "move",   () => openMoveFolderUI());
-makeActionBtn("palette",                    "color_folder",  "btn-color-folder","color",  () => openColorFolderModal(sf.full));
-makeActionBtn("drive_file_rename_outline",  "rename_folder", "btn-warning folder-rename-btn",     "rename", () => openRenameFolderModal());
-makeActionBtn("share",                      "share_folder",  "btn-secondary",   "share",  () => openFolderShareModal(sf.full));
-    
-      td.appendChild(group);
+      btn.appendChild(icon);
+      td.appendChild(btn);
     }
   
       // IMPORTANT: always append the cell, no matter which column we're in
@@ -1309,22 +1935,27 @@ makeActionBtn("share",                      "share_folder",  "btn-secondary",   
   
     // click → navigate, same as before
     tr.addEventListener("click", e => {
+      // If the click came from the 3-dot button, let the context menu logic handle it
+      if (e.target.closest(".btn-actions-ellipsis")) {
+        return;
+      }
+    
       if (e.button !== 0) return;
       const dest = sf.full;
       if (!dest) return;
-  
+    
       window.currentFolder = dest;
       try { localStorage.setItem("lastOpenedFolder", dest); } catch { }
-  
+    
       updateBreadcrumbTitle(dest);
-  
+    
       document.querySelectorAll(".folder-option.selected")
         .forEach(o => o.classList.remove("selected"));
       const treeNode = document.querySelector(
         `.folder-option[data-folder="${CSS.escape(dest)}"]`
       );
       if (treeNode) treeNode.classList.add("selected");
-  
+    
       const strip = document.getElementById("folderStripContainer");
       if (strip) {
         strip.querySelectorAll(".folder-item.selected")
@@ -1334,7 +1965,7 @@ makeActionBtn("share",                      "share_folder",  "btn-secondary",   
         );
         if (stripItem) stripItem.classList.add("selected");
       }
-  
+    
       loadFileList(dest);
     });
   
@@ -1563,9 +2194,30 @@ function syncFolderIconSizeToRowHeight() {
     svg.style.transform       = `translateY(${offsetY}px) scale(${scale})`;
   });
 }
+
+async function openDefaultFileFromHover(file) {
+  if (!file) return;
+  const folder = file.folder || window.currentFolder || "root";
+
+  try {
+    if (canEditFile(file.name) && file.editable) {
+      const m = await import('./fileEditor.js?v={{APP_QVER}}');
+      m.editFile(file.name, folder);
+    } else {
+      const url = apiFileUrl(folder, file.name, true);
+      const m = await import('./filePreview.js?v={{APP_QVER}}');
+      m.previewFile(url, file.name);
+    }
+  } catch (e) {
+    console.error("Failed to open hover preview action", e);
+  }
+}
+
 /**
  * Render table view
  */
+
+
 export function renderFileTable(folder, container, subfolders) {
   const fileListContent = container || document.getElementById("fileList");
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
@@ -1680,11 +2332,100 @@ export function renderFileTable(folder, container, subfolders) {
 
   fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
-  // Inject inline folder rows for THIS page (Explorer-style)
-  if (window.showInlineFolders !== false && pageFolders.length) {
-    injectInlineFolderRows(fileListContent, folder, pageFolders);
-  }
-  wireSelectAll(fileListContent);
+  // ---- MOBILE FIX: show "Size" column for files (Name | Size | Actions) ----
+  (function fixMobileFileSizeColumn() {
+    const isMobile = window.innerWidth <= 640;
+    if (!isMobile) return;
+
+    const table = fileListContent.querySelector("table.filr-table");
+    if (!table || !table.tHead || !table.tBodies.length) return;
+
+    const thead = table.tHead;
+    const tbody = table.tBodies[0];
+
+    const headerCells = Array.from(thead.querySelectorAll("th"));
+    // Find the Size column index by label or data-column
+    const sizeIdx = headerCells.findIndex(th =>
+      (th.dataset && (th.dataset.column === "size" || th.dataset.column === "filesize")) ||
+      /\bsize\b/i.test((th.textContent || "").trim())
+    );
+    if (sizeIdx < 0) return;
+
+    // Unhide Size header on mobile
+    const sizeTh = headerCells[sizeIdx];
+    sizeTh.classList.remove(
+      "hide-small",
+      "hide-medium",
+      "d-none",
+      "d-sm-table-cell",
+      "d-md-table-cell",
+      "d-lg-table-cell",
+      "d-xl-table-cell"
+    );
+
+    // Unhide the Size cell in every body row (files + folders)
+    Array.from(tbody.rows).forEach(row => {
+      if (sizeIdx >= row.cells.length) return;
+      const td = row.cells[sizeIdx];
+      if (!td) return;
+
+      td.classList.remove(
+        "hide-small",
+        "hide-medium",
+        "d-none",
+        "d-sm-table-cell",
+        "d-md-table-cell",
+        "d-lg-table-cell",
+        "d-xl-table-cell"
+      );
+    });
+  })();
+
+// Inject inline folder rows for THIS page (Explorer-style) first
+if (window.showInlineFolders !== false && pageFolders.length) {
+  injectInlineFolderRows(fileListContent, folder, pageFolders);
+}
+
+// Now wire 3-dot ellipsis so it also picks up folder rows
+wireEllipsisContextMenu(fileListContent);
+
+// Hover preview (desktop only, and only if user didn’t disable it)
+if (window.innerWidth >= 768 && !isHoverPreviewDisabled()) {
+  fileListContent.querySelectorAll("tbody tr").forEach(row => {
+    if (row.classList.contains("folder-strip-row")) return;
+
+    row.addEventListener("mouseenter", (e) => {
+      hoverPreviewActiveRow = row;
+      clearTimeout(hoverPreviewTimer);
+      hoverPreviewTimer = setTimeout(() => {
+        if (hoverPreviewActiveRow === row && !isHoverPreviewDisabled()) {
+          fillHoverPreviewForRow(row);
+          const el = ensureHoverPreviewEl();
+          el.style.display = "block";
+          positionHoverPreview(e.clientX, e.clientY);
+        }
+      }, 180);
+    });
+
+    row.addEventListener("mouseleave", () => {
+      hoverPreviewActiveRow = null;
+      clearTimeout(hoverPreviewTimer);
+      setTimeout(() => {
+        if (!hoverPreviewActiveRow && !hoverPreviewHoveringCard) {
+          hideHoverPreview();
+        }
+      }, 120);
+    });
+
+    row.addEventListener("contextmenu", () => {
+      hoverPreviewActiveRow = null;
+      clearTimeout(hoverPreviewTimer);
+      hideHoverPreview();
+    });
+  });
+}
+
+wireSelectAll(fileListContent);
 
   // PATCH each row's preview/thumb to use the secure API URLs
     // PATCH each row's preview/thumb to use the secure API URLs
@@ -1869,7 +2610,10 @@ export function renderFileTable(folder, container, subfolders) {
   document.querySelectorAll(".download-btn, .edit-btn, .rename-btn").forEach(btn => {
     btn.addEventListener("click", e => e.stopPropagation());
   });
+
+  // Right-click context menu stays for power users
   bindFileListContextMenu();
+
   refreshViewedBadges(folder).catch(() => { });
 }
 

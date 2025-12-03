@@ -1,6 +1,6 @@
 // fileDragDrop.js
 import { showToast } from './domUtils.js?v={{APP_QVER}}';
-import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
+import { loadFileList, cancelHoverPreview } from './fileListView.js?v={{APP_QVER}}';
 
 /* ---------------- helpers ---------------- */
 function getRowEl(el) {
@@ -54,6 +54,7 @@ function makeDragImage(labelText, iconName = 'insert_drive_file') {
 
 /* ---------------- drag start (rows/cards) ---------------- */
 export function fileDragStartHandler(event) {
+  try { cancelHoverPreview(); } catch {}
   const row = getRowEl(event.currentTarget);
   if (!row) return;
 

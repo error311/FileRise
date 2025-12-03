@@ -163,9 +163,9 @@ export function buildFileTableHeader(sortOrder) {
           <th data-column="name" class="sortable-col">${t("name")} ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="modified" class="hide-small sortable-col">${t("modified")} ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="uploaded" class="hide-small hide-medium sortable-col">${t("created")} ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th data-column="size" class="hide-small sortable-col">${t("size")} ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
+          <th data-column="size" class="sortable-col"> ${t("size")} ${sortOrder.column === "size" ? (sortOrder.ascending ? "▲" : "▼") : ""} </th>
           <th data-column="uploader" class="hide-small hide-medium sortable-col">${t("owner")} ${sortOrder.column === "uploader" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
-          <th>${t("actions")}</th>
+          <th data-column="actions" class="actions-col">${t("actions")}</th>
         </tr>
       </thead>
   `;
@@ -175,99 +175,32 @@ export function buildFileTableRow(file, folderPath) {
   const safeFileName = escapeHTML(file.name);
   const safeModified = escapeHTML(file.modified);
   const safeUploaded = escapeHTML(file.uploaded);
-  const safeSize = escapeHTML(file.size);
+  const safeSize     = escapeHTML(file.size);
   const safeUploader = escapeHTML(file.uploader || "Unknown");
 
-  let previewButton = "";
-
-  const isSvg = /\.svg$/i.test(file.name);
-
-  // IMPORTANT: do NOT treat SVG as previewable
-  if (
-    !isSvg &&
-    /\.(jpg|jpeg|png|gif|bmp|webp|ico|tif|tiff|eps|heic|pdf|mp4|webm|mov|mp3|wav|m4a|ogg|flac|aac|wma|opus|mkv|ogv)$/i
-      .test(file.name)
-  ) {
-    let previewIcon = "";
-
-    // images (SVG explicitly excluded)
-    if (
-      /\.(jpg|jpeg|png|gif|bmp|webp|ico|tif|tiff|eps|heic)$/i
-        .test(file.name)
-    ) {
-      previewIcon = `<i class="material-icons">image</i>`;
-    } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(file.name)) {
-      previewIcon = `<i class="material-icons">videocam</i>`;
-    } else if (/\.pdf$/i.test(file.name)) {
-      previewIcon = `<i class="material-icons">picture_as_pdf</i>`;
-    } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
-      previewIcon = `<i class="material-icons">audiotrack</i>`;
-    }
-
-    previewButton = `
-      <button 
-        type="button"
-        class="btn btn-sm btn-info preview-btn" 
-        data-preview-url="${folderPath + encodeURIComponent(file.name)}?t=${Date.now()}" 
-        data-preview-name="${safeFileName}" 
-        title="${t('preview')}">
-        ${previewIcon}
-      </button>`;
-  }
-
   return `
-  <tr class="clickable-row">
-    <td>
-      <input type="checkbox" class="file-checkbox" value="${safeFileName}">
-    </td>
-    <td class="file-name-cell">${safeFileName}</td>
-    <td class="hide-small nowrap">${safeModified}</td>
-    <td class="hide-small hide-medium nowrap">${safeUploaded}</td>
-    <td class="hide-small nowrap">${safeSize}</td>
-    <td class="hide-small hide-medium nowrap">${safeUploader}</td>
-    <td>
-      <div class="btn-group btn-group-sm" role="group" aria-label="File actions">
-        <button 
-          type="button" 
-          class="btn btn-sm btn-success download-btn" 
-          data-download-name="${file.name}" 
-          data-download-folder="${file.folder || 'root'}" 
-          title="${t('download')}">
-          <i class="material-icons">file_download</i>
-        </button>
-
-        ${file.editable ? `
-        <button 
-          type="button" 
-          class="btn btn-sm btn-secondary edit-btn" 
-          data-edit-name="${file.name}" 
-          data-edit-folder="${file.folder || 'root'}" 
-          title="${t('edit')}">
-          <i class="material-icons">edit</i>
-        </button>` : ""}
-
-        ${previewButton}
-
-        <button 
-          type="button" 
-          class="btn btn-sm btn-warning rename-btn" 
-          data-rename-name="${file.name}" 
-          data-rename-folder="${file.folder || 'root'}" 
-          title="${t('rename')}">
-          <i class="material-icons">drive_file_rename_outline</i>
-        </button>
-        <!-- share -->
-        <button 
+    <tr class="clickable-row" data-file-name="${safeFileName}">
+      <td>
+        <input type="checkbox" class="file-checkbox" value="${safeFileName}">
+      </td>
+      <td class="file-name-cell name-cell">
+        ${safeFileName}
+      </td>
+      <td class="hide-small nowrap">${safeModified}</td>
+      <td class="hide-small hide-medium nowrap">${safeUploaded}</td>
+      <td class="hide-small nowrap size-cell">${safeSize}</td>
+      <td class="hide-small hide-medium nowrap">${safeUploader}</td>
+      <td class="actions-cell">
+        <button
           type="button"
-          class="btn btn-secondary btn-sm share-btn ms-1"
-          data-file="${safeFileName}"
-          title="${t('share')}">
-          <i class="material-icons">share</i>
+          class="btn btn-link btn-actions-ellipsis"
+          title="${t("more_actions")}"
+        >
+          <span class="material-icons">more_vert</span>
         </button>
-      </div>
-    </td>
-  </tr>
-`;
+      </td>
+    </tr>
+  `;
 }
 
 export function buildBottomControls(itemsPerPageSetting) {

@@ -1066,6 +1066,41 @@ export function openColorFolderModal(folder) {
     }
   });
 }
+
+function addFolderActionButton(rowEl, folderPath) {
+  if (!rowEl || !folderPath) return;
+  if (rowEl.querySelector('.folder-kebab')) return; // avoid duplicates
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  // share styling with file list kebab
+  btn.className = 'folder-kebab btn-actions-ellipsis material-icons';
+  btn.textContent = 'more_vert';
+
+  const label = t('folder_actions') || 'Folder actions';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+
+  // only control visibility/layout here; let CSS handle colors/hover
+  Object.assign(btn.style, {
+    display: 'none',
+    marginLeft: '4px',
+    flexShrink: '0'
+  });
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = btn.getBoundingClientRect();
+    const x = rect.right;
+    const y = rect.bottom;
+    const opt = rowEl.querySelector('.folder-option');
+    await openFolderActionsMenu(folderPath, opt, x, y);
+  });
+
+  rowEl.appendChild(btn);
+}
+
 /* ----------------------
    DOM builders & DnD
 ----------------------*/
@@ -1125,6 +1160,10 @@ function makeChildLi(parentPath, item) {
 
   opt.append(icon, label);
   row.append(spacer, opt);
+
+  // Add 3-dot actions button for unlocked folders
+  if (!locked) addFolderActionButton(row, fullPath);
+
   li.append(row);
 
   // <ul class="folder-tree collapsed" role="group"></ul>
@@ -1300,6 +1339,28 @@ function getULForFolder(folder) {
   const li  = opt ? opt.closest('li[role="treeitem"]') : null;
   return li ? li.querySelector(':scope > ul.folder-tree') : null;
 }
+
+function updateFolderActionButtons() {
+  const container = document.getElementById('folderTreeContainer');
+  if (!container) return;
+
+  // Hide all kebabs by default
+  container.querySelectorAll('.folder-kebab').forEach(btn => {
+    btn.style.display = 'none';
+  });
+
+  // Show only for the currently selected, unlocked folder
+  const selectedOpt = container.querySelector('.folder-option.selected');
+  if (!selectedOpt || selectedOpt.classList.contains('locked')) return;
+
+  const row = selectedOpt.closest('.folder-row');
+  if (!row) return;
+  const kebab = row.querySelector('.folder-kebab');
+  if (kebab) {
+    kebab.style.display = 'inline-flex';
+  }
+}
+
 async function selectFolder(selected) {
   const container = document.getElementById('folderTreeContainer');
   if (!container) return;
@@ -1368,6 +1429,9 @@ async function selectFolder(selected) {
     saveFolderTreeState(st);
     try { await ensureChildrenLoaded(selected, ul); primeChildToggles(ul); } catch {}
   }
+
+  // Keep the 3-dot action aligned to the active folder
+  updateFolderActionButtons();
 }
 
 /* ----------------------
@@ -1431,6 +1495,12 @@ export async function loadFolderTree(selectedFolder) {
       <ul id="rootChildren" class="folder-tree ${rootOpen ? 'expanded' : 'collapsed'}" role="group"></ul>
     `;
     container.innerHTML = html;
+
+    // Add 3-dot actions button for root
+    const rootRow = document.getElementById('rootRow');
+    if (rootRow) {
+      addFolderActionButton(rootRow, effectiveRoot);
+    }
 
     // Determine root's lock state
     const rootOpt = container.querySelector('.root-folder-option');
@@ -1654,13 +1724,57 @@ export function hideFolderManagerContextMenu() {
   if (menu) menu.hidden = true;
 }
 
+async function openFolderActionsMenu(folder, targetEl, clientX, clientY) {
+  if (!folder) return;
+
+  window.currentFolder = folder;
+  await applyFolderCapabilities(folder);
+
+  // Clear previous selection in tree + breadcrumb
+  document.querySelectorAll('.folder-option, .breadcrumb-link').forEach(el => el.classList.remove('selected'));
+
+  // Mark the clicked thing selected (folder-option or breadcrumb)
+  if (targetEl) targetEl.classList.add('selected');
+
+  // Also sync selection in the tree if we invoked from a breadcrumb or kebab
+  const tree = document.getElementById('folderTreeContainer');
+  if (tree) {
+    const inTree = tree.querySelector(`.folder-option[data-folder="${CSS.escape(folder)}"]`);
+    if (inTree) inTree.classList.add('selected');
+  }
+
+  // Show the kebab only for this selected folder
+  updateFolderActionButtons();
+
+  const canColor = !!(window.currentFolderCaps && window.currentFolderCaps.canEdit);
+
+  const menuItems = [
+    {
+      label: t('create_folder'),
+      action: () => {
+        const modal = document.getElementById('createFolderModal');
+        const input = document.getElementById('newFolderName');
+        if (modal) modal.style.display = 'block';
+        if (input) input.focus();
+      }
+    },
+    { label: t('move_folder'),   action: () => openMoveFolderUI(folder) },
+    { label: t('rename_folder'), action: () => openRenameFolderModal()  },
+    ...(canColor ? [{ label: t('color_folder'), action: () => openColorFolderModal(folder) }] : []),
+    { label: t('folder_share'),  action: () => openFolderShareModal(folder) },
+    { label: t('delete_folder'), action: () => openDeleteFolderModal()  },
+  ];
+
+  showFolderManagerContextMenu(clientX, clientY, menuItems);
+}
+
 async function folderManagerContextMenuHandler(e) {
   const target = e.target.closest('.folder-option, .breadcrumb-link');
   if (!target) return;
   e.preventDefault();
   e.stopPropagation();
 
-  // Toggle-only for locked nodes
+  // Toggle-only for locked nodes (no menu)
   if (target.classList && target.classList.contains('locked')) {
     const folder = target.getAttribute('data-folder') || '';
     const ul = getULForFolder(folder);
@@ -1679,29 +1793,9 @@ async function folderManagerContextMenuHandler(e) {
   const folder = target.getAttribute('data-folder');
   if (!folder) return;
 
-  window.currentFolder = folder;
-  await applyFolderCapabilities(folder);
-
-  document.querySelectorAll('.folder-option, .breadcrumb-link').forEach(el => el.classList.remove('selected'));
-  target.classList.add('selected');
-
-  const canColor = !!(window.currentFolderCaps && window.currentFolderCaps.canEdit);
-
-  const menuItems = [
-    { label: t('create_folder'), action: () => {
-        const modal = document.getElementById('createFolderModal');
-        const input = document.getElementById('newFolderName');
-        if (modal) modal.style.display = 'block';
-        if (input) input.focus();
-      }},
-    { label: t('move_folder'),   action: () => openMoveFolderUI(folder) },
-    { label: t('rename_folder'), action: () => openRenameFolderModal()  },
-    ...(canColor ? [{ label: t('color_folder'), action: () => openColorFolderModal(folder) }] : []),
-    { label: t('folder_share'),  action: () => openFolderShareModal(folder) },
-    { label: t('delete_folder'), action: () => openDeleteFolderModal()  },
-  ];
-
-  showFolderManagerContextMenu(e.clientX, e.clientY, menuItems);
+  const x = e.clientX;
+  const y = e.clientY;
+  await openFolderActionsMenu(folder, target, x, y);
 }
 
 function bindFolderManagerContextMenu() {
