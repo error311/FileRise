@@ -721,17 +721,31 @@ async function fetchFolderPeek(folder) {
 /* ===========================================================
    SECURITY: build file URLs only via the API (no /uploads)
    =========================================================== */
-function apiFileUrl(folder, name, inline = false) {
-  const f = folder && folder !== "root" ? folder : "root";
-  const q = new URLSearchParams({
-    folder: f,
-    file: name,
-    inline: inline ? "1" : "0",
-    t: String(Date.now()) // cache-bust
-  });
-  return `/api/file/download.php?${q.toString()}`;
-}
-
+   function apiFileUrl(folder, name, inline = false) {
+    const fParam = folder && folder !== "root" ? folder : "root";
+    const q = new URLSearchParams({
+      folder: fParam,
+      file: name,
+      inline: inline ? "1" : "0"
+    });
+  
+    // Try to find this file in fileData to get a stable cache key
+    try {
+      if (Array.isArray(fileData)) {
+        const meta = fileData.find(
+          f => f.name === name && (f.folder || "root") === fParam
+        );
+        if (meta) {
+          const v = meta.cacheKey || meta.modified || meta.uploaded || meta.sizeBytes;
+          if (v != null && v !== "") {
+            q.set("t", String(v));  // stable per-file token
+          }
+        }
+      }
+    } catch { /* best-effort only */ }
+  
+    return `/api/file/download.php?${q.toString()}`;
+  }
 // Wire "select all" header checkbox for the current table render
 function wireSelectAll(fileListContent) {
   // Be flexible about how the header checkbox is identified
@@ -915,19 +929,30 @@ fetchFolderPeek(folderPath).then(result => {
     // ======================
     //   FILE HOVER PREVIEW
     // ======================
-    const name = row.getAttribute("data-file-name") || "";
-    const file = fileData.find(f => f.name === name) || null;
+    const name = row.getAttribute("data-file-name");
+
+    // If this row isn't a real file row (e.g. "No files found"), don't show hover preview.
+    if (!name) {
+      hoverPreviewContext = null;
+      hideHoverPreview();
+      return;
+    }
+
+    const file = Array.isArray(fileData)
+      ? fileData.find(f => f.name === name)
+      : null;
+
+    // If we can't resolve a real file from fileData, also skip the preview
+    if (!file) {
+      hoverPreviewContext = null;
+      hideHoverPreview();
+      return;
+    }
 
     hoverPreviewContext = {
       type: "file",
       file
     };
-
-    if (!file) {
-      titleEl.textContent = name || "(unknown)";
-      metaEl.textContent = "";
-      return;
-    }
 
     titleEl.textContent = file.name;
 
@@ -977,8 +1002,17 @@ fetchFolderPeek(folderPath).then(result => {
     if (ext) {
       props.push(`<div class="hover-prop-line"><strong>${t("extension") || "Ext"}:</strong> .${escapeHTML(ext)}</div>`);
     }
-    if (file.size) {
-      props.push(`<div class="hover-prop-line"><strong>${t("size") || "Size"}:</strong> ${escapeHTML(file.size)}</div>`);
+    if (Number.isFinite(file.sizeBytes) && file.sizeBytes >= 0) {
+      const prettySize = formatSize(file.sizeBytes);
+      props.push(`
+        <div class="hover-prop-line hover-prop-size">
+          <strong>${t("size") || "Size"}:</strong>
+          <span class="hover-prop-value"
+                style="margin-left:4px; font-variant-numeric:tabular-nums;">
+            ${escapeHTML(prettySize)}
+          </span>
+        </div>
+      `);
     }
     if (file.modified) {
       props.push(`<div class="hover-prop-line"><strong>${t("modified") || "Modified"}:</strong> ${escapeHTML(file.modified)}</div>`);
@@ -1325,14 +1359,16 @@ function parseSizeToBytes(sizeStr) {
  * Format the total bytes as a human-readable string.
  */
 function formatSize(totalBytes) {
+  if (!Number.isFinite(totalBytes) || totalBytes < 0) return "";
+
   if (totalBytes < 1024) {
-    return totalBytes + " Bytes";
+    return totalBytes + " B";
   } else if (totalBytes < 1024 * 1024) {
-    return (totalBytes / 1024).toFixed(2) + " KB";
+    return (totalBytes / 1024).toFixed(1) + " KB";
   } else if (totalBytes < 1024 * 1024 * 1024) {
-    return (totalBytes / (1024 * 1024)).toFixed(2) + " MB";
+    return (totalBytes / (1024 * 1024)).toFixed(1) + " MB";
   } else {
-    return (totalBytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    return (totalBytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
   }
 }
 
@@ -1591,18 +1627,30 @@ export async function loadFileList(folderParam) {
         ? f.sizeBytes
         : parseSizeToBytes(String(f.size || ""));
     
-      // If we can't parse a sane size, treat as "unknown" instead of Infinity
       if (!Number.isFinite(bytes) || bytes < 0) {
         bytes = null;
       }
     
       f.sizeBytes = bytes;
     
+      // New: normalize display size and create a stable cache key
+      if (bytes != null) {
+        f.size = formatSize(bytes);
+      }
+    
+      const cacheKey =
+        (f.modified && String(f.modified)) ||
+        (f.uploaded && String(f.uploaded)) ||
+        (bytes != null ? String(bytes) : "") ||
+        f.name;
+    
+      f.cacheKey = cacheKey;
+      f.folder   = folder;
+    
       // For editing: if size is unknown, assume it's OK and let the editor enforce limits.
       const safeForEdit = (bytes == null) || (bytes <= MAX_EDIT_BYTES);
       f.editable = canEditFile(f.name) && safeForEdit;
     
-      f.folder = folder;
       return f;
     });
     fileData = data.files;
@@ -1676,7 +1724,7 @@ export async function loadFileList(folderParam) {
             <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
               ${t("row_height")}:
             </label>
-            <input type="range" id="rowHeightSlider" min="30" max="60" value="${currentHeight}" style="vertical-align:middle;">
+            <input type="range" id="rowHeightSlider" min="20" max="60" value="${currentHeight}" style="vertical-align:middle;">
             <span id="rowHeightValue" style="margin-left:6px;line-height:1;">${currentHeight}px</span>
           `;
         const rowSlider = document.getElementById("rowHeightSlider");
@@ -1907,6 +1955,9 @@ if (headerClass) {
       } else if (i === sizeIdx) {
         td.classList.add("folder-size-cell");
         td.textContent = "…"; // placeholder until we load stats
+        // NEW: match file-row numeric alignment
+        td.style.textAlign = "right";
+        td.style.fontVariantNumeric = "tabular-nums";
   
       // 4) uploader / owner column
       } else if (i === uploaderIdx) {
@@ -2159,24 +2210,19 @@ function syncFolderIconSizeToRowHeight() {
   const raw  = cs.getPropertyValue('--file-row-height') || '48px';
   const rowH = parseInt(raw, 10) || 60;
 
-  const FUDGE          = 5;
+  const FUDGE          = 1;
   const MAX_GROWTH_ROW = 44;   // after this, stop growing the icon
 
   const BASE_ROW_FOR_OFFSET = 40; // where icon looks centered
   const OFFSET_FACTOR       = 0.25;
-
-  // cap growth for size, like you already do
   const effectiveRow = Math.min(rowH, MAX_GROWTH_ROW);
 
-  const boxSize = Math.max(25, Math.min(35, effectiveRow - 20 + FUDGE));
+  const boxSize = Math.max(20, Math.min(35, effectiveRow - 20 + FUDGE));
   const scale   = 1.20;
 
-  // use your existing offset curve
+  // use existing offset curve
   const clampedForOffset = Math.max(30, Math.min(60, rowH));
   let offsetY = (clampedForOffset - BASE_ROW_FOR_OFFSET) * OFFSET_FACTOR;
-
-  // 30–44: untouched (you said this range is perfect)
-  // 45–60: same curve, but shifted up slightly
   if (rowH > 53) {
     offsetY -= 3; 
   }
@@ -2194,6 +2240,77 @@ function syncFolderIconSizeToRowHeight() {
     svg.style.transformOrigin = 'left center';
     svg.style.transform       = `translateY(${offsetY}px) scale(${scale})`;
   });
+}
+
+async function sortSubfoldersForCurrentOrder(subfolders) {
+  const base = Array.isArray(subfolders) ? [...subfolders] : [];
+  if (!base.length) return base;
+
+  const col = sortOrder?.column || "uploaded";
+  const ascending = sortOrder?.ascending !== false;
+  const dir = ascending ? 1 : -1;
+
+  // Name sort (A–Z / Z–A)
+  if (col === "name") {
+    base.sort((a, b) => {
+      const n1 = (a.name || "").toLowerCase();
+      const n2 = (b.name || "").toLowerCase();
+      if (n1 < n2) return -1 * dir;
+      if (n1 > n2) return  1 * dir;
+      return 0;
+    });
+    return base;
+  }
+
+  // Size sort – use folder stats (bytes); keep folders as a block above files
+  if (col === "size" || col === "filesize") {
+    const statsList = await Promise.all(
+      base.map(sf => fetchFolderStats(sf.full).catch(() => null))
+    );
+
+    const decorated = base.map((sf, idx) => {
+      const stats = statsList[idx];
+      let bytes = 0;
+
+      if (stats) {
+        const candidates = [
+          stats.bytes,
+          stats.sizeBytes,
+          stats.size,
+          stats.totalBytes
+        ];
+        for (const v of candidates) {
+          const n = Number(v);
+          if (Number.isFinite(n) && n >= 0) {
+            bytes = n;
+            break;
+          }
+        }
+      }
+
+      return { sf, bytes };
+    });
+
+    decorated.sort((a, b) => {
+      if (a.bytes < b.bytes) return -1 * dir;
+      if (a.bytes > b.bytes) return  1 * dir;
+
+      // tie-break by name
+      const n1 = (a.sf.name || "").toLowerCase();
+      const n2 = (b.sf.name || "").toLowerCase();
+      if (n1 < n2) return -1 * dir;
+      if (n1 > n2) return  1 * dir;
+      return 0;
+    });
+
+    return decorated.map(d => d.sf);
+  }
+
+  // Default: keep folders A–Z by name regardless of other sorts
+  base.sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+  );
+  return base;
 }
 
 async function openDefaultFileFromHover(file) {
@@ -2219,7 +2336,7 @@ async function openDefaultFileFromHover(file) {
  */
 
 
-export function renderFileTable(folder, container, subfolders) {
+export async function renderFileTable(folder, container, subfolders) {
   const fileListContent = container || document.getElementById("fileList");
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "50", 10);
@@ -2230,11 +2347,11 @@ export function renderFileTable(folder, container, subfolders) {
 
   // Inline folders: sort once (Explorer-style A→Z)
   const allSubfolders = Array.isArray(window.currentSubfolders)
-    ? window.currentSubfolders
-    : [];
-  const subfoldersSorted = [...allSubfolders].sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
-  );
+  ? window.currentSubfolders
+  : [];
+
+// NEW: sort folders according to current sort order (name / size)
+const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
 
   const totalFiles   = filteredFiles.length;
   const totalFolders = subfoldersSorted.length;
@@ -2333,6 +2450,28 @@ export function renderFileTable(folder, container, subfolders) {
 
   fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
 
+  (function rightAlignSizeColumn() {
+    const table = fileListContent.querySelector("table.filr-table");
+    if (!table || !table.tHead || !table.tBodies.length) return;
+  
+    const headerCells = Array.from(table.tHead.querySelectorAll("th"));
+    const sizeIdx = headerCells.findIndex(th =>
+      (th.dataset && (th.dataset.column === "size" || th.dataset.column === "filesize")) ||
+      /\bsize\b/i.test((th.textContent || "").trim())
+    );
+    if (sizeIdx < 0) return;
+  
+    // Header
+    headerCells[sizeIdx].style.textAlign = "right";
+  
+    // Body cells
+    Array.from(table.tBodies[0].rows).forEach(row => {
+      if (sizeIdx >= row.cells.length) return;
+      row.cells[sizeIdx].style.textAlign = "right";
+      row.cells[sizeIdx].style.fontVariantNumeric = "tabular-nums";
+    });
+  })();
+
   // ---- MOBILE FIX: show "Size" column for files (Name | Size | Actions) ----
   (function fixMobileFileSizeColumn() {
     const isMobile = window.innerWidth <= 640;
@@ -2386,6 +2525,52 @@ export function renderFileTable(folder, container, subfolders) {
 if (window.showInlineFolders !== false && pageFolders.length) {
   injectInlineFolderRows(fileListContent, folder, pageFolders);
 }
+
+  // Right-align meta columns: created / modified / owner
+  (function rightAlignMetaColumns() {
+    const table = fileListContent.querySelector("table.filr-table");
+    if (!table || !table.tHead || !table.tBodies.length) return;
+
+    const headerCells = Array.from(table.tHead.querySelectorAll("th"));
+    const bodyRows = Array.from(table.tBodies[0].rows);
+
+    function alignCol(matchFn, numeric = true) {
+      const idx = headerCells.findIndex(matchFn);
+      if (idx < 0) return;
+
+      const th = headerCells[idx];
+      th.style.textAlign = "right";
+
+      bodyRows.forEach(row => {
+        if (idx >= row.cells.length) return;
+        const td = row.cells[idx];
+        if (!td) return;
+        td.style.textAlign = "right";
+        if (numeric) {
+          td.style.fontVariantNumeric = "tabular-nums";
+        }
+      });
+    }
+
+    // Uploaded / Created
+    alignCol(th =>
+      (th.dataset && (th.dataset.column === "uploaded" || th.dataset.column === "created")) ||
+      /\b(uploaded|created)\b/i.test((th.textContent || "").trim())
+    );
+
+    // Modified
+    alignCol(th =>
+      (th.dataset && th.dataset.column === "modified") ||
+      /\bmodified\b/i.test((th.textContent || "").trim())
+    );
+
+    // Owner / Uploader
+    alignCol(th =>
+      (th.dataset && th.dataset.column === "uploader") ||
+      /\b(owner|uploader)\b/i.test((th.textContent || "").trim()),
+      /* numeric = */ false   // names aren't numbers, but right-align anyway
+    );
+  })();
 
 // Now wire 3-dot ellipsis so it also picks up folder rows
 wireEllipsisContextMenu(fileListContent);
@@ -2694,8 +2879,7 @@ export function renderGalleryView(folder, container) {
   pageFiles.forEach((file, idx) => {
     const idSafe = encodeURIComponent(file.name) + "-" + (startIdx + idx);
 
-    // build preview URL from API (cache-busted)
-    const previewURL = `${apiBase}${encodeURIComponent(file.name)}&t=${Date.now()}`;
+    const previewURL = apiFileUrl(folder, file.name, true);
 
     // thumbnail
     let thumbnail;
@@ -2989,10 +3173,16 @@ export function sortFiles(column, folder) {
     sortOrder.column = column;
     sortOrder.ascending = true;
   }
+
   fileData.sort((a, b) => {
     let valA = a[column] || "";
     let valB = b[column] || "";
-    if (column === "modified" || column === "uploaded") {
+
+    if (column === "size" || column === "filesize") {
+      // numeric size
+      valA = Number.isFinite(a.sizeBytes) ? a.sizeBytes : 0;
+      valB = Number.isFinite(b.sizeBytes) ? b.sizeBytes : 0;
+    } else if (column === "modified" || column === "uploaded") {
       const parsedA = parseCustomDate(valA);
       const parsedB = parseCustomDate(valB);
       valA = parsedA;
@@ -3001,10 +3191,12 @@ export function sortFiles(column, folder) {
       valA = valA.toLowerCase();
       valB = valB.toLowerCase();
     }
+
     if (valA < valB) return sortOrder.ascending ? -1 : 1;
-    if (valA > valB) return sortOrder.ascending ? 1 : -1;
+    if (valA > valB) return sortOrder.ascending ?  1 : -1;
     return 0;
   });
+
   if (window.viewMode === "gallery") {
     renderGalleryView(folder);
   } else {

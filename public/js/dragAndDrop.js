@@ -80,7 +80,6 @@ function createCardGhost(card, rect, opts) {
   const ghost = card.cloneNode(true);
   const cs = window.getComputedStyle(card);
 
-  // Give the ghost the same “card” chrome even though it’s attached to <body>
   Object.assign(ghost.style, {
     position: 'fixed',
     left: rect.left + 'px',
@@ -94,7 +93,6 @@ function createCardGhost(card, rect, opts) {
     transform: 'scale(' + scale + ')',
     opacity: String(opacity),
 
-    // pull key visuals from the real card
     backgroundColor: cs.backgroundColor || 'rgba(24,24,24,.96)',
     borderRadius: cs.borderRadius || '',
     boxShadow: cs.boxShadow || '',
@@ -102,7 +100,16 @@ function createCardGhost(card, rect, opts) {
     borderWidth: cs.borderWidth || '',
     borderStyle: cs.borderStyle || '',
     backdropFilter: cs.backdropFilter || '',
+
+    // ✨ make the ghost crisper
+    overflow: 'hidden',
+    willChange: 'transform, opacity',
+    backfaceVisibility: 'hidden'
   });
+
+  // Subtle: de-emphasize inner text so it doesn’t look “smeared”
+  const ghBody = ghost.querySelector('.card-body');
+  if (ghBody) ghBody.style.opacity = '0.6';
 
   return ghost;
 }
@@ -396,7 +403,7 @@ function animateCardsIntoHeaderAndThen(done) {
     return { card, rect };
   });
 
-  // Show dock so icons exist / have positions
+  // Make sure header dock is visible so icons are laid out
   showHeaderDockPersistent();
 
   // Move real cards into header (hidden container + icons)
@@ -410,16 +417,16 @@ function animateCardsIntoHeaderAndThen(done) {
     // remember the size for the expand animation later
     card.dataset.lastWidth  = String(rect.width);
     card.dataset.lastHeight = String(rect.height);
-  
+
     const iconBtn = card.headerIconButton;
     if (!iconBtn) return;
-  
+
     const iconRect = iconBtn.getBoundingClientRect();
-  
-    const ghost = createCardGhost(card, rect, { scale: 1, opacity: 1 });
+
+    const ghost = createCardGhost(card, rect, { scale: 1, opacity: 0.95 });
     ghost.id = card.id + '-ghost-collapse';
     ghost.classList.add('card-collapse-ghost');
-    ghost.style.transition = 'transform 0.22s ease-out, opacity 0.22s ease-out';
+    ghost.style.transition = 'transform 0.4s cubic-bezier(.22,.61,.36,1), opacity 0.4s linear';
 
     document.body.appendChild(ghost);
     ghosts.push({ ghost, from: rect, to: iconRect });
@@ -430,6 +437,7 @@ function animateCardsIntoHeaderAndThen(done) {
     return;
   }
 
+  // Kick off motion on next frame
   requestAnimationFrame(() => {
     ghosts.forEach(({ ghost, from, to }) => {
       const fromCx = from.left + from.width  / 2;
@@ -441,17 +449,18 @@ function animateCardsIntoHeaderAndThen(done) {
       const dy = toCy - fromCy;
 
       const rawScale = to.width / from.width;
-      const scale = Math.max(0.25, Math.min(0.5, rawScale * 0.9));
+      const scale = Math.max(0.35, Math.min(0.6, rawScale * 0.9));
 
+      // ✨ more readable: clear slide + shrink, but don’t fully vanish mid-flight
       ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-      ghost.style.opacity   = '0';
+      ghost.style.opacity   = '0.35';
     });
   });
 
   setTimeout(() => {
     ghosts.forEach(({ ghost }) => { try { ghost.remove(); } catch {} });
     done();
-  }, 260);
+  }, 430); // a bit over the 0.4s transition
 }
 
 function resolveTargetZoneForExpand(cardId) {
@@ -508,9 +517,9 @@ function animateCardsOutOfHeaderThen(done) {
   if (sb)  sb.style.display  = '';
   if (top) top.style.display = '';
 
-  const SAFE_TOP       = 16;   // minimum distance from top of viewport
-  const START_OFFSET_Y = 40;   // how far BELOW the icon we start the ghost
-  const DEST_EXTRA_Y   = 120;  // how far down into the zone center we aim
+  const SAFE_TOP       = 16;
+  const START_OFFSET_Y = 32;   // a touch closer to header
+  const DEST_EXTRA_Y   = 120;
 
   const ghosts = [];
 
@@ -528,24 +537,20 @@ function animateCardsOutOfHeaderThen(done) {
     const zoneRect = host.getBoundingClientRect();
     if (!zoneRect.width) return;
 
-    // Where the ghost "comes from" (near the icon)
     const fromCx = iconRect.left + iconRect.width / 2;
-    const fromCy = iconRect.bottom + START_OFFSET_Y; // lower starting point
+    const fromCy = iconRect.bottom + START_OFFSET_Y;
 
-    // Where we want it to "land" (roughly center of the zone, a bit down)
     let toCx = zoneRect.left + zoneRect.width / 2;
     let toCy = zoneRect.top + Math.min(zoneRect.height / 2 || DEST_EXTRA_Y, DEST_EXTRA_Y);
 
-    // 🔹 If both cards are going to the sidebar, offset them so they don't stack
     if (zoneId === ZONES.SIDEBAR) {
       if (card.id === 'uploadCard') {
-        toCy -= 48; // a bit higher
+        toCy -= 48;
       } else if (card.id === 'folderManagementCard') {
-        toCy += 48; // a bit lower
+        toCy += 48;
       }
     }
 
-    // Try to match the real card size we captured during collapse
     const savedW = parseFloat(card.dataset.lastWidth  || '');
     const savedH = parseFloat(card.dataset.lastHeight || '');
     const targetWidth  = !Number.isNaN(savedW)
@@ -553,10 +558,8 @@ function animateCardsOutOfHeaderThen(done) {
       : Math.min(280, Math.max(220, zoneRect.width * 0.85));
     const targetHeight = !Number.isNaN(savedH) ? savedH : 190;
 
-    // Make sure the top of the ghost never goes above SAFE_TOP
     const startTop = Math.max(SAFE_TOP, fromCy - targetHeight / 2);
 
-    // Build a rect for our ghost and use createCardGhost so we KEEP bg/border/shadow.
     const ghostRect = {
       left:  fromCx - targetWidth / 2,
       top:   startTop,
@@ -564,13 +567,12 @@ function animateCardsOutOfHeaderThen(done) {
       height: targetHeight
     };
 
-    const ghost = createCardGhost(card, ghostRect, { scale: 0.7, opacity: 0 });
+    const ghost = createCardGhost(card, ghostRect, { scale: 0.75, opacity: 0.25 });
     ghost.id = card.id + '-ghost-expand';
     ghost.classList.add('card-expand-ghost');
 
-    // Override transform/transition for our flight animation
-    ghost.style.transform  = 'translate(0,0) scale(0.7)';
-    ghost.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+    ghost.style.transform  = 'translate(0,0) scale(0.75)';
+    ghost.style.transition = 'transform 0.4s cubic-bezier(.22,.61,.36,1), opacity 0.4s linear';
 
     document.body.appendChild(ghost);
     ghosts.push({
@@ -586,7 +588,6 @@ function animateCardsOutOfHeaderThen(done) {
     return;
   }
 
-  // Kick off the flight on the next frame
   requestAnimationFrame(() => {
     ghosts.forEach(({ ghost, from, to }) => {
       const dx = to.cx - from.cx;
@@ -596,13 +597,12 @@ function animateCardsOutOfHeaderThen(done) {
     });
   });
 
-  // Clean up ghosts and then do real layout restore
   setTimeout(() => {
     ghosts.forEach(({ ghost }) => {
       try { ghost.remove(); } catch {}
     });
     done();
-  }, 280); // just over the 0.25s transition
+  }, 430);
 }
 
 // -------------------- zones toggle (collapse to header) --------------------

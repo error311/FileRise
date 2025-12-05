@@ -144,6 +144,9 @@ class AdminController
                 $proType    = $proPayload['type']  ?? null;
                 $proEmail   = $proPayload['email'] ?? null;
                 $proVersion = defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : null;
+                $proPlan      = $proPayload['plan']      ?? null;
+                $proExpiresAt = $proPayload['expiresAt'] ?? null;
+                $proMaxMajor  = $proPayload['maxMajor']  ?? null;
             
                 // Whitelisted public subset only (+ ONLYOFFICE enabled flag)
                 $public = [
@@ -169,6 +172,7 @@ class AdminController
                         'customLogoUrl' => (string)($config['branding']['customLogoUrl'] ?? ''),
                         'headerBgLight' => (string)($config['branding']['headerBgLight'] ?? ''),
                         'headerBgDark'  => (string)($config['branding']['headerBgDark'] ?? ''),
+                        'footerHtml'    => (string)($config['branding']['footerHtml'] ?? ''),
                     ],
                     'pro' => [
                         'active'  => $proActive,
@@ -176,6 +180,9 @@ class AdminController
                         'email'   => $proEmail,
                         'version' => $proVersion,
                         'license' => $licenseString,
+                        'plan'      => $proPlan,
+                        'expiresAt' => $proExpiresAt,
+                        'maxMajor'  => $proMaxMajor,
                     ],
                     'demoMode' => defined('FR_DEMO_MODE') ? (bool)FR_DEMO_MODE : false,
                 ];
@@ -581,6 +588,28 @@ public function installProBundle(): void
             return;
         }
 
+        // NEW: normalize to basename so C:\fakepath\FileRisePro-v1.2.1.zip works.
+        $basename = $origName;
+        if ($basename !== '') {
+            // Normalize slashes and then take basename
+            $basename = str_replace('\\', '/', $basename);
+            $basename = basename($basename);
+        }
+
+        // Try to parse the bundle version from the *basename*
+        // Supports: FileRisePro-v1.2.3.zip or FileRisePro_1.2.3.zip (case-insensitive)
+        $declaredVersion = null;
+        if (
+            $basename !== '' &&
+            preg_match(
+                '/^FileRisePro[_-]v?([0-9]+\.[0-9]+\.[0-9]+)\.zip$/i',
+                $basename,
+                $m
+            )
+        ) {
+            $declaredVersion = 'v' . $m[1];
+        }
+
         // Prepare temp working dir
         $tempRoot = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR);
         $workDir  = $tempRoot . DIRECTORY_SEPARATOR . 'filerise_pro_' . bin2hex(random_bytes(8));
@@ -723,20 +752,36 @@ public function installProBundle(): void
         // Best-effort cleanup; ignore failures
         @unlink($zipPath);
         @rmdir($workDir);
-
+        
+        // NEW: ensure OPcache picks up new Pro bundle code immediately
+        if (function_exists('opcache_invalidate')) {
+            foreach ($installed['src'] as $pathInfo) {
+                // strip " (overwritten)" suffix if present
+                $path = preg_replace('/\s+\(overwritten\)$/', '', $pathInfo);
+                if (is_string($path) && $path !== '' && is_file($path)) {
+                    @opcache_invalidate($path, true);
+                }
+            }
+        }
+        
         // Reflect current Pro status in response if bootstrap was loaded
-        $proActive  = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE;
+        $proActive = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE;
+        
+        $reportedVersion = $declaredVersion;
+        if ($reportedVersion === null && defined('FR_PRO_BUNDLE_VERSION')) {
+            $reportedVersion = FR_PRO_BUNDLE_VERSION;
+        }
+        
         $proPayload = defined('FR_PRO_INFO') && is_array(FR_PRO_INFO)
             ? (FR_PRO_INFO['payload'] ?? null)
             : null;
-        $proVersion = defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : null;
-
+        
         echo json_encode([
             'success'    => true,
             'message'    => 'Pro bundle installed.',
             'installed'  => $installed,
             'proActive'  => (bool)$proActive,
-            'proVersion' => $proVersion,
+            'proVersion' => $reportedVersion,
             'proPayload' => $proPayload,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     } catch (\Throwable $e) {
@@ -809,6 +854,7 @@ public function installProBundle(): void
                 'customLogoUrl' => '',
                 'headerBgLight'   => '',
                 'headerBgDark'    => '',
+                'footerHtml'    => '',
             ],
         ];
 
@@ -948,21 +994,22 @@ public function installProBundle(): void
         
                     $merged['onlyoffice'] = $oo;
                 }
-                // Branding: pass through raw strings; AdminModel enforces Pro + sanitization.
-            if (isset($data['branding']) && is_array($data['branding'])) {
-            if (!isset($merged['branding']) || !is_array($merged['branding'])) {
-                $merged['branding'] = [
-                    'customLogoUrl'   => '',
-                    'headerBgLight'   => '',
-                    'headerBgDark'    => '',
-                ];
-            }
-            foreach (['customLogoUrl', 'headerBgLight', 'headerBgDark'] as $key) {
-                if (array_key_exists($key, $data['branding'])) {
-                    $merged['branding'][$key] = (string)$data['branding'][$key];
-                }
-            }
+             // Branding: pass through raw strings; AdminModel enforces Pro + sanitization.
+if (isset($data['branding']) && is_array($data['branding'])) {
+    if (!isset($merged['branding']) || !is_array($merged['branding'])) {
+        $merged['branding'] = [
+            'customLogoUrl'   => '',
+            'headerBgLight'   => '',
+            'headerBgDark'    => '',
+            'footerHtml'      => '',
+        ];
+    }
+    foreach (['customLogoUrl', 'headerBgLight', 'headerBgDark', 'footerHtml'] as $key) {
+        if (array_key_exists($key, $data['branding'])) {
+            $merged['branding'][$key] = (string)$data['branding'][$key];
         }
+    }
+}
 
         $result = AdminModel::updateConfig($merged);
         if (isset($result['error'])) {

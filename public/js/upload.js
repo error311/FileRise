@@ -103,6 +103,14 @@ function wireFileInputChange(fileInput) {
   });
 }
 
+function setUploadButtonVisible(visible) {
+  const btn = document.getElementById('uploadBtn');
+  if (!btn) return;
+
+  btn.style.display = visible ? 'block' : 'none';
+  btn.disabled = !visible;
+}
+
 function getUserDraftContext() {
   const all = loadResumableDraftsAll();
   const userKey = getCurrentUserKey();
@@ -346,6 +354,8 @@ function setDropAreaDefault() {
   const fileInput = dropArea.querySelector('#file');
   wireFileInputChange(fileInput);
   wireChooseButton();
+
+  setUploadButtonVisible(false);
 }
 
 function adjustFolderHelpExpansion() {
@@ -464,6 +474,8 @@ function createFileEntry(file) {
 
     li.remove();
     updateFileInfoCount();
+    const anyItems = !!document.querySelector('li.upload-progress-item');
+    setUploadButtonVisible(anyItems);
   });
   li.removeBtn = removeBtn;
   li.appendChild(removeBtn);
@@ -674,6 +686,7 @@ function processFiles(filesInput) {
 
   window.selectedFiles = files;
   updateFileInfoCount();
+  setUploadButtonVisible(files.length > 0); 
 }
 
 /* -----------------------------------------------------
@@ -770,6 +783,7 @@ async function initResumableUpload() {
     list.appendChild(li);
     updateFileInfoCount();
     updateResumableQuery();
+    setUploadButtonVisible(true);
   });
 
   resumableInstance.on("fileProgress", function (file) {
@@ -931,6 +945,7 @@ async function initResumableUpload() {
         }
         clearResumableDraftsForFolder(window.currentFolder || 'root');
         showResumableDraftBanner();
+        setUploadButtonVisible(false); 
       }, 5000);
     } else {
       showToast("Some files failed to upload. Please check the list.");
@@ -1183,6 +1198,8 @@ function submitFiles(allFiles) {
         } else {
           showToast(`${succeeded} file(s) succeeded. Please check the list.`);
         }
+        const anyItems = !!document.querySelector('li.upload-progress-item');
+        setUploadButtonVisible(anyItems);
       })
       .catch(error => {
         console.error("Error fetching file list:", error);
@@ -1274,6 +1291,8 @@ function initUpload() {
         showToast("No files selected.");
         return;
       }
+
+      setUploadButtonVisible(false);
 
       const hasResumableFiles =
         useResumable &&

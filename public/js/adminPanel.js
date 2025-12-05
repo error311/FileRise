@@ -20,7 +20,7 @@ function normalizeLogoPath(raw) {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.2.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.2.1';
 
 function getAdminTitle(isPro, proVersion) {
   const corePill = `
@@ -110,6 +110,25 @@ function applyHeaderColorsFromAdmin() {
     console.warn('Failed to live-update header colors from admin panel', e);
   }
 }
+function applyFooterFromAdmin() {
+  try {
+    const footerEl = document.getElementById('siteFooter');
+    if (!footerEl) return;
+
+    const val = (document.getElementById('brandingFooterHtml')?.value || '').trim();
+    if (val) {
+      // Allow HTML here – rely on backend sanitizing what gets stored.
+      footerEl.innerHTML = val;
+    } else {
+      const year = new Date().getFullYear();
+      footerEl.innerHTML =
+  `&copy; ${year}&nbsp;<a href="https://filerise.net" target="_blank" rel="noopener noreferrer">FileRise</a>`;
+    }
+  } catch (e) {
+    console.warn('Failed to live-update footer from admin panel', e);
+  }
+}
+
 function updateHeaderLogoFromAdmin() {
   try {
     const input = document.getElementById('brandingCustomLogoUrl');
@@ -295,6 +314,7 @@ function captureInitialAdminConfig() {
     brandingCustomLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
     brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
     brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
+    brandingFooterHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
   };
 }
 function hasUnsavedChanges() {
@@ -315,7 +335,8 @@ function hasUnsavedChanges() {
     getVal("globalOtpauthUrl") !== o.globalOtpauthUrl ||
     getVal("brandingCustomLogoUrl") !== (o.brandingCustomLogoUrl || "") ||
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
-    getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "")
+    getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
+    getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "")
   );
 }
 
@@ -409,13 +430,42 @@ export function initProBundleInstaller() {
           return;
         }
 
-        const versionText = data.proVersion ? ` (version ${data.proVersion})` : '';
+        // --- NEW: ask the server what version is now active via getConfig.php ---
+        let finalVersion = '';
+        try {
+          const cfgRes = await fetch('/api/admin/getConfig.php?ts=' + Date.now(), {
+            credentials: 'include',
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-store' }
+          });
+          const cfg = await safeJson(cfgRes).catch(() => null);
+          const cfgVersion = cfg && cfg.pro && cfg.pro.version;
+          if (cfgVersion) {
+            finalVersion = String(cfgVersion);
+          }
+        } catch (e) {
+          // If this fails, just fall back to whatever installProBundle gave us.
+          console.warn('Failed to refresh config after Pro bundle install', e);
+        }
+
+        if (!finalVersion && data.proVersion) {
+          finalVersion = String(data.proVersion);
+        }
+
+        const versionText = finalVersion ? ` (version ${finalVersion})` : '';
         statusEl.textContent = 'Pro bundle installed' + versionText + '. Reload the page to apply changes.';
         statusEl.className = 'small text-success';
 
+        // Clear file input so repeat installs feel "fresh"
+        try { fileInput.value = ''; } catch (_) {}
+
+        // Keep existing behavior: refresh any admin config in the header, etc.
         if (typeof loadAdminConfigFunc === 'function') {
           loadAdminConfigFunc();
         }
+        setTimeout(() => {
+          window.location.reload();
+        }, 800);
       } catch (e) {
         statusEl.textContent = 'Install failed: ' + (e && e.message ? e.message : String(e));
         statusEl.className = 'small text-danger';
@@ -537,10 +587,19 @@ export function openAdminPanel() {
       const proEmail = proInfo.email || '';
       const proVersion = proInfo.version || 'not installed';
       const proLicense = proInfo.license || '';
+            // New: richer license metadata from FR_PRO_INFO / backend
+            const proPlan = proInfo.plan || '';            // e.g. "early_supporter_1x", "personal_yearly"
+            const proExpiresAt = proInfo.expiresAt || '';  // ISO timestamp string or ""
+            const proMaxMajor = (
+              typeof proInfo.maxMajor === 'number'
+                ? proInfo.maxMajor
+                : (proInfo.maxMajor ? Number(proInfo.maxMajor) : null)
+            );
       const brandingCfg = config.branding || {};
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
       const brandingHeaderBgDark = brandingCfg.headerBgDark || "";
+      const brandingFooterHtml = brandingCfg.footerHtml || "";
       const bg = dark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
       const inner = `
         background:${dark ? "#2c2c2c" : "#fff"};
@@ -569,7 +628,7 @@ export function openAdminPanel() {
             <form id="adminPanelForm">
             ${[
             { id: "userManagement", label: t("user_management") },
-            { id: "headerSettings", label: t("header_settings") },
+            { id: "headerSettings", label: tf("header_footer_settings", "Header & Footer settings") },
             { id: "loginOptions", label: t("login_options") },
             { id: "webdav", label: "WebDAV Access" },
             { id: "onlyoffice", label: "ONLYOFFICE" },
@@ -758,8 +817,8 @@ export function openAdminPanel() {
     </label>
     <small class="text-muted d-block mb-1">
       ${isPro
-            ? 'Upload a logo image or paste a local path.'
-            : 'Requires FileRise Pro to enable custom header branding.'}
+        ? 'Upload a logo image or paste a local path.'
+        : 'Requires FileRise Pro to enable custom header branding.'}
     </small>
 
     <div class="input-group mb-2">
@@ -818,11 +877,29 @@ export function openAdminPanel() {
       </div>
     </div>
     <small class="text-muted d-block mt-1">
-    ${isPro
-            ? 'If left empty, FileRise uses its default blue and dark header colors.'
-            : 'Requires FileRise Pro to enable custom color branding.'}
-      
+      ${isPro
+        ? 'If left empty, FileRise uses its default blue and dark header colors.'
+        : 'Requires FileRise Pro to enable custom color branding.'}
     </small>
+  </div>
+
+  <!-- Pro: Footer text -->
+  <div class="form-group" style="margin-top:16px;">
+    <label for="brandingFooterHtml">
+      Footer text
+      ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
+    </label>
+    <small class="text-muted d-block mb-1">
+      ${isPro
+        ? 'Shown at the bottom of every page. You can include simple HTML like links.'
+        : 'Requires FileRise Pro to customize footer text.'}
+    </small>
+    <textarea
+      id="brandingFooterHtml"
+      class="form-control"
+      rows="2"
+      placeholder="&copy; 2025 Your Company. Powered by FileRise."
+      ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}>${isPro ? (brandingFooterHtml || '') : ''}</textarea>
   </div>
 `;
         wireHeaderTitleLive();
@@ -946,26 +1023,57 @@ export function openAdminPanel() {
           const hasLatest = !!norm(latestVersionRaw);
           const hasUpdate = hasCurrent && hasLatest && norm(currentVersionRaw) !== norm(latestVersionRaw);
 
-          const proMetaHtml =
-            isPro && (proType || proEmail || proVersion)
-              ? `
-        <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
-          <div>
-            ✅ ${proType ? `License type: ${proType}` : 'License active'}
-            ${proType && proEmail ? ' • ' : ''}
-            ${proEmail ? `Licensed to: ${proEmail}` : ''}
-          </div>
-          ${hasCurrent ? `
-          <div>
-            Installed Pro bundle: v${norm(currentVersionRaw)}
-          </div>` : ''}
-          ${hasLatest ? `
-          <div>
-            Latest Pro bundle (UI hint): ${latestVersionRaw}
-          </div>` : ''}
-        </div>
-      `
-              : '';
+                   // Friendly description of plan + lifetime/expiry
+                   let planLabel = '';
+                   if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
+                     const mj = proMaxMajor || 1;
+                     planLabel = `Early supporter – lifetime for FileRise Pro ${mj}.x`;
+                   } else if (proPlan) {
+                     if (proPlan.startsWith('personal_') || proPlan === 'personal_yearly') {
+                       planLabel = 'Personal license';
+                     } else if (proPlan.startsWith('business_') || proPlan === 'business_yearly') {
+                       planLabel = 'Business license';
+                     } else {
+                       planLabel = proPlan;
+                     }
+                   }
+         
+                   let expiryLabel = '';
+                   if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
+                     // Early supporters: we treat as lifetime for that major – do NOT show an expiry date
+                     expiryLabel = 'Lifetime license (no expiry)';
+                   } else if (proExpiresAt) {
+                     expiryLabel = `Valid until ${proExpiresAt}`;
+                   }
+         
+                   const proMetaHtml =
+                     isPro && (proType || proEmail || proVersion || planLabel || expiryLabel)
+                       ? `
+                 <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
+                   <div>
+                     ✅ ${proType ? `License type: ${proType}` : 'License active'}
+                     ${proType && proEmail ? ' • ' : ''}
+                     ${proEmail ? `Licensed to: ${proEmail}` : ''}
+                   </div>
+                   ${planLabel ? `
+                   <div>
+                     Plan: ${planLabel}
+                   </div>` : ''}
+                   ${expiryLabel ? `
+                   <div>
+                     ${expiryLabel}
+                   </div>` : ''}
+                   ${hasCurrent ? `
+                   <div>
+                     Installed Pro bundle: v${norm(currentVersionRaw)}
+                   </div>` : ''}
+                   ${hasLatest ? `
+                   <div>
+                     Latest Pro bundle (UI hint): ${latestVersionRaw}
+                   </div>` : ''}
+                 </div>
+               `
+                       : '';
 
           proContent.innerHTML = `
     <div class="card pro-card" style="padding:12px; border:1px solid #ddd; border-radius:12px; max-width:720px; margin:8px auto;">
@@ -1309,6 +1417,7 @@ function handleSave() {
       customLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
       headerBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
       headerBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
+      footerHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     },
   };
 
@@ -1348,6 +1457,7 @@ function handleSave() {
       closeAdminPanel();
       applyHeaderColorsFromAdmin();
       updateHeaderLogoFromAdmin();
+      applyFooterFromAdmin();
     })
     .catch(() => showToast('Save failed.'));
 }

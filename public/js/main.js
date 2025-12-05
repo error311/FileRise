@@ -445,107 +445,127 @@ function bindDarkMode() {
     m.content = val;
   };
 
-  // ---------- site config / auth ----------
-  function applySiteConfig(cfg, { phase = 'final' } = {}) {
-    try {
-      const title = (cfg && cfg.header_title) ? String(cfg.header_title) : 'FileRise';
-
-      // Always keep <title> correct early (no visual flicker)
-      document.title = title;
-      // --- Header logo (branding) in BOTH phases ---
+    // ---------- site config / auth ----------
+    function applySiteConfig(cfg, { phase = 'final' } = {}) {
       try {
-        const branding = (cfg && cfg.branding) ? cfg.branding : {};
-        const customLogoUrl = branding.customLogoUrl || "";
-        const logoImg = document.querySelector('.header-logo img');
-        if (logoImg) {
-          if (customLogoUrl) {
-            logoImg.setAttribute('src', customLogoUrl);
-            logoImg.setAttribute('alt', 'Site logo');
+        const title = (cfg && cfg.header_title) ? String(cfg.header_title) : 'FileRise';
+  
+        // Always keep <title> correct early (no visual flicker)
+        document.title = title;
+  
+        // --- Header logo (branding) in BOTH phases ---
+        try {
+          const branding = (cfg && cfg.branding) ? cfg.branding : {};
+          const customLogoUrl = branding.customLogoUrl || "";
+          const logoImg = document.querySelector('.header-logo img');
+          if (logoImg) {
+            if (customLogoUrl) {
+              logoImg.setAttribute('src', customLogoUrl);
+              logoImg.setAttribute('alt', 'Site logo');
+            } else {
+              // fall back to default FileRise logo
+              logoImg.setAttribute('src', '/assets/logo.svg?v={{APP_QVER}}');
+              logoImg.setAttribute('alt', 'FileRise');
+            }
+          }
+        } catch (e) {
+          // non-fatal; ignore branding issues
+        }
+  
+        // --- Header colors (branding) in BOTH phases ---
+        try {
+          const branding = (cfg && cfg.branding) ? cfg.branding : {};
+          const root = document.documentElement;
+  
+          const light = branding.headerBgLight || '';
+          const dark  = branding.headerBgDark  || '';
+  
+          if (light) root.style.setProperty('--header-bg-light', light);
+          else root.style.removeProperty('--header-bg-light');
+  
+          if (dark) root.style.setProperty('--header-bg-dark', dark);
+          else root.style.removeProperty('--header-bg-dark');
+        } catch (e) {
+          // non-fatal
+        }
+  
+        // --- Footer HTML (branding) in BOTH phases ---
+        try {
+          const branding = (cfg && cfg.branding) ? cfg.branding : {};
+          const footerEl = document.getElementById('siteFooter');
+          if (footerEl) {
+            const html = (branding.footerHtml || '').trim();
+            if (html) {
+              // allow simple HTML from config
+              footerEl.innerHTML = html;
+            } else {
+              const year = new Date().getFullYear();
+              footerEl.innerHTML =
+  `&copy; ${year}&nbsp;<a href="https://filerise.net" target="_blank" rel="noopener noreferrer">FileRise</a>`;
+            }
+          }
+        } catch (e) {
+          // non-fatal
+        }
+  
+        // --- Login options (apply in BOTH phases so login page is correct) ---
+        const lo = (cfg && cfg.loginOptions) ? cfg.loginOptions : {};
+  
+        // be tolerant to key variants just in case
+        const disableForm = !!(lo.disableFormLogin ?? lo.disable_form_login ?? lo.disableForm);
+        const disableOIDC = !!(lo.disableOIDCLogin ?? lo.disable_oidc_login ?? lo.disableOIDC);
+        const disableBasic = !!(lo.disableBasicAuth ?? lo.disable_basic_auth ?? lo.disableBasic);
+  
+        const showForm = !disableForm;
+        const showOIDC = !disableOIDC;
+        const showBasic = !disableBasic;
+  
+        const loginWrap = $('#loginForm');         // outer wrapper that contains buttons + form
+        const authForm = $('#authForm');          // inner username/password form
+        const oidcBtn = $('#oidcLoginBtn');      // OIDC button
+        const basicLink = document.querySelector('a[href="/api/auth/login_basic.php"]');
+  
+        // 1) Show the wrapper if ANY method is enabled (form OR OIDC OR basic)
+        if (loginWrap) {
+          const anyMethod = showForm || showOIDC || showBasic;
+          if (anyMethod) {
+            loginWrap.removeAttribute('hidden');   // remove [hidden], which beats display:
+            loginWrap.style.display = '';          // let CSS decide
           } else {
-            // fall back to default FileRise logo
-            logoImg.setAttribute('src', '/assets/logo.svg?v={{APP_QVER}}');
-            logoImg.setAttribute('alt', 'FileRise');
+            loginWrap.setAttribute('hidden', '');
+            loginWrap.style.display = '';
           }
         }
-      } catch (e) {
-        // non-fatal; ignore branding issues
-      }
-      // --- Header colors (branding) in BOTH phases ---
-      try {
-        const branding = (cfg && cfg.branding) ? cfg.branding : {};
-        const root = document.documentElement;
-
-        const light = branding.headerBgLight || '';
-        const dark  = branding.headerBgDark  || '';
-
-        if (light) root.style.setProperty('--header-bg-light', light);
-        else root.style.removeProperty('--header-bg-light');
-
-       if (dark) root.style.setProperty('--header-bg-dark', dark);
-        else root.style.removeProperty('--header-bg-dark');
-      } catch (e) {
-        // non-fatal
-      }
-
-      // --- Login options (apply in BOTH phases so login page is correct) ---
-      const lo = (cfg && cfg.loginOptions) ? cfg.loginOptions : {};
-
-
-      // be tolerant to key variants just in case
-      const disableForm = !!(lo.disableFormLogin ?? lo.disable_form_login ?? lo.disableForm);
-      const disableOIDC = !!(lo.disableOIDCLogin ?? lo.disable_oidc_login ?? lo.disableOIDC);
-      const disableBasic = !!(lo.disableBasicAuth ?? lo.disable_basic_auth ?? lo.disableBasic);
-
-      const showForm = !disableForm;
-      const showOIDC = !disableOIDC;
-      const showBasic = !disableBasic;
-
-      const loginWrap = $('#loginForm');         // outer wrapper that contains buttons + form
-      const authForm = $('#authForm');          // inner username/password form
-      const oidcBtn = $('#oidcLoginBtn');      // OIDC button
-      const basicLink = document.querySelector('a[href="/api/auth/login_basic.php"]');
-
-      // 1) Show the wrapper if ANY method is enabled (form OR OIDC OR basic)
-      if (loginWrap) {
-        const anyMethod = showForm || showOIDC || showBasic;
-        if (anyMethod) {
-          loginWrap.removeAttribute('hidden');   // remove [hidden], which beats display:
-          loginWrap.style.display = '';          // let CSS decide
-        } else {
-          loginWrap.setAttribute('hidden', '');
-          loginWrap.style.display = '';
-        }
-      }
-
-      // 2) Toggle the pieces inside the wrapper
-      if (authForm) authForm.style.display = showForm ? '' : 'none';
-      if (oidcBtn) oidcBtn.style.display = showOIDC ? '' : 'none';
-      if (basicLink) basicLink.style.display = showBasic ? '' : 'none';
-      const oidc = $('#oidcLoginBtn'); if (oidc) oidc.style.display = disableOIDC ? 'none' : '';
-      const basic = document.querySelector('a[href="/api/auth/login_basic.php"]');
-      if (basic) basic.style.display = disableBasic ? 'none' : '';
-
-      // --- Header <h1> only in the FINAL phase (prevents visible flips) ---
-      if (phase === 'final') {
-        const h1 = document.querySelector('.header-title h1');
-        if (h1) {
-          // prevent i18n or legacy from overwriting it
-          if (h1.hasAttribute('data-i18n-key')) h1.removeAttribute('data-i18n-key');
-
-          if (h1.textContent !== title) h1.textContent = title;
-
-          // lock it so late code can't stomp it
-          if (!h1.__titleLock) {
-            const mo = new MutationObserver(() => {
-              if (h1.textContent !== title) h1.textContent = title;
-            });
-            mo.observe(h1, { childList: true, characterData: true, subtree: true });
-            h1.__titleLock = mo;
+  
+        // 2) Toggle the pieces inside the wrapper
+        if (authForm) authForm.style.display = showForm ? '' : 'none';
+        if (oidcBtn) oidcBtn.style.display = showOIDC ? '' : 'none';
+        if (basicLink) basicLink.style.display = showBasic ? '' : 'none';
+        const oidc = $('#oidcLoginBtn'); if (oidc) oidc.style.display = disableOIDC ? 'none' : '';
+        const basic = document.querySelector('a[href="/api/auth/login_basic.php"]');
+        if (basic) basic.style.display = disableBasic ? 'none' : '';
+  
+        // --- Header <h1> only in the FINAL phase (prevents visible flips) ---
+        if (phase === 'final') {
+          const h1 = document.querySelector('.header-title h1');
+          if (h1) {
+            // prevent i18n or legacy from overwriting it
+            if (h1.hasAttribute('data-i18n-key')) h1.removeAttribute('data-i18n-key');
+  
+            if (h1.textContent !== title) h1.textContent = title;
+  
+            // lock it so late code can't stomp it
+            if (!h1.__titleLock) {
+              const mo = new MutationObserver(() => {
+                if (h1.textContent !== title) h1.textContent = title;
+              });
+              mo.observe(h1, { childList: true, characterData: true, subtree: true });
+              h1.__titleLock = mo;
+            }
           }
         }
-      }
-    } catch { }
-  }
+      } catch { }
+    }
 
   async function readyToReveal() {
     // Wait for CSS + fonts so the first revealed frame is fully styled

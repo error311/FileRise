@@ -1,5 +1,61 @@
 # Changelog
 
+## Changes 12/5/2025 (v2.3.3)
+
+release(v2.3.3): footer branding, Pro bundle UX + file list polish
+
+**Branding & footer**  
+
+- Added **Pro-only footer branding** (`branding.footerHtml`) stored in `adminConfig.json` and exposed via the Admin API.
+- Footer is now rendered from config; if no Pro footer is set, FileRise shows:  
+  `© YEAR FileRise` with a link to **filerise.net**.
+- New **“Header & Footer settings”** section in the Admin Panel, with a textarea for footer HTML (simple HTML + links allowed for Pro users).
+
+**FileRise Pro & license UX**  
+
+- Bumped UI hint to `PRO_LATEST_BUNDLE_VERSION = v1.2.1`.
+- Pro bundle install now:
+  - Parses the version from the uploaded ZIP basename (works with `C:\fakepath\FileRisePro-v1.2.1.zip`).
+  - Invalidates OPcache for updated Pro files so new code is active immediately.
+  - Re-fetches admin config after a successful install and displays the actual active Pro bundle version in the status line.
+- Admin config now exposes richer Pro metadata (plan, expiresAt, maxMajor), and the Admin Panel shows:
+  - License type + email,
+  - Friendly **plan** description (early supporter vs personal/business),
+  - **Lifetime** vs **Valid until …** wording instead of a scary raw timestamp.
+
+**Upload UX**  
+
+- Upload button is now only visible/enabled when there are files queued (regular or resumable):
+  - Hidden when the list is empty or after clearing uploads.
+  - Shown again when user picks or drags in files.
+- Adjusted Upload / Choose Files button sizing and spacing for a cleaner upload card, especially on smaller screens.
+
+**File list & hover preview polish**  
+
+- Inline folders now respect the current sort mode:
+  - **Name** sort: A–Z / Z–A.
+  - **Size** sort: uses folder stats (bytes) and sorts accordingly.
+- Size and meta columns:
+  - Right-aligned **size**, **uploaded/created**, **modified**, and **owner/uploader** columns.
+  - Use tabular numerals for nicer numeric alignment.
+- Hover preview:
+  - Skips “fake” rows (e.g. “No files found”) and rows that don’t resolve to a real file.
+  - Uses `sizeBytes` + `formatSize()` for a consistent, human-readable size.
+- `formatSize()` now uses 1 decimal place (KB/MB/GB) and short `B` label for bytes.
+- File metadata normalization:
+  - Every file gets a `sizeBytes`, normalized display `size`, and a `cacheKey` derived from modified/uploaded/size, used for stable cache-busting.
+- Gallery / preview URLs now use `apiFileUrl()` with a stable `t` parameter instead of `Date.now()`, improving browser caching behavior.
+
+**Layout & animation tweaks**  
+
+- Slightly reduced default upload card padding and button sizes to make the homepage cards feel less “tall”.
+- New **site footer** styling (subtle border, centered text) added below the main layout.
+- Drag-and-drop card (upload/folder cards to header dock) animations:
+  - Crisper ghost cards with better text opacity and anti-jank tweaks.
+  - Longer, smoother easing and more readable motion (both collapse-to-header and expand-from-header).
+
+---
+
 ## Changes 12/3/2025 (v2.3.2)
 
 release(v2.3.2): fix media preview URLs and tighten hover card layout

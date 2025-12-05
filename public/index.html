@@ -188,7 +188,7 @@
                   <div class="card-header" data-i18n-key="upload_header">Upload Files/Folders</div>
                   <div class="card-body d-flex flex-column">
                     <form id="uploadFileForm" method="post" enctype="multipart/form-data" class="d-flex flex-column">
-                      <div class="form-group flex-grow-1" style="margin-bottom: 1rem;">
+                      <div class="form-group flex-grow-1" style="margin-bottom: 0rem;">
                         <div id="uploadDropArea"
                           style="border:2px dashed #ccc; padding:20px; cursor:pointer; display:flex; flex-direction:column; justify-content:center; align-items:center; position:relative;">
                           <span data-i18n-key="upload_instruction">Drop files/folders here or click 'Choose
@@ -199,7 +199,7 @@
                           <button type="button" id="customChooseBtn" data-i18n-key="choose_files">Choose Files</button>
                         </div>
                       </div>
-                      <button type="submit" id="uploadBtn" class="btn btn-primary d-block mx-auto"
+                      <button type="submit" id="uploadBtn" class="btn btn-primary mx-auto"
                         data-i18n-key="upload">Upload</button>
                       <div id="uploadProgressContainer"></div>
                     </form>
@@ -216,7 +216,7 @@
                     <div class="form-group d-flex align-items-top" style="padding-top:0; margin-bottom:0;">
                       <div id="folderTreeContainer"></div>
                     </div>
-                    <div class="folder-actions mt-3">
+                    <div class="folder-actions">
                       <button id="createFolderBtn" class="btn btn-primary" data-i18n-title="create_folder">
                         <i class="material-icons">create_new_folder</i>
                       </button>
@@ -538,5 +538,14 @@
   </div>
 </div>
 </div>
+<footer id="siteFooter" class="site-footer">
+  <span>
+    &copy; 2025
+    <a href="https://filerise.net" target="_blank" rel="noopener noreferrer">
+      FileRise
+    </a>
+  </span>
+</footer>
 </body>
+
 </html>

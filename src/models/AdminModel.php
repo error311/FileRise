@@ -110,17 +110,18 @@ private static function sanitizeLogoUrl($url): string
             'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
             'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
         ],
-        'branding' => [
-            'customLogoUrl' => self::sanitizeLogoUrl(
-                $config['branding']['customLogoUrl'] ?? ''
-            ),
-            'headerBgLight' => self::sanitizeColorHex(
-                $config['branding']['headerBgLight'] ?? ''
-            ),
-            'headerBgDark'  => self::sanitizeColorHex(
-                $config['branding']['headerBgDark'] ?? ''
-            ),
-        ],
+       'branding' => [
+    'customLogoUrl' => self::sanitizeLogoUrl(
+        $config['branding']['customLogoUrl'] ?? ''
+    ),
+    'headerBgLight' => self::sanitizeColorHex(
+        $config['branding']['headerBgLight'] ?? ''
+    ),
+    'headerBgDark'  => self::sanitizeColorHex(
+        $config['branding']['headerBgDark'] ?? ''
+    ),
+    'footerHtml'    => (string)($config['branding']['footerHtml'] ?? ''),
+],
         'demoMode' => (defined('FR_DEMO_MODE') && FR_DEMO_MODE),
     ];
 
@@ -261,29 +262,31 @@ private static function sanitizeLogoUrl($url): string
                     $configUpdate['onlyoffice'] = $norm;
                 }
         
-        // Branding (Pro-only). Normalize and only persist when Pro is active.
-        if (!isset($configUpdate['branding']) || !is_array($configUpdate['branding'])) {
-            $configUpdate['branding'] = [
-                'customLogoUrl'   => '',
-                'headerBgLight'   => '',
-                'headerBgDark'    => '',
-            ];
-        } else {
-            $logo  = self::sanitizeLogoUrl($configUpdate['branding']['customLogoUrl'] ?? '');
-            $light = self::sanitizeColorHex($configUpdate['branding']['headerBgLight'] ?? '');
-            $dark  = self::sanitizeColorHex($configUpdate['branding']['headerBgDark'] ?? '');
-
-            if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) {
-                $configUpdate['branding']['customLogoUrl'] = $logo;
-                $configUpdate['branding']['headerBgLight'] = $light;
-                $configUpdate['branding']['headerBgDark']  = $dark;
-            } else {
-                // Free mode: always clear branding customizations
-                $configUpdate['branding']['customLogoUrl'] = '';
-                $configUpdate['branding']['headerBgLight'] = '';
-                $configUpdate['branding']['headerBgDark']  = '';
-            }
-        }
+                if (!isset($configUpdate['branding']) || !is_array($configUpdate['branding'])) {
+                    $configUpdate['branding'] = [
+                        'customLogoUrl'   => '',
+                        'headerBgLight'   => '',
+                        'headerBgDark'    => '',
+                        'footerHtml'      => '',
+                    ];
+                } else {
+                    $logo   = self::sanitizeLogoUrl($configUpdate['branding']['customLogoUrl'] ?? '');
+                    $light  = self::sanitizeColorHex($configUpdate['branding']['headerBgLight'] ?? '');
+                    $dark   = self::sanitizeColorHex($configUpdate['branding']['headerBgDark'] ?? '');
+                    $footer = trim((string)($configUpdate['branding']['footerHtml'] ?? ''));
+                
+                    if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) {
+                        $configUpdate['branding']['customLogoUrl'] = $logo;
+                        $configUpdate['branding']['headerBgLight'] = $light;
+                        $configUpdate['branding']['headerBgDark']  = $dark;
+                        $configUpdate['branding']['footerHtml']    = $footer;
+                    } else {
+                        $configUpdate['branding']['customLogoUrl'] = '';
+                        $configUpdate['branding']['headerBgLight'] = '';
+                        $configUpdate['branding']['headerBgDark']  = '';
+                        $configUpdate['branding']['footerHtml']    = '';
+                    }
+                }
 
         // Convert configuration to JSON.
         $plainTextConfig = json_encode($configUpdate, JSON_PRETTY_PRINT);
@@ -444,6 +447,7 @@ private static function sanitizeLogoUrl($url): string
                     'customLogoUrl' => '',
                     'headerBgLight' => '',
                     'headerBgDark'  => '',
+                    'footerHtml'    => '',
                 ];
             } else {
                 $config['branding']['customLogoUrl'] = self::sanitizeLogoUrl(
@@ -486,6 +490,7 @@ private static function sanitizeLogoUrl($url): string
                 'customLogoUrl' => '',
                 'headerBgLight'   => '',
                 'headerBgDark'    => '',
+                'footerHtml'    => '',
             ],
         ];
     }
