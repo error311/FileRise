@@ -117,12 +117,12 @@ function applyFooterFromAdmin() {
 
     const val = (document.getElementById('brandingFooterHtml')?.value || '').trim();
     if (val) {
-      // Allow HTML here – rely on backend sanitizing what gets stored.
-      footerEl.innerHTML = val;
+      // Show raw text in the live preview; HTML will be rendered on real page load
+      footerEl.textContent = val;
     } else {
       const year = new Date().getFullYear();
       footerEl.innerHTML =
-  `&copy; ${year}&nbsp;<a href="https://filerise.net" target="_blank" rel="noopener noreferrer">FileRise</a>`;
+        `&copy; ${year}&nbsp;<a href="https://filerise.net" target="_blank" rel="noopener noreferrer">FileRise</a>`;
     }
   } catch (e) {
     console.warn('Failed to live-update footer from admin panel', e);

@@ -1,5 +1,9 @@
 # Changelog
 
+## Changes 12/5/2025 (v2.3.4)
+
+release(v2.3.4): fix(admin): use textContent for footer preview to satisfy CodeQL
+
 ## Changes 12/5/2025 (v2.3.3)
 
 release(v2.3.3): footer branding, Pro bundle UX + file list polish
