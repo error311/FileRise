@@ -217,6 +217,9 @@ let __portalsCache = {};
 let __portalFolderListLoaded = false;
 let __portalFolderOptions = [];
 
+// Remember a newly-created portal to focus its folder field
+let __portalSlugToFocus = null;
+
 // Cache portal submissions per slug for CSV export
 const __portalSubmissionsCache = {};
 
@@ -279,13 +282,38 @@ export async function openClientPortalsModal() {
           (and optionally download) files without seeing your full FileRise UI.
         </p>
 
-        <div class="d-flex justify-content-between align-items-center" style="margin:8px 0 10px;">
-          <button type="button" id="addPortalBtn" class="btn btn-sm btn-success">
-            <i class="material-icons" style="font-size:16px;">cloud_upload</i>
-            <span style="margin-left:4px;">Add portal</span>
-          </button>
-          <span id="clientPortalsStatus" class="small text-muted"></span>
-        </div>
+<div class="d-flex justify-content-between align-items-center" style="margin:8px 0 10px;">
+  <div>
+    <button type="button" id="addPortalBtn" class="btn btn-sm btn-success">
+      <i class="material-icons" style="font-size:16px;">cloud_upload</i>
+      <span style="margin-left:4px;">Add portal</span>
+    </button>
+
+    <button type="button"
+            id="clientPortalsQuickAddUser"
+            class="btn btn-sm btn-outline-primary ms-1">
+      <i class="material-icons" style="font-size:16px; vertical-align:middle;">person_add</i>
+      <span style="margin-left:4px;">Add user…</span>
+    </button>
+
+    <button
+      type="button"
+      id="clientPortalsOpenUserPerms"
+      class="btn btn-sm btn-outline-secondary ms-1">
+      <i class="material-icons" style="font-size:16px; vertical-align:middle;">folder_shared</i>
+      <span style="margin-left:4px;">Folder access…</span>
+    </button>
+
+    <button
+      type="button"
+      id="clientPortalsOpenUserGroups"
+      class="btn btn-sm btn-outline-secondary ms-1">
+      <i class="material-icons" style="font-size:16px; vertical-align:middle;">groups</i>
+      <span style="margin-left:4px;">User groups…</span>
+    </button>
+  </div>
+  <span id="clientPortalsStatus" class="small text-muted"></span>
+</div>
 
         <div id="clientPortalsBody" style="max-height:60vh; overflow:auto; margin-bottom:12px;">
           ${t('loading')}…
@@ -303,6 +331,41 @@ export async function openClientPortalsModal() {
     document.getElementById('cancelClientPortals').onclick = () => (modal.style.display = 'none');
     document.getElementById('saveClientPortals').onclick = saveClientPortalsFromUI;
     document.getElementById('addPortalBtn').onclick = addEmptyPortalRow;
+    const quickAddUserBtn = document.getElementById('clientPortalsQuickAddUser');
+    if (quickAddUserBtn) {
+      quickAddUserBtn.onclick = () => {
+        // Reuse existing admin add-user button / modal
+        const globalBtn = document.getElementById('adminOpenAddUser');
+        if (globalBtn) {
+          globalBtn.click();
+        } else {
+          showToast('Use the Users tab to add a new user.');
+        }
+      };
+    }
+    const openPermsBtn = document.getElementById('clientPortalsOpenUserPerms');
+    if (openPermsBtn) {
+      openPermsBtn.onclick = () => {
+        const btn = document.getElementById('adminOpenUserPermissions');
+        if (btn) {
+          btn.click();
+        } else {
+          showToast('Use the Users tab to edit folder access.');
+        }
+      };
+    }
+
+    const openGroupsBtn = document.getElementById('clientPortalsOpenUserGroups');
+    if (openGroupsBtn) {
+      openGroupsBtn.onclick = () => {
+        const btn = document.getElementById('adminOpenUserGroups');
+        if (btn) {
+          btn.click();
+        } else {
+          showToast('Use the Users tab to manage user groups.');
+        }
+      };
+    }
   } else {
     modal.style.background = overlayBg;
     const content = modal.querySelector('.modal-content');
@@ -358,7 +421,22 @@ async function loadClientPortalsList(useCacheOnly) {
       const folder = p.folder || '';
       const clientEmail = p.clientEmail || '';
       const uploadOnly = !!p.uploadOnly;
-      const allowDownload = p.allowDownload !== false; // default true
+
+      // Backwards compat:
+      //  - Old portals only had "uploadOnly":
+      //      uploadOnly = true  => upload yes, download no
+      //      uploadOnly = false => upload yes, download yes
+      //  - New portals have explicit allowDownload.
+      let allowDownload;
+      if (Object.prototype.hasOwnProperty.call(p, 'allowDownload')) {
+        allowDownload = p.allowDownload !== false;
+      } else {
+        // Legacy: "upload only" meant no download
+        allowDownload = !uploadOnly;
+      }
+
+
+
       const expiresAt = p.expiresAt ? String(p.expiresAt).slice(0, 10) : '';
       const brandColor = p.brandColor || '';
       const footerText = p.footerText || '';
@@ -419,8 +497,8 @@ async function loadClientPortalsList(useCacheOnly) {
 
           <div class="portal-card-body">
             <div class="portal-meta-row">
-              <label style="font-weight:600;">
-                Portal slug:
+<label style="font-weight:600;">
+  Portal slug<span class="text-danger">*</span>:
                 <input type="text"
                        class="form-control form-control-sm"
                        data-portal-field="slug"
@@ -439,8 +517,8 @@ async function loadClientPortalsList(useCacheOnly) {
 
             <div class="portal-meta-row">
               <div class="portal-folder-row">
-                <label>
-                  Folder:
+<label>
+  Folder<span class="text-danger">*</span>:
                   <input type="text"
                          class="form-control form-control-sm portal-folder-input"
                          data-portal-field="folder"
@@ -482,11 +560,11 @@ async function loadClientPortalsList(useCacheOnly) {
                 />
               </div>
 
-              <label style="display:flex; align-items:center; gap:4px;">
+                <label style="display:flex; align-items:center; gap:4px;">
                 <input type="checkbox"
                        data-portal-field="uploadOnly"
                        ${uploadOnly ? 'checked' : ''} />
-                <span>Upload only</span>
+                <span>Allow upload</span>
               </label>
 
               <label style="display:flex; align-items:center; gap:4px;">
@@ -495,7 +573,6 @@ async function loadClientPortalsList(useCacheOnly) {
                        ${allowDownload ? 'checked' : ''} />
                 <span>Allow download</span>
               </label>
-            </div>
 
             <div style="margin-top:8px;">
               <div class="form-group" style="margin-bottom:6px;">
@@ -840,6 +917,32 @@ body.querySelectorAll('[data-portal-action="delete"]').forEach(btn => {
       card.remove();
     });
   });
+      // After rendering, if we have a "new" portal to focus, expand it and focus Folder
+      if (__portalSlugToFocus) {
+        const focusSlug = __portalSlugToFocus;
+        __portalSlugToFocus = null;
+  
+        const focusCard = body.querySelector(`.portal-card[data-portal-slug="${focusSlug}"]`);
+        if (focusCard) {
+          const header = focusCard.querySelector('.portal-card-header');
+          const bodyEl = focusCard.querySelector('.portal-card-body');
+          const caret  = focusCard.querySelector('.portal-card-caret');
+  
+          if (header && bodyEl) {
+            header.setAttribute('aria-expanded', 'true');
+            bodyEl.style.display = 'block';
+            if (caret) caret.textContent = '▾';
+          }
+  
+          const folderInput = focusCard.querySelector('[data-portal-field="folder"]');
+          if (folderInput) {
+            folderInput.focus();
+            folderInput.select();
+          }
+  
+          focusCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
         // Keep submissions viewer working
         attachPortalSubmissionsUI();
         // Intake presets dropdowns
@@ -881,6 +984,8 @@ function addEmptyPortalRow() {
     expiresAt: ''
   };
 
+  // After re-render, auto-focus this portal's folder field
+  __portalSlugToFocus = slug;
   loadClientPortalsList(true);
 }
 
@@ -1421,6 +1526,48 @@ async function saveClientPortalsFromUI() {
 
   const cards = body.querySelectorAll('.card[data-portal-slug]');
   const portals = {};
+  const invalid = [];
+  let firstInvalidField = null;
+
+  // Clear previous visual errors
+  cards.forEach(card => {
+    card.style.boxShadow = '';
+    card.style.borderColor = '';
+    card.classList.remove('portal-card-has-error');
+
+    const hint = card.querySelector('.portal-card-error-hint');
+    if (hint) hint.remove();
+  });
+
+  const markCardMissingRequired = (card, message) => {
+    // Mark visually
+    card.classList.add('portal-card-has-error');
+    card.style.borderColor = '#dc3545';
+    card.style.boxShadow = '0 0 0 2px rgba(220,53,69,0.6)';
+
+    // Expand the card so the error is visible even if it was collapsed
+    const header = card.querySelector('.portal-card-header');
+    const bodyEl = card.querySelector('.portal-card-body') || card;
+    const caret = card.querySelector('.portal-card-caret');
+
+    if (header && bodyEl) {
+      header.setAttribute('aria-expanded', 'true');
+      bodyEl.style.display = 'block';
+      if (caret) caret.textContent = '▾';
+    }
+
+    // Small inline hint at top of the card body
+    let hint = bodyEl.querySelector('.portal-card-error-hint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'portal-card-error-hint text-danger small';
+      hint.style.marginBottom = '6px';
+      hint.textContent = message || 'Slug and folder are required. This portal will not be saved until both are filled.';
+      bodyEl.insertBefore(hint, bodyEl.firstChild);
+    } else {
+      hint.textContent = message || hint.textContent;
+    }
+  };
 
   cards.forEach(card => {
     const origSlug = card.getAttribute('data-portal-slug') || '';
@@ -1453,21 +1600,22 @@ async function saveClientPortalsFromUI() {
     const lblRef   = getVal('[data-portal-field="lblRef"]').trim();
     const lblNotes = getVal('[data-portal-field="lblNotes"]').trim();
 
-    const uploadOnlyEl = card.querySelector('[data-portal-field="uploadOnly"]');
+    const uploadOnlyEl    = card.querySelector('[data-portal-field="uploadOnly"]');
     const allowDownloadEl = card.querySelector('[data-portal-field="allowDownload"]');
-    const requireFormEl = card.querySelector('[data-portal-field="requireForm"]');
+    const requireFormEl   = card.querySelector('[data-portal-field="requireForm"]');
 
-    const uploadOnly = uploadOnlyEl ? !!uploadOnlyEl.checked : true;
+    const uploadOnly    = uploadOnlyEl ? !!uploadOnlyEl.checked : true;
     const allowDownload = allowDownloadEl ? !!allowDownloadEl.checked : false;
-    const requireForm = requireFormEl ? !!requireFormEl.checked : false;
-    const reqNameEl = card.querySelector('[data-portal-field="reqName"]');
+    const requireForm   = requireFormEl ? !!requireFormEl.checked : false;
+
+    const reqNameEl  = card.querySelector('[data-portal-field="reqName"]');
     const reqEmailEl = card.querySelector('[data-portal-field="reqEmail"]');
-    const reqRefEl = card.querySelector('[data-portal-field="reqRef"]');
+    const reqRefEl   = card.querySelector('[data-portal-field="reqRef"]');
     const reqNotesEl = card.querySelector('[data-portal-field="reqNotes"]');
 
-    const reqName = reqNameEl ? !!reqNameEl.checked : false;
+    const reqName  = reqNameEl ? !!reqNameEl.checked : false;
     const reqEmail = reqEmailEl ? !!reqEmailEl.checked : false;
-    const reqRef = reqRefEl ? !!reqRefEl.checked : false;
+    const reqRef   = reqRefEl ? !!reqRefEl.checked : false;
     const reqNotes = reqNotesEl ? !!reqNotesEl.checked : false;
 
     const visNameEl  = card.querySelector('[data-portal-field="visName"]');
@@ -1487,62 +1635,105 @@ async function saveClientPortalsFromUI() {
 
     const showThankYouEl = card.querySelector('[data-portal-field="showThankYou"]');
     const showThankYou   = showThankYouEl ? !!showThankYouEl.checked : false;
-
+    const folderInput = card.querySelector('[data-portal-field="folder"]');
     const slugInput = card.querySelector('[data-portal-field="slug"]');
     if (slugInput) {
       const rawSlug = slugInput.value.trim();
       if (rawSlug) slug = rawSlug;
     }
 
+    const labelForError = label || slug || origSlug || '(unnamed portal)';
+
+    // Validation: slug + folder required
     if (!slug || !folder) {
+      invalid.push(labelForError);
+
+      // Remember the first problematic field so we can scroll exactly to it
+      if (!firstInvalidField) {
+        if (!folder && folderInput) {
+          firstInvalidField = folderInput;
+        } else if (!slug && slugInput) {
+          firstInvalidField = slugInput;
+        } else {
+          firstInvalidField = card;
+        }
+      }
+
+      markCardMissingRequired(
+        card,
+        'Slug and folder are required. This portal will not be saved until both are filled.'
+      );
       return;
     }
 
     portals[slug] = {
-        label,
-        folder,
-        clientEmail,
-        uploadOnly,
-        allowDownload,
-        expiresAt,
-        title,
-        introText,
-        requireForm,
-        brandColor,
-        footerText,
-        logoFile,
-        logoUrl,
-        formDefaults: {
-          name: defName,
-          email: defEmail,
-          reference: defRef,
-          notes: defNotes
-        },
-        formRequired: {
-          name: reqName,
-          email: reqEmail,
-          reference: reqRef,
-          notes: reqNotes
-        },
-        formLabels: {
-          name: lblName,
-          email: lblEmail,
-          reference: lblRef,
-          notes: lblNotes
-        },
-        formVisible: {
-          name: visName,
-          email: visEmail,
-          reference: visRef,
-          notes: visNotes
-        },
-        uploadMaxSizeMb: uploadMaxSizeMb ? parseInt(uploadMaxSizeMb, 10) || 0 : 0,
-        uploadExtWhitelist,
-        uploadMaxPerDay: uploadMaxPerDay ? parseInt(uploadMaxPerDay, 10) || 0 : 0,
-        showThankYou,
-        thankYouText,
-      };
+      label,
+      folder,
+      clientEmail,
+      uploadOnly,
+      allowDownload,
+      expiresAt,
+      title,
+      introText,
+      requireForm,
+      brandColor,
+      footerText,
+      logoFile,
+      logoUrl,
+      formDefaults: {
+        name:      defName,
+        email:     defEmail,
+        reference: defRef,
+        notes:     defNotes
+      },
+      formRequired: {
+        name:      reqName,
+        email:     reqEmail,
+        reference: reqRef,
+        notes:     reqNotes
+      },
+      formLabels: {
+        name:      lblName,
+        email:     lblEmail,
+        reference: lblRef,
+        notes:     lblNotes
+      },
+      formVisible: {
+        name:      visName,
+        email:     visEmail,
+        reference: visRef,
+        notes:     visNotes
+      },
+      uploadMaxSizeMb:   uploadMaxSizeMb ? parseInt(uploadMaxSizeMb, 10) || 0 : 0,
+      uploadExtWhitelist,
+      uploadMaxPerDay:   uploadMaxPerDay ? parseInt(uploadMaxPerDay, 10) || 0 : 0,
+      showThankYou,
+      thankYouText,
+    };
   });
+
+  if (invalid.length) {
+    if (status) {
+      status.textContent = 'Please fill slug and folder for highlighted portals.';
+      status.className = 'small text-danger';
+    }
+
+    // Scroll the *first missing field* into view so the admin sees exactly where to fix
+    const targetEl = firstInvalidField || body.querySelector('.portal-card-has-error');
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // If it's an input, focus + select to make typing instant
+      if (typeof targetEl.focus === 'function') {
+        targetEl.focus();
+        if (typeof targetEl.select === 'function') {
+          targetEl.select();
+        }
+      }
+    }
+
+    showToast('Please set slug and folder for: ' + invalid.join(', '));
+    return; // Don’t hit the API if local validation failed
+  }
 
   if (status) {
     status.textContent = 'Saving…';

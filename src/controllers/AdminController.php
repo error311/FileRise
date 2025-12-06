@@ -317,99 +317,103 @@ public function saveProPortals(array $portalsPayload): void
 
     require_once $proPortalsPath;
 
-    if (!is_array($portalsPayload)) {
-        throw new InvalidArgumentException('Invalid portals format.');
-    }
+        if (!is_array($portalsPayload)) {
+                throw new InvalidArgumentException('Invalid portals format.');
+            }
+        
+            $data    = ['portals' => []];
+            $invalid = [];
+        
+            foreach ($portalsPayload as $slug => $info) {
+                $slug = trim((string)$slug);
+    
+                if (!is_array($info)) {
+                    $info = [];
+                }
+        
+                $label  = trim((string)($info['label'] ?? $slug));
+                $folder = trim((string)($info['folder'] ?? ''));
+        
+                // Require both slug and folder; collect invalid ones so the UI can warn.
+                if ($slug === '' || $folder === '') {
+                    $invalid[] = $label !== '' ? $label : ($slug !== '' ? $slug : '(unnamed portal)');
+                    continue;
+                }
+        
+                $clientEmail  = trim((string)($info['clientEmail'] ?? ''));
+                $uploadOnly   = !empty($info['uploadOnly']);
+                $allowDownload = array_key_exists('allowDownload', $info)
+                    ? !empty($info['allowDownload'])
+                    : true;
+            $expiresAt    = trim((string)($info['expiresAt'] ?? ''));
+        
+                // Branding + form behavior
+                $title        = trim((string)($info['title'] ?? ''));
+                $introText    = trim((string)($info['introText'] ?? ''));
+                $requireForm  = !empty($info['requireForm']);
+                $brandColor   = trim((string)($info['brandColor'] ?? ''));
+                $footerText   = trim((string)($info['footerText'] ?? ''));
+        
+                // Optional logo info
+                $logoFile = trim((string)($info['logoFile'] ?? ''));
+                $logoUrl  = trim((string)($info['logoUrl']  ?? ''));
+        
+                // Upload rules / thank-you behavior
+                $uploadMaxSizeMb    = isset($info['uploadMaxSizeMb']) ? (int)$info['uploadMaxSizeMb'] : 0;
+                $uploadExtWhitelist = trim((string)($info['uploadExtWhitelist'] ?? ''));
+                $uploadMaxPerDay    = isset($info['uploadMaxPerDay']) ? (int)$info['uploadMaxPerDay'] : 0;
+                $showThankYou       = !empty($info['showThankYou']);
+                $thankYouText       = trim((string)($info['thankYouText'] ?? ''));
+        
+                // Form defaults
+                $formDefaults = isset($info['formDefaults']) && is_array($info['formDefaults'])
+                    ? $info['formDefaults']
+                    : [];
+        
+                $formDefaults = [
+                    'name'      => trim((string)($formDefaults['name'] ?? '')),
+                    'email'     => trim((string)($formDefaults['email'] ?? '')),
+                    'reference' => trim((string)($formDefaults['reference'] ?? '')),
+                    'notes'     => trim((string)($formDefaults['notes'] ?? '')),
+                ];
+        
+                // Required flags
+                $formRequired = isset($info['formRequired']) && is_array($info['formRequired'])
+                    ? $info['formRequired']
+                    : [];
+        
+                $formRequired = [
+                    'name'      => !empty($formRequired['name']),
+                    'email'     => !empty($formRequired['email']),
+                    'reference' => !empty($formRequired['reference']),
+                    'notes'     => !empty($formRequired['notes']),
+                ];
+        
+            // Labels
+                $formLabels = isset($info['formLabels']) && is_array($info['formLabels'])
+                    ? $info['formLabels']
+                    : [];
+        
+                $formLabels = [
+                    'name'      => trim((string)($formLabels['name'] ?? 'Name')),
+                    'email'     => trim((string)($formLabels['email'] ?? 'Email')),
+                    'reference' => trim((string)($formLabels['reference'] ?? 'Reference / Case / Order #')),
+                    'notes'     => trim((string)($formLabels['notes'] ?? 'Notes')),
+                ];
+        
+                // Visibility
+                $formVisible = isset($info['formVisible']) && is_array($info['formVisible'])
+                    ? $info['formVisible']
+                    : [];
+        
+                $formVisible = [
+                    'name'      => !array_key_exists('name', $formVisible)      || !empty($formVisible['name']),
+                    'email'     => !array_key_exists('email', $formVisible)     || !empty($formVisible['email']),
+                    'reference' => !array_key_exists('reference', $formVisible) || !empty($formVisible['reference']),
+                    'notes'     => !array_key_exists('notes', $formVisible)     || !empty($formVisible['notes']),
+                ];
 
-    $data = ['portals' => []];
 
-    foreach ($portalsPayload as $slug => $info) {
-        $slug = trim((string)$slug);
-        if ($slug === '') {
-            continue;
-        }
-        if (!is_array($info)) {
-            $info = [];
-        }
-
-        $label        = trim((string)($info['label'] ?? $slug));
-        $folder       = trim((string)($info['folder'] ?? ''));
-        $clientEmail  = trim((string)($info['clientEmail'] ?? ''));
-        $uploadOnly   = !empty($info['uploadOnly']);
-        $allowDownload = array_key_exists('allowDownload', $info)
-            ? !empty($info['allowDownload'])
-            : true;
-        $expiresAt    = trim((string)($info['expiresAt'] ?? ''));
-
-        // Branding + form behavior
-        $title        = trim((string)($info['title'] ?? ''));
-        $introText    = trim((string)($info['introText'] ?? ''));
-        $requireForm  = !empty($info['requireForm']);
-        $brandColor   = trim((string)($info['brandColor'] ?? ''));
-        $footerText   = trim((string)($info['footerText'] ?? ''));
-
-        // Optional logo info
-        $logoFile = trim((string)($info['logoFile'] ?? ''));
-        $logoUrl  = trim((string)($info['logoUrl']  ?? ''));
-
-        // Upload rules / thank-you behavior
-        $uploadMaxSizeMb    = isset($info['uploadMaxSizeMb']) ? (int)$info['uploadMaxSizeMb'] : 0;
-        $uploadExtWhitelist = trim((string)($info['uploadExtWhitelist'] ?? ''));
-        $uploadMaxPerDay    = isset($info['uploadMaxPerDay']) ? (int)$info['uploadMaxPerDay'] : 0;
-        $showThankYou       = !empty($info['showThankYou']);
-        $thankYouText       = trim((string)($info['thankYouText'] ?? ''));
-
-        // Form defaults
-        $formDefaults = isset($info['formDefaults']) && is_array($info['formDefaults'])
-            ? $info['formDefaults']
-            : [];
-
-        $formDefaults = [
-            'name'      => trim((string)($formDefaults['name'] ?? '')),
-            'email'     => trim((string)($formDefaults['email'] ?? '')),
-            'reference' => trim((string)($formDefaults['reference'] ?? '')),
-            'notes'     => trim((string)($formDefaults['notes'] ?? '')),
-        ];
-
-        // Required flags
-        $formRequired = isset($info['formRequired']) && is_array($info['formRequired'])
-            ? $info['formRequired']
-            : [];
-
-        $formRequired = [
-            'name'      => !empty($formRequired['name']),
-            'email'     => !empty($formRequired['email']),
-            'reference' => !empty($formRequired['reference']),
-            'notes'     => !empty($formRequired['notes']),
-        ];
-
-        // Labels
-        $formLabels = isset($info['formLabels']) && is_array($info['formLabels'])
-            ? $info['formLabels']
-            : [];
-
-        $formLabels = [
-            'name'      => trim((string)($formLabels['name'] ?? 'Name')),
-            'email'     => trim((string)($formLabels['email'] ?? 'Email')),
-            'reference' => trim((string)($formLabels['reference'] ?? 'Reference / Case / Order #')),
-            'notes'     => trim((string)($formLabels['notes'] ?? 'Notes')),
-        ];
-
-        // Visibility
-        $formVisible = isset($info['formVisible']) && is_array($info['formVisible'])
-            ? $info['formVisible']
-            : [];
-
-        $formVisible = [
-            'name'      => !array_key_exists('name', $formVisible)      || !empty($formVisible['name']),
-            'email'     => !array_key_exists('email', $formVisible)     || !empty($formVisible['email']),
-            'reference' => !array_key_exists('reference', $formVisible) || !empty($formVisible['reference']),
-            'notes'     => !array_key_exists('notes', $formVisible)     || !empty($formVisible['notes']),
-        ];
-
-        if ($folder === '') {
-            continue;
-        }
 
         $data['portals'][$slug] = [
             'label'              => $label,
@@ -436,6 +440,12 @@ public function saveProPortals(array $portalsPayload): void
             'formVisible'        => $formVisible,
         ];
     }
+        if (!empty($invalid)) {
+                throw new InvalidArgumentException(
+                    'One or more portals are missing a slug or folder: ' . implode(', ', $invalid)
+                );
+            }
+         
 
     $store = new ProPortals(FR_PRO_BUNDLE_DIR);
     $ok    = $store->savePortals($data);

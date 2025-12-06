@@ -1,8 +1,27 @@
 # Changelog
 
+## Changese 12/6/2025 (v2.3.5)
+
+release(v2.3.5): make client portals ACL-aware and improve admin UX
+
+- Wire PortalController into ACL.php and expose canUpload/canDownload flags
+- Gate portal uploads/downloads on both portal flags and folder ACL for logged-in users
+- Normalize legacy portal JSON (uploadOnly) with new allowDownload checkbox semantics
+- Disable portal upload UI when uploads are turned off; hide refresh when downloads are disabled
+- Improve portal subtitles (“Upload & download”, “Upload only”, etc.) and status messaging
+- Add quick-access buttons in Client Portals modal for Add user, Folder access, and User groups
+- Enforce slug + folder as required on both frontend and backend, with inline hints and scroll-to-first-error
+- Auto-focus newly created portals’ folder input for faster setup
+- Raise user permissions modal z-index so it appears above the portals modal
+- Enhance portal form submission logging with better client IP detection (X-Forwarded-For / X-Real-IP aware)
+
+---
+
 ## Changes 12/5/2025 (v2.3.4)
 
 release(v2.3.4): fix(admin): use textContent for footer preview to satisfy CodeQL
+
+---
 
 ## Changes 12/5/2025 (v2.3.3)
 

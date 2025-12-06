@@ -10,10 +10,33 @@ function portalFolder() {
   return portal.folder || portal.targetFolder || portal.path || 'root';
 }
 
+function portalCanUpload() {
+  if (!portal) return false;
+
+  // Prefer explicit flags from backend (PortalController)
+  if (typeof portal.canUpload !== 'undefined') {
+    return !!portal.canUpload;
+  }
+
+  // Fallbacks for older bundles (if you ever add these)
+  if (typeof portal.allowUpload !== 'undefined') {
+    return !!portal.allowUpload;
+  }
+
+  // Legacy behavior: portals were always upload-capable;
+  // uploadOnly only controlled download visibility.
+  return true;
+}
+
 function portalCanDownload() {
   if (!portal) return false;
 
-  // Prefer explicit flags if present
+  // Prefer explicit flag if present (PortalController)
+  if (typeof portal.canDownload !== 'undefined') {
+    return !!portal.canDownload;
+  }
+
+  // Fallback to allowDownload / allowDownloads (older payloads)
   if (typeof portal.allowDownload !== 'undefined') {
     return !!portal.allowDownload;
   }
@@ -21,7 +44,7 @@ function portalCanDownload() {
     return !!portal.allowDownloads;
   }
 
-  // Fallback: uploadOnly = true => no downloads
+  // Legacy: uploadOnly = true => no downloads
   if (typeof portal.uploadOnly !== 'undefined') {
     return !portal.uploadOnly;
   }
@@ -260,7 +283,7 @@ function setupPortalForm(slug) {
   const formSection   = qs('portalFormSection');
   const uploadSection = qs('portalUploadSection');
 
-  if (!portal || !portal.requireForm) {
+  if (!portal || !portal.requireForm || !portalCanUpload()) {
     if (formSection) formSection.style.display = 'none';
     if (uploadSection) uploadSection.style.opacity = '1';
     return;
@@ -549,17 +572,47 @@ function renderPortalInfo() {
     }
   }
 
+  const uploadsEnabled   = portalCanUpload();
+  const downloadsEnabled = portalCanDownload();
+
   if (subtitleEl) {
-    const parts = [];
-    if (portal.uploadOnly) parts.push('upload only');
-    if (portalCanDownload()) parts.push('download allowed');
-    subtitleEl.textContent = parts.length ? parts.join(' • ') : '';
+    let text = '';
+    if (uploadsEnabled && downloadsEnabled) {
+      text = 'Upload & download';
+    } else if (uploadsEnabled && !downloadsEnabled) {
+      text = 'Upload only';
+    } else if (!uploadsEnabled && downloadsEnabled) {
+      text = 'Download only';
+    } else {
+      text = 'Access only';
+    }
+    subtitleEl.textContent = text;
   }
 
   if (footerEl) {
     footerEl.textContent = portal.footerText && portal.footerText.trim()
       ? portal.footerText.trim()
       : '';
+  }
+
+  const formSection   = qs('portalFormSection');
+  const uploadSection = qs('portalUploadSection');
+
+  // If uploads are disabled, hide upload + form (form is only meaningful for uploads)
+  if (!uploadsEnabled) {
+    if (formSection) {
+      formSection.style.display = 'none';
+    }
+    if (uploadSection) {
+      uploadSection.style.display = 'none';
+    }
+
+    const statusEl = qs('portalStatus');
+    if (statusEl) {
+      statusEl.textContent = 'Uploads are disabled for this portal.';
+      statusEl.classList.remove('text-muted');
+      statusEl.classList.add('text-warning');
+    }
   }
   applyPortalFormLabels();
   const color = portal.brandColor && portal.brandColor.trim();
@@ -741,6 +794,13 @@ async function loadPortalFiles() {
 // ----------------- Upload -----------------
 async function uploadFiles(fileList) {
   if (!portal || !fileList || !fileList.length) return;
+
+  if (!portalCanUpload()) {
+    showToast('Uploads are disabled for this portal.');
+    setStatus('Uploads are disabled for this portal.', true);
+    return;
+  }
+
   if (portal.requireForm && !portalFormDone) {
     showToast('Please fill in your details before uploading.');
     return;
@@ -900,11 +960,23 @@ async function uploadFiles(fileList) {
 
 // ----------------- Upload UI wiring -----------------
 function wireUploadUI() {
-  const drop = qs('portalDropzone');
-  const input = qs('portalFileInput');
+  const drop       = qs('portalDropzone');
+  const input      = qs('portalFileInput');
   const refreshBtn = qs('portalRefreshBtn');
 
-  if (drop && input) {
+  const uploadsEnabled   = portalCanUpload();
+  const downloadsEnabled = portalCanDownload();
+
+  // Upload UI
+  if (drop) {
+    if (!uploadsEnabled) {
+      // Visually dim + disable clicks
+      drop.classList.add('portal-dropzone-disabled');
+      drop.style.cursor = 'not-allowed';
+    }
+  }
+
+  if (uploadsEnabled && drop && input) {
     drop.addEventListener('click', () => input.click());
 
     input.addEventListener('change', (e) => {
@@ -938,10 +1010,15 @@ function wireUploadUI() {
     });
   }
 
+  // Download / refresh
   if (refreshBtn) {
-    refreshBtn.addEventListener('click', () => {
-      loadPortalFiles();
-    });
+    if (!downloadsEnabled) {
+      refreshBtn.style.display = 'none';
+    } else {
+      refreshBtn.addEventListener('click', () => {
+        loadPortalFiles();
+      });
+    }
   }
 }
 

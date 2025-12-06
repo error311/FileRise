@@ -58,6 +58,27 @@ try {
     require_once $subPath;
 
     $submittedBy = (string)($_SESSION['username'] ?? '');
+
+    // ─────────────────────────────
+    // Better client IP detection
+    // ─────────────────────────────
+    $ip = '';
+    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        // Can be a comma-separated list; use the first non-empty
+        $parts = explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR']);
+        foreach ($parts as $part) {
+            $candidate = trim($part);
+            if ($candidate !== '') {
+                $ip = $candidate;
+                break;
+            }
+        }
+    } elseif (!empty($_SERVER['HTTP_X_REAL_IP'])) {
+        $ip = trim((string)$_SERVER['HTTP_X_REAL_IP']);
+    } elseif (!empty($_SERVER['REMOTE_ADDR'])) {
+        $ip = trim((string)$_SERVER['REMOTE_ADDR']);
+    }
+
     $payload = [
         'slug'        => $slug,
         'portalLabel' => $portal['label'] ?? '',
@@ -69,7 +90,7 @@ try {
             'notes'     => $notes,
         ],
         'submittedBy' => $submittedBy,
-        'ip'          => $_SERVER['REMOTE_ADDR'] ?? '',
+        'ip'          => $ip,
         'userAgent'   => $_SERVER['HTTP_USER_AGENT'] ?? '',
         'createdAt'   => gmdate('c'),
     ];

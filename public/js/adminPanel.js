@@ -1968,7 +1968,7 @@ export function openUserPermissionsModal() {
       top: 0; left: 0; width: 100vw; height: 100vh;
       background-color: ${overlayBackground};
       display: flex; justify-content: center; align-items: center;
-      z-index: 3500;
+      z-index: 10000;
     `;
     userPermissionsModal.innerHTML = `
       <div class="modal-content" style="${modalContentStyles}">
