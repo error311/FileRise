@@ -1,5 +1,42 @@
 # Changelog
 
+## Changes 12/6/2025 (v2.3.6)
+
+release(v2.3.6): add non-zip multi-download, richer hover preview/peak, modified sort default
+
+- download: add "Download (no ZIP)" bulk action
+  - New context-menu action to download multiple selected files individually without creating a ZIP.
+  - Shows a centered stepper panel with "Download next" / "Cancel" while walking the queue.
+  - Limits plain multi-downloads (default 20) and nudges user to ZIP for larger batches.
+  - Uses existing /api/file/download.php URLs and respects current folder + selection.
+
+- hover preview/peak: richer folder/file details and safer snippets
+  - Folder hover now shows:
+    - Icon + path
+    - Owner (from folder caps, when available)
+    - "Your access" summary (Upload / Move / Rename / Share / Delete) based on capabilities.
+    - Created / Modified timestamps derived from folder stats.
+    - Peek into child items (📁 / 📄) with trimmed labels and a clean "…" when truncated.
+  - File hover now adds:
+    - Tags/metadata line (tag names + MIME, duration, resolution when present).
+  - Text snippets are now capped per-line and by total characters to avoid huge blocks and keep previews/peak tidy.
+
+- sorting: modified-desc default and folder stats for created/modified
+  - Default sort for the file list is now `Modified ↓` (newest first), matching typical Explorer-style views.
+  - Folders respect Created/Uploaded and Modified sort using folder stats:
+    - Created/Uploaded uses `earliest_uploaded`.
+    - Modified uses `latest_mtime`.
+  - Added a shared compareFilesForSort() so table view and gallery view use the same sort pipeline.
+  - Inline folders still render A>Z by name, so tree/folder strip remain predictable.
+
+- UX / plumbing
+  - Added i18n strings for the new download queue labels and permission names ("Your access", Upload/Move/Rename/Share/Delete).
+  - Reset hover snippet styling per-row so folder previews and file previews each get the right wrapping behavior.
+  - Exported downloadSelectedFilesIndividually on window for file context menu integration and optional debugging helpers.
+  - Changed default file list row height from 48px to 44px.
+
+---
+
 ## Changese 12/6/2025 (v2.3.5)
 
 release(v2.3.5): make client portals ACL-aware and improve admin UX

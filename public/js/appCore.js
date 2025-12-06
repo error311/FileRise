@@ -83,7 +83,7 @@ export async function loadCsrfToken() {
    APP INIT (shared)
    ========================= */
 export function initializeApp() {
-  const saved = parseInt(localStorage.getItem('rowHeight') || '48', 10);
+  const saved = parseInt(localStorage.getItem('rowHeight') || '44', 10);
   document.documentElement.style.setProperty('--file-row-height', saved + 'px');
 
   const last = localStorage.getItem('lastOpenedFolder');

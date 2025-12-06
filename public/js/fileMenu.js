@@ -8,9 +8,10 @@ import {
 } from './fileActions.js?v={{APP_QVER}}';
 import { previewFile, buildPreviewUrl } from './filePreview.js?v={{APP_QVER}}';
 import { editFile } from './fileEditor.js?v={{APP_QVER}}';
-import { canEditFile, fileData } from './fileListView.js?v={{APP_QVER}}';
+import { canEditFile, fileData, downloadSelectedFilesIndividually } from './fileListView.js?v={{APP_QVER}}';
 import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
 import { escapeHTML } from './domUtils.js?v={{APP_QVER}}';
+
 
 const MENU_ID = 'fileContextMenu';
 
@@ -31,7 +32,9 @@ function localizeMenu() {
     'preview': 'preview',
     'edit': 'edit',
     'rename': 'rename',
-    'tag_file': 'tag_file'
+    'tag_file': 'tag_file',
+    // NEW:
+    'download_plain': 'download_plain'
   };
   Object.entries(map).forEach(([action, key]) => {
     const el = m.querySelector(`.mi[data-action="${action}"]`);
@@ -187,6 +190,10 @@ function menuClickDelegate(ev) {
     case 'move_selected':   handleMoveSelected(new Event('click'));   break;
     case 'download_zip':    handleDownloadZipSelected(new Event('click')); break;
     case 'extract_zip':     handleExtractZipSelected(new Event('click'));  break;
+    case 'download_plain':
+      // Uses current checkbox selection; limit enforced in fileListView
+      downloadSelectedFilesIndividually(s.files);
+      break;
 
     case 'tag_selected':
       openMultiTagModal(s.files);  // s.files are the real file objects

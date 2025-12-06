@@ -37,7 +37,7 @@ import {
 } from './fileDragDrop.js?v={{APP_QVER}}';
 
 export let fileData = [];
-export let sortOrder = { column: "uploaded", ascending: true };
+export let sortOrder = { column: "modified", ascending: false };
 
 
 const FOLDER_STRIP_PAGE_SIZE = 50;
@@ -196,6 +196,13 @@ function renderFolderStripPaged(strip, subfolders) {
   drawPage(1);
 }
 
+function _trimLabel(str, max = 40) {
+  if (!str) return "";
+  const s = String(str);
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
+}
+
 // helper to repaint one strip item quickly
 function repaintStripIcon(folder) {
   const el = document.querySelector(`#folderStripContainer .folder-item[data-folder="${CSS.escape(folder)}"]`);
@@ -265,16 +272,29 @@ async function fillFileSnippet(file, snippetEl) {
     if (!res.ok) throw 0;
     const text = await res.text();
 
-    const MAX_LINES = 6;
-    const MAX_CHARS = 600;
+    const MAX_LINES       = 6;
+    const MAX_CHARS_TOTAL = 600;
+    const MAX_LINE_CHARS  = 20;   // ← per-line cap (tweak to taste)
 
     const allLines = text.split(/\r?\n/);
-    let visibleLines = allLines.slice(0, MAX_LINES);
-    let snippet = visibleLines.join("\n");
-    let truncated = allLines.length > MAX_LINES;
 
-    if (snippet.length > MAX_CHARS) {
-      snippet = snippet.slice(0, MAX_CHARS);
+    // Take the first few lines and trim each so they don't wrap forever
+    let visibleLines = allLines.slice(0, MAX_LINES).map(line =>
+      _trimLabel(line, MAX_LINE_CHARS)
+    );
+
+    let truncated =
+      allLines.length > MAX_LINES ||
+      visibleLines.some((line, idx) => {
+        const orig = allLines[idx] || "";
+        return orig.length > MAX_LINE_CHARS;
+      });
+
+    let snippet = visibleLines.join("\n");
+
+    // Also enforce an overall character ceiling just in case
+    if (snippet.length > MAX_CHARS_TOTAL) {
+      snippet = snippet.slice(0, MAX_CHARS_TOTAL);
       truncated = true;
     }
 
@@ -286,6 +306,7 @@ async function fillFileSnippet(file, snippetEl) {
 
     _fileSnippetCache.set(key, finalSnippet);
     snippetEl.textContent = finalSnippet;
+
   } catch {
     snippetEl.textContent = "";
     snippetEl.style.display = "none";
@@ -571,6 +592,13 @@ window.addEventListener('folderColorChanged', (e) => {
 // Hide "Edit" for files >10 MiB
 const MAX_EDIT_BYTES = 10 * 1024 * 1024;
 
+// Max number of files allowed for non-ZIP multi-download
+const MAX_NONZIP_MULTI_DOWNLOAD = 20;
+
+// Global queue + panel ref for stepper-style downloads
+window.__nonZipDownloadQueue = window.__nonZipDownloadQueue || [];
+window.__nonZipDownloadPanel = window.__nonZipDownloadPanel || null;
+
 // Latest-response-wins guard (prevents double render/flicker if loadFileList gets called twice)
 let __fileListReqSeq = 0;
 
@@ -812,18 +840,26 @@ function fillHoverPreviewForRow(row) {
   const propsEl   = el.querySelector(".hover-preview-props");
   const snippetEl = el.querySelector(".hover-preview-snippet");
 
+  
+
   if (!titleEl || !metaEl || !thumbEl || !propsEl || !snippetEl) return;
 
-  // Reset content
-  thumbEl.innerHTML = "";
-  propsEl.innerHTML = "";
-  snippetEl.textContent = "";
-  snippetEl.style.display = "none";
-  metaEl.textContent = "";
-  titleEl.textContent = "";
+// Reset content
+thumbEl.innerHTML = "";
+propsEl.innerHTML = "";
+snippetEl.textContent = "";
+snippetEl.style.display = "none";
+metaEl.textContent = "";
+titleEl.textContent = "";
 
-  // Reset per-row sizing (we only make this tall for images)
-  thumbEl.style.minHeight = "0";
+// reset snippet style defaults (for file previews)
+snippetEl.style.whiteSpace   = "pre-wrap";
+snippetEl.style.overflowX    = "auto";
+snippetEl.style.textOverflow = "clip";
+snippetEl.style.wordBreak    = "break-word";
+
+// Reset per-row sizing...
+thumbEl.style.minHeight = "0";
 
   const isFolder = row.classList.contains("folder-row");
 
@@ -841,23 +877,61 @@ function fillHoverPreviewForRow(row) {
       folder: folderPath
     };
 
-    // Right column: icon + path
-    const iconHtml = `
+    // Right column: icon + path (start props array so we can append later)
+    const props = [];
+
+    props.push(`
       <div class="hover-prop-line" style="display:flex;align-items:center;margin-bottom:4px;">
         <span class="hover-preview-icon material-icons" style="margin-right:6px;">folder</span>
         <strong>${t("folder") || "Folder"}</strong>
       </div>
-    `;
+    `);
 
-    let propsHtml = iconHtml;
-    propsHtml += `
+    props.push(`
       <div class="hover-prop-line">
         <strong>${t("path") || "Path"}:</strong> ${escapeHTML(folderPath || "root")}
       </div>
-    `;
-    propsEl.innerHTML = propsHtml;
+    `);
 
-    // Meta: counts + size
+    propsEl.innerHTML = props.join("");
+
+    // --- Owner + "Your access" (from capabilities) --------------------
+    fetchFolderCaps(folderPath).then(caps => {
+      if (!caps || !document.body.contains(el)) return;
+      if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
+
+      const owner = caps.owner || caps.user || "";
+      if (owner) {
+        props.push(`
+          <div class="hover-prop-line">
+            <strong>${t("owner") || "Owner"}:</strong> ${escapeHTML(owner)}
+          </div>
+        `);
+      }
+
+      // Summarize what the current user can do in this folder
+      const perms = [];
+      if (caps.canUpload || caps.canCreate)    perms.push(t("perm_upload") || "Upload");
+      if (caps.canMoveFolder)                  perms.push(t("perm_move")   || "Move");
+      if (caps.canRename)                      perms.push(t("perm_rename") || "Rename");
+      if (caps.canShareFolder)                 perms.push(t("perm_share")  || "Share");
+      if (caps.canDeleteFolder || caps.canDelete)
+                                              perms.push(t("perm_delete") || "Delete");
+
+      if (perms.length) {
+        const label = t("your_access") || "Your access";
+        props.push(`
+          <div class="hover-prop-line">
+            <strong>${escapeHTML(label)}:</strong> ${escapeHTML(perms.join(", "))}
+          </div>
+        `);
+      }
+
+      propsEl.innerHTML = props.join("");
+    }).catch(() => {});
+    // ------------------------------------------------------------------
+
+    // --- Meta: counts + size + created/modified -----------------------
     fetchFolderStats(folderPath).then(stats => {
       if (!stats || !document.body.contains(el)) return;
       if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
@@ -884,22 +958,55 @@ function fillHoverPreviewForRow(row) {
       metaEl.textContent = sizeLabel
         ? `${pieces.join(", ")} • ${sizeLabel}`
         : pieces.join(", ");
-    }).catch(() => {});
 
-    // Left side: peek inside folder (first few children)
+      // Optional: created / modified range under the path/owner/access
+      const created  = typeof stats.earliest_uploaded === "string" ? stats.earliest_uploaded : "";
+      const modified = typeof stats.latest_mtime       === "string" ? stats.latest_mtime      : "";
+
+      if (modified) {
+        props.push(`
+          <div class="hover-prop-line">
+            <strong>${t("modified") || "Modified"}:</strong> ${escapeHTML(modified)}
+          </div>
+        `);
+      }
+
+      if (created) {
+        props.push(`
+          <div class="hover-prop-line">
+            <strong>${t("created") || "Created"}:</strong> ${escapeHTML(created)}
+          </div>
+        `);
+      }
+
+      propsEl.innerHTML = props.join("");
+    }).catch(() => {});
+    // ------------------------------------------------------------------
+
     // Left side: peek inside folder (first few children)
 fetchFolderPeek(folderPath).then(result => {
   if (!document.body.contains(el)) return;
   if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
 
+  // Folder mode: force single-line-ish behavior and avoid wrapping
+  snippetEl.style.whiteSpace   = "pre";
+  snippetEl.style.wordBreak    = "normal";
+  snippetEl.style.overflowX    = "hidden";
+  snippetEl.style.textOverflow = "ellipsis";
+
   if (!result) {
-    snippetEl.style.display = "none";
+    const msg =
+      t("no_files_or_folders") ||
+      t("no_files_found") ||
+      "No files or folders";
+
+    snippetEl.textContent = msg;
+    snippetEl.style.display = "block";
     return;
   }
 
   const { items, truncated } = result;
 
-  // If nothing inside, show a friendly message like files do
   if (!items || !items.length) {
     const msg =
       t("no_files_or_folders") ||
@@ -911,12 +1018,15 @@ fetchFolderPeek(folderPath).then(result => {
     return;
   }
 
+  const MAX_LABEL_CHARS = 42; // tweak to taste
+
   const lines = items.map(it => {
     const prefix = it.type === "folder" ? "📁 " : "📄 ";
-    return prefix + it.name;
+    const trimmed = _trimLabel(it.name, MAX_LABEL_CHARS);
+    return prefix + trimmed;
   });
 
-  // If we had to cut the list to FOLDER_PEEK_MAX_ITEMS, turn the LAST line into "…"
+  // If we had to cut the list to FOLDER_PEEK_MAX_ITEMS, show a clean final "…"
   if (truncated && lines.length) {
     lines[lines.length - 1] = "…";
   }
@@ -1023,6 +1133,56 @@ fetchFolderPeek(folderPath).then(result => {
     if (file.uploader) {
       props.push(`<div class="hover-prop-line"><strong>${t("owner") || "Owner"}:</strong> ${escapeHTML(file.uploader)}</div>`);
     }
+
+    // --- NEW: Tags / Metadata line ------------------------------------
+    (function addMetaLine() {
+      // Tags from backend: file.tags = [{ name, color }, ...]
+      const tagNames = Array.isArray(file.tags)
+        ? file.tags
+            .map(t => t && t.name ? String(t.name).trim() : "")
+            .filter(Boolean)
+        : [];
+
+      // Optional extra metadata if you ever add it to fileData
+      const mime =
+        file.mime ||
+        file.mimetype ||
+        file.contentType ||
+        "";
+
+      const extraPieces = [];
+      if (mime) extraPieces.push(mime);
+
+      // Example future fields; safe even if undefined
+      if (Number.isFinite(file.durationSeconds)) {
+        extraPieces.push(`${file.durationSeconds}s`);
+      }
+      if (file.width && file.height) {
+        extraPieces.push(`${file.width}×${file.height}`);
+      }
+
+      const parts = [];
+
+      if (tagNames.length) {
+        parts.push(tagNames.join(", "));
+      }
+      if (extraPieces.length) {
+        parts.push(extraPieces.join(" • "));
+      }
+
+      if (!parts.length) return; // nothing to show
+
+      const useMetadataLabel = parts.length > 1 || extraPieces.length > 0;
+      const labelKey = useMetadataLabel ? "metadata" : "tags";
+      const label = t(labelKey) || (useMetadataLabel ? "MetaData" : "Tags");
+
+      props.push(
+        `<div class="hover-prop-line"><strong>${escapeHTML(label)}:</strong> ${escapeHTML(parts.join(" • "))}</div>`
+      );
+    })();
+    // ------------------------------------------------------------------
+
+    propsEl.innerHTML = props.join("");
 
     propsEl.innerHTML = props.join("");
 
@@ -1372,6 +1532,165 @@ function formatSize(totalBytes) {
   }
 }
 
+
+function ensureNonZipDownloadPanel() {
+  if (window.__nonZipDownloadPanel) return window.__nonZipDownloadPanel;
+
+  const panel = document.createElement('div');
+  panel.id = 'nonZipDownloadPanel';
+  panel.setAttribute('role', 'status');
+
+  // Simple bottom-right card using Bootstrap-ish styles + inline layout tweaks
+  panel.style.position = 'fixed';
+  panel.style.top = '50%';
+  panel.style.left = '50%';
+  panel.style.transform = 'translate(-50%, -50%)';
+  panel.style.zIndex = '9999';
+  panel.style.width    = 'min(440px, 95vw)';
+  panel.style.minWidth = '280px';
+  panel.style.maxWidth = '440px';
+  panel.style.padding = '14px 16px';
+  panel.style.borderRadius = '12px';
+  panel.style.boxShadow = '0 18px 40px rgba(0,0,0,0.35)';
+  panel.style.backgroundColor = 'var(--filr-menu-bg, #222)';
+  panel.style.color = 'var(--filr-menu-fg, #f9fafb)';
+  panel.style.fontSize = '0.9rem';
+  panel.style.display = 'none';
+
+  panel.innerHTML = `
+    <div class="nonzip-title" style="margin-bottom:6px; font-weight:600;"></div>
+    <div class="nonzip-sub" style="margin-bottom:8px; opacity:0.85;"></div>
+    <div class="nonzip-actions" style="display:flex; justify-content:flex-end; gap:6px;">
+      <button type="button"
+              class="btn btn-sm btn-secondary nonzip-cancel-btn">
+        ${t('cancel') || 'Cancel'}
+      </button>
+      <button type="button"
+              class="btn btn-sm btn-primary nonzip-next-btn">
+        ${t('download_next') || 'Download next'}
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(panel);
+
+  const nextBtn   = panel.querySelector('.nonzip-next-btn');
+  const cancelBtn = panel.querySelector('.nonzip-cancel-btn');
+
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      triggerNextNonZipDownload();
+    });
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      clearNonZipQueue(true);
+    });
+  }
+
+  window.__nonZipDownloadPanel = panel;
+  return panel;
+}
+
+function updateNonZipPanelText() {
+  const panel = ensureNonZipDownloadPanel();
+  const q = window.__nonZipDownloadQueue || [];
+  const count = q.length;
+
+  const titleEl = panel.querySelector('.nonzip-title');
+  const subEl   = panel.querySelector('.nonzip-sub');
+
+  if (!titleEl || !subEl) return;
+
+  if (!count) {
+    titleEl.textContent = t('no_files_queued') || 'No files queued.';
+    subEl.textContent   = '';
+    return;
+  }
+
+  const title =
+    t('nonzip_queue_title') ||
+    'Files queued for download';
+
+  const raw = t('nonzip_queue_subtitle') ||
+    '{count} files queued. Click "Download next" for each file.';
+
+  const msg = raw.replace('{count}', String(count));
+
+  titleEl.textContent = title;
+  subEl.textContent   = msg;
+}
+
+function showNonZipPanel() {
+  const panel = ensureNonZipDownloadPanel();
+  updateNonZipPanelText();
+  panel.style.display = 'block';
+}
+
+function hideNonZipPanel() {
+  const panel = ensureNonZipDownloadPanel();
+  panel.style.display = 'none';
+}
+
+function clearNonZipQueue(showToastCancel = false) {
+  window.__nonZipDownloadQueue = [];
+  hideNonZipPanel();
+  if (showToastCancel) {
+    showToast(
+      t('nonzip_queue_cleared') || 'Download queue cleared.',
+      'info'
+    );
+  }
+}
+
+function triggerNextNonZipDownload() {
+  const q = window.__nonZipDownloadQueue || [];
+  if (!q.length) {
+    hideNonZipPanel();
+    showToast(
+      t('downloads_started') || 'All downloads started.',
+      'success'
+    );
+    return;
+  }
+
+  const { folder, name } = q.shift();
+  const url = apiFileUrl(folder || 'root', name, /* inline */ false);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+
+  try {
+    a.click();
+  } finally {
+    setTimeout(() => {
+      if (a && a.parentNode) {
+        a.parentNode.removeChild(a);
+      }
+    }, 500);
+  }
+
+  // Update queue + UI
+  window.__nonZipDownloadQueue = q;
+  if (q.length) {
+    updateNonZipPanelText();
+  } else {
+    hideNonZipPanel();
+    showToast(
+      t('downloads_started') || 'All downloads started.',
+      'success'
+    );
+  }
+}
+
+// Optional debug helpers if you want them globally:
+window.triggerNextNonZipDownload = triggerNextNonZipDownload;
+window.clearNonZipQueue          = clearNonZipQueue;
+
+
 /**
  * Build the folder summary HTML using the filtered file list.
  */
@@ -1719,7 +2038,7 @@ export async function loadFileList(folderParam) {
             ?.style.setProperty("grid-template-columns", `repeat(${v},1fr)`);
         };
       } else {
-        const currentHeight = parseInt(localStorage.getItem("rowHeight") || "48", 10);
+        const currentHeight = parseInt(localStorage.getItem("rowHeight") || "44", 10);
         sliderContainer.innerHTML = `
             <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
               ${t("row_height")}:
@@ -2207,7 +2526,7 @@ if (iconSpan) {
 }
 function syncFolderIconSizeToRowHeight() {
   const cs   = getComputedStyle(document.documentElement);
-  const raw  = cs.getPropertyValue('--file-row-height') || '48px';
+  const raw  = cs.getPropertyValue('--file-row-height') || '44px';
   const rowH = parseInt(raw, 10) || 60;
 
   const FUDGE          = 1;
@@ -2262,7 +2581,7 @@ async function sortSubfoldersForCurrentOrder(subfolders) {
     return base;
   }
 
-  // Size sort – use folder stats (bytes); keep folders as a block above files
+  // Size sort – use folder stats (bytes)
   if (col === "size" || col === "filesize") {
     const statsList = await Promise.all(
       base.map(sf => fetchFolderStats(sf.full).catch(() => null))
@@ -2294,6 +2613,72 @@ async function sortSubfoldersForCurrentOrder(subfolders) {
     decorated.sort((a, b) => {
       if (a.bytes < b.bytes) return -1 * dir;
       if (a.bytes > b.bytes) return  1 * dir;
+
+      // tie-break by name
+      const n1 = (a.sf.name || "").toLowerCase();
+      const n2 = (b.sf.name || "").toLowerCase();
+      if (n1 < n2) return -1 * dir;
+      if (n1 > n2) return  1 * dir;
+      return 0;
+    });
+
+    return decorated.map(d => d.sf);
+  }
+
+  // NEW: Created / Uploaded sort – use earliest_uploaded from stats
+  if (col === "uploaded" || col === "created") {
+    const statsList = await Promise.all(
+      base.map(sf => fetchFolderStats(sf.full).catch(() => null))
+    );
+
+    const decorated = base.map((sf, idx) => {
+      const stats = statsList[idx];
+      let ts = 0;
+
+      if (stats && typeof stats.earliest_uploaded === "string") {
+        ts = parseCustomDate(String(stats.earliest_uploaded));
+        if (!Number.isFinite(ts)) ts = 0;
+      }
+
+      return { sf, ts };
+    });
+
+    decorated.sort((a, b) => {
+      if (a.ts < b.ts) return -1 * dir;
+      if (a.ts > b.ts) return  1 * dir;
+
+      // tie-break by name
+      const n1 = (a.sf.name || "").toLowerCase();
+      const n2 = (b.sf.name || "").toLowerCase();
+      if (n1 < n2) return -1 * dir;
+      if (n1 > n2) return  1 * dir;
+      return 0;
+    });
+
+    return decorated.map(d => d.sf);
+  }
+
+  // NEW: Modified sort – use latest_mtime from stats
+  if (col === "modified") {
+    const statsList = await Promise.all(
+      base.map(sf => fetchFolderStats(sf.full).catch(() => null))
+    );
+
+    const decorated = base.map((sf, idx) => {
+      const stats = statsList[idx];
+      let ts = 0;
+
+      if (stats && typeof stats.latest_mtime === "string") {
+        ts = parseCustomDate(String(stats.latest_mtime));
+        if (!Number.isFinite(ts)) ts = 0;
+      }
+
+      return { sf, ts };
+    });
+
+    decorated.sort((a, b) => {
+      if (a.ts < b.ts) return -1 * dir;
+      if (a.ts > b.ts) return  1 * dir;
 
       // tie-break by name
       const n1 = (a.sf.name || "").toLowerCase();
@@ -2343,7 +2728,12 @@ export async function renderFileTable(folder, container, subfolders) {
   let currentPage = window.currentPage || 1;
 
   // Files (filtered by search)
-  const filteredFiles = searchFiles(searchTerm);
+  let filteredFiles = searchFiles(searchTerm);
+
+  // Apply current sort (Modified desc by default for you)
+  if (Array.isArray(filteredFiles) && filteredFiles.length) {
+    filteredFiles = [...filteredFiles].sort(compareFilesForSort);
+  }
 
   // Inline folders: sort once (Explorer-style A→Z)
   const allSubfolders = Array.isArray(window.currentSubfolders)
@@ -2812,7 +3202,11 @@ function getMaxImageHeight() {
 export function renderGalleryView(folder, container) {
   const fileListContent = container || document.getElementById("fileList");
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
-  const filteredFiles = searchFiles(searchTerm);
+  let filteredFiles = searchFiles(searchTerm);
+
+  if (Array.isArray(filteredFiles) && filteredFiles.length) {
+    filteredFiles = [...filteredFiles].sort(compareFilesForSort);
+  }
 
   // API preview base (we’ll build per-file URLs)
   const apiBase = `/api/file/download.php?folder=${encodeURIComponent(folder)}&file=`;
@@ -3166,6 +3560,97 @@ function updateSliderConstraints() {
 window.addEventListener('load', updateSliderConstraints);
 window.addEventListener('resize', updateSliderConstraints);
 
+/**
+ * Fallback: derive selected files from DOM checkboxes if no explicit list
+ * of file objects is provided.
+ */
+function getSelectedFilesForDownload() {
+  const checks = Array.from(document.querySelectorAll('#fileList .file-checkbox'));
+  if (!checks.length) return [];
+
+  // checkbox values are ESCAPED names
+  const selectedEsc = checks.filter(cb => cb.checked).map(cb => cb.value);
+  if (!selectedEsc.length) return [];
+
+  const escSet = new Set(selectedEsc);
+
+  const files = Array.isArray(fileData)
+    ? fileData.filter(f => escSet.has(escapeHTML(f.name)))
+    : [];
+
+  return files.map(f => ({
+    folder: f.folder || window.currentFolder || 'root',
+    name: f.name
+  }));
+}
+
+/**
+ * Push selected files into a stepper queue and show the
+ * bottom-right panel with "Download next / Cancel".
+ *
+ * Expects `fileObjs` to be an array of file objects from `fileData`
+ * (e.g. currentSelection().files in fileMenu.js).
+ */
+export function downloadSelectedFilesIndividually(fileObjs) {
+  const src = Array.isArray(fileObjs) ? fileObjs : [];
+
+  if (!src.length) {
+    showToast(t('no_files_selected') || 'No files selected.', 'warning');
+    return;
+  }
+
+  const mapped = src.map(f => ({
+    folder: f.folder || window.currentFolder || 'root',
+    name: f.name
+  }));
+
+  const limit = window.maxNonZipDownloads || MAX_NONZIP_MULTI_DOWNLOAD;
+  if (mapped.length > limit) {
+    const msg =
+      t('too_many_plain_downloads') ||
+      `You selected ${mapped.length} files. For more than ${limit} files, please use "Download as ZIP".`;
+    showToast(msg, 'warning');
+    return;
+  }
+
+  // Replace any existing queue with the new one.
+  window.__nonZipDownloadQueue = mapped.slice();
+
+  // Show the panel; user will click "Download next" for each file.
+  showNonZipPanel();
+
+  // auto-fire the first file here:
+  triggerNextNonZipDownload();
+}
+
+function compareFilesForSort(a, b) {
+  const column = sortOrder?.column || "uploaded";
+  const ascending = sortOrder?.ascending !== false;
+
+  let valA = a[column] ?? "";
+  let valB = b[column] ?? "";
+
+  if (column === "size" || column === "filesize") {
+    // numeric size
+    valA = Number.isFinite(a.sizeBytes) ? a.sizeBytes : 0;
+    valB = Number.isFinite(b.sizeBytes) ? b.sizeBytes : 0;
+  } else if (column === "modified" || column === "uploaded") {
+    // date sort (newest/oldest)
+    const parsedA = parseCustomDate(String(valA || ""));
+    const parsedB = parseCustomDate(String(valB || ""));
+    valA = parsedA;
+    valB = parsedB;
+  } else {
+    if (typeof valA === "string") valA = valA.toLowerCase();
+    if (typeof valB === "string") valB = valB.toLowerCase();
+  }
+
+  if (valA < valB) return ascending ? -1 : 1;
+  if (valA > valB) return ascending ?  1 : -1;
+  return 0;
+}
+
+
 export function sortFiles(column, folder) {
   if (sortOrder.column === column) {
     sortOrder.ascending = !sortOrder.ascending;
@@ -3174,28 +3659,8 @@ export function sortFiles(column, folder) {
     sortOrder.ascending = true;
   }
 
-  fileData.sort((a, b) => {
-    let valA = a[column] || "";
-    let valB = b[column] || "";
-
-    if (column === "size" || column === "filesize") {
-      // numeric size
-      valA = Number.isFinite(a.sizeBytes) ? a.sizeBytes : 0;
-      valB = Number.isFinite(b.sizeBytes) ? b.sizeBytes : 0;
-    } else if (column === "modified" || column === "uploaded") {
-      const parsedA = parseCustomDate(valA);
-      const parsedB = parseCustomDate(valB);
-      valA = parsedA;
-      valB = parsedB;
-    } else if (typeof valA === "string") {
-      valA = valA.toLowerCase();
-      valB = valB.toLowerCase();
-    }
-
-    if (valA < valB) return sortOrder.ascending ? -1 : 1;
-    if (valA > valB) return sortOrder.ascending ?  1 : -1;
-    return 0;
-  });
+  // Re-sort master fileData
+  fileData.sort(compareFilesForSort);
 
   if (window.viewMode === "gallery") {
     renderGalleryView(folder);
@@ -3300,3 +3765,4 @@ window.renderFileTable = renderFileTable;
 window.renderGalleryView = renderGalleryView;
 window.sortFiles = sortFiles;
 window.toggleAdvancedSearch = toggleAdvancedSearch;
+window.downloadSelectedFilesIndividually = downloadSelectedFilesIndividually;

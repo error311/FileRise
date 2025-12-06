@@ -353,7 +353,20 @@ const translations = {
     "zoom_in": "Zoom In",
     "zoom_out": "Zoom Out",
     "rotate_left": "Rotate Left",
-    "rotate_right": "Rotate Right"
+    "rotate_right": "Rotate Right",
+    "download_plain": "Download (no ZIP)",
+    "download_next": "Download next",
+    "nonzip_queue_title": "Files queued for download",
+    "nonzip_queue_subtitle": "{count} files queued. Click \"Download next\" for each file.",
+    "nonzip_queue_cleared": "Download queue cleared.",
+    "your_access": "Your access",
+
+    "perm_upload": "Upload",
+    "perm_move":   "Move",
+    "perm_rename": "Rename",
+    "perm_share":  "Share",
+    "perm_delete": "Delete"
+  
   },
   es: {
     "please_log_in_to_continue": "Por favor, inicie sesión para continuar.",
