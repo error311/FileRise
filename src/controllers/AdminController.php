@@ -521,6 +521,119 @@ public function saveProGroups(array $groupsPayload): void
     }
 }
 
+
+public function testOidcConfig(array $payload): array
+{
+    // 1) Resolve providerUrl:
+    //    - Prefer payload (what you type into the Admin UI)
+    //    - Fall back to saved admin config
+    //    - Fall back to env/constant (if you use env-based config)
+    $providerUrl = trim((string)($payload['providerUrl'] ?? ''));
+
+    // Try admin config if not provided in payload
+    if ($providerUrl === '') {
+        if (!class_exists('AdminModel')) {
+            require_once PROJECT_ROOT . '/src/models/AdminModel.php';
+        }
+        $model  = new AdminModel();
+        $config = $model->getConfig();
+        $providerUrl = trim((string)($config['oidc']['providerUrl'] ?? ''));
+    }
+
+    // Try constant from config.php (if you use one)
+    if ($providerUrl === '' && defined('OIDC_PROVIDER_URL')) {
+        $providerUrl = trim((string)OIDC_PROVIDER_URL);
+    }
+
+    if ($providerUrl === '') {
+        return [
+            'success' => false,
+            'error'   => 'No OIDC provider URL configured.'
+        ];
+    }
+
+    if (!preg_match('#^https?://#i', $providerUrl)) {
+        return [
+            'success' => false,
+            'error'   => 'OIDC provider URL must start with http:// or https://',
+            'value'   => $providerUrl,
+        ];
+    }
+
+    // 2) Normalize discovery URL
+    $base = rtrim($providerUrl, '/');
+
+    // If they pasted a .well-known URL directly, don't append anything
+    if (stripos($base, '/.well-known/') !== false) {
+        $discoveryUrl = $base;
+    } else {
+        // Works with Keycloak:
+        //   https://auth.example.com/realms/yourrealm
+        // → https://auth.example.com/realms/yourrealm/.well-known/openid-configuration
+        $discoveryUrl = $base . '/.well-known/openid-configuration';
+    }
+
+    // 3) Fetch discovery document
+    $ctx = stream_context_create([
+        'http' => [
+            'timeout' => 5,
+        ],
+        'https' => [
+            'timeout' => 5,
+        ],
+    ]);
+
+    $raw = @file_get_contents($discoveryUrl, false, $ctx);
+    if ($raw === false) {
+        $err = error_get_last();
+        return [
+            'success'      => false,
+            'error'        => 'Failed to fetch discovery document from provider.',
+            'discoveryUrl' => $discoveryUrl,
+            'phpError'     => $err['message'] ?? null,
+        ];
+    }
+
+    $json = json_decode($raw, true);
+    if (!is_array($json)) {
+        return [
+            'success'      => false,
+            'error'        => 'Discovery document is not valid JSON.',
+            'discoveryUrl' => $discoveryUrl,
+        ];
+    }
+
+    $issuer  = (string)($json['issuer'] ?? '');
+    $auth    = (string)($json['authorization_endpoint'] ?? '');
+    $token   = (string)($json['token_endpoint'] ?? '');
+    $userinfo = (string)($json['userinfo_endpoint'] ?? '');
+
+    if ($issuer === '' || $auth === '') {
+        return [
+            'success'      => false,
+            'error'        => 'Discovery document is missing issuer or authorization_endpoint.',
+            'discoveryUrl' => $discoveryUrl,
+            'jsonSample'   => [
+                'issuer'                 => $json['issuer'] ?? null,
+                'authorization_endpoint' => $json['authorization_endpoint'] ?? null,
+            ],
+        ];
+    }
+
+    // Shape the response exactly how your JS expects it:
+    return [
+        'success'                => true,
+        'providerUrl'            => $providerUrl,
+        'discoveryUrl'           => $discoveryUrl,
+        'issuer'                 => $issuer,
+        'authorization_endpoint' => $auth,
+        'token_endpoint'         => $token,
+        'userinfo_endpoint'      => $userinfo,
+        // optional warnings array, your JS will just log them
+        'warnings'               => [],
+    ];
+}
+
 public function installProBundle(): void
 {
     header('Content-Type: application/json; charset=utf-8');
@@ -961,11 +1074,7 @@ public function installProBundle(): void
                 }
                 return false;
             };
-            if (!$httpsOk($prov) || !$httpsOk($rid)) {
-                http_response_code(400);
-                echo json_encode(['error' => 'providerUrl and redirectUri must be https (or http on localhost)']);
-                exit;
-            }
+
         }
         
 

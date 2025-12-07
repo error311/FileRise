@@ -380,7 +380,7 @@ function attachOnlyOfficeCspHelper(container) {
   function buildCspNginx(originRaw) {
     const o = (originRaw || 'https://your-onlyoffice-server.example.com').replace(/\/+$/, '');
     const api = `${o}/web-apps/apps/api/documents/api.js`;
-  
+
     const cspValue =
       `default-src 'self'; ` +
       `base-uri 'self'; ` +
@@ -393,16 +393,16 @@ function attachOnlyOfficeCspHelper(container) {
       `connect-src 'self' ${o}; ` +
       `media-src 'self' blob:; ` +
       `worker-src 'self' blob:; ` +
-      `form-action 'self'; `
+      `form-action 'self'; ` +
       `frame-src 'self' ${o}`;
-  
+
     return [
       '# Drop upstream (Apache/.htaccess) headers that conflict with ONLYOFFICE',
       'proxy_hide_header X-Frame-Options;',
       'proxy_hide_header Content-Security-Policy;',
       '',
       '# Replace with an ONLYOFFICE-aware CSP at the proxy',
-      `add_header Content-Security-Policy "${cspValue}" always;`
+      `add_header Content-Security-Policy "${cspValue}" always;`,
     ].join('\n');
   }
 
@@ -469,11 +469,11 @@ export function initOnlyOfficeUI({ config }) {
     </div>
 
     ${renderMaskedInput({
-      id: 'ooJwtSecret',
-      label: 'JWT Secret',
-      hasValue: hasOOSecret,
-      isSecret: true
-    })}
+    id: 'ooJwtSecret',
+    label: 'JWT Secret',
+    hasValue: hasOOSecret,
+    isSecret: true
+  })}
   `;
 
   wireReplaceButtons(sec);

@@ -41,6 +41,28 @@ if (!defined('OFFICE_SNIPPET_MAX_BYTES')) {
 if (!defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD')) {
     define('OIDC_TOKEN_ENDPOINT_AUTH_METHOD', 'client_secret_basic'); // default
 }
+// --- Optional: OIDC → FileRise integration ----------------------------
+
+// Auto-create users from OIDC when no users.txt match.
+if (!defined('FR_OIDC_AUTO_CREATE')) {
+    define('FR_OIDC_AUTO_CREATE', true);
+}
+
+// Claim that contains IdP groups/roles (typical: "groups" or "roles").
+if (!defined('FR_OIDC_GROUP_CLAIM')) {
+    define('FR_OIDC_GROUP_CLAIM', 'groups');
+}
+
+// Name of an IdP group that should be treated as "FileRise admin".
+if (!defined('FR_OIDC_ADMIN_GROUP')) {
+    define('FR_OIDC_ADMIN_GROUP', 'filerise-admins');
+}
+
+// Prefix for IdP groups that should map into FileRise Pro groups.
+// Example: IdP group "frp_clients_acme" → Pro group "clients_acme".
+if (!defined('FR_OIDC_PRO_GROUP_PREFIX')) {
+    define('FR_OIDC_PRO_GROUP_PREFIX', '');
+}
 
 // Encryption helpers
 function encryptData($data, $encryptionKey)

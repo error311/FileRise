@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
+require_once PROJECT_ROOT . '/src/models/AuthModel.php';
 
 /**
  * UserController
@@ -555,51 +556,71 @@ class UserController
                 exit;
             }
 
-            // Issue “remember me” token if requested
-            if ($rememberMe) {
-                $tokFile = USERS_DIR . 'persistent_tokens.json';
-                $token = bin2hex(random_bytes(32));
-                $expiry = time() + 30 * 24 * 60 * 60;
-                $all = [];
-                if (file_exists($tokFile)) {
-                    $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
-                    $all = json_decode($dec, true) ?: [];
-                }
-                $perms = loadUserPermissions($username);
-                $all[$token] = [
-                    'username'      => $username,
-                    'expiry'        => $expiry,
-                    'isAdmin'       => ((int)UserModel::getUserRole($username) === 1),
-                    'folderOnly'    => $perms['folderOnly']    ?? false,
-                    'readOnly'      => $perms['readOnly']      ?? false,
-                    'disableUpload' => $perms['disableUpload'] ?? false
-                ];
-                file_put_contents(
-                    $tokFile,
-                    encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
-                    LOCK_EX
-                );
-                $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-                setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
-                setcookie(session_name(), session_id(), $expiry, '/', '', $secure, true);
-            }
-
-            // Finalize login
-            session_regenerate_id(true);
-            $_SESSION['authenticated']   = true;
-            $_SESSION['username']        = $username;
-            $_SESSION['isAdmin']         = ((int)UserModel::getUserRole($username) === 1);
-            $perms = loadUserPermissions($username);
-            $_SESSION['folderOnly']      = $perms['folderOnly']    ?? false;
-            $_SESSION['readOnly']        = $perms['readOnly']      ?? false;
-            $_SESSION['disableUpload']   = $perms['disableUpload'] ?? false;
-
-            unset(
-                $_SESSION['pending_login_user'],
-                $_SESSION['pending_login_secret'],
-                $_SESSION['pending_login_remember_me'],
-                $_SESSION['totp_failures']
-            );
+             // Decide final admin flag (local role + optional OIDC override)
+             $roleAdmin = ((int)UserModel::getUserRole($username) === 1);
+             $isAdmin   = $roleAdmin;
+ 
+             if (!empty($_SESSION['oidc_isAdmin'])) {
+                 $isAdmin = true; // IdP admin group can only elevate, never downgrade
+             }
+ 
+             // Issue remember-me token if requested
+             if ($rememberMe) {
+                 $tokFile = USERS_DIR . 'persistent_tokens.json';
+                 $token   = bin2hex(random_bytes(32));
+                 $expiry  = time() + 30 * 24 * 60 * 60;
+                 $all     = [];
+ 
+                 if (file_exists($tokFile)) {
+                     $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
+                     $all = json_decode($dec, true) ?: [];
+                 }
+ 
+                 $perms = loadUserPermissions($username);
+                 $all[$token] = [
+                     'username'      => $username,
+                     'expiry'        => $expiry,
+                     'isAdmin'       => $isAdmin,
+                     'folderOnly'    => $perms['folderOnly']    ?? false,
+                     'readOnly'      => $perms['readOnly']      ?? false,
+                     'disableUpload' => $perms['disableUpload'] ?? false,
+                 ];
+ 
+                 file_put_contents(
+                     $tokFile,
+                     encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
+                     LOCK_EX
+                 );
+ 
+                 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+                 setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
+                 setcookie(session_name(), session_id(), $expiry, '/', '', $secure, true);
+             }
+ 
+             // Finalize login
+             session_regenerate_id(true);
+             $_SESSION['authenticated']   = true;
+             $_SESSION['username']        = $username;
+             $_SESSION['isAdmin']         = $isAdmin;
+ 
+             $perms = loadUserPermissions($username);
+             $_SESSION['folderOnly']      = $perms['folderOnly']    ?? false;
+             $_SESSION['readOnly']        = $perms['readOnly']      ?? false;
+             $_SESSION['disableUpload']   = $perms['disableUpload'] ?? false;
+ 
+             // If OIDC groups were stashed for this pending login, sync them now (after TOTP)
+             if (!empty($_SESSION['oidc_groups']) && is_array($_SESSION['oidc_groups'])) {
+                 AuthModel::syncOidcGroupsToPro($username, $_SESSION['oidc_groups']);
+             }
+ 
+             unset(
+                 $_SESSION['pending_login_user'],
+                 $_SESSION['pending_login_secret'],
+                 $_SESSION['pending_login_remember_me'],
+                 $_SESSION['totp_failures'],
+                 $_SESSION['oidc_isAdmin'],
+                 $_SESSION['oidc_groups']
+             );
 
             echo json_encode([
                 'status'        => 'ok',

@@ -2,6 +2,7 @@
 // src/models/AuthModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/models/UserModel.php';
 
 class AuthModel
 {
@@ -25,7 +26,185 @@ class AuthModel
         }
         return null;
     }
+    
+    /**
+     * Ensure a local FileRise account exists for an OIDC user, and keep
+     * their admin flag in sync with the IdP on every OIDC login.
+     *
+     * - If the user does not exist and FR_OIDC_AUTO_CREATE is true, a new user
+     *   is created with a random password and role "1" (admin) or "0" (user).
+     * - If the user already exists, we set their role to match $isAdminByIdp
+     *   (so removing them from the IdP admin role will demote them in FileRise).
+     *
+     * Returns: ['success' => true] or ['error' => '...']
+     */
+    public static function ensureLocalOidcUser(string $username, bool $isAdminByIdp): array
+    {
+        if (!preg_match(REGEX_USER, $username)) {
+            return ['error' => 'OIDC username is not a valid FileRise username'];
+        }
 
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (!file_exists($usersFile)) {
+            // Try to create an empty file so we can append to it
+            if (file_put_contents($usersFile, '', LOCK_EX) === false) {
+                return ['error' => 'Users file not found and could not be created.'];
+            }
+        }
+
+        $lines      = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $foundIndex = null;
+
+        foreach ($lines as $i => $line) {
+            $parts = explode(':', trim($line));
+            if (count($parts) < 3) {
+                continue;
+            }
+            if (strcasecmp($parts[0], $username) === 0) {
+                $foundIndex = $i;
+                break;
+            }
+        }
+
+        $role = $isAdminByIdp ? '1' : '0';
+
+        if ($foundIndex === null) {
+            // No existing user
+            if (!defined('FR_OIDC_AUTO_CREATE') || !FR_OIDC_AUTO_CREATE) {
+                return ['error' => 'User does not exist in FileRise and auto-create is disabled.'];
+            }
+
+            $randomPassword = bin2hex(random_bytes(16));
+            $hash           = password_hash($randomPassword, PASSWORD_BCRYPT);
+            $lines[]        = $username . ':' . $hash . ':' . $role;
+        } else {
+            // Existing user – keep role in sync with IdP
+            $parts = explode(':', trim($lines[$foundIndex]));
+            if (count($parts) < 3) {
+                $parts = array_pad($parts, 3, '');
+            }
+
+            // Trust IdP: if they are no longer admin in IdP, demote here as well.
+            $parts[2]           = $role;
+            $lines[$foundIndex] = implode(':', $parts);
+        }
+
+        $payload = $lines ? (implode(PHP_EOL, $lines) . PHP_EOL) : '';
+        if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
+            return ['error' => 'Failed to update users file for OIDC user.'];
+        }
+
+        return ['success' => true];
+    }
+
+    /**
+     * Map OIDC groups into FileRise Pro groups (additive only – we never remove membership).
+     *
+     * @param string $username   Local FileRise username
+     * @param array  $groupSlugs Array of group keys coming from the IdP,
+     *                           already filtered by FR_OIDC_GROUP_PREFIX.
+     */
+    public static function applyOidcGroupsToPro(string $username, array $groupSlugs): void
+{
+    if (empty($groupSlugs)) {
+        return;
+    }
+    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
+        return;
+    }
+    if (!defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
+        return;
+    }
+
+    $bundleDir     = rtrim(FR_PRO_BUNDLE_DIR, '/\\');
+    $proGroupsPath = $bundleDir . '/ProGroups.php';
+    if (!is_file($proGroupsPath)) {
+        error_log('[OIDC] ProGroups.php not found at ' . $proGroupsPath);
+        return;
+    }
+
+    require_once $proGroupsPath;
+    if (!class_exists('ProGroups')) {
+        error_log('[OIDC] ProGroups class not found after include.');
+        return;
+    }
+
+    $store = new \ProGroups($bundleDir);
+
+    // IMPORTANT: use load() so we preserve the full { "groups": ... } structure
+    $data = $store->load();
+    if (!is_array($data)) {
+        $data = [];
+    }
+    if (!isset($data['groups']) || !is_array($data['groups'])) {
+        $data['groups'] = [];
+    }
+
+    $groups = &$data['groups'];
+
+    // Build lowercase key index for case-insensitive lookups of existing groups
+    $keyIndex = [];
+    foreach ($groups as $key => $_info) {
+        $keyIndex[strtolower((string)$key)] = $key;
+    }
+
+    $uname   = (string)$username;
+    $unameLc = strtolower($uname);
+
+    foreach ($groupSlugs as $rawSlug) {
+        $slug = trim((string)$rawSlug);
+        if ($slug === '') {
+            continue;
+        }
+
+        $slugLc = strtolower($slug);
+
+        // 1) Find existing group (case-insensitive) or auto-create a new one keyed by the slug
+        if (isset($keyIndex[$slugLc])) {
+            $groupKey = $keyIndex[$slugLc];
+        } else {
+            $groupKey = $slug;
+            $groups[$groupKey] = [
+                'name'    => $slug,
+                'label'   => 'OIDC: ' . $slug,
+                'members' => [],
+                'grants'  => [], // ACLs still managed in FileRise UI
+            ];
+            $keyIndex[$slugLc] = $groupKey;
+            error_log('[OIDC] Auto-created Pro group ' . $groupKey . ' for user ' . $uname);
+        }
+
+        // 2) Ensure user is a member of that group (case-insensitive)
+        $group   = $groups[$groupKey] ?? [];
+        $members = isset($group['members']) && is_array($group['members'])
+            ? $group['members']
+            : [];
+
+        $already = false;
+        foreach ($members as $m) {
+            if (strcasecmp((string)$m, $uname) === 0) {
+                $already = true;
+                break;
+            }
+        }
+
+        if (!$already) {
+            $members[] = $uname;
+            $group['members'] = array_values($members);
+            $groups[$groupKey] = $group;
+            error_log('[OIDC] Added ' . $uname . ' to Pro group ' . $groupKey);
+        }
+    }
+
+    // 3) Save the updated structure; nothing is removed
+    try {
+        if (!$store->save($data)) {
+            error_log('[OIDC] Failed to save Pro groups after sync for ' . $uname);
+        }
+    } catch (\Throwable $e) {
+        error_log('[OIDC] Pro group sync error for ' . $uname . ': ' . $e->getMessage());
+    }
+}
     /**
      * Authenticates the user using form-based credentials.
      *
@@ -155,4 +334,205 @@ class AuthModel
         // Valid token—return its payload
         return $all[$token];
     }
+
+     /**
+     * Given OIDC claims, derive a FileRise username and optionally auto-create it.
+     *
+     * - Tries preferred_username, then email local part, validated against REGEX_USER.
+     * - If nothing valid, falls back to "oidc_<hash>".
+     * - If a matching users.txt entry exists, returns that username.
+     * - If none exists and FR_OIDC_AUTO_CREATE is false (default), returns null.
+     * - If FR_OIDC_AUTO_CREATE is true, creates a non-admin user with a random password.
+     */
+    public static function ensureOidcUserFromClaims(
+        ?string $preferredUsername,
+        ?string $email,
+        ?string $sub
+    ): ?string {
+        $candidates = [];
+
+        if (is_string($preferredUsername) && $preferredUsername !== '') {
+            $candidates[] = trim($preferredUsername);
+        }
+
+        if (is_string($email) && $email !== '') {
+            $at = strpos($email, '@');
+            if ($at !== false) {
+                $local = substr($email, 0, $at);
+                $candidates[] = trim($local);
+            }
+        }
+
+        $username = null;
+        foreach ($candidates as $cand) {
+            $cand = trim($cand);
+            if ($cand !== '' && preg_match(REGEX_USER, $cand)) {
+                $username = $cand;
+                break;
+            }
+        }
+
+        // Fallback if nothing matched REGEX_USER
+        if ($username === null) {
+            $base = $sub ?: bin2hex(random_bytes(8));
+            $username = 'oidc_' . substr(sha1($base), 0, 16);
+        }
+
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (file_exists($usersFile)) {
+            foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                $parts = explode(':', trim($line));
+                if (count($parts) >= 3 && $parts[0] === $username) {
+                    return $username;
+                }
+            }
+        }
+
+        // No match in users.txt → only continue if auto-create is enabled
+        if (!defined('FR_OIDC_AUTO_CREATE') || !FR_OIDC_AUTO_CREATE) {
+            return null;
+        }
+
+        // Auto-create as a non-admin with a random password (SSO-only account).
+        $randomPassword = bin2hex(random_bytes(16));
+        $isAdmin        = '0';
+
+        $result = UserModel::addUser($username, $randomPassword, $isAdmin, false);
+        if (isset($result['error'])) {
+            error_log('OIDC auto-create failed for ' . $username . ': ' . $result['error']);
+            return null;
+        }
+
+        return $username;
+    }
+
+    /**
+     * Sync IdP groups into FileRise Pro groups using a prefix-based mapping.
+     *
+     * - Only runs when FR_PRO_ACTIVE + FR_PRO_BUNDLE_DIR + FR_OIDC_PRO_GROUP_PREFIX are set.
+     * - Only groups whose *IdP name* starts with FR_OIDC_PRO_GROUP_PREFIX are considered.
+     * - The Pro group name is derived from the suffix, normalized to [a-z0-9_-].
+     * - For those Pro groups:
+     *     - Ensure the group exists.
+     *     - Ensure $username is in members[].
+     *     - Remove $username from any *other* FR_OIDC_PRO_GROUP_PREFIX groups they no longer have.
+     * - Does NOT touch per-folder grants; admins still configure ACLs via the Pro UI.
+     */
+    public static function syncOidcGroupsToPro(string $username, array $groups): void
+    {
+        if (empty($groups)) {
+            return;
+        }
+        if (
+            !defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE ||
+            !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR ||
+            !defined('FR_OIDC_PRO_GROUP_PREFIX') || FR_OIDC_PRO_GROUP_PREFIX === ''
+        ) {
+            return;
+        }
+
+        $prefix    = (string)FR_OIDC_PRO_GROUP_PREFIX;
+        $prefixLen = strlen($prefix);
+
+        // Normalize incoming groups to a clean list of strings
+        $raw = [];
+        foreach ($groups as $g) {
+            $g = trim((string)$g);
+            if ($g !== '') {
+                $raw[] = $g;
+            }
+        }
+        if (!$raw) {
+            return;
+        }
+
+        // Map IdP groups → Pro group names (suffix of prefix, normalized)
+        $desiredNames = [];
+        foreach ($raw as $g) {
+            if (stripos($g, $prefix) === 0) {
+                $slug = substr($g, $prefixLen);
+                $slug = strtolower(preg_replace('/[^a-z0-9_\-]/i', '_', $slug));
+                if ($slug !== '') {
+                    $desiredNames[] = $slug;
+                }
+            }
+        }
+        $desiredNames = array_values(array_unique($desiredNames));
+        if (!$desiredNames) {
+            return;
+        }
+
+        $proGroupsPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . '/ProGroups.php';
+        if (!is_file($proGroupsPath)) {
+            return;
+        }
+
+        require_once $proGroupsPath;
+        if (!class_exists('ProGroups')) {
+            return;
+        }
+
+        $store = new ProGroups(FR_PRO_BUNDLE_DIR);
+        $data  = $store->listGroups();
+        if (!is_array($data)) {
+            $data = [];
+        }
+        if (!isset($data['groups']) || !is_array($data['groups'])) {
+            $data['groups'] = [];
+        }
+        $groupsArr = $data['groups'];
+
+        // Upsert the OIDC-managed groups and ensure $username is a member
+        foreach ($desiredNames as $name) {
+            if (!isset($groupsArr[$name]) || !is_array($groupsArr[$name])) {
+                $groupsArr[$name] = [
+                    'name'    => $name,
+                    'label'   => 'OIDC: ' . $name,
+                    'members' => [],
+                    'grants'  => $groupsArr[$name]['grants'] ?? [],
+                ];
+            }
+
+            $members = $groupsArr[$name]['members'] ?? [];
+            if (!is_array($members)) {
+                $members = [];
+            }
+
+            $already = false;
+            foreach ($members as $m) {
+                if (strcasecmp((string)$m, $username) === 0) {
+                    $already = true;
+                    break;
+                }
+            }
+            if (!$already) {
+                $members[] = $username;
+            }
+
+            $groupsArr[$name]['members'] = array_values($members);
+        }
+
+        // Remove user from any other OIDC-managed groups they no longer have
+        foreach ($groupsArr as $name => &$info) {
+            if (stripos($name, $prefix) === 0 && !in_array($name, $desiredNames, true)) {
+                $members = $info['members'] ?? [];
+                if (is_array($members) && $members) {
+                    $info['members'] = array_values(array_filter(
+                        $members,
+                        fn($m) => strcasecmp((string)$m, $username) !== 0
+                    ));
+                }
+            }
+        }
+        unset($info);
+
+        $data['groups'] = $groupsArr;
+
+        try {
+            $store->save($data);
+        } catch (\Throwable $e) {
+            error_log('OIDC Pro group sync failed: ' . $e->getMessage());
+        }
+    }
+
 }

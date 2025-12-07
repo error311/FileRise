@@ -49,11 +49,11 @@ class AuthController
             $this->finalizeLogin($username, $rememberMe);
         }
 
-        //
+               //
         // 2) OIDC flow
         //
         $oidcAction = $_GET['oidc'] ?? null;
-        if (! $oidcAction && isset($_GET['code'])) {
+        if (!$oidcAction && isset($_GET['code'])) {
             $oidcAction = 'callback';
         }
         if ($oidcAction) {
@@ -61,7 +61,9 @@ class AuthController
             $clientId     = $cfg['oidc']['clientId']     ?? null;
             $clientSecret = $cfg['oidc']['clientSecret'] ?? null;
             // When configured as a public client (no secret), pass null, not an empty string.
-            if ($clientSecret === '') { $clientSecret = null; }
+            if ($clientSecret === '') {
+                $clientSecret = null;
+            }
 
             $oidc = new OpenIDConnectClient(
                 $cfg['oidc']['providerUrl'],
@@ -78,16 +80,136 @@ class AuthController
                 $oidc->setTokenEndpointAuthMethod(OIDC_TOKEN_ENDPOINT_AUTH_METHOD);
             }
             $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
-            $oidc->addScope(['openid','profile','email']);
-
+            $oidc->addScope(['openid', 'profile', 'email']);
 
             if ($oidcAction === 'callback') {
                 try {
                     $oidc->authenticate();
-                    $username =
-    $oidc->requestUserInfo('preferred_username')
-    ?: $oidc->requestUserInfo('email')
-    ?: $oidc->requestUserInfo('sub');
+
+                    // Resolve username from claims
+                                        // Resolve username from claims
+                                        $username =
+                                        $oidc->requestUserInfo('preferred_username')
+                                        ?: $oidc->requestUserInfo('email')
+                                        ?: $oidc->requestUserInfo('sub');
+                
+                                    $username = trim((string)$username);
+                                    if ($username === '') {
+                                        http_response_code(401);
+                                        echo json_encode(['error' => 'Authentication failed: no username in OIDC claims.']);
+                                        exit();
+                                    }
+                
+                                    // Pull full userinfo once so we can inspect groups / roles
+                                    $userinfo = $oidc->requestUserInfo();
+                
+                                    // TEMP DEBUG: log what we actually get from the IdP
+                                    // (check your PHP error log after a login)
+                                    //error_log('[OIDC] userinfo = ' . json_encode($userinfo));
+                
+                                    // Collect groups/roles from various fields
+                                    $rawTags = [];
+                
+                                    $addTags = function ($val) use (&$rawTags) {
+                                        if (is_array($val)) {
+                                            foreach ($val as $v) {
+                                                $v = trim((string)$v);
+                                                if ($v !== '') {
+                                                    $rawTags[] = $v;
+                                                }
+                                            }
+                                        } elseif (is_string($val)) {
+                                            // support comma or space separated lists
+                                            foreach (preg_split('/[,\s]+/', $val) as $v) {
+                                                $v = trim($v);
+                                                if ($v !== '') {
+                                                    $rawTags[] = $v;
+                                                }
+                                            }
+                                        }
+                                    };
+                
+                                    // 1) Common flat claims (includes "usergroups" which you mentioned)
+                                    foreach (['groups', 'group', 'usergroups', 'user_groups', 'roles'] as $field) {
+                                        if (isset($userinfo->$field)) {
+                                            $addTags($userinfo->$field);
+                                        }
+                                    }
+                
+                                    // 2) realm_access.roles (Keycloak realm roles)
+                                    if (isset($userinfo->realm_access) && is_object($userinfo->realm_access)
+                                        && isset($userinfo->realm_access->roles) && is_array($userinfo->realm_access->roles)
+                                    ) {
+                                        $addTags($userinfo->realm_access->roles);
+                                    }
+                
+                                    // 3) resource_access.<client>.roles (Keycloak client roles)
+                                    if (isset($userinfo->resource_access) && is_object($userinfo->resource_access)) {
+                                        foreach (get_object_vars($userinfo->resource_access) as $clientObj) {
+                                            if (is_object($clientObj) && isset($clientObj->roles) && is_array($clientObj->roles)) {
+                                                $addTags($clientObj->roles);
+                                            }
+                                        }
+                                    }
+                
+                                    // Normalize tags: strip leading '/', trim, drop empties
+                                    $normalizedTags = [];
+                                    foreach ($rawTags as $g) {
+                                        $g = trim((string)$g);
+                                        if ($g === '') {
+                                            continue;
+                                        }
+                                        // Keycloak groups often look like "/filerise-admins" or "/frp_staff"
+                                        $g = ltrim($g, '/');
+                                        if ($g === '') {
+                                            continue;
+                                        }
+                                        $normalizedTags[] = $g;
+                                    }
+                
+                                    // TEMP DEBUG: see exactly what tags we think exist
+                                    //error_log('[OIDC] normalizedTags = ' . json_encode($normalizedTags));
+                
+                                    // Determine whether IdP says this user is an admin
+                                    $isAdminByIdp = false;
+                                    if (!empty($normalizedTags) && defined('FR_OIDC_ADMIN_GROUP') && FR_OIDC_ADMIN_GROUP !== '') {
+                                        $adminNeedle = strtolower(FR_OIDC_ADMIN_GROUP);
+                                        foreach ($normalizedTags as $tag) {
+                                            if (strtolower($tag) === $adminNeedle) {
+                                                $isAdminByIdp = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                
+                                    // Determine which Pro groups this user should be in
+                                    $proGroupSlugs = [];
+                                    $prefix   = defined('FR_OIDC_GROUP_PREFIX') ? (string)FR_OIDC_GROUP_PREFIX : '';
+                                    $prefixLc = strtolower($prefix);
+                
+                                    foreach ($normalizedTags as $tag) {
+                                        $tagLc = strtolower($tag);
+                                        if ($prefixLc !== '' && stripos($tagLc, $prefixLc) === 0) {
+                                            // Keep the full tag as the group key, e.g. "frp_staff".
+                                            $proGroupSlugs[] = $tag;
+                                        }
+                                    }
+
+                    // Make sure a local FileRise account exists, and upgrade to admin if IdP says so
+                    $ensure = AuthModel::ensureLocalOidcUser($username, $isAdminByIdp);
+                    if (isset($ensure['error'])) {
+                        error_log('OIDC local user ensure failed for ' . $username . ': ' . $ensure['error']);
+                        http_response_code(403);
+                        echo json_encode(['error' => 'OIDC login rejected: ' . $ensure['error']]);
+                        exit();
+                    }
+
+                    // Best-effort: map IdP groups into FileRise Pro groups
+                    try {
+                        AuthModel::applyOidcGroupsToPro($username, $proGroupSlugs);
+                    } catch (\Throwable $syncEx) {
+                        error_log('OIDC Pro group sync error for ' . $username . ': ' . $syncEx->getMessage());
+                    }
 
                     // check if this user has a TOTP secret
                     $totp_secret = null;
@@ -108,7 +230,7 @@ class AuthController
                         exit();
                     }
 
-                    // no TOTP → finish immediately
+                    // no TOTP → finish immediately (this recomputes isAdmin from users.txt)
                     $this->finishBrowserLogin($username);
                 } catch (\Exception $e) {
                     error_log("OIDC auth error: " . $e->getMessage());
@@ -259,14 +381,22 @@ class AuthController
 
     /**
      * A version of finalizeLogin() that ends in a browser redirect
-     * (used for OIDC non‑AJAX flows).
+     * (used for OIDC non-AJAX flows).
+     *
+     * @param string    $username
+     * @param bool|null $isAdminOverride  If true, force admin. If null, use users.txt role.
      */
-    protected function finishBrowserLogin(string $username): void
+    protected function finishBrowserLogin(string $username, ?bool $isAdminOverride = null): void
     {
         session_regenerate_id(true);
         $_SESSION['authenticated'] = true;
         $_SESSION['username']      = $username;
-        $_SESSION['isAdmin']       = (AuthModel::getUserRole($username) === '1');
+
+        if ($isAdminOverride === null) {
+            $_SESSION['isAdmin'] = (AuthModel::getUserRole($username) === '1');
+        } else {
+            $_SESSION['isAdmin'] = $isAdminOverride;
+        }
 
         $perms = loadUserPermissions($username);
         $_SESSION['folderOnly']    = $perms['folderOnly']    ?? false;

@@ -1,5 +1,38 @@
 # Changelog
 
+## Changes 12/7/2025 (v2.4.0)
+
+release(v2.4.0): OIDC auto-provisioning, admin mapping & Pro group sync
+
+- Add /api/admin/oidcTest.php endpoint and AdminPanel "Test OIDC discovery" button
+  to sanity-check the provider's .well-known/openid-configuration.
+- Introduce OIDC > FileRise integration helpers in AuthModel:
+  - ensureLocalOidcUser() keeps a local account in sync with IdP admin flag
+    and auto-creates users when FR_OIDC_AUTO_CREATE is enabled.
+  - applyOidcGroupsToPro() and syncOidcGroupsToPro() map IdP groups into
+    FileRise Pro groups and keep membership up to date.
+- Extend AuthController OIDC callback to:
+  - pull full userinfo, normalize groups/roles, and detect IdP admin status
+    via FR_OIDC_ADMIN_GROUP and FR_OIDC_GROUP_PREFIX.
+  - ensure a local FileRise user exists before login and sync Pro group
+    membership on each successful OIDC login.
+- Update UserController login flow so:
+  - remember-me tokens and $_SESSION['isAdmin'] honor OIDC admin elevation
+    while still supporting local users and TOTP.
+  - OIDC group info survives TOTP and is applied after second factor.
+- Add config.php knobs for OIDC integration:
+  FR_OIDC_AUTO_CREATE, FR_OIDC_GROUP_CLAIM, FR_OIDC_ADMIN_GROUP,
+  FR_OIDC_PRO_GROUP_PREFIX.
+- Improve Admin → OIDC UI:
+  - better guidance on issuer/base URL and redirect URI.
+  - explicit warning that http:// should only be used in lab/local setups;
+    production OIDC should be over https://.
+- Tweak OnlyOffice Nginx CSP helper to generate a single
+  Content-Security-Policy header including form-action and frame-src and
+  document dropping upstream X-Frame-Options/CSP via proxy_hide_header.
+
+---
+
 ## Changes 12/7/2025 (v2.3.7)
 
 release(v2.3.7): hover snippets, inline folder drag, OnlyOffice & CSP polish

@@ -243,6 +243,77 @@ function wireReplaceButtons(scope = document) {
   });
 }
 
+function wireOidcTestButton(scope = document) {
+  const btn = scope.querySelector('#oidcTestBtn');
+  const statusEl = scope.querySelector('#oidcTestStatus');
+  if (!btn || !statusEl || btn.__wired) return;
+
+  btn.__wired = true;
+
+  btn.addEventListener('click', async () => {
+    const urlInput = scope.querySelector('#oidcProviderUrl');
+    const redirectInput = scope.querySelector('#oidcRedirectUri');
+
+    const providerUrl = (urlInput && urlInput.value.trim()) || '';
+    const redirectUri = (redirectInput && redirectInput.value.trim()) || '';
+
+    statusEl.textContent = providerUrl
+      ? `Testing discovery for ${providerUrl}…`
+      : 'Testing saved OIDC configuration…';
+    statusEl.className = 'small text-muted';
+
+    try {
+      const res = await fetch('/api/admin/oidcTest.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.csrfToken || ''
+        },
+        body: JSON.stringify({
+          providerUrl: providerUrl || null,
+          redirectUri: redirectUri || null
+        })
+      });
+
+      const data = await safeJson(res);
+
+      if (!data || data.success !== true) {
+        const msg = (data && (data.error || data.message)) || 'OIDC test failed.';
+        statusEl.textContent = msg;
+        statusEl.className = 'small text-danger';
+        showToast('OIDC test failed: ' + msg, 'error');
+        return;
+      }
+
+      const parts = [];
+const authEndpoint = data.authorization_endpoint || data.authorizationUrl;
+const userinfoEndpoint = data.userinfo_endpoint || data.userinfoUrl;
+
+if (data.issuer) parts.push('issuer: ' + data.issuer);
+if (authEndpoint) parts.push('auth: ' + authEndpoint);
+if (userinfoEndpoint) parts.push('userinfo: ' + userinfoEndpoint);
+
+      const summary = parts.length
+        ? 'OK – ' + parts.join(' • ')
+        : 'OK – provider discovery succeeded.';
+
+      statusEl.textContent = summary;
+      statusEl.className = 'small text-success';
+      showToast('OIDC discovery is reachable.');
+
+      if (Array.isArray(data.warnings) && data.warnings.length) {
+        console.warn('OIDC test warnings:', data.warnings);
+      }
+    } catch (e) {
+      console.error('OIDC test error', e);
+      statusEl.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
+      statusEl.className = 'small text-danger';
+      showToast('OIDC test failed – see console.', 'error');
+    }
+  });
+}
+
 function onShareFolderToggle(row, checked) {
   const manage = qs(row, 'input[data-cap="manage"]');
   const viewAll = qs(row, 'input[data-cap="view"]');
@@ -983,12 +1054,33 @@ export function openAdminPanel() {
 
         document.getElementById("oidcContent").innerHTML = `
   <div class="form-text text-muted" style="margin-top:8px;">
-    <small>Client ID/Secret are never shown after saving. A green note indicates a value is saved. Click “Replace” to overwrite.</small>
+    <small>
+      Client ID/Secret are never shown after saving. A green note indicates a value is saved.
+      Click “Replace” to overwrite. For OIDC:
+      1) create an app in your IdP (Authentik, Keycloak, etc),
+      2) paste its issuer/base URL below,
+      3) configure the redirect URI in your IdP,
+      4) then run the test.
+      <br><br>
+      <strong>Security note:</strong>
+      In production, always configure your IdP and FileRise over
+      <code>https://</code>. Plain <code>http://</code> should only be used
+      for local testing or lab environments.
+    </small>
   </div>
 
-  <div class="form-group">
+  <div class="form-group" style="margin-top:8px;">
     <label for="oidcProviderUrl">${t("oidc_provider_url")}:</label>
-    <input type="text" id="oidcProviderUrl" class="form-control" value="${(window.currentOIDCConfig?.providerUrl || "")}" />
+    <input type="text" id="oidcProviderUrl" class="form-control"
+           placeholder="https://idp.example.com/application/o/filerise/"
+           value="${(window.currentOIDCConfig?.providerUrl || "")}" />
+    <small class="text-muted">
+      Use the issuer / base URL from your provider (without the
+      <code>/.well-known/openid-configuration</code> suffix).
+      <br>
+      Avoid <code>http://</code> in production – many IdPs and browsers will
+      block insecure OIDC redirects or set cookies incorrectly.
+    </small>
   </div>
 
   ${renderMaskedInput({ id: "oidcClientId", label: t("oidc_client_id"), hasValue: hasId })}
@@ -996,16 +1088,42 @@ export function openAdminPanel() {
 
   <div class="form-group">
     <label for="oidcRedirectUri">${t("oidc_redirect_uri")}:</label>
-    <input type="text" id="oidcRedirectUri" class="form-control" value="${(window.currentOIDCConfig?.redirectUri || "")}" />
+    <input type="text" id="oidcRedirectUri" class="form-control"
+           placeholder="https://your-filerise-host/auth/oidc/callback"
+           value="${(window.currentOIDCConfig?.redirectUri || "")}" />
+    <small class="text-muted">
+      This must exactly match the redirect/callback URL configured in your IdP application.
+    </small>
   </div>
 
   <div class="form-group">
     <label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label>
-    <input type="text" id="globalOtpauthUrl" class="form-control" value="${window.currentOIDCConfig?.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
+    <input type="text" id="globalOtpauthUrl" class="form-control"
+           value="${window.currentOIDCConfig?.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
+  </div>
+
+  <hr style="margin:10px 0;">
+
+  <div class="form-group">
+    <label>${tf("oidc_quick_test_label", "Quick OIDC connectivity test")}</label>
+    <p class="text-muted small mb-1">
+      This checks that FileRise can reach your provider’s
+      <code>/.well-known/openid-configuration</code> endpoint using the URL above.
+      Save settings first if you changed the URL.
+    </p>
+    <button type="button"
+            class="btn btn-sm btn-secondary"
+            id="oidcTestBtn">
+      ${tf("oidc_test_button", "Test OIDC discovery")}
+    </button>
+    <div id="oidcTestStatus"
+         class="small text-muted"
+         style="margin-top:4px;"></div>
   </div>
 `;
 
         wireReplaceButtons(document.getElementById("oidcContent"));
+        wireOidcTestButton(document.getElementById("oidcContent"));
 
         document.getElementById("shareLinksContent").textContent = t("loading") + "…";
 
@@ -1363,6 +1481,7 @@ export function openAdminPanel() {
         if (!hasId) idEl.value = window.currentOIDCConfig?.clientId || "";
         if (!hasSecret) secEl.value = window.currentOIDCConfig?.clientSecret || "";
         wireReplaceButtons(document.getElementById("oidcContent"));
+        wireOidcTestButton(document.getElementById("oidcContent"));
         document.getElementById("ooEnabled").checked = !!(config.onlyoffice && config.onlyoffice.enabled);
         document.getElementById("ooDocsOrigin").value = (config.onlyoffice && config.onlyoffice.docsOrigin) ? config.onlyoffice.docsOrigin : "";
         const ooCont = document.getElementById("onlyofficeContent");
