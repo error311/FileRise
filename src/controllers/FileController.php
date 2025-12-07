@@ -294,6 +294,209 @@ class FileController
         return $f !== '' && (bool)preg_match(REGEX_FILE_NAME, $f);
     }
 
+    /**
+ * Safe filesize() wrapper.
+ */
+private function filesizeSafe(string $path): int
+{
+    $s = @filesize($path);
+    return ($s === false) ? 0 : (int)$s;
+}
+
+/**
+ * Ensure UTF-8 text, collapsing some whitespace but keeping newlines.
+ */
+private function normalizeSnippetText(string $text): string
+{
+    if (function_exists('mb_detect_encoding')) {
+        $enc = mb_detect_encoding($text, ['UTF-8', 'ISO-8859-1', 'Windows-1252'], true);
+        if ($enc && $enc !== 'UTF-8') {
+            $text = mb_convert_encoding($text, 'UTF-8', $enc);
+        }
+    } else {
+        $text = @utf8_encode($text);
+    }
+
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+    $text = preg_replace("/[ \t]+/u", ' ', $text);
+
+    $lines = explode("\n", $text);
+    $lines = array_map(static fn($l) => trim($l), $lines);
+
+    return implode("\n", $lines);
+}
+
+/**
+ * Multibyte-safe substring with truncation flag.
+ */
+private function mbSubstrSafe(string $text, int $maxChars, bool &$truncated): string
+{
+    if ($maxChars <= 0) {
+        $truncated = ($text !== '');
+        return '';
+    }
+
+    if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+        if (mb_strlen($text, 'UTF-8') > $maxChars) {
+            $truncated = true;
+            return mb_substr($text, 0, $maxChars, 'UTF-8');
+        }
+        return $text;
+    }
+
+    if (strlen($text) > $maxChars) {
+        $truncated = true;
+        return substr($text, 0, $maxChars);
+    }
+
+    return $text;
+}
+
+/**
+ * Plain text / code files: read the first chunk only.
+ */
+private function extractTextFileSnippet(string $path, int $maxChars, bool &$truncated): string
+{
+    $truncated = false;
+
+    $fh = @fopen($path, 'rb');
+    if (!$fh) return '';
+
+    $chunkSize = 64 * 1024;
+    $data = @fread($fh, $chunkSize);
+    @fclose($fh);
+
+    if ($data === false) return '';
+
+    $text = $this->normalizeSnippetText($data);
+    return $this->mbSubstrSafe($text, $maxChars, $truncated);
+}
+
+/**
+ * DOCX: pull text from word/document.xml (<w:t> tags).
+ */
+private function extractDocxSnippet(string $path, int $maxChars, bool &$truncated): string
+{
+    if (!class_exists('ZipArchive')) return '';
+
+    $zip = new \ZipArchive();
+    if ($zip->open($path) !== true) {
+        return '';
+    }
+
+    $xml = $zip->getFromName('word/document.xml');
+    $zip->close();
+
+    if ($xml === false || $xml === '') {
+        return '';
+    }
+
+    $xml = preg_replace('/<w:br[^>]*\/>/i', "\n", $xml);
+    $xml = preg_replace('/<\/w:p>/i', "\n", $xml);
+
+    $textPieces = [];
+
+    if (preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/si', $xml, $m) && !empty($m[1])) {
+        foreach ($m[1] as $raw) {
+            $piece = strip_tags((string)$raw);
+            $piece = html_entity_decode($piece, ENT_QUOTES | ENT_XML1, 'UTF-8');
+            $piece = $this->normalizeSnippetText($piece);
+            if ($piece !== '') {
+                $textPieces[] = $piece;
+            }
+            if (strlen(implode("\n", $textPieces)) > ($maxChars * 2)) {
+                break;
+            }
+        }
+    }
+
+    $text = implode("\n", $textPieces);
+    $text = $this->normalizeSnippetText($text);
+
+    return $this->mbSubstrSafe($text, $maxChars, $truncated);
+}
+
+/**
+ * XLSX: get text from xl/sharedStrings.xml (<t> tags).
+ */
+private function extractXlsxSnippet(string $path, int $maxChars, bool &$truncated): string
+{
+    if (!class_exists('ZipArchive')) return '';
+
+    $zip = new \ZipArchive();
+    if ($zip->open($path) !== true) {
+        return '';
+    }
+
+    $xml = $zip->getFromName('xl/sharedStrings.xml');
+    $zip->close();
+
+    if ($xml === false || $xml === '') {
+        return '';
+    }
+
+    $textPieces = [];
+
+    if (preg_match_all('/<t[^>]*>(.*?)<\/t>/si', $xml, $m) && !empty($m[1])) {
+        foreach ($m[1] as $raw) {
+            $piece = strip_tags((string)$raw);
+            $piece = html_entity_decode($piece, ENT_QUOTES | ENT_XML1, 'UTF-8');
+            $piece = $this->normalizeSnippetText($piece);
+            if ($piece !== '') {
+                $textPieces[] = $piece;
+            }
+            if (strlen(implode("\n", $textPieces)) > ($maxChars * 2)) {
+                break;
+            }
+        }
+    }
+
+    $text = implode("\n", $textPieces);
+    $text = $this->normalizeSnippetText($text);
+
+    return $this->mbSubstrSafe($text, $maxChars, $truncated);
+}
+
+/**
+ * PPTX: use the first slide (ppt/slides/slide1.xml), <a:t> tags.
+ */
+private function extractPptxSnippet(string $path, int $maxChars, bool &$truncated): string
+{
+    if (!class_exists('ZipArchive')) return '';
+
+    $zip = new \ZipArchive();
+    if ($zip->open($path) !== true) {
+        return '';
+    }
+
+    $xml = $zip->getFromName('ppt/slides/slide1.xml');
+    $zip->close();
+
+    if ($xml === false || $xml === '') {
+        return '';
+    }
+
+    $textPieces = [];
+
+    if (preg_match_all('/<a:t[^>]*>(.*?)<\/a:t>/si', $xml, $m) && !empty($m[1])) {
+        foreach ($m[1] as $raw) {
+            $piece = strip_tags((string)$raw);
+            $piece = html_entity_decode($piece, ENT_QUOTES | ENT_XML1, 'UTF-8');
+            $piece = $this->normalizeSnippetText($piece);
+            if ($piece !== '') {
+                $textPieces[] = $piece;
+            }
+            if (strlen(implode("\n", $textPieces)) > ($maxChars * 2)) {
+                break;
+            }
+        }
+    }
+
+    $text = implode("\n", $textPieces);
+    $text = $this->normalizeSnippetText($text);
+
+    return $this->mbSubstrSafe($text, $maxChars, $truncated);
+}
     /* =========================
      * Actions
      * ========================= */
@@ -1075,6 +1278,127 @@ public function downloadZip()
             $this->_jsonOut(['error' => 'Internal server error while extracting ZIP.'], 500);
         } finally { $this->_jsonEnd(); }
     }
+
+    public function snippet(): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+
+    // Session -> snapshot user + perms -> release lock
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        @session_start();
+    }
+
+    $user  = (string)($_SESSION['username'] ?? '');
+    $perms = [
+        'role'    => $_SESSION['role']    ?? null,
+        'admin'   => $_SESSION['admin']   ?? null,
+        'isAdmin' => $_SESSION['isAdmin'] ?? null,
+    ];
+
+    @session_write_close();
+
+    // ---- Input ----
+    $folder = isset($_GET['folder']) ? (string)$_GET['folder'] : 'root';
+    $folder = str_replace('\\', '/', trim($folder));
+    $folder = ($folder === '' || $folder === 'root') ? 'root' : trim($folder, '/');
+
+    $file = isset($_GET['file']) ? (string)$_GET['file'] : '';
+    $file = trim($file);
+
+    if ($file === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing file parameter.']);
+        return;
+    }
+
+    // ---- ACL ----
+    if (class_exists('ACL')) {
+        $folderNorm = ACL::normalizeFolder($folder);
+        $canRead = ACL::canRead($user, $perms, $folderNorm)
+            || ACL::canReadOwn($user, $perms, $folderNorm);
+
+        if (!$canRead) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden']);
+            return;
+        }
+    }
+
+    // ---- Resolve file via model ----
+    try {
+        $info = FileModel::getDownloadInfo($folder, $file);
+    } catch (\Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Internal error.']);
+        return;
+    }
+
+    if (!is_array($info) || !empty($info['error'] ?? null)) {
+        http_response_code(404);
+        echo json_encode([
+            'error' => isset($info['error']) ? (string)$info['error'] : 'File not found.',
+        ]);
+        return;
+    }
+
+    $fullPath = $info['filePath'] ?? null;
+    if (!$fullPath || !is_file($fullPath) || !is_readable($fullPath)) {
+        http_response_code(404);
+        echo json_encode(['error' => 'File not found or not readable.']);
+        return;
+    }
+
+    // ---- Limits & supported formats ----
+    $maxChars      = 1200;              // backend cap
+    $maxOfficeSize = defined('OFFICE_SNIPPET_MAX_BYTES')
+    ? (int)OFFICE_SNIPPET_MAX_BYTES
+    : 5 * 1024 * 1024;
+    $truncated     = false;
+
+    $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+
+    $textExts = [
+        'txt', 'text', 'md', 'markdown', 'log',
+        'csv', 'tsv', 'tab',
+        'json', 'yml', 'yaml', 'xml', 'ini', 'cfg', 'conf', 'config',
+        'html', 'htm', 'css', 'js', 'ts', 'php',
+    ];
+
+    $officeDocExts = ['doc', 'docx', 'docm', 'dotx'];
+    $officeXlsExts = ['xls', 'xlsx', 'xlsm', 'xltx'];
+    $officePptExts = ['ppt', 'pptx', 'pptm', 'potx'];
+
+    $snippet = '';
+
+    if (in_array($ext, $textExts, true)) {
+        $snippet = $this->extractTextFileSnippet($fullPath, $maxChars, $truncated);
+
+    } elseif (in_array($ext, $officeDocExts, true)) {
+        if ($this->filesizeSafe($fullPath) <= $maxOfficeSize) {
+            $snippet = $this->extractDocxSnippet($fullPath, $maxChars, $truncated);
+        }
+
+    } elseif (in_array($ext, $officeXlsExts, true)) {
+        if ($this->filesizeSafe($fullPath) <= $maxOfficeSize) {
+            $snippet = $this->extractXlsxSnippet($fullPath, $maxChars, $truncated);
+        }
+
+    } elseif (in_array($ext, $officePptExts, true)) {
+        if ($this->filesizeSafe($fullPath) <= $maxOfficeSize) {
+            $snippet = $this->extractPptxSnippet($fullPath, $maxChars, $truncated);
+        }
+    }
+
+    if (!is_string($snippet)) {
+        $snippet = '';
+    }
+    $snippet = trim($snippet);
+
+    echo json_encode([
+        'snippet'   => $snippet,
+        'truncated' => $truncated,
+    ], JSON_UNESCAPED_UNICODE);
+}
 
     public function shareFile()
     {

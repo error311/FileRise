@@ -1110,6 +1110,175 @@ function isSafeFolderPath(p) {
   return /^(root|(?!\.)[^/\0]+)(\/(?!\.)[^/\0]+)*$/.test(String(p || ''));
 }
 
+function getAppZoomFactor() {
+  try {
+    const v = getComputedStyle(document.documentElement)
+      .getPropertyValue('--app-zoom')
+      .trim();
+    const n = parseFloat(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch {}
+  return 1;
+}
+
+function handleFolderDragStart(ev, fullPath, optEl) {
+  const dt = ev.dataTransfer;
+  if (!dt) return;
+
+  // Drag payload
+  try { dt.setData('application/x-filerise-folder', fullPath); } catch {}
+  try { dt.setData('text/plain', fullPath); } catch {}
+  dt.effectAllowed = 'move';
+
+  const row = optEl.closest('.folder-row') || optEl;
+  if (!row || !dt.setDragImage) return;
+
+  const isDark = document.body.classList.contains('dark-mode');
+
+  // --- Resolve folder colors from CSS vars (per-folder color picker) ---
+  let frontColor = '';
+  let backColor = '';
+  let strokeColor = '';
+  try {
+    const src = optEl || row;
+    if (src) {
+      const cs = getComputedStyle(src);
+      frontColor  = (cs.getPropertyValue('--filr-folder-front')  || '').trim();
+      backColor   = (cs.getPropertyValue('--filr-folder-back')   || '').trim();
+      strokeColor = (cs.getPropertyValue('--filr-folder-stroke') || '').trim();
+    }
+  } catch {
+    // fall through to defaults
+  }
+
+  // Fallback to your default palette if no custom color is set
+  if (!frontColor)  frontColor  = isDark ? '#facc6b' : '#e2b158';
+  if (!backColor)   backColor   = isDark ? '#f5d88a' : '#f0d084';
+  if (!strokeColor) strokeColor = isDark ? '#854d0e' : '#996a1e';
+
+  // --- Drag ghost pill ---
+  const ghost = document.createElement('div');
+  ghost.className = 'folder-drag-ghost';
+
+  const rowStyles = getComputedStyle(row);
+
+  Object.assign(ghost.style, {
+    position: 'fixed',
+    top: '-9999px',
+    left: '-9999px',
+    pointerEvents: 'none',
+    zIndex: '99999',
+
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '2px 10px',
+    borderRadius: '999px',
+    whiteSpace: 'nowrap',
+
+    fontFamily: rowStyles.fontFamily,
+    fontSize: rowStyles.fontSize,
+
+    background: isDark
+      ? 'rgba(32,33,36,0.96)'
+      : 'var(--filr-bg-elevated, #ffffff)',
+
+    color: isDark
+      ? '#f1f3f4'
+      : 'var(--filr-text, #111827)',
+
+    border: isDark
+      ? '1px solid rgba(255,255,255,0.14)'
+      : '1px solid rgba(15,23,42,0.12)',
+
+    // Kill the shadow completely so no square halo can appear
+    boxShadow: 'none',
+
+    // Clip children to the rounded shape
+    overflow: 'hidden',
+    backgroundClip: 'padding-box'
+  });
+
+  // Icon
+  const iconWrap = document.createElement('span');
+  iconWrap.className = 'folder-icon';
+  iconWrap.setAttribute('aria-hidden', 'true');
+  iconWrap.style.width = '20px';
+  iconWrap.style.height = '20px';
+  iconWrap.style.display = 'inline-block';
+
+  iconWrap.innerHTML = folderSVG('paper', { locked: false });
+
+  try {
+    const svg   = iconWrap.querySelector('svg');
+    const back  = svg?.querySelector('.folder-back');
+    const front = svg?.querySelector('.folder-front');
+    const lip   = svg?.querySelector('.lip-highlight');
+    const paper = svg?.querySelector('.paper');
+    const fold  = svg?.querySelector('.paper-fold');
+    const inks  = svg?.querySelectorAll('.paper-ink') || [];
+
+    // Match current folder color (from vars)
+    if (back) {
+      back.setAttribute('fill', backColor);
+    }
+    if (front) {
+      front.setAttribute('fill', frontColor);
+      front.setAttribute('stroke', strokeColor);
+      front.setAttribute('stroke-width', '.6');
+    }
+    if (lip) {
+      lip.setAttribute('stroke', 'rgba(255,255,255,.35)');
+      lip.setAttribute('stroke-width', '.9');
+      lip.setAttribute('fill', 'none');
+    }
+
+    // Paper: stay white in both themes
+    if (paper) {
+      paper.setAttribute('fill', '#ffffff');
+      paper.setAttribute('stroke', isDark ? '#4b5563' : '#d0d0d0');
+      paper.setAttribute('stroke-width', '.6');
+    }
+    if (fold) {
+      fold.setAttribute('fill', isDark ? '#374151' : '#ececec');
+    }
+    inks.forEach(line => {
+      line.setAttribute('stroke', isDark ? '#60a5fa' : '#4da3ff');
+      line.setAttribute('stroke-width', '.9');
+    });
+  } catch {
+    // non-fatal: worst case the icon is default-colored
+  }
+
+  // Label
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'folder-label';
+  labelSpan.style.color = 'inherit';
+  const fromRow = row.querySelector('.folder-label');
+  labelSpan.textContent =
+    (fromRow && fromRow.textContent) ||
+    fullPath.split('/').pop() ||
+    fullPath;
+
+  ghost.append(iconWrap, labelSpan);
+  document.body.appendChild(ghost);
+
+  // Offset so cursor isn't dead center
+  const offsetX = 14;
+  const offsetY = 12;
+
+  try {
+    dt.setDragImage(ghost, offsetX, offsetY);
+  } catch {
+    // fall back to browser default ghost
+  }
+
+  // Cleanup after snapshot
+  setTimeout(() => {
+    if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+  }, 0);
+}
+
 function makeChildLi(parentPath, item) {
   const it = normalizeItem(item);
   if (!it) return document.createElement('li');
@@ -1175,10 +1344,9 @@ function makeChildLi(parentPath, item) {
   // Wire DnD / click the same as before
   if (!locked) {
     opt.addEventListener('dragstart', (ev) => {
-      try { ev.dataTransfer.setData('application/x-filerise-folder', fullPath); } catch {}
-      try { ev.dataTransfer.setData('text/plain', fullPath); } catch {}
-      ev.dataTransfer.effectAllowed = 'move';
+      handleFolderDragStart(ev, fullPath, opt);
     });
+    opt.addEventListener('dragover', folderDragOverHandler);
     opt.addEventListener('dragover', folderDragOverHandler);
     opt.addEventListener('dragleave', folderDragLeaveHandler);
     opt.addEventListener('drop', (e) => handleDropOnFolder(e, fullPath));
@@ -1214,6 +1382,76 @@ async function carryFolderColor(sourceFolder, newPath) {
 }
 
 /* ----------------------
+   Shared tree sync after a folder move
+   Used by modal / inline moves so tree + selection stay in sync.
+----------------------*/
+export async function syncTreeAfterFolderMove(sourceFolder, destination) {
+  if (!sourceFolder || !destination) return;
+
+  const base = sourceFolder.split('/').pop();
+  const newPath = (destination === 'root' ? '' : destination + '/') + base;
+
+  // carry color (best-effort)
+  await carryFolderColor(sourceFolder, newPath);
+
+  // migrate expansion state + keep parents open
+  migrateExpansionStateOnMove(sourceFolder, newPath, [destination, getParentFolder(destination)]);
+
+  const srcParent = getParentFolder(sourceFolder);
+  const dstParent = destination;
+
+  // clear caches so icons/chevrons/counts are recomputed
+  invalidateFolderCaches(srcParent);
+  invalidateFolderCaches(dstParent);
+  clearPeekCache([srcParent, dstParent, sourceFolder, newPath]);
+
+  // re-render src + dest ULs incrementally
+  const srcUl = getULForFolder(srcParent);
+  const dstUl = getULForFolder(dstParent);
+
+  if (srcUl) {
+    srcUl._renderedOnce = false;
+    srcUl.innerHTML = '';
+    await ensureChildrenLoaded(srcParent, srcUl);
+  }
+  if (dstUl) {
+    dstUl._renderedOnce = false;
+    dstUl.innerHTML = '';
+    await ensureChildrenLoaded(dstParent, dstUl);
+  }
+
+  // dest definitely has a child now → chevron on
+  updateToggleForOption(dstParent, true);
+  ensureFolderIcon(dstParent);
+
+  // source may have lost its last child → recompute
+  const _srcUlLive = getULForFolder(srcParent);
+  updateToggleForOption(
+    srcParent,
+    !!(_srcUlLive && _srcUlLive.querySelector(':scope > li.folder-item'))
+  );
+
+  // restore any open branches we had saved
+  await expandAndLoadSavedState();
+
+  // update currentFolder + sticky lastOpened
+  if (window.currentFolder === sourceFolder) {
+    window.currentFolder = newPath;
+  } else if (window.currentFolder && window.currentFolder.startsWith(sourceFolder + '/')) {
+    const suffix = window.currentFolder.slice(sourceFolder.length); // includes leading '/'
+    window.currentFolder = newPath + suffix;
+  }
+  localStorage.setItem('lastOpenedFolder', window.currentFolder || newPath);
+
+  // refresh icons for parents
+  refreshFolderIcon(srcParent);
+  refreshFolderIcon(dstParent);
+
+  // finally select the new path (also reloads file list + breadcrumb)
+  selectFolder(window.currentFolder || newPath);
+}
+
+/* ----------------------
    Handle drop (files or folders)
 ----------------------*/
 function handleDropOnFolder(event, dropFolder) {
@@ -1224,94 +1462,91 @@ function handleDropOnFolder(event, dropFolder) {
   try {
     const jsonStr = event.dataTransfer.getData("application/json") || "";
     if (jsonStr) dragData = JSON.parse(jsonStr);
-  } catch { /* noop */ }
+  } catch {
+    dragData = null;
+  }
 
-  // FOLDER->FOLDER move fallback
-  if (!dragData) {
-    const plain = (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
-      (event.dataTransfer && event.dataTransfer.getData("text/plain")) || "";
-    const sourceFolder = String(plain || "").trim();
+  // --- NEW: folder drag coming from the inline file list (JSON payload) ---
+  if (dragData && dragData.dragType === 'folder' && dragData.folder) {
+    const sourceFolder = String(dragData.folder || "").trim();
     if (!sourceFolder || sourceFolder === "root") return;
-    if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
-      showToast("Invalid destination.", 4000); return;
-    }
 
-    // snapshot current expansion state (to re-apply later)
-    const preState = loadFolderTreeState();
+    // prevent moving into self/descendant
+    if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
+      showToast("Invalid destination.", 4000);
+      return;
+    }
 
     fetchWithCsrf("/api/folder/moveFolder.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
-    }).then(safeJson).then(async (data) => {
-      if (data && !data.error) {
-        const base = sourceFolder.split("/").pop();
-        const newPath = (dropFolder === "root" ? "" : dropFolder + "/") + base;
-
-        // carry color
-        await carryFolderColor(sourceFolder, newPath);
-
-        // migrate expansion + keep dest open
-        migrateExpansionStateOnMove(sourceFolder, newPath, [dropFolder, getParentFolder(dropFolder)]);
-
-        // refresh parents (incremental)
-        const srcParent = getParentFolder(sourceFolder);
-        const dstParent = dropFolder;
-        invalidateFolderCaches(srcParent);
-        invalidateFolderCaches(dstParent);
-        clearPeekCache([srcParent, dstParent, sourceFolder, newPath]);
-
-        const srcUl = getULForFolder(srcParent);
-        const dstUl = getULForFolder(dstParent);
-        if (srcUl) { srcUl._renderedOnce = false; srcUl.innerHTML = ""; await ensureChildrenLoaded(srcParent, srcUl); }
-        if (dstUl) { dstUl._renderedOnce = false; dstUl.innerHTML = ""; await ensureChildrenLoaded(dstParent, dstUl); }
-
-        // destination now definitely has a child folder → force chevron immediately
-        updateToggleForOption(dstParent, true);
-        ensureFolderIcon(dstParent);
-
-        // source may have lost its last child folder → recompute from the live DOM
-        const _srcUlLive = getULForFolder(srcParent);
-        updateToggleForOption(srcParent, !!(_srcUlLive && _srcUlLive.querySelector(':scope > li.folder-item')));
-
-        // re-apply all saved expansions so nothing "closes"
-        await expandAndLoadSavedState();
-
-        // update selection/current folder (if you were inside moved subtree)
-        if (window.currentFolder) {
-          if (window.currentFolder === sourceFolder) {
-            window.currentFolder = newPath;
-          } else if (window.currentFolder.startsWith(sourceFolder + "/")) {
-            const suffix = window.currentFolder.slice(sourceFolder.length); // includes leading '/'
-            window.currentFolder = newPath + suffix;
-          }
-          localStorage.setItem("lastOpenedFolder", window.currentFolder);
+    })
+      .then(safeJson)
+      .then(async (data) => {
+        if (data && !data.error) {
+          showToast(`Folder moved to ${dropFolder}!`);
+          // reuse the shared tree-sync helper so icons, chevrons, selection, and file list all match
+          await syncTreeAfterFolderMove(sourceFolder, dropFolder);
+        } else {
+          showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
         }
+      })
+      .catch(err => {
+        console.error("Error moving folder:", err);
+        showToast("Error moving folder", 5000);
+      });
 
-        // icons + breadcrumb + file list
-        refreshFolderIcon(srcParent);
-        refreshFolderIcon(dstParent);
-        showToast(`Folder moved to ${dropFolder}!`);
-        updateBreadcrumbTitle(window.currentFolder || newPath);
-        loadFileList(window.currentFolder || newPath);
-
-        // ensure the moved node is visible & selected
-        selectFolder(window.currentFolder || newPath);
-
-      } else {
-        showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
-      }
-    }).catch(err => {
-      console.error("Error moving folder:", err);
-      showToast("Error moving folder", 5000);
-    });
     return;
   }
 
+  // --- existing FOLDER->FOLDER fallback (tree → tree drag using plain text) ---
+  let plainSource = "";
+  try {
+    plainSource =
+      (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
+      (event.dataTransfer && event.dataTransfer.getData("text/plain")) ||
+      "";
+  } catch {
+    plainSource = "";
+  }
+
+  if (!dragData && plainSource) {
+    const sourceFolder = String(plainSource || "").trim();
+    if (!sourceFolder || sourceFolder === "root") return;
+    if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
+      showToast("Invalid destination.", 4000);
+      return;
+    }
+
+    fetchWithCsrf("/api/folder/moveFolder.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
+    })
+      .then(safeJson)
+      .then(async (data) => {
+        if (data && !data.error) {
+          showToast(`Folder moved to ${dropFolder}!`);
+          await syncTreeAfterFolderMove(sourceFolder, dropFolder);
+        } else {
+          showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
+        }
+      })
+      .catch(err => {
+        console.error("Error moving folder:", err);
+        showToast("Error moving folder", 5000);
+      });
+
+    return;
+  }
+
+  // --- existing FILE(S) move branch (unchanged) ---
   // File(s) move
-  const filesToMove = dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []);
-  if (filesToMove.length === 0) return;
+  const filesToMove = dragData && (dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []));
+  if (!filesToMove || filesToMove.length === 0) return;
 
   fetchWithCsrf("/api/file/moveFiles.php", {
     method: "POST",

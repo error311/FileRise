@@ -221,7 +221,12 @@ function repaintStripIcon(folder) {
   const kind = iconSpan.dataset.kind || 'empty';
   iconSpan.innerHTML = folderSVG(kind);
 }
-const TEXT_PREVIEW_MAX_BYTES = 120 * 1024; // ~120 KB
+const TEXT_PREVIEW_MAX_BYTES = 512 * 1024;
+const OFFICE_SNIPPET_EXTS = new Set([
+  'doc', 'docx', 'docm', 'dotx',
+  'xls', 'xlsx', 'xlsm', 'xltx',
+  'ppt', 'pptx', 'pptm', 'potx'
+]);
 const _fileSnippetCache = new Map();
 
 function getFileExt(name) {
@@ -235,31 +240,111 @@ async function fillFileSnippet(file, snippetEl) {
   snippetEl.style.display = "none";
 
   const folder = file.folder || window.currentFolder || "root";
-  const key = `${folder}::${file.name}`;
+  const key    = `${folder}::${file.name}`;
+  const ext    = getFileExt(file.name || "");
+  const bytes  = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+  const isOffice = OFFICE_SNIPPET_EXTS.has(ext);
 
-  if (!canEditFile(file.name)) {
-    // No text preview possible for this type – cache the fact and bail
-    _fileSnippetCache.set(key, "");
-    return;
-  }
-
-  const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
-  if (bytes != null && bytes > TEXT_PREVIEW_MAX_BYTES) {
-    // File is too large to safely preview inline
-    const msg = t("no_preview_available") || "No preview available";
-    snippetEl.style.display = "block";
-    snippetEl.textContent = msg;
-    _fileSnippetCache.set(key, msg);
-    return;
-  }
-
-  // Use cache if we have it
+  // Reuse cache if we have it
   if (_fileSnippetCache.has(key)) {
     const cached = _fileSnippetCache.get(key);
     if (cached) {
       snippetEl.textContent = cached;
       snippetEl.style.display = "block";
     }
+    return;
+  }
+
+  // ============================
+  // OFFICE DOCS (DOCX/XLSX/PPTX)
+  // ============================
+  if (isOffice) {
+    // Size guard (avoid parsing massive Office files)
+    const MAX_OFFICE_BYTES = 20 * 1024 * 1024; // 20 MiB
+    if (bytes != null && bytes > MAX_OFFICE_BYTES) {
+      const msg = t("no_preview_available") || "No preview available";
+      snippetEl.style.display = "block";
+      snippetEl.textContent   = msg;
+      _fileSnippetCache.set(key, msg);
+      return;
+    }
+
+    snippetEl.style.display = "block";
+    snippetEl.textContent   = t("loading") || "Loading...";
+
+    try {
+      const url = `/api/file/snippet.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(file.name)}&t=${Date.now()}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw 0;
+
+      const j = await res.json().catch(() => ({}));
+      let text = (j && typeof j.snippet === "string") ? j.snippet : "";
+      text = text || "";
+
+      if (!text) {
+        snippetEl.textContent = "";
+        snippetEl.style.display = "none";
+        _fileSnippetCache.set(key, "");
+        return;
+      }
+
+      // Same visual rule as before: 6 lines, 600 chars, but let lines be a bit wider
+      const MAX_LINES       = 6;
+      const MAX_CHARS_TOTAL = 600;
+      const MAX_LINE_CHARS  = 60;
+
+      const rawLines = text.split(/\r?\n/);
+
+      let visibleLines = rawLines.slice(0, MAX_LINES).map(line =>
+        _trimLabel(line, MAX_LINE_CHARS)
+      );
+
+      let truncated =
+        rawLines.length > MAX_LINES ||
+        visibleLines.some((line, idx) => {
+          const orig = rawLines[idx] || "";
+          return orig.length > MAX_LINE_CHARS;
+        });
+
+      let snippet = visibleLines.join("\n");
+
+      if (snippet.length > MAX_CHARS_TOTAL) {
+        snippet = snippet.slice(0, MAX_CHARS_TOTAL);
+        truncated = true;
+      }
+
+      snippet = snippet.trim();
+      let finalSnippet = snippet || "(empty file)";
+      if (truncated || j.truncated === true) {
+        finalSnippet += "\n…";
+      }
+
+      _fileSnippetCache.set(key, finalSnippet);
+      snippetEl.textContent = finalSnippet;
+
+    } catch {
+      snippetEl.textContent = "";
+      snippetEl.style.display = "none";
+      _fileSnippetCache.set(key, "");
+    }
+    return;
+  }
+
+  // ============================
+  // EXISTING TEXT FILE BEHAVIOR
+  // ============================
+  if (!canEditFile(file.name)) {
+    // No text preview possible for this type – cache the fact and bail
+    _fileSnippetCache.set(key, "");
+    return;
+  }
+
+  if (bytes != null && bytes > TEXT_PREVIEW_MAX_BYTES) {
+    // File is too large to safely preview inline
+    const msg = t("no_preview_available") || "No preview available";
+    snippetEl.style.display = "block";
+    snippetEl.textContent = msg;
+    _fileSnippetCache.set(key, msg);
     return;
   }
 
@@ -274,11 +359,10 @@ async function fillFileSnippet(file, snippetEl) {
 
     const MAX_LINES       = 6;
     const MAX_CHARS_TOTAL = 600;
-    const MAX_LINE_CHARS  = 20;   // ← per-line cap (tweak to taste)
+    const MAX_LINE_CHARS  = 20;
 
     const allLines = text.split(/\r?\n/);
 
-    // Take the first few lines and trim each so they don't wrap forever
     let visibleLines = allLines.slice(0, MAX_LINES).map(line =>
       _trimLabel(line, MAX_LINE_CHARS)
     );
@@ -292,7 +376,6 @@ async function fillFileSnippet(file, snippetEl) {
 
     let snippet = visibleLines.join("\n");
 
-    // Also enforce an overall character ceiling just in case
     if (snippet.length > MAX_CHARS_TOTAL) {
       snippet = snippet.slice(0, MAX_CHARS_TOTAL);
       truncated = true;
@@ -365,12 +448,16 @@ export function cancelHoverPreview() {
 }
 
 function isHoverPreviewDisabled() {
-  // Live flag from user panel
   if (window.disableHoverPreview === true) return true;
 
-  // Fallback to localStorage (e.g. on first page load)
+  // Disable on touch / coarse pointer devices
   try {
-    return localStorage.getItem('disableHoverPreview') === 'true';
+    const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    if (coarse) return true;
+  } catch {}
+
+  try {
+    return localStorage.getItem("disableHoverPreview") === "true";
   } catch {
     return false;
   }
@@ -539,6 +626,32 @@ function hideHoverPreview() {
   cancelHoverPreview();
 }
 
+// allow ESC to quickly dismiss the hover preview
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" || e.key === "Esc") {
+    hideHoverPreview();
+  }
+});
+
+function parentFolderOf(path) {
+  if (!path || path === 'root') return 'root';
+  const parts = String(path).split('/').filter(Boolean);
+  if (parts.length <= 1) return 'root';
+  parts.pop();
+  return parts.join('/');
+}
+
+function invalidateFolderStats(folders) {
+  try {
+    const arr = Array.isArray(folders) ? folders : [folders];
+    window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
+      detail: { folders: arr }
+    }));
+  } catch {
+    // best effort only
+  }
+}
+
 function applyFolderStripLayout(strip) {
   if (!strip) return;
   const hasItems = strip.querySelector('.folder-item') !== null;
@@ -650,6 +763,20 @@ function fetchFolderStats(folder) {
 // --- Folder "peek" cache (first few child folders/files) ---
 const FOLDER_PEEK_MAX_ITEMS = 6;
 const _folderPeekCache = new Map();
+
+// Listen for invalidation events from drag/drop, etc.
+window.addEventListener('folderStatsInvalidated', (e) => {
+  const detail = e.detail || {};
+  let folders = detail.folders || detail.folder || null;
+  if (!folders) return;
+  if (!Array.isArray(folders)) folders = [folders];
+
+  folders.forEach(f => {
+    if (!f) return;
+    _folderStatsCache.delete(f);
+    _folderPeekCache.delete(f);
+  });
+});
 
 /**
  * Best-effort peek: first few direct child folders + files for a folder.
@@ -1080,8 +1207,9 @@ fetchFolderPeek(folderPath).then(result => {
     const url    = apiFileUrl(folder, file.name, true);
     const canTextPreview = canEditFile(file.name);
 
-    // Left: image preview OR text snippet OR "No preview"
+    // Left: image / video preview OR text snippet OR "No preview"
     if (isImage) {
+      // --- image thumbnail
       thumbEl.style.minHeight = "140px";
       const img = document.createElement("img");
       img.src = url;
@@ -1090,6 +1218,68 @@ fetchFolderPeek(folderPath).then(result => {
       img.style.maxHeight = "120px";
       img.style.display   = "block";
       thumbEl.appendChild(img);
+
+    } else if (isVideo) {
+      // --- NEW: lightweight video thumbnail ---
+      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+      const MAX_VIDEO_PREVIEW_BYTES = 1 * 1024 * 1024 * 1024; // 1 GiB cap (just metadata anyway)
+    
+      if (bytes == null || bytes <= MAX_VIDEO_PREVIEW_BYTES) {
+        thumbEl.style.minHeight = "140px";
+    
+        const video = document.createElement("video");
+        video.src = url;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "metadata"; // only fetch metadata + keyframe, not full file
+        video.controls = false;
+        video.style.maxWidth  = "200px";
+        video.style.maxHeight = "120px";
+        video.style.display   = "block";
+        video.style.borderRadius = "6px";
+    
+        // Try to seek a tiny bit in so we don't get a black frame
+        video.addEventListener("loadedmetadata", () => {
+          try {
+            const dur = video.duration;
+            if (Number.isFinite(dur) && dur > 1) {
+              video.currentTime = Math.min(1, dur / 3);
+            }
+          } catch {
+            // best effort; ignore errors
+          }
+        });
+    
+        // graceful fallback if the video can't load
+        video.addEventListener("error", () => {
+          const msg = t("no_preview_available") || "No preview available";
+          thumbEl.innerHTML = `
+            <div style="
+              padding:6px 8px;
+              border-radius:6px;
+              font-size:0.8rem;
+              text-align:center;
+              background-color:rgba(15,23,42,0.92);
+              color:#e5e7eb;
+              max-width:100%;
+            ">
+              ${escapeHTML(msg)}
+            </div>
+          `;
+        });
+    
+        thumbEl.appendChild(video);
+    
+        const overlay = document.createElement("div");
+        overlay.textContent = "▶";
+        overlay.style.position = "absolute";
+        overlay.style.fontSize = "1.6rem";
+        overlay.style.opacity = "0.85";
+        thumbEl.appendChild(overlay);
+    
+      } else {
+        // too big for preview → fall through to "No preview available"
+      }
     }
 
     // Icon type for right column
@@ -1186,26 +1376,26 @@ fetchFolderPeek(folderPath).then(result => {
 
     propsEl.innerHTML = props.join("");
 
-    // Text snippet (left) for smaller text/code files
-    if (canTextPreview) {
-      fillFileSnippet(file, snippetEl);
-    } else if (!isImage) {
-      // Non-image, non-text → explicit "No preview"
-      const msg = t("no_preview_available") || "No preview available";
-      thumbEl.innerHTML = `
-        <div style="
-          padding:6px 8px;
-          border-radius:6px;
-          font-size:0.8rem;
-          text-align:center;
-          background-color:rgba(15,23,42,0.92);
-          color:#e5e7eb;
-          max-width:100%;
-        ">
-          ${escapeHTML(msg)}
-        </div>
-      `;
-    }
+        // Text snippet (left) for smaller text/code files
+        if (canTextPreview) {
+          fillFileSnippet(file, snippetEl);
+        } else if (!isImage && !isVideo) {
+          // Non-image, non-video, non-text → explicit "No preview"
+          const msg = t("no_preview_available") || "No preview available";
+          thumbEl.innerHTML = `
+            <div style="
+              padding:6px 8px;
+              border-radius:6px;
+              font-size:0.8rem;
+              text-align:center;
+              background-color:rgba(15,23,42,0.92);
+              color:#e5e7eb;
+              max-width:100%;
+            ">
+              ${escapeHTML(msg)}
+            </div>
+          `;
+        }
   }
 }
 
@@ -1858,6 +2048,7 @@ window.updateRowHighlight = updateRowHighlight;
 
 export async function loadFileList(folderParam) {
   await initOnlyOfficeCaps();
+  hideHoverPreview();
   const reqId = ++__fileListReqSeq; // latest call wins
   const folder = folderParam || "root";
   const fileListContainer = document.getElementById("fileList");
@@ -2151,6 +2342,102 @@ export async function loadFileList(folderParam) {
   }
 }
 
+function makeInlineFolderDragImage(labelText) {
+  const isDark = document.body.classList.contains('dark-mode');
+
+  const textColor = isDark
+    ? '#f1f3f4'
+    : 'var(--filr-text, #111827)';
+
+  const bgColor = isDark
+    ? 'rgba(32,33,36,0.96)'
+    : 'var(--filr-bg-elevated, #ffffff)';
+
+  const borderColor = isDark
+    ? 'rgba(255,255,255,0.14)'
+    : 'rgba(15,23,42,0.12)';
+
+  const wrap = document.createElement('div');
+  Object.assign(wrap.style, {
+    position: 'fixed',
+    top: '-9999px',
+    left: '-9999px',
+    zIndex: '99999',
+
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+
+    padding: '7px 16px',
+    minHeight: '32px',
+    maxWidth: '420px',
+    whiteSpace: 'nowrap',
+
+    borderRadius: '999px',
+    overflow: 'hidden',
+    backgroundClip: 'padding-box',
+
+    background: bgColor,
+    color: textColor,
+    border: `1px solid ${borderColor}`,
+    boxShadow: '0 4px 18px rgba(0,0,0,0.18)',
+
+    fontSize: '14px',
+    lineHeight: '1.4',
+    fontWeight: '500',
+
+    pointerEvents: 'none'
+  });
+
+  const icon = document.createElement('span');
+  icon.className = 'material-icons';
+  icon.textContent = 'folder';
+  Object.assign(icon.style, {
+    fontSize: '20px',
+    lineHeight: '1',
+    flexShrink: '0',
+    color: textColor
+  });
+
+  const label = document.createElement('span');
+  const txt = String(labelText || '');
+  label.textContent = txt.length > 60 ? (txt.slice(0, 57) + '…') : txt;
+  Object.assign(label.style, {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  });
+
+  wrap.appendChild(icon);
+  wrap.appendChild(label);
+  document.body.appendChild(wrap);
+
+  return wrap;
+}
+
+function folderRowDragStartHandler(event, fullPath) {
+  try { cancelHoverPreview(); } catch {}
+
+  if (!fullPath) return;
+
+  const srcParent = parentFolderOf(fullPath);
+
+  const payload = {
+    dragType: 'folder',
+    folder: fullPath,
+    sourceFolder: srcParent
+  };
+
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('application/json', JSON.stringify(payload));
+  event.dataTransfer.setData('text/plain', fullPath);
+
+  const label = fullPath.split('/').pop() || fullPath;
+  const ghost = makeInlineFolderDragImage(label);
+  event.dataTransfer.setDragImage(ghost, 10, 10);
+  setTimeout(() => {
+    try { document.body.removeChild(ghost); } catch {}
+  }, 0);
+}
 
 function injectInlineFolderRows(fileListContent, folder, pageSubfolders) {
   const table = fileListContent.querySelector('table.filr-table');
@@ -2229,6 +2516,10 @@ function injectInlineFolderRows(fileListContent, folder, pageSubfolders) {
     const tr = document.createElement("tr");
     tr.classList.add("folder-row");
     tr.dataset.folder = sf.full;
+
+      // Allow dragging this folder row itself (for folder → folder moves)
+  tr.setAttribute('draggable', 'true');
+  tr.addEventListener('dragstart', e => folderRowDragStartHandler(e, sf.full));
   
     for (let i = 0; i < colCount; i++) {
       const td = document.createElement("td");
@@ -2306,6 +2597,7 @@ if (headerClass) {
   
     // click → navigate, same as before
     tr.addEventListener("click", e => {
+      hideHoverPreview();
       // If the click came from the 3-dot button, let the context menu logic handle it
       if (e.target.closest(".btn-actions-ellipsis")) {
         return;
@@ -3294,6 +3586,8 @@ export function renderGalleryView(folder, container) {
             alt="${escapeHTML(file.name)}"
             style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
       }
+    } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(file.name)) {
+      thumbnail = `<span class="material-icons gallery-icon">movie</span>`;
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
       thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
     } else {

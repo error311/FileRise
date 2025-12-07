@@ -380,7 +380,30 @@ function attachOnlyOfficeCspHelper(container) {
   function buildCspNginx(originRaw) {
     const o = (originRaw || 'https://your-onlyoffice-server.example.com').replace(/\/+$/, '');
     const api = `${o}/web-apps/apps/api/documents/api.js`;
-    return `add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' '${INLINE_SHA}' ${o} ${api}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${o}; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' ${o}" always;`;
+  
+    const cspValue =
+      `default-src 'self'; ` +
+      `base-uri 'self'; ` +
+      `frame-ancestors 'self'; ` +
+      `object-src 'none'; ` +
+      `script-src 'self' '${INLINE_SHA}' ${o} ${api}; ` +
+      `style-src 'self' 'unsafe-inline'; ` +
+      `img-src 'self' data: blob:; ` +
+      `font-src 'self'; ` +
+      `connect-src 'self' ${o}; ` +
+      `media-src 'self' blob:; ` +
+      `worker-src 'self' blob:; ` +
+      `form-action 'self'; `
+      `frame-src 'self' ${o}`;
+  
+    return [
+      '# Drop upstream (Apache/.htaccess) headers that conflict with ONLYOFFICE',
+      'proxy_hide_header X-Frame-Options;',
+      'proxy_hide_header Content-Security-Policy;',
+      '',
+      '# Replace with an ONLYOFFICE-aware CSP at the proxy',
+      `add_header Content-Security-Policy "${cspValue}" always;`
+    ].join('\n');
   }
 
   const ooDocsInput = document.getElementById('ooDocsOrigin');

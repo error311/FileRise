@@ -1,5 +1,34 @@
 # Changelog
 
+## Changes 12/7/2025 (v2.3.7)
+
+release(v2.3.7): hover snippets, inline folder drag, OnlyOffice & CSP polish
+
+- Add `/api/file/snippet.php` + `FileController::snippet()` to return short, ACL-aware text snippets for hover previews (txt/code, CSV, and Office docs). Uses `FileModel::getDownloadInfo()` for path safety, enforces byte caps via `OFFICE_SNIPPET_MAX_BYTES`, and normalizes to UTF-8 with a `truncated` flag.  
+- Extend hover snippets in `fileListView.js`:
+  - Text preview cap set to 512 KB, with caching keyed by `folder::file`.
+  - New Office snippet support (DOC/DOCX, XLS/XLSX, PPT/PPTX) via the backend endpoint instead of downloading whole files.
+  - Hover preview auto-disabled on touch / coarse-pointer devices, and can be dismissed via `Esc`.
+  - Hover preview is hidden when changing folders / reloading the file list to avoid stale overlays.
+- Add lightweight video previews in the hover panel + gallery:
+  - Inline `<video>` thumbnail for common formats (mp4, mkv, webm, mov, ogv, mov) using `preload="metadata"` and a quick seek, with a graceful text fallback if the video cannot load.
+  - New movie icon in the gallery view for video files.
+- Allow dragging *inline folder rows* into the folder tree / drop targets:
+  - New `folderRowDragStartHandler()` and JSON drag payload (`dragType: 'folder'`) wired from `fileListView.js`.
+  - Shared `syncTreeAfterFolderMove(sourceFolder, destination)` helper in `folderManager.js` keeps the tree, expansion state, `currentFolder`, `lastOpenedFolder`, chevrons, icons, and peek caches in sync after any folder move (tree→tree, inline→tree, quick-move).
+- Improve drag-and-drop UX for both files and folders:
+  - New pill-style drag ghosts for files (`fileDragDrop.js`) and folders (`folderManager.js` + inline folders) that respect light/dark mode, use rounded pills, and avoid the grey square halo.
+  - Folder and file moves now emit a `folderStatsInvalidated` event so folder stats/peek caches stay in sync for both source and destination parents.
+- OnlyOffice integration polish in `fileEditor.js`:
+  - Warm overlay (`.oo-warm-overlay`) now has `pointer-events: none` so CSV / options dialogs are clickable.
+  - `onRequestClose`, `onAppReady`, and `onDocumentReady` from PHP config are preserved and chained instead of being overwritten; the warm overlay is cleared as soon as OnlyOffice signals the UI is ready.
+- Admin OnlyOffice CSP helper update in `adminOnlyOffice.js`:
+  - Generated nginx snippet now explicitly hides upstream `X-Frame-Options` and `Content-Security-Policy` headers and replaces them with a single OnlyOffice-aware CSP for the configured Docs origin (script/connect/frame/media/worker rules included).
+- Add `OFFICE_SNIPPET_MAX_BYTES` constant (default 5 MiB) in `config.php` to cap Office snippet parsing.
+- Minor UX copy tweak: “No files or folders to display.” → “No files or folders.” in `i18n.js`.
+
+---
+
 ## Changes 12/6/2025 (v2.3.6)
 
 release(v2.3.6): add non-zip multi-download, richer hover preview/peak, modified sort default

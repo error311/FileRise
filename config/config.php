@@ -34,6 +34,9 @@ define('ONLYOFFICE_JWT_SECRET', 'test123456');
 define('ONLYOFFICE_DOCS_ORIGIN', 'http://192.168.1.61'); // your Document Server
 define('ONLYOFFICE_DEBUG', true);
 */
+if (!defined('OFFICE_SNIPPET_MAX_BYTES')) {
+    define('OFFICE_SNIPPET_MAX_BYTES', 5 * 1024 * 1024); // 5 MiB
+}
 
 if (!defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD')) {
     define('OIDC_TOKEN_ENDPOINT_AUTH_METHOD', 'client_secret_basic'); // default

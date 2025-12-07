@@ -345,7 +345,7 @@ const translations = {
     "preview_not_available": "Preview is not available for this file type.",
     "storage_pro_bundle_outdated": "Please upgrade to the latest FileRise Pro bundle to use the Storage explorer.",
     "svg_preview_disabled": "SVG preview is disabled for now for security reasons.",
-    "no_files_or_folders": "No files or folders to display.",
+    "no_files_or_folders": "No files or folders.",
     "no_preview_available": "No preview available.",
     "more_actions": "More Actions",
     "folder_actions": "Folder Actions",

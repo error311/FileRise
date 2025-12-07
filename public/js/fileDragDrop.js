@@ -1,10 +1,35 @@
 // fileDragDrop.js
 import { showToast } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList, cancelHoverPreview } from './fileListView.js?v={{APP_QVER}}';
+import {
+  getParentFolder,
+  syncTreeAfterFolderMove,
+} from './folderManager.js?v={{APP_QVER}}';
 
 /* ---------------- helpers ---------------- */
 function getRowEl(el) {
   return el?.closest('tr[data-file-name], .gallery-card[data-file-name]') || null;
+}
+function parentFolderOf(path) {
+  if (!path || path === 'root') return 'root';
+  const parts = String(path).split('/').filter(Boolean);
+  if (parts.length <= 1) return 'root';
+  parts.pop();
+  return parts.join('/');
+}
+
+function invalidateFolderStats(folders) {
+  try {
+    const list = Array.isArray(folders) ? folders : [folders];
+    window.dispatchEvent(
+      new CustomEvent('folderStatsInvalidated', {
+        detail: { folders: list }
+      })
+    );
+  } catch (e) {
+    // best-effort only; never break the move on this
+    console.warn('folderStatsInvalidated failed', e);
+  }
 }
 function getNameFromAny(el) {
   const row = getRowEl(el);
@@ -24,31 +49,73 @@ function getSelectedFileNames() {
   return Array.from(new Set(names));
 }
 function makeDragImage(labelText, iconName = 'insert_drive_file') {
+  const isDark = document.body.classList.contains('dark-mode');
+
+  const textColor = isDark
+    ? '#f1f3f4'
+    : 'var(--filr-text, #111827)';
+
+  const bgColor = isDark
+    ? 'rgba(32,33,36,0.96)'
+    : 'var(--filr-bg-elevated, #ffffff)';
+
+  const borderColor = isDark
+    ? 'rgba(255,255,255,0.14)'
+    : 'rgba(15,23,42,0.12)';
+
   const wrap = document.createElement('div');
   Object.assign(wrap.style, {
+    position: 'fixed',
+    top: '-9999px',
+    left: '-9999px',
+    zIndex: '99999',
+
     display: 'inline-flex',
-    maxWidth: '420px',
-    padding: '6px 10px',
-    backgroundColor: '#333',
-    color: '#fff',
-    border: '1px solid #555',
-    borderRadius: '6px',
     alignItems: 'center',
-    gap: '6px',
-    boxShadow: '2px 2px 6px rgba(0,0,0,0.3)',
-    fontSize: '12px',
+    gap: '8px',
+
+    padding: '7px 16px',
+    minHeight: '32px',
+    maxWidth: '420px',
+    whiteSpace: 'nowrap',
+
+    borderRadius: '999px',
+    overflow: 'hidden',
+    backgroundClip: 'padding-box',
+
+    background: bgColor,
+    color: textColor,
+    border: `1px solid ${borderColor}`,
+    boxShadow: '0 4px 18px rgba(0,0,0,0.18)',
+    fontSize: '14px',
+    lineHeight: '1.4',
+    fontWeight: '500',
+
     pointerEvents: 'none'
   });
+
   const icon = document.createElement('span');
   icon.className = 'material-icons';
   icon.textContent = iconName;
+  Object.assign(icon.style, {
+    fontSize: '20px',
+    lineHeight: '1',
+    flexShrink: '0',
+    color: textColor
+  });
+
   const label = document.createElement('span');
-  // trim long single-name labels
   const txt = String(labelText || '');
   label.textContent = txt.length > 60 ? (txt.slice(0, 57) + '…') : txt;
+  Object.assign(label.style, {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  });
+
   wrap.appendChild(icon);
   wrap.appendChild(label);
   document.body.appendChild(wrap);
+
   return wrap;
 }
 
@@ -95,30 +162,114 @@ export async function folderDropHandler(event) {
   event.preventDefault();
   event.currentTarget.classList.remove('drop-hover');
 
-  const dropFolder = event.currentTarget.getAttribute('data-folder')
-    || event.currentTarget.getAttribute('data-dest-folder')
-    || 'root';
+  const dropFolder =
+    event.currentTarget.getAttribute('data-folder') ||
+    event.currentTarget.getAttribute('data-dest-folder') ||
+    'root';
 
-  // parse drag payload
   let dragData = null;
   try {
     const raw = event.dataTransfer.getData('application/json') || '{}';
     dragData = JSON.parse(raw);
   } catch {
-    // ignore
+    dragData = null;
   }
+
   if (!dragData) {
     showToast('Invalid drag data.');
     return;
   }
 
-  // normalize names
-  let names = Array.isArray(dragData.files) ? dragData.files.slice()
-    : dragData.fileName ? [dragData.fileName]
+  // ---------------------------
+  // 1) FOLDER → FOLDER MOVE
+  // ---------------------------
+  if (dragData.dragType === 'folder' && dragData.folder) {
+    const source = String(dragData.folder);
+    const destination = dropFolder || 'root';
+
+    // quick no-op: same parent as before
+    const oldParent = parentFolderOf(source);
+    if (destination === oldParent) {
+      showToast('Source and destination are the same.');
+      return;
+    }
+
+    // optional: mirror PHP self/descendant guard so we fail fast
+    const norm = s => {
+      if (!s) return '';
+      return s.replace(/^[/\\]+|[/\\]+$/g, '');
+    };
+    const srcNorm = norm(source);
+    const dstNorm = destination === 'root' ? '' : norm(destination);
+
+    if (
+      dstNorm !== '' &&
+      (
+        dstNorm.toLowerCase() === srcNorm.toLowerCase() ||
+        (dstNorm + '/').toLowerCase().startsWith((srcNorm + '/').toLowerCase())
+      )
+    ) {
+      showToast('Destination cannot be the source or its descendant');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/folder/moveFolder.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': window.csrfToken
+        },
+        body: JSON.stringify({
+          source,        // full folder path
+          destination    // parent or "root"
+        })
+      });
+
+      const text = await res.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { /* ignore double-echo edge cases */ }
+
+      if (!res.ok || (data && data.error)) {
+        const msg = (data && data.error) || text || `HTTP ${res.status}`;
+        showToast('Error moving folder: ' + msg);
+        return;
+      }
+
+      const oldParent = getParentFolder(source);
+      const dstParent = destination || 'root';
+
+      // keep inline folder stats in sync for both parents
+      invalidateFolderStats([oldParent, dstParent]);
+
+      showToast(`Moved folder to "${dstParent || 'root'}".`);
+
+      // Let folderManager handle tree refresh + selection + file list reload
+      await syncTreeAfterFolderMove(source, dstParent);
+
+    } catch (e) {
+      console.error('Error moving folder:', e);
+      showToast('Error moving folder.');
+    }
+
+    return;
+  }
+
+  // ---------------------------
+  // 2) FILE → FOLDER MOVE (existing logic)
+  // ---------------------------
+
+  let names = Array.isArray(dragData.files)
+    ? dragData.files.slice()
+    : dragData.fileName
+      ? [dragData.fileName]
       : [];
+
   names = names.filter(v => typeof v === 'string' && v.length > 0);
 
-  if (names.length === 0) {
+  if (!names.length) {
     showToast('No files to move.');
     return;
   }
@@ -129,7 +280,6 @@ export async function folderDropHandler(event) {
     return;
   }
 
-  // POST move
   try {
     const res = await fetch('/api/file/moveFiles.php', {
       method: 'POST',
@@ -145,14 +295,19 @@ export async function folderDropHandler(event) {
         destination: dropFolder
       })
     });
+
     const data = await res.json().catch(() => ({}));
 
     if (res.ok && data && data.success) {
-      const msg = (names.length === 1)
-        ? `Moved "${names[0]}" to ${dropFolder}.`
-        : `Moved ${names.length} files to ${dropFolder}.`;
+      const msg =
+        names.length === 1
+          ? `Moved "${names[0]}" to ${dropFolder}.`
+          : `Moved ${names.length} files to ${dropFolder}.`;
       showToast(msg);
-      // Refresh whatever view the user is currently looking at
+
+      // keep stats fresh for source + dest
+      invalidateFolderStats([sourceFolder, dropFolder]);
+
       loadFileList(window.currentFolder || sourceFolder);
     } else {
       const err = (data && (data.error || data.message)) || `HTTP ${res.status}`;

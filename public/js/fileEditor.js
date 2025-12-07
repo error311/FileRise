@@ -272,9 +272,10 @@ function ensureOoModalCss() {
     }
     #ooEditorModal #oo-editor{ width:100%!important; height:100%!important; }
 
-    #ooEditorModal .oo-warm-overlay{
+        #ooEditorModal .oo-warm-overlay{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       background:rgba(0,0,0,.14); z-index:5; font-weight:600; font-size:14px;
+      pointer-events: none; /* let clicks pass through to ONLYOFFICE (CSV dialog etc.) */
     }
 
     html.oo-lock, body.oo-lock{ height:100%!important; overflow:hidden!important; }
@@ -416,26 +417,46 @@ async function openOnlyOffice(fileName, folder){
     injectOOPreconnect(cfg.documentServerOrigin || null);
     await ensureOnlyOfficeApi(cfg.docs_api_js, cfg.documentServerOrigin);
 
-    // 3) Theme + base events
-    const isDark = document.documentElement.classList.contains('dark-mode')
-      || /^(1|true)$/i.test(localStorage.getItem('darkMode') || '');
-    cfg.events = (cfg.events && typeof cfg.events === 'object') ? cfg.events : {};
-    cfg.editorConfig = cfg.editorConfig || {};
-    cfg.editorConfig.customization = Object.assign(
-      {}, cfg.editorConfig.customization, { uiTheme: isDark ? 'theme-dark' : 'theme-light' }
-    );
-    cfg.events.onRequestClose = () => onClose();
-
-    // 4) Warm EVERY click 
-    if (ALWAYS_WARM_OO && !userClosed){
-      setOoBusy(modal, true);          // overlay INSIDE modal body
-      await warmDocServerOnce(cfg);
-      if (userClosed) return;
-    }
-
-    // 5) Launch visible editor in full-screen modal
-    cfg.events.onDocumentReady = () => { setOoBusy(modal, false); };
-    editor = new window.DocsAPI.DocEditor('oo-editor', cfg);
+        // 3) Theme + base events
+        const isDark = document.documentElement.classList.contains('dark-mode')
+        || /^(1|true)$/i.test(localStorage.getItem('darkMode') || '');
+      cfg.events = (cfg.events && typeof cfg.events === 'object') ? cfg.events : {};
+      cfg.editorConfig = cfg.editorConfig || {};
+      cfg.editorConfig.customization = Object.assign(
+        {}, cfg.editorConfig.customization, { uiTheme: isDark ? 'theme-dark' : 'theme-light' }
+      );
+  
+      // Preserve any events coming from PHP side
+      const prevOnRequestClose   = cfg.events.onRequestClose;
+      const prevOnAppReady       = cfg.events.onAppReady;
+      const prevOnDocumentReady  = cfg.events.onDocumentReady;
+  
+      cfg.events.onRequestClose = function () {
+        if (typeof prevOnRequestClose === 'function') prevOnRequestClose();
+        onClose();
+      };
+  
+      // Important: hide overlay as soon as ONLYOFFICE UI is ready (CSV options dialog included)
+      cfg.events.onAppReady = function () {
+        setOoBusy(modal, false);
+        if (typeof prevOnAppReady === 'function') prevOnAppReady();
+      };
+  
+      // Still also clear it on full document ready
+      cfg.events.onDocumentReady = function () {
+        setOoBusy(modal, false);
+        if (typeof prevOnDocumentReady === 'function') prevOnDocumentReady();
+      };
+  
+      // 4) Warm EVERY click 
+      if (ALWAYS_WARM_OO && !userClosed){
+        setOoBusy(modal, true);          // overlay INSIDE modal body
+        await warmDocServerOnce(cfg);
+        if (userClosed) return;
+      }
+  
+      // 5) Launch visible editor in full-screen modal
+      editor = new window.DocsAPI.DocEditor('oo-editor', cfg);
 
     // Live theme switching + keep modal bg in sync
     const darkToggle = document.getElementById('darkModeToggle');
