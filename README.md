@@ -22,7 +22,7 @@ Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI �
 - 🌍 **WebDAV** – Mount FileRise as a drive from macOS, Windows, Linux, or Cyberduck/WinSCP.
 - 📊 **Storage / disk usage summary** – CLI scanner with snapshots, total usage, and per-volume breakdowns in the admin panel.
 - 🎨 **Polished UI** – Dark/light mode, responsive layout, in-browser previews & code editor.
-- 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.).
+- 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.) with optional auto-provisioning, IdP-admin role sync, and Pro user-group mapping.
 - 👥 **Pro: user groups, client portals & storage explorer** – Group-based ACLs, brandable client upload portals, and an ncdu-style explorer to drill into folders, largest files, and clean up storage inline.
 
 Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
@@ -60,6 +60,18 @@ FileRise turns a folder on your server into a **web-based file explorer** with:
 - Inline previews (images, audio, video, PDF) and a built-in code editor
 
 Everything flows through a single ACL engine, so permissions are enforced consistently whether users are in the browser UI, using WebDAV, or hitting the API.
+
+### Login & SSO (OIDC roles + groups)
+
+FileRise supports local accounts, TOTP 2FA, and modern OIDC providers (Auth0, Authentik, Keycloak, …).  
+Beyond “just login”, OIDC can now drive **roles** and **Pro user groups**:
+
+- 🧑‍💻 **Auto-provision users**  
+- 👑 **IdP-driven admin role**  
+- 👥 **Pro: OIDC groups → FileRise Pro user groups**  
+- 🧪 **Admin: OIDC connectivity test**  
+
+➡️ Full docs: [OIDC / SSO setup](https://github.com/error311/FileRise/wiki/OIDC-and-SSO)
 
 ---
 
