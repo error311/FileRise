@@ -317,11 +317,9 @@ FileRise Core is released under the **MIT License** – see [LICENSE](LICENSE).
 It bundles a small set of well-known client and server libraries (Bootstrap, CodeMirror, DOMPurify, Fuse.js, Resumable.js, sabre/dav, etc.).  
 All third-party code remains under its original licenses.
 
-See `THIRD_PARTY.md` and the `licenses/` folder for full details.
+The official Docker image includes the **ClamAV** antivirus scanner (GPL-2.0-only) for optional upload scanning.
 
-The official Docker image includes the **ClamAV** antivirus scanner (GPL-2.0-only) for optional upload scanning.  
-ClamAV is maintained separately by Cisco and the ClamAV community.  
-Source and license text are available from your Linux distribution or [clamav.net](https://www.clamav.net/).
+See `THIRD_PARTY.md` and the `licenses/` folder for full details.
 
 ---
 
