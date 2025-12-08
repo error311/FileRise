@@ -6,6 +6,104 @@ import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
+// --- ClamAV scanning UI helpers ----------------------------------------
+
+function isVirusScanLikelyEnabled() {
+  try {
+    if (
+      window.__FR_FLAGS &&
+      Object.prototype.hasOwnProperty.call(window.__FR_FLAGS, 'clamavScanUploads')
+    ) {
+      return !!window.__FR_FLAGS.clamavScanUploads;
+    }
+
+    // Fallbacks if you ever expose config globals directly
+    const cfg =
+      (window.appConfig)      ||
+      (window.FR_CONFIG)      ||
+      (window.__FR_CONFIG__)  ||
+      (window.siteConfig)     ||
+      null;
+
+    return !!(cfg && cfg.clamav && cfg.clamav.scanUploads);
+  } catch {
+    return false;
+  }
+}
+
+let _virusScanNoticeDismissed = false;
+
+function showVirusScanNotice() {
+  if (!isVirusScanLikelyEnabled()) return;
+  if (_virusScanNoticeDismissed) return;
+
+  // If already visible, don't duplicate
+  let existing = document.getElementById('frVirusScanNotice');
+  if (existing) return;
+
+  const box = document.createElement('div');
+  box.id = 'frVirusScanNotice';
+  box.className = 'fr-virus-notice card';
+
+  // Minimal inline layout so we don't rely on extra CSS
+  Object.assign(box.style, {
+    position: 'fixed',
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    maxWidth: '420px',
+    width: 'calc(100% - 32px)', // nice on mobile too
+    zIndex: '1080',
+    padding: '16px 18px',
+    borderRadius: '10px',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+    backgroundColor: getComputedStyle(document.body).backgroundColor || '#fff',
+    color: getComputedStyle(document.body).color || '#111',
+  });
+
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <div style="display:flex;align-items:center;gap:6px;flex:1;">
+        <span class="material-icons" style="font-size:20px;flex-shrink:0;">shield</span>
+        <div style="font-size:0.9rem;">
+          <div style="font-weight:600;margin-bottom:2px;">
+            ${escapeHTML(t ? t('clamav_scanning_title') || 'Scanning uploads for viruses…' : 'Scanning uploads for viruses…')}
+          </div>
+          <div style="font-size:0.8rem;opacity:0.8;">
+            ${escapeHTML(t ? t('clamav_scanning_desc') || 'Uploads may take a little longer while antivirus scanning is enabled.' : 'Uploads may take a little longer while antivirus scanning is enabled.')}
+          </div>
+        </div>
+      </div>
+      <button type="button"
+              id="frVirusScanNoticeClose"
+              class="btn btn-sm btn-outline-secondary"
+              style="flex-shrink:0;">
+        ${escapeHTML(t ? t('close') || 'Close' : 'Close')}
+      </button>
+    </div>
+    <div class="progress" style="height:6px;margin-top:8px;">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%;"></div>
+    </div>
+  `;
+
+  document.body.appendChild(box);
+
+  const closeBtn = box.querySelector('#frVirusScanNoticeClose');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      _virusScanNoticeDismissed = true; // don't nag again this session
+      hideVirusScanNotice();
+    });
+  }
+}
+
+function hideVirusScanNotice() {
+  const el = document.getElementById('frVirusScanNotice');
+  if (el && el.parentNode) {
+    el.parentNode.removeChild(el);
+  }
+}
+
 // --- Lightweight tracking of in-progress resumable uploads (per user) ---
 const RESUMABLE_DRAFTS_KEY = 'filr_resumable_drafts_v1';
 
@@ -911,7 +1009,16 @@ async function initResumableUpload() {
       pauseResumeBtn.innerHTML = '<span class="material-icons pauseResumeBtn">replay</span>';
       pauseResumeBtn.disabled = false;
     }
-    showToast("Error uploading file: " + file.fileName);
+    let msgText = "Error uploading file: " + (file.fileName || file.name || "");
+    try {
+      const parsed = JSON.parse(message);
+      if (parsed && parsed.error) {
+        msgText = parsed.error; // e.g. "Upload blocked: virus detected in file."
+      }
+    } catch {
+      // message wasn't JSON, ignore
+    }
+    showToast(msgText);
     // Treat errored file as no longer resumable (for now) and clear its hint
     showResumableDraftBanner();
   });
@@ -950,6 +1057,8 @@ async function initResumableUpload() {
     } else {
       showToast("Some files failed to upload. Please check the list.");
     }
+    // In all cases, once Resumable has finished its batch, hide the ClamAV notice.
+    hideVirusScanNotice();
   });
 
   _resumableReady = true;
@@ -1206,7 +1315,9 @@ function submitFiles(allFiles) {
         showToast("Some files may have failed to upload. Please check the list.");
       })
       .finally(() => {
+        // Folder list refresh + hide any ClamAV scan notice
         loadFolderTree(window.currentFolder);
+        hideVirusScanNotice();
       });
   }
 }
@@ -1293,6 +1404,8 @@ function initUpload() {
       }
 
       setUploadButtonVisible(false);
+        // If ClamAV scanning is enabled, show a small non-blocking notice
+      showVirusScanNotice();
 
       const hasResumableFiles =
         useResumable &&

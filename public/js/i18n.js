@@ -365,7 +365,14 @@ const translations = {
     "perm_move":   "Move",
     "perm_rename": "Rename",
     "perm_share":  "Share",
-    "perm_delete": "Delete"
+    "perm_delete": "Delete",
+    "clamav_scanning_title": "Scanning uploads for viruses…",
+    "clamav_scanning_desc":"Uploads may take a little longer while antivirus scanning is enabled.",
+    "oidc_quick_test_label": "Quick OIDC connectivity test",
+    "oidc_test_button": "Test OIDC discovery",
+    "clamav_enable_label": "Enable ClamAV scanning for uploads",
+    "clamav_scan_uploads_help": "Files are scanned with ClamAV before being accepted. This may impact upload speed.",
+    "clamav_env_locked_help": "Controlled by container env VIRUS_SCAN_ENABLED ({state}). Change it in your Docker/host env."
   
   },
   es: {

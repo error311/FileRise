@@ -1,12 +1,192 @@
 // adminPanel.js
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
-import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
+import { showToast, toggleVisibility, attachEnterKeyListener, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
 import { initAdminStorageSection } from './adminStorage.js?v={{APP_QVER}}';
 import { initAdminSponsorSection } from './adminSponsor.js?v={{APP_QVER}}';
 import { initOnlyOfficeUI, collectOnlyOfficeSettingsForSave } from './adminOnlyOffice.js?v={{APP_QVER}}';
 import { openClientPortalsModal } from './adminPortals.js?v={{APP_QVER}}';
+
+// Ensure OIDC config object always exists
+if (!window.currentOIDCConfig || typeof window.currentOIDCConfig !== 'object') {
+  window.currentOIDCConfig = {};
+}
+
+async function loadVirusDetectionLog() {
+  const tableBody = document.getElementById('virusLogTableBody');
+  const emptyEl   = document.getElementById('virusLogEmpty');
+  const wrapper   = document.getElementById('virusLogWrapper');
+
+  if (!wrapper || !tableBody || !emptyEl) return;
+
+  // If Pro is not active, we just leave the static "Pro" notice alone.
+  if (!window.__FR_IS_PRO) {
+    return;
+  }
+
+  emptyEl.textContent = 'Loading recent detections…';
+  tableBody.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/admin/virusLog.php?limit=50', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'X-CSRF-Token': window.csrfToken || '',
+        'Accept': 'application/json',
+      },
+    });
+
+    const data = await safeJson(res);
+
+    if (!data || data.ok !== true) {
+      const msg = (data && (data.error || data.message)) || 'Failed to load detection log.';
+      emptyEl.textContent = msg;
+      return;
+    }
+
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    if (!entries.length) {
+      emptyEl.textContent = 'No virus detections have been logged yet.';
+      return;
+    }
+
+    emptyEl.textContent = 'Tip: hover or click a row to see full ClamAV details.';
+    tableBody.innerHTML = '';
+
+    entries.forEach(row => {
+      const tr = document.createElement('tr');
+
+      // Build a compact ClamAV info summary for tooltip / click
+      const infoParts = [];
+      if (row.engine) {
+        infoParts.push(`Engine: ${row.engine}`);
+      }
+      if (
+        typeof row.exitCode === 'number' ||
+        (typeof row.exitCode === 'string' && row.exitCode !== '')
+      ) {
+        infoParts.push(`Exit: ${row.exitCode}`);
+      }
+      if (row.source) {
+        infoParts.push(`Source: ${row.source}`);
+      }
+      if (row.message) {
+        // keep it single-line-ish for tooltip/toast
+        const msg = String(row.message).replace(/\s+/g, ' ').trim();
+        if (msg) infoParts.push(`Message: ${msg}`);
+      }
+      const infoText = infoParts.join(' • ');
+
+      tr.innerHTML = `
+        <td>${escapeHTML(row.ts || '')}</td>
+        <td>${escapeHTML(row.user || '')}</td>
+        <td>${escapeHTML(row.ip || '')}</td>
+        <td>${escapeHTML(row.file || '')}</td>
+        <td>${escapeHTML(row.folder || '')}</td>
+      `;
+
+      if (infoText) {
+        // Native browser tooltip on hover
+        tr.title = infoText;
+        // Visual hint that row is interactive
+        tr.style.cursor = 'pointer';
+
+        // Click to show toast with same info
+        tr.addEventListener('click', () => {
+          showToast(infoText);
+        });
+      }
+
+      tableBody.appendChild(tr);
+    });
+  } catch (e) {
+    console.error('Failed to load virus detection log', e);
+    emptyEl.textContent = 'Failed to load detection log.';
+  }
+}
+
+async function downloadVirusLogCsv() {
+  const emptyEl = document.getElementById('virusLogEmpty');
+  if (emptyEl) {
+    emptyEl.textContent = 'Preparing CSV…';
+  }
+
+  try {
+    const res = await fetch('/api/admin/virusLog.php?limit=2000&format=csv', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'X-CSRF-Token': window.csrfToken || '',
+        'Accept': 'text/csv,text/plain;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'filerise-virus-log.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    if (emptyEl && emptyEl.textContent === 'Preparing CSV…') {
+      emptyEl.textContent = '';
+    }
+  } catch (e) {
+    console.error('Failed to download virus log CSV', e);
+    if (emptyEl) {
+      emptyEl.textContent = 'Failed to download CSV.';
+    }
+    showToast('Failed to download CSV.', 'error');
+  }
+}
+
+function initVirusLogUI({ isPro }) {
+  const uploadScope = document.getElementById('uploadContent');
+  if (!uploadScope) return;
+
+  const wrapper = uploadScope.querySelector('#virusLogWrapper');
+  if (!wrapper) return;
+
+  // global hint for loadVirusDetectionLog
+  window.__FR_IS_PRO = !!isPro;
+
+  if (!isPro) {
+    // Free/core: we just show the static Pro alert text, nothing to wire
+    return;
+  }
+
+  const refreshBtn  = uploadScope.querySelector('#virusLogRefreshBtn');
+  const downloadBtn = uploadScope.querySelector('#virusLogDownloadCsvBtn');
+
+  if (refreshBtn && !refreshBtn.__wired) {
+    refreshBtn.__wired = true;
+    refreshBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      loadVirusDetectionLog();
+    });
+  }
+
+  if (downloadBtn && !downloadBtn.__wired) {
+    downloadBtn.__wired = true;
+    downloadBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      downloadVirusLogCsv();
+    });
+  }
+
+  // Initial load
+  loadVirusDetectionLog();
+}
 
 function normalizeLogoPath(raw) {
   if (!raw) return '';
@@ -314,6 +494,250 @@ if (userinfoEndpoint) parts.push('userinfo: ' + userinfoEndpoint);
   });
 }
 
+function wireClamavTestButton(scope = document) {
+  const btn = scope.querySelector('#clamavTestBtn');
+  const statusEl = scope.querySelector('#clamavTestStatus');
+  if (!btn || !statusEl || btn.__wired) return;
+
+  btn.__wired = true;
+
+  btn.addEventListener('click', async () => {
+    statusEl.textContent = 'Running ClamAV self-test…';
+    statusEl.className = 'small text-muted';
+
+    try {
+      const res = await fetch('/api/admin/clamavTest.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.csrfToken || ''
+        },
+        body: JSON.stringify({})
+      });
+
+      const data = await safeJson(res).catch(err => {
+        // safeJson throws on !res.ok, so catch to show a nicer message
+        console.error('ClamAV test HTTP error', err);
+        return null;
+      });
+
+      if (!data || data.success !== true) {
+        const msg = (data && (data.error || data.message)) || 'ClamAV test failed.';
+        statusEl.textContent = msg;
+        statusEl.className = 'small text-danger';
+        showToast(msg, 'error');
+        return;
+      }
+
+      const cmd     = data.command || 'clamscan';
+      const engine  = data.engine || '';
+      const details = data.details || '';
+
+      const parts = [];
+      parts.push(`OK – ${cmd} is reachable`);
+      if (engine)  parts.push(engine);
+      if (details) parts.push(details);
+
+      statusEl.textContent = parts.join(' • ');
+      statusEl.className = 'small text-success';
+      showToast('ClamAV self-test succeeded.');
+    } catch (e) {
+      console.error('ClamAV test error', e);
+      statusEl.textContent =
+        'ClamAV test error: ' + (e && e.message ? e.message : String(e));
+      statusEl.className = 'small text-danger';
+      showToast('ClamAV test failed – see console.', 'error');
+    }
+  });
+}
+
+function initVirusLogSection({ isPro }) {
+  const uploadScope = document.getElementById('uploadContent');
+  if (!uploadScope) return;
+
+  const wrapper = uploadScope.querySelector('#virusLogWrapper');
+  const shell   = uploadScope.querySelector('#virusLogTableShell');
+  if (!wrapper || !shell) return;
+
+  // Let us overlay a Pro banner on top of the table
+  if (!wrapper.style.position) {
+    wrapper.style.position = 'relative';
+  }
+
+  // Remove any previous overlays
+  wrapper.querySelectorAll('.virus-pro-overlay').forEach(el => el.remove());
+
+  // --- Free/core: show blurred preview + Pro banner ---
+  if (!isPro) {
+    shell.innerHTML = `
+      <table class="table table-sm mb-1"
+             style="width:100%; filter: blur(2px); opacity:0.65; pointer-events:none;">
+        <thead>
+          <tr>
+            <th style="white-space:nowrap;">Timestamp (UTC)</th>
+            <th>User</th>
+            <th>IP</th>
+            <th>File</th>
+            <th>Folder</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="5" class="text-muted small">
+              Virus detections from the last 30 days would appear here.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'virus-pro-overlay';
+    overlay.style.cssText = `
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      pointer-events:none;
+    `;
+    overlay.innerHTML = `
+      <div style="
+        background:rgba(0,0,0,0.78);
+        color:#fff;
+        padding:8px 14px;
+        border-radius:999px;
+        display:flex;
+        align-items:center;
+        gap:8px;
+        font-size:0.85rem;
+      ">
+        <span class="badge badge-pill badge-warning">Pro</span>
+        <span>Virus detection log is available in FileRise Pro.</span>
+        <a href="https://filerise.net"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="btn btn-sm btn-light"
+           style="pointer-events:auto;">
+          Learn more
+        </a>
+      </div>
+    `;
+    wrapper.appendChild(overlay);
+    return;
+  }
+
+  // --- Pro: load real data from /api/admin/virusLog.php ---
+  shell.innerHTML = `<div class="small text-muted">Loading virus detection log…</div>`;
+
+  (async () => {
+    try {
+      const res = await fetch('/api/admin/virusLog.php?limit=200', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'X-CSRF-Token': window.csrfToken || ''
+        }
+      });
+
+      const data = await safeJson(res).catch(err => {
+        console.error('virusLog HTTP error', err);
+        return null;
+      });
+
+      if (!data || data.ok === false) {
+        const msg =
+          (data && (data.error || data.message)) ||
+          'Failed to load detection log.';
+        shell.innerHTML = `<div class="text-danger small">${msg}</div>`;
+        return;
+      }
+
+      const rows = Array.isArray(data.rows || data.entries || data.data)
+        ? (data.rows || data.entries || data.data)
+        : [];
+
+      if (!rows.length) {
+        shell.innerHTML = `<div class="small text-muted">No virus detections have been logged yet.</div>`;
+        return;
+      }
+
+      const escapeCell = (v) => {
+        if (v === null || v === undefined) return '';
+        return String(v)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      };
+
+      const normEntry = (e) => {
+        const tsRaw = e.ts ?? e.timestamp ?? e.time ?? e.when ?? '';
+        let tsLabel = '';
+        if (typeof tsRaw === 'number') {
+          const d = new Date(tsRaw * 1000);
+          tsLabel = isNaN(d.getTime())
+            ? String(tsRaw)
+            : d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+        } else if (tsRaw) {
+          const d = new Date(tsRaw);
+          tsLabel = isNaN(d.getTime())
+            ? String(tsRaw)
+            : d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+        }
+
+        return {
+          ts: tsLabel || '',
+          user: e.user ?? e.username ?? '',
+          ip: e.ip ?? e.remote_ip ?? e.remoteIp ?? '',
+          file: e.file ?? e.filename ?? e.name ?? '',
+          folder: e.folder ?? e.path ?? e.dir ?? ''
+        };
+      };
+
+      const normalized = rows.map(normEntry);
+
+      let html = `
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="white-space:nowrap;">Timestamp (UTC)</th>
+                <th>User</th>
+                <th>IP</th>
+                <th>File</th>
+                <th>Folder</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      normalized.forEach(entry => {
+        html += `
+          <tr>
+            <td style="white-space:nowrap;">${escapeCell(entry.ts)}</td>
+            <td>${escapeCell(entry.user)}</td>
+            <td>${escapeCell(entry.ip)}</td>
+            <td>${escapeCell(entry.file)}</td>
+            <td>${escapeCell(entry.folder)}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      shell.innerHTML = html;
+    } catch (e) {
+      console.error('virusLog error', e);
+      shell.innerHTML = `<div class="text-danger small">Error loading detection log. See console for details.</div>`;
+    }
+  })();
+}
+
 function onShareFolderToggle(row, checked) {
   const manage = qs(row, 'input[data-cap="manage"]');
   const viewAll = qs(row, 'input[data-cap="view"]');
@@ -386,6 +810,8 @@ function captureInitialAdminConfig() {
     brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
     brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
     brandingFooterHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
+
+    clamavScanUploads: !!document.getElementById("clamavScanUploads")?.checked,
   };
 }
 function hasUnsavedChanges() {
@@ -407,7 +833,9 @@ function hasUnsavedChanges() {
     getVal("brandingCustomLogoUrl") !== (o.brandingCustomLogoUrl || "") ||
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
     getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
-    getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "")
+    getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "") ||
+
+    getChk("clamavScanUploads") !== o.clamavScanUploads
   );
 }
 
@@ -648,12 +1076,20 @@ export function openAdminPanel() {
         if (h) h.textContent = config.header_title;
         window.headerTitle = config.header_title;
       }
-      if (config.oidc) Object.assign(window.currentOIDCConfig, config.oidc);
-      if (config.globalOtpauthUrl) window.currentOIDCConfig.globalOtpauthUrl = config.globalOtpauthUrl;
+      window.currentOIDCConfig = window.currentOIDCConfig || {};
+
+      if (config.oidc && typeof config.oidc === 'object') {
+        Object.assign(window.currentOIDCConfig, config.oidc);
+      }
+      
+      if (config.globalOtpauthUrl) {
+        window.currentOIDCConfig.globalOtpauthUrl = config.globalOtpauthUrl;
+      }
 
       const dark = document.body.classList.contains("dark-mode");
       const proInfo = config.pro || {};
       const isPro = !!proInfo.active;
+      window.__FR_IS_PRO = isPro;
       const proType = proInfo.type || '';
       const proEmail = proInfo.email || '';
       const proVersion = proInfo.version || 'not installed';
@@ -703,7 +1139,7 @@ export function openAdminPanel() {
             { id: "loginOptions", label: t("login_options") },
             { id: "webdav", label: "WebDAV Access" },
             { id: "onlyoffice", label: "ONLYOFFICE" },
-            { id: "upload", label: t("shared_max_upload_size_bytes_title") },
+            { id: "upload", label: tf("upload_limits_and_antivirus", "Upload limits & antivirus") },
             { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
             { id: "shareLinks", label: t("manage_shared_links") },
             { id: "storage", label: "Storage / Disk Usage" },
@@ -728,11 +1164,23 @@ export function openAdminPanel() {
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
 
-        ["userManagement", "headerSettings", "loginOptions", "webdav", "onlyoffice", "upload", "oidc", "shareLinks", "storage", "pro", "sponsor"]
-          .forEach(id => {
-            document.getElementById(id + "Header")
-              .addEventListener("click", () => toggleSection(id));
-          });
+        [
+          "userManagement",
+          "headerSettings",
+          "loginOptions",
+          "webdav",
+          "onlyoffice",
+          "upload",
+          "oidc",
+          "shareLinks",
+          "storage",
+          "pro",
+          "sponsor"
+        ].forEach(id => {
+          const headerEl = document.getElementById(id + "Header");
+          if (!headerEl) return;
+          headerEl.addEventListener("click", () => toggleSection(id));
+        });
 
         document.getElementById("userManagementContent").innerHTML = `
   <div class="admin-user-actions">
@@ -1039,13 +1487,171 @@ export function openAdminPanel() {
         `;
 
         document.getElementById("uploadContent").innerHTML = `
-          <div class="form-group">
-            <label for="sharedMaxUploadSize">${t("shared_max_upload_size_bytes")}:</label>
-            <input type="number" id="sharedMaxUploadSize" class="form-control" placeholder="e.g. 52428800" />
-            <small>${t("max_bytes_shared_uploads_note")}</small>
-          </div>
-        `;
+  <div class="form-group">
+    <label for="sharedMaxUploadSize">${t("shared_max_upload_size_bytes")}:</label>
+    <input
+      type="number"
+      id="sharedMaxUploadSize"
+      class="form-control"
+      placeholder="e.g. 52428800"
+    />
+    <small class="text-muted d-block">
+      ${t("max_bytes_shared_uploads_note")}
+    </small>
+  </div>
 
+  <div class="form-group" style="margin-top:10px;">
+    <input type="checkbox" id="clamavScanUploads" />
+    <label for="clamavScanUploads" style="margin-left:4px;">
+      ${tf("clamav_enable_label", "Enable ClamAV scanning for uploads")}
+    </label>
+    <small
+      id="clamavScanUploadsHelp"
+      class="d-block text-muted"
+      style="margin-top:2px;"
+    >
+      ${tf(
+        "clamav_help_text_short",
+        "Files are scanned with ClamAV before being accepted. This may impact upload speed."
+      )}
+    </small>
+  </div>
+
+  <div class="mt-2">
+    <button
+      type="button"
+      id="clamavTestBtn"
+      class="btn btn-sm btn-secondary">
+      ${tf("clamav_test_button", "Run ClamAV self-test")}
+    </button>
+    <small class="text-muted d-block" style="margin-top:4px;">
+      ${tf(
+        "clamav_test_help",
+        "Runs a quick scan against a tiny test file using your configured ClamAV command (VIRUS_SCAN_CMD or clamscan). Safe to run anytime."
+      )}
+    </small>
+    <div id="clamavTestStatus" class="small text-muted" style="margin-top:4px;"></div>
+  </div>
+
+  <hr class="mt-3 mb-2">
+
+  ${
+    isPro
+      ? `
+      <!-- Real Pro virus log -->
+      <div id="virusLogWrapper"
+           class="card"
+           style="border-radius: var(--menu-radius); overflow:hidden;">
+        <div class="card-header py-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <strong>Virus detection log</strong>
+              <div class="small text-muted">
+                Recent uploads that were blocked by ClamAV (username, IP and filename).
+              </div>
+            </div>
+            <div class="btn-group" role="group">
+              <button
+                type="button"
+                class="btn btn-sm btn-secondary"
+                id="virusLogRefreshBtn">
+                ${tf("refresh", "Refresh")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-warning"
+                id="virusLogDownloadCsvBtn">
+                ${tf("download_csv", "Download CSV")}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <div class="table-responsive"
+               style="max-height:220px; overflow:auto;">
+            <table class="table table-sm table-striped mb-0">
+              <thead>
+                <tr>
+                  <th style="width:26%;">Timestamp (UTC)</th>
+                  <th style="width:18%;">User</th>
+                  <th style="width:18%;">IP</th>
+                  <th style="width:24%;">File</th>
+                  <th style="width:14%;">Folder</th>
+                </tr>
+              </thead>
+              <tbody id="virusLogTableBody"></tbody>
+            </table>
+          </div>
+          <div id="virusLogEmpty" class="small text-muted mt-1">
+            No virus detections have been logged yet.
+          </div>
+        </div>
+      </div>
+      `
+      : `
+      <!-- Pro-style blurred teaser, like Storage explorer -->
+      <div id="virusLogWrapper"
+           class="card"
+           style="border-radius: var(--menu-radius); overflow:hidden; position:relative;">
+        <div class="card-header py-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <strong>
+                Virus detection log
+                <span class="badge bg-warning text-dark ms-1 align-middle">Pro</span>
+              </strong>
+              <div class="small text-muted">
+                Recent uploads that were blocked by ClamAV (username, IP and filename).
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <!-- Blurred fake table teaser -->
+          <div class="table-responsive"
+               style="max-height:220px;overflow:hidden;filter:blur(3px);opacity:0.5;pointer-events:none;">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Timestamp (UTC)</th>
+                  <th>User</th>
+                  <th>IP</th>
+                  <th>File</th>
+                  <th>Folder</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="5">&nbsp;</td></tr>
+                <tr><td colspan="5">&nbsp;</td></tr>
+                <tr><td colspan="5">&nbsp;</td></tr>
+                <tr><td colspan="5">&nbsp;</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Centered overlay copy -->
+          <div
+            class="d-flex flex-column align-items-center justify-content-center text-center"
+            style="position:absolute; inset:0; padding:16px;">
+            <div class="mb-1">
+              <span class="badge bg-warning text-dark me-1">Pro</span>
+              <span class="fw-semibold">
+                Virus detection log is a Pro feature
+              </span>
+            </div>
+            <div class="small text-muted mb-2">
+              Upgrade to FileRise Pro to view detailed ClamAV detection history
+              and download it as CSV from the admin panel.
+            </div>
+          </div>
+        </div>
+      </div>
+      `
+  }
+`;
+
+wireClamavTestButton(document.getElementById("uploadContent"));
+initVirusLogUI({ isPro });
         // ONLYOFFICE section (moved into adminOnlyOffice.js)
         initOnlyOfficeUI({ config });
 
@@ -1458,6 +2064,24 @@ export function openAdminPanel() {
         document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
+        // --- ClamAV toggle wiring ---
+        const cfgClam = config.clamav || {};
+        const clamChk = document.getElementById("clamavScanUploads");
+        if (clamChk) {
+          clamChk.checked = !!cfgClam.scanUploads;
+
+          if (cfgClam.lockedByEnv) {
+            // Env var VIRUS_SCAN_ENABLED is controlling this – show as read-only
+            clamChk.disabled = true;
+            const help = document.getElementById("clamavScanUploadsHelp");
+            if (help) {
+              help.textContent =
+                'Controlled by container env VIRUS_SCAN_ENABLED (' +
+                (cfgClam.scanUploads ? 'enabled' : 'disabled') +
+                '). Change it in your Docker/host env.';
+            }
+          }
+        }
         // Rebuild ONLYOFFICE section from fresh config
         initOnlyOfficeUI({ config });
 
@@ -1475,6 +2099,32 @@ export function openAdminPanel() {
         document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
+        // --- ClamAV toggle wiring (refresh) ---
+        const cfgClam = config.clamav || {};
+        const clamChk = document.getElementById("clamavScanUploads");
+        if (clamChk) {
+          clamChk.checked = !!cfgClam.scanUploads;
+
+          // Reset any previous disabled/help, then re-apply
+          clamChk.disabled = false;
+          const help = document.getElementById("clamavScanUploadsHelp");
+          if (help) {
+            help.textContent =
+              'Files are scanned with ClamAV before being accepted. This may impact upload speed.';
+          }
+
+          if (cfgClam.lockedByEnv) {
+            clamChk.disabled = true;
+            if (help) {
+              help.textContent =
+                'Controlled by container env VIRUS_SCAN_ENABLED (' +
+                (cfgClam.scanUploads ? 'enabled' : 'disabled') +
+                '). Change it in your Docker/host env.';
+            }
+          }
+        }
+        wireClamavTestButton(document.getElementById("uploadContent"));
+        initVirusLogUI({ isPro });
         document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig?.providerUrl || "";
         const idEl = document.getElementById("oidcClientId");
         const secEl = document.getElementById("oidcClientSecret");
@@ -1537,6 +2187,10 @@ function handleSave() {
       headerBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
       headerBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
       footerHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
+    },
+
+    clamav: {
+      scanUploads: document.getElementById("clamavScanUploads").checked,
     },
   };
 

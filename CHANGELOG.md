@@ -1,5 +1,39 @@
 # Changelog
 
+## Changes 12/8/2025 (v2.5.0)
+
+release(v2.5.0): add optional ClamAV upload, share upload & portal upload scanning and Pro virus log
+
+- Wire optional ClamAV scanning into core uploads and shared uploads:
+  - Respect VIRUS_SCAN_ENABLED env / constant as a hard override
+  - Fall back to admin config clamav.scanUploads when env is unset
+  - Block infected uploads with a friendly error and delete the file
+  - Treat ClamAV errors (missing DB, bad config, etc.) as non-blocking
+
+- Add virus detection JSONL log in META_DIR/virus_detections.log:
+  - Log timestamp, user, IP, folder, file, source, engine, exit code and message
+  - Soft-rotate the log at ~5MB
+
+- Add Pro-only virus detection log viewer in Admin → Upload:
+  - Paginated JSON view with hover/click details and CSV export
+  - Blurred teaser + Pro badge when FileRise Pro is not active
+
+- Extend the Admin > Upload section:
+  - New “Upload limits & antivirus” section title
+  - ClamAV upload scanning toggle with env-locked hint
+  - “Run ClamAV self-test” button hitting /api/admin/clamavTest.php
+
+- Improve upload UX when antivirus is enabled:
+  - Show a small non-blocking “Scanning uploads for viruses…” notice while uploads run
+  - Surface server-side JSON error messages (e.g. “Upload blocked: virus detected in file.”) in the toast
+
+- Docker / startup:
+  - Install clamav and clamav-freshclam in the Docker image
+  - Log VIRUS_SCAN_ENABLED and VIRUS_SCAN_CMD on container start
+  - Optionally run freshclam on startup (CLAMAV_AUTO_UPDATE=true by default), but do not fail the container if it errors
+
+---
+
 ## Changes 12/7/2025 (v2.4.0)
 
 release(v2.4.0): OIDC auto-provisioning, admin mapping & Pro group sync

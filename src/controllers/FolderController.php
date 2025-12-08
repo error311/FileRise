@@ -7,6 +7,7 @@ require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/FolderMeta.php';
 require_once PROJECT_ROOT . '/src/lib/FS.php';
+require_once PROJECT_ROOT . '/src/models/UploadModel.php';
 
 class FolderController
 {
@@ -32,7 +33,8 @@ class FolderController
         return $headers;
     }
 
-    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500): array {
+    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500): array
+    {
         return FolderModel::listChildren($folder, $user, $perms, $cursor, $limit);
     }
 
@@ -50,7 +52,7 @@ class FolderController
         $perms  = self::loadPermsFor($username);
 
         $isAdmin       = ACL::isAdmin($perms);
-        $folderOnly    = self::boolFrom($perms, 'folderOnly','userFolderOnly','UserFolderOnly');
+        $folderOnly    = self::boolFrom($perms, 'folderOnly', 'userFolderOnly', 'UserFolderOnly');
         $readOnly      = !empty($perms['readOnly']);
         $disableUpload = !empty($perms['disableUpload']);
 
@@ -107,11 +109,14 @@ class FolderController
             $canShareFold  = false;
         } else {
             $canMoveFolder = (ACL::canManage($username, $perms, $folder) || ACL::isOwner($username, $perms, $folder))
-                             && !$readOnly;
+                && !$readOnly;
         }
 
         $owner = null;
-        try { if (class_exists('FolderModel') && method_exists('FolderModel','getOwnerFor')) $owner = FolderModel::getOwnerFor($folder); } catch (\Throwable $e) {}
+        try {
+            if (class_exists('FolderModel') && method_exists('FolderModel', 'getOwnerFor')) $owner = FolderModel::getOwnerFor($folder);
+        } catch (\Throwable $e) {
+        }
 
         return [
             'user'    => $username,
@@ -150,7 +155,8 @@ class FolderController
     /* ---------------------------
        Private helpers (caps)
     ----------------------------*/
-    private static function loadPermsFor(string $u): array {
+    private static function loadPermsFor(string $u): array
+    {
         try {
             if (function_exists('loadUserPermissions')) {
                 $p = loadUserPermissions($u);
@@ -164,16 +170,19 @@ class FolderController
                     if (isset($all[$lk])) return (array)$all[$lk];
                 }
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
         return [];
     }
 
-    private static function boolFrom(array $a, string ...$keys): bool {
+    private static function boolFrom(array $a, string ...$keys): bool
+    {
         foreach ($keys as $k) if (!empty($a[$k])) return true;
         return false;
     }
 
-    private static function isOwnerOrAncestorOwner(string $user, array $perms, string $folder): bool {
+    private static function isOwnerOrAncestorOwner(string $user, array $perms, string $folder): bool
+    {
         $f = ACL::normalizeFolder($folder);
         if (ACL::isOwner($user, $perms, $f)) return true;
         while ($f !== '' && strcasecmp($f, 'root') !== 0) {
@@ -186,7 +195,8 @@ class FolderController
         return false;
     }
 
-    private static function inUserFolderScope(string $folder, string $u, array $perms, bool $isAdmin, bool $folderOnly): bool {
+    private static function inUserFolderScope(string $folder, string $u, array $perms, bool $isAdmin, bool $folderOnly): bool
+    {
         if ($isAdmin) return true;
         if (!$folderOnly) return true; // normal users: global scope
 
@@ -1210,6 +1220,17 @@ class FolderController
             echo json_encode(['error' => $msg]);
             exit;
         }
+
+        // ---- ClamAV: reuse UploadModel scan logic on the tmp file ----
+        $scan = UploadModel::scanSingleUploadIfEnabled($fileUpload);
+        if (is_array($scan) && isset($scan['error'])) {
+            // scanFileIfEnabled() already deletes the tmp file on infection
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode($scan); // e.g. ["error" => "Upload blocked: virus detected in file."]
+            exit;
+        }
+        // --------------------------------------------------------------
 
         $result = FolderModel::uploadToSharedFolder($token, $fileUpload);
         if (isset($result['error'])) {

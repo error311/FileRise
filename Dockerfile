@@ -36,9 +36,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
-      apache2 php php-json php-curl php-zip php-mbstring php-gd php-xml \
-      ca-certificates curl git openssl && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*  # slim down image
+      apache2 \
+      php php-json php-curl php-zip php-mbstring php-gd php-xml \
+      ca-certificates curl git openssl \
+      clamav clamav-freshclam \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Remap www-data to the PUID/PGID provided for safe bind mounts
 RUN set -eux; \

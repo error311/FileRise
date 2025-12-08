@@ -64,6 +64,22 @@ if (!defined('FR_OIDC_PRO_GROUP_PREFIX')) {
     define('FR_OIDC_PRO_GROUP_PREFIX', '');
 }
 
+// Antivirus / ClamAV (optional)
+// If VIRUS_SCAN_ENABLED is set in the environment, it overrides the admin setting.
+// If it is not set, we don't define the constant and the admin checkbox controls scanning.
+$envScanRaw = getenv('VIRUS_SCAN_ENABLED');
+if ($envScanRaw !== false && $envScanRaw !== '') {
+    $val = strtolower(trim((string)$envScanRaw));
+    $enabled = in_array($val, ['1', 'true', 'yes', 'on'], true);
+    define('VIRUS_SCAN_ENABLED', $enabled);
+}
+
+// Which scanner command to run. Can be "clamscan" or "clamdscan" (faster with clamd).
+define('VIRUS_SCAN_CMD', getenv('VIRUS_SCAN_CMD') ?: 'clamscan');
+
+// Optional: max time you consider acceptable for a scan (for logging / future timeout logic)
+define('VIRUS_SCAN_TIMEOUT', 60);
+
 // Encryption helpers
 function encryptData($data, $encryptionKey)
 {

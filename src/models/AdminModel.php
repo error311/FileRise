@@ -25,28 +25,44 @@ class AdminModel
             $unit = strtolower($m[2] ?? '');
 
             switch ($unit) {
-                case 'k': case 'kb': case 'kib':
+                case 'k':
+                case 'kb':
+                case 'kib':
                     $num *= 1024;
                     break;
-                case 'm': case 'mb': case 'mib':
+                case 'm':
+                case 'mb':
+                case 'mib':
                     $num *= 1024 ** 2;
                     break;
-                case 'g': case 'gb': case 'gib':
+                case 'g':
+                case 'gb':
+                case 'gib':
                     $num *= 1024 ** 3;
                     break;
-                case 't': case 'tb': case 'tib':
+                case 't':
+                case 'tb':
+                case 'tib':
                     $num *= 1024 ** 4;
                     break;
-                case 'p': case 'pb': case 'pib':
+                case 'p':
+                case 'pb':
+                case 'pib':
                     $num *= 1024 ** 5;
                     break;
-                case 'e': case 'eb': case 'eib':
+                case 'e':
+                case 'eb':
+                case 'eib':
                     $num *= 1024 ** 6;
                     break;
-                case 'z': case 'zb': case 'zib':
+                case 'z':
+                case 'zb':
+                case 'zib':
                     $num *= 1024 ** 7;
                     break;
-                case 'y': case 'yb': case 'yib':
+                case 'y':
+                case 'yb':
+                case 'yib':
                     $num *= 1024 ** 8;
                     break;
                 // case 'b' or empty => bytes; do nothing
@@ -74,78 +90,104 @@ class AdminModel
     }
 
     /** Allow logo URLs that are either site-relative (/uploads/…) or http(s). */
-private static function sanitizeLogoUrl($url): string
-{
-    $url = trim((string)$url);
-    if ($url === '') return '';
+    private static function sanitizeLogoUrl($url): string
+    {
+        $url = trim((string)$url);
+        if ($url === '') return '';
 
-    // 1) Site-relative like "/uploads/profile_pics/branding_foo.png"
-    if ($url[0] === '/') {
-        // Strip CRLF just in case
-        $url = preg_replace('~[\r\n]+~', '', $url);
-        // Don’t allow sneaky schemes embedded in a relative path
-        if (strpos($url, '://') !== false) {
-            return '';
+        // 1) Site-relative like "/uploads/profile_pics/branding_foo.png"
+        if ($url[0] === '/') {
+            // Strip CRLF just in case
+            $url = preg_replace('~[\r\n]+~', '', $url);
+            // Don’t allow sneaky schemes embedded in a relative path
+            if (strpos($url, '://') !== false) {
+                return '';
+            }
+            return $url;
         }
-        return $url;
-    }
 
-    // 2) Fallback to plain http(s) validation
-    return self::sanitizeHttpUrl($url);
-}
+        // 2) Fallback to plain http(s) validation
+        return self::sanitizeHttpUrl($url);
+    }
 
     public static function buildPublicSubset(array $config): array
-{
-    $public = [
-        'header_title'        => $config['header_title'] ?? 'FileRise',
-        'loginOptions'        => [
-            'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
-            'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
-            'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
-        ],
-        'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
-        'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
-        'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
-        'oidc' => [
-            'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
-            'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
-        ],
-       'branding' => [
-    'customLogoUrl' => self::sanitizeLogoUrl(
-        $config['branding']['customLogoUrl'] ?? ''
-    ),
-    'headerBgLight' => self::sanitizeColorHex(
-        $config['branding']['headerBgLight'] ?? ''
-    ),
-    'headerBgDark'  => self::sanitizeColorHex(
-        $config['branding']['headerBgDark'] ?? ''
-    ),
-    'footerHtml'    => (string)($config['branding']['footerHtml'] ?? ''),
-],
-        'demoMode' => (defined('FR_DEMO_MODE') && FR_DEMO_MODE),
-    ];
+    {
+        $public = [
+            'header_title'        => $config['header_title'] ?? 'FileRise',
+            'loginOptions'        => [
+                'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
+                'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
+                'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
+            ],
+            'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
+            'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
+            'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
+            'oidc' => [
+                'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
+                'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
+            ],
+            'branding' => [
+                'customLogoUrl' => self::sanitizeLogoUrl(
+                    $config['branding']['customLogoUrl'] ?? ''
+                ),
+                'headerBgLight' => self::sanitizeColorHex(
+                    $config['branding']['headerBgLight'] ?? ''
+                ),
+                'headerBgDark'  => self::sanitizeColorHex(
+                    $config['branding']['headerBgDark'] ?? ''
+                ),
+                'footerHtml'    => (string)($config['branding']['footerHtml'] ?? ''),
+            ],
+            'demoMode' => (defined('FR_DEMO_MODE') && FR_DEMO_MODE),
+        ];
 
-    // NEW: include ONLYOFFICE minimal public flag
-    $ooEnabled = null;
-    if (isset($config['onlyoffice']['enabled'])) {
-        $ooEnabled = (bool)$config['onlyoffice']['enabled'];
-    } elseif (defined('ONLYOFFICE_ENABLED')) {
-        $ooEnabled = (bool)ONLYOFFICE_ENABLED;
-    }
-    if ($ooEnabled !== null) {
+        // --- ONLYOFFICE public flag ---
+        $ooEnabled = null;
+        if (isset($config['onlyoffice']['enabled'])) {
+            $ooEnabled = (bool)$config['onlyoffice']['enabled'];
+        } elseif (defined('ONLYOFFICE_ENABLED')) {
+            $ooEnabled = (bool)ONLYOFFICE_ENABLED;
+        }
+
+        $locked = defined('ONLYOFFICE_ENABLED')
+            || defined('ONLYOFFICE_JWT_SECRET')
+            || defined('ONLYOFFICE_DOCS_ORIGIN')
+            || defined('ONLYOFFICE_PUBLIC_ORIGIN');
+
+        if ($locked) {
+            $ooEnabled = defined('ONLYOFFICE_ENABLED') ? (bool)ONLYOFFICE_ENABLED : false;
+        } else {
+            $ooEnabled = isset($config['onlyoffice']['enabled'])
+                ? (bool)$config['onlyoffice']['enabled']
+                : false;
+        }
+
         $public['onlyoffice'] = ['enabled' => $ooEnabled];
-    }
-    $locked = defined('ONLYOFFICE_ENABLED') || defined('ONLYOFFICE_JWT_SECRET')
-       || defined('ONLYOFFICE_DOCS_ORIGIN') || defined('ONLYOFFICE_PUBLIC_ORIGIN');
 
-    if ($locked) {
-        $ooEnabled = defined('ONLYOFFICE_ENABLED') ? (bool)ONLYOFFICE_ENABLED : false;
-    } else {
-        $ooEnabled = isset($config['onlyoffice']['enabled']) ? (bool)$config['onlyoffice']['enabled'] : false;
-    }
-
-        $public['onlyoffice'] = ['enabled' => $ooEnabled];
+        // Keep explicit demoMode override (no harm)
         $public['demoMode'] = defined('FR_DEMO_MODE') ? (bool)FR_DEMO_MODE : false;
+
+        // ClamAV, mirroring AdminController::getConfig() logic ---
+        $envScanRaw = getenv('VIRUS_SCAN_ENABLED');
+
+        if ($envScanRaw !== false && $envScanRaw !== '') {
+            // Env var wins
+            $clamScanUploads = filter_var($envScanRaw, FILTER_VALIDATE_BOOLEAN);
+            $clamLockedByEnv = true;
+        } elseif (defined('VIRUS_SCAN_ENABLED')) {
+            // Optional PHP constant override
+            $clamScanUploads = (bool) VIRUS_SCAN_ENABLED;
+            $clamLockedByEnv = true;
+        } else {
+            // Fall back to stored admin config
+            $clamScanUploads = (bool)($config['clamav']['scanUploads'] ?? false);
+            $clamLockedByEnv = false;
+        }
+
+        $public['clamav'] = [
+            'scanUploads' => $clamScanUploads,
+            'lockedByEnv' => $clamLockedByEnv,
+        ];
 
         return $public;
     }
@@ -194,7 +236,7 @@ private static function sanitizeLogoUrl($url): string
 
         if (!$oidcDisabled) {
             $oidc = $configUpdate['oidc'] ?? [];
-            $required = ['providerUrl','clientId','clientSecret','redirectUri'];
+            $required = ['providerUrl', 'clientId', 'clientSecret', 'redirectUri'];
             foreach ($required as $k) {
                 if (empty($oidc[$k]) || !is_string($oidc[$k])) {
                     return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, clientSecret, redirectUri)."];
@@ -208,20 +250,36 @@ private static function sanitizeLogoUrl($url): string
             : false;
 
         // Validate sharedMaxUploadSize if provided
-        if (isset($configUpdate['sharedMaxUploadSize'])) {
-            $sms = filter_var(
-                $configUpdate['sharedMaxUploadSize'],
-                FILTER_VALIDATE_INT,
-                ["options" => ["min_range" => 1]]
-            );
-            if ($sms === false) {
-                return ["error" => "Invalid sharedMaxUploadSize."];
+        if (array_key_exists('sharedMaxUploadSize', $configUpdate)) {
+            $raw = $configUpdate['sharedMaxUploadSize'];
+
+            // If blank or zero, treat as "no override" and drop the key
+            if ($raw === '' || $raw === null || (int)$raw <= 0) {
+                unset($configUpdate['sharedMaxUploadSize']);
+            } else {
+                $sms = filter_var(
+                    $raw,
+                    FILTER_VALIDATE_INT,
+                    ["options" => ["min_range" => 1]]
+                );
+                if ($sms === false) {
+                    return ["error" => "Invalid sharedMaxUploadSize."];
+                }
+                $totalBytes = self::parseSize(TOTAL_UPLOAD_SIZE);
+                if ($sms > $totalBytes) {
+                    return ["error" => "sharedMaxUploadSize must be ≤ TOTAL_UPLOAD_SIZE."];
+                }
+                $configUpdate['sharedMaxUploadSize'] = $sms;
             }
-            $totalBytes = self::parseSize(TOTAL_UPLOAD_SIZE);
-            if ($sms > $totalBytes) {
-                return ["error" => "sharedMaxUploadSize must be ≤ TOTAL_UPLOAD_SIZE."];
-            }
-            $configUpdate['sharedMaxUploadSize'] = $sms;
+        }
+
+        // ---- ClamAV (simple boolean flag) ----
+        if (!isset($configUpdate['clamav']) || !is_array($configUpdate['clamav'])) {
+            $configUpdate['clamav'] = [
+                'scanUploads' => false,
+            ];
+        } else {
+            $configUpdate['clamav']['scanUploads'] = !empty($configUpdate['clamav']['scanUploads']);
         }
 
         // Normalize authBypass & authHeaderName
@@ -240,53 +298,53 @@ private static function sanitizeLogoUrl($url): string
             $configUpdate['loginOptions']['authHeaderName'] = trim($configUpdate['loginOptions']['authHeaderName']);
         }
 
-                // ---- ONLYOFFICE (persist, sanitize; keep secret unless explicitly replaced) ----
-                if (isset($configUpdate['onlyoffice']) && is_array($configUpdate['onlyoffice'])) {
-                    $oo = $configUpdate['onlyoffice'];
-        
-                    $norm = [
-                        'enabled'      => (bool)($oo['enabled'] ?? false),
-                        'docsOrigin'   => self::sanitizeHttpUrl($oo['docsOrigin'] ?? ''),
-                        'publicOrigin' => self::sanitizeHttpUrl($oo['publicOrigin'] ?? ''),
-                    ];
-        
-                    // Only accept a new secret if provided (non-empty). We do NOT clear on empty.
-                    if (array_key_exists('jwtSecret', $oo)) {
-                        $js = trim((string)$oo['jwtSecret']);
-                        if ($js !== '') {
-                            if (strlen($js) > 1024) $js = substr($js, 0, 1024);
-                            $norm['jwtSecret'] = $js; // will be encrypted with encryptData()
-                        }
-                    }
-        
-                    $configUpdate['onlyoffice'] = $norm;
+        // ---- ONLYOFFICE (persist, sanitize; keep secret unless explicitly replaced) ----
+        if (isset($configUpdate['onlyoffice']) && is_array($configUpdate['onlyoffice'])) {
+            $oo = $configUpdate['onlyoffice'];
+
+            $norm = [
+                'enabled'      => (bool)($oo['enabled'] ?? false),
+                'docsOrigin'   => self::sanitizeHttpUrl($oo['docsOrigin'] ?? ''),
+                'publicOrigin' => self::sanitizeHttpUrl($oo['publicOrigin'] ?? ''),
+            ];
+
+            // Only accept a new secret if provided (non-empty). We do NOT clear on empty.
+            if (array_key_exists('jwtSecret', $oo)) {
+                $js = trim((string)$oo['jwtSecret']);
+                if ($js !== '') {
+                    if (strlen($js) > 1024) $js = substr($js, 0, 1024);
+                    $norm['jwtSecret'] = $js; // will be encrypted with encryptData()
                 }
-        
-                if (!isset($configUpdate['branding']) || !is_array($configUpdate['branding'])) {
-                    $configUpdate['branding'] = [
-                        'customLogoUrl'   => '',
-                        'headerBgLight'   => '',
-                        'headerBgDark'    => '',
-                        'footerHtml'      => '',
-                    ];
-                } else {
-                    $logo   = self::sanitizeLogoUrl($configUpdate['branding']['customLogoUrl'] ?? '');
-                    $light  = self::sanitizeColorHex($configUpdate['branding']['headerBgLight'] ?? '');
-                    $dark   = self::sanitizeColorHex($configUpdate['branding']['headerBgDark'] ?? '');
-                    $footer = trim((string)($configUpdate['branding']['footerHtml'] ?? ''));
-                
-                    if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) {
-                        $configUpdate['branding']['customLogoUrl'] = $logo;
-                        $configUpdate['branding']['headerBgLight'] = $light;
-                        $configUpdate['branding']['headerBgDark']  = $dark;
-                        $configUpdate['branding']['footerHtml']    = $footer;
-                    } else {
-                        $configUpdate['branding']['customLogoUrl'] = '';
-                        $configUpdate['branding']['headerBgLight'] = '';
-                        $configUpdate['branding']['headerBgDark']  = '';
-                        $configUpdate['branding']['footerHtml']    = '';
-                    }
-                }
+            }
+
+            $configUpdate['onlyoffice'] = $norm;
+        }
+
+        if (!isset($configUpdate['branding']) || !is_array($configUpdate['branding'])) {
+            $configUpdate['branding'] = [
+                'customLogoUrl'   => '',
+                'headerBgLight'   => '',
+                'headerBgDark'    => '',
+                'footerHtml'      => '',
+            ];
+        } else {
+            $logo   = self::sanitizeLogoUrl($configUpdate['branding']['customLogoUrl'] ?? '');
+            $light  = self::sanitizeColorHex($configUpdate['branding']['headerBgLight'] ?? '');
+            $dark   = self::sanitizeColorHex($configUpdate['branding']['headerBgDark'] ?? '');
+            $footer = trim((string)($configUpdate['branding']['footerHtml'] ?? ''));
+
+            if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) {
+                $configUpdate['branding']['customLogoUrl'] = $logo;
+                $configUpdate['branding']['headerBgLight'] = $light;
+                $configUpdate['branding']['headerBgDark']  = $dark;
+                $configUpdate['branding']['footerHtml']    = $footer;
+            } else {
+                $configUpdate['branding']['customLogoUrl'] = '';
+                $configUpdate['branding']['headerBgLight'] = '';
+                $configUpdate['branding']['headerBgDark']  = '';
+                $configUpdate['branding']['footerHtml']    = '';
+            }
+        }
 
         // Convert configuration to JSON.
         $plainTextConfig = json_encode($configUpdate, JSON_PRETTY_PRINT);
@@ -329,16 +387,16 @@ private static function sanitizeLogoUrl($url): string
     }
 
     private static function sanitizeColorHex($value): string
-{
-    $value = trim((string)$value);
-    if ($value === '') return '';
+    {
+        $value = trim((string)$value);
+        if ($value === '') return '';
 
-    // allow #RGB or #RRGGBB
-    if (preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $value)) {
-        return strtoupper($value);
+        // allow #RGB or #RRGGBB
+        if (preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $value)) {
+            return strtoupper($value);
+        }
+        return '';
     }
-    return '';
-}
 
     /**
      * Retrieves the current configuration.
@@ -388,7 +446,7 @@ private static function sanitizeLogoUrl($url): string
                     'redirectUri'  => '',
                 ];
             } else {
-                foreach (['providerUrl','clientId','clientSecret','redirectUri'] as $k) {
+                foreach (['providerUrl', 'clientId', 'clientSecret', 'redirectUri'] as $k) {
                     if (!isset($config['oidc'][$k]) || !is_string($config['oidc'][$k])) {
                         $config['oidc'][$k] = '';
                     }
@@ -461,6 +519,15 @@ private static function sanitizeLogoUrl($url): string
                 );
             }
 
+            // ---- ClamAV: ensure structure exists ----
+            if (!isset($config['clamav']) || !is_array($config['clamav'])) {
+                $config['clamav'] = [
+                    'scanUploads' => false,
+                ];
+            } else {
+                $config['clamav']['scanUploads'] = !empty($config['clamav']['scanUploads']);
+            }
+
             return $config;
         }
 
@@ -491,6 +558,9 @@ private static function sanitizeLogoUrl($url): string
                 'headerBgLight'   => '',
                 'headerBgDark'    => '',
                 'footerHtml'    => '',
+            ],
+            'clamav'                => [
+                'scanUploads' => false,
             ],
         ];
     }

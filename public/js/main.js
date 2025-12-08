@@ -448,6 +448,15 @@ function bindDarkMode() {
     // ---------- site config / auth ----------
     function applySiteConfig(cfg, { phase = 'final' } = {}) {
       try {
+        // Make config available globally
+    window.siteConfig = cfg || {};
+    window.__FR_FLAGS = window.__FR_FLAGS || {};
+
+    // Expose a simple boolean for ClamAV scanning
+    if (cfg && cfg.clamav && typeof cfg.clamav.scanUploads !== 'undefined') {
+      window.__FR_FLAGS.clamavScanUploads = !!cfg.clamav.scanUploads;
+    }
+
         const title = (cfg && cfg.header_title) ? String(cfg.header_title) : 'FileRise';
   
         // Always keep <title> correct early (no visual flicker)

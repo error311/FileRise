@@ -39,6 +39,14 @@ if [ "${PERSISTENT_TOKENS_KEY:-}" = "default_please_change_this_key" ] || [ -z "
   echo "⚠️ WARNING: Using default/empty persistent tokens key—override for production."
 fi
 
+# 1.5) Log virus-scan configuration (purely informational)
+if [ "${VIRUS_SCAN_ENABLED:-false}" = "true" ]; then
+  echo "[startup] VIRUS_SCAN_ENABLED=true"
+  echo "[startup] Using virus scanner command: ${VIRUS_SCAN_CMD:-clamscan}"
+else
+  echo "[startup] Virus scanning disabled (VIRUS_SCAN_ENABLED != 'true')."
+fi
+
 # 2) Update config.php based on environment variables
 CONFIG_FILE="/var/www/config/config.php"
 if [ -f "${CONFIG_FILE}" ]; then
@@ -80,6 +88,22 @@ if [ -n "${TOTAL_UPLOAD_SIZE:-}" ]; then
 upload_max_filesize = ${TOTAL_UPLOAD_SIZE}
 post_max_size = ${TOTAL_UPLOAD_SIZE}
 EOF
+fi
+
+# 3.3) Update ClamAV signatures if not explicitly disabled
+if [ "${CLAMAV_AUTO_UPDATE:-true}" = "true" ]; then
+  if command -v freshclam >/dev/null 2>&1; then
+    if [ "$(id -u)" -eq 0 ]; then
+      echo "[startup] Updating ClamAV signatures via freshclam..."
+      freshclam || echo "[startup] freshclam failed; continuing with existing signatures (if any)."
+    else
+      echo "[startup] Not running as root; skipping freshclam (requires root)."
+    fi
+  else
+    echo "[startup] ClamAV installed but 'freshclam' not found; skipping DB update."
+  fi
+else
+  echo "[startup] CLAMAV_AUTO_UPDATE=false; skipping freshclam."
 fi
 
 # 4) Adjust Apache LimitRequestBody

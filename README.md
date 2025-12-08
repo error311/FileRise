@@ -23,6 +23,7 @@ Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI �
 - 📊 **Storage / disk usage summary** – CLI scanner with snapshots, total usage, and per-volume breakdowns in the admin panel.
 - 🎨 **Polished UI** – Dark/light mode, responsive layout, in-browser previews & code editor.
 - 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.) with optional auto-provisioning, IdP-admin role sync, and Pro user-group mapping.
+- 🛡️ **ClamAV virus scanning (Core) + Pro virus log** – Optional integration with ClamAV to scan uploads, plus a Pro virus detection log in the admin panel with CSV export.
 - 👥 **Pro: user groups, client portals & storage explorer** – Group-based ACLs, brandable client upload portals, and an ncdu-style explorer to drill into folders, largest files, and clean up storage inline.
 
 Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
@@ -151,15 +152,25 @@ docker compose up -d
 
 ### Common environment variables
 
-| Variable                | Required | Example                          | What it does                                                                  |
-|-------------------------|----------|----------------------------------|-------------------------------------------------------------------------------|
-| `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone.                                                     |
-| `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request (e.g. `5G`, `10G`).                         |
-| `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / reverse proxy, else `false`.               |
-| `PERSISTENT_TOKENS_KEY` | ✅       | `default_please_change_this_key` | Secret used to sign “remember me” tokens. **Change this.**                    |
-| `SCAN_ON_START`         | Optional | `true`                           | If `true`, scan `uploads/` on startup and index existing files.               |
-| `CHOWN_ON_START`        | Optional | `true`                           | If `true`, chown `uploads/`, `users/`, `metadata/` on startup.                |
-| `DATE_TIME_FORMAT`      | Optional | `Y-m-d H:i`                      | Overrides `DATE_TIME_FORMAT` in `config.php` (controls how dates are shown).  |
+| Variable                | Required | Example                          | What it does                                                                                           |
+|-------------------------|----------|----------------------------------|--------------------------------------------------------------------------------------------------------|
+| `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone.                                                                              |
+| `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request (e.g. `5G`, `10G`). Also used to set PHP `upload_max_filesize` and `post_max_size`, and Apache `LimitRequestBody`. |
+| `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / a reverse proxy, else `false`.                                     |
+| `PERSISTENT_TOKENS_KEY` | ✅       | `change_me_super_secret`         | Secret used to sign “remember me”/persistent tokens. **Do not leave this at the default.**            |
+| `DATE_TIME_FORMAT`      | Optional | `Y-m-d H:i`                      | Overrides `DATE_TIME_FORMAT` in `config.php` (controls how dates/times are rendered in the UI).       |
+| `SCAN_ON_START`         | Optional | `true`                           | If `true`, runs `scan_uploads.php` once on container start to index existing files.                    |
+| `CHOWN_ON_START`        | Optional | `true`                           | If `true` (default), recursively `chown`s `uploads/`, `users/`, and `metadata/` to `www-data:www-data` on startup. Set to `false` if you manage ownership yourself. |
+| `PUID`                  | Optional | `99`                             | If running as root, remap `www-data` user to this UID (e.g. Unraid’s 99).                             |
+| `PGID`                  | Optional | `100`                            | If running as root, remap `www-data` group to this GID (e.g. Unraid’s 100).                           |
+| `HTTP_PORT`             | Optional | `8080`                           | Override Apache `Listen 80` and vhost port with this port inside the container.                       |
+| `HTTPS_PORT`            | Optional | `8443`                           | If you terminate TLS inside the container, override `Listen 443` with this port.                      |
+| `SERVER_NAME`           | Optional | `files.example.com`              | Sets Apache’s `ServerName` (defaults to `FileRise` if not provided).                                  |
+| `LOG_STREAM`            | Optional | `error`                          | Controls which logs are streamed to container stdout: `error`, `access`, `both`, or `none`.           |
+| `VIRUS_SCAN_ENABLED`    | Optional | `true`                           | If `true`, enable ClamAV-based virus scanning for uploads.              |
+| `VIRUS_SCAN_CMD`        | Optional | `clamscan`                       | Command used to scan files. Can be `clamscan`, `clamdscan`, or a wrapper with flags.                  |
+| `CLAMAV_AUTO_UPDATE`    | Optional | `true`                           | If `true` and running as root, call `freshclam` on startup to update signatures.                      |
+| `SHARE_URL`             | Optional | `https://files.example.com`      | Overrides the base URL used when generating public share links (useful behind reverse proxies).       |
 
 > If `DATE_TIME_FORMAT` is not set, FileRise uses the default from `config/config.php`
 > (currently `m/d/y  h:iA`).
