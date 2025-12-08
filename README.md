@@ -310,6 +310,12 @@ All third-party code remains under its original licenses.
 
 See `THIRD_PARTY.md` and the `licenses/` folder for full details.
 
+The official Docker image includes the **ClamAV** antivirus scanner (GPL-2.0-only) for optional upload scanning.  
+ClamAV is maintained separately by Cisco and the ClamAV community.  
+Source and license text are available from your Linux distribution or [clamav.net](https://www.clamav.net/).
+
+---
+
 ## 8. Press
 
 - [Heise / iX Magazin – “FileRise 2.0: Web-Dateimanager mit Client Portals” (DE)](https://www.heise.de/news/FileRise-2-0-Web-Dateimanager-mit-Client-Portals-11092171.html)

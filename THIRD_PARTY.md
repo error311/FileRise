@@ -45,3 +45,50 @@ If you believe any attribution is missing or incorrect, please open an issue.
 > Apache-2.0–licensed code: see `licenses/apache-2.0.txt`.
 
 ---
+
+### Docker & ClamAV
+
+Used optionally for virus scanning of uploads (via the `clamscan` command).
+
+- **License:** GPL-2.0-only  
+- **Copyright:** © Cisco / ClamAV contributors  
+- **Home:** <https://www.clamav.net/>
+- **Source:** Available via your Linux distribution’s package repositories or from the ClamAV website.  
+- **Note:** ClamAV runs as a separate executable and is not part of the FileRise application code.
+
+### Base image and system packages
+
+The official Docker image is built on **Ubuntu 24.04** and includes common
+system packages (Apache HTTP Server, PHP, OpenSSL, ClamAV, etc.), each under
+their respective upstream licenses as distributed by Ubuntu.
+
+---
+
+## PHP libraries (Composer)
+
+The following PHP libraries are installed via Composer and live under `vendor/`:
+
+- **jumbojett/openid-connect-php** – MIT License  
+  Used for OpenID Connect / OIDC login.  
+  Files: `vendor/jumbojett/openid-connect-php/*`
+
+- **phpseclib/phpseclib** – MIT License  
+  Used for cryptographic helpers.  
+  Files: `vendor/phpseclib/phpseclib/*`
+
+- **robthree/twofactorauth** – MIT License  
+  Used for TOTP-based two-factor authentication (2FA).  
+  Files: `vendor/robthree/twofactorauth/*`
+
+- **endroid/qr-code** – MIT License  
+  Used to generate QR codes for TOTP provisioning.  
+  Files: `vendor/endroid/qr-code/*`
+
+- **sabre/dav** – BSD-3-Clause (“New BSD”)  
+  Used to provide the WebDAV server.  
+  Files: `vendor/sabre/dav/*`
+
+> MIT-licensed code: see `licenses/mit.txt`.  
+> BSD-licensed code: see [bsd-3-clause](https://opensource.org/license/bsd-3-clause/).
+
+---
