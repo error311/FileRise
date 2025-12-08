@@ -15,16 +15,22 @@
 Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI — all in a single PHP app that you control.
 
 - 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external DB required.
-- 🔐 **Granular per-folder ACLs** – View / Own / Upload / Edit / Delete / Share, enforced across UI, API, and WebDAV.
-- 🔄 **Fast drag-and-drop uploads** – Chunked, resumable uploads with pause/resume and progress.
-- 🌳 **Scales to huge trees** – Tested with **100k+ folders** in the sidebar tree.
-- 🧩 **ONLYOFFICE support (optional)** – Edit DOCX/XLSX/PPTX using your own Document Server.
-- 🌍 **WebDAV** – Mount FileRise as a drive from macOS, Windows, Linux, or Cyberduck/WinSCP.
-- 📊 **Storage / disk usage summary** – CLI scanner with snapshots, total usage, and per-volume breakdowns in the admin panel.
-- 🎨 **Polished UI** – Dark/light mode, responsive layout, in-browser previews & code editor.
-- 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.) with optional auto-provisioning, IdP-admin role sync, and Pro user-group mapping.
-- 🛡️ **ClamAV virus scanning (Core) + Pro virus log** – Optional integration with ClamAV to scan uploads, plus a Pro virus detection log in the admin panel with CSV export.
-- 👥 **Pro: user groups, client portals & storage explorer** – Group-based ACLs, brandable client upload portals, and an ncdu-style explorer to drill into folders, largest files, and clean up storage inline.
+- 🔐 **Granular per-folder ACLs** – Manage, View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share… all enforced centrally across the UI, API, and WebDAV.
+- 🔄 **Fast drag-and-drop uploads** – Chunked, resumable uploads with pause/resume and progress. If your connection drops, FileRise resumes automatically.
+- 🌳 **Scales to huge trees** – Tested with **100k+ folders** in the sidebar tree without choking the UI.
+- 🌈 **Visual organization** – Color-code folders in the tree, inline list, and folder strip, plus tag files with color-coded labels for quick scanning.
+- 👀 **Hover preview “peek” cards** – On desktop, hover files or folders to see a thumbnail (for images/video), quick metadata (size, timestamps, tags), and effective permissions. Per-user toggle stored in `localStorage`.
+- 🎬 **Smart media handling** – Track per-file video watch progress with a “watched” indicator, remember last volume/mute state, and reset progress when needed.
+- 🧩 **ONLYOFFICE support (optional)** – Edit DOCX/XLSX/PPTX using your own Document Server; ODT/ODS/ODP supported as well. PDFs can be viewed inline.
+- 🌍 **WebDAV (ACL-aware)** – Mount FileRise as a drive from macOS, Windows, Linux, or Cyberduck/WinSCP. Listings, uploads, overwrites, deletes, and folder creates all honor the same ACLs as the web UI.
+- 🏷️ **Tags, search & trash** – Tag files, search by name/tag/uploader/content via fuzzy search, and recover mistakes via a Trash with time-based retention.
+- 📚 **API + live docs** – OpenAPI spec (`openapi.json`) plus an embedded Redoc viewer (`api.html`) for exploring endpoints.
+- 📊 **Storage / disk usage summary** – CLI scanner with snapshots, total usage, and per-volume breakdowns surfaced in the admin panel.
+- 🎨 **Polished, responsive UI** – Dark/light mode, mobile-friendly layout, in-browser previews, and a built-in code editor powered by CodeMirror.
+- 🌐 **Internationalization** – English, Spanish, French, German, and Simplified Chinese included; community translations welcome.
+- 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.) with optional auto-provisioning, IdP-driven admin role, and Pro user-group mapping.
+- 🛡️ **ClamAV virus scanning (Core) + Pro virus log** – Optional ClamAV upload scanning, with a Pro virus detection log in the admin panel and CSV export.
+- 👥 **Pro: user groups, client portals & storage explorer** – Group-based ACLs, brandable client upload portals, and an ncdu-style storage explorer for drilling into largest folders/files and cleaning up space inline.
 
 Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
@@ -43,7 +49,7 @@ Full list of features available at [Full Feature Wiki](https://github.com/error3
   - [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV)
   - [ONLYOFFICE](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
 - 🐳 **Docker image:** [Docker](https://github.com/error311/filerise-docker)
-- 💬 **Discord:** [Join the FileRise server](https://discord.gg/YOUR_CODE_HERE)
+- 💬 **Discord:** [Join the FileRise server](https://discord.com/invite/7WN6f56X2e)
 - 📝 **Changelog:** [Changes](https://github.com/error311/FileRise/blob/master/CHANGELOG.md)
 
 ---
@@ -107,7 +113,7 @@ http://your-server-ip:8080
 On first launch you’ll be guided through creating the **initial admin user**.
 
 > 💡 After the first run, you can set `CHOWN_ON_START="false"` if permissions are already correct and you don’t want a recursive `chown` on every start.
-
+>
 > ⚠️ **Uploads folder recommendation**
 >
 > It’s strongly recommended to bind `/var/www/uploads` to a **dedicated folder**
@@ -174,7 +180,8 @@ docker compose up -d
 
 > If `DATE_TIME_FORMAT` is not set, FileRise uses the default from `config/config.php`
 > (currently `m/d/y  h:iA`).
-> 🗂 **Using an existing folder tree**
+>
+> 🗂 **Using an existing folder tree**  
 >
 > - Point `/var/www/uploads` at the folder you want FileRise to manage.
 > - Set `SCAN_ON_START="true"` on the first run to index existing files, then
@@ -184,17 +191,19 @@ docker compose up -d
 >   avoid recursive `chown` on every start.
 >
 > Volumes:  
+>
 > - `/var/www/uploads` – your actual files  
 > - `/var/www/users` – user & pro jsons  
 > - `/var/www/metadata` – tags, search index, share links, etc.
 
 **More Docker / orchestration options (Unraid, Portainer, k8s, reverse proxy, etc.)**  
+
 - [Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)  
 - [Nginx](https://github.com/error311/FileRise/wiki/Nginx-Setup)  
 - [FAQ](https://github.com/error311/FileRise/wiki/FAQ)  
 - [Kubernetes / k8s deployment](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)  
 - Portainer templates: add this URL in Portainer → Settings → App Templates:  
-  `https://raw.githubusercontent.com/error311/filerise-portainer-templates/refs/heads/main/templates.json` 
+  `https://raw.githubusercontent.com/error311/filerise-portainer-templates/refs/heads/main/templates.json`
 - See also the Docker repo: [error311/filerise-docker](https://github.com/error311/filerise-docker)
 
 ---
