@@ -773,6 +773,45 @@ const tf = (key, fallback) => {
   const v = t(key);
   return (v && v !== key) ? v : fallback;
 };
+function wireOidcDebugSnapshotButton(scope = document) {
+  const btn = scope.querySelector('#oidcDebugSnapshotBtn');
+  const box = scope.querySelector('#oidcDebugSnapshot');
+  if (!btn || !box || btn.__wired) return;
+  btn.__wired = true;
+
+  btn.addEventListener('click', async () => {
+    box.textContent = 'Loading snapshot…';
+
+    try {
+      const res = await fetch('/api/admin/oidcDebugInfo.php', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRF-Token': window.csrfToken || ''
+        }
+      });
+
+      const data = await safeJson(res).catch(err => {
+        console.error('oidcDebugInfo HTTP error', err);
+        return null;
+      });
+
+      if (!data || data.success !== true) {
+        const msg = (data && (data.error || data.message)) || 'Failed to load OIDC snapshot.';
+        box.textContent = msg;
+        showToast(msg, 'error');
+        return;
+      }
+
+      box.textContent = JSON.stringify(data.info || data.data || data, null, 2);
+    } catch (e) {
+      console.error('oidcDebugInfo error', e);
+      box.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
+      showToast('Failed to load OIDC snapshot – see console.', 'error');
+    }
+  });
+}
 
 // --- tiny robust JSON helper ---
 async function safeJson(res) {
@@ -796,13 +835,20 @@ function captureInitialAdminConfig() {
   const ht = document.getElementById("headerTitle");
   originalAdminConfig = {
     headerTitle: ht ? ht.value.trim() : "",
+
     oidcProviderUrl: (document.getElementById("oidcProviderUrl")?.value || "").trim(),
     oidcClientId: (document.getElementById("oidcClientId")?.value || "").trim(),
     oidcClientSecret: (document.getElementById("oidcClientSecret")?.value || "").trim(),
+    oidcDebugLogging: !!document.getElementById("oidcDebugLogging")?.checked,
     oidcRedirectUri: (document.getElementById("oidcRedirectUri")?.value || "").trim(),
-    disableFormLogin: !!document.getElementById("disableFormLogin")?.checked,
-    disableBasicAuth: !!document.getElementById("disableBasicAuth")?.checked,
-    disableOIDCLogin: !!document.getElementById("disableOIDCLogin")?.checked,
+    oidcAllowDemote: !!document.getElementById("oidcAllowDemote")?.checked,
+
+    // UI is now “enable” toggles
+    enableFormLogin: !!document.getElementById("enableFormLogin")?.checked,
+    enableBasicAuth: !!document.getElementById("enableBasicAuth")?.checked,
+    enableOIDCLogin: !!document.getElementById("enableOIDCLogin")?.checked,
+    authBypass: !!document.getElementById("authBypass")?.checked,
+
     enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
     sharedMaxUploadSize: (document.getElementById("sharedMaxUploadSize")?.value || "").trim(),
     globalOtpauthUrl: (document.getElementById("globalOtpauthUrl")?.value || "").trim(),
@@ -818,15 +864,23 @@ function hasUnsavedChanges() {
   const o = originalAdminConfig;
   const getVal = id => (document.getElementById(id)?.value || "").trim();
   const getChk = id => !!document.getElementById(id)?.checked;
+
   return (
     getVal("headerTitle") !== o.headerTitle ||
+
     getVal("oidcProviderUrl") !== o.oidcProviderUrl ||
     getVal("oidcClientId") !== o.oidcClientId ||
     getVal("oidcClientSecret") !== o.oidcClientSecret ||
     getVal("oidcRedirectUri") !== o.oidcRedirectUri ||
-    getChk("disableFormLogin") !== o.disableFormLogin ||
-    getChk("disableBasicAuth") !== o.disableBasicAuth ||
-    getChk("disableOIDCLogin") !== o.disableOIDCLogin ||
+    getChk("oidcAllowDemote") !== o.oidcAllowDemote ||
+    getChk("oidcDebugLogging") !== o.oidcDebugLogging ||
+
+    // new enable-toggles
+    getChk("enableFormLogin") !== o.enableFormLogin ||
+    getChk("enableBasicAuth") !== o.enableBasicAuth ||
+    getChk("enableOIDCLogin") !== o.enableOIDCLogin ||
+    getChk("authBypass") !== o.authBypass ||
+
     getChk("enableWebDAV") !== o.enableWebDAV ||
     getVal("sharedMaxUploadSize") !== o.sharedMaxUploadSize ||
     getVal("globalOtpauthUrl") !== o.globalOtpauthUrl ||
@@ -834,7 +888,6 @@ function hasUnsavedChanges() {
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
     getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
     getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "") ||
-
     getChk("clamavScanUploads") !== o.clamavScanUploads
   );
 }
@@ -1038,14 +1091,31 @@ function loadShareLinksSection() {
           const endpoint = isFolder
             ? "/api/folder/deleteShareFolderLink.php"
             : "/api/file/deleteShareLink.php";
-
+      
+          const csrfToken =
+            (document.querySelector('meta[name="csrf-token"]')?.content || window.csrfToken || "");
+      
+          const body = new URLSearchParams({ token });
+      
           fetch(endpoint, {
             method: "POST",
             credentials: "include",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({ token })
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "X-CSRF-Token": csrfToken
+            },
+            body
           })
-            .then(res => res.ok ? res.json() : Promise.reject(res))
+            .then(res => {
+              if (!res.ok) {
+                if (res.status === 403) {
+                  // Optional: nicer message when CSRF/session is bad
+                  showToast("Forbidden while deleting share (check CSRF/session).", "error");
+                }
+                return Promise.reject(res);
+              }
+              return res.json();
+            })
             .then(json => {
               if (json.success) {
                 showToast(t("share_deleted_successfully"));
@@ -1136,8 +1206,7 @@ export function openAdminPanel() {
             ${[
             { id: "userManagement", label: t("user_management") },
             { id: "headerSettings", label: tf("header_footer_settings", "Header & Footer settings") },
-            { id: "loginOptions", label: t("login_options") },
-            { id: "webdav", label: "WebDAV Access" },
+            { id: "loginOptions", label: t("login_webdav") },
             { id: "onlyoffice", label: "ONLYOFFICE" },
             { id: "upload", label: tf("upload_limits_and_antivirus", "Upload limits & antivirus") },
             { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
@@ -1168,7 +1237,6 @@ export function openAdminPanel() {
           "userManagement",
           "headerSettings",
           "loginOptions",
-          "webdav",
           "onlyoffice",
           "upload",
           "oidc",
@@ -1324,14 +1392,20 @@ export function openAdminPanel() {
 
         document.getElementById("headerSettingsContent").innerHTML = `
   <div class="form-group">
-    <label for="headerTitle">${t("header_title_text")}:</label>
+      <div class="admin-subsection-title" style="margin-top:2px;">
+      ${t("header_title_text")}
+  </div>
     <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle || ""}" />
   </div>
+
+    <hr class="admin-divider">
 
   <!-- Pro: Logo -->
   <div class="form-group" style="margin-top:16px;">
     <label for="brandingCustomLogoUrl">
-      Header Logo
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      ${t("header_logo")}
+  </div>
       ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
     </label>
     <small class="text-muted d-block mb-1">
@@ -1369,10 +1443,14 @@ export function openAdminPanel() {
     </div>
   </div>
 
+    <hr class="admin-divider">
+
   <!-- Pro: Header colors -->
   <div class="form-group" style="margin-top:16px;">
     <label>
-      Header Colors
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      ${t("header_colors")}
+  </div>
       ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
     </label>
     <div class="d-flex align-items-center" style="gap: 12px; flex-wrap: wrap;">
@@ -1402,10 +1480,14 @@ export function openAdminPanel() {
     </small>
   </div>
 
+    <hr class="admin-divider">
+
   <!-- Pro: Footer text -->
   <div class="form-group" style="margin-top:16px;">
     <label for="brandingFooterHtml">
-      Footer text
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      ${t("footer_text")}
+  </div>
       ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
     </label>
     <small class="text-muted d-block mb-1">
@@ -1469,24 +1551,105 @@ export function openAdminPanel() {
         }
 
         document.getElementById("loginOptionsContent").innerHTML = `
-          <div class="form-group"><input type="checkbox" id="disableFormLogin" /> <label for="disableFormLogin">${t("disable_login_form")}</label></div>
-          <div class="form-group"><input type="checkbox" id="disableBasicAuth" /> <label for="disableBasicAuth">${t("disable_basic_http_auth")}</label></div>
-          <div class="form-group"><input type="checkbox" id="disableOIDCLogin" /> <label for="disableOIDCLogin">${t("disable_oidc_login")}</label></div>
-          <div class="form-group">
-            <input type="checkbox" id="authBypass" />
-            <label for="authBypass">Disable all built-in logins (proxy only)</label>
-          </div>
-          <div class="form-group">
-            <label for="authHeaderName">Auth header name:</label>
-            <input type="text" id="authHeaderName" class="form-control" placeholder="e.g. X-Remote-User" />
-          </div>
-        `;
+  <div class="admin-subsection-title">
+    ${tf("login_options", "Login options")}
+  </div>
 
-        document.getElementById("webdavContent").innerHTML = `
-          <div class="form-group"><input type="checkbox" id="enableWebDAV" /> <label for="enableWebDAV">Enable WebDAV</label></div>
-        `;
+  <div class="form-group">
+    <div class="form-check fr-toggle">
+      <input
+        type="checkbox"
+        class="form-check-input fr-toggle-input"
+        id="enableFormLogin"
+      />
+      <label class="form-check-label" for="enableFormLogin">
+        ${tf("enable_login_form", "Enable login form")}
+      </label>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <div class="form-check fr-toggle">
+      <input
+        type="checkbox"
+        class="form-check-input fr-toggle-input"
+        id="enableBasicAuth"
+      />
+      <label class="form-check-label" for="enableBasicAuth">
+        ${tf("enable_basic_http_auth", "Enable HTTP Basic auth")}
+      </label>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <div class="form-check fr-toggle">
+      <input
+        type="checkbox"
+        class="form-check-input fr-toggle-input"
+        id="enableOIDCLogin"
+      />
+      <label class="form-check-label" for="enableOIDCLogin">
+        ${tf("enable_oidc_login", "Enable OIDC login (OIDC config required)")}
+      </label>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <div class="form-check fr-toggle">
+      <input
+        type="checkbox"
+        class="form-check-input fr-toggle-input"
+        id="authBypass"
+      />
+      <label class="form-check-label" for="authBypass">
+        ${tf(
+          "proxy_only_login_label",
+          "Use proxy header only (disable built-in logins)"
+        )}
+      </label>
+    </div>
+    <small class="text-muted d-block mt-1">
+      ${tf(
+        "proxy_only_login_help",
+        "When enabled, FileRise trusts the reverse proxy header and disables the login form, HTTP Basic and OIDC."
+      )}
+    </small>
+  </div>
+
+  <div class="form-group">
+    <label for="authHeaderName">Auth header name:</label>
+    <input
+      type="text"
+      id="authHeaderName"
+      class="form-control"
+      placeholder="e.g. X-Remote-User"
+    />
+  </div>
+
+    <hr class="admin-divider">
+
+  <div class="admin-subsection-title" style="margin-top:2px;">
+    WebDAV access
+  </div>
+
+  <div class="form-group">
+    <div class="form-check fr-toggle">
+      <input
+        type="checkbox"
+        class="form-check-input fr-toggle-input"
+        id="enableWebDAV"
+      />
+      <label class="form-check-label" for="enableWebDAV">
+        Enable WebDAV
+      </label>
+    </div>
+  </div>
+`;
 
         document.getElementById("uploadContent").innerHTML = `
+    <div class="admin-subsection-title" style="margin-top:2px;">
+    Shared upload limits
+  </div>
   <div class="form-group">
     <label for="sharedMaxUploadSize">${t("shared_max_upload_size_bytes")}:</label>
     <input
@@ -1500,11 +1663,23 @@ export function openAdminPanel() {
     </small>
   </div>
 
-  <div class="form-group" style="margin-top:10px;">
-    <input type="checkbox" id="clamavScanUploads" />
-    <label for="clamavScanUploads" style="margin-left:4px;">
-      ${tf("clamav_enable_label", "Enable ClamAV scanning for uploads")}
-    </label>
+    <hr class="admin-divider">
+
+      <div class="admin-subsection-title" style="margin-top:2px;">
+    Antivirus scanning
+  </div>
+
+    <div class="form-group" style="margin-top:10px;">
+    <div class="form-check fr-toggle">
+      <input
+        type="checkbox"
+        class="form-check-input fr-toggle-input"
+        id="clamavScanUploads"
+      />
+      <label class="form-check-label" for="clamavScanUploads">
+        ${tf("clamav_enable_label", "Enable ClamAV scanning for uploads")}
+      </label>
+    </div>
     <small
       id="clamavScanUploadsHelp"
       class="d-block text-muted"
@@ -1656,9 +1831,14 @@ initVirusLogUI({ isPro });
         initOnlyOfficeUI({ config });
 
         const hasId = !!(config.oidc && config.oidc.hasClientId);
-        const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
+const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
+const oidcDebugEnabled = !!(config.oidc && config.oidc.debugLogging);
+const oidcAllowDemote = !!(config.oidc && config.oidc.allowDemote);
 
-        document.getElementById("oidcContent").innerHTML = `
+document.getElementById("oidcContent").innerHTML = `
+ <div class="admin-subsection-title" style="margin-top:2px;">
+    OIDC Configuration
+  </div>
   <div class="form-text text-muted" style="margin-top:8px;">
     <small>
       Client ID/Secret are never shown after saving. A green note indicates a value is saved.
@@ -1674,6 +1854,8 @@ initVirusLogUI({ isPro });
       for local testing or lab environments.
     </small>
   </div>
+
+  <hr class="admin-divider">
 
   <div class="form-group" style="margin-top:8px;">
     <label for="oidcProviderUrl">${t("oidc_provider_url")}:</label>
@@ -1702,13 +1884,30 @@ initVirusLogUI({ isPro });
     </small>
   </div>
 
-  <div class="form-group">
-    <label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label>
-    <input type="text" id="globalOtpauthUrl" class="form-control"
-           value="${window.currentOIDCConfig?.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
+  <hr class="admin-divider">
+
+  <div class="form-group" style="margin-top:4px;">
+  <div class="form-check fr-toggle">
+    <input type="checkbox"
+           class="form-check-input fr-toggle-input"
+           id="oidcAllowDemote"
+           ${oidcAllowDemote ? 'checked' : ''} />
+    <label class="form-check-label" for="oidcAllowDemote">
+      Allow OIDC to downgrade FileRise admins
+    </label>
+  </div>
+    <small class="text-muted d-block mt-1">
+      When enabled, if a user loses admin privileges in your IdP, FileRise will also
+      demote them from admin to regular user on next OIDC login.
+      <br>
+      When disabled (default), once a user is an admin in FileRise, role changes in
+      the IdP will not demote them automatically.
+      <br>
+      Container env <code>FR_OIDC_ALLOW_DEMOTE</code> overrides this setting.
+    </small>
   </div>
 
-  <hr style="margin:10px 0;">
+  <hr class="admin-divider">
 
   <div class="form-group">
     <label>${tf("oidc_quick_test_label", "Quick OIDC connectivity test")}</label>
@@ -1726,10 +1925,60 @@ initVirusLogUI({ isPro });
          class="small text-muted"
          style="margin-top:4px;"></div>
   </div>
+
+  <hr class="admin-divider">
+
+<div class="form-group" style="margin-top:10px;">
+  <div class="form-check fr-toggle">
+    <input type="checkbox"
+           class="form-check-input fr-toggle-input"
+           id="oidcDebugLogging"
+           ${oidcDebugEnabled ? 'checked' : ''} />
+    <label class="form-check-label" for="oidcDebugLogging">
+      Enable OIDC debug logging
+    </label>
+  </div>
+    <small class="text-muted d-block mt-1">
+      When enabled, FileRise logs extra non-sensitive OIDC info to the PHP error log
+      (issuer, redirect URI, auth method, group counts, etc). Turn this on only while
+      troubleshooting, then disable it.
+    </small>
+  </div>
+
+  <hr class="admin-divider">
+
+  <div class="form-group" style="margin-top:10px;">
+    <label>${tf("oidc_debug_snapshot_label", "Effective OIDC configuration snapshot")}</label>
+    <p class="text-muted small mb-1">
+      Generates a redacted JSON snapshot (no secrets) of how FileRise sees your OIDC
+      configuration and environment. Useful to copy/paste into a support ticket.
+    </p>
+    <button type="button"
+            class="btn btn-sm btn-secondary"
+            id="oidcDebugSnapshotBtn">
+      ${tf("oidc_debug_snapshot_button", "Show snapshot")}
+    </button>
+    <pre id="oidcDebugSnapshot"
+     class="small oidc-debug-snapshot"
+     style="margin-top:4px; max-height:200px; overflow:auto; padding:6px; border-radius:4px;"></pre>
+  </div>
+
+    <hr class="admin-divider">
+
+     <div class="admin-subsection-title" style="margin-top:2px;">
+    TOTP Configuration
+  </div>
+
+    <div class="form-group">
+    <label for="globalOtpauthUrl">${t("global_otpauth_url")}:</label>
+    <input type="text" id="globalOtpauthUrl" class="form-control"
+           value="${window.currentOIDCConfig?.globalOtpauthUrl || 'otpauth://totp/{label}?secret={secret}&issuer=FileRise'}" />
+  </div>
 `;
 
-        wireReplaceButtons(document.getElementById("oidcContent"));
-        wireOidcTestButton(document.getElementById("oidcContent"));
+wireReplaceButtons(document.getElementById("oidcContent"));
+wireOidcTestButton(document.getElementById("oidcContent"));
+wireOidcDebugSnapshotButton(document.getElementById("oidcContent")); 
 
         document.getElementById("shareLinksContent").textContent = t("loading") + "…";
 
@@ -2026,24 +2275,56 @@ initVirusLogUI({ isPro });
         // --- end FileRise Pro section ---
 
         document.getElementById("saveAdminSettings")
-          .addEventListener("click", handleSave);
-        ["disableFormLogin", "disableBasicAuth", "disableOIDCLogin"].forEach(id => {
-          document.getElementById(id)
-            .addEventListener("change", e => {
-              const chk = ["disableFormLogin", "disableBasicAuth", "disableOIDCLogin"]
-                .filter(i => document.getElementById(i).checked).length;
-              if (chk === 3) {
-                showToast(t("at_least_one_login_method"));
-                e.target.checked = false;
-              }
-            });
+        .addEventListener("click", handleSave);
+
+      const loginToggleIds = ["enableFormLogin", "enableBasicAuth", "enableOIDCLogin"];
+
+      const ensureAtLeastOneLogin = (changedEl) => {
+        const proxyEl = document.getElementById("authBypass");
+        const proxyOnly = !!proxyEl && proxyEl.checked;
+
+        const enabledCount = loginToggleIds
+          .map(id => document.getElementById(id))
+          .filter(el => el && el.checked).length;
+
+        // If proxy-only is OFF, we require at least one login method
+        if (!proxyOnly && enabledCount === 0 && changedEl) {
+          showToast(t("at_least_one_login_method"));
+          changedEl.checked = true;
+        }
+      };
+
+      loginToggleIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener("change", (e) => {
+          ensureAtLeastOneLogin(e.target);
         });
-        document.getElementById("authBypass").addEventListener("change", e => {
-          if (e.target.checked) {
-            ["disableFormLogin", "disableBasicAuth", "disableOIDCLogin"]
-              .forEach(i => document.getElementById(i).checked = false);
+      });
+
+      const authBypassEl = document.getElementById("authBypass");
+      if (authBypassEl) {
+        authBypassEl.addEventListener("change", (e) => {
+          const checked = e.target.checked;
+
+          if (checked) {
+            // Proxy-only: switch off all built-in logins
+            loginToggleIds.forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.checked = false;
+            });
+          } else {
+            // Leaving proxy-only: if everything is off, enable login form by default
+            const enabledCount = loginToggleIds
+              .map(id => document.getElementById(id))
+              .filter(el => el && el.checked).length;
+            if (enabledCount === 0) {
+              const fallback = document.getElementById("enableFormLogin");
+              if (fallback) fallback.checked = true;
+            }
           }
         });
+      }
 
        
 
@@ -2057,12 +2338,27 @@ initVirusLogUI({ isPro });
         };
         userMgmt?.addEventListener("click", window.__userMgmtDelegatedClick);
 
-        document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
-        document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
-        document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
-        document.getElementById("authBypass").checked = !!config.loginOptions.authBypass;
-        document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
-        document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
+        const loginOpts = config.loginOptions || {};
+        const formEnabled  = !(loginOpts.disableFormLogin === true);
+        const basicEnabled = !(loginOpts.disableBasicAuth === true);
+        const oidcEnabled  = !(loginOpts.disableOIDCLogin === true);
+        const proxyOnly    = !!loginOpts.authBypass;
+
+        document.getElementById("enableFormLogin").checked  = formEnabled;
+        document.getElementById("enableBasicAuth").checked  = basicEnabled;
+        document.getElementById("enableOIDCLogin").checked  = oidcEnabled;
+        document.getElementById("authBypass").checked       = proxyOnly;
+        document.getElementById("authHeaderName").value     = loginOpts.authHeaderName || "X-Remote-User";
+
+        // If proxy-only is on, force all built-in login toggles off
+        if (proxyOnly) {
+          ["enableFormLogin", "enableBasicAuth", "enableOIDCLogin"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.checked = false;
+          });
+        }
+
+        document.getElementById("enableWebDAV").checked      = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         // --- ClamAV toggle wiring ---
         const cfgClam = config.clamav || {};
@@ -2092,12 +2388,26 @@ initVirusLogUI({ isPro });
         const hasId = !!(config.oidc && config.oidc.hasClientId);
         const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
 
-        document.getElementById("disableFormLogin").checked = config.loginOptions.disableFormLogin === true;
-        document.getElementById("disableBasicAuth").checked = config.loginOptions.disableBasicAuth === true;
-        document.getElementById("disableOIDCLogin").checked = config.loginOptions.disableOIDCLogin === true;
-        document.getElementById("authBypass").checked = !!config.loginOptions.authBypass;
-        document.getElementById("authHeaderName").value = config.loginOptions.authHeaderName || "X-Remote-User";
-        document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
+        const loginOpts = config.loginOptions || {};
+        const formEnabled  = !(loginOpts.disableFormLogin === true);
+        const basicEnabled = !(loginOpts.disableBasicAuth === true);
+        const oidcEnabled  = !(loginOpts.disableOIDCLogin === true);
+        const proxyOnly    = !!loginOpts.authBypass;
+
+        document.getElementById("enableFormLogin").checked  = formEnabled;
+        document.getElementById("enableBasicAuth").checked  = basicEnabled;
+        document.getElementById("enableOIDCLogin").checked  = oidcEnabled;
+        document.getElementById("authBypass").checked       = proxyOnly;
+        document.getElementById("authHeaderName").value     = loginOpts.authHeaderName || "X-Remote-User";
+
+        if (proxyOnly) {
+          ["enableFormLogin", "enableBasicAuth", "enableOIDCLogin"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.checked = false;
+          });
+        }
+
+        document.getElementById("enableWebDAV").checked      = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         // --- ClamAV toggle wiring (refresh) ---
         const cfgClam = config.clamav || {};
@@ -2139,6 +2449,15 @@ initVirusLogUI({ isPro });
         document.getElementById("oidcClientSecret").value = window.currentOIDCConfig?.clientSecret || "";
         document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig?.redirectUri || "";
         document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig?.globalOtpauthUrl || '';
+        const oidcDebugEl = document.getElementById('oidcDebugLogging');
+        if (oidcDebugEl) {
+          oidcDebugEl.checked = !!(config.oidc && config.oidc.debugLogging);
+        }
+        const oidcAllowDemoteEl = document.getElementById('oidcAllowDemote');
+if (oidcAllowDemoteEl) {
+  oidcAllowDemoteEl.checked = !!(config.oidc && config.oidc.allowDemote);
+}
+      wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
         captureInitialAdminConfig();
       }
       try {
@@ -2165,30 +2484,48 @@ initVirusLogUI({ isPro });
 }
 
 function handleSave() {
+  const enableFormLogin  = !!document.getElementById("enableFormLogin")?.checked;
+  const enableBasicAuth  = !!document.getElementById("enableBasicAuth")?.checked;
+  const enableOIDCLogin  = !!document.getElementById("enableOIDCLogin")?.checked;
+  const proxyOnlyEnabled = !!document.getElementById("authBypass")?.checked;
+
+  const authHeaderName =
+    (document.getElementById("authHeaderName")?.value || "").trim() ||
+    "X-Remote-User";
+
   const payload = {
     header_title: document.getElementById("headerTitle")?.value || "",
     loginOptions: {
-      disableFormLogin: document.getElementById("disableFormLogin").checked,
-      disableBasicAuth: document.getElementById("disableBasicAuth").checked,
-      disableOIDCLogin: document.getElementById("disableOIDCLogin").checked,
-      authBypass: document.getElementById("authBypass").checked,
-      authHeaderName: document.getElementById("authHeaderName").value.trim() || "X-Remote-User",
+      // Backend still expects “disable*” flags:
+      disableFormLogin: !enableFormLogin,
+      disableBasicAuth: !enableBasicAuth,
+      disableOIDCLogin: !enableOIDCLogin,
+      authBypass: proxyOnlyEnabled,
+      authHeaderName,
     },
-    enableWebDAV: document.getElementById("enableWebDAV").checked,
-    sharedMaxUploadSize: parseInt(document.getElementById("sharedMaxUploadSize").value || "0", 10) || 0,
+    enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
+    sharedMaxUploadSize: parseInt(
+      document.getElementById("sharedMaxUploadSize").value || "0",
+      10
+    ) || 0,
     oidc: {
       providerUrl: document.getElementById("oidcProviderUrl").value.trim(),
-      redirectUri: document.getElementById("oidcRedirectUri").value.trim(),
+      redirectUri: document
+        .getElementById("oidcRedirectUri")
+        .value.trim(),
+      debugLogging: !!document.getElementById("oidcDebugLogging")?.checked,
+      allowDemote: !!document.getElementById("oidcAllowDemote")?.checked,
       // clientId/clientSecret added conditionally below
     },
-    globalOtpauthUrl: document.getElementById("globalOtpauthUrl").value.trim(),
+    globalOtpauthUrl: document
+      .getElementById("globalOtpauthUrl")
+      .value.trim(),
     branding: {
       customLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
       headerBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
       headerBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
       footerHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     },
-
     clamav: {
       scanUploads: document.getElementById("clamavScanUploads").checked,
     },

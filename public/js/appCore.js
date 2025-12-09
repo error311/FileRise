@@ -96,12 +96,21 @@ export function initializeApp() {
   const zoomWrap = document.querySelector('.header-zoom-controls');
   if (zoomWrap) {
     const hideZoom = localStorage.getItem('hideZoomControls') === 'true';
+
     if (hideZoom) {
       zoomWrap.style.display = 'none';
       zoomWrap.setAttribute('aria-hidden', 'true');
     } else {
       zoomWrap.style.display = 'flex';
       zoomWrap.removeAttribute('aria-hidden');
+
+      // If individual controls were hard-hidden in markup (setup mode),
+      // clear their inline display:none so they become visible in the app.
+      zoomWrap
+        .querySelectorAll('.zoom-btn, #zoomDisplay')
+        .forEach(el => {
+          el.style.removeProperty('display');
+        });
     }
 
     // Always load zoom.js once app is running

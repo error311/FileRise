@@ -3,10 +3,27 @@
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
+require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 class AuthModel
 {
 
+    public static function isOidcDemoteAllowed(): bool
+{
+    // 1) Container / env always wins if set
+    if (defined('FR_OIDC_ALLOW_DEMOTE')) {
+        return FR_OIDC_ALLOW_DEMOTE;
+    }
+
+    // 2) Fallback to admin panel config
+    try {
+        $cfg = AdminModel::getConfig();
+        return !empty($cfg['oidc']['allowDemote']);
+    } catch (\Throwable $e) {
+        error_log('OIDC allowDemote check failed: ' . $e->getMessage());
+        return false;
+    }
+}
     /**
      * Retrieves the user's role from the users file.
      *
@@ -39,63 +56,80 @@ class AuthModel
      * Returns: ['success' => true] or ['error' => '...']
      */
     public static function ensureLocalOidcUser(string $username, bool $isAdminByIdp): array
-    {
-        if (!preg_match(REGEX_USER, $username)) {
-            return ['error' => 'OIDC username is not a valid FileRise username'];
-        }
-
-        $usersFile = USERS_DIR . USERS_FILE;
-        if (!file_exists($usersFile)) {
-            // Try to create an empty file so we can append to it
-            if (file_put_contents($usersFile, '', LOCK_EX) === false) {
-                return ['error' => 'Users file not found and could not be created.'];
-            }
-        }
-
-        $lines      = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $foundIndex = null;
-
-        foreach ($lines as $i => $line) {
-            $parts = explode(':', trim($line));
-            if (count($parts) < 3) {
-                continue;
-            }
-            if (strcasecmp($parts[0], $username) === 0) {
-                $foundIndex = $i;
-                break;
-            }
-        }
-
-        $role = $isAdminByIdp ? '1' : '0';
-
-        if ($foundIndex === null) {
-            // No existing user
-            if (!defined('FR_OIDC_AUTO_CREATE') || !FR_OIDC_AUTO_CREATE) {
-                return ['error' => 'User does not exist in FileRise and auto-create is disabled.'];
-            }
-
-            $randomPassword = bin2hex(random_bytes(16));
-            $hash           = password_hash($randomPassword, PASSWORD_BCRYPT);
-            $lines[]        = $username . ':' . $hash . ':' . $role;
-        } else {
-            // Existing user – keep role in sync with IdP
-            $parts = explode(':', trim($lines[$foundIndex]));
-            if (count($parts) < 3) {
-                $parts = array_pad($parts, 3, '');
-            }
-
-            // Trust IdP: if they are no longer admin in IdP, demote here as well.
-            $parts[2]           = $role;
-            $lines[$foundIndex] = implode(':', $parts);
-        }
-
-        $payload = $lines ? (implode(PHP_EOL, $lines) . PHP_EOL) : '';
-        if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
-            return ['error' => 'Failed to update users file for OIDC user.'];
-        }
-
-        return ['success' => true];
+{
+    if (!preg_match(REGEX_USER, $username)) {
+        return ['error' => 'OIDC username is not a valid FileRise username'];
     }
+
+    $usersFile = USERS_DIR . USERS_FILE;
+
+    if (!file_exists($usersFile)) {
+        if (file_put_contents($usersFile, '', LOCK_EX) === false) {
+            return ['error' => 'Users file not found and could not be created.'];
+        }
+    }
+
+    $lines      = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $foundIndex = null;
+
+    foreach ($lines as $i => $line) {
+        $parts = explode(':', trim($line));
+        if (count($parts) < 3) {
+            continue;
+        }
+        if (strcasecmp($parts[0], $username) === 0) {
+            $foundIndex = $i;
+            break;
+        }
+    }
+
+    // Role according to IdP for THIS login
+    $roleFromIdp = $isAdminByIdp ? '1' : '0';
+
+    if ($foundIndex === null) {
+        // No existing user → auto-create (if allowed)
+        if (!defined('FR_OIDC_AUTO_CREATE') || !FR_OIDC_AUTO_CREATE) {
+            return ['error' => 'User does not exist in FileRise and auto-create is disabled.'];
+        }
+
+        $randomPassword = bin2hex(random_bytes(16));
+        $hash           = password_hash($randomPassword, PASSWORD_BCRYPT);
+
+        // Standard 3-field format: username:hash:role
+        $lines[] = $username . ':' . $hash . ':' . $roleFromIdp;
+    } else {
+        $rawLine = trim($lines[$foundIndex]);
+        $parts   = explode(':', $rawLine);
+
+        if (count($parts) < 3) {
+            $parts = array_pad($parts, 3, '');
+        }
+
+               // username, hash, role
+        $usernameExisting = $parts[0];
+        $hashExisting     = $parts[1];
+        $currentRole      = ($parts[2] === '1') ? '1' : '0';
+
+        // Always allow promotion: if IdP says admin, make them admin locally.
+        if ($isAdminByIdp && $currentRole !== '1') {
+            $parts[2] = '1';
+        }
+
+        // Demotion: only if the IdP says "not admin" AND demotion is allowed.
+        if (!$isAdminByIdp && self::isOidcDemoteAllowed() && $currentRole !== '0') {
+            $parts[2] = '0';
+        }
+
+        $lines[$foundIndex] = implode(':', $parts);
+    }
+
+    $payload = $lines ? (implode(PHP_EOL, $lines) . PHP_EOL) : '';
+    if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
+        return ['error' => 'Failed to update users file for OIDC user.'];
+    }
+
+    return ['success' => true];
+}
 
     /**
      * Map OIDC groups into FileRise Pro groups (additive only – we never remove membership).
@@ -426,7 +460,7 @@ class AuthModel
         if (
             !defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE ||
             !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR ||
-            !defined('FR_OIDC_PRO_GROUP_PREFIX') || FR_OIDC_PRO_GROUP_PREFIX === ''
+            !defined('FR_OIDC_PRO_GROUP_PREFIX')
         ) {
             return;
         }
@@ -447,20 +481,23 @@ class AuthModel
         }
 
         // Map IdP groups → Pro group names (suffix of prefix, normalized)
-        $desiredNames = [];
-        foreach ($raw as $g) {
-            if (stripos($g, $prefix) === 0) {
-                $slug = substr($g, $prefixLen);
-                $slug = strtolower(preg_replace('/[^a-z0-9_\-]/i', '_', $slug));
-                if ($slug !== '') {
-                    $desiredNames[] = $slug;
-                }
-            }
+$desiredNames = [];
+foreach ($raw as $g) {
+    if ($prefix === '' || stripos($g, $prefix) === 0) {
+        $slug = ($prefix === '')
+            ? $g
+            : substr($g, $prefixLen);
+
+        $slug = strtolower(preg_replace('/[^a-z0-9_\-]/i', '_', $slug));
+        if ($slug !== '') {
+            $desiredNames[] = $slug;
         }
-        $desiredNames = array_values(array_unique($desiredNames));
-        if (!$desiredNames) {
-            return;
-        }
+    }
+}
+$desiredNames = array_values(array_unique($desiredNames));
+if (!$desiredNames) {
+    return;
+}
 
         $proGroupsPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . '/ProGroups.php';
         if (!is_file($proGroupsPath)) {
@@ -514,7 +551,11 @@ class AuthModel
 
         // Remove user from any other OIDC-managed groups they no longer have
         foreach ($groupsArr as $name => &$info) {
-            if (stripos($name, $prefix) === 0 && !in_array($name, $desiredNames, true)) {
+            $managedByPrefix = ($prefix === '')
+                ? true           // with empty prefix, we treat all groups here as OIDC-managed
+                : (stripos($name, $prefix) === 0);
+        
+            if ($managedByPrefix && !in_array($name, $desiredNames, true)) {
                 $members = $info['members'] ?? [];
                 if (is_array($members) && $members) {
                     $info['members'] = array_values(array_filter(

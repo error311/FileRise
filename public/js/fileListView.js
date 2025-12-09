@@ -1915,7 +1915,7 @@ window.cacheImage = cacheImage;
  * Fuse.js fuzzy search helper
  */
 // --- Lazy Fuse loader (drop-in, CSP-safe, no inline) ---
-const FUSE_SRC = '/vendor/fuse/6.6.2/fuse.min.js?v={{APP_QVER}}';
+const FUSE_SRC = '/vendor/fuse/7.1.0/fuse.min.js?v={{APP_QVER}}';
 let _fuseLoadingPromise = null;
 
 function loadScriptOnce(src) {

@@ -6,7 +6,7 @@ import {
   handleDownloadZipSelected, handleExtractZipSelected,
   renameFile, openCreateFileModal
 } from './fileActions.js?v={{APP_QVER}}';
-import { previewFile, buildPreviewUrl } from './filePreview.js?v={{APP_QVER}}';
+import { previewFile, buildPreviewUrl, openShareModal } from './filePreview.js?v={{APP_QVER}}';
 import { editFile } from './fileEditor.js?v={{APP_QVER}}';
 import { canEditFile, fileData, downloadSelectedFilesIndividually } from './fileListView.js?v={{APP_QVER}}';
 import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
@@ -34,7 +34,8 @@ function localizeMenu() {
     'rename': 'rename',
     'tag_file': 'tag_file',
     // NEW:
-    'download_plain': 'download_plain'
+    'download_plain': 'download_plain',
+    'share_file': 'share_file'
   };
   Object.entries(map).forEach(([action, key]) => {
     const el = m.querySelector(`.mi[data-action="${action}"]`);
@@ -214,6 +215,10 @@ function menuClickDelegate(ev) {
     case 'tag_file':
       if (s.file) openTagModal(s.file);
       break;
+
+      case 'share_file':
+        if (s.file) openShareModal(s.file, folder);
+        break;
   }
 }
 

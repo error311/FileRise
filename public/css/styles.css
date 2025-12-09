@@ -189,9 +189,6 @@ body{letter-spacing: 0.2px;
     white-space: nowrap;
     font-weight: 600;
   }
-  #userManagementContent {
-    margin-top: 10px !important;
-  }
 
 #darkModeIcon{color: #fff;}
 .header-logo{max-height: 50px;
@@ -2940,4 +2937,132 @@ th[data-column="actions"]::after {
   text-align: center;
   max-width: 100%;
   white-space: normal;
+}
+/* Base look for the OIDC debug JSON box */
+#oidcDebugSnapshot,
+.oidc-debug-snapshot {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;      /* long JSON stays readable */
+  word-break: break-word;
+}
+
+/* Light mode */
+body:not(.dark-mode) #oidcDebugSnapshot,
+body:not(.dark-mode) .oidc-debug-snapshot {
+  background: rgba(0, 0, 0, 0.03);
+  color: #333;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Dark mode */
+body.dark-mode #oidcDebugSnapshot,
+body.dark-mode .oidc-debug-snapshot {
+  color: #e5e7eb;      /* light gray text */
+}
+/* admin section separators */
+.admin-divider {
+  border: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  margin: 10px 0;
+}
+
+.dark-mode .admin-divider {
+  border-top-color: rgba(255, 255, 255, 0.16);
+}
+
+/* OIDC debug JSON snapshot */
+#oidcContent .oidc-debug-snapshot {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+}
+
+.dark-mode #oidcContent .oidc-debug-snapshot {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+
+/* Toggle-style switches for admin panel (OIDC etc.) */
+#adminPanelModal .form-check.fr-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 0; 
+}
+
+/* Base switch track */
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 2.6rem;
+  height: 1.4rem;
+  margin: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background-color: #e1e4ea;
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+/* Knob */
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease;
+}
+
+/* ON state */
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked {
+  background-color: var(--filr-accent-500, #0d6efd);
+  border-color: var(--filr-accent-500, #0d6efd);
+}
+
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked::before {
+  transform: translateX(1.1rem);
+}
+
+/* Focus outline */
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input:focus-visible {
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.35);
+}
+
+/* Dark mode tweaks */
+.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input {
+  border-color: rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked {
+  background-color: var(--filr-accent-400, #0d6efd);
+  border-color: var(--filr-accent-400, #0d6efd);
+}
+
+.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input::before {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+/* Give every admin section a little breathing room at the top */
+#adminPanelModal .section-content {
+  padding-top: 10px;
+}
+#adminPanelModal .admin-subsection-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-top: 4px;
+  margin-bottom: 6px;
 }

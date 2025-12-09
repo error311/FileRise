@@ -444,6 +444,8 @@ class AdminModel
                     'clientId'     => '',
                     'clientSecret' => '',
                     'redirectUri'  => '',
+                    'debugLogging'  => false,
+                    'allowDemote'    => false,
                 ];
             } else {
                 foreach (['providerUrl', 'clientId', 'clientSecret', 'redirectUri'] as $k) {
@@ -453,6 +455,8 @@ class AdminModel
                 }
             }
 
+            $config['oidc']['debugLogging'] = !empty($config['oidc']['debugLogging']);
+            $config['oidc']['allowDemote'] = !empty($config['oidc']['allowDemote']);
             // Normalize authBypass & authHeaderName
             if (!array_key_exists('authBypass', $config['loginOptions'])) {
                 $config['loginOptions']['authBypass'] = false;
@@ -538,7 +542,9 @@ class AdminModel
                 'providerUrl'  => 'https://your-oidc-provider.com',
                 'clientId'     => '',
                 'clientSecret' => '',
-                'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback'
+                'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback',
+                'debugLogging' => false,
+                'allowDemote'    => false,
             ],
             'loginOptions'          => [
                 'disableFormLogin' => false,

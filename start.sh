@@ -95,7 +95,9 @@ if [ "${CLAMAV_AUTO_UPDATE:-true}" = "true" ]; then
   if command -v freshclam >/dev/null 2>&1; then
     if [ "$(id -u)" -eq 0 ]; then
       echo "[startup] Updating ClamAV signatures via freshclam..."
-      freshclam || echo "[startup] freshclam failed; continuing with existing signatures (if any)."
+      # Suppress noisy "NotifyClamd" warnings – we don't run clamd in this container.
+      freshclam >/dev/null 2>&1 \
+  || echo "[startup] freshclam failed; continuing with existing signatures (if any)."
     else
       echo "[startup] Not running as root; skipping freshclam (requires root)."
     fi

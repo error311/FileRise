@@ -166,48 +166,23 @@ class AdminController
         $proExpiresAt = $proPayload['expiresAt'] ?? null;
         $proMaxMajor  = $proPayload['maxMajor']  ?? null;
 
-        // Whitelisted public subset only (+ ONLYOFFICE enabled flag)
-        $public = [
-            'header_title'        => (string)($config['header_title'] ?? 'FileRise'),
-            'loginOptions'        => [
-                'disableFormLogin' => (bool)($config['loginOptions']['disableFormLogin'] ?? false),
-                'disableBasicAuth' => (bool)($config['loginOptions']['disableBasicAuth'] ?? false),
-                'disableOIDCLogin' => (bool)($config['loginOptions']['disableOIDCLogin'] ?? false),
-            ],
-            'globalOtpauthUrl'    => (string)($config['globalOtpauthUrl'] ?? ''),
-            'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
-            'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
-            'oidc' => [
-                'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
-                'redirectUri' => (string)($config['oidc']['redirectUri'] ?? ''),
-                // never include clientId/clientSecret
-            ],
-            'onlyoffice' => [
-                // Public only needs to know if it’s on; no secrets/origins here.
-                'enabled' => $effEnabled,
-            ],
-            'branding' => [
-                'customLogoUrl' => (string)($config['branding']['customLogoUrl'] ?? ''),
-                'headerBgLight' => (string)($config['branding']['headerBgLight'] ?? ''),
-                'headerBgDark'  => (string)($config['branding']['headerBgDark'] ?? ''),
-                'footerHtml'    => (string)($config['branding']['footerHtml'] ?? ''),
-            ],
-            'pro' => [
-                'active'  => $proActive,
-                'type'    => $proType,
-                'email'   => $proEmail,
-                'version' => $proVersion,
-                'license' => $licenseString,
-                'plan'      => $proPlan,
-                'expiresAt' => $proExpiresAt,
-                'maxMajor'  => $proMaxMajor,
-            ],
-            'clamav' => [
-                'scanUploads' => $clamScanUploads,
-                'lockedByEnv' => $clamLockedByEnv,
-            ],
-            'demoMode' => defined('FR_DEMO_MODE') ? (bool)FR_DEMO_MODE : false,
+        $proInfo = [
+            'active'   => (bool)$proActive,
+            'type'     => $proType ?: '',
+            'email'    => $proEmail ?: '',
+            'version'  => $proVersion ?: '',
+            'license'  => $licenseString ?: '',
+            'plan'     => $proPlan ?: '',
+            'expiresAt'=> $proExpiresAt ?: '',
+            'maxMajor' => $proMaxMajor,
         ];
+
+        $public = AdminModel::buildPublicSubset($config); 
+
+                // Safe public view of Pro status (no license string)
+                $public['pro'] = [
+                    'version' => $proVersion ?: '',
+                ];
 
         $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
 
@@ -221,6 +196,8 @@ class AdminController
                 'oidc' => array_merge($public['oidc'], [
                     'hasClientId'     => !empty($config['oidc']['clientId']),
                     'hasClientSecret' => !empty($config['oidc']['clientSecret']),
+                    'debugLogging'    => !empty($config['oidc']['debugLogging']),
+                    'allowDemote'     => !empty($config['oidc']['allowDemote']),
                 ]),
                 'onlyoffice' => [
                     'enabled'      => $effEnabled,
@@ -234,6 +211,7 @@ class AdminController
                         || defined('ONLYOFFICE_PUBLIC_ORIGIN')
                     ),
                 ],
+                'pro' => $proInfo,
             ];
 
             header('Cache-Control: no-store'); // don’t cache admin config
@@ -752,13 +730,6 @@ class AdminController
             ];
         }
 
-        if (!preg_match('#^https?://#i', $providerUrl)) {
-            return [
-                'success' => false,
-                'error'   => 'OIDC provider URL must start with http:// or https://',
-                'value'   => $providerUrl,
-            ];
-        }
 
         // 2) Normalize discovery URL
         $base = rtrim($providerUrl, '/');
@@ -1252,29 +1223,59 @@ class AdminController
             }
         }
 
+        // OIDC debug logging toggle
+if (isset($data['oidc']['debugLogging'])) {
+    $merged['oidc']['debugLogging'] = filter_var(
+        $data['oidc']['debugLogging'],
+        FILTER_VALIDATE_BOOLEAN
+    );
+}
+
+// OIDC admin demotion toggle
+if (isset($data['oidc']['allowDemote'])) {
+    $merged['oidc']['allowDemote'] = filter_var(
+        $data['oidc']['allowDemote'],
+        FILTER_VALIDATE_BOOLEAN
+    );
+}
+
         // If OIDC login is enabled, ensure required fields are present and sane
         $oidcEnabled = !empty($merged['loginOptions']['disableOIDCLogin']) ? false : true;
+
         if ($oidcEnabled) {
             $prov = $merged['oidc']['providerUrl'] ?? '';
             $rid  = $merged['oidc']['redirectUri'] ?? '';
             $cid  = $merged['oidc']['clientId'] ?? '';
-            // clientSecret may be empty for some PKCE-only flows, but commonly needed for code flow.
+
             if ($prov === '' || $rid === '' || $cid === '') {
                 http_response_code(400);
-                echo json_encode(['error' => 'OIDC is enabled but providerUrl, redirectUri, and clientId are required.']);
+                echo json_encode([
+                    'error' => 'OIDC is enabled but providerUrl, redirectUri, and clientId are required.'
+                ]);
                 exit;
             }
+
             // Require https except for localhost development
             $httpsOk = function (string $url): bool {
                 if ($url === '') return false;
                 $parts = parse_url($url);
                 if (!$parts || empty($parts['scheme'])) return false;
-                if ($parts['scheme'] === 'https') return true;
-                if ($parts['scheme'] === 'http' && (isset($parts['host']) && ($parts['host'] === 'localhost' || $parts['host'] === '127.0.0.1'))) {
+
+                $scheme = strtolower($parts['scheme']);
+                $host   = strtolower($parts['host'] ?? '');
+
+                if ($scheme === 'https') {
                     return true;
                 }
+
+                if ($scheme === 'http' && ($host === 'localhost' || $host === '127.0.0.1')) {
+                    return true;
+                }
+
                 return false;
             };
+
+
         }
 
 

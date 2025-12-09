@@ -9,7 +9,7 @@ const EDITOR_PLAIN_THRESHOLD = 5 * 1024 * 1024;  // >5 MiB => force plain text, 
 const EDITOR_BLOCK_THRESHOLD = 10 * 1024 * 1024; // >10 MiB => block editing
 
 // ==== CodeMirror lazy loader ===============================================
-const CM_BASE = "/vendor/codemirror/5.65.5/";
+const CM_BASE = "/vendor/codemirror/5.65.18/";
 
 // Stamp-friendly helpers (the stamper will replace {{APP_QVER}})
 const coreUrl = (p) => `${CM_BASE}${p}?v={{APP_QVER}}`;

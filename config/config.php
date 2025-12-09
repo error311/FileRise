@@ -63,7 +63,20 @@ if (!defined('FR_OIDC_ADMIN_GROUP')) {
 if (!defined('FR_OIDC_PRO_GROUP_PREFIX')) {
     define('FR_OIDC_PRO_GROUP_PREFIX', '');
 }
+// Optional env/constant override: if set, it wins; if not set, UI setting is used.
+if (!defined('FR_OIDC_ALLOW_DEMOTE')) {
+    $envVal = getenv('FR_OIDC_ALLOW_DEMOTE');
 
+    if ($envVal !== false && $envVal !== '') {
+        $val = strtolower(trim((string)$envVal));
+        define('FR_OIDC_ALLOW_DEMOTE', $val === '1' || $val === 'true');
+    }
+    // IMPORTANT: no "else" here ⇒ if env is not set, we do NOT define the constant,
+    // so AuthModel::isOidcDemoteAllowed() will fall back to AdminModel::getConfig().
+}
+if (!defined('FR_OIDC_DEBUG')) {
+    define('FR_OIDC_DEBUG', false);
+}
 // Antivirus / ClamAV (optional)
 // If VIRUS_SCAN_ENABLED is set in the environment, it overrides the admin setting.
 // If it is not set, we don't define the constant and the admin checkbox controls scanning.

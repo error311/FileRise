@@ -22,22 +22,22 @@ If you believe any attribution is missing or incorrect, please open an issue.
 
 ## CSS / JS Libraries (vendored)
 
-- **Bootstrap 4.5.2** — MIT License  
-  **Files:** `public/vendor/bootstrap/4.5.2/bootstrap.min.css`
+- **Bootstrap 4.6.2** — MIT License  
+  **Files:** `public/vendor/bootstrap/4.6.2/bootstrap.min.css`
 
-- **CodeMirror 5.65.5** — MIT License  
-  **Files:** `public/vendor/codemirror/5.65.5/*`
+- **CodeMirror 5.65.18** — MIT License  
+  **Files:** `public/vendor/codemirror/5.65.18/*`
 
-- **DOMPurify 2.4.0** — Apache License 2.0  
-  **Files:** `public/vendor/dompurify/2.4.0/purify.min.js`
+- **DOMPurify 3.3.1** — Apache License 2.0  
+  **Files:** `public/vendor/dompurify/3.3.1/purify.min.js`
 
-- **Fuse.js 6.6.2** — Apache License 2.0  
-  **Files:** `public/vendor/fuse/6.6.2/fuse.min.js`
+- **Fuse.js 7.1.0** — Apache License 2.0  
+  **Files:** `public/vendor/fuse/7.1.0/fuse.min.js`
 
 - **Resumable.js 1.1.0** — MIT License  
   **Files:** `public/vendor/resumable/1.1.0/resumable.min.js`
 
-- **ReDoc (redoc.standalone.js)** — MIT License  
+- **ReDoc 2.5.1 (redoc.standalone.js)** — MIT License  
   **Files:** `public/vendor/redoc/redoc.standalone.js`  
   **Notes:** Self-hosted to comply with `script-src 'self'` CSP.
 

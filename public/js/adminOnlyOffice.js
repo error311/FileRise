@@ -455,10 +455,14 @@ export function initOnlyOfficeUI({ config }) {
 
   // Base content
   sec.innerHTML = `
-    <div class="form-group">
-      <input type="checkbox" id="ooEnabled" />
-      <label for="ooEnabled">Enable ONLYOFFICE integration</label>
-    </div>
+    <div class="form-check fr-toggle">
+  <input type="checkbox"
+         class="form-check-input fr-toggle-input"
+         id="ooEnabled" />
+  <label class="form-check-label" for="ooEnabled">
+    Enable ONLYOFFICE integration
+  </label>
+</div>
 
     <div class="form-group">
       <label for="ooDocsOrigin">Document Server Origin:</label>

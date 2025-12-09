@@ -21,7 +21,7 @@
   <link rel="apple-touch-icon" href="/assets/icons/icon-192.png?v={{APP_QVER}}">
   
   <!-- Critical CSS -->
-  <link rel="stylesheet" href="/vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="/vendor/bootstrap/4.6.2/bootstrap.min.css?v={{APP_QVER}}">
   <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
   <link rel="stylesheet" href="/css/vendor/roboto.css?v={{APP_QVER}}">
   
@@ -30,7 +30,7 @@
   <link rel="preload" as="font" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBHMdazQ.woff2?v={{APP_QVER}}" type="font/woff2" crossorigin>
   
   <!-- Vendor & version (deferred) -->
-  <script src="/vendor/dompurify/2.4.0/purify.min.js?v={{APP_QVER}}" defer></script>
+  <script src="/vendor/dompurify/3.3.1/purify.min.js?v={{APP_QVER}}" defer></script>
   <script src="/js/version.js?v={{APP_QVER}}" defer></script>
   
   <!-- App entry -->
@@ -65,18 +65,18 @@
       <div class="header-zoom-controls">
         <!-- Left stack: + / - -->
         <div class="zoom-vertical">
-          <button class="btn-icon zoom-btn" data-zoom="in" title="Zoom in">
+          <button class="btn-icon zoom-btn" data-zoom="in" title="Zoom in" style="display: none;">
             <span class="material-icons">add</span>
           </button>
-          <button class="btn-icon zoom-btn" data-zoom="out" title="Zoom out">
+          <button class="btn-icon zoom-btn" data-zoom="out" title="Zoom out" style="display: none;">
             <span class="material-icons">remove</span>
           </button>
         </div>
     
         <!-- Right stack: 100% / reset -->
         <div class="zoom-meta">
-          <span id="zoomDisplay" class="zoom-display">100%</span>
-          <button class="btn-icon zoom-btn" data-zoom="reset" title="Reset zoom">
+          <span id="zoomDisplay" class="zoom-display" style="display: none;">100%</span>
+          <button class="btn-icon zoom-btn" data-zoom="reset" title="Reset zoom" style="display: none;">
             <span class="material-icons">refresh</span>
           </button>
         </div>
@@ -562,6 +562,13 @@
       <i class="material-icons">sell</i>
       <span>Tag file</span>
     </button>
+    <button type="button" class="mi"
+    data-action="share_file"
+    data-when="one">
+<i class="material-icons">share</i>
+<span>Share file</span>
+</button>
+
   </div>
   <div id="removeUserModal" class="modal" style="display:none;">
     <div class="modal-content">

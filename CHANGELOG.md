@@ -1,5 +1,77 @@
 # Changelog
 
+## Changes 12/9/2025 (v2.5.1)
+
+release(v2.5.1): upgrade vendor libs and enhance OIDC + admin UX
+
+**OIDC & Authentication**  
+
+- Added **OIDC admin demotion control**:
+  - New `FR_OIDC_ALLOW_DEMOTE` env/constant and `oidc.allowDemote` admin toggle.
+  - When enabled, if a user loses admin in the IdP they are also downgraded in FileRise on their next OIDC login.
+  - When disabled (default), once a user is admin in FileRise they are not demoted automatically by the IdP.
+- Improved OIDC → local user sync:
+  - `ensureLocalOidcUser()` now always promotes when the IdP says admin, and only demotes when demotion is explicitly allowed.
+  - Automatically creates OIDC users when `FR_OIDC_AUTO_CREATE` is enabled and `users.txt` is missing (file is created with locking).
+- Reworked **OIDC → Pro group mapping**:
+  - `FR_OIDC_PRO_GROUP_PREFIX = ''` now means “map all IdP groups into Pro groups”.
+  - Non-empty prefixes still only map groups starting with the prefix.
+  - Cleanup logic only removes memberships in groups that are managed by OIDC, avoiding accidental removals.
+- Added **OIDC debug logging**:
+  - New `FR_OIDC_DEBUG` constant and `oidc.debugLogging` admin toggle.
+  - Logs a redacted summary of provider URL, redirect URI, client ID presence, token auth method and group counts (no secrets/tokens).
+- New **admin-only OIDC debug snapshot** endpoint:
+  - `GET /api/admin/oidcDebugInfo.php` (admin only, CSRF protected).
+  - Returns a JSON snapshot (no secrets) of OIDC config, login options and relevant request environment for easier support/debugging.
+  - Exposed in Admin Panel → OIDC as “Effective OIDC configuration snapshot”.
+
+**Admin Panel & UX**  
+
+- **Login & WebDAV section** refreshed:
+  - Combined “Login Options” and WebDAV into one tab: “Login Options & WebDAV Access”.
+  - Switched from “Disable X” checkboxes to **enable-style toggles** for:
+    - Login form
+    - HTTP Basic Auth
+    - OIDC login
+  - Added a clear, explicit “Proxy header only (disable built-in logins)” toggle with validation so you can’t accidentally disable all login paths unless proxy-only is enabled.
+- Added a better visual structure for admin sections:
+  - Reusable `.admin-divider` horizontal rules and `.admin-subsection-title` headings for header title, logo, colors, footer, upload limits, antivirus, etc.
+  - New `fr-toggle` switch styling used consistently across login options, WebDAV, ONLYOFFICE and ClamAV.
+- OIDC settings panel:
+  - Now includes toggles for **“Allow OIDC to downgrade FileRise admins”** and **“Enable OIDC debug logging”**.
+  - Adds inline help text explaining the demotion behavior and the debug logging use-case.
+  - Provides a debug snapshot button wired to the new `/api/admin/oidcDebugInfo.php` endpoint.
+  - Moves global TOTP template URL into a clearly-labeled “TOTP configuration” subsection.
+
+**Sharing & CSRF**  
+
+- **File context menu** now supports sharing:
+  - Added “Share file” entry to the right-click menu (when exactly one file is selected).
+  - Opens the existing share modal, so sharing is now discoverable from both inline actions and the context menu.
+- **Share link deletion**:
+  - Folder/file share delete now sends `X-CSRF-Token` and handles 403 responses with a clear toast message.
+  - Fixes admin share-link deletion failures under stricter CSRF/session setups.
+
+**Editor, search & vendor updates**  
+
+- Upgraded bundled vendor libraries:
+  - **Bootstrap** 4.5.2 → **4.6.2**.
+  - **CodeMirror** 5.65.5 → **5.65.18**.
+  - **DOMPurify** 2.4.0 → **3.3.1**.
+  - **Fuse.js** 6.6.2 → **7.1.0**.
+  - Updated THIRD_PARTY.md to match new versions and paths.
+- Editor and search code now point at the new vendor paths:
+  - CodeMirror base set to `/vendor/codemirror/5.65.18/`.
+  - Fuse.js lazy loader updated to `/vendor/fuse/7.1.0/fuse.min.js`.
+
+**Miscellaneous**  
+
+- Added CSS for the OIDC debug JSON box to keep long snapshots readable in both light and dark modes.
+- Updated admin storage “Deep delete” toggle to use the same `fr-toggle` styling as other switches.
+- Docker start script: silenced noisy `freshclam` output while still logging a clear message if signature updates fail.
+
+---
+
 ## Changes 12/8/2025 (v2.5.0)
 
 release(v2.5.0): add optional ClamAV upload, share upload & portal upload scanning and Pro virus log
@@ -292,7 +364,7 @@ release(v2.3.0): feat(portals): branding, intake presets, limits & CSV export
   - Pro-only, admin-only, CSRF-protected.  
   - Accepts JPEG/PNG/GIF up to 2MB and stores them under `UPLOAD_DIR/profile_pics` with randomised names.
 
-_No breaking changes expected; existing portals continue to work with default settings._
+No breaking changes expected; existing portals continue to work with default settings.
 
 ---
 
@@ -455,8 +527,8 @@ release(v2.0.3): polish uploads, header dock, and panel fly animations
 release(v2.0.2): add config-driven demo mode and lock demo account changes
 
 - Wire FR_DEMO_MODE through AdminModel/siteConfig and admin getConfig (demoMode flag)
-- Drive demo detection in JS from __FR_SITE_CFG__.demoMode instead of hostname
-- Show consistent login tip + toasts for demo using shared __FR_DEMO__ flag
+- Drive demo detection in JS from FR_SITE_CFG.demoMode instead of hostname
+- Show consistent login tip + toasts for demo using shared FR_DEMO flag
 - Block password changes for the demo user and profile picture uploads when in demo mode
 - Keep normal user dropdown/admin UI visible even on the demo, while still protecting the demo account
 

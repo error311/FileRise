@@ -777,9 +777,9 @@ function renderProExplorerSkeleton() {
                   ${tf('storage_tab_topfiles','Top files')}
                 </button>
               </div>
-              <div class="form-check form-switch mb-0">
+              <div class="form-check fr-toggle">
                 <input
-                  class="form-check-input"
+                  class="form-check-input fr-toggle-input"
                   type="checkbox"
                   id="adminStorageDeepDeleteToggle">
                 <label class="form-check-label small" for="adminStorageDeepDeleteToggle">
