@@ -219,36 +219,110 @@ Prefer bare-metal or your own stack? FileRise is just PHP + a few extensions.
 - PHP extensions: `json`, `curl`, `zip` (and usual defaults)
 - No database required
 
-**Steps**  
+FileRise ships as a standard PHP app with this layout:
 
-1. Clone or download FileRise into your web root:
+- `config/`
+- `public/`  ← web server **DocumentRoot**
+- `src/`
+- `uploads/`, `users/`, `metadata/` (created on first run / install)
+
+You can install from a **release ZIP** (recommended) or from **git**.
+
+---
+
+### 3.1 Install from release ZIP (recommended)
+
+1. **Download the latest release ZIP to `/var/www`**
 
    ```bash
-   git clone https://github.com/error311/FileRise.git
+   cd /var/www
+
+   VERSION="v2.5.2"  # replace with the tag you want
+   ASSET="FileRise-${VERSION}.zip"
+
+   curl -fsSL "https://github.com/error311/FileRise/releases/download/${VERSION}/${ASSET}" -o "${ASSET}"
+   unzip "${ASSET}"
+   # The ZIP already contains config/, public/, src/, etc. at the top level
    ```
 
-2. Create data directories and set permissions:
+2. **Create data directories (if they don’t exist) and set permissions**
 
    ```bash
-   cd FileRise
    mkdir -p uploads users metadata
    chown -R www-data:www-data uploads users metadata   # adjust for your web user
    chmod -R 775 uploads users metadata
    ```
 
-3. (Optional) Install PHP dependencies with Composer:
+3. **(Usually optional) Install PHP dependencies**
+
+   Release ZIPs are built with `vendor/` included for convenience.  
+   If `vendor/` is missing and you have Composer:
+
+   ```bash
+   cd /var/www
+   composer install --no-dev --optimize-autoloader
+   ```
+
+4. **Point your web server at `public/`**
+
+   - **Apache:** `DocumentRoot /var/www/public`
+   - **Nginx / Caddy:** root should also be `/var/www/public`  
+     (PHP via PHP-FPM)
+
+   Enable URL rewriting:
+
+   - Apache: allow `.htaccess` inside `public/` or copy its rules into your vhost.
+   - Nginx / Caddy: mirror the protections from `public/.htaccess`
+     (no directory listing, block `config`, `src`, etc.).
+
+5. **Open FileRise in the browser**
+
+   Go to your URL (e.g. `https://files.example.com`) and follow the **admin setup** screen.
+
+---
+
+### 3.2 Install from git (developer mode)
+
+1. **Clone into `/var/www`**
+
+   ```bash
+   cd /var/www
+   git clone https://github.com/error311/FileRise.git .
+   ```
+
+2. **Create data directories and set permissions**
+
+   ```bash
+   mkdir -p uploads users metadata
+   chown -R www-data:www-data uploads users metadata   # adjust for your web user
+   chmod -R 775 uploads users metadata
+   ```
+
+3. **Install PHP dependencies**
 
    ```bash
    composer install
    ```
 
-4. Configure PHP (upload limits / timeouts) and ensure rewrites are enabled.  
-   - Apache: allow `.htaccess` or copy its rules into your vhost.  
-   - Nginx/Caddy: mirror the basic protections (no directory listing, block sensitive files).
+4. **Configure your web server**
 
-5. Browse to your FileRise URL and follow the **admin setup** screen.
+   - DocumentRoot → `/var/www/public`
+   - PHP-FPM / mod_php enabled
+   - Rewrites / protections as above
 
-For detailed examples and reverse proxy snippets, see the **Installation** page in the Wiki [Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup).
+5. **Hit your FileRise URL and complete setup**
+
+For detailed examples and reverse proxy snippets, see the Wiki:  
+[Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup).
+
+---
+
+## 4. Updating an existing manual install
+
+If you deployed FileRise directly in `/var/www`, you can use this helper script
+to update to a new release without touching your data.
+
+Save this as `scripts/update-filerise.sh` [update-filerise.sh](error311/FileRise/scripts/update-filerise.sh) (make it executable with `chmod +x scripts/update-filerise.sh`):
 
 ---
 
