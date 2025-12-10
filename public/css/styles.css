@@ -6,6 +6,7 @@ img.logo{width:50px; height:50px; display:block;}
 #userPanelModal .modal-content,
 #adminPanelModal .modal-content,
 #userPermissionsModal .modal-content,
+#adminUserHubModal .modal-content,
 #userFlagsModal .modal-content,
 #userGroupsModal .modal-content,
 #groupAclModal .modal-content,
@@ -2066,7 +2067,7 @@ body.dark-mode #deleteSelectedBtn,body.dark-mode #deleteAllBtn,body.dark-mode #d
 body.dark-mode .folder-strip-container.folder-strip-mobile{background:var(--fr-surface-dark-2)!important;border:1px solid var(--fr-border-dark)!important}
 body.dark-mode #customToast{background:#212121!important;border:1px solid var(--fr-border-dark)!important;box-shadow:0 8px 20px rgba(0,0,0,.9)!important}
 body.dark-mode #fileSummary{color:var(--fr-muted-dark)!important}
-body.dark-mode #createMenu,body.dark-mode .user-dropdown .user-menu,body.dark-mode #fileContextMenu,body.dark-mode #folderContextMenu,body.dark-mode #folderManagerContextMenu,body.dark-mode #adminPanelModal .modal-content,body.dark-mode #userPermissionsModal .modal-content,body.dark-mode #userFlagsModal .modal-content,body.dark-mode #userGroupsModal .modal-content,body.dark-mode #userPanelModal .modal-content,body.dark-mode #groupAclModal .modal-content,body.dark-mode .editor-modal,body.dark-mode #filePreviewModal .modal-content,body.dark-mode #loginForm,body.dark-mode .editor-header,#clientPortalsModal .modal-content{background:var(--fr-surface-dark)!important;border:1px solid var(--fr-border-dark)!important;color:#f1f1f1!important;border-radius:12px!important;box-shadow:0 8px 24px rgba(0,0,0,.9)!important}
+body.dark-mode #createMenu,body.dark-mode .user-dropdown .user-menu,body.dark-mode #fileContextMenu,body.dark-mode #folderContextMenu,body.dark-mode #folderManagerContextMenu,body.dark-mode #adminPanelModal .modal-content,body.dark-mode #userPermissionsModal .modal-content,body.dark-mode #userPermissionsModal .modal-content,body.dark-mode #userFlagsModal .modal-content,body.dark-mode #userGroupsModal .modal-content,body.dark-mode #userPanelModal .modal-content,body.dark-mode #groupAclModal .modal-content,body.dark-mode .editor-modal,body.dark-mode #filePreviewModal .modal-content,body.dark-mode #loginForm,body.dark-mode .editor-header,#clientPortalsModal .modal-content{background:var(--fr-surface-dark)!important;border:1px solid var(--fr-border-dark)!important;color:#f1f1f1!important;border-radius:12px!important;box-shadow:0 8px 24px rgba(0,0,0,.9)!important}
 body.dark-mode .user-dropdown .user-menu,body.dark-mode #createMenu,body.dark-mode #fileContextMenu,body.dark-mode #folderContextMenu,body.dark-mode #folderManagerContextMenu{background-clip:padding-box}
 body:not(.dark-mode){background:var(--fr-bg-light)!important;color:#111!important;background-image:none!important}
 body:not(.dark-mode) #fileListContainer,body:not(.dark-mode) #uploadCard,body:not(.dark-mode) #folderManagementCard,body:not(.dark-mode) .card,body:not(.dark-mode) .admin-panel-content{background:var(--fr-surface-light)!important;border-color:var(--fr-border-light)!important;box-shadow:0 3px 8px rgba(0,0,0,.04)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
@@ -2084,7 +2085,7 @@ body:not(.dark-mode) #deleteSelectedBtn,body:not(.dark-mode) #deleteAllBtn,body:
 body:not(.dark-mode) .folder-strip-container.folder-strip-mobile{background:#f1f1f1!important;border:1px solid var(--fr-border-light)!important}
 body:not(.dark-mode) #customToast{background:#212121!important;color:#fff!important;border:1px solid #000!important;box-shadow:0 8px 18px rgba(0,0,0,.45)!important}
 body:not(.dark-mode) #fileSummary{color:var(--fr-muted-light)!important}
-body:not(.dark-mode) #createMenu,body:not(.dark-mode) .user-dropdown .user-menu,body:not(.dark-mode) #fileContextMenu,body:not(.dark-mode) #folderContextMenu,body:not(.dark-mode) #folderManagerContextMenu,body:not(.dark-mode) #adminPanelModal .modal-content,body:not(.dark-mode) #userPermissionsModal .modal-content,body:not(.dark-mode) #userFlagsModal .modal-content,body:not(.dark-mode) #userGroupsModal .modal-content,body:not(.dark-mode) #userPanelModal .modal-content,body:not(.dark-mode) #groupAclModal .modal-content,body:not(.dark-mode) .editor-modal,body:not(.dark-mode) #filePreviewModal .modal-content,body:not(.dark-mode) #loginForm,body:not(.dark-mode) .editor-header,body:not(.dark-mode) #clientPortalsModal .modal-content{background:var(--fr-surface-light)!important;border:1px solid var(--fr-border-light)!important;color:#111!important;border-radius:12px!important;box-shadow:0 4px 12px rgba(0,0,0,.12)!important}
+body:not(.dark-mode) #createMenu,body:not(.dark-mode) .user-dropdown .user-menu,body:not(.dark-mode) #fileContextMenu,body:not(.dark-mode) #folderContextMenu,body:not(.dark-mode) #folderManagerContextMenu,body:not(.dark-mode) #adminPanelModal .modal-content,body:not(.dark-mode) #userPermissionsModal .modal-content,body:not(.dark-mode) #userPermissionsModal .modal-content,body:not(.dark-mode) #userFlagsModal .modal-content,body:not(.dark-mode) #userGroupsModal .modal-content,body:not(.dark-mode) #userPanelModal .modal-content,body:not(.dark-mode) #groupAclModal .modal-content,body:not(.dark-mode) .editor-modal,body:not(.dark-mode) #filePreviewModal .modal-content,body:not(.dark-mode) #loginForm,body:not(.dark-mode) .editor-header,body:not(.dark-mode) #clientPortalsModal .modal-content{background:var(--fr-surface-light)!important;border:1px solid var(--fr-border-light)!important;color:#111!important;border-radius:12px!important;box-shadow:0 4px 12px rgba(0,0,0,.12)!important}
 #searchIcon{display:inline-flex;align-items:center;justify-content:center;width:38px;height:36px;padding:0;border-radius:999px 0 0 999px;border:1px solid rgba(0,0,0,.18);border-right:none;background:#fff;cursor:pointer;box-shadow:none;transform:none}
 #searchIcon .material-icons{font-size:20px;line-height:1;color:#555}
 #searchIcon:hover{background:#f5f5f5}
@@ -2251,7 +2252,7 @@ body:not(.dark-mode) .header-zoom-controls .btn-icon.zoom-btn .material-icons{
  /* Modal sizing */
  #adminPanelModal .modal-content {
   max-width: 1100px;
-  width: 60% !important;
+  width: 64% !important;
   background: #fff !important;
   color: #000 !important;
   border: 1px solid #ccc !important;
@@ -2964,8 +2965,9 @@ body.dark-mode .oidc-debug-snapshot {
 /* admin section separators */
 .admin-divider {
   border: 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  margin: 10px 0;
+  border-top: 2px solid rgba(0, 0, 0, 0.08);
+margin-top: 20px;
+margin-bottom: 20px;
 }
 
 .dark-mode .admin-divider {
@@ -2975,7 +2977,7 @@ body.dark-mode .oidc-debug-snapshot {
 /* OIDC debug JSON snapshot */
 #oidcContent .oidc-debug-snapshot {
   background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 2px solid rgba(0, 0, 0, 0.08);
   border-radius: 4px;
 }
 
@@ -3028,8 +3030,8 @@ body.dark-mode .oidc-debug-snapshot {
 
 /* ON state */
 #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked {
-  background-color: var(--filr-accent-500, #0d6efd);
-  border-color: var(--filr-accent-500, #0d6efd);
+  background-color: var(--filr-accent-400, #0d6efd);
+  border-color: var(--filr-accent-400, #0d6efd);
 }
 
 #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked::before {
@@ -3062,7 +3064,7 @@ body.dark-mode .oidc-debug-snapshot {
 }
 #adminPanelModal .admin-subsection-title {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 1.15rem;
   margin-top: 4px;
   margin-bottom: 6px;
 }

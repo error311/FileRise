@@ -291,15 +291,15 @@ export async function openClientPortalsModal() {
 
     <button type="button"
             id="clientPortalsQuickAddUser"
-            class="btn btn-sm btn-outline-primary ms-1">
-      <i class="material-icons" style="font-size:16px; vertical-align:middle;">person_add</i>
-      <span style="margin-left:4px;">Add user…</span>
+            class="btn btn-sm btn-primary ms-1">
+      <i class="material-icons" style="font-size:16px; vertical-align:middle;">people</i>
+      <span style="margin-left:4px;">Manage users…</span>
     </button>
 
     <button
       type="button"
       id="clientPortalsOpenUserPerms"
-      class="btn btn-sm btn-outline-secondary ms-1">
+      class="btn btn-sm btn-secondary ms-1">
       <i class="material-icons" style="font-size:16px; vertical-align:middle;">folder_shared</i>
       <span style="margin-left:4px;">Folder access…</span>
     </button>
@@ -307,7 +307,7 @@ export async function openClientPortalsModal() {
     <button
       type="button"
       id="clientPortalsOpenUserGroups"
-      class="btn btn-sm btn-outline-secondary ms-1">
+      class="btn btn-sm btn-secondary ms-1">
       <i class="material-icons" style="font-size:16px; vertical-align:middle;">groups</i>
       <span style="margin-left:4px;">User groups…</span>
     </button>
@@ -335,7 +335,7 @@ export async function openClientPortalsModal() {
     if (quickAddUserBtn) {
       quickAddUserBtn.onclick = () => {
         // Reuse existing admin add-user button / modal
-        const globalBtn = document.getElementById('adminOpenAddUser');
+        const globalBtn = document.getElementById('adminOpenUserHub');
         if (globalBtn) {
           globalBtn.click();
         } else {
@@ -346,7 +346,7 @@ export async function openClientPortalsModal() {
     const openPermsBtn = document.getElementById('clientPortalsOpenUserPerms');
     if (openPermsBtn) {
       openPermsBtn.onclick = () => {
-        const btn = document.getElementById('adminOpenUserPermissions');
+        const btn = document.getElementById('adminOpenFolderAccess');
         if (btn) {
           btn.click();
         } else {

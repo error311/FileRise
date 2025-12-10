@@ -144,15 +144,17 @@ class UserController
         if (empty($_SESSION['csrf_token'])) {
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         }
-
+    
         // Setup mode detection (first-run bootstrap)
         $usersFile = USERS_DIR . USERS_FILE;
         $isSetup   = (isset($_GET['setup']) && $_GET['setup'] === '1');
         $setupMode = false;
+    
         if (
-            $isSetup && (!file_exists($usersFile)
-                || filesize($usersFile) === 0
-                || trim(@file_get_contents($usersFile)) === ''
+            $isSetup && (
+                !file_exists($usersFile) ||
+                filesize($usersFile) === 0 ||
+                trim(@file_get_contents($usersFile)) === ''
             )
         ) {
             $setupMode = true;
@@ -160,47 +162,109 @@ class UserController
             // Not setup: enforce CSRF + admin auth
             $h = self::headersLower();
             $receivedToken = trim($h['x-csrf-token'] ?? '');
-
-            // Soft-fail CSRF: on mismatch, regenerate and return new token (preserve your current UX)
+    
+            // Soft-fail CSRF: on mismatch, regenerate and return new token
             if ($receivedToken !== $_SESSION['csrf_token']) {
                 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 header('X-CSRF-Token: ' . $_SESSION['csrf_token']);
                 echo json_encode([
                     'csrf_expired' => true,
-                    'csrf_token'   => $_SESSION['csrf_token']
+                    'csrf_token'   => $_SESSION['csrf_token'],
                 ]);
                 exit;
             }
-
+    
             self::requireAdmin();
         }
-
+    
         $data        = self::readJson();
         $newUsername = trim($data['username'] ?? '');
         $newPassword = trim($data['password'] ?? '');
-
+    
         $isAdmin = $setupMode ? '1' : (!empty($data['isAdmin']) ? '1' : '0');
-
-        if ($newUsername === '' || $newPassword === '') {
-            echo json_encode(["error" => "Username and password required"]);
-            exit;
-        }
-        if (!preg_match(REGEX_USER, $newUsername)) {
+    
+        // Helper for validation errors (new + legacy shape)
+        $fail = function (string $message, int $status = 422) {
+            http_response_code($status);
             echo json_encode([
-                "error" => "Invalid username. Only letters, numbers, underscores, dashes, and spaces are allowed."
+                'ok'      => false,
+                'error'   => $message,
+                // legacy-friendly fields:
+                'success' => false,
+                'message' => $message,
             ]);
             exit;
+        };
+    
+        if ($newUsername === '' || $newPassword === '') {
+            $fail('Username and password required');
         }
-        // Keep password rules lenient to avoid breaking existing flows; enforce at least 6 chars
+    
+        if (!preg_match(REGEX_USER, $newUsername)) {
+            $fail('Invalid username. Only letters, numbers, underscores, dashes, and spaces are allowed.');
+        }
+    
+        // Enforce at least 6 chars (for new accounts)
         if (strlen($newPassword) < 6) {
-            echo json_encode(["error" => "Password must be at least 6 characters."]);
-            exit;
+            $fail('Password must be at least 6 characters.');
         }
-
+    
         $result = UserModel::addUser($newUsername, $newPassword, $isAdmin, $setupMode);
-        echo json_encode($result);
+    
+        // If the model returns an error, also go through the same fail() helper
+        if (isset($result['error']) && $result['error'] !== '') {
+            $fail($result['error']);
+        }
+    
+        // Normalize success shape: new + legacy fields
+        $msg = $result['success'] ?? 'User added successfully';
+    
+        http_response_code(200);
+        echo json_encode([
+            'ok'      => true,
+            'data'    => $result,       // keeps your new structure
+            // legacy-friendly:
+            'success' => true,
+            'message' => $msg,
+        ]);
         exit;
     }
+
+public function adminChangeUserPassword()
+{
+    self::jsonHeaders();
+    self::requireMethod(['POST']);
+    self::requireAdmin();
+    self::requireCsrf();
+
+    $data = self::readJson();
+    $username    = trim((string)($data['username'] ?? ''));
+    $newPassword = (string)($data['newPassword'] ?? '');
+
+    if ($username === '' || $newPassword === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'Username and newPassword are required.']);
+        exit;
+    }
+
+    // Optional: enforce a minimum length, like addUser
+    if (strlen($newPassword) < 6) {
+        http_response_code(422);
+        echo json_encode(['error' => 'Password must be at least 6 characters.']);
+        exit;
+    }
+
+    $result = UserModel::adminResetPassword($username, $newPassword);
+
+    if (!empty($result['error'])) {
+        http_response_code(400);
+    } else {
+        http_response_code(200);
+    }
+
+    echo json_encode($result);
+    exit;
+}
 
     public function removeUser()
     {

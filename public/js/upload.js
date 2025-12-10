@@ -53,7 +53,7 @@ function showVirusScanNotice() {
     transform: 'translate(-50%, -50%)',
     maxWidth: '420px',
     width: 'calc(100% - 32px)', // nice on mobile too
-    zIndex: '1080',
+    zIndex: '11080',
     padding: '16px 18px',
     borderRadius: '10px',
     boxShadow: '0 4px 24px rgba(0,0,0,0.35)',

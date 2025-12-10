@@ -15,8 +15,8 @@ if (!window.currentOIDCConfig || typeof window.currentOIDCConfig !== 'object') {
 
 async function loadVirusDetectionLog() {
   const tableBody = document.getElementById('virusLogTableBody');
-  const emptyEl   = document.getElementById('virusLogEmpty');
-  const wrapper   = document.getElementById('virusLogWrapper');
+  const emptyEl = document.getElementById('virusLogEmpty');
+  const wrapper = document.getElementById('virusLogWrapper');
 
   if (!wrapper || !tableBody || !emptyEl) return;
 
@@ -128,7 +128,7 @@ async function downloadVirusLogCsv() {
     }
 
     const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
     a.href = url;
@@ -165,7 +165,7 @@ function initVirusLogUI({ isPro }) {
     return;
   }
 
-  const refreshBtn  = uploadScope.querySelector('#virusLogRefreshBtn');
+  const refreshBtn = uploadScope.querySelector('#virusLogRefreshBtn');
   const downloadBtn = uploadScope.querySelector('#virusLogDownloadCsvBtn');
 
   if (refreshBtn && !refreshBtn.__wired) {
@@ -467,12 +467,12 @@ function wireOidcTestButton(scope = document) {
       }
 
       const parts = [];
-const authEndpoint = data.authorization_endpoint || data.authorizationUrl;
-const userinfoEndpoint = data.userinfo_endpoint || data.userinfoUrl;
+      const authEndpoint = data.authorization_endpoint || data.authorizationUrl;
+      const userinfoEndpoint = data.userinfo_endpoint || data.userinfoUrl;
 
-if (data.issuer) parts.push('issuer: ' + data.issuer);
-if (authEndpoint) parts.push('auth: ' + authEndpoint);
-if (userinfoEndpoint) parts.push('userinfo: ' + userinfoEndpoint);
+      if (data.issuer) parts.push('issuer: ' + data.issuer);
+      if (authEndpoint) parts.push('auth: ' + authEndpoint);
+      if (userinfoEndpoint) parts.push('userinfo: ' + userinfoEndpoint);
 
       const summary = parts.length
         ? 'OK – ' + parts.join(' • ')
@@ -530,13 +530,13 @@ function wireClamavTestButton(scope = document) {
         return;
       }
 
-      const cmd     = data.command || 'clamscan';
-      const engine  = data.engine || '';
+      const cmd = data.command || 'clamscan';
+      const engine = data.engine || '';
       const details = data.details || '';
 
       const parts = [];
       parts.push(`OK – ${cmd} is reachable`);
-      if (engine)  parts.push(engine);
+      if (engine) parts.push(engine);
       if (details) parts.push(details);
 
       statusEl.textContent = parts.join(' • ');
@@ -557,7 +557,7 @@ function initVirusLogSection({ isPro }) {
   if (!uploadScope) return;
 
   const wrapper = uploadScope.querySelector('#virusLogWrapper');
-  const shell   = uploadScope.querySelector('#virusLogTableShell');
+  const shell = uploadScope.querySelector('#virusLogTableShell');
   if (!wrapper || !shell) return;
 
   // Let us overlay a Pro banner on top of the table
@@ -1009,7 +1009,7 @@ export function initProBundleInstaller() {
         statusEl.className = 'small text-success';
 
         // Clear file input so repeat installs feel "fresh"
-        try { fileInput.value = ''; } catch (_) {}
+        try { fileInput.value = ''; } catch (_) { }
 
         // Keep existing behavior: refresh any admin config in the header, etc.
         if (typeof loadAdminConfigFunc === 'function') {
@@ -1028,16 +1028,713 @@ export function initProBundleInstaller() {
   }
 }
 
+let __userFlagsCacheHub = null;
+let __userMetaCache = {}; // username -> { isAdmin }
+
+async function getUserFlagsCacheForHub() {
+  if (!__userFlagsCacheHub) {
+    __userFlagsCacheHub = await fetchAllUserFlags();
+  }
+  return __userFlagsCacheHub;
+}
+
+function updateUserMetaCache(list) {
+  __userMetaCache = {};
+  (list || []).forEach(u => {
+    if (!u || !u.username) return;
+    __userMetaCache[u.username] = {
+      isAdmin: !!(u.isAdmin || u.admin || u.role === "1" || u.username.toLowerCase() === "admin")
+    };
+  });
+}
+
+async function renderUserHubFlagsForSelected(modal) {
+  const flagsHost = modal.querySelector('#adminUserHubFlagsRow');
+  const selectEl = modal.querySelector('#adminUserHubSelect');
+  if (!flagsHost || !selectEl) return;
+
+  const username = (selectEl.value || "").trim();
+  if (!username) {
+    flagsHost.innerHTML = `
+      <div class="small text-muted">
+        ${tf("select_user_for_flags", "Select a user above to view account-level switches.")}
+      </div>
+    `;
+    return;
+  }
+
+  const flagsCache = await getUserFlagsCacheForHub();
+  const flags = flagsCache[username] || {};
+  const meta = __userMetaCache[username] || {};
+  const isAdmin = !!meta.isAdmin;
+
+  const disabledAttr = isAdmin ? 'disabled data-admin="1" title="Admin: full access"' : '';
+  const adminNote = isAdmin
+    ? `<span class="muted" style="margin-left:4px;">(${tf("admin_full_access", "Admin: full access")})</span>`
+    : '';
+
+  flagsHost.innerHTML = `
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" style="width:100%;">
+        <thead>
+          <tr>
+            <th style="width:24%;">${t("user")}</th>
+            <th class="text-center">${t("read_only")}</th>
+            <th class="text-center">${t("disable_upload")}</th>
+            <th class="text-center">${t("can_share")}</th>
+            <th class="text-center">${t("bypass_ownership")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-username="${escapeHTML(username)}">
+            <td><strong>${escapeHTML(username)}</strong>${adminNote}</td>
+            <td class="text-center">
+              <div class="form-check fr-toggle d-inline-block">
+                <input type="checkbox"
+                       class="form-check-input fr-toggle-input"
+                       id="hubFlagReadOnly"
+                       data-flag="readOnly"
+                       ${flags.readOnly ? "checked" : ""}
+                       ${disabledAttr}>
+                <label class="form-check-label" for="hubFlagReadOnly"></label>
+              </div>
+            </td>
+            <td class="text-center">
+              <div class="form-check fr-toggle d-inline-block">
+                <input type="checkbox"
+                       class="form-check-input fr-toggle-input"
+                       id="hubFlagDisableUpload"
+                       data-flag="disableUpload"
+                       ${flags.disableUpload ? "checked" : ""}
+                       ${disabledAttr}>
+                <label class="form-check-label" for="hubFlagDisableUpload"></label>
+              </div>
+            </td>
+            <td class="text-center">
+              <div class="form-check fr-toggle d-inline-block">
+                <input type="checkbox"
+                       class="form-check-input fr-toggle-input"
+                       id="hubFlagCanShare"
+                       data-flag="canShare"
+                       ${flags.canShare ? "checked" : ""}
+                       ${disabledAttr}>
+                <label class="form-check-label" for="hubFlagCanShare"></label>
+              </div>
+            </td>
+            <td class="text-center">
+              <div class="form-check fr-toggle d-inline-block">
+                <input type="checkbox"
+                       class="form-check-input fr-toggle-input"
+                       id="hubFlagBypassOwnership"
+                       data-flag="bypassOwnership"
+                       ${flags.bypassOwnership ? "checked" : ""}
+                       ${disabledAttr}>
+                <label class="form-check-label" for="hubFlagBypassOwnership"></label>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <small class="text-muted d-block mt-1">
+      ${isAdmin
+      ? tf("admin_flags_info", "Admins already have full access. These switches are disabled.")
+      : tf("user_flags_inline_help", "Changes here are saved immediately for this user.")}
+    </small>
+  `;
+
+  // Admin row is read-only
+  if (isAdmin) return;
+
+  const row = flagsHost.querySelector('tr[data-username]');
+  if (!row) return;
+  const checkboxes = row.querySelectorAll('input[type="checkbox"][data-flag]');
+
+  const getFlagsFromRow = () => {
+    const get = (k) => {
+      const el = row.querySelector(`input[data-flag="${k}"]`);
+      return !!(el && el.checked);
+    };
+    return {
+      username,
+      readOnly: get("readOnly"),
+      disableUpload: get("disableUpload"),
+      canShare: get("canShare"),
+      bypassOwnership: get("bypassOwnership")
+    };
+  };
+
+  const saveFlags = async () => {
+    const permissions = [getFlagsFromRow()];
+    try {
+      const res = await sendRequest(
+        "/api/updateUserPermissions.php",
+        "PUT",
+        { permissions },
+        { "X-CSRF-Token": window.csrfToken }
+      );
+
+      if (!res || res.success === false) {
+        const msg = (res && (res.error || res.message)) || tf("error_updating_permissions", "Error updating permissions");
+        showToast(msg, "error");
+        return;
+      }
+
+      // keep local cache in sync
+      const flagsCache = await getUserFlagsCacheForHub();
+      flagsCache[username] = permissions[0];
+      showToast(tf("user_permissions_updated_successfully", "User permissions updated successfully"));
+    } catch (err) {
+      console.error("save inline flags error", err);
+      showToast(tf("error_updating_permissions", "Error updating permissions"), "error");
+    }
+  };
+
+  checkboxes.forEach(cb => {
+    cb.addEventListener("change", () => {
+      saveFlags();
+    });
+  });
+}
+
+export function openAdminUserHubModal() {
+  const isDark = document.body.classList.contains("dark-mode");
+  const overlayBg = isDark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
+  const contentBg = isDark ? "var(--fr-surface-dark)" : "#fff";
+  const contentFg = isDark ? "#e0e0e0" : "#000";
+  const borderCol = isDark ? "var(--fr-border-dark)" : "#ccc";
+
+  // Local helper so we ALWAYS see something (toast or alert)
+  const safeToast = (msg, type) => {
+    try {
+      if (typeof showToast === "function") {
+        showToast(msg, 7000);
+      } else {
+        alert(msg);
+      }
+    } catch (e) {
+      console.error("showToast failed, falling back to alert", e);
+      alert(msg);
+    }
+  };
+
+  let modal = document.getElementById("adminUserHubModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "adminUserHubModal";
+    modal.style.cssText = `
+      position:fixed; inset:0;
+      background:${overlayBg};
+      display:flex; align-items:center; justify-content:center;
+      z-index:9999;
+    `;
+
+    modal.innerHTML = `
+      <div class="modal-content"
+           style="
+             background:${contentBg};
+             color:${contentFg};
+             padding:16px 18px;
+             max-width:980px;
+             width:95%;
+             position:relative;
+             border:1px solid ${borderCol};
+             max-height:90vh;
+             overflow:auto;
+           ">
+        <span id="closeAdminUserHub"
+              class="editor-close-btn"
+              style="top:8px; right:10px;">&times;</span>
+
+        <h3 style="margin-top:0;">
+          ${tf("manage_users", "Manage users")}
+        </h3>
+        <p class="muted" style="margin-top:-4px; margin-bottom:10px; font-size:0.9rem;">
+          ${tf(
+      "manage_users_help",
+      "Select a user from the list to change their password, delete them, or update account-level flags. Use Add User to create a brand new account."
+    )}
+        </p>
+
+        <!-- Top row: user select + inline actions -->
+        <div class="d-flex flex-wrap align-items-center"
+             style="gap:8px; margin-bottom:12px; position:relative;">
+          <label for="adminUserHubSelect" style="margin:0; font-weight:500;">
+            ${t("username")}
+          </label>
+
+          <select id="adminUserHubSelect"
+                  class="form-control"
+                  style="min-width:220px; max-width:260px;"></select>
+
+          <!-- Add user button + dropdown card anchored right under it -->
+          <div id="adminUserHubAddWrapper"
+               style="position:relative; display:inline-block;">
+            <button type="button"
+                    id="adminUserHubAddBtn"
+                    class="btn btn-success btn-sm">
+              <i class="material-icons"
+                 style="font-size:16px; vertical-align:middle;">person_add</i>
+              <span style="vertical-align:middle; margin-left:2px;">
+                ${t("add_user")}
+              </span>
+            </button>
+
+            <div class="card"
+                 id="adminUserHubAddCard"
+                 style="
+                   position:absolute;
+                   top:110%;
+                   left:0;
+                   min-width:260px;
+                   max-width:320px;
+                   padding:10px;
+                   border-radius:8px;
+                   display:none;
+                   z-index:3700;
+                   box-shadow:0 4px 10px rgba(0,0,0,0.25);
+                 ">
+              <h5 style="font-size:0.95rem; margin-bottom:8px;">
+                ${tf("create_new_user_title", "Create New User")}
+              </h5>
+              <form id="adminUserHubAddForm">
+                <div class="form-group mb-1">
+                  <label for="adminUserHubNewUsername" style="margin-bottom:2px;">
+                    ${t("username")}
+                  </label>
+                  <input type="text"
+                         id="adminUserHubNewUsername"
+                         name="username"
+                         class="form-control"
+                         autocomplete="off" />
+                </div>
+
+                <div class="form-group mb-1">
+                  <label for="adminUserHubAddPassword" style="margin-bottom:2px;">
+                    ${t("password")}
+                  </label>
+                  <input type="password"
+                         id="adminUserHubAddPassword"
+                         name="password"
+                         class="form-control" />
+                </div>
+
+                <div class="form-group mb-2">
+                  <input type="checkbox"
+                         id="adminUserHubIsAdmin"
+                         name="is_admin" />
+                  <label for="adminUserHubIsAdmin" style="margin-left:4px;">
+                    ${t("grant_admin")}
+                  </label>
+                </div>
+
+                <button type="submit"
+                        class="btn btn-primary btn-sm">
+                  ${t("save_user")}
+                </button>
+              </form>
+              <small class="text-muted d-block"
+                     style="margin-top:4px; font-size:0.8rem;">
+                ${tf(
+      "create_user_help",
+      "New users are created immediately and appear in the dropdown at the top."
+    )}
+              </small>
+            </div>
+          </div>
+
+          <button type="button"
+                  id="adminUserHubDeleteBtn"
+                  class="btn btn-danger btn-sm">
+            <i class="material-icons"
+               style="font-size:16px; vertical-align:middle;">person_remove</i>
+            <span style="vertical-align:middle; margin-left:2px;">
+              ${t("remove_user")}
+            </span>
+          </button>
+
+          <button type="button"
+                  id="adminUserHubRefresh"
+                  class="btn btn-sm btn-outline-secondary ms-auto">
+            ${tf("refresh", "Refresh")}
+          </button>
+        </div>
+
+        <small class="text-muted d-block"
+               style="font-size:0.8rem; margin-bottom:8px;">
+          ${tf(
+      "user_actions_help_inline",
+      "Delete, change password, and flags apply to the selected user in the dropdown above."
+    )}
+        </small>
+
+        <!-- Layout -->
+        <div id="adminUserHubLayout">
+          <!-- Change password (selected user) -->
+          <div class="card" style="padding:10px; border-radius:8px; margin-top:4px;">
+            <h5 style="font-size:0.95rem; margin-bottom:8px;">
+              ${tf("change_user_password", "Change user password")}
+            </h5>
+
+            <div class="form-group mb-1">
+              <input type="password"
+                     id="adminUserHubNewPassword"
+                     class="form-control"
+                     data-i18n-placeholder="new_password"
+                     placeholder="${t("new_password") || "New Password"}" />
+            </div>
+            <div class="form-group mb-2">
+              <input type="password"
+                     id="adminUserHubConfirmPassword"
+                     class="form-control"
+                     data-i18n-placeholder="confirm_new_password"
+                     placeholder="${t("confirm_new_password") || "Confirm New Password"}" />
+            </div>
+            <button type="button"
+                    id="adminUserHubSavePassword"
+                    class="btn btn-primary btn-sm">
+              ${t("save")}
+            </button>
+            <small class="text-muted d-block"
+                   style="margin-top:4px; font-size:0.8rem;">
+              ${tf(
+      "change_user_password_help",
+      "Resets the selected user’s password. Does not require their old password (admin-only)."
+    )}
+            </small>
+          </div>
+
+          <!-- User permissions / flags -->
+          <div class="card" style="padding:10px; border-radius:8px; margin-top:10px;">
+            <h5 style="font-size:0.95rem; margin-bottom:4px;">
+              ${tf("user_permissions", "User Permissions")}
+            </h5>
+            <p class="muted"
+               style="margin-top:-2px; margin-bottom:6px; font-size:0.85rem;">
+              ${tf(
+      "user_flags_inline_help_long",
+      "Account-level switches (read-only, disable upload, can share, bypass ownership) for the selected user. For per-folder ACLs, use Folder Access."
+    )}
+            </p>
+            <div id="adminUserHubFlagsRow"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeBtn = modal.querySelector("#closeAdminUserHub");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        modal.style.display = "none";
+      });
+    }
+
+    // ESC closes modal
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal.style.display === "flex") {
+        modal.style.display = "none";
+      }
+    });
+
+    const selectEl = modal.querySelector("#adminUserHubSelect");
+    const refreshBtn = modal.querySelector("#adminUserHubRefresh");
+    const addForm = modal.querySelector("#adminUserHubAddForm");
+    const addBtn = modal.querySelector("#adminUserHubAddBtn");
+    const addCard = modal.querySelector("#adminUserHubAddCard");
+    const delBtn = modal.querySelector("#adminUserHubDeleteBtn");
+    const pwBtn = modal.querySelector("#adminUserHubSavePassword");
+
+    const newUserInput = modal.querySelector("#adminUserHubNewUsername");
+    const newPassInput = modal.querySelector("#adminUserHubAddPassword");
+    const newAdminInput = modal.querySelector("#adminUserHubIsAdmin");
+
+    const resetNewPwInput = modal.querySelector("#adminUserHubNewPassword");
+    const resetConfPwInput = modal.querySelector("#adminUserHubConfirmPassword");
+
+    const getSelectedUser = () => {
+      return (selectEl && selectEl.value) ? selectEl.value.trim() : "";
+    };
+
+    if (refreshBtn && selectEl) {
+      refreshBtn.addEventListener("click", async () => {
+        await populateAdminUserHubSelect(selectEl);
+        await renderUserHubFlagsForSelected(modal);
+      });
+    }
+
+    // "Add user" button toggles the dropdown card under the button
+    if (addBtn && addCard && newUserInput) {
+      addCard.style.display = "none";
+
+      addBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isHidden =
+          addCard.style.display === "none" || addCard.style.display === "";
+        addCard.style.display = isHidden ? "block" : "none";
+        if (isHidden) {
+          newUserInput.focus();
+        }
+      });
+
+      // Clicking outside of the addCard closes it
+      document.addEventListener("click", (e) => {
+        if (!modal.contains(e.target)) return;
+        if (
+          addCard.style.display === "block" &&
+          !addCard.contains(e.target) &&
+          !addBtn.contains(e.target)
+        ) {
+          addCard.style.display = "none";
+        }
+      });
+    }
+
+    // Inline "Add user" form WITH backend error -> toast (handles 422)
+    if (addForm && newUserInput && newPassInput && newAdminInput && selectEl) {
+      addForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const username = newUserInput.value.trim();
+        const password = newPassInput.value.trim();
+        const isAdmin = !!newAdminInput.checked;
+
+        if (!username || !password) {
+          safeToast("Username and password are required!", "error");
+          return;
+        }
+
+        try {
+          const resp = await fetch("/api/addUser.php", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": window.csrfToken || ""
+            },
+            body: JSON.stringify({ username, password, isAdmin })
+          });
+
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch {
+            // non-JSON or empty; leave as null
+          }
+
+          const isError =
+            !resp.ok ||
+            !data ||
+            (data.ok === false) ||
+            (data.success === false);
+
+          if (isError) {
+            const msg =
+              (data && (data.error || data.message)) ||
+              (resp.status === 422
+                ? "Could not create user. Please check username/password."
+                : "Error: Could not add user");
+
+            console.error("Add user failed –", resp.status, data);
+            safeToast(msg, "error");
+            return;
+          }
+
+          // success
+          safeToast("User added successfully!");
+          newUserInput.value = "";
+          newPassInput.value = "";
+          newAdminInput.checked = false;
+
+          // hide dropdown after successful create
+          if (addCard) {
+            addCard.style.display = "none";
+          }
+
+          await populateAdminUserHubSelect(selectEl);
+          selectEl.value = username;
+
+          if (typeof __userFlagsCacheHub !== "undefined") {
+            __userFlagsCacheHub = null;
+          }
+          await renderUserHubFlagsForSelected(modal);
+        } catch (err) {
+          console.error("Add user error", err);
+          const msg =
+            err && err.message
+              ? err.message
+              : "Network error while creating user.";
+          safeToast(msg, "error");
+        }
+      });
+    }
+
+    // Delete user
+    if (delBtn && selectEl) {
+      delBtn.addEventListener("click", async () => {
+        const username = getSelectedUser();
+        if (!username) {
+          safeToast("Please select a user first.", "error");
+          return;
+        }
+
+        const current = (localStorage.getItem("username") || "").trim();
+        if (current && current === username) {
+          safeToast(
+            "You cannot delete the account you are currently logged in as.",
+            "error"
+          );
+          return;
+        }
+
+        const ok = await showCustomConfirmModal(
+          `Are you sure you want to delete user "${username}"?`
+        );
+        if (!ok) return;
+
+        try {
+          const res = await sendRequest(
+            "/api/removeUser.php",
+            "POST",
+            { username },
+            { "X-CSRF-Token": window.csrfToken || "" }
+          );
+
+          if (!res || res.success === false) {
+            const msg =
+              (res && (res.error || res.message)) ||
+              "Error: Could not remove user";
+            safeToast(msg, "error");
+            return;
+          }
+
+          safeToast("User removed successfully!");
+          if (typeof __userFlagsCacheHub !== "undefined") {
+            __userFlagsCacheHub = null;
+          }
+          await populateAdminUserHubSelect(selectEl);
+          await renderUserHubFlagsForSelected(modal);
+        } catch (err) {
+          console.error(err);
+          const msg =
+            err && err.message
+              ? err.message
+              : "Error: Could not remove user";
+          safeToast(msg, "error");
+        }
+      });
+    }
+
+    // Reset password for selected user (admin)
+    if (pwBtn && resetNewPwInput && resetConfPwInput && selectEl) {
+      pwBtn.addEventListener("click", async () => {
+        if (window.__FR_DEMO__) {
+          safeToast("Password changes are disabled on the public demo.");
+          return;
+        }
+
+        const username = getSelectedUser();
+        if (!username) {
+          safeToast("Please select a user first.", "error");
+          return;
+        }
+
+        const newPw = resetNewPwInput.value.trim();
+        const conf = resetConfPwInput.value.trim();
+
+        if (!newPw || !conf) {
+          safeToast("Please fill in both password fields.", "error");
+          return;
+        }
+        if (newPw !== conf) {
+          safeToast("New passwords do not match.", "error");
+          return;
+        }
+
+        try {
+          const res = await sendRequest(
+            "/api/admin/changeUserPassword.php",
+            "POST",
+            { username, newPassword: newPw },
+            { "X-CSRF-Token": window.csrfToken || "" }
+          );
+
+          // Handle both legacy {success:false} and new {ok:false,error:...}
+          if (!res || res.success === false || res.ok === false) {
+            const msg =
+              (res && (res.error || res.message)) ||
+              "Error changing password. Password must be at least 6 characters.";
+            safeToast(msg, "error");
+            return;
+          }
+
+          safeToast("Password updated successfully.");
+          resetNewPwInput.value = "";
+          resetConfPwInput.value = "";
+        } catch (err) {
+          // If sendRequest throws on non-2xx, e.g. 422, surface backend JSON error
+          console.error("Change password failed –", err.status, err.data || err);
+
+          const msg =
+            (err &&
+              err.data &&
+              (err.data.error || err.data.message)) ||
+            (err && err.message) ||
+            "Error changing password. Password must be at least 6 characters.";
+
+          safeToast(msg, "error");
+        }
+      });
+    }
+
+    // When user selection changes, refresh inline flags row
+    if (selectEl) {
+      selectEl.addEventListener("change", () => {
+        renderUserHubFlagsForSelected(modal);
+      });
+    }
+
+    // Expose for later calls to re-populate
+    modal.__populate = async () => {
+      const sel = modal.querySelector("#adminUserHubSelect");
+      if (sel) {
+        await populateAdminUserHubSelect(sel);
+        if (typeof __userFlagsCacheHub !== "undefined") {
+          __userFlagsCacheHub = null;
+        }
+        await renderUserHubFlagsForSelected(modal);
+      }
+    };
+  } else {
+    // Update colors/theme if already exists
+    modal.style.background = overlayBg;
+    const content = modal.querySelector(".modal-content");
+    if (content) {
+      content.style.background = contentBg;
+      content.style.color = contentFg;
+      content.style.border = `1px solid ${borderCol}`;
+    }
+  }
+
+  modal.style.display = "flex";
+  if (modal.__populate) {
+    modal.__populate();
+  }
+}
+
 function loadShareLinksSection() {
-  const container = document.getElementById("shareLinksContent");
+  const container =
+    document.getElementById("shareLinksList") ||
+    document.getElementById("shareLinksContent");
   if (!container) return;
+
   container.textContent = t("loading") + "...";
 
   function fetchMeta(fileName) {
     return fetch(`/api/admin/readMetadata.php?file=${encodeURIComponent(fileName)}`, {
       credentials: "include"
     })
-      .then(resp => resp.ok ? resp.json() : {})
+      .then(resp => (resp.ok ? resp.json() : {}))
       .catch(() => ({}));
   }
 
@@ -1091,12 +1788,12 @@ function loadShareLinksSection() {
           const endpoint = isFolder
             ? "/api/folder/deleteShareFolderLink.php"
             : "/api/file/deleteShareLink.php";
-      
+
           const csrfToken =
             (document.querySelector('meta[name="csrf-token"]')?.content || window.csrfToken || "");
-      
+
           const body = new URLSearchParams({ token });
-      
+
           fetch(endpoint, {
             method: "POST",
             credentials: "include",
@@ -1151,7 +1848,7 @@ export function openAdminPanel() {
       if (config.oidc && typeof config.oidc === 'object') {
         Object.assign(window.currentOIDCConfig, config.oidc);
       }
-      
+
       if (config.globalOtpauthUrl) {
         window.currentOIDCConfig.globalOtpauthUrl = config.globalOtpauthUrl;
       }
@@ -1164,14 +1861,14 @@ export function openAdminPanel() {
       const proEmail = proInfo.email || '';
       const proVersion = proInfo.version || 'not installed';
       const proLicense = proInfo.license || '';
-            // New: richer license metadata from FR_PRO_INFO / backend
-            const proPlan = proInfo.plan || '';            // e.g. "early_supporter_1x", "personal_yearly"
-            const proExpiresAt = proInfo.expiresAt || '';  // ISO timestamp string or ""
-            const proMaxMajor = (
-              typeof proInfo.maxMajor === 'number'
-                ? proInfo.maxMajor
-                : (proInfo.maxMajor ? Number(proInfo.maxMajor) : null)
-            );
+      // New: richer license metadata from FR_PRO_INFO / backend
+      const proPlan = proInfo.plan || '';            // e.g. "early_supporter_1x", "personal_yearly"
+      const proExpiresAt = proInfo.expiresAt || '';  // ISO timestamp string or ""
+      const proMaxMajor = (
+        typeof proInfo.maxMajor === 'number'
+          ? proInfo.maxMajor
+          : (proInfo.maxMajor ? Number(proInfo.maxMajor) : null)
+      );
       const brandingCfg = config.branding || {};
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
@@ -1208,9 +1905,9 @@ export function openAdminPanel() {
             { id: "headerSettings", label: tf("header_footer_settings", "Header & Footer settings") },
             { id: "loginOptions", label: t("login_webdav") },
             { id: "onlyoffice", label: "ONLYOFFICE" },
-            { id: "upload", label: tf("upload_limits_and_antivirus", "Upload limits & antivirus") },
+            { id: "upload", label: tf("antivirus_settings", "Antivirus") },
             { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
-            { id: "shareLinks", label: t("manage_shared_links") },
+            { id: "shareLinks", label: t("manage_shared_links_size") },
             { id: "storage", label: "Storage / Disk Usage" },
             { id: "pro", label: "FileRise Pro" },
             { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Sponsor / Donations") : "Sponsor / Donations") }
@@ -1251,122 +1948,70 @@ export function openAdminPanel() {
         });
 
         document.getElementById("userManagementContent").innerHTML = `
-  <div class="admin-user-actions">
-    <!-- Core buttons -->
-    <button type="button" id="adminOpenAddUser" class="btn btn-success btn-sm">
-      <i class="material-icons">person_add</i>
-      <span>${t("add_user")}</span>
+  <div class="admin-user-actions d-flex flex-wrap" style="gap:8px; margin-bottom:6px;">
+    <!-- Core: Manage users -->
+    <button type="button" id="adminOpenUserHub" class="btn btn-primary btn-sm">
+      <i class="material-icons">people</i>
+      <span>${tf("manage_users", "Manage users")}</span>
     </button>
 
-    <button type="button" id="adminOpenRemoveUser" class="btn btn-danger btn-sm">
-      <i class="material-icons">person_remove</i>
-      <span>${t("remove_user")}</span>
-    </button>
-
-    <button type="button" id="adminOpenUserPermissions" class="btn btn-secondary btn-sm">
+    <!-- Core: Folder Access (per-folder ACLs) -->
+    <button type="button" id="adminOpenFolderAccess" class="btn btn-secondary btn-sm">
       <i class="material-icons">folder_shared</i>
       <span>${tf("folder_access", "Folder Access")}</span>
     </button>
 
-    <button type="button" id="adminOpenUserFlags" class="btn btn-secondary btn-sm">
-      <i class="material-icons">tune</i>
-      <span>${tf("user_permissions", "User Permissions")}</span>
-    </button>
-
-    <!-- Pro-only: User groups -->
-    ${isPro
-            ? `
+    <!-- Pro: User groups -->
     <div class="btn-pro-wrapper">
       <button
         type="button"
         id="adminOpenUserGroups"
-        class="btn btn-sm btn-pro-admin">
+        class="btn btn-sm btn-pro-admin"
+        ${!isPro ? "data-pro-locked='1'" : ""}
+      >
         <i class="material-icons">groups</i>
         <span>User Groups</span>
       </button>
+      ${!isPro ? '<span class="btn-pro-pill">Pro</span>' : ''}
     </div>
-    `
-            : `
-    <div class="btn-pro-wrapper">
-      <button
-        type="button"
-        id="adminOpenUserGroups"
-        class="btn btn-sm btn-pro-admin">
-        <i class="material-icons">groups</i>
-        <span>User Groups</span>
-      </button>
-      <span class="btn-pro-pill">Pro</span>
-    </div>
-    `
-          }
 
-    <!-- Pro roadmap: Client portal -->
-    ${isPro
-            ? `
+    <!-- Pro: Client Portals -->
     <div class="btn-pro-wrapper">
       <button
         type="button"
         id="adminOpenClientPortal"
         class="btn btn-sm btn-pro-admin"
+        ${!isPro ? "data-pro-locked='1'" : ""}
         title="Client portals are part of FileRise Pro.">
         <i class="material-icons">cloud_upload</i>
         <span>Client Portals</span>
       </button>
+      ${!isPro ? '<span class="btn-pro-pill">Pro</span>' : ''}
     </div>
-    `
-            : `
-    <div class="btn-pro-wrapper">
-      <button
-        type="button"
-        id="adminOpenClientPortal"
-        class="btn btn-sm btn-pro-admin"
-        disabled
-        title="Client portals are part of FileRise Pro.">
-        <i class="material-icons">cloud_upload</i>
-        <span>Client Portals</span>
-      </button>
-      <span class="btn-pro-pill">Pro</span>
-    </div>
-    `
-          }
   </div>
 
-  <small class="text-muted d-block" style="margin-top:6px;">
-    Use the core tools to manage users, permissions and per-folder access.
-    User Groups and Client Portals are only available in FileRise Pro.
+  <small class="text-muted d-block" style="margin-top:4px;">
+    Manage users, passwords and account-level flags from “Manage users”.
+    Use “Folder Access” for per-folder ACLs. User Groups and Client Portals are available in FileRise Pro.
   </small>
 `;
 
-        document.getElementById("adminOpenAddUser")
-          .addEventListener("click", () => {
-            toggleVisibility("addUserModal", true);
-            document.getElementById("newUsername")?.focus();
-          });
-        document.getElementById("adminOpenRemoveUser")
-          .addEventListener("click", () => {
-            if (typeof window.loadUserList === "function") window.loadUserList();
-            toggleVisibility("removeUserModal", true);
-          });
-        document.getElementById("adminOpenUserPermissions")
-          .addEventListener("click", openUserPermissionsModal);
-
-        // Pro-only stubs for future features
-        const regBtn = document.getElementById("adminOpenUserRegistration");
-        const groupsBtn = document.getElementById("adminOpenUserGroups");
-        const clientBtn = document.getElementById("adminOpenClientPortal");
-
-        if (regBtn) {
-          regBtn.addEventListener("click", () => {
-            if (!isPro) {
-              showToast("User registration is a FileRise Pro feature. Visit filerise.net to purchase a license.");
-              window.open("https://filerise.net", "_blank", "noopener");
-              return;
-            }
-            // Placeholder for future Pro UI:
-            showToast("User registration management is coming soon in FileRise Pro.");
+        // Wiring for the 4 buttons
+        const userHubBtn = document.getElementById("adminOpenUserHub");
+        if (userHubBtn) {
+          userHubBtn.addEventListener("click", () => {
+            openAdminUserHubModal();
           });
         }
 
+        const folderAccessBtn = document.getElementById("adminOpenFolderAccess");
+        if (folderAccessBtn) {
+          folderAccessBtn.addEventListener("click", () => {
+            openUserPermissionsModal();
+          });
+        }
+
+        const groupsBtn = document.getElementById("adminOpenUserGroups");
         if (groupsBtn) {
           groupsBtn.addEventListener("click", () => {
             if (!isPro) {
@@ -1378,6 +2023,7 @@ export function openAdminPanel() {
           });
         }
 
+        const clientBtn = document.getElementById("adminOpenClientPortal");
         if (clientBtn) {
           clientBtn.addEventListener("click", () => {
             if (!isPro) {
@@ -1385,7 +2031,6 @@ export function openAdminPanel() {
               window.open("https://filerise.net", "_blank", "noopener");
               return;
             }
-
             openClientPortalsModal();
           });
         }
@@ -1410,8 +2055,8 @@ export function openAdminPanel() {
     </label>
     <small class="text-muted d-block mb-1">
       ${isPro
-        ? 'Upload a logo image or paste a local path.'
-        : 'Requires FileRise Pro to enable custom header branding.'}
+            ? 'Upload a logo image or paste a local path.'
+            : 'Requires FileRise Pro to enable custom header branding.'}
     </small>
 
     <div class="input-group mb-2">
@@ -1419,7 +2064,7 @@ export function openAdminPanel() {
         type="text"
         id="brandingCustomLogoUrl"
         class="form-control"
-        placeholder="/uploads/profile_pics/logo.png"
+        placeholder="/assets/logo.png"
         value="${isPro ? (brandingCustomLogoUrl.replace(/"/g, '&quot;')) : ''}"
         ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
       />
@@ -1475,8 +2120,8 @@ export function openAdminPanel() {
     </div>
     <small class="text-muted d-block mt-1">
       ${isPro
-        ? 'If left empty, FileRise uses its default blue and dark header colors.'
-        : 'Requires FileRise Pro to enable custom color branding.'}
+            ? 'If left empty, FileRise uses its default blue and dark header colors.'
+            : 'Requires FileRise Pro to enable custom color branding.'}
     </small>
   </div>
 
@@ -1492,8 +2137,8 @@ export function openAdminPanel() {
     </label>
     <small class="text-muted d-block mb-1">
       ${isPro
-        ? 'Shown at the bottom of every page. You can include simple HTML like links.'
-        : 'Requires FileRise Pro to customize footer text.'}
+            ? 'Shown at the bottom of every page. You can include simple HTML like links.'
+            : 'Requires FileRise Pro to customize footer text.'}
     </small>
     <textarea
       id="brandingFooterHtml"
@@ -1610,9 +2255,9 @@ export function openAdminPanel() {
     </div>
     <small class="text-muted d-block mt-1">
       ${tf(
-        "proxy_only_login_help",
-        "When enabled, FileRise trusts the reverse proxy header and disables the login form, HTTP Basic and OIDC."
-      )}
+          "proxy_only_login_help",
+          "When enabled, FileRise trusts the reverse proxy header and disables the login form, HTTP Basic and OIDC."
+        )}
     </small>
   </div>
 
@@ -1647,26 +2292,8 @@ export function openAdminPanel() {
 `;
 
         document.getElementById("uploadContent").innerHTML = `
-    <div class="admin-subsection-title" style="margin-top:2px;">
-    Shared upload limits
-  </div>
-  <div class="form-group">
-    <label for="sharedMaxUploadSize">${t("shared_max_upload_size_bytes")}:</label>
-    <input
-      type="number"
-      id="sharedMaxUploadSize"
-      class="form-control"
-      placeholder="e.g. 52428800"
-    />
-    <small class="text-muted d-block">
-      ${t("max_bytes_shared_uploads_note")}
-    </small>
-  </div>
-
-    <hr class="admin-divider">
-
       <div class="admin-subsection-title" style="margin-top:2px;">
-    Antivirus scanning
+    Antivirus upload scanning
   </div>
 
     <div class="form-group" style="margin-top:10px;">
@@ -1686,9 +2313,9 @@ export function openAdminPanel() {
       style="margin-top:2px;"
     >
       ${tf(
-        "clamav_help_text_short",
-        "Files are scanned with ClamAV before being accepted. This may impact upload speed."
-      )}
+          "clamav_help_text_short",
+          "Files are scanned with ClamAV before being accepted. This may impact upload speed."
+        )}
     </small>
   </div>
 
@@ -1701,18 +2328,17 @@ export function openAdminPanel() {
     </button>
     <small class="text-muted d-block" style="margin-top:4px;">
       ${tf(
-        "clamav_test_help",
-        "Runs a quick scan against a tiny test file using your configured ClamAV command (VIRUS_SCAN_CMD or clamscan). Safe to run anytime."
-      )}
+          "clamav_test_help",
+          "Runs a quick scan against a tiny test file using your configured ClamAV command (VIRUS_SCAN_CMD or clamscan). Safe to run anytime."
+        )}
     </small>
     <div id="clamavTestStatus" class="small text-muted" style="margin-top:4px;"></div>
   </div>
 
   <hr class="mt-3 mb-2">
 
-  ${
-    isPro
-      ? `
+  ${isPro
+            ? `
       <!-- Real Pro virus log -->
       <div id="virusLogWrapper"
            class="card"
@@ -1763,7 +2389,7 @@ export function openAdminPanel() {
         </div>
       </div>
       `
-      : `
+            : `
       <!-- Pro-style blurred teaser, like Storage explorer -->
       <div id="virusLogWrapper"
            class="card"
@@ -1822,20 +2448,20 @@ export function openAdminPanel() {
         </div>
       </div>
       `
-  }
+          }
 `;
 
-wireClamavTestButton(document.getElementById("uploadContent"));
-initVirusLogUI({ isPro });
+        wireClamavTestButton(document.getElementById("uploadContent"));
+        initVirusLogUI({ isPro });
         // ONLYOFFICE section (moved into adminOnlyOffice.js)
         initOnlyOfficeUI({ config });
 
         const hasId = !!(config.oidc && config.oidc.hasClientId);
-const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
-const oidcDebugEnabled = !!(config.oidc && config.oidc.debugLogging);
-const oidcAllowDemote = !!(config.oidc && config.oidc.allowDemote);
+        const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
+        const oidcDebugEnabled = !!(config.oidc && config.oidc.debugLogging);
+        const oidcAllowDemote = !!(config.oidc && config.oidc.allowDemote);
 
-document.getElementById("oidcContent").innerHTML = `
+        document.getElementById("oidcContent").innerHTML = `
  <div class="admin-subsection-title" style="margin-top:2px;">
     OIDC Configuration
   </div>
@@ -1976,13 +2602,41 @@ document.getElementById("oidcContent").innerHTML = `
   </div>
 `;
 
-wireReplaceButtons(document.getElementById("oidcContent"));
-wireOidcTestButton(document.getElementById("oidcContent"));
-wireOidcDebugSnapshotButton(document.getElementById("oidcContent")); 
+        wireReplaceButtons(document.getElementById("oidcContent"));
+        wireOidcTestButton(document.getElementById("oidcContent"));
+        wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
 
-        document.getElementById("shareLinksContent").textContent = t("loading") + "…";
+        const shareLinksHost = document.getElementById("shareLinksContent");
+        if (shareLinksHost) {
+          shareLinksHost.innerHTML = `
 
-        document.getElementById("shareLinksContent").textContent = t("loading") + "…";
+    <div class="form-group" style="margin-top:8px;">
+        <div class="admin-subsection-title" style="margin-top:2px;">
+${t("shared_max_upload_size_bytes")}
+          </div>
+      <input
+        type="number"
+        id="sharedMaxUploadSize"
+        class="form-control"
+        placeholder="e.g. 52428800"
+      />
+      <small class="text-muted d-block">
+        ${t("max_bytes_shared_uploads_note")}
+      </small>
+    </div>
+
+    <hr class="admin-divider">
+
+    <div class="admin-subsection-title" style="margin-top:2px;">
+      ${tf("manage_shared_links", "Manage shared links")}
+    </div>
+
+
+    <div id="shareLinksList" class="mt-2">
+      ${t("loading")}…
+    </div>
+  `;
+        }
 
         // --- FileRise Pro / License section ---
         const proContent = document.getElementById("proContent");
@@ -1996,32 +2650,32 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
           const hasLatest = !!norm(latestVersionRaw);
           const hasUpdate = hasCurrent && hasLatest && norm(currentVersionRaw) !== norm(latestVersionRaw);
 
-                   // Friendly description of plan + lifetime/expiry
-                   let planLabel = '';
-                   if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
-                     const mj = proMaxMajor || 1;
-                     planLabel = `Early supporter – lifetime for FileRise Pro ${mj}.x`;
-                   } else if (proPlan) {
-                     if (proPlan.startsWith('personal_') || proPlan === 'personal_yearly') {
-                       planLabel = 'Personal license';
-                     } else if (proPlan.startsWith('business_') || proPlan === 'business_yearly') {
-                       planLabel = 'Business license';
-                     } else {
-                       planLabel = proPlan;
-                     }
-                   }
-         
-                   let expiryLabel = '';
-                   if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
-                     // Early supporters: we treat as lifetime for that major – do NOT show an expiry date
-                     expiryLabel = 'Lifetime license (no expiry)';
-                   } else if (proExpiresAt) {
-                     expiryLabel = `Valid until ${proExpiresAt}`;
-                   }
-         
-                   const proMetaHtml =
-                     isPro && (proType || proEmail || proVersion || planLabel || expiryLabel)
-                       ? `
+          // Friendly description of plan + lifetime/expiry
+          let planLabel = '';
+          if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
+            const mj = proMaxMajor || 1;
+            planLabel = `Early supporter – lifetime for FileRise Pro ${mj}.x`;
+          } else if (proPlan) {
+            if (proPlan.startsWith('personal_') || proPlan === 'personal_yearly') {
+              planLabel = 'Personal license';
+            } else if (proPlan.startsWith('business_') || proPlan === 'business_yearly') {
+              planLabel = 'Business license';
+            } else {
+              planLabel = proPlan;
+            }
+          }
+
+          let expiryLabel = '';
+          if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
+            // Early supporters: we treat as lifetime for that major – do NOT show an expiry date
+            expiryLabel = 'Lifetime license (no expiry)';
+          } else if (proExpiresAt) {
+            expiryLabel = `Valid until ${proExpiresAt}`;
+          }
+
+          const proMetaHtml =
+            isPro && (proType || proEmail || proVersion || planLabel || expiryLabel)
+              ? `
                  <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
                    <div>
                      ✅ ${proType ? `License type: ${proType}` : 'License active'}
@@ -2046,7 +2700,7 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
                    </div>` : ''}
                  </div>
                `
-                       : '';
+              : '';
 
           proContent.innerHTML = `
     <div class="card pro-card" style="padding:12px; border:1px solid #ddd; border-radius:12px; max-width:720px; margin:8px auto;">
@@ -2275,58 +2929,58 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
         // --- end FileRise Pro section ---
 
         document.getElementById("saveAdminSettings")
-        .addEventListener("click", handleSave);
+          .addEventListener("click", handleSave);
 
-      const loginToggleIds = ["enableFormLogin", "enableBasicAuth", "enableOIDCLogin"];
+        const loginToggleIds = ["enableFormLogin", "enableBasicAuth", "enableOIDCLogin"];
 
-      const ensureAtLeastOneLogin = (changedEl) => {
-        const proxyEl = document.getElementById("authBypass");
-        const proxyOnly = !!proxyEl && proxyEl.checked;
+        const ensureAtLeastOneLogin = (changedEl) => {
+          const proxyEl = document.getElementById("authBypass");
+          const proxyOnly = !!proxyEl && proxyEl.checked;
 
-        const enabledCount = loginToggleIds
-          .map(id => document.getElementById(id))
-          .filter(el => el && el.checked).length;
+          const enabledCount = loginToggleIds
+            .map(id => document.getElementById(id))
+            .filter(el => el && el.checked).length;
 
-        // If proxy-only is OFF, we require at least one login method
-        if (!proxyOnly && enabledCount === 0 && changedEl) {
-          showToast(t("at_least_one_login_method"));
-          changedEl.checked = true;
-        }
-      };
-
-      loginToggleIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.addEventListener("change", (e) => {
-          ensureAtLeastOneLogin(e.target);
-        });
-      });
-
-      const authBypassEl = document.getElementById("authBypass");
-      if (authBypassEl) {
-        authBypassEl.addEventListener("change", (e) => {
-          const checked = e.target.checked;
-
-          if (checked) {
-            // Proxy-only: switch off all built-in logins
-            loginToggleIds.forEach(id => {
-              const el = document.getElementById(id);
-              if (el) el.checked = false;
-            });
-          } else {
-            // Leaving proxy-only: if everything is off, enable login form by default
-            const enabledCount = loginToggleIds
-              .map(id => document.getElementById(id))
-              .filter(el => el && el.checked).length;
-            if (enabledCount === 0) {
-              const fallback = document.getElementById("enableFormLogin");
-              if (fallback) fallback.checked = true;
-            }
+          // If proxy-only is OFF, we require at least one login method
+          if (!proxyOnly && enabledCount === 0 && changedEl) {
+            showToast(t("at_least_one_login_method"));
+            changedEl.checked = true;
           }
-        });
-      }
+        };
 
-       
+        loginToggleIds.forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener("change", (e) => {
+            ensureAtLeastOneLogin(e.target);
+          });
+        });
+
+        const authBypassEl = document.getElementById("authBypass");
+        if (authBypassEl) {
+          authBypassEl.addEventListener("change", (e) => {
+            const checked = e.target.checked;
+
+            if (checked) {
+              // Proxy-only: switch off all built-in logins
+              loginToggleIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.checked = false;
+              });
+            } else {
+              // Leaving proxy-only: if everything is off, enable login form by default
+              const enabledCount = loginToggleIds
+                .map(id => document.getElementById(id))
+                .filter(el => el && el.checked).length;
+              if (enabledCount === 0) {
+                const fallback = document.getElementById("enableFormLogin");
+                if (fallback) fallback.checked = true;
+              }
+            }
+          });
+        }
+
+
 
         const userMgmt = document.getElementById("userManagementContent");
         userMgmt?.removeEventListener("click", window.__userMgmtDelegatedClick);
@@ -2339,16 +2993,16 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
         userMgmt?.addEventListener("click", window.__userMgmtDelegatedClick);
 
         const loginOpts = config.loginOptions || {};
-        const formEnabled  = !(loginOpts.disableFormLogin === true);
+        const formEnabled = !(loginOpts.disableFormLogin === true);
         const basicEnabled = !(loginOpts.disableBasicAuth === true);
-        const oidcEnabled  = !(loginOpts.disableOIDCLogin === true);
-        const proxyOnly    = !!loginOpts.authBypass;
+        const oidcEnabled = !(loginOpts.disableOIDCLogin === true);
+        const proxyOnly = !!loginOpts.authBypass;
 
-        document.getElementById("enableFormLogin").checked  = formEnabled;
-        document.getElementById("enableBasicAuth").checked  = basicEnabled;
-        document.getElementById("enableOIDCLogin").checked  = oidcEnabled;
-        document.getElementById("authBypass").checked       = proxyOnly;
-        document.getElementById("authHeaderName").value     = loginOpts.authHeaderName || "X-Remote-User";
+        document.getElementById("enableFormLogin").checked = formEnabled;
+        document.getElementById("enableBasicAuth").checked = basicEnabled;
+        document.getElementById("enableOIDCLogin").checked = oidcEnabled;
+        document.getElementById("authBypass").checked = proxyOnly;
+        document.getElementById("authHeaderName").value = loginOpts.authHeaderName || "X-Remote-User";
 
         // If proxy-only is on, force all built-in login toggles off
         if (proxyOnly) {
@@ -2358,7 +3012,7 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
           });
         }
 
-        document.getElementById("enableWebDAV").checked      = config.enableWebDAV === true;
+        document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         // --- ClamAV toggle wiring ---
         const cfgClam = config.clamav || {};
@@ -2389,16 +3043,16 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
         const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
 
         const loginOpts = config.loginOptions || {};
-        const formEnabled  = !(loginOpts.disableFormLogin === true);
+        const formEnabled = !(loginOpts.disableFormLogin === true);
         const basicEnabled = !(loginOpts.disableBasicAuth === true);
-        const oidcEnabled  = !(loginOpts.disableOIDCLogin === true);
-        const proxyOnly    = !!loginOpts.authBypass;
+        const oidcEnabled = !(loginOpts.disableOIDCLogin === true);
+        const proxyOnly = !!loginOpts.authBypass;
 
-        document.getElementById("enableFormLogin").checked  = formEnabled;
-        document.getElementById("enableBasicAuth").checked  = basicEnabled;
-        document.getElementById("enableOIDCLogin").checked  = oidcEnabled;
-        document.getElementById("authBypass").checked       = proxyOnly;
-        document.getElementById("authHeaderName").value     = loginOpts.authHeaderName || "X-Remote-User";
+        document.getElementById("enableFormLogin").checked = formEnabled;
+        document.getElementById("enableBasicAuth").checked = basicEnabled;
+        document.getElementById("enableOIDCLogin").checked = oidcEnabled;
+        document.getElementById("authBypass").checked = proxyOnly;
+        document.getElementById("authHeaderName").value = loginOpts.authHeaderName || "X-Remote-User";
 
         if (proxyOnly) {
           ["enableFormLogin", "enableBasicAuth", "enableOIDCLogin"].forEach(id => {
@@ -2407,7 +3061,7 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
           });
         }
 
-        document.getElementById("enableWebDAV").checked      = config.enableWebDAV === true;
+        document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         // --- ClamAV toggle wiring (refresh) ---
         const cfgClam = config.clamav || {};
@@ -2454,39 +3108,39 @@ wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
           oidcDebugEl.checked = !!(config.oidc && config.oidc.debugLogging);
         }
         const oidcAllowDemoteEl = document.getElementById('oidcAllowDemote');
-if (oidcAllowDemoteEl) {
-  oidcAllowDemoteEl.checked = !!(config.oidc && config.oidc.allowDemote);
-}
-      wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
+        if (oidcAllowDemoteEl) {
+          oidcAllowDemoteEl.checked = !!(config.oidc && config.oidc.allowDemote);
+        }
+        wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
         captureInitialAdminConfig();
       }
       try {
-               initAdminStorageSection({
-                 isPro,
-                 modalEl: mdl
-               });
-             } catch (e) {
-               console.error('Failed to init Storage / Disk Usage section', e);
-             }
+        initAdminStorageSection({
+          isPro,
+          modalEl: mdl
+        });
+      } catch (e) {
+        console.error('Failed to init Storage / Disk Usage section', e);
+      }
 
-    try {
-              initAdminSponsorSection({
-                container: document.getElementById('sponsorContent'),
-                t,
-                tf,
-                showToast
-              });
-            } catch (e) {
-              console.error('Failed to init Sponsor / Donations section', e);
-            }
+      try {
+        initAdminSponsorSection({
+          container: document.getElementById('sponsorContent'),
+          t,
+          tf,
+          showToast
+        });
+      } catch (e) {
+        console.error('Failed to init Sponsor / Donations section', e);
+      }
     })
     .catch(() => {/* if even fetching fails, open empty panel */ });
 }
 
 function handleSave() {
-  const enableFormLogin  = !!document.getElementById("enableFormLogin")?.checked;
-  const enableBasicAuth  = !!document.getElementById("enableBasicAuth")?.checked;
-  const enableOIDCLogin  = !!document.getElementById("enableOIDCLogin")?.checked;
+  const enableFormLogin = !!document.getElementById("enableFormLogin")?.checked;
+  const enableBasicAuth = !!document.getElementById("enableBasicAuth")?.checked;
+  const enableOIDCLogin = !!document.getElementById("enableOIDCLogin")?.checked;
   const proxyOnlyEnabled = !!document.getElementById("authBypass")?.checked;
 
   const authHeaderName =
@@ -3055,7 +3709,53 @@ function collectGrantsFrom(container) {
   return out;
 }
 
-export function openUserPermissionsModal() {
+async function populateAdminUserHubSelect(selectEl) {
+  if (!selectEl) return;
+
+  selectEl.innerHTML = `<option value="">${tf("loading", "Loading…")}</option>`;
+
+  try {
+    const usersRaw = await fetchAllUsers();
+    const list = Array.isArray(usersRaw)
+      ? usersRaw
+      : (usersRaw && Array.isArray(usersRaw.users) ? usersRaw.users : []);
+
+    const current = (localStorage.getItem("username") || "").trim();
+    __userMetaCache = {}; // reset cache
+
+    selectEl.innerHTML = "";
+    const normalized = list
+      .map(u => {
+        if (typeof u === "string") return { username: u, isAdmin: false };
+        return {
+          username: u.username || u.user || "",
+          isAdmin: !!(u.isAdmin || u.admin || u.role === "1")
+        };
+      })
+      .filter(u => u.username);
+
+    updateUserMetaCache(normalized);
+
+    normalized.forEach(u => {
+      const opt = document.createElement("option");
+      opt.value = u.username;
+      opt.textContent = u.isAdmin ? `${u.username} (admin)` : u.username;
+      if (current && u.username === current) {
+        opt.dataset.currentUser = "1";
+      }
+      selectEl.appendChild(opt);
+    });
+
+    if (!selectEl.value && selectEl.options.length > 0) {
+      selectEl.selectedIndex = 0;
+    }
+  } catch (e) {
+    console.error("populateAdminUserHubSelect error", e);
+    selectEl.innerHTML = `<option value="">${tf("error_loading_users", "Error loading users")}</option>`;
+  }
+}
+
+export function openUserPermissionsModal(initialUser = null) {
   let userPermissionsModal = document.getElementById("userPermissionsModal");
   const isDarkMode = document.body.classList.contains("dark-mode");
   const overlayBackground = isDarkMode ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";

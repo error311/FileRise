@@ -1,5 +1,67 @@
 # Changelog
 
+## Changes 12/10/2025 (v2.5.2)
+
+release(v2.5.2): new user management hub & relocated shared upload limits
+
+**Admin panel – User Management**  
+
+- Added a new **“Manage users” hub** in the Users section, replacing the old separate “Add user / Remove user / User permissions” buttons.
+- Introduced an inline **Add user dropdown card** anchored directly under the “Add user” button:
+  - Opens as a small card right under the button.
+  - Creates the user via `/api/addUser.php` and auto-selects them in the dropdown on success.
+  - Closes the card after a successful create.
+- Added an inline **User Permissions (flags) row** for the selected user:
+  - Toggles `readOnly`, `disableUpload`, `canShare`, and `bypassOwnership`.
+  - Changes are saved immediately via `updateUserPermissions.php` and cached in `__userFlagsCacheHub`.
+  - Admin users are detected and treated as full-access (toggles disabled with a note).
+
+**User creation & password resets**  
+
+- Improved `/api/addUser.php` responses:
+  - Returns proper HTTP status codes (e.g. **422** for validation failures).
+  - Normalized JSON shape to `{ ok: false, error: "…" }` for errors and `{ ok: true, data: … }` for success.
+  - Enforces **minimum 6-character passwords** for new users; invalid usernames and short passwords surface as clear error messages.
+- Updated the admin “Add user” form in the hub to:
+  - Use `fetch` directly so 4xx responses (like 422) are correctly parsed.
+  - Show a toast (or `alert` fallback) on both success and failure, including backend validation messages.  
+- Added `UserModel::adminResetPassword()` to reset a user’s password from the admin hub without the old password, preserving TOTP/extra fields in the users file.
+- Added new endpoint `public/api/admin/changeUserPassword.php`:
+  - Admin-only, with CSRF header check.
+  - Resets a user’s password via `adminResetPassword()` and returns consistent JSON.
+
+**Shared links & upload limits**  
+
+- Reworked **shared upload size limit** UI:
+  - Removed the “Shared upload limits” block from the **Upload** section.
+  - Moved the **Shared Max Upload Size (bytes)** input into the **Shared links** section, above the links table.
+  - Renamed the section label to **“Manage Shared Links & Upload Size Limit”** and added a new `manage_shared_links_size` i18n key.
+- Updated the Upload section label to **“Antivirus”** / “Antivirus upload scanning” since that section now focuses purely on AV configuration.
+
+**Admin UI & Pro integrations**  
+
+- Updated the **Users** tab toolbar:
+  - Replaced old “Add user / Remove user / User permissions” buttons with:
+    - **Manage users** (opens the new hub).
+    - **Folder Access** (per-folder ACLs).
+    - **User Groups** (Pro).
+    - **Client Portals** (Pro).
+- Wired **Client Portals** to open the new hub for user management:
+  - “Manage users…” button now triggers the global `adminOpenUserHub` instead of the old Add-User modal.
+  - “Folder access…” and “User groups…” buttons now link to `adminOpenFolderAccess` and the Pro groups modal respectively.
+- Increased `#adminPanelModal` base width slightly (60% → 64%) for a bit more breathing room in the new layouts.
+- Slight visual polish:
+  - Thicker `admin-divider` and OIDC debug snapshot border.
+  - **Admin subsection titles** bumped to 1.15rem.
+  - Toggle “ON” state uses `--filr-accent-400` for a slightly softer accent.
+
+**Miscellaneous**  
+
+- Bumped the **upload card/modal z-index** so the upload UI always sits cleanly above other overlays.
+- Added styling for `#adminUserHubModal .modal-content` in both light and dark mode so it matches existing admin panel modals.
+
+---
+
 ## Changes 12/9/2025 (v2.5.1)
 
 release(v2.5.1): upgrade vendor libs and enhance OIDC + admin UX

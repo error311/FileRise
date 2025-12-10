@@ -192,6 +192,7 @@ const translations = {
     "shared_max_upload_size_bytes": "Shared Max Upload Size (bytes)",
     "max_bytes_shared_uploads_note": "Enter maximum bytes allowed for shared-folder uploads",
     "manage_shared_links": "Manage Shared Links",
+    "manage_shared_links_size": "Manage Shared Links & Upload Size Limit",
     "folder_shares": "Folder Shares",
     "file_shares": "File Shares",
     "loading": "Loading…",

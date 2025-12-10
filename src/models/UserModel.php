@@ -330,6 +330,54 @@ class userModel
     }
 
     /**
+ * Admin-only password reset (no old password required).
+ */
+public static function adminResetPassword($targetUsername, $newPassword)
+{
+    if (!preg_match(REGEX_USER, $targetUsername)) {
+        return ["error" => "Invalid username"];
+    }
+
+    $usersFile = USERS_DIR . USERS_FILE;
+    if (!file_exists($usersFile)) {
+        return ["error" => "Users file not found"];
+    }
+
+    $lines     = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $userFound = false;
+    $newLines  = [];
+
+    foreach ($lines as $line) {
+        $parts = explode(':', trim($line));
+        if (count($parts) < 3) {
+            $newLines[] = $line;
+            continue;
+        }
+        $storedUser = $parts[0];
+
+        if ($storedUser === $targetUsername) {
+            $userFound = true;
+            // index 1 is the hash; preserve TOTP/extra fields in the rest of the line
+            $parts[1] = password_hash($newPassword, PASSWORD_BCRYPT);
+            $newLines[] = implode(':', $parts);
+        } else {
+            $newLines[] = $line;
+        }
+    }
+
+    if (!$userFound) {
+        return ["error" => "User not found."];
+    }
+
+    $payload = implode(PHP_EOL, $newLines) . PHP_EOL;
+    if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
+        return ["error" => "Could not update password."];
+    }
+
+    return ["success" => "Password updated successfully."];
+}
+
+    /**
      * Update panel: if TOTP disabled, clear secret.
      */
     public static function updateUserPanel($username, $totp_enabled)
