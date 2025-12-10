@@ -224,7 +224,13 @@ FileRise ships as a standard PHP app with this layout:
 - `config/`
 - `public/`  ← web server **DocumentRoot**
 - `src/`
-- `uploads/`, `users/`, `metadata/` (created on first run / install)
+- `uploads/`, `users/`, `metadata/` (data directories; you can create them up front as shown below — FileRise will attempt to create them on first run if they’re missing and permissions allow)
+
+```bash
+mkdir -p uploads users metadata
+chown -R www-data:www-data uploads users metadata   # adjust for your web user
+chmod -R 775 uploads users metadata
+```
 
 You can install from a **release ZIP** (recommended) or from **git**.
 
@@ -322,7 +328,7 @@ For detailed examples and reverse proxy snippets, see the Wiki:
 If you deployed FileRise directly in `/var/www`, you can use this helper script
 to update to a new release without touching your data.
 
-Save this as `scripts/update-filerise.sh` [update-filerise.sh](error311/FileRise/scripts/update-filerise.sh) (make it executable with `chmod +x scripts/update-filerise.sh`):
+Save this as `scripts/update-filerise.sh` [update-filerise.sh](scripts/update-filerise.sh) (make it executable with `chmod +x scripts/update-filerise.sh`):
 
 ---
 
