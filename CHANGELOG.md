@@ -1,5 +1,13 @@
 # Changelog
 
+## Changes 12/13/2025 (v2.6.1)
+
+release(v2.6.1): fix(folderManager): replace Math.random SVG IDs with crypto-based UID helper
+
+- Add makeUid() using crypto.randomUUID() / crypto.getRandomValues() (with counter fallback) to avoid Math.random CodeQL findings.
+- Use makeUid() for folderSVG() clipPath IDs and recycleBinSVG() IDs to prevent collisions and satisfy security linting.
+- UI: tweak header button + header drop area icon padding for more consistent sizing.
+
 ## Changes 12/12/2025 (v2.6.0)
 
 release(v2.6.0): Harden downloads and refresh recycle bin + toolbar UX

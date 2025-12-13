@@ -979,6 +979,11 @@ label{font-size: 0.9rem;}
 @media (max-width: 600px) {
   .col-12.col-md-4.text-left{margin-left: -15px;}
 }
+
+  .header-buttons button:not(#userDropdownToggle),
+#headerDropArea .header-card-icon {
+  padding: 9px;
+}
 #fileListTitle{font-size: 1.8em;
     margin-top: 10px;
     margin-bottom: 10px;}

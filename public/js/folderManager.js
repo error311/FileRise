@@ -34,6 +34,20 @@ function detachFolderModalsToBody() {
 document.addEventListener('DOMContentLoaded', detachFolderModalsToBody);
 
 const PAGE_LIMIT = 100;
+let _uidFallbackCounter = 0;
+
+// Generate stable-ish unique IDs using crypto when available (avoids Math.random CodeQL finding).
+function makeUid(prefix = 'uid') {
+  const cryptoObj = (typeof self !== 'undefined' && self.crypto) ? self.crypto : (typeof window !== 'undefined' ? window.crypto : undefined);
+  if (cryptoObj?.randomUUID) return `${prefix}-${cryptoObj.randomUUID()}`;
+  if (cryptoObj?.getRandomValues) {
+    const buf = new Uint32Array(2);
+    cryptoObj.getRandomValues(buf);
+    return `${prefix}-${buf[0].toString(36)}${buf[1].toString(36)}`;
+  }
+  _uidFallbackCounter = (_uidFallbackCounter + 1) % 0x7fffffff;
+  return `${prefix}-${Date.now().toString(36)}-${_uidFallbackCounter.toString(36)}`;
+}
 
 /* ----------------------
    Helpers: safe JSON + state
@@ -538,7 +552,7 @@ async function expandAncestors(targetFolder) {
    SVG icon helpers
 ----------------------*/
 export function folderSVG(kind = 'empty', { locked = false } = {}) {
-  const gid = 'g' + Math.random().toString(36).slice(2, 8);
+  const gid = makeUid('g');
   return `
 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="display:block;shape-rendering:geometricPrecision">
   <defs>
@@ -1117,7 +1131,7 @@ function isSafeFolderPath(p) {
 const RECYCLE_BIN_ID = 'recycleBinRow';
 
 export function recycleBinSVG(filled = false, size = 24) {
-  const uid = `rb-${Math.random().toString(36).slice(2, 9)}`;
+  const uid = makeUid('rb');
 
   const level1Inside = filled ? `
     <!-- Level 1: inside the mouth (subtle) -->
