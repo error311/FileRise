@@ -1,5 +1,35 @@
 # Changelog
 
+## Changes 12/13/2025 (v2.7.0)
+
+release(v2.7.0): fix critical SVG XSS on public share links
+
+This release hardens FileRise public share endpoints against stored XSS via SVG files by preventing any SVG/SVGZ content from being rendered inline and by closing “renamed SVG” bypasses (e.g., `evil.png` that is actually SVG).
+
+**Security**  
+
+- **Public file share links (`/api/file/share.php`)**
+  - Always force **SVG/SVGZ** to download (`Content-Disposition: attachment`) and serve as `application/octet-stream`
+  - Treat **detected SVG MIME** (`image/svg+xml`) as unsafe even when the filename extension is not `.svg` (prevents rename-based bypass)
+  - Add defense-in-depth headers on shared responses:
+    - `X-Content-Type-Options: nosniff`
+    - `Content-Security-Policy: sandbox; default-src 'none'; base-uri 'none'; form-action 'none'`
+    - `Cache-Control: no-store, no-cache, must-revalidate`
+    - `Pragma: no-cache`
+
+- **Public shared folder downloads (`/api/folder/downloadSharedFile.php`)**
+  - Always force **SVG/SVGZ** to download (attachment + octet-stream)
+  - Explicit raster MIME mapping (`png/jpg/webp/...`) so gallery previews still render correctly under `nosniff`
+
+- (`/api/file/download.php`)
+  - Harden authenticated downloads: treat **.svg/.svgz** (and detected `image/svg+xml`) as unsafe and always force **attachment** with `application/octet-stream` (no inline rendering, even with `?inline=1`), while keeping inline previews limited to the raster allowlist.
+
+**UI**  
+
+- Shared folder gallery view no longer attempts to preview SVG via `<img>` (SVG is download-only).
+
+---
+
 ## Changes 12/13/2025 (v2.6.2)
 
 release(v2.6.2): no-access UI hardening + API coalescing + shared-link security

@@ -738,6 +738,91 @@ class FolderController
         exit;
     }
 
+    /* -------------------- API: Download Shared File -------------------- */
+    public function downloadSharedFile(): void
+    {
+        $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
+        $file  = filter_input(INPUT_GET, 'file', FILTER_SANITIZE_STRING);
+
+        if (empty($token) || empty($file)) {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => "Missing token or file parameter."]);
+            exit;
+        }
+
+        $basename = basename($file);
+        if (!preg_match(REGEX_FILE_NAME, $basename)) {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => "Invalid file name."]);
+            exit;
+        }
+
+        $result = FolderModel::getSharedFileInfo($token, $basename);
+        if (isset($result['error'])) {
+            http_response_code(404);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => $result['error']]);
+            exit;
+        }
+
+        $realFilePath = $result['realFilePath'];
+        $ext          = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
+
+        // Ensure clean binary response (only on the file-stream path)
+        if (headers_sent($hf, $hl)) {
+            error_log("downloadSharedFile headers already sent at {$hf}:{$hl}");
+        }
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        // Harden against sniffing
+        header('X-Content-Type-Options: nosniff');
+
+        // Safer filename handling
+        $downloadName = basename($realFilePath);
+        $downloadName = str_replace(["\r", "\n"], '', $downloadName);
+        $downloadNameStar = rawurlencode($downloadName);
+
+        // Explicit raster map (so PNG/JPG always render even if model mime is wrong)
+        $rasterMime = [
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'gif'  => 'image/gif',
+            'bmp'  => 'image/bmp',
+            'webp' => 'image/webp',
+            'ico'  => 'image/x-icon',
+        ];
+
+        // SVG / SVGZ: NEVER render inline on shared/public links
+        if ($ext === 'svg' || $ext === 'svgz') {
+            header('Content-Type: application/octet-stream');
+            header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+            // defense-in-depth if something opens it anyway
+            header("Content-Security-Policy: sandbox; default-src 'none'; base-uri 'none'; form-action 'none'");
+        } elseif (isset($rasterMime[$ext])) {
+            // Raster images: allow inline so gallery <img> works
+            header('Content-Type: ' . $rasterMime[$ext]);
+            header("Content-Disposition: inline; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+        } else {
+            // Everything else: download
+            $mimeType = $result['mimeType'] ?: 'application/octet-stream';
+            header('Content-Type: ' . $mimeType);
+            header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+        }
+
+        $size = @filesize($realFilePath);
+        if (is_int($size)) {
+            header('Content-Length: ' . $size);
+        }
+
+        readfile($realFilePath);
+        exit;
+    }
+
     /* -------------------- Public Shared Folder HTML -------------------- */
     public function shareFolder(): void
     {
@@ -756,6 +841,10 @@ class FolderController
         $data = FolderModel::getSharedFolderData($token, $providedPass, $page);
 
         if (isset($data['needs_password']) && $data['needs_password'] === true) {
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Frame-Options: DENY');
+            header("Content-Security-Policy: frame-ancestors 'none';");
             header("Content-Type: text/html; charset=utf-8"); ?>
             <!DOCTYPE html>
             <html lang="en">
@@ -830,6 +919,10 @@ class FolderController
         $currentPage = $data['currentPage'];
         $totalPages  = $data['totalPages'];
 
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('X-Frame-Options: DENY');
+        header("Content-Security-Policy: frame-ancestors 'none';");
         header("Content-Type: text/html; charset=utf-8"); ?>
         <!DOCTYPE html>
         <html lang="en">
@@ -1132,87 +1225,27 @@ class FolderController
         exit;
     }
 
-    /* -------------------- API: Download Shared File -------------------- */
-    public function downloadSharedFile(): void
-    {
-        $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
-        $file  = filter_input(INPUT_GET, 'file', FILTER_SANITIZE_STRING);
-
-        if (empty($token) || empty($file)) {
-            http_response_code(400);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(["error" => "Missing token or file parameter."]);
-            exit;
-        }
-
-        $basename = basename($file);
-        if (!preg_match(REGEX_FILE_NAME, $basename)) {
-            http_response_code(400);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(["error" => "Invalid file name."]);
-            exit;
-        }
-
-        $result = FolderModel::getSharedFileInfo($token, $basename);
-        if (isset($result['error'])) {
-            http_response_code(404);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(["error" => $result['error']]);
-            exit;
-        }
-
-        $realFilePath = $result['realFilePath'];
-        $mimeType     = $result['mimeType'] ?: 'application/octet-stream';
-        $ext          = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
-
-        // Harden against content-type sniffing
-        header('X-Content-Type-Options: nosniff');
-
-        if ($ext === 'svg') {
-            // SECURITY: never render SVG inline on shared links
-            header('Content-Type: image/svg+xml');
-            header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
-        } else {
-            header('Content-Type: ' . $mimeType);
-
-            // Safe inline preview types (raster images only)
-            if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'], true)) {
-                header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
-            } else {
-                header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
-            }
-        }
-
-        $size = @filesize($realFilePath);
-        if (is_int($size)) {
-            header('Content-Length: ' . $size);
-        }
-
-        readfile($realFilePath);
-        exit;
-    }
-
     /* -------------------- API: Upload to Shared Folder -------------------- */
     public function uploadToSharedFolder(): void
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Method not allowed."]);
             exit;
         }
 
         if (empty($_POST['token'])) {
             http_response_code(400);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Missing share token."]);
             exit;
         }
-        $token = trim($_POST['token']);
+        $token = trim((string)$_POST['token']);
 
         if (!isset($_FILES['fileToUpload'])) {
             http_response_code(400);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "No file was uploaded."]);
             exit;
         }
@@ -1230,17 +1263,88 @@ class FolderController
             ];
             $msg = $map[$fileUpload['error']] ?? 'Upload error.';
             http_response_code(400);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['error' => $msg]);
+            exit;
+        }
+
+        // Basic sanity: must be an uploaded tmp file
+        $tmp = (string)($fileUpload['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Invalid upload.']);
+            exit;
+        }
+
+        // Validate & normalize filename
+        $origName = (string)($fileUpload['name'] ?? '');
+        $basename = basename($origName);
+
+        if (!defined('REGEX_FILE_NAME') || !preg_match(REGEX_FILE_NAME, $basename)) {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => "Invalid file name."]);
+            exit;
+        }
+
+        // Block SVG/SVGZ uploads to shared folders (prevents stored XSS via public share endpoints)
+        $ext = strtolower(pathinfo($basename, PATHINFO_EXTENSION));
+
+        $detectedMime = '';
+        if (function_exists('finfo_open')) {
+            $fi = @finfo_open(FILEINFO_MIME_TYPE);
+            if ($fi) {
+                $detectedMime = (string)@finfo_file($fi, $tmp);
+                @finfo_close($fi);
+            }
+        }
+
+        $looksLikeSvg = false;
+        if ($ext === 'svg' || $ext === 'svgz') {
+            $looksLikeSvg = true;
+        } elseif ($detectedMime === 'image/svg+xml') {
+            $looksLikeSvg = true;
+        } else {
+            // Lightweight content sniff: check first chunk for "<svg"
+            $chunk = @file_get_contents($tmp, false, null, 0, 4096);
+            if (is_string($chunk) && stripos($chunk, '<svg') !== false) {
+                $looksLikeSvg = true;
+            }
+        }
+
+        if ($looksLikeSvg) {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => "Upload blocked: SVG files are not allowed in shared folders."]);
+            exit;
+        }
+
+        $tmp = (string)($fileUpload['tmp_name'] ?? '');
+        $mime = function_exists('mime_content_type') ? (string)@mime_content_type($tmp) : '';
+
+        if ($mime === 'image/svg+xml') {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Upload blocked: SVG files are not allowed in shared folders.']);
+            exit;
+        }
+
+        // ultra-light sniff as fallback
+        $head = @file_get_contents($tmp, false, null, 0, 4096);
+        if (is_string($head) && stripos($head, '<svg') !== false) {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Upload blocked: SVG files are not allowed in shared folders.']);
             exit;
         }
 
         // ---- ClamAV: reuse UploadModel scan logic on the tmp file ----
         $scan = UploadModel::scanSingleUploadIfEnabled($fileUpload);
         if (is_array($scan) && isset($scan['error'])) {
-            // scanFileIfEnabled() already deletes the tmp file on infection
+            // scanSingleUploadIfEnabled() already deletes the tmp file on infection
             http_response_code(400);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode($scan); // e.g. ["error" => "Upload blocked: virus detected in file."]
             exit;
         }
@@ -1249,7 +1353,7 @@ class FolderController
         $result = FolderModel::uploadToSharedFolder($token, $fileUpload);
         if (isset($result['error'])) {
             http_response_code(400);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode($result);
             exit;
         }
@@ -1259,6 +1363,8 @@ class FolderController
         header("Location: " . $redirectUrl);
         exit;
     }
+
+
 
     /* -------------------- Admin: List/Delete Share Folder Links -------------------- */
     public function getAllShareFolderLinks(): void

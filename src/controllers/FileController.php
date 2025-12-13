@@ -1157,7 +1157,7 @@ class FileController
         $mimeType     = $downloadInfo['mimeType'];
 
         $ext   = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
-        $isSvg = ($ext === 'svg');
+        $isSvg = ($ext === 'svg' || $ext === 'svgz');
 
         // Images we are OK to render inline
         $inlineImageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'];
@@ -1167,15 +1167,14 @@ class FileController
             $mimeType = 'application/octet-stream';
         }
 
-        // SECURITY: SVG is never rendered inline, even if ?inline=1
-        if ($isSvg) {
-            // keep correct mime for downloads but always use attachment
-            $mimeType = 'image/svg+xml';
+        // SECURITY: SVG/SVGZ is never rendered inline, even if ?inline=1
+        // Also serve as octet-stream to avoid any chance of inline execution.
+        if ($isSvg || $mimeType === 'image/svg+xml') {
+            $mimeType = 'application/octet-stream';
             $inline   = false;
         } else {
             // Inline is allowed only for the safe allowlist; ignore inline=1 for others
             $inline = in_array($ext, $inlineImageTypes, true) && $inlineParam;
-            // If no inline flag but the type is in the list, leave $inline false so it downloads unless requested
         }
 
         // Stream with proper Range support for video/audio seeking
@@ -1731,24 +1730,51 @@ class FileController
         $mimeType = mime_content_type($realFilePath) ?: 'application/octet-stream';
         $ext      = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
 
+        if (headers_sent($hf, $hl)) {
+            error_log("share.php headers already sent at {$hf}:{$hl}");
+        }
+
+        // Clear any buffered output so headers + binary stream are clean
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
         // Harden against content-type sniffing
         header('X-Content-Type-Options: nosniff');
 
-        if ($ext === 'svg') {
-            // SECURITY: SVG share links are *always* forced to download,
-            // never rendered inline, to avoid stored XSS from SVG script.
-            $mimeType = 'image/svg+xml';
-            header('Content-Type: ' . $mimeType);
-            header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
+        // Defense-in-depth: if a browser ignores attachment somehow, this reduces blast radius
+        header("Content-Security-Policy: sandbox; default-src 'none'; base-uri 'none'; form-action 'none'");
+
+        // IMPORTANT: prevent header override from earlier code / middleware
+        header_remove('Content-Type');
+        header_remove('Content-Disposition');
+
+        $downloadName = basename($realFilePath);
+        // prevent header injection
+        $downloadName = str_replace(["\r", "\n"], '', $downloadName);
+        $downloadNameStar = rawurlencode($downloadName);
+
+        $rasterMime = [
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'gif'  => 'image/gif',
+            'bmp'  => 'image/bmp',
+            'webp' => 'image/webp',
+            'ico'  => 'image/x-icon',
+        ];
+
+        // If detector says SVG, never inline it (even if extension lies)
+        if ($ext === 'svg' || $ext === 'svgz' || $mimeType === 'image/svg+xml') {
+            header('Content-Type: application/octet-stream');
+            header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+        } elseif (isset($rasterMime[$ext])) {
+            // Raster images: force correct MIME so gallery/inline works even under nosniff
+            header('Content-Type: ' . $rasterMime[$ext]);
+            header("Content-Disposition: inline; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
         } else {
             header('Content-Type: ' . $mimeType);
-
-            // "Safe" inline preview types
-            if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'], true)) {
-                header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
-            } else {
-                header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
-            }
+            header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
         }
 
         header("Cache-Control: no-store, no-cache, must-revalidate");

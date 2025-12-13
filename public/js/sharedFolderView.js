@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
       filesData.forEach(file => {
         const url = downloadBase + encodeURIComponent(file);
         const ext = file.split('.').pop().toLowerCase();
-        const isImg = /^(jpg|jpeg|png|gif|bmp|webp|svg|ico)$/.test(ext);
+        const isImg = /^(jpg|jpeg|png|gif|bmp|webp|ico)$/.test(ext);
   
         // card
         const card = document.createElement('div');
