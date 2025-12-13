@@ -86,39 +86,22 @@ export function initializeApp() {
   const saved = parseInt(localStorage.getItem('rowHeight') || '44', 10);
   document.documentElement.style.setProperty('--file-row-height', saved + 'px');
 
+  // Ensure zoom script is loaded for toolbar controls
+  try {
+    const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
+    import(`/js/zoom.js?v=${encodeURIComponent(QVER)}`).catch(err => {
+      console.warn('[zoom] failed to load zoom.js', err);
+    });
+  } catch (err) {
+    console.warn('[zoom] load error:', err);
+  }
+
   const last = localStorage.getItem('lastOpenedFolder');
   window.currentFolder = last ? last : "root";
 
   const stored = localStorage.getItem('showFoldersInList');
   // default: false (unchecked)
   window.showFoldersInList = stored === 'true';
-
-  const zoomWrap = document.querySelector('.header-zoom-controls');
-  if (zoomWrap) {
-    const hideZoom = localStorage.getItem('hideZoomControls') === 'true';
-
-    if (hideZoom) {
-      zoomWrap.style.display = 'none';
-      zoomWrap.setAttribute('aria-hidden', 'true');
-    } else {
-      zoomWrap.style.display = 'flex';
-      zoomWrap.removeAttribute('aria-hidden');
-
-      // If individual controls were hard-hidden in markup (setup mode),
-      // clear their inline display:none so they become visible in the app.
-      zoomWrap
-        .querySelectorAll('.zoom-btn, #zoomDisplay')
-        .forEach(el => {
-          el.style.removeProperty('display');
-        });
-    }
-
-    // Always load zoom.js once app is running
-    const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
-    import(`/js/zoom.js?v=${encodeURIComponent(QVER)}`).catch(err => {
-      console.warn('[zoom] failed to load zoom.js', err);
-    });
-  }
 
   // Load public site config early (safe subset)
   loadAdminConfigFunc();
@@ -202,25 +185,6 @@ export function initializeApp() {
     });
   }
 }
-
-// ---- Zoom controls: load only for logged-in app ----
-(function loadZoomControls() {
-  const zoomWrap = document.querySelector('.header-zoom-controls');
-  if (!zoomWrap) return;
-
-  // show container (keep CSS default = hidden)
-  zoomWrap.style.display = 'flex';
-  zoomWrap.style.alignItems = 'center';
-
-  try {
-    const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
-    import(`/js/zoom.js?v=${encodeURIComponent(QVER)}`)
-      .catch(err => console.warn('[zoom] failed to load:', err));
-  } catch (e) {
-    console.warn('[zoom] load error:', e);
-  }
-})();
-
 
 /* =========================
    LOGOUT (shared)

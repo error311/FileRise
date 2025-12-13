@@ -677,6 +677,14 @@ window.addEventListener('resize', () => {
   if (strip) applyFolderStripLayout(strip);
 });
 
+// Clamp gallery columns when viewport shrinks
+window.addEventListener('resize', () => {
+  const maxCols = getGalleryMaxColumns();
+  if ((window.galleryColumns || 0) > maxCols) {
+    applyGalleryColumns(maxCols);
+  }
+});
+
 // Listen once: update strip + tree + inline rows when folder color changes
 window.addEventListener('folderColorChanged', (e) => {
   const { folder } = e.detail || {};
@@ -706,7 +714,7 @@ window.addEventListener('folderColorChanged', (e) => {
 const MAX_EDIT_BYTES = 10 * 1024 * 1024;
 
 // Max number of files allowed for non-ZIP multi-download
-const MAX_NONZIP_MULTI_DOWNLOAD = 20;
+export const MAX_NONZIP_MULTI_DOWNLOAD = 20;
 
 // Global queue + panel ref for stepper-style downloads
 window.__nonZipDownloadQueue = window.__nonZipDownloadQueue || [];
@@ -738,6 +746,128 @@ try {
 
 // Global flag for advanced search mode.
 window.advancedSearchEnabled = false;
+
+// ---- Inline folder selection helpers --------------------------
+function getFolderCheckboxes() {
+  return Array.from(document.querySelectorAll('#fileList .folder-checkbox'));
+}
+
+function getFileCheckboxes() {
+  return Array.from(document.querySelectorAll('#fileList .file-checkbox'));
+}
+
+function clearFolderSelections() {
+  getFolderCheckboxes().forEach(cb => {
+    if (cb.checked) {
+      cb.checked = false;
+      updateRowHighlight(cb);
+    }
+  });
+  window.selectedInlineFolder = null;
+  window.selectedFolderCaps = null;
+}
+
+function clearFileSelections() {
+  getFileCheckboxes().forEach(cb => {
+    if (cb.checked) {
+      cb.checked = false;
+      updateRowHighlight(cb);
+    }
+  });
+}
+
+function getSelectedFolderPath() {
+  const cb = document.querySelector('#fileList .folder-checkbox:checked');
+  return cb ? cb.dataset.folder || null : null;
+}
+
+async function refreshSelectedFolderCaps(folder) {
+  if (!folder) {
+    window.selectedFolderCaps = null;
+    updateFileActionButtons();
+    return;
+  }
+  window.selectedFolderCaps = null;
+  try {
+    const caps = await fetchFolderCaps(folder);
+    window.selectedFolderCaps = caps || null;
+  } catch {
+    window.selectedFolderCaps = null;
+  }
+  updateFileActionButtons();
+}
+
+function handleFolderCheckboxChange(cb) {
+  if (!cb) return;
+
+  // Enforce single-select folders and mutually exclusive with files
+  if (cb.checked) {
+    clearFileSelections();
+    getFolderCheckboxes().forEach(other => {
+      if (other !== cb && other.checked) {
+        other.checked = false;
+        updateRowHighlight(other);
+      }
+    });
+    window.selectedInlineFolder = cb.dataset.folder || null;
+  } else {
+    window.selectedInlineFolder = null;
+  }
+
+  updateRowHighlight(cb);
+  updateFileActionButtons();
+  refreshSelectedFolderCaps(window.selectedInlineFolder);
+}
+
+function setCurrentFolderContext(folder) {
+  if (!folder) return;
+  window.currentFolder = folder;
+  try { localStorage.setItem("lastOpenedFolder", folder); } catch { /* ignore */ }
+  updateBreadcrumbTitle(folder);
+}
+
+function clampRowHeight(v) {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return 44;
+  return Math.max(20, Math.min(60, n));
+}
+
+function applyRowHeight(v) {
+  const h = clampRowHeight(v);
+  document.documentElement.style.setProperty('--file-row-height', `${h}px`);
+  localStorage.setItem('rowHeight', h);
+
+  // compact marker for tiny rows
+  if (h <= 32) {
+    document.documentElement.setAttribute('data-row-compact', '1');
+  } else {
+    document.documentElement.removeAttribute('data-row-compact');
+  }
+
+  try { syncFolderIconSizeToRowHeight(); } catch {}
+  return h;
+}
+
+function getGalleryMaxColumns() {
+  const w = window.innerWidth;
+  if (w < 600) return 1;
+  if (w < 1024) return 3;
+  if (w < 1440) return 4;
+  return 6;
+}
+
+function clampGalleryColumns(v) {
+  const max = getGalleryMaxColumns();
+  const n = parseInt(v, 10);
+  const base = Number.isFinite(n) ? n : 3;
+  return Math.max(1, Math.min(max, base));
+}
+
+// Apply stored row height immediately so the table uses it on first render.
+applyRowHeight(localStorage.getItem('rowHeight') || '44');
+
+// Base gallery column value (clamped per screen width)
+window.galleryColumns = clampGalleryColumns(localStorage.getItem('galleryColumns') || window.galleryColumns || 3);
 
 // --- Folder stats cache (for isEmpty.php) ---
 const _folderStatsCache = new Map();
@@ -919,6 +1049,11 @@ function wireSelectAll(fileListContent) {
 
   // Toggle all rows when the header checkbox changes
   selectAll.addEventListener('change', () => {
+    // Clear any folder selection when toggling all files
+    document.querySelectorAll('#fileList .folder-checkbox:checked').forEach(cb => {
+      cb.checked = false;
+      updateRowHighlight(cb);
+    });
     const checked = selectAll.checked;
     getRowCbs().forEach(cb => {
       cb.checked = checked;
@@ -1549,6 +1684,17 @@ async function fetchFolderCaps(folder) {
   }
 }
 
+async function refreshCurrentFolderCaps(folder) {
+  window.currentFolderCaps = null;
+  try {
+    const caps = await fetchFolderCaps(folder);
+    window.currentFolderCaps = caps || null;
+  } catch {
+    window.currentFolderCaps = null;
+  }
+  updateFileActionButtons();
+}
+
 // --- Folder owner cache + helper ----------------------
 const _folderOwnerCache = new Map();
 
@@ -2001,7 +2147,7 @@ export function createViewToggleButton() {
   if (!toggleBtn) {
     toggleBtn = document.createElement("button");
     toggleBtn.id = "toggleViewBtn";
-    toggleBtn.classList.add("btn", "btn-toggleview");
+    toggleBtn.classList.add("btn", "action-btn", "icon-only", "btn-light");
 
     if (window.viewMode === "gallery") {
       toggleBtn.innerHTML = '<i class="material-icons">view_list</i>';
@@ -2011,15 +2157,25 @@ export function createViewToggleButton() {
       toggleBtn.title = t("switch_to_gallery_view");
     }
 
+    const actionsBar = document.getElementById("fileActionsBar");
     const headerButtons = document.querySelector(".header-buttons");
-    if (headerButtons && headerButtons.lastElementChild) {
+
+    if (actionsBar) {
+      actionsBar.appendChild(toggleBtn);
+    } else if (headerButtons && headerButtons.lastElementChild) {
       headerButtons.insertBefore(toggleBtn, headerButtons.lastElementChild);
     } else if (headerButtons) {
       headerButtons.appendChild(toggleBtn);
     }
+  } else {
+    const actionsBar = document.getElementById("fileActionsBar");
+    if (actionsBar && toggleBtn.parentElement !== actionsBar) {
+      actionsBar.appendChild(toggleBtn);
+    }
   }
 
   toggleBtn.onclick = () => {
+    hideViewOptionsPopover();
     window.viewMode = window.viewMode === "gallery" ? "table" : "gallery";
     localStorage.setItem("viewMode", window.viewMode);
     loadFileList(window.currentFolder);
@@ -2033,6 +2189,319 @@ export function createViewToggleButton() {
   };
 
   return toggleBtn;
+}
+
+function bindFolderToolbarActions() {
+  const map = [
+    { id: "folderMoveInlineBtn",   handler: (folder) => openMoveFolderUI(folder) },
+    { id: "folderRenameInlineBtn", handler: () => openRenameFolderModal() },
+    { id: "folderColorInlineBtn",  handler: (folder) => openColorFolderModal(folder) },
+    { id: "folderShareInlineBtn",  handler: (folder) => openFolderShareModal(folder) },
+    { id: "folderDeleteInlineBtn", handler: () => openDeleteFolderModal() }
+  ];
+
+  const selectedOrToast = () => {
+    const folder = getSelectedFolderPath();
+    if (!folder) {
+      showToast(t("select_folder") || "Select a folder first.");
+      return null;
+    }
+    return folder;
+  };
+
+  map.forEach(({ id, handler }) => {
+    const btn = document.getElementById(id);
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      const folder = selectedOrToast();
+      if (!folder) return;
+      setCurrentFolderContext(folder);
+      handler(folder);
+    });
+  });
+}
+
+function applyGalleryColumns(cols) {
+  const clamped = clampGalleryColumns(cols);
+  window.galleryColumns = clamped;
+  localStorage.setItem("galleryColumns", clamped);
+
+  const grid = document.querySelector(".gallery-container");
+  if (grid) {
+    grid.style.gridTemplateColumns = `repeat(${clamped},1fr)`;
+  }
+  document.querySelectorAll(".gallery-thumbnail")
+    .forEach(img => img.style.maxHeight = getMaxImageHeight() + "px");
+
+  const val = document.getElementById("galleryColumnsValue");
+  if (val) val.textContent = clamped;
+
+  return clamped;
+}
+
+let viewOptionsPopover = null;
+let viewOptionsAnchor = null;
+let viewOptionsBound = false;
+
+function hideViewOptionsPopover() {
+  if (viewOptionsPopover) {
+    viewOptionsPopover.style.display = "none";
+  }
+  viewOptionsAnchor = null;
+  document.removeEventListener("click", viewOptionsOutside, true);
+  document.removeEventListener("keydown", viewOptionsEscape, true);
+  viewOptionsBound = false;
+}
+
+function viewOptionsOutside(ev) {
+  if (!viewOptionsPopover || viewOptionsPopover.style.display === "none") return;
+  const anchor = viewOptionsAnchor;
+  if (viewOptionsPopover.contains(ev.target)) return;
+  if (anchor && (ev.target === anchor || anchor.contains(ev.target))) return;
+  hideViewOptionsPopover();
+}
+
+function viewOptionsEscape(ev) {
+  if (ev.key === "Escape") hideViewOptionsPopover();
+}
+
+function ensureViewOptionsPopover() {
+  if (viewOptionsPopover) return viewOptionsPopover;
+  const el = document.createElement("div");
+  el.id = "viewOptionsPopover";
+  el.className = "filr-popover";
+  el.style.display = "none";
+  document.body.appendChild(el);
+  viewOptionsPopover = el;
+  return el;
+}
+
+function buildRowHeightControls(host) {
+  const wrap = document.createElement("div");
+  wrap.className = "vo-control";
+
+  const label = document.createElement("div");
+  label.className = "vo-label";
+  label.textContent = t("row_height") || "Row height";
+
+  const sliderRow = document.createElement("div");
+  sliderRow.className = "vo-slider-row";
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "20";
+  slider.max = "60";
+  slider.value = clampRowHeight(localStorage.getItem("rowHeight") || 44);
+  slider.id = "rowHeightSlider";
+
+  const value = document.createElement("span");
+  value.id = "rowHeightValue";
+  value.className = "vo-value";
+  value.textContent = `${slider.value}px`;
+
+  slider.addEventListener("input", () => {
+    const h = applyRowHeight(slider.value);
+    value.textContent = `${h}px`;
+  });
+
+  sliderRow.appendChild(slider);
+  sliderRow.appendChild(value);
+
+  wrap.appendChild(label);
+  wrap.appendChild(sliderRow);
+  host.appendChild(wrap);
+}
+
+function buildGalleryControls(host) {
+  const wrap = document.createElement("div");
+  wrap.className = "vo-control";
+
+  const label = document.createElement("div");
+  label.className = "vo-label";
+  label.textContent = t("columns") || "Columns";
+
+  const sliderRow = document.createElement("div");
+  sliderRow.className = "vo-slider-row";
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "1";
+  slider.max = String(getGalleryMaxColumns());
+  slider.value = clampGalleryColumns(localStorage.getItem("galleryColumns") || window.galleryColumns || 3);
+  slider.id = "galleryColumnsSlider";
+
+  const value = document.createElement("span");
+  value.id = "galleryColumnsValue";
+  value.className = "vo-value";
+  value.textContent = slider.value;
+
+  slider.addEventListener("input", () => {
+    const cols = applyGalleryColumns(slider.value);
+    value.textContent = cols;
+  });
+
+  sliderRow.appendChild(slider);
+  sliderRow.appendChild(value);
+
+  wrap.appendChild(label);
+  wrap.appendChild(sliderRow);
+  host.appendChild(wrap);
+}
+
+function currentZoomPercent() {
+  try {
+    if (window.fileriseZoom && typeof window.fileriseZoom.currentPercent === "function") {
+      return window.fileriseZoom.currentPercent();
+    }
+  } catch {}
+  const css = getComputedStyle(document.documentElement).getPropertyValue('--app-zoom') || "1";
+  const n = parseFloat(css);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 100;
+}
+
+function buildZoomControls(host) {
+  const wrap = document.createElement("div");
+  wrap.className = "vo-control";
+
+  const label = document.createElement("div");
+  label.className = "vo-label";
+  label.textContent = t("zoom") || "Zoom";
+
+  const row = document.createElement("div");
+  row.className = "vo-slider-row";
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "60";
+  slider.max = "140";
+  slider.step = "5";
+  slider.value = currentZoomPercent();
+  slider.id = "zoomPercentSlider";
+
+  const value = document.createElement("span");
+  value.id = "zoomPercentValue";
+  value.className = "vo-value";
+  value.textContent = `${slider.value}%`;
+
+  const applyZoom = (pct) => {
+    const api = window.fileriseZoom;
+    if (api && typeof api.setPercent === "function") {
+      api.setPercent(pct);
+    } else {
+      document.documentElement.style.setProperty('--app-zoom', String(pct / 100));
+    }
+    value.textContent = `${pct}%`;
+    slider.value = String(pct);
+  };
+
+  slider.addEventListener("input", () => {
+    applyZoom(parseInt(slider.value, 10));
+  });
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "vo-zoom-btns";
+
+  const mkBtn = (icon, title, handler) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-sm btn-light vo-zoom-btn";
+    b.title = title;
+    b.innerHTML = `<span class="material-icons">${icon}</span>`;
+    b.addEventListener("click", handler);
+    return b;
+  };
+
+  btnRow.appendChild(mkBtn("remove", t("zoom_out") || "Zoom out", () => {
+    const api = window.fileriseZoom;
+    const next = api && api.out ? api.out() : currentZoomPercent() - 5;
+    applyZoom(next);
+  }));
+  btnRow.appendChild(mkBtn("add", t("zoom_in") || "Zoom in", () => {
+    const api = window.fileriseZoom;
+    const next = api && api.in ? api.in() : currentZoomPercent() + 5;
+    applyZoom(next);
+  }));
+  btnRow.appendChild(mkBtn("refresh", t("reset_zoom") || "Reset", () => {
+    const api = window.fileriseZoom;
+    const next = api && api.reset ? api.reset() : 100;
+    applyZoom(next);
+  }));
+
+  row.appendChild(slider);
+  row.appendChild(value);
+
+  wrap.appendChild(label);
+  wrap.appendChild(row);
+  wrap.appendChild(btnRow);
+  host.appendChild(wrap);
+}
+
+function positionPopover(pop, anchor) {
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  pop.style.display = "block";
+  pop.style.visibility = "hidden";
+
+  const { width: pw, height: ph } = pop.getBoundingClientRect();
+  let left = rect.left + rect.width - pw;
+  let top = rect.bottom + 8;
+  const padding = 8;
+
+  left = Math.min(Math.max(padding, left), window.innerWidth - pw - padding);
+  top = Math.min(Math.max(padding, top), window.innerHeight - ph - padding);
+
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+  pop.style.visibility = "visible";
+}
+
+function showViewOptionsPopover(triggerBtn) {
+  const pop = ensureViewOptionsPopover();
+  if (pop.style.display === "block" && viewOptionsAnchor === triggerBtn) {
+    hideViewOptionsPopover();
+    return;
+  }
+
+  pop.innerHTML = "";
+  viewOptionsAnchor = triggerBtn || null;
+
+  const title = document.createElement("div");
+  title.className = "vo-title";
+  title.textContent = t("view_options") || "View options";
+  pop.appendChild(title);
+
+  if (window.viewMode === "gallery") {
+    buildGalleryControls(pop);
+  } else {
+    buildRowHeightControls(pop);
+  }
+
+  // separator then zoom controls
+  const sep = document.createElement("div");
+  sep.className = "vo-separator";
+  pop.appendChild(sep);
+  buildZoomControls(pop);
+
+  positionPopover(pop, triggerBtn);
+  pop.style.display = "block";
+
+  if (!viewOptionsBound) {
+    document.addEventListener("click", viewOptionsOutside, true);
+    document.addEventListener("keydown", viewOptionsEscape, true);
+    viewOptionsBound = true;
+  }
+}
+
+function bindViewOptionsButton() {
+  const btn = document.getElementById("viewOptionsBtn");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    showViewOptionsPopover(btn);
+  });
 }
 
 export function formatFolderName(folder) {
@@ -2053,6 +2522,8 @@ export async function loadFileList(folderParam) {
   const folder = folderParam || "root";
   const fileListContainer = document.getElementById("fileList");
   const actionsContainer = document.getElementById("fileListActions");
+  window.selectedFolderCaps = null;
+  refreshCurrentFolderCaps(folder);
 
   // 1) show loader (only this request is allowed to render)
   fileListContainer.style.visibility = "hidden";
@@ -2111,8 +2582,6 @@ export async function loadFileList(folderParam) {
 
       const summaryElem = document.getElementById("fileSummary");
       if (summaryElem) summaryElem.style.display = "none";
-      const sliderContainer = document.getElementById("viewSliderContainer");
-      if (sliderContainer) sliderContainer.style.display = "none";
 
       const strip = document.getElementById("folderStripContainer");
       if (strip) strip.style.display = "none";
@@ -2179,80 +2648,6 @@ export async function loadFileList(folderParam) {
       }
       summaryElem.style.display = "block";
       summaryElem.innerHTML = buildFolderSummary(fileData);
-
-      // b) slider
-      const viewMode = window.viewMode || "table";
-      let sliderContainer = document.getElementById("viewSliderContainer");
-      if (!sliderContainer) {
-        sliderContainer = document.createElement("div");
-        sliderContainer.id = "viewSliderContainer";
-        sliderContainer.style.cssText = "display:inline-flex; align-items:center; margin-right:auto; font-size:0.9em;";
-        actionsContainer.insertBefore(sliderContainer, summaryElem);
-      } else {
-        sliderContainer.style.display = "inline-flex";
-      }
-
-      if (viewMode === "gallery") {
-        const w = window.innerWidth;
-        let maxCols;
-        if (w < 600) maxCols = 1;
-        else if (w < 900) maxCols = 2;
-        else if (w < 1200) maxCols = 4;
-        else maxCols = 6;
-
-        const currentCols = Math.min(
-          parseInt(localStorage.getItem("galleryColumns") || "3", 10),
-          maxCols
-        );
-
-        sliderContainer.innerHTML = `
-            <label for="galleryColumnsSlider" style="margin-right:8px;line-height:1;">
-              ${t("columns")}:
-            </label>
-            <input
-              type="range"
-              id="galleryColumnsSlider"
-              min="1"
-              max="${maxCols}"
-              value="${currentCols}"
-              style="vertical-align:middle;"
-            >
-            <span id="galleryColumnsValue" style="margin-left:6px;line-height:1;">${currentCols}</span>
-          `;
-        const gallerySlider = document.getElementById("galleryColumnsSlider");
-        const galleryValue = document.getElementById("galleryColumnsValue");
-        gallerySlider.oninput = e => {
-          const v = +e.target.value;
-          localStorage.setItem("galleryColumns", v);
-          galleryValue.textContent = v;
-          document.querySelector(".gallery-container")
-            ?.style.setProperty("grid-template-columns", `repeat(${v},1fr)`);
-        };
-      } else {
-        const currentHeight = parseInt(localStorage.getItem("rowHeight") || "44", 10);
-        sliderContainer.innerHTML = `
-            <label for="rowHeightSlider" style="margin-right:8px;line-height:1;">
-              ${t("row_height")}:
-            </label>
-            <input type="range" id="rowHeightSlider" min="20" max="60" value="${currentHeight}" style="vertical-align:middle;">
-            <span id="rowHeightValue" style="margin-left:6px;line-height:1;">${currentHeight}px</span>
-          `;
-        const rowSlider = document.getElementById("rowHeightSlider");
-        const rowValue = document.getElementById("rowHeightValue");
-        rowSlider.oninput = e => {
-          const v = e.target.value;
-          document.documentElement.style.setProperty("--file-row-height", v + "px");
-          localStorage.setItem("rowHeight", v);
-          rowValue.textContent = v + "px";
-            // mark compact mode for very low heights
-  if (v <= 32) {
-    document.documentElement.setAttribute('data-row-compact', '1');
-  } else {
-    document.documentElement.removeAttribute('data-row-compact');
-  }
-          syncFolderIconSizeToRowHeight();
-        };
-      }
     }
 
     // 7) render files
@@ -2532,15 +2927,19 @@ if (headerClass) {
   td.classList.remove("ml-2", "mx-2");
 }
   
-      // 1) icon / checkbox column
+      // 1) checkbox column (real checkbox; icon moves to name cell)
       if (i === checkboxIdx) {
-        td.classList.add("folder-icon-cell");
-        td.style.textAlign = "left";
+        td.classList.add("folder-icon-cell", "checkbox-col");
+        td.style.textAlign = "center";
         td.style.verticalAlign = "middle";
   
-        const iconSpan = document.createElement("span");
-        iconSpan.className = "folder-svg folder-row-icon";
-        td.appendChild(iconSpan);
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "folder-checkbox";
+        cb.dataset.folder = sf.full;
+        cb.addEventListener("click", e => e.stopPropagation());
+        cb.addEventListener("change", () => handleFolderCheckboxChange(cb));
+        td.appendChild(cb);
   
       // 2) name column
       } else if (i === nameIdx) {
@@ -2548,6 +2947,9 @@ if (headerClass) {
   
         const wrap = document.createElement("div");
         wrap.className = "folder-row-inner";
+  
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "folder-svg folder-row-icon";
   
         const nameSpan = document.createElement("span");
         nameSpan.className = "folder-row-name";
@@ -2557,6 +2959,7 @@ if (headerClass) {
         metaSpan.className = "folder-row-meta";
         metaSpan.textContent = ""; // "(15 folders, 19 files)" later
   
+        wrap.appendChild(iconSpan);
         wrap.appendChild(nameSpan);
         wrap.appendChild(metaSpan);
         td.appendChild(wrap);
@@ -2598,6 +3001,9 @@ if (headerClass) {
     // click → navigate, same as before
     tr.addEventListener("click", e => {
       hideHoverPreview();
+      if (e.target.closest(".folder-checkbox")) {
+        return;
+      }
       // If the click came from the 3-dot button, let the context menu logic handle it
       if (e.target.closest(".btn-actions-ellipsis")) {
         return;
@@ -2824,8 +3230,8 @@ function syncFolderIconSizeToRowHeight() {
   const FUDGE          = 1;
   const MAX_GROWTH_ROW = 44;   // after this, stop growing the icon
 
-  const BASE_ROW_FOR_OFFSET = 40; // where icon looks centered
-  const OFFSET_FACTOR       = 0.25;
+  const BASE_ROW_FOR_OFFSET = 20; // where icon looks centered
+  const OFFSET_FACTOR       = -0.10;
   const effectiveRow = Math.min(rowH, MAX_GROWTH_ROW);
 
   const boxSize = Math.max(20, Math.min(35, effectiveRow - 20 + FUDGE));
@@ -2835,7 +3241,7 @@ function syncFolderIconSizeToRowHeight() {
   const clampedForOffset = Math.max(30, Math.min(60, rowH));
   let offsetY = (clampedForOffset - BASE_ROW_FOR_OFFSET) * OFFSET_FACTOR;
   if (rowH > 53) {
-    offsetY -= 3; 
+    offsetY -= -2; 
   }
 
   document.querySelectorAll('#fileList .folder-row-icon').forEach(iconSpan => {
@@ -3366,6 +3772,7 @@ wireSelectAll(fileListContent);
   // Row-select (only file rows have checkboxes; folder rows are ignored here)
   fileListContent.querySelectorAll("tbody tr").forEach(row => {
     row.addEventListener("click", e => {
+      clearFolderSelections();
       const cb = row.querySelector(".file-checkbox");
       if (!cb) return;
       toggleRowSelection(e, cb.value);
@@ -3410,6 +3817,7 @@ wireSelectAll(fileListContent);
   });
 
   createViewToggleButton();
+  bindViewOptionsButton();
 
   // search input
   const newSearchInput = document.getElementById("searchInput");
@@ -3429,17 +3837,6 @@ wireSelectAll(fileListContent);
     }, 300));
   }
 
-  const slider = document.getElementById('rowHeightSlider');
-  const valueDisplay = document.getElementById('rowHeightValue');
-  if (slider) {
-    slider.addEventListener('input', e => {
-      const v = +e.target.value;  // slider value in px
-      document.documentElement.style.setProperty('--file-row-height', v + 'px');
-      localStorage.setItem('rowHeight', v);
-      valueDisplay.textContent = v + 'px';
-    });
-  }
-
   document.querySelectorAll("#fileList table.filr-table thead th[data-column]").forEach(cell => {
     cell.addEventListener("click", function () {
       const column = this.getAttribute("data-column");
@@ -3448,6 +3845,7 @@ wireSelectAll(fileListContent);
   });
   document.querySelectorAll("#fileList .file-checkbox").forEach(checkbox => {
     checkbox.addEventListener("change", function (e) {
+      clearFolderSelections();
       updateRowHighlight(e.target);
       updateFileActionButtons();
     });
@@ -3464,6 +3862,7 @@ wireSelectAll(fileListContent);
       }
     });
   });
+  bindFolderToolbarActions();
   updateFileActionButtons();
 
   // Dragstart only for file rows (skip folder rows)
@@ -3541,19 +3940,15 @@ export function renderGalleryView(folder, container) {
   }, 0);
 
   // determine column max by screen size
-  const numColumns = window.galleryColumns || 3;
-  const w = window.innerWidth;
-  let maxCols = 6;
-  if (w < 600) maxCols = 1;
-  else if (w < 900) maxCols = 2;
-  const startCols = Math.min(numColumns, maxCols);
+  const maxCols = getGalleryMaxColumns();
+  const startCols = Math.min(window.galleryColumns || 3, maxCols);
   window.galleryColumns = startCols;
 
   // --- Start gallery grid ---
   galleryHTML += `
       <div class="gallery-container"
            style="display:grid;
-                  grid-template-columns:repeat(${numColumns},1fr);
+                  grid-template-columns:repeat(${startCols},1fr);
                   gap:10px;
                   padding:10px;">
     `;
@@ -3783,20 +4178,6 @@ export function renderGalleryView(folder, container) {
     cb.addEventListener("change", () => updateFileActionButtons());
   });
 
-  // slider
-  const slider = document.getElementById("galleryColumnsSlider");
-  if (slider) {
-    slider.addEventListener("input", () => {
-      const v = +slider.value;
-      document.getElementById("galleryColumnsValue").textContent = v;
-      window.galleryColumns = v;
-      document.querySelector(".gallery-container")
-        .style.gridTemplateColumns = `repeat(${v},1fr)`;
-      document.querySelectorAll(".gallery-thumbnail")
-        .forEach(img => img.style.maxHeight = getMaxImageHeight() + "px");
-    });
-  }
-
   // pagination helpers
   window.changePage = newPage => {
     window.currentPage = newPage;
@@ -3812,47 +4193,11 @@ export function renderGalleryView(folder, container) {
     else renderFileTable(folder);
   };
   refreshViewedBadges(folder).catch(() => { });
+  bindFolderToolbarActions();
   updateFileActionButtons();
   createViewToggleButton();
+  bindViewOptionsButton();
 }
-
-// Responsive slider constraints based on screen size.
-function updateSliderConstraints() {
-  const slider = document.getElementById("galleryColumnsSlider");
-  if (!slider) return;
-
-  const width = window.innerWidth;
-  let min = 1;
-  let max;
-
-  if (width < 600) {
-    max = 1;
-  } else if (width < 1024) {
-    max = 3;
-  } else if (width < 1440) {
-    max = 4;
-  } else {
-    max = 6;
-  }
-
-  let currentVal = parseInt(slider.value, 10);
-  if (currentVal > max) {
-    currentVal = max;
-    slider.value = max;
-  }
-
-  slider.min = min;
-  slider.max = max;
-  document.getElementById("galleryColumnsValue").textContent = currentVal;
-
-  const galleryContainer = document.querySelector(".gallery-container");
-  if (galleryContainer) {
-    galleryContainer.style.gridTemplateColumns = `repeat(${currentVal}, 1fr)`;
-  }
-}
-
-window.addEventListener('load', updateSliderConstraints);
-window.addEventListener('resize', updateSliderConstraints);
 
 /**
  * Fallback: derive selected files from DOM checkboxes if no explicit list

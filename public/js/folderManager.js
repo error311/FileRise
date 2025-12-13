@@ -583,15 +583,18 @@ export function folderSVG(kind = 'empty', { locked = false } = {}) {
 function setFolderIconForOption(optEl, kind) {
   const iconEl = optEl.querySelector('.folder-icon');
   if (!iconEl) return;
+  if (optEl.dataset && optEl.dataset.folder === 'recycle_bin') return; // keep recycle icon intact
   const isLocked = optEl.classList.contains('locked');
   iconEl.dataset.kind = kind;
   iconEl.innerHTML = folderSVG(kind, { locked: isLocked });
 }
 export function refreshFolderIcon(folder) {
+  if (folder === 'recycle_bin') return;
   invalidateFolderCaches(folder);
   ensureFolderIcon(folder);
 }
 function ensureFolderIcon(folder) {
+  if (folder === 'recycle_bin') return; // keep custom recycle icon intact
   const opt = document.querySelector(`.folder-option[data-folder="${CSS.escape(folder)}"]`);
   if (!opt) return;
 
@@ -911,6 +914,7 @@ async function ensureChildrenLoaded(folder, ulEl) {
 function primeChildToggles(ulEl) {
   ulEl.querySelectorAll('.folder-option[data-folder]').forEach(opt => {
     const f = opt.dataset.folder;
+    if (f === 'recycle_bin') return;
     try { setFolderIconForOption(opt, 'empty'); } catch {}
 
     Promise.all([
@@ -1108,6 +1112,230 @@ function isSafeFolderPath(p) {
   // Client-side defense-in-depth; server already enforces safe segments.
   // Allows letters/numbers/space/_-. and slashes between segments.
   return /^(root|(?!\.)[^/\0]+)(\/(?!\.)[^/\0]+)*$/.test(String(p || ''));
+}
+
+const RECYCLE_BIN_ID = 'recycleBinRow';
+
+export function recycleBinSVG(filled = false, size = 24) {
+  const uid = `rb-${Math.random().toString(36).slice(2, 9)}`;
+
+  const level1Inside = filled ? `
+    <!-- Level 1: inside the mouth (subtle) -->
+    <g clip-path="url(#${uid}-openingClip)" opacity="0.92">
+      ${paperBall(7.6, 6.95, 1.35)}
+      ${paperBall(10.4, 6.85, 1.25)}
+      ${paperBall(12.9, 7.05, 1.35)}
+      ${paperBall(15.2, 7.15, 1.15)}
+    </g>
+  ` : '';
+
+  const level2BehindBar = filled ? `
+    <!-- Level 2: packed at rim, behind gray bar -->
+    <g clip-path="url(#${uid}-mouthOverflowClip)" opacity="0.97">
+      ${paperBall(6.6, 5.15, 1.70, true)}
+      ${paperBall(9.2, 4.90, 1.65, true)}
+      ${paperBall(11.8, 5.10, 1.80, true)}
+      ${paperBall(14.4, 4.85, 1.55, true)}
+      ${paperBall(16.6, 5.15, 1.45, true)}
+    </g>
+  ` : '';
+
+  const level3BehindBarButVisibleAbove = filled ? `
+    <!-- Level 3: overflow, STILL behind gray bar.
+         Positioned higher so tops are visible above the bar. -->
+    <g clip-path="url(#${uid}-mouthOverflowClip)" opacity="0.99">
+      ${paperBall(7.0, 2.55, 1.85, true)}
+      ${paperBall(10.0, 2.30, 1.75, true)}
+      ${paperBall(12.9, 2.50, 1.95, true)}
+      ${paperBall(15.6, 2.55, 1.60, true)}
+    </g>
+  ` : '';
+
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+         shape-rendering="geometricPrecision">
+      <defs>
+        <linearGradient id="${uid}-body" x1="0" y1="5" x2="0" y2="22">
+          <stop offset="0%" stop-color="#eaf6ff"/>
+          <stop offset="100%" stop-color="#cde6ff"/>
+        </linearGradient>
+
+        <linearGradient id="${uid}-side" x1="0" y1="6" x2="0" y2="20">
+          <stop offset="0%" stop-color="#cfe8ff"/>
+          <stop offset="100%" stop-color="#b9dcff"/>
+        </linearGradient>
+
+        <linearGradient id="${uid}-rim" x1="0" y1="3" x2="0" y2="6">
+          <stop offset="0%" stop-color="#8b9aa2"/>
+          <stop offset="100%" stop-color="#6f8089"/>
+        </linearGradient>
+
+        <linearGradient id="${uid}-base" x1="0" y1="19" x2="0" y2="22">
+          <stop offset="0%" stop-color="#8b9aa2"/>
+          <stop offset="100%" stop-color="#6f8089"/>
+        </linearGradient>
+
+        <marker id="${uid}-ah" markerWidth="4.2" markerHeight="4.2" refX="3.7" refY="2.1"
+                orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L4.2,2.1 L0,4.2 Z" fill="#2f7fd8"/>
+        </marker>
+        <marker id="${uid}-ahS" markerWidth="4.2" markerHeight="4.2" refX="3.7" refY="2.1"
+                orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L4.2,2.1 L0,4.2 Z" fill="#1f5fa8" opacity="0.9"/>
+        </marker>
+
+        <clipPath id="${uid}-binClip">
+          <path d="M5.2 5.9H18.8L18.05 18.9c-.12 1.25-1.18 2.2-2.44 2.2H8.39c-1.26 0-2.32-.95-2.44-2.2Z"/>
+        </clipPath>
+
+        <clipPath id="${uid}-openingClip">
+          <ellipse cx="12" cy="6.55" rx="6.05" ry="1.75"/>
+        </clipPath>
+
+        <!-- Constrain overflow to mouth width so it never reads "outside" -->
+        <clipPath id="${uid}-mouthOverflowClip">
+          <rect x="5.35" y="1.20" width="13.3" height="8.20" rx="3.0"/>
+        </clipPath>
+      </defs>
+
+      <!-- can body -->
+      <path d="M5.2 5.9H18.8L18.05 18.9c-.12 1.25-1.18 2.2-2.44 2.2H8.39c-1.26 0-2.32-.95-2.44-2.2Z"
+            fill="url(#${uid}-body)" stroke="#b6d3ee" stroke-width="0.6" stroke-linejoin="round"/>
+
+      <!-- inner side strips -->
+      <g clip-path="url(#${uid}-binClip)" opacity="0.95">
+        <rect x="6.0" y="6.1" width="1.25" height="14.6" fill="url(#${uid}-side)"/>
+        <rect x="16.75" y="6.1" width="1.25" height="14.6" fill="url(#${uid}-side)"/>
+        <rect x="7.6" y="6.3" width="0.6" height="14.2" fill="#ffffff" opacity="0.18"/>
+      </g>
+
+      ${level1Inside}
+      ${level2BehindBar}
+      ${level3BehindBarButVisibleAbove}
+
+      <!-- gray top rim bar (ON TOP of all paper) -->
+      <rect x="3" y="3.15" width="18" height="2.35" rx="0.45" fill="url(#${uid}-rim)"/>
+
+      <!-- side “lip” blocks -->
+      <path d="M3.55 5.55h2.15v3.05H4.25c-.4 0-.7-.3-.7-.7z" fill="#b8dcff" opacity="0.95"/>
+      <path d="M18.3 5.55h2.15v2.35c0 .4-.3.7-.7.7H18.3z" fill="#b8dcff" opacity="0.95"/>
+
+      <!-- recycle symbol -->
+      <g transform="translate(12 12.45) scale(1.05)">
+        <g opacity="0.22" transform="translate(0 0.35)">
+          ${recycleTriangle(true)}
+        </g>
+        ${recycleTriangle(false)}
+      </g>
+
+      <!-- bottom base -->
+      <rect x="4.6" y="19.2" width="14.8" height="2.55" rx="0.55" fill="url(#${uid}-base)"/>
+      <path d="M5.4 20.0h2.0" stroke="#ffffff" stroke-opacity="0.25" stroke-width="0.8" stroke-linecap="round"/>
+    </svg>
+  `;
+
+  function recycleTriangle(isShadow) {
+    const stroke = isShadow ? '#1f5fa8' : '#2f7fd8';
+    const w = isShadow ? 2.05 : 1.55;
+    const head = isShadow ? `url(#${uid}-ahS)` : `url(#${uid}-ah)`;
+    return `
+      <g fill="none" stroke="${stroke}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 0.0 -5.0 L 4.5 2.2" marker-end="${head}"/>
+        <path d="M 3.9 3.1 L -3.9 3.1" marker-end="${head}"/>
+        <path d="M -4.5 2.2 L 0.0 -5.0" marker-end="${head}"/>
+      </g>
+    `;
+  }
+
+  function paperBall(cx, cy, r, extra = false) {
+    const k = r * 0.72;
+    const d = `
+      M ${cx - r} ${cy}
+      C ${cx - r} ${cy - k}, ${cx - k} ${cy - r}, ${cx} ${cy - r}
+      C ${cx + k} ${cy - r}, ${cx + r} ${cy - k}, ${cx + r} ${cy}
+      C ${cx + r} ${cy + k}, ${cx + k} ${cy + r}, ${cx} ${cy + r}
+      C ${cx - k} ${cy + r}, ${cx - r} ${cy + k}, ${cx - r} ${cy}
+      Z
+    `;
+    return `
+      <path d="${d}" fill="#f7f9ff" stroke="#c7d2e4" stroke-width="0.48"/>
+      <path d="M ${cx - r*0.55} ${cy - r*0.05}
+               C ${cx - r*0.15} ${cy - r*0.65}, ${cx + r*0.35} ${cy - r*0.40}, ${cx + r*0.35} ${cy - r*0.05}"
+            fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="0.55" stroke-linecap="round"/>
+      <path d="M ${cx - r*0.28} ${cy + r*0.15} l ${r*0.60} ${-r*0.38}"
+            fill="none" stroke="#8fa7cf" stroke-opacity="0.55" stroke-width="0.50" stroke-linecap="round"/>
+      <path d="M ${cx - r*0.08} ${cy + r*0.50} l ${r*0.35} ${-r*0.25}"
+            fill="none" stroke="#8fa7cf" stroke-opacity="0.45" stroke-width="0.45" stroke-linecap="round"/>
+      ${extra ? `
+        <path d="M ${cx - r*0.55} ${cy - r*0.10} l ${r*0.38} ${r*0.28}"
+              fill="none" stroke="#8fa7cf" stroke-opacity="0.50" stroke-width="0.45" stroke-linecap="round"/>
+      ` : ''}
+    `;
+  }
+}
+
+function renderRecycleBinNode(hasItems = false) {
+  const ul = document.getElementById('rootChildren');
+  const container = document.getElementById('folderTreeContainer');
+  if (!ul || !container) return;
+
+  const existing = document.getElementById(RECYCLE_BIN_ID);
+  if (existing) existing.remove();
+
+  const li = document.createElement('li');
+  li.id = RECYCLE_BIN_ID;
+  li.className = 'folder-item recycle-bin-item';
+  li.setAttribute('role', 'treeitem');
+  li.setAttribute('aria-expanded', 'false');
+
+  const row = document.createElement('div');
+  row.className = 'folder-row recycle-bin-row';
+
+  const spacer = document.createElement('span');
+  spacer.className = 'folder-spacer';
+  spacer.setAttribute('aria-hidden', 'true');
+
+  const opt = document.createElement('button');
+  opt.type = 'button';
+  opt.id = 'recycleBinBtn';
+  opt.className = 'folder-option recycle-bin-option';
+  opt.setAttribute('data-folder', 'recycle_bin');
+  opt.setAttribute('aria-label', t('recycle_bin') || 'Recycle Bin');
+  opt.setAttribute('tabindex', '0');
+
+  const icon = document.createElement('span');
+  icon.className = 'folder-icon recycle-bin-icon';
+  icon.innerHTML = recycleBinSVG(hasItems);
+
+  const label = document.createElement('span');
+  label.className = 'folder-label recycle-bin-label';
+  label.textContent = t('recycle_bin') || 'Recycle Bin';
+
+  opt.append(icon, label);
+  row.append(spacer, opt);
+  li.append(row);
+  ul.appendChild(li);
+}
+
+export function updateRecycleBinState(hasItems) {
+  window.recycleBinHasItems = !!hasItems;
+  const icon = document.querySelector(`#${RECYCLE_BIN_ID} .recycle-bin-icon`);
+  if (icon) {
+    icon.innerHTML = recycleBinSVG(!!hasItems);
+  }
+}
+
+function placeRecycleBinNode() {
+  const ul = document.getElementById('rootChildren');
+  if (!ul) return;
+
+  const existing = document.getElementById(RECYCLE_BIN_ID);
+  if (existing) existing.remove();
+
+  const isAdmin = localStorage.getItem('isAdmin') === '1' || localStorage.getItem('isAdmin') === 'true';
+  if (!isAdmin) return;
+
+  renderRecycleBinNode(window.recycleBinHasItems || false);
 }
 
 function getAppZoomFactor() {
@@ -1799,6 +2027,10 @@ export async function loadFolderTree(selectedFolder) {
         if (!opt || !container.contains(opt)) return;
         e.stopPropagation();
 
+        if (opt.classList.contains('recycle-bin-option')) {
+          return; // handled separately
+        }
+
         if (opt.classList.contains('locked')) {
           // Toggle expansion, don't select
           const folderPath = opt.getAttribute('data-folder');
@@ -1832,6 +2064,9 @@ export async function loadFolderTree(selectedFolder) {
 
     // Expand + render all previously opened nodes
     await expandAndLoadSavedState();
+
+    // Static recycle bin entry (admins only)
+    placeRecycleBinNode();
 
     // ---------- Smart initial selection (sticky + top-level preference) ----------
 let target = await chooseInitialFolder(effectiveRoot, selectedFolder);
@@ -1924,7 +2159,7 @@ export function showFolderManagerContextMenu(x, y, menuItems) {
 
     const ic = document.createElement('i');
     ic.className = 'material-icons';
-    ic.textContent = iconForFolderLabel(item.label);
+    ic.textContent = item.icon || iconForFolderLabel(item.label);
 
     const tx = document.createElement('span');
     tx.textContent = item.label;
@@ -2030,6 +2265,27 @@ async function folderManagerContextMenuHandler(e) {
 
   const x = e.clientX;
   const y = e.clientY;
+
+  if (folder === 'recycle_bin') {
+    const menuItems = [
+      {
+        label: t('empty_recycle_bin') || 'Empty Recycle Bin',
+        icon: 'delete_forever',
+        action: () => {
+          if (typeof window.confirmEmptyRecycleBin === 'function') {
+            window.confirmEmptyRecycleBin();
+            return;
+          }
+          const btn = document.getElementById('deleteAllBtn');
+          if (btn) { btn.click(); return; }
+          showToast('Empty recycle bin action is not available.');
+        }
+      }
+    ];
+    showFolderManagerContextMenu(x, y, menuItems);
+    return;
+  }
+
   await openFolderActionsMenu(folder, target, x, y);
 }
 

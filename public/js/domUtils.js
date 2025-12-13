@@ -33,6 +33,8 @@ export function toggleAllCheckboxes(masterCheckbox) {
 export function updateFileActionButtons() {
   const fileCheckboxes = document.querySelectorAll("#fileList .file-checkbox");
   const selectedCheckboxes = document.querySelectorAll("#fileList .file-checkbox:checked");
+  const folderCheckboxes = document.querySelectorAll("#fileList .folder-checkbox");
+  const selectedFolders = document.querySelectorAll("#fileList .folder-checkbox:checked");
 
   const deleteBtn = document.getElementById("deleteSelectedBtn");
   const copyBtn = document.getElementById("copySelectedBtn");
@@ -40,59 +42,127 @@ export function updateFileActionButtons() {
   const zipBtn = document.getElementById("downloadZipBtn");
   const extractZipBtn = document.getElementById("extractZipBtn");
   const createBtn = document.getElementById("createBtn");
+  const renameBtn = document.getElementById("renameSelectedBtn");
+  const shareBtn = document.getElementById("shareSelectedBtn");
+  const folderActionsInline = document.getElementById("folderActionsInline");
+  const folderMoveBtn = document.getElementById("folderMoveInlineBtn");
+  const folderRenameBtn = document.getElementById("folderRenameInlineBtn");
+  const folderColorBtn = document.getElementById("folderColorInlineBtn");
+  const folderShareBtn = document.getElementById("folderShareInlineBtn");
+  const folderDeleteBtn = document.getElementById("folderDeleteInlineBtn");
+  const secondaryActions = document.querySelector("#fileActionsBar .secondary-actions");
+  const actionSeparator = document.querySelector("#fileActionsBar .action-separator");
+  const bar = document.getElementById("fileActionsBar");
 
   const anyFiles = fileCheckboxes.length > 0;
   const anySelected = selectedCheckboxes.length > 0;
+  const anyFolderSelected = selectedFolders.length > 0;
   const anyZip = Array.from(selectedCheckboxes)
     .some(cb => cb.value.toLowerCase().endsWith(".zip"));
+  const singleSelected = selectedCheckboxes.length === 1;
+  const currentFolderCaps = window.currentFolderCaps || null;
+  const selectedFolderCaps = window.selectedFolderCaps || null;
+
+  // ACL-driven switches (default to true so we don’t regress if caps are unavailable)
+  const allowCreate   = currentFolderCaps ? !!(currentFolderCaps.canCreate || currentFolderCaps.canUpload) : true;
+  const allowDownload = currentFolderCaps ? !!(currentFolderCaps.canView || currentFolderCaps.canViewOwn) : true;
+  const allowCopy     = currentFolderCaps ? !!currentFolderCaps.canCopy : true;
+  const allowMove     = currentFolderCaps ? !!(currentFolderCaps.canMoveIn || currentFolderCaps.canMove) : true;
+  const allowRename   = currentFolderCaps ? !!(currentFolderCaps.canRename || currentFolderCaps.isAdmin) : true;
+  const allowDelete   = currentFolderCaps ? !!currentFolderCaps.canDelete : true;
+  const allowShare    = currentFolderCaps ? !!(currentFolderCaps.canShareFile || currentFolderCaps.canShare) : true;
+  const allowExtract  = currentFolderCaps ? !!currentFolderCaps.canExtract : true;
+
+  const folderCaps    = selectedFolderCaps || currentFolderCaps || {};
+  const allowFolderMove   = !!(folderCaps.canMoveFolder   ?? true);
+  const allowFolderRename = !!(folderCaps.canRename       ?? true);
+  const allowFolderColor  = !!(folderCaps.canEdit         ?? true);
+  const allowFolderShare  = !!(folderCaps.canShareFolder  ?? true);
+  const allowFolderDelete = !!(folderCaps.canDeleteFolder ?? true);
+
+  const setEnabled = (el, enabled) => {
+    if (!el) return;
+    el.disabled = !enabled;
+    el.classList.toggle("disabled", !enabled);
+    el.setAttribute("aria-disabled", String(!enabled));
+    el.style.pointerEvents = enabled ? "" : "none";
+    el.style.opacity = enabled ? "" : "0.6";
+  };
 
   // — Select All checkbox sync (unchanged) —
   const master = document.getElementById("selectAll");
   if (master) {
-    if (selectedCheckboxes.length === fileCheckboxes.length) {
+    if (anyFolderSelected) {
+      master.disabled = false;
+      master.checked = false;
+      master.indeterminate = true;
+    } else if (selectedCheckboxes.length === fileCheckboxes.length && fileCheckboxes.length) {
       master.checked = true;
       master.indeterminate = false;
+      master.disabled = false;
     } else if (selectedCheckboxes.length === 0) {
       master.checked = false;
       master.indeterminate = false;
+      master.disabled = false;
     } else {
       master.checked = false;
       master.indeterminate = true;
+      master.disabled = false;
     }
   }
 
-  // Delete / Copy / Move: only show when something is selected
-  if (deleteBtn) {
-    deleteBtn.style.display = anySelected ? "" : "none";
-  }
-  if (copyBtn) {
-    copyBtn.style.display = anySelected ? "" : "none";
-  }
-  if (moveBtn) {
-    moveBtn.style.display = anySelected ? "" : "none";
+  // Toggle mode class for animated swap
+  if (bar) bar.classList.toggle("folder-mode", anyFolderSelected);
+
+  // Folder buttons only enabled when a folder is selected
+  setEnabled(folderMoveBtn,   anyFolderSelected && allowFolderMove);
+  setEnabled(folderRenameBtn, anyFolderSelected && allowFolderRename);
+  setEnabled(folderColorBtn,  anyFolderSelected && allowFolderColor);
+  setEnabled(folderShareBtn,  anyFolderSelected && allowFolderShare);
+  setEnabled(folderDeleteBtn, anyFolderSelected && allowFolderDelete);
+
+  // Keep the bar layout stable; just disable when unavailable
+  const showFileActions = !anyFolderSelected;
+  const showFolderActions = anyFolderSelected;
+
+  const setGroupVisible = (el, visible) => {
+    if (!el) return;
+    el.classList.toggle("is-visible", !!visible);
+  };
+
+  setGroupVisible(secondaryActions, showFileActions);
+  setGroupVisible(folderActionsInline, showFolderActions);
+  if (actionSeparator) {
+    actionSeparator.style.display = (showFileActions || showFolderActions) ? "" : "none";
   }
 
-  // Download ZIP: only show when something is selected
-  if (zipBtn) {
-    zipBtn.style.display = anySelected ? "" : "none";
-  }
+  if (deleteBtn) deleteBtn.style.display = showFileActions ? "" : "none";
+  if (copyBtn) copyBtn.style.display = showFileActions ? "" : "none";
+  if (moveBtn) moveBtn.style.display = showFileActions ? "" : "none";
+  if (zipBtn) zipBtn.style.display = showFileActions ? "" : "none";
+  if (renameBtn) renameBtn.style.display = showFileActions ? "" : "none";
+  if (shareBtn) shareBtn.style.display = showFileActions ? "" : "none";
+  if (createBtn) createBtn.style.display = "";
 
-  // Extract ZIP: only show when a selected file is a .zip
-  if (extractZipBtn) {
-    extractZipBtn.style.display = anyZip ? "" : "none";
-  }
-
-  // Create File: only show when nothing is selected
-  if (createBtn) {
-    createBtn.style.display = anySelected ? "none" : "";
-  }
+  // Extract ZIP still appears only when a .zip is selected (and file mode)
+  if (extractZipBtn) extractZipBtn.style.display = showFileActions && anyZip ? "" : "none";
 
   // Finally disable the ones that are shown but shouldn’t be clickable
-  if (deleteBtn) deleteBtn.disabled = !anySelected;
-  if (copyBtn) copyBtn.disabled = !anySelected;
-  if (moveBtn) moveBtn.disabled = !anySelected;
-  if (zipBtn) zipBtn.disabled = !anySelected;
-  if (extractZipBtn) extractZipBtn.disabled = !anyZip;
+  setEnabled(createBtn, allowCreate);
+  setEnabled(deleteBtn, showFileActions && anySelected && allowDelete);
+  setEnabled(copyBtn,   showFileActions && anySelected && allowCopy);
+  setEnabled(moveBtn,   showFileActions && anySelected && allowMove);
+  setEnabled(zipBtn,    showFileActions && anySelected && allowDownload);
+  setEnabled(renameBtn, showFileActions && singleSelected && allowRename);
+  setEnabled(shareBtn,  showFileActions && singleSelected && allowShare);
+  setEnabled(extractZipBtn, showFileActions && anyZip && allowExtract);
+
+  // Collapse/expand the toolbar for a slimmer default view
+  if (bar) {
+    const expanded = anySelected || anyFolderSelected;
+    bar.classList.toggle("expanded", expanded);
+    bar.classList.toggle("collapsed", !expanded);
+  }
 }
 
 export function showToast(message, duration = 3000) {

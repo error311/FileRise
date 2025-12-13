@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 12/12/2025 (v2.6.0)
+
+release(v2.6.0): Harden downloads and refresh recycle bin + toolbar UX
+
+- Security: block inline SVG rendering for downloads/share links, add `nosniff` headers, tighten share link validation/error handling, and keep ownership checks for own-only reads.
+- Added: Recycle Bin entry in the folder tree with live indicator, redesigned recycle modal with accessible list + bulk restore/delete/empty actions, and new recycle translations.
+- Changed: File actions toolbar rebuilt with icon-first buttons, inline folder action group, and a view-options popover that hosts zoom/row-height/gallery controls (header zoom removed); header buttons now pill-shaped.
+- Improved: Trash handling now uses shared fetch helpers, confirmation flows, auto-refresh of icons, and periodic polling; multi-file download button falls back to individual downloads under a configurable limit before zipping.
+- UI/UX: Refreshed restore modal styling, aligned folder row icons/gaps, updated action separators, and capability-driven button enabling based on folder ACLs.
+
+---
+
 ## Changes 12/10/2025 (v2.5.2)
 
 release(v2.5.2): new user management hub & relocated shared upload limits

@@ -61,26 +61,6 @@
       <h1>FileRise</h1>
     </div>
     <div class="header-right">
-      <!-- Zoom controls FIRST on the right -->
-      <div class="header-zoom-controls">
-        <!-- Left stack: + / - -->
-        <div class="zoom-vertical">
-          <button class="btn-icon zoom-btn" data-zoom="in" title="Zoom in" style="display: none;">
-            <span class="material-icons">add</span>
-          </button>
-          <button class="btn-icon zoom-btn" data-zoom="out" title="Zoom out" style="display: none;">
-            <span class="material-icons">remove</span>
-          </button>
-        </div>
-    
-        <!-- Right stack: 100% / reset -->
-        <div class="zoom-meta">
-          <span id="zoomDisplay" class="zoom-display" style="display: none;">100%</span>
-          <button class="btn-icon zoom-btn" data-zoom="reset" title="Reset zoom" style="display: none;">
-            <span class="material-icons">refresh</span>
-          </button>
-        </div>
-      </div>
       <div class="header-buttons-wrapper" style="display: flex; align-items: center;">
         
         <div id="headerDropArea" class="header-drop-zone"></div>
@@ -89,25 +69,36 @@
             <i class="material-icons">vpn_key</i>
           </button>
           <div id="restoreFilesModal" class="modal centered-modal" style="display: none;">
-            <div class="modal-content">
-              <h4 class="custom-restore-header">
-                <i class="material-icons orange-icon">restore_from_trash</i>
-                <span data-i18n-key="restore_text">Restore or</span>
-                <i class="material-icons red-icon">delete_for_ever</i>
-                <span data-i18n-key="delete_text">Delete Trash Items</span>
-              </h4>
-              <div id="restoreFilesList"
-                style="max-height:300px; overflow-y:auto; border:1px solid #ccc; padding:10px; margin-bottom:10px;">
-                <!-- Trash items will be loaded here -->
+            <div class="modal-content restore-modal">
+              <div class="restore-modal__header">
+                <div id="restoreModalIcon" class="restore-modal__icon" aria-hidden="true"></div>
+                <div class="restore-modal__titles">
+                  <h4 data-i18n-key="recycle_bin">Recycle Bin</h4>
+                  <p data-i18n-key="restore_delete_hint">Restore or permanently delete trashed items.</p>
+                </div>
+                <button id="closeRestoreModal" class="restore-close-btn" aria-label="Close">
+                  <span class="material-icons">close</span>
+                </button>
               </div>
-              <div style="text-align: right;">
-                <button id="restoreSelectedBtn" class="btn btn-primary" data-i18n-key="restore_selected">Restore
-                  Selected</button>
-                <button id="restoreAllBtn" class="btn btn-secondary" data-i18n-key="restore_all">Restore All</button>
-                <button id="deleteTrashSelectedBtn" class="btn btn-warning" data-i18n-key="delete_selected_trash">Delete
-                  Selected</button>
-                <button id="deleteAllBtn" class="btn btn-danger" data-i18n-key="delete_all">Delete All</button>
-                <button id="closeRestoreModal" class="btn btn-dark" data-i18n-key="close">Close</button>
+              <div id="restoreFilesList" class="restore-list" role="listbox" aria-label="Trash items">
+              </div>
+              <div class="restore-modal__actions">
+                <button id="restoreSelectedBtn" class="btn restore-btn restore-btn-primary">
+                  <span class="material-icons">history</span>
+                  <span data-i18n-key="restore_selected">Restore Selected</span>
+                </button>
+                <button id="restoreAllBtn" class="btn restore-btn">
+                  <span class="material-icons">undo</span>
+                  <span data-i18n-key="restore_all">Restore All</span>
+                </button>
+                <button id="deleteTrashSelectedBtn" class="btn restore-btn restore-btn-warn">
+                  <span class="material-icons">delete_sweep</span>
+                  <span data-i18n-key="delete_selected_trash">Delete Selected</span>
+                </button>
+                <button id="deleteAllBtn" class="btn restore-btn restore-btn-danger">
+                  <span class="material-icons">delete_forever</span>
+                  <span data-i18n-key="delete_all">Delete All</span>
+                </button>
               </div>
             </div>
           </div>
@@ -304,8 +295,80 @@
         <div id="fileListContainer" style="display: none;">
           <h2 id="fileListTitle" data-i18n-key="file_list_title">Files in (Root)</h2>
           <div id="fileListActions" class="file-list-actions">
-            <button id="deleteSelectedBtn" class="btn action-btn" style="display: none;"
-              data-i18n-key="delete_files">Delete Files</button>
+            <div class="file-actions-strip collapsed" aria-label="File actions" id="fileActionsBar">
+              <div class="action-group primary-actions" id="createDropdown" style="position:relative; display:inline-flex;">
+                <button id="createBtn" class="btn action-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Create">
+                  <span class="material-icons" aria-hidden="true">add</span>
+                  <span class="btn-label">New</span>
+                  <span class="material-icons dropdown-caret" aria-hidden="true">arrow_drop_down</span>
+                </button>
+                <ul id="createMenu" class="dropdown-menu" style="display:none; position:absolute; top:100%; left:0; margin:4px 0 0; padding:0; list-style:none; background:#fff; border:1px solid #ccc; box-shadow:0 2px 6px rgba(0,0,0,0.2); z-index:10010; min-width:160px;">
+                  <li id="createFileOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
+                    <span data-i18n-key="create_file">Create file</span>
+                  </li>
+                  <li id="createFolderOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
+                    <span data-i18n-key="create_folder">Create folder</span>
+                  </li>
+                  <li id="uploadOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
+                    <span data-i18n-key="upload">Upload file(s)</span>
+                  </li>
+                </ul>
+              </div>
+              <div class="action-separator secondary-separator" aria-hidden="true"></div>
+              <div class="action-group secondary-actions">
+                <button id="downloadZipBtn" class="btn action-btn icon-only" disabled title="Download selected" data-i18n-title="download">
+                  <span class="material-icons" aria-hidden="true">file_download</span>
+                </button>
+                <button id="copySelectedBtn" class="btn action-btn icon-only" disabled title="Copy" data-i18n-title="copy_files">
+                  <span class="material-icons" aria-hidden="true">content_copy</span>
+                </button>
+                <button id="moveSelectedBtn" class="btn action-btn icon-only" disabled title="Move" data-i18n-title="move_files">
+                  <span class="material-icons" aria-hidden="true">drive_file_move</span>
+                </button>
+                <button id="renameSelectedBtn" class="btn action-btn icon-only" disabled title="Rename">
+                  <span class="material-icons" aria-hidden="true">drive_file_rename_outline</span>
+                </button>
+                <button id="shareSelectedBtn" class="btn action-btn icon-only" disabled title="Share">
+                  <span class="material-icons" aria-hidden="true">share</span>
+                </button>
+                <button id="deleteSelectedBtn" class="btn action-btn icon-only" disabled title="Delete" data-i18n-title="delete_files">
+                  <span class="material-icons" aria-hidden="true">delete</span>
+                </button>
+                <button id="extractZipBtn" class="btn action-btn icon-only" style="display: none;" disabled title="Extract zip" data-i18n-title="extract_zip_button">
+                  <span class="material-icons" aria-hidden="true">unarchive</span>
+                </button>
+                <button id="toolbarMenuBtn" class="btn action-btn icon-only" title="More actions">
+                  <span class="material-icons" aria-hidden="true">more_horiz</span>
+                </button>
+              </div>
+              <div class="action-group folder-inline-actions" id="folderActionsInline">
+                <button id="folderMoveInlineBtn" class="btn action-btn icon-only" title="Move folder" data-i18n-title="move_folder">
+                  <span class="material-icons" aria-hidden="true">drive_file_move</span>
+                </button>
+                <button id="folderRenameInlineBtn" class="btn action-btn icon-only" title="Rename folder" data-i18n-title="rename_folder">
+                  <span class="material-icons" aria-hidden="true">drive_file_rename_outline</span>
+                </button>
+                <button id="folderColorInlineBtn" class="btn action-btn icon-only" title="Color folder" data-i18n-title="color_folder">
+                  <span class="material-icons" aria-hidden="true">palette</span>
+                </button>
+                <button id="folderShareInlineBtn" class="btn action-btn icon-only" title="Share folder" data-i18n-title="folder_share">
+                  <span class="material-icons" aria-hidden="true">share</span>
+                </button>
+                <button id="folderDeleteInlineBtn" class="btn action-btn icon-only" title="Delete folder" data-i18n-title="delete_folder">
+                  <span class="material-icons" aria-hidden="true">delete</span>
+                </button>
+              </div>
+              <div class="action-separator" aria-hidden="true"></div>
+              <div class="action-group view-actions">
+                <button id="toggleViewBtn" class="btn action-btn icon-only btn-light" title="Switch view">
+                  <i class="material-icons" aria-hidden="true">view_module</i>
+                </button>
+                <button id="viewOptionsBtn" class="btn action-btn icon-only" title="View options">
+                  <span class="material-icons" aria-hidden="true">tune</span>
+                </button>
+              </div>
+            </div>
+
             <div id="deleteFilesModal" class="modal">
               <div class="modal-content">
                 <h4 data-i18n-key="delete_selected_files_title">Delete Selected Files</h4>
@@ -317,8 +380,6 @@
                 </div>
               </div>
             </div>
-            <button id="copySelectedBtn" class="btn action-btn" style="display: none;" disabled
-              data-i18n-key="copy_files">Copy Files</button>
             <div id="copyFilesModal" class="modal">
               <div class="modal-content">
                 <h4 data-i18n-key="copy_files_title">Copy Selected Files</h4>
@@ -331,8 +392,6 @@
                 </div>
               </div>
             </div>
-            <button id="moveSelectedBtn" class="btn action-btn" style="display: none;" disabled
-              data-i18n-key="move_files">Move Files</button>
             <div id="moveFilesModal" class="modal">
               <div class="modal-content">
                 <h4 data-i18n-key="move_files_title">Move Selected Files</h4>
@@ -345,28 +404,6 @@
                 </div>
               </div>
             </div>
-            <button id="downloadZipBtn" class="btn action-btn" style="display: none;" disabled
-              data-i18n-key="download_zip">Download ZIP</button>
-            <button id="extractZipBtn" class="btn action-btn btn-sm btn-info"  style="display: none;" disabled
-              data-i18n-key="extract_zip_button">Extract Zip</button>
-              <div id="createDropdown" class="dropdown-container" style="position:relative; display:inline-block;">
-                <button id="createBtn" class="btn action-btn" type="button" style="display:none;" aria-haspopup="true" aria-expanded="false">
-                  <span data-i18n-key="create">Create</span>
-                  <span class="material-icons" style="font-size:16px;vertical-align:middle;">arrow_drop_down</span>
-                </button>
-                <ul id="createMenu" class="dropdown-menu" style="display:none; position:absolute; top:100%; left:0; margin:4px 0 0; padding:0; list-style:none; background:#fff; border:1px solid #ccc; box-shadow:0 2px 6px rgba(0,0,0,0.2); z-index:10010; min-width:160px;">
-                  <li id="createFileOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
-                    <span data-i18n-key="create_file">Create file</span>
-                  </li>
-                  <li id="createFolderOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
-                    <span data-i18n-key="create_folder">Create folder</span>
-                  </li>
-                  <li id="uploadOption" class="dropdown-item" style="padding:8px 12px; cursor:pointer;">
-                    <span data-i18n-key="upload">Upload file(s)</span>
-                  </li>
-                  
-                </ul>
-              </div>
             <!-- Create File Modal -->
             <div id="createFileModal" class="modal" style="display:none;">
               <div class="modal-content">

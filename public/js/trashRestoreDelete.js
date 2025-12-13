@@ -1,9 +1,14 @@
 // trashRestoreDelete.js
-import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
 import { toggleVisibility, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
-import { loadFolderTree, refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
+import { loadFolderTree, refreshFolderIcon, updateRecycleBinState, recycleBinSVG } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
+
+const ENDPOINTS = {
+  list: '/api/file/getTrashItems.php',
+  restore: '/api/file/restoreFiles.php',
+  delete: '/api/file/deleteTrashFiles.php',
+};
 
 function showConfirm(message, onConfirm) {
     const modal = document.getElementById("customConfirmModal");
@@ -36,195 +41,264 @@ function showConfirm(message, onConfirm) {
     });
 }
 
+function tr(key, fallback) {
+    const translated = t(key);
+    if (!translated || translated === key) return fallback;
+    return translated;
+}
+
+function getModalElements() {
+    return {
+        modal: document.getElementById("restoreFilesModal"),
+        list: document.getElementById("restoreFilesList"),
+        headerIcon: document.getElementById("restoreModalIcon"),
+        restoreSelectedBtn: document.getElementById("restoreSelectedBtn"),
+        restoreAllBtn: document.getElementById("restoreAllBtn"),
+        deleteSelectedBtn: document.getElementById("deleteTrashSelectedBtn"),
+        deleteAllBtn: document.getElementById("deleteAllBtn"),
+        closeBtn: document.getElementById("closeRestoreModal"),
+    };
+}
+
+function setHeaderIcon(hasItems) {
+    const { headerIcon } = getModalElements();
+    if (!headerIcon) return;
+    headerIcon.innerHTML = recycleBinSVG(hasItems, 32);
+}
+
+async function fetchJson(url, body) {
+    const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": window.csrfToken
+        },
+        body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
+
+async function fetchTrash() {
+    const res = await fetch(ENDPOINTS.list, { credentials: "include" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
+
+function updateRowSelection(row, checked) {
+    row.classList.toggle("selected", checked);
+    row.setAttribute("aria-selected", checked ? "true" : "false");
+}
+
+function toggleRow(row, checkbox) {
+    checkbox.checked = !checkbox.checked;
+    updateRowSelection(row, checkbox.checked);
+}
+
+function buildTrashRow(item) {
+    const row = document.createElement("div");
+    row.className = "restore-row";
+    row.setAttribute("role", "option");
+    row.setAttribute("tabindex", "0");
+    row.dataset.trashName = item.trashName;
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = item.trashName;
+    checkbox.className = "restore-checkbox";
+
+    const textWrap = document.createElement("div");
+    textWrap.className = "restore-row-text";
+
+    const primary = document.createElement("div");
+    primary.className = "restore-primary";
+    primary.textContent = item.originalName || item.trashName;
+
+    const meta = document.createElement("div");
+    meta.className = "restore-meta";
+    const deletedBy = item.deletedBy || tr("unknown_user", "Unknown");
+    const trashedDate = item.trashedAt ? new Date(item.trashedAt * 1000).toLocaleString() : "";
+    meta.textContent = trashedDate ? `${deletedBy} • ${trashedDate}` : deletedBy;
+
+    textWrap.append(primary, meta);
+    row.append(checkbox, textWrap);
+
+    checkbox.addEventListener("change", () => updateRowSelection(row, checkbox.checked));
+    row.addEventListener("click", (e) => {
+        if (e.target === checkbox) return;
+        toggleRow(row, checkbox);
+    });
+    row.addEventListener("keydown", (e) => {
+        if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            toggleRow(row, checkbox);
+        }
+    });
+
+    return row;
+}
+
+function renderTrashList(trashItems) {
+    const { list } = getModalElements();
+    if (!list) return;
+
+    list.innerHTML = "";
+
+    if (!Array.isArray(trashItems) || trashItems.length === 0) {
+        const emptyState = document.createElement("div");
+        emptyState.className = "restore-empty";
+        emptyState.textContent = tr("trash_empty", "Trash is empty.");
+        list.appendChild(emptyState);
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    trashItems.forEach(item => frag.appendChild(buildTrashRow(item)));
+    list.appendChild(frag);
+}
+
+function getSelectedFiles() {
+    const { list } = getModalElements();
+    if (!list) return [];
+    return Array.from(list.querySelectorAll("input[type='checkbox']:checked")).map(chk => chk.value);
+}
+
+function afterTrashMutation(message, closeModal = false) {
+    if (message) showToast(message);
+    loadTrashItems();
+    loadFileList(window.currentFolder);
+    loadFolderTree(window.currentFolder);
+    refreshFolderIcon(window.currentFolder);
+    if (closeModal) toggleVisibility("restoreFilesModal", false);
+}
+
+async function deleteAllTrashItems() {
+    const data = await fetchJson(ENDPOINTS.delete, { deleteAll: true });
+    if (data.success) {
+        afterTrashMutation(data.success, true);
+    } else {
+        showToast(data.error || tr("error_deleting_trash", "Error deleting trash files."));
+    }
+}
+
+export function confirmEmptyRecycleBin() {
+    showConfirm(tr("confirm_delete_all_trash", "Permanently delete all trash items? This cannot be undone."), async () => {
+        try {
+            await deleteAllTrashItems();
+        } catch (err) {
+            console.error("Error deleting all trash files:", err);
+            showToast(tr("error_deleting_trash", "Error deleting trash files."));
+        }
+    });
+}
+try { window.confirmEmptyRecycleBin = confirmEmptyRecycleBin; } catch {}
+
 export function setupTrashRestoreDelete() {
 
-    // --- Attach listener to the restore button (created in auth.js) to open the modal.
-    const restoreBtn = document.getElementById("restoreFilesBtn");
-    if (restoreBtn) {
-        restoreBtn.addEventListener("click", () => {
+    const wireTrigger = () => {
+        const btn = document.getElementById("recycleBinBtn");
+        if (!btn) return false;
+        btn.addEventListener("click", () => {
             toggleVisibility("restoreFilesModal", true);
             loadTrashItems();
         });
-    } else {
-        setTimeout(() => {
-            const retryBtn = document.getElementById("restoreFilesBtn");
-            if (retryBtn) {
-                retryBtn.addEventListener("click", () => {
-                    toggleVisibility("restoreFilesModal", true);
-                    loadTrashItems();
-                });
-            }
-        }, 500);
+        return true;
+    };
+
+    if (!wireTrigger()) {
+        setTimeout(wireTrigger, 500);
     }
 
+    // Sync recycle bin icon on load
+    refreshRecycleBinIndicator();
+    if (!window.__frRecyclePoll) {
+        window.__frRecyclePoll = setInterval(refreshRecycleBinIndicator, 15000);
+    }
+    window.refreshRecycleBinIndicator = refreshRecycleBinIndicator;
 
-    // --- Restore Selected: Restore only the selected trash items.
-    const restoreSelectedBtn = document.getElementById("restoreSelectedBtn");
+    const {
+        restoreSelectedBtn,
+        restoreAllBtn,
+        deleteSelectedBtn,
+        deleteAllBtn,
+        closeBtn
+    } = getModalElements();
+
     if (restoreSelectedBtn) {
-        restoreSelectedBtn.addEventListener("click", () => {
-            const selected = document.querySelectorAll("#restoreFilesList input[type='checkbox']:checked");
-            const files = Array.from(selected).map(chk => chk.value);
-            console.log("Restore Selected clicked, files:", files);
+        restoreSelectedBtn.addEventListener("click", async () => {
+            const files = getSelectedFiles();
             if (files.length === 0) {
-                showToast(t("no_trash_selected"));
+                showToast(tr("no_trash_selected", "No trash items selected."));
                 return;
             }
-            fetch("/api/file/restoreFiles.php", {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRF-Token": window.csrfToken
-                },
-                body: JSON.stringify({ files })
-            })
-                .then(response => response.json())
-                .then(() => {
-                    // Always report what we actually restored
-                    if (files.length === 1) {
-                        showToast(`Restored file: ${files[0]}`);
-                    } else {
-                        showToast(`Restored files: ${files.join(", ")}`);
-                    }
-                    toggleVisibility("restoreFilesModal", false);
-                    loadFileList(window.currentFolder);
-                    loadFolderTree(window.currentFolder);
-                    refreshFolderIcon(window.currentFolder);
-                })
-                .catch(err => {
-                    console.error("Error restoring files:", err);
-                    showToast("Error restoring files.");
-                });
+            try {
+                await fetchJson(ENDPOINTS.restore, { files });
+                const restoredLabel = tr("restored", "Restored");
+                const msg = files.length === 1
+                    ? `${restoredLabel}: ${files[0]}`
+                    : `${restoredLabel}: ${files.join(", ")}`;
+                afterTrashMutation(msg, true);
+            } catch (err) {
+                console.error("Error restoring files:", err);
+                showToast(tr("error_restoring_files", "Error restoring files."));
+            }
         });
-    } else {
-        console.error("restoreSelectedBtn not found.");
     }
 
-    // --- Restore All: Restore all trash items.
-    const restoreAllBtn = document.getElementById("restoreAllBtn");
     if (restoreAllBtn) {
-        restoreAllBtn.addEventListener("click", () => {
-            const allChk = document.querySelectorAll("#restoreFilesList input[type='checkbox']");
-            const files = Array.from(allChk).map(chk => chk.value);
-            console.log("Restore All clicked, files:", files);
+        restoreAllBtn.addEventListener("click", async () => {
+            const checkboxes = document.querySelectorAll("#restoreFilesList input[type='checkbox']");
+            const files = Array.from(checkboxes).map(chk => chk.value);
             if (files.length === 0) {
-                showToast(t("trash_empty"));
+                showToast(tr("trash_empty", "Trash is empty."));
                 return;
             }
-            fetch("/api/file/restoreFiles.php", {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRF-Token": window.csrfToken
-                },
-                body: JSON.stringify({ files })
-            })
-                .then(response => response.json())
-                .then(() => {
-                    if (files.length === 1) {
-                        showToast(`Restored file: ${files[0]}`);
-                    } else {
-                        showToast(`Restored files: ${files.join(", ")}`);
-                    }
-                    toggleVisibility("restoreFilesModal", false);
-                    loadFileList(window.currentFolder);
-                    loadFolderTree(window.currentFolder);
-                })
-                .catch(err => {
-                    console.error("Error restoring files:", err);
-                    showToast("Error restoring files.");
-                });
+            try {
+                await fetchJson(ENDPOINTS.restore, { files });
+                const restoredLabel = tr("restored", "Restored");
+                const msg = files.length === 1
+                    ? `${restoredLabel}: ${files[0]}`
+                    : `${restoredLabel}: ${files.join(", ")}`;
+                afterTrashMutation(msg, true);
+            } catch (err) {
+                console.error("Error restoring files:", err);
+                showToast(tr("error_restoring_files", "Error restoring files."));
+            }
         });
-    } else {
-        console.error("restoreAllBtn not found.");
     }
 
-    // --- Delete Selected: Permanently delete selected trash items with confirmation.
-    const deleteTrashSelectedBtn = document.getElementById("deleteTrashSelectedBtn");
-    if (deleteTrashSelectedBtn) {
-        deleteTrashSelectedBtn.addEventListener("click", () => {
-            const selected = document.querySelectorAll("#restoreFilesList input[type='checkbox']:checked");
-            const files = Array.from(selected).map(chk => chk.value);
-            console.log("Delete Selected clicked, files:", files);
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener("click", () => {
+            const files = getSelectedFiles();
             if (files.length === 0) {
-                showToast("No trash items selected for deletion.");
+                showToast(tr("no_trash_selected", "No trash items selected for deletion."));
                 return;
             }
-            showConfirm("Are you sure you want to permanently delete the selected trash items?", () => {
-                fetch("/api/file/deleteTrashFiles.php", {
-                    method: "POST",
-                    credentials: "include",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRF-Token": window.csrfToken
-                    },
-                    body: JSON.stringify({ files })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            showToast(data.success);
-                            loadTrashItems();
-                            loadFileList(window.currentFolder);
-                            loadFolderTree(window.currentFolder);
-                        } else {
-                            showToast(data.error);
-                        }
-                    })
-                    .catch(err => {
-                        console.error("Error deleting trash files:", err);
-                        showToast("Error deleting trash files.");
-                    });
+            showConfirm(tr("confirm_delete_selected", "Permanently delete the selected items?"), async () => {
+                try {
+                    const data = await fetchJson(ENDPOINTS.delete, { files });
+                    if (data.success) {
+                        afterTrashMutation(data.success, true);
+                    } else {
+                        showToast(data.error || tr("error_deleting_trash", "Error deleting trash files."));
+                    }
+                } catch (err) {
+                    console.error("Error deleting trash files:", err);
+                    showToast(tr("error_deleting_trash", "Error deleting trash files."));
+                }
             });
         });
-    } else {
-        console.error("deleteTrashSelectedBtn not found.");
     }
 
-    // --- Delete All: Permanently delete all trash items with confirmation.
-    const deleteAllBtn = document.getElementById("deleteAllBtn");
     if (deleteAllBtn) {
         deleteAllBtn.addEventListener("click", () => {
-            showConfirm("Are you sure you want to permanently delete all trash items? This action cannot be undone.", () => {
-                fetch("/api/file/deleteTrashFiles.php", {
-                    method: "POST",
-                    credentials: "include",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRF-Token": window.csrfToken
-                    },
-                    body: JSON.stringify({ deleteAll: true })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            showToast(data.success);
-                            toggleVisibility("restoreFilesModal", false);
-                            loadFileList(window.currentFolder);
-                            loadFolderTree(window.currentFolder);
-                        } else {
-                            showToast(data.error);
-                        }
-                    })
-                    .catch(err => {
-                        console.error("Error deleting all trash files:", err);
-                        showToast("Error deleting all trash files.");
-                    });
-            });
+            confirmEmptyRecycleBin();
         });
-    } else {
-        console.error("deleteAllBtn not found.");
     }
 
-    // --- Close the Restore Modal ---
-    const closeRestoreModal = document.getElementById("closeRestoreModal");
-    if (closeRestoreModal) {
-        closeRestoreModal.addEventListener("click", () => {
-            toggleVisibility("restoreFilesModal", false);
-        });
-    } else {
-        console.error("closeRestoreModal not found.");
+    if (closeBtn) {
+        closeBtn.addEventListener("click", () => toggleVisibility("restoreFilesModal", false));
     }
 
     // --- Auto-purge old trash items (older than 3 days) ---
@@ -234,45 +308,38 @@ export function setupTrashRestoreDelete() {
 /**
  * Loads trash items from the server and updates the restore modal list.
  */
-export function loadTrashItems() {
-    fetch("/api/file/getTrashItems.php", { credentials: "include" })
-        .then(response => response.json())
-        .then(trashItems => {
-            const listContainer = document.getElementById("restoreFilesList");
-            if (listContainer) {
-                listContainer.innerHTML = "";
-                trashItems.forEach(item => {
-                    const li = document.createElement("li");
-                    li.style.listStyle = "none";
-                    li.style.marginBottom = "5px";
+export async function loadTrashItems() {
+    try {
+        const trashItems = await fetchTrash();
+        renderTrashList(trashItems);
+        const hasItems = Array.isArray(trashItems) && trashItems.length > 0;
+        updateRecycleBinState(hasItems);
+        setHeaderIcon(hasItems);
+    } catch (err) {
+        console.error("Error loading trash items:", err);
+        showToast(tr("error_loading_trash", "Error loading trash items."));
+        updateRecycleBinState(false);
+        setHeaderIcon(false);
+    }
+}
 
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.value = item.trashName;
-                    li.appendChild(checkbox);
-
-                    const label = document.createElement("label");
-                    label.style.marginLeft = "8px";
-                    // Include the deletedBy username in the label text.
-                    const deletedBy = item.deletedBy ? item.deletedBy : "Unknown";
-                    label.textContent = `${item.originalName} (${deletedBy} trashed on ${new Date(item.trashedAt * 1000).toLocaleString()})`;
-                    li.appendChild(label);
-
-                    listContainer.appendChild(li);
-                });
-            }
-        })
-        .catch(err => {
-            console.error("Error loading trash items:", err);
-            showToast("Error loading trash items.");
-        });
+export async function refreshRecycleBinIndicator() {
+    try {
+        const trashItems = await fetchTrash();
+        const hasItems = Array.isArray(trashItems) && trashItems.length > 0;
+        updateRecycleBinState(hasItems);
+        setHeaderIcon(hasItems);
+    } catch {
+        updateRecycleBinState(false);
+        setHeaderIcon(false);
+    }
 }
 
 /**
  * Automatically purges (permanently deletes) trash items older than 3 days.
  */
 function autoPurgeOldTrash() {
-    fetch("/api/file/getTrashItems.php", { credentials: "include" })
+    fetch(ENDPOINTS.list, { credentials: "include" })
         .then(response => response.json())
         .then(trashItems => {
             const now = Date.now();
@@ -280,16 +347,7 @@ function autoPurgeOldTrash() {
             const oldItems = trashItems.filter(item => (now - (item.trashedAt * 1000)) > threeDays);
             if (oldItems.length > 0) {
                 const files = oldItems.map(item => item.trashName);
-                fetch("/api/file/deleteTrashFiles.php", {
-                    method: "POST",
-                    credentials: "include",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRF-Token": window.csrfToken
-                    },
-                    body: JSON.stringify({ files })
-                })
-                    .then(response => response.json())
+                fetchJson(ENDPOINTS.delete, { files })
                     .then(data => {
                         if (data.success) {
                             console.log("Auto-purged old trash items:", data.success);

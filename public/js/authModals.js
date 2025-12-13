@@ -407,26 +407,6 @@ export async function openUserPanel() {
         inlineLabel.append(` ${t('show_inline_folders') || 'Show folders inline (above files)'}`);
         dispFs.appendChild(inlineLabel);
     
-        // 3) Hide header zoom controls
-        const zoomLabel = document.createElement('label');
-        zoomLabel.style.cursor = 'pointer';
-        zoomLabel.style.display = 'block';
-        zoomLabel.style.marginTop = '4px';
-    
-        const zoomCb = document.createElement('input');
-        zoomCb.type = 'checkbox';
-        zoomCb.id = 'hideHeaderZoomControls';
-        zoomCb.style.verticalAlign = 'middle';
-    
-        {
-          const storedZoom = localStorage.getItem('hideZoomControls');
-          zoomCb.checked = storedZoom === 'true';
-        }
-    
-        zoomLabel.appendChild(zoomCb);
-        zoomLabel.append(` ${t('hide_header_zoom_controls') || 'Hide zoom controls in header'}`);
-        dispFs.appendChild(zoomLabel);
-    
         content.appendChild(dispFs);
     
         // Handlers: toggle + refresh list
@@ -446,23 +426,6 @@ export async function openUserPanel() {
           }
         });
     
-        // NEW: zoom hide/show handler
-        zoomCb.addEventListener('change', () => {
-          const hideZoom = zoomCb.checked;
-          localStorage.setItem('hideZoomControls', hideZoom ? 'true' : 'false');
-    
-          const zoomWrap = document.querySelector('.header-zoom-controls');
-          if (!zoomWrap) return;
-    
-          if (hideZoom) {
-            zoomWrap.style.display = 'none';
-            zoomWrap.setAttribute('aria-hidden', 'true');
-          } else {
-            zoomWrap.style.display = 'flex';
-            zoomWrap.removeAttribute('aria-hidden');
-          }
-        });
-
                 // 4) Disable hover preview
                 const hoverLabel = document.createElement('label');
                 hoverLabel.style.cursor = 'pointer';

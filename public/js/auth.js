@@ -333,25 +333,7 @@ export async function updateAuthenticatedUI(data) {
 
   // 5) Build / update header buttons
   const headerButtons = document.querySelector(".header-buttons");
-  const firstButton = headerButtons.firstElementChild;
-
-  // a) restore-from-trash for admins
-  if (data.isAdmin) {
-    let r = document.getElementById("restoreFilesBtn");
-    if (!r) {
-      r = document.createElement("button");
-      r.id = "restoreFilesBtn";
-      r.classList.add("btn", "btn-warning");
-      r.setAttribute("data-i18n-title", "trash_restore_delete");
-      r.innerHTML = '<i class="material-icons">restore_from_trash</i>';
-      if (firstButton) insertAfter(r, firstButton);
-      else headerButtons.appendChild(r);
-    }
-    r.style.display = "block";
-  } else {
-    const r = document.getElementById("restoreFilesBtn");
-    if (r) r.style.display = "none";
-  }
+  const firstButton = headerButtons ? headerButtons.firstElementChild : null;
 
   // c) user dropdown on non-demo
 {

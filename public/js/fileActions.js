@@ -1,7 +1,12 @@
 // fileActions.js
-import { showToast, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
-import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
-import { formatFolderName } from './fileListView.js?v={{APP_QVER}}';
+import { showToast, attachEnterKeyListener, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
+import {
+  loadFileList,
+  formatFolderName,
+  fileData,
+  downloadSelectedFilesIndividually,
+  MAX_NONZIP_MULTI_DOWNLOAD
+} from './fileListView.js?v={{APP_QVER}}';
 import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
@@ -39,6 +44,18 @@ function portalFileModalsToBody() {
       document.body.appendChild(el);
     }
   });
+}
+
+function getSelectedFileObjects() {
+  const selected = Array.from(document.querySelectorAll(".file-checkbox:checked")).map(cb => cb.value);
+  if (!selected.length) return [];
+  const selectedSet = new Set(selected);
+  return fileData.filter(f => selectedSet.has(escapeHTML(f.name)));
+}
+
+function getDownloadLimit() {
+  const limit = window.maxNonZipDownloads || MAX_NONZIP_MULTI_DOWNLOAD;
+  return Number.isFinite(limit) ? limit : MAX_NONZIP_MULTI_DOWNLOAD;
 }
 
 
@@ -127,6 +144,26 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 });
+
+export function handleDownloadMultiSelected(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  const files = getSelectedFileObjects();
+  if (!files.length) {
+    showToast(t("no_files_selected") || "No files selected for download.");
+    return;
+  }
+
+  const limit = getDownloadLimit();
+  if (files.length >= limit) {
+    handleDownloadZipSelected(e || new Event("click"));
+    return;
+  }
+
+  downloadSelectedFilesIndividually(files);
+}
 
 attachEnterKeyListener("downloadZipModal", "confirmDownloadZip");
 export function handleDownloadZipSelected(e) {
@@ -771,6 +808,73 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+export function handleRenameSelected(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  const files = getSelectedFileObjects();
+  if (files.length !== 1) {
+    showToast(t("select_single_file") || "Select a single file to rename.");
+    return;
+  }
+  const file = files[0];
+  renameFile(file.name, file.folder || window.currentFolder || "root");
+}
+
+export function handleShareSelected(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  const files = getSelectedFileObjects();
+  if (files.length !== 1) {
+    showToast(t("select_single_file") || "Select one file to share.");
+    return;
+  }
+  const fileObj = files[0];
+  const folder = fileObj.folder || window.currentFolder || "root";
+
+  import('./filePreview.js?v={{APP_QVER}}')
+    .then(mod => mod.openShareModal(fileObj, folder))
+    .catch(err => console.error("Failed to open share modal", err));
+}
+
+export async function handleToolbarMenuOpen(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
+  const btn = e?.currentTarget || document.getElementById("toolbarMenuBtn");
+  const rect = btn ? btn.getBoundingClientRect() : null;
+  const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  const y = rect ? rect.bottom + 6 : 60;
+  const target = btn || document.getElementById("fileList") || document.body;
+
+  try {
+    const mod = await import('./fileMenu.js?v={{APP_QVER}}');
+    const fakeEvent = {
+      preventDefault() {},
+      target,
+      clientX: x,
+      clientY: y
+    };
+    mod.fileListContextMenuHandler(fakeEvent);
+  } catch (err) {
+    console.error("Could not open toolbar menu", err);
+  }
+}
+
+// Fallback: wire the overflow menu once DOM is ready in case initFileActions
+// has not yet run when the button is rendered.
+document.addEventListener("DOMContentLoaded", () => {
+  const toolbarBtn = document.getElementById("toolbarMenuBtn");
+  if (toolbarBtn) {
+    toolbarBtn.addEventListener("click", handleToolbarMenuOpen);
+  }
+});
+
 export function renameFile(oldName, folder) {
   window.fileToRename = oldName;
   window.fileFolder = folder || window.currentFolder || "root";
@@ -858,17 +962,27 @@ export function initFileActions() {
   const downloadZipBtn = document.getElementById("downloadZipBtn");
   if (downloadZipBtn) {
     downloadZipBtn.replaceWith(downloadZipBtn.cloneNode(true));
-    document.getElementById("downloadZipBtn").addEventListener("click", handleDownloadZipSelected);
+    document.getElementById("downloadZipBtn").addEventListener("click", handleDownloadMultiSelected);
   }
   const extractZipBtn = document.getElementById("extractZipBtn");
   if (extractZipBtn) {
     extractZipBtn.replaceWith(extractZipBtn.cloneNode(true));
     document.getElementById("extractZipBtn").addEventListener("click", handleExtractZipSelected);
   }
-  const createBtn = document.getElementById('createFileBtn');
-  if (createBtn) {
-    createBtn.replaceWith(createBtn.cloneNode(true));
-    document.getElementById('createFileBtn').addEventListener('click', openCreateFileModal);
+  const renameSelectedBtn = document.getElementById("renameSelectedBtn");
+  if (renameSelectedBtn) {
+    renameSelectedBtn.replaceWith(renameSelectedBtn.cloneNode(true));
+    document.getElementById("renameSelectedBtn").addEventListener("click", handleRenameSelected);
+  }
+  const shareSelectedBtn = document.getElementById("shareSelectedBtn");
+  if (shareSelectedBtn) {
+    shareSelectedBtn.replaceWith(shareSelectedBtn.cloneNode(true));
+    document.getElementById("shareSelectedBtn").addEventListener("click", handleShareSelected);
+  }
+  const toolbarMenuBtn = document.getElementById("toolbarMenuBtn");
+  if (toolbarMenuBtn) {
+    toolbarMenuBtn.replaceWith(toolbarMenuBtn.cloneNode(true));
+    document.getElementById("toolbarMenuBtn").addEventListener("click", handleToolbarMenuOpen);
   }
 }
 
