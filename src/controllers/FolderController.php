@@ -1140,7 +1140,7 @@ class FolderController
 
         if (empty($token) || empty($file)) {
             http_response_code(400);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Missing token or file parameter."]);
             exit;
         }
@@ -1148,7 +1148,7 @@ class FolderController
         $basename = basename($file);
         if (!preg_match(REGEX_FILE_NAME, $basename)) {
             http_response_code(400);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Invalid file name."]);
             exit;
         }
@@ -1156,24 +1156,38 @@ class FolderController
         $result = FolderModel::getSharedFileInfo($token, $basename);
         if (isset($result['error'])) {
             http_response_code(404);
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => $result['error']]);
             exit;
         }
 
         $realFilePath = $result['realFilePath'];
-        $mimeType     = $result['mimeType'];
+        $mimeType     = $result['mimeType'] ?: 'application/octet-stream';
+        $ext          = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
 
+        // Harden against content-type sniffing
         header('X-Content-Type-Options: nosniff');
-        header("Content-Type: " . $mimeType);
-        $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
-        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'])) {
-            header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
-        } else {
+
+        if ($ext === 'svg') {
+            // SECURITY: never render SVG inline on shared links
+            header('Content-Type: image/svg+xml');
             header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
+        } else {
+            header('Content-Type: ' . $mimeType);
+
+            // Safe inline preview types (raster images only)
+            if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'], true)) {
+                header('Content-Disposition: inline; filename="' . basename($realFilePath) . '"');
+            } else {
+                header('Content-Disposition: attachment; filename="' . basename($realFilePath) . '"');
+            }
         }
+
         $size = @filesize($realFilePath);
-        if (is_int($size)) header('Content-Length: ' . $size);
+        if (is_int($size)) {
+            header('Content-Length: ' . $size);
+        }
+
         readfile($realFilePath);
         exit;
     }

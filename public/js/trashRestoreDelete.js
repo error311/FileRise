@@ -210,10 +210,14 @@ export function setupTrashRestoreDelete() {
         setTimeout(wireTrigger, 500);
     }
 
-    // Sync recycle bin icon on load
-    refreshRecycleBinIndicator();
+    // Sync recycle bin icon on load, but don't hammer the API
+    const runRecyclePoll = () => {
+        if (document.visibilityState === "hidden") return;
+        refreshRecycleBinIndicator();
+    };
+    runRecyclePoll();
     if (!window.__frRecyclePoll) {
-        window.__frRecyclePoll = setInterval(refreshRecycleBinIndicator, 15000);
+        window.__frRecyclePoll = setInterval(runRecyclePoll, 60000);
     }
     window.refreshRecycleBinIndicator = refreshRecycleBinIndicator;
 

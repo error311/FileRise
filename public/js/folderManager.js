@@ -176,12 +176,45 @@ function setControlEnabled(el, enabled) {
   el.style.pointerEvents = enabled ? '' : 'none';
   el.style.opacity = enabled ? '' : '0.5';
 }
+// --- Capability cache so we don't spam /capabilities.php
+const _capsCache = window.__FR_CAPS_CACHE || new Map();
+const _capsInflight = window.__FR_CAPS_INFLIGHT || new Map();
+window.__FR_CAPS_CACHE = _capsCache;
+window.__FR_CAPS_INFLIGHT = _capsInflight;
+
+async function getFolderCapabilities(folder) {
+  if (!folder) return null;
+
+  if (_capsCache.has(folder)) {
+    return _capsCache.get(folder);
+  }
+  if (_capsInflight.has(folder)) {
+    return _capsInflight.get(folder);
+  }
+
+  const p = (async () => {
+    try {
+      const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const caps = await res.json();
+      _capsCache.set(folder, caps || null);
+      return caps || null;
+    } catch {
+      _capsCache.set(folder, null);
+      return null;
+    } finally {
+      _capsInflight.delete(folder);
+    }
+  })();
+
+  _capsInflight.set(folder, p);
+  return p;
+}
 async function applyFolderCapabilities(folder) {
   try {
-    const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`, { credentials: 'include' });
-    if (!res.ok) { disableAllFolderControls(); return; }
-    const caps = await res.json();
-    window.currentFolderCaps = caps;
+    const caps = await getFolderCapabilities(folder);
+    if (!caps) { disableAllFolderControls(); return; }
+    if (folder === window.currentFolder) window.currentFolderCaps = caps;
     const isRoot = (folder === 'root');
     setControlEnabled(document.getElementById('createFolderBtn'), !!caps.canCreate);
     setControlEnabled(document.getElementById('moveFolderBtn'),   !!caps.canMoveFolder);
@@ -196,11 +229,15 @@ async function applyFolderCapabilities(folder) {
 // returns boolean whether user can view given folder
 async function canViewFolder(folder) {
   try {
-    const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`, { credentials: 'include' });
-    if (!res.ok) return false;
-    const caps = await res.json();
+    const caps = await getFolderCapabilities(folder);
+    if (!caps) return false;
     // prefer explicit flag; otherwise compose from older keys
-    return !!(caps.canView ?? caps.canRead ?? caps.canReadOwn ?? caps.isAdmin);
+    return !!(
+      caps.canView ??
+      caps.canRead ??
+      caps.canReadOwn ??
+      caps.isAdmin
+    );
   } catch { return false; }
 }
 
@@ -247,19 +284,37 @@ async function findFirstAccessibleFolder(startFolder = 'root') {
   return null; // none found
 }
 function showNoAccessEmptyState() {
+  // 1) Hide actions bar
+  const actions = document.getElementById('fileListActions');
+  if (actions) actions.style.display = 'none';
+
+  // 2) Render message INSIDE #fileList (safe)
+  const fileList = document.getElementById('fileList');
+  if (fileList) {
+    fileList.innerHTML = `
+      <div class="empty-state" style="padding:20px; text-align:center; opacity:.9;">
+        ${t('no_access') || 'You do not have access to this resource.'}
+      </div>
+    `;
+    fileList.style.visibility = 'visible';
+    return;
+  }
+
+  // 3) Fallback (if #fileList is missing) – create it without nuking the pane
   const host =
     document.getElementById('fileListContainer') ||
-    document.getElementById('fileList') ||
     document.querySelector('.file-list-container');
 
   if (!host) return;
 
-  // Clear whatever was there (e.g., “No Files Found”)
-  host.innerHTML = `
+  const el = document.createElement('div');
+  el.id = 'fileList';
+  el.innerHTML = `
     <div class="empty-state" style="padding:20px; text-align:center; opacity:.9;">
       ${t('no_access') || 'You do not have access to this resource.'}
     </div>
   `;
+  host.appendChild(el);
 }
 /* ----------------------
    Breadcrumb
@@ -366,11 +421,43 @@ function breadcrumbDropHandler(e) {
 async function checkUserFolderPermission() {
   const username = localStorage.getItem("username") || "";
   try {
-    const res = await fetchWithCsrf("/api/getUserPermissions.php", {
-      method: "GET",
-      credentials: "include"
-    });
-    const permissionsData = await safeJson(res);
+    if (window.__FR_PERMISSIONS_CACHE) {
+      // reuse cached snapshot from auth.js if available
+      const permissionsData = window.__FR_PERMISSIONS_CACHE;
+      const isFolderOnly =
+        !!(permissionsData && permissionsData[username] && permissionsData[username].folderOnly);
+      window.userFolderOnly = isFolderOnly;
+      localStorage.setItem("folderOnly", isFolderOnly ? "true" : "false");
+      if (isFolderOnly && username) {
+        localStorage.setItem("lastOpenedFolder", username);
+        window.currentFolder = username;
+      }
+      return isFolderOnly;
+    }
+
+    if (window.__FR_PERMISSIONS_PROMISE) {
+      const permissionsData = await window.__FR_PERMISSIONS_PROMISE;
+      const isFolderOnly =
+        !!(permissionsData && permissionsData[username] && permissionsData[username].folderOnly);
+      window.userFolderOnly = isFolderOnly;
+      localStorage.setItem("folderOnly", isFolderOnly ? "true" : "false");
+      if (isFolderOnly && username) {
+        localStorage.setItem("lastOpenedFolder", username);
+        window.currentFolder = username;
+      }
+      return isFolderOnly;
+    }
+
+    window.__FR_PERMISSIONS_PROMISE = (async () => {
+      const res = await fetchWithCsrf("/api/getUserPermissions.php", {
+        method: "GET",
+        credentials: "include"
+      });
+      return safeJson(res);
+    })();
+    const permissionsData = await window.__FR_PERMISSIONS_PROMISE;
+    window.__FR_PERMISSIONS_CACHE = permissionsData || {};
+    window.__FR_PERMISSIONS_PROMISE = null;
     const isFolderOnly =
       !!(permissionsData && permissionsData[username] && permissionsData[username].folderOnly);
     window.userFolderOnly = isFolderOnly;
@@ -509,6 +596,8 @@ function invalidateFolderCaches(folder) {
   _nonEmptyCache.delete(folder);
   _inflightCounts.delete(folder);
   _childCache.delete(folder);
+  _capsCache.delete(folder);
+  _capsInflight.delete(folder);
 }
 
 // Expand root -> ... -> parent chain for a target folder and persist that state
@@ -757,11 +846,16 @@ async function saveFolderColor(folder, colorHexOrEmpty) {
 }
 
 async function loadFolderColors() {
-  try {
-    const r = await fetch('/api/folder/getFolderColors.php', { credentials: 'include' });
-    if (!r.ok) { window.folderColorMap = {}; return; }
-    window.folderColorMap = await r.json() || {};
-  } catch { window.folderColorMap = {}; }
+  if (window.__FR_COLORS_PROMISE) return window.__FR_COLORS_PROMISE;
+  window.__FR_COLORS_PROMISE = (async () => {
+    try {
+      const r = await fetch('/api/folder/getFolderColors.php', { credentials: 'include' });
+      if (!r.ok) { window.folderColorMap = {}; return; }
+      window.folderColorMap = await r.json() || {};
+    } catch { window.folderColorMap = {}; }
+    finally { window.__FR_COLORS_PROMISE = null; }
+  })();
+  return window.__FR_COLORS_PROMISE;
 }
 
 /* ----------------------
@@ -794,28 +888,33 @@ async function fetchChildrenOnce(folder) {
   if (_childCache.has(folder)) return _childCache.get(folder);
   const qs = new URLSearchParams({ folder });
   qs.set('limit', String(PAGE_LIMIT));
-  const res = await fetch(`/api/folder/listChildren.php?${qs.toString()}`, { method: 'GET', credentials: 'include' });  
-  const body = await safeJson(res);
+  const p = (async () => {
+    const res = await fetch(`/api/folder/listChildren.php?${qs.toString()}`, { method: 'GET', credentials: 'include' });  
+    const body = await safeJson(res);
 
-  const raw = Array.isArray(body.items) ? body.items : [];
-const items = raw
-  .map(normalizeItem)
-  .filter(Boolean)
-  .filter(it => {
-    const s = it.name.toLowerCase();
-    return (
-      s !== 'trash' &&
-      s !== 'profile_pics' &&
-      !s.startsWith('resumable_')
-    );
-  });
+    const raw = Array.isArray(body.items) ? body.items : [];
+  const items = raw
+    .map(normalizeItem)
+    .filter(Boolean)
+    .filter(it => {
+      const s = it.name.toLowerCase();
+      return (
+        s !== 'trash' &&
+        s !== 'profile_pics' &&
+        !s.startsWith('resumable_')
+      );
+    });
 
-  const payload = { items, nextCursor: body.nextCursor ?? null };
-  _childCache.set(folder, payload);
-  return payload;
+    const payload = { items, nextCursor: body.nextCursor ?? null };
+    // Replace the promise with the resolved payload for future callers
+    _childCache.set(folder, payload);
+    return payload;
+  })();
+  _childCache.set(folder, p);
+  return p;
 }
 async function loadMoreChildren(folder, ulEl, moreLi) {
-  const cached = _childCache.get(folder);
+  const cached = await _childCache.get(folder);
   const cursor = cached?.nextCursor || null;
 
   const qs = new URLSearchParams({ folder });
@@ -857,7 +956,10 @@ async function loadMoreChildren(folder, ulEl, moreLi) {
   updateToggleForOption(folder, hasKids);
 }
 async function ensureChildrenLoaded(folder, ulEl) {
-  const cached = _childCache.get(folder);
+  let cached = _childCache.get(folder);
+  if (cached && typeof cached.then === 'function') {
+    cached = await cached;
+  }
   let items, nextCursor;
   if (cached) { items = cached.items; nextCursor = cached.nextCursor; }
   else {
@@ -1983,12 +2085,9 @@ export async function loadFolderTree(selectedFolder) {
     const rootOpt = container.querySelector('.root-folder-option');
     let rootLocked = false;
     try {
-      const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(effectiveRoot)}`, { credentials: 'include' });
-      if (res.ok) {
-        const caps = await res.json();
-        const canView = !!(caps.canView ?? caps.canRead ?? caps.canReadOwn ?? caps.isAdmin);
-        rootLocked = !canView;
-      }
+      const caps = await getFolderCapabilities(effectiveRoot);
+      const canView = !!(caps?.canView ?? caps?.canRead ?? caps?.canReadOwn ?? caps?.isAdmin);
+      rootLocked = !canView;
     } catch {}
     if (rootOpt && rootLocked) markOptionLocked(rootOpt, true);
     applyFolderCapabilities(effectiveRoot);
@@ -2059,7 +2158,8 @@ export async function loadFolderTree(selectedFolder) {
           if (willExpand) ensureChildrenLoaded(folderPath, ul);
           return;
         }
-
+        const actions = document.getElementById('fileListActions');
+        if (actions) actions.style.display = '';
         selectFolder(opt.getAttribute("data-folder") || 'root');
       });
     }
@@ -2089,10 +2189,8 @@ if (!target) {
   const ro = document.querySelector('.root-folder-option');
   if (ro) ro.classList.add('selected');
 
-  // Show explicit no_access in the files pane
   showNoAccessEmptyState();
   applyFolderCapabilities(effectiveRoot);
-  showToast(t('no_access') || "You do not have access to this resource.");
   return;
 }
 

@@ -31,6 +31,28 @@ const currentOIDCConfig = {
 };
 window.currentOIDCConfig = currentOIDCConfig;
 
+// Shared permissions cache across modules (populated once per tab)
+const PERMISSIONS_URL = '/api/getUserPermissions.php';
+
+async function fetchUserPermissionsOnce() {
+  if (window.__FR_PERMISSIONS_CACHE) return window.__FR_PERMISSIONS_CACHE;
+  if (window.__FR_PERMISSIONS_PROMISE) return window.__FR_PERMISSIONS_PROMISE;
+  window.__FR_PERMISSIONS_PROMISE = (async () => {
+    try {
+      const r = await fetch(PERMISSIONS_URL, { credentials: 'include' });
+      const data = await r.json();
+      window.__FR_PERMISSIONS_CACHE = data || {};
+      return window.__FR_PERMISSIONS_CACHE;
+    } catch {
+      window.__FR_PERMISSIONS_CACHE = {};
+      return {};
+    } finally {
+      window.__FR_PERMISSIONS_PROMISE = null;
+    }
+  })();
+  return window.__FR_PERMISSIONS_PROMISE;
+}
+
 
 
 (function installToastFilter() {
@@ -231,7 +253,8 @@ function updateLoginOptionsUIFromStorage() {
 }
 
 export function loadAdminConfigFunc() {
-  return fetch("/api/siteConfig.php", { credentials: "include" })
+  if (window.__FR_SITE_CFG_PROMISE) return window.__FR_SITE_CFG_PROMISE;
+  window.__FR_SITE_CFG_PROMISE = fetch("/api/siteConfig.php", { credentials: "include" })
     .then(async (response) => {
       // If a proxy or some edge returns 204/empty, handle gracefully
       let config = {};
@@ -266,7 +289,9 @@ export function loadAdminConfigFunc() {
 
       const headerTitleElem = document.querySelector(".header-title h1");
       if (headerTitleElem) headerTitleElem.textContent = "FileRise";
-    });
+    })
+    .finally(() => { window.__FR_SITE_CFG_PROMISE = null; });
+  return window.__FR_SITE_CFG_PROMISE;
 }
 
 function insertAfter(newNode, referenceNode) {
@@ -564,8 +589,7 @@ async function fetchAuthSnapshot() {
 
 async function syncPermissionsToLocalStorage() {
   try {
-    const r = await fetch('/api/getUserPermissions.php', { credentials: 'include' });
-    const perm = await r.json();
+    const perm = await fetchUserPermissionsOnce();
     if (perm && typeof perm === 'object') {
       localStorage.setItem('folderOnly', perm.folderOnly ? 'true' : 'false');
       localStorage.setItem('readOnly', perm.readOnly ? 'true' : 'false');

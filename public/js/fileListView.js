@@ -45,17 +45,34 @@ const FOLDER_STRIP_PAGE_SIZE = 50;
 let OO_ENABLED = false;
 let OO_EXTS = new Set();
 
+// Late-import safety: many legacy modules bind on DOMContentLoaded/load.
+// If this file is imported after those events already fired, replay them once
+// so modal buttons (delete/move/rename/etc.) wire up correctly.
+(function ensureLegacyReadyReplay() {
+  if (window.__FR_READY_REPLAYED__) return;
+  if (document.readyState === 'loading') return; // native event still pending
+  window.__FR_READY_REPLAYED__ = true;
+  try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch { }
+  try { window.dispatchEvent(new Event('load')); } catch { }
+})();
+
 export async function initOnlyOfficeCaps() {
-  try {
-    const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
-    if (!r.ok) throw 0;
-    const j = await r.json();
-    OO_ENABLED = !!j.enabled;
-    OO_EXTS = new Set(Array.isArray(j.exts) ? j.exts : []);
-  } catch {
-    OO_ENABLED = false;
-    OO_EXTS = new Set();
-  }
+  if (window.__FR_OO_PROMISE) return window.__FR_OO_PROMISE;
+  window.__FR_OO_PROMISE = (async () => {
+    try {
+      const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
+      if (!r.ok) throw 0;
+      const j = await r.json();
+      OO_ENABLED = !!j.enabled;
+      OO_EXTS = new Set(Array.isArray(j.exts) ? j.exts : []);
+    } catch {
+      OO_ENABLED = false;
+      OO_EXTS = new Set();
+    } finally {
+      window.__FR_OO_PROMISE = null;
+    }
+  })();
+  return window.__FR_OO_PROMISE;
 }
 
 function wireFolderStripItems(strip) {
@@ -222,6 +239,7 @@ function repaintStripIcon(folder) {
   iconSpan.innerHTML = folderSVG(kind);
 }
 const TEXT_PREVIEW_MAX_BYTES = 512 * 1024;
+const MAX_IMAGE_PREVIEW_BYTES = 8 * 1024 * 1024; // shared cap for hover + gallery thumbs
 const OFFICE_SNIPPET_EXTS = new Set([
   'doc', 'docx', 'docm', 'dotx',
   'xls', 'xlsx', 'xlsm', 'xltx',
@@ -1344,6 +1362,22 @@ fetchFolderPeek(folderPath).then(result => {
 
     // Left: image / video preview OR text snippet OR "No preview"
     if (isImage) {
+      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+      if (bytes != null && bytes > MAX_IMAGE_PREVIEW_BYTES) {
+        thumbEl.innerHTML = `
+          <div style="
+            padding:6px 8px;
+            border-radius:6px;
+            font-size:0.82rem;
+            text-align:center;
+            background-color:rgba(15,23,42,0.92);
+            color:#e5e7eb;
+            max-width:100%;
+          ">
+            ${escapeHTML(t("preview_too_large") || "Preview disabled for large image")}
+          </div>
+        `;
+      } else {
       // --- image thumbnail
       thumbEl.style.minHeight = "140px";
       const img = document.createElement("img");
@@ -1353,6 +1387,7 @@ fetchFolderPeek(folderPath).then(result => {
       img.style.maxHeight = "120px";
       img.style.display   = "block";
       thumbEl.appendChild(img);
+      }
 
     } else if (isVideo) {
       // --- NEW: lightweight video thumbnail ---
@@ -1659,29 +1694,43 @@ async function safeJson(res) {
 }
 
 // --- Folder capabilities + owner cache ----------------------
-const _folderCapsCache  = new Map();
+const _folderCapsCache  = window.__FR_CAPS_CACHE || new Map();
+const _folderCapsInflight = window.__FR_CAPS_INFLIGHT || new Map();
+window.__FR_CAPS_CACHE = _folderCapsCache;
+window.__FR_CAPS_INFLIGHT = _folderCapsInflight;
 
 async function fetchFolderCaps(folder) {
   if (!folder) return null;
   if (_folderCapsCache.has(folder)) {
     return _folderCapsCache.get(folder);
   }
-  try {
-    const res  = await fetch(
-      `/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`,
-      { credentials: 'include' }
-    );
-    const data = await safeJson(res);
-    _folderCapsCache.set(folder, data || null);
-
-    if (data && (data.owner || data.user)) {
-      _folderOwnerCache.set(folder, data.owner || data.user || "");
-    }
-    return data || null;
-  } catch {
-    _folderCapsCache.set(folder, null);
-    return null;
+  if (_folderCapsInflight.has(folder)) {
+    return _folderCapsInflight.get(folder);
   }
+
+  const p = (async () => {
+    try {
+      const res  = await fetch(
+        `/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`,
+        { credentials: 'include' }
+      );
+      const data = await safeJson(res);
+      _folderCapsCache.set(folder, data || null);
+
+      if (data && (data.owner || data.user)) {
+        _folderOwnerCache.set(folder, data.owner || data.user || "");
+      }
+      return data || null;
+    } catch {
+      _folderCapsCache.set(folder, null);
+      return null;
+    } finally {
+      _folderCapsInflight.delete(folder);
+    }
+  })();
+
+  _folderCapsInflight.set(folder, p);
+  return p;
 }
 
 async function refreshCurrentFolderCaps(folder) {
@@ -1705,11 +1754,7 @@ async function fetchFolderOwner(folder) {
   }
 
   try {
-    const res = await fetch(
-      `/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`,
-      { credentials: 'include' }
-    );
-    const data = await safeJson(res);
+    const data = await fetchFolderCaps(folder);
     const owner = data && (data.owner || data.user || "");
     _folderOwnerCache.set(folder, owner || "");
     return owner || "";
@@ -2516,10 +2561,23 @@ window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
 export async function loadFileList(folderParam) {
+  
   await initOnlyOfficeCaps();
   hideHoverPreview();
   const reqId = ++__fileListReqSeq; // latest call wins
-  const folder = folderParam || "root";
+  const folderOnly =
+    window.userFolderOnly === true ||
+    localStorage.getItem("folderOnly") === "true";
+  const username = (localStorage.getItem("username") || "").trim();
+
+  let folder = folderParam || window.currentFolder || "root";
+  if (folderOnly && (!folder || folder === "root") && username) {
+    folder = username;
+    window.currentFolder = folder;
+    try { localStorage.setItem("lastOpenedFolder", folder); } catch { }
+    updateBreadcrumbTitle(folder);
+  }
+
   const fileListContainer = document.getElementById("fileList");
   const actionsContainer = document.getElementById("fileListActions");
   window.selectedFolderCaps = null;
@@ -2531,17 +2589,56 @@ export async function loadFileList(folderParam) {
 
   try {
     // Kick off both in parallel, but render as soon as FILES are ready
+    const recursiveParam = folderOnly ? 0 : 1;
     const filesPromise = fetch(
-      `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=1&t=${Date.now()}`,
+      `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=${recursiveParam}&t=${Date.now()}`,
       { credentials: 'include' }
     );
-    const foldersPromise = fetch(
+    let foldersPromise = fetch(
       `/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`,
       { credentials: 'include' }
     );
 
     // ----- FILES FIRST -----
-    const filesRes = await filesPromise;
+    let filesRes = await filesPromise;
+
+    // If the first attempt is forbidden (common for folder-only users or wrong folder),
+    // retry smartly:
+    //  - first, drop recursion
+    //  - if still forbidden and we have a username, try that folder once
+    if (filesRes.status === 403 && folder !== "root") {
+      try {
+        filesRes = await fetch(
+          `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`,
+          { credentials: "include" }
+        );
+      } catch { /* ignore and fall through */ }
+    }
+    if (filesRes.status === 403 && username && folder !== username) {
+      try {
+        const alt = await fetch(
+          `/api/file/getFileList.php?folder=${encodeURIComponent(username)}&recursive=0&t=${Date.now()}`,
+          { credentials: "include" }
+        );
+        if (alt.ok) {
+          // switch context to the user folder
+          filesRes = alt;
+          folder = username;
+          window.currentFolder = folder;
+          try { localStorage.setItem("lastOpenedFolder", folder); } catch { }
+          updateBreadcrumbTitle(folder);
+          // remember that this is a folder-only session
+          window.userFolderOnly = true;
+          try { localStorage.setItem("folderOnly", "true"); } catch { }
+          refreshCurrentFolderCaps(folder);
+          // refresh folders promise for the new folder context
+          foldersPromise = fetch(
+            `/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`,
+            { credentials: 'include' }
+          );
+        }
+      } catch { /* ignore; will fall back to the normal 403 handling */ }
+    }
 
     if (filesRes.status === 401) {
       // session expired — bounce to logout
@@ -2549,6 +2646,21 @@ export async function loadFileList(folderParam) {
       throw new Error("Unauthorized");
     }
     if (filesRes.status === 403) {
+      // For folder-only users, treat 403 as "empty list" instead of hard error.
+      if (folderOnly) {
+        fileListContainer.innerHTML = `
+            <div class="empty-state">
+              ${t("no_files_found") || "No files found."}
+            </div>`;
+        const summaryElem = document.getElementById("fileSummary");
+        if (summaryElem) summaryElem.style.display = "none";
+        const strip = document.getElementById("folderStripContainer");
+        if (strip) strip.style.display = "none";
+        updateFileActionButtons();
+        fileListContainer.style.visibility = "visible";
+        return [];
+      }
+
       // forbidden — friendly message, keep UI responsive
       fileListContainer.innerHTML = `
           <div class="empty-state">
@@ -3965,20 +4077,38 @@ export function renderGalleryView(folder, container) {
     // thumbnail
     let thumbnail;
     if (/\.(jpe?g|png|gif|bmp|webp|ico)$/i.test(file.name)) {
-      const cacheKey = previewURL; // include folder & file
-      if (window.imageCache && window.imageCache[cacheKey]) {
-        thumbnail = `<img
-            src="${window.imageCache[cacheKey]}"
-            class="gallery-thumbnail"
-            data-cache-key="${cacheKey}"
-            alt="${escapeHTML(file.name)}"
-            style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
+      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+      const tooBig = bytes != null && bytes > MAX_IMAGE_PREVIEW_BYTES;
+      if (tooBig) {
+        const sizeLabel = bytes != null ? formatSize(bytes) : '';
+        thumbnail = `
+          <div class="gallery-placeholder" style="
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            min-height:${getMaxImageHeight()}px;
+            padding:10px;
+            border-radius:8px;
+            background:rgba(0,0,0,0.05);
+            color:#444;
+            font-size:0.9rem;
+            text-align:center;
+          ">
+            ${escapeHTML(t("preview_too_large") || "Preview disabled for large image")}
+            ${sizeLabel ? `<div style="font-size:0.8rem; opacity:0.75; margin-top:4px;">${escapeHTML(sizeLabel)}</div>` : ""}
+          </div>
+        `;
       } else {
+        const cacheKey = previewURL; // include folder & file
+        const src = (window.imageCache && window.imageCache[cacheKey]) || previewURL;
         thumbnail = `<img
-            src="${previewURL}"
+            src="${src}"
             class="gallery-thumbnail"
             data-cache-key="${cacheKey}"
             alt="${escapeHTML(file.name)}"
+            loading="lazy"
+            decoding="async"
+            fetchpriority="low"
             style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
       }
     } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(file.name)) {

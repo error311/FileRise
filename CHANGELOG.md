@@ -1,5 +1,19 @@
 # Changelog
 
+## Changes 12/13/2025 (v2.6.2)
+
+release(v2.6.2): no-access UI hardening + API coalescing + shared-link security
+
+- Fix “no access” state so it **renders safely inside `#fileList`**, hides `#fileListActions`, and avoids null-DOM crashes when the list container isn’t present (root/no-target scenarios).
+- Add **capabilities request caching + in-flight de-dupe** to reduce repeated `/api/folder/capabilities.php` calls.
+- Improve startup/network behavior by **coalescing noisy GET API calls** (auth, permissions, folder/file lists, siteConfig, onlyoffice status) and ignoring cache-buster query keys for stable request keys.
+- Cache `siteConfig` + `OnlyOffice` status with single-flight promises to prevent parallel duplicate requests.
+- Limit image hover/gallery thumb previews for very large images (show “preview disabled” instead of trying to render huge thumbs).
+- Reduce recycle-bin indicator polling + skip polling when the tab is hidden.
+- SECURITY: Shared-file download endpoint now defaults MIME safely, uses `nosniff`, **forces SVG to download (no inline render)**, and only inlines safe raster image types.
+
+---
+
 ## Changes 12/13/2025 (v2.6.1)
 
 release(v2.6.1): fix(folderManager): replace Math.random SVG IDs with crypto-based UID helper
@@ -7,6 +21,8 @@ release(v2.6.1): fix(folderManager): replace Math.random SVG IDs with crypto-bas
 - Add makeUid() using crypto.randomUUID() / crypto.getRandomValues() (with counter fallback) to avoid Math.random CodeQL findings.
 - Use makeUid() for folderSVG() clipPath IDs and recycleBinSVG() IDs to prevent collisions and satisfy security linting.
 - UI: tweak header button + header drop area icon padding for more consistent sizing.
+
+---
 
 ## Changes 12/12/2025 (v2.6.0)
 

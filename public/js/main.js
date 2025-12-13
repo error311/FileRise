@@ -155,13 +155,18 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
 
   const inFlight = new Map(); // key -> { ts, promise }
 
+  const IGNORE_QUERY_KEYS = new Set(['t', '_', 'cache']);
+
   function normalizeUrl(u) {
     try {
       const url = new URL(u, window.location.origin);
       // Keep path + stable query ordering
       const params = new URLSearchParams(url.search);
       const sorted = new URLSearchParams();
-      [...params.keys()].sort().forEach(k => sorted.set(k, params.get(k)));
+      [...params.keys()].sort().forEach(k => {
+        if (IGNORE_QUERY_KEYS.has(k)) return;
+        sorted.set(k, params.get(k));
+      });
       return url.pathname + (sorted.toString() ? '?' + sorted.toString() : '');
     } catch { return String(u || ''); }
   }
@@ -201,8 +206,25 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       return existing.promise.then(r => r.clone());
     }
 
-    // 1) Only coalesce mutating methods
-    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const urlPath = (typeof input === 'string') ? input : new URL(input.url).pathname;
+
+    // 1) Only coalesce mutating methods OR specific noisy GETs
+    const isCoalescableGet =
+      method === 'GET' &&
+      urlPath.startsWith('/api/') &&
+      [
+        '/api/auth/checkAuth.php',
+        '/api/getUserPermissions.php',
+        '/api/profile/getCurrentUser.php',
+        '/api/folder/getFolderColors.php',
+        '/api/folder/getFolderList.php',
+        '/api/folder/listChildren.php',
+        '/api/file/getFileList.php',
+        '/api/siteConfig.php',
+        '/api/onlyoffice/status.php'
+      ].some(p => urlPath.startsWith(p));
+
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !isCoalescableGet) {
       return nativeFetch(input, init);
     }
 
@@ -210,7 +232,6 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
     const isSameOrigin = (typeof input === 'string')
       ? input.startsWith('/') || input.startsWith(location.origin)
       : new URL(input.url).origin === location.origin;
-    const urlPath = (typeof input === 'string') ? input : new URL(input.url).pathname;
     if (!isSameOrigin || !urlPath.startsWith('/api/')) {
       return nativeFetch(input, init);
     }
@@ -342,6 +363,7 @@ function bindClickIfMissing(id, fnName) {
 function dispatchLegacyReadyOnce() {
   if (window.__FR_FLAGS.domReadyFired) return;
   window.__FR_FLAGS.domReadyFired = true;
+  // Fire synthetic DOMContentLoaded/load once so legacy listeners in imported modules bind.
   try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch { }
   try { window.dispatchEvent(new Event('load')); } catch { }
 }
@@ -597,6 +619,8 @@ function bindDarkMode() {
   }
 
   async function loadSiteConfig() {
+    if (window.__FR_SITE_CFG_PROMISE) return window.__FR_SITE_CFG_PROMISE;
+    window.__FR_SITE_CFG_PROMISE = (async () => {
     try {
       const r = await fetch('/api/siteConfig.php', { credentials: 'include' });
       const j = await r.json().catch(() => ({}));
@@ -610,7 +634,9 @@ function bindDarkMode() {
       window.__FR_DEMO__ = false; 
       applySiteConfig({}, { phase: 'early' });
       return null;
-    }
+    } finally { window.__FR_SITE_CFG_PROMISE = null; }
+    })();
+    return window.__FR_SITE_CFG_PROMISE;
   }
   async function primeCsrf() {
     try {
@@ -1009,7 +1035,7 @@ function bindDarkMode() {
   }
 
   // ---------- HEAVY BOOT ----------
-  async function bootHeavy() {
+  async function bootHeavy(preAuthState) {
     if (window.__FR_FLAGS.bootPromise) return window.__FR_FLAGS.bootPromise;
     window.__FR_FLAGS.bootPromise = (async () => {
       if (window.__FR_FLAGS.booted) return; // no-op if somehow set
@@ -1022,10 +1048,12 @@ function bindDarkMode() {
 
       try {
         // 0) refresh auth snapshot (once)
-        let state = {};
+        let state = preAuthState || {};
         try {
-          const r = await fetch('/api/auth/checkAuth.php', { credentials: 'include' });
-          state = await r.json();
+          if (!state || !Object.keys(state).length) {
+            const r = await fetch('/api/auth/checkAuth.php', { credentials: 'include' });
+            state = await r.json();
+          }
           if (state && state.username) localStorage.setItem('username', state.username);
           if (typeof state.isAdmin !== 'undefined') localStorage.setItem('isAdmin', state.isAdmin ? '1' : '0');
           window.__FR_AUTH_STATE = state;
@@ -1098,18 +1126,7 @@ function bindDarkMode() {
         // 4) legacy ready **only once** (prevents loops)
         dispatchLegacyReadyOnce();
 
-        // 5) first file list — once (initializeApp doesn’t fetch list)
-        if (!window.__FR_FLAGS.wired.firstList) {
-          try {
-            const flv = await import('/js/fileListView.js?v={{APP_QVER}}');
-            window.currentFolder ||= 'root';
-            if (typeof flv.loadFileList === 'function') await flv.loadFileList(window.currentFolder);
-            const list = document.getElementById('fileListContainer'); if (list) list.style.display = '';
-            updateFileListTitle();
-          } catch { }
-          window.__FR_FLAGS.wired.firstList = true;
-        }
-        // 6) light UI wiring — once each (no confirm bindings here; your modules own them)
+        // 5) light UI wiring — once each (no confirm bindings here; your modules own them)
         if (!window.__FR_FLAGS.wired.dark) { bindDarkMode(); window.__FR_FLAGS.wired.dark = true; }
         if (!window.__FR_FLAGS.wired.create) { wireCreateDropdown(); window.__FR_FLAGS.wired.create = true; }
         if (!window.__FR_FLAGS.wired.folder) { wireFolderButtons(); window.__FR_FLAGS.wired.folder = true; }
@@ -1146,7 +1163,7 @@ function bindDarkMode() {
     bindDarkMode();
     await loadSiteConfig();
 
-    const { authed, setup } = await checkAuth();
+    const { authed, setup, raw: authRaw } = await checkAuth();
 
     if (setup) {
       // Setup wizard runs inside app shell
@@ -1163,7 +1180,7 @@ function bindDarkMode() {
       document.body.classList.add('authed');
       unhide(wrap);            // works whether CSS or [hidden] was used
       hideEl(login);
-      await bootHeavy();
+      await bootHeavy(authRaw || null);
       await revealAppAndHideOverlay();
       requestAnimationFrame(() => {
         const pre = document.getElementById('pretheme-css');
