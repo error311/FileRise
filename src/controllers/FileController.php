@@ -1641,13 +1641,14 @@ class FileController
 
     public function shareFile()
     {
-        $token        = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
-        $providedPass = filter_input(INPUT_GET, 'pass',   FILTER_SANITIZE_STRING);
+        $token        = trim((string)($_GET['token'] ?? ''));
+        $providedPass = (string)($_GET['pass'] ?? '');
 
-        if (empty($token)) {
+        // adjust if your token format differs
+        if ($token === '' || !preg_match('/^[a-f0-9]{32}$/i', $token)) {
             http_response_code(400);
             header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(["error" => "Missing token."]);
+            echo json_encode(["error" => "Missing or invalid token."]);
             exit;
         }
 
@@ -1667,6 +1668,10 @@ class FileController
         }
 
         if (!empty($record['password']) && empty($providedPass)) {
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
             header("Content-Type: text/html; charset=utf-8");
 ?>
             <!DOCTYPE html>

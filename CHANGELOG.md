@@ -1,5 +1,15 @@
 # Changelog
 
+## Changes 12/13/2025 (v2.7.1)
+
+release(v2.7.1): harden share endpoint headers + suppress deprecated output
+
+- Replace deprecated FILTER_SANITIZE_STRING token/pass parsing with strict token validation
+- Add nosniff + no-cache + restrictive CSP to password prompt response
+- Buffer/suppress PHP notices (incl. E_DEPRECATED on PHP 8.4/Termux) in public/api/file/share.php so headers can’t be broken before streaming
+
+---
+
 ## Changes 12/13/2025 (v2.7.0)
 
 release(v2.7.0): fix critical SVG XSS on public share links

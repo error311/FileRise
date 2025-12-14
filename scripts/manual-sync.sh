@@ -2,7 +2,7 @@
 # === Update FileRise to v2.3.2 (safe rsync, no composer on demo) ===
 set -Eeuo pipefail
 
-VER="v2.3.2"
+VER="v2.7.1"
 ASSET="FileRise-${VER}.zip"      # matches GitHub release asset name
 
 WEBROOT="/var/www"
@@ -38,16 +38,16 @@ STAGE_DIR="$(find "$TMP" -maxdepth 1 -type d -name 'FileRise*' ! -path "$TMP" | 
 #    - DO NOT touch filerise-site / bundles / demo config
 #    - DO NOT touch vendor/ so Stripe + other libs stay intact on demo
 rsync -a --delete \
-  --exclude='public/.htaccess' \
-  --exclude='uploads/***' \
-  --exclude='users/***' \
-  --exclude='metadata/***' \
-  --exclude='filerise-bundles/***' \
-  --exclude='filerise-config/***' \
-  --exclude='filerise-site/***' \
-  --exclude='vendor/***' \
-  --exclude='.github/***' \
-  --exclude='docker-compose.yml' \
+  --exclude='/public/.htaccess' \
+  --exclude='/uploads/***' \
+  --exclude='/users/***' \
+  --exclude='/metadata/***' \
+  --exclude='/filerise-bundles/***' \
+  --exclude='/filerise-config/***' \
+  --exclude='/filerise-site/***' \
+  --exclude='/vendor/***' \
+  --exclude='/.github/***' \
+  --exclude='/docker-compose.yml' \
   "$STAGE_DIR"/ "$WEBROOT"/
 
 # 4) Ownership (Ubuntu/Debian w/ Apache)

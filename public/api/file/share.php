@@ -1,34 +1,21 @@
 <?php
-// public/api/file/share.php
+declare(strict_types=1);
 
-/**
- * @OA\Get(
- *   path="/api/file/share.php",
- *   summary="Open a shared file by token",
- *   description="If the link is password-protected and no password is supplied, an HTML password form is returned. Otherwise the file is streamed.",
- *   operationId="shareFile",
- *   tags={"Shares"},
- *   @OA\Parameter(name="token", in="query", required=true, @OA\Schema(type="string")),
- *   @OA\Parameter(name="pass", in="query", required=false, @OA\Schema(type="string")),
- *   @OA\Response(
- *     response=200,
- *     description="Binary file (or HTML password form when missing password)",
- *     content={
- *       "application/octet-stream": @OA\MediaType(
- *         mediaType="application/octet-stream",
- *         @OA\Schema(type="string", format="binary")
- *       ),
- *       "text/html": @OA\MediaType(mediaType="text/html")
- *     }
- *   ),
- *   @OA\Response(response=400, description="Missing token / invalid input"),
- *   @OA\Response(response=403, description="Expired or invalid password"),
- *   @OA\Response(response=404, description="Not found")
- * )
- */
+// Buffer any accidental output so headers still work
+if (ob_get_level() === 0) {
+    ob_start();
+}
+
+// Never leak notices/warnings into the response (breaks headers + can leak paths)
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+ini_set('html_errors', '0');
+ini_set('log_errors', '1');
+
+// Avoid deprecated notices being emitted at all (Termux/PHP 8.4+)
+error_reporting(E_ALL & ~E_DEPRECATED);
 
 require_once __DIR__ . '/../../../config/config.php';
 require_once PROJECT_ROOT . '/src/controllers/FileController.php';
 
-$fileController = new FileController();
-$fileController->shareFile();
+(new FileController())->shareFile();
