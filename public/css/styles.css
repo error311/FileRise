@@ -1,8 +1,20 @@
+/* === FileRise styles.css TOC ===
+   1) Variables
+   2) Base
+   3) Layout
+   4) Components
+   5) Modals
+   6) Utilities
+   7) Dark Mode
+   8) Overrides / Compact / Legacy
+*/
+/* === Variables === */
 :root{--header-h: 55px;}
 .header-container{min-height: var(--header-h);}
 img.logo{width:50px; height:50px; display:block;}
 .is-visually-hidden{visibility: hidden;
   pointer-events: none;}
+/* === Modals === */
 #userPanelModal .modal-content,
 #adminPanelModal .modal-content,
 #userPermissionsModal .modal-content,
@@ -18,9 +30,11 @@ img.logo{width:50px; height:50px; display:block;}
   padding: 10px 12px;
   text-align: left;
   margin-bottom: 10px;}
+/* === Layout === */
 .main-wrapper{display:flex;              
   gap:5px;
   align-items:flex-start;}
+/* === Base === */
 body{font-family: 'Roboto', sans-serif;
     background-color: #f5f5f5;
     margin: 0;
@@ -42,6 +56,7 @@ body{letter-spacing: 0.2px;
 @media (max-width: 600px) {
   .zones-toggle{left: 85px !important;}
 }
+/* === Components === */
 :root{--filr-accent-500:#008CB4; 
   --filr-accent-600:#00789A; 
   --filr-accent-700:#006882; 
@@ -126,19 +141,11 @@ body{letter-spacing: 0.2px;
     color: #c8e6c9;
   }
   /* FileRise Pro button styling (admin) */
-.btn-pro-admin {
-  background: linear-gradient(135deg, #ff9800, #ff5722);
-  border-color: #ff9800;
-  color: #1b0f00 !important;
-  font-weight: 600;
-  box-shadow: 0 0 10px rgba(255, 152, 0, 0.4);
-}
-
-.btn-pro-admin:hover {
+  .btn-pro-admin:hover {
   filter: brightness(1.05);
 }
-
     /* User management action bar */
+    /* TODO: admin-user-actions also redefined below with different margins; keep both until spacing contexts are confirmed. */
     .admin-user-actions {
       display: flex;
       flex-wrap: wrap;
@@ -1566,6 +1573,7 @@ label{font-size: 0.9rem;}
 #restoreFilesList li input[type="checkbox"]{margin: 0 !important;
     transform: translateY(-3px) !important;}
 #restoreFilesList li label{margin-left: 8px !important;}
+/* === Context Menus === */
 .filr-menu{position: fixed;
   z-index: 9999;
   min-width: 220px;
@@ -1616,6 +1624,7 @@ label{font-size: 0.9rem;}
 #folderContextMenu.filr-menu{max-height: min(calc(100vh - 16px), 420px);
   overflow-y: auto;}
 #folderContextMenu .material-icons{color: currentColor; opacity: .9;}
+/* === Sidebar / Drag & Drop Zones === */
 .drop-target-sidebar{display: none;
     background-color: #f8f9fa;
     border-right: 2px dashed #1565C0;
@@ -1715,6 +1724,7 @@ body.dark-mode #folderManagementCard{border-color: var(--card-border-dark, #3a3a
 .custom-folder-card-body{padding-top: 5px !important;
     padding-right: 0 !important;
     padding-left: 0 !important;}
+/* === Modals (admin/user panels) === */
 #addUserModal,
   #removeUserModal{z-index: 5000 !important;}
 #customConfirmModal{z-index: 12000 !important;}
@@ -1733,6 +1743,7 @@ body.dark-mode #folderManagementCard{border-color: var(--card-border-dark, #3a3a
     padding: 6px 12px;
     font-size: 14px;}
 #changePasswordModal{z-index: 9999;}
+/* === Utilities === */
 @keyframes spin {
   0%{transform: rotate(0deg);}
   100%{transform: rotate(360deg);}
@@ -1803,6 +1814,7 @@ body:not(.dark-mode){--download-spinner-color: #000;}
     margin: 0;
     padding: 0;}
 .dark-mode #fileSummary{color: white;}
+/* TODO: searchIcon also redefined later with alternate sizing/pill treatment; keep both until usages converge. */
 #searchIcon{border-radius: 4px;
     padding: 4px 8px;}
 .dark-mode #searchIcon{background-color: #444;
@@ -1834,7 +1846,7 @@ body:not(.dark-mode){--download-spinner-color: #000;}
     inset 0 -1px 0 var(--filr-row-outline-hover);}
 .dark-mode .btn-icon .material-icons,
   .dark-mode #searchIcon .material-icons{color: #fff;}
-.dark-mode .btn-icon:hover,
+  .dark-mode .btn-icon:hover,
   .dark-mode .btn-icon:focus{background: rgba(255, 255, 255, 0.1);}
 .user-dropdown{position: relative;
     display: inline-block;}
@@ -1849,23 +1861,23 @@ body:not(.dark-mode){--download-spinner-color: #000;}
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     z-index: 1000;}
 .user-dropdown .user-menu.show{display: block;}
-.user-dropdown .user-menu .item{padding: 0.5rem 0.75rem;
+  .user-dropdown .user-menu .item{padding: 0.5rem 0.75rem;
     cursor: pointer;
     white-space: nowrap;}
-.user-dropdown .dropdown-caret{border-top: 5px solid currentColor;
+  .user-dropdown .dropdown-caret{border-top: 5px solid currentColor;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
     display: inline-block;
     vertical-align: middle;
     margin-left: 0.25rem;}
-.dark-mode .user-dropdown .user-menu{background: #2c2c2c;
+  .dark-mode .user-dropdown .user-menu{background: #2c2c2c;
     border-color: #444;}
-.dark-mode .user-dropdown .user-menu .item{color: #e0e0e0;}
-.user-dropdown .dropdown-username{margin: 0 8px;
+  .dark-mode .user-dropdown .user-menu .item{color: #e0e0e0;}
+  .user-dropdown .dropdown-username{margin: 0 8px;
     font-weight: 500;
     vertical-align: middle;
     white-space: nowrap;}
-.user-dropdown .user-menu{border-radius: var(--menu-radius);
+  .user-dropdown .user-menu{border-radius: var(--menu-radius);
   overflow: hidden;                
   backdrop-filter: saturate(140%) blur(2px);}
 .user-dropdown .user-menu .item{padding: 0.5rem 0.75rem;
@@ -2051,6 +2063,7 @@ body.dark-mode .folder-strip-container .folder-item:hover{background-color: rgba
   line-height: 1.2;
   margin-top: 2px;
 }
+/* === Folder Tree (detailed icons + rows) === */
 #folderTreeContainer .folder-icon{flex: 0 0 var(--icon-size);
   width: var(--icon-size); height: var(--icon-size);
   display: inline-flex; align-items: center; justify-content: center;}
@@ -2179,6 +2192,7 @@ body.dark-mode #folderTreeContainer .folder-icon .lock-keyhole{fill: rgba(255,25
 @keyframes filr-spin {
   to{transform: rotate(360deg);}
 }
+/* === Upload resume banner === */
 #resumableDraftBanner.upload-resume-banner{margin: 8px 12px 12px;}
 .upload-resume-banner-inner{display: flex;
   align-items: center;
@@ -2188,19 +2202,21 @@ body.dark-mode #folderTreeContainer .folder-icon .lock-keyhole{fill: rgba(255,25
   background: rgba(255, 152, 0, 0.06);
   border: 1px solid rgba(255, 152, 0, 0.55);
   font-size: 0.9rem;}
-.upload-resume-banner-inner .material-icons,
-.folder-badge .material-icons{font-size: 20px;
+  .upload-resume-banner-inner .material-icons,
+  .folder-badge .material-icons{font-size: 20px;
   margin-right: 6px;
-  vertical-align: middle;
-  background-color: transparent;
+    vertical-align: middle;
+    background-color: transparent;
   color: #111;}
-.dark-mode .upload-resume-banner-inner .material-icons,
-.dark-mode .folder-badge .material-icons{background-color: transparent; 
-  color: #f5f5f5;}
+  .dark-mode .upload-resume-banner-inner .material-icons,
+  .dark-mode .folder-badge .material-icons{background-color: transparent; 
+    color: #f5f5f5;}
+/* === Folder Strip (header chips/list) === */
+/* TODO: folder-strip-container is also defined earlier with fuller styling; keeping both until combined layout states are clarified. */
  /* Base strip container */
-.folder-strip-container {
-  margin-bottom: 6px;
-}
+ .folder-strip-container {
+   margin-bottom: 6px;
+ }
 
 /* Base item layout */
 .folder-strip-container .folder-item {
@@ -2287,6 +2303,7 @@ body.dark-mode #folderTreeContainer .folder-icon .lock-keyhole{fill: rgba(255,25
   text-align: center;
   cursor: pointer;
 }
+/* === Overrides / Compact / Legacy === */
 /* ============================================
    FileRise polish – compact theme layer
 ============================================ */
@@ -2295,14 +2312,16 @@ body.dark-mode #folderTreeContainer .folder-icon .lock-keyhole{fill: rgba(255,25
 #customToast{border-radius:999px}
 #folderTreeContainer .folder-row{border-radius:8px}
 .btn,#customChooseBtn, #colorFolderModal .btn-ghost, #cancelMoveFolder, #confirmMoveFolder, #cancelRenameFolder, #submitRenameFolder, #cancelDeleteFolder, #confirmDeleteFolder, #cancelCreateFolder, #submitCreateFolder{border-radius:999px;font-weight:500;border:1px solid transparent;transition:background-color var(--filr-transition-fast),box-shadow var(--filr-transition-fast),transform var(--filr-transition-fast),border-color var(--filr-transition-fast)}
-.btn-primary,#createBtn,#uploadBtn,#submitCreateFolder,#submitRenameFolder,#confirmMoveFolder{box-shadow:0 2px 4px rgba(0,0,0,.6)}
+.btn-danger,.btn-primary,#createBtn,#uploadBtn,#submitCreateFolder,#submitRenameFolder,#confirmMoveFolder{box-shadow:0 2px 4px rgba(0,0,0,.6)}
 .btn-primary:hover,#createBtn:hover,#uploadBtn:hover,#submitCreateFolder:hover,#submitRenameFolder:hover,#confirmMoveFolder:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 10px 22px rgba(0,140,180,.28)}
+.btn-danger:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 10px 22px rgba(248,113,113,.35)}
 #deleteFolderBtn,#confirmDeleteFolder{border-color:rgba(248,113,113,.9);box-shadow:0 8px 18px rgba(248,113,113,.35)}
 input[type=text],input[type=password],input[type=email],input[type=url],select,textarea{border-radius:10px;padding:8px 10px;font-size:.92rem;transition:border-color var(--filr-transition-fast),box-shadow var(--filr-transition-fast),background-color var(--filr-transition-fast)}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--filr-accent-500);box-shadow:0 0 0 1px var(--filr-accent-ring)}
 .modal{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 #fileListContainer,#uploadCard,#folderManagementCard,.card,.admin-panel-content{border-radius:var(--filr-radius-xl);border:1px solid rgba(15,23,42,.06);background:#ffffff;box-shadow:var(--filr-shadow-subtle)}
 body{min-height:100vh}
+/* === Dark Mode === */
 body.dark-mode{background:var(--fr-surface-dark-2)!important;color:#f1f1f1!important;background-image:none!important}
 body.dark-mode #fileListContainer,body.dark-mode #uploadCard,body.dark-mode #folderManagementCard,body.dark-mode .card,body.dark-mode .admin-panel-content,body.dark-mode .media-topbar{background:var(--fr-surface-dark)!important;border-color:var(--fr-border-dark)!important;box-shadow:0 1px 4px rgba(0,0,0,.9)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body.dark-mode #fileListContainer::before,body.dark-mode #uploadCard::before,body.dark-mode #folderManagementCard::before,body.dark-mode .card::before,body.dark-mode .admin-panel-content::before{box-shadow:none!important}
@@ -2387,6 +2406,7 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
 #fileList table.filr-table tbody tr.folder-row>td.folder-icon-cell{overflow:visible}
 #fileList tr.folder-row .folder-row-inner,#fileList tr.folder-row .folder-row-name{cursor:inherit}
 
+/* === App Zoom Shell === */
 :root {
   --app-zoom: 1; /* 1.0 = 100% */
 }
@@ -2856,6 +2876,7 @@ th[data-column="actions"]::after {
   text-decoration: none !important;
 }
 
+/* === Late Additions: Hover Preview === */
 /* ============================================
    HOVER PREVIEW CARD – glassmorphism
    ============================================ */
@@ -3137,6 +3158,7 @@ th[data-column="actions"]::after {
   max-width: 100%;
   white-space: normal;
 }
+/* === Late Additions: Admin / OIDC === */
 /* Base look for the OIDC debug JSON box */
 #oidcDebugSnapshot,
 .oidc-debug-snapshot {

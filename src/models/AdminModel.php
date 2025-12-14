@@ -236,12 +236,25 @@ class AdminModel
 
         if (!$oidcDisabled) {
             $oidc = $configUpdate['oidc'] ?? [];
-            $required = ['providerUrl', 'clientId', 'clientSecret', 'redirectUri'];
+            $publicClient = !empty($oidc['publicClient']);
+            $required = ['providerUrl', 'clientId', 'redirectUri'];
+
+            // Confidential clients still require a secret
+            if (!$publicClient) {
+                $required[] = 'clientSecret';
+            }
+
             foreach ($required as $k) {
                 if (empty($oidc[$k]) || !is_string($oidc[$k])) {
-                    return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, clientSecret, redirectUri)."];
+                    return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, redirectUri" . ($publicClient ? '' : ', clientSecret') . ")."];
                 }
             }
+
+            // Normalize secret handling for public clients (strip it when flagged)
+            if ($publicClient) {
+                $configUpdate['oidc']['clientSecret'] = '';
+            }
+            $configUpdate['oidc']['publicClient'] = $publicClient;
         }
 
         // Ensure enableWebDAV flag is boolean (default to false if missing)
@@ -444,14 +457,20 @@ class AdminModel
                     'clientId'     => '',
                     'clientSecret' => '',
                     'redirectUri'  => '',
-                    'debugLogging'  => false,
-                    'allowDemote'    => false,
+                    'debugLogging' => false,
+                    'allowDemote'  => false,
+                    'publicClient' => false,
                 ];
             } else {
                 foreach (['providerUrl', 'clientId', 'clientSecret', 'redirectUri'] as $k) {
                     if (!isset($config['oidc'][$k]) || !is_string($config['oidc'][$k])) {
                         $config['oidc'][$k] = '';
                     }
+                }
+                if (!array_key_exists('publicClient', $config['oidc'])) {
+                    $config['oidc']['publicClient'] = false;
+                } else {
+                    $config['oidc']['publicClient'] = !empty($config['oidc']['publicClient']);
                 }
             }
 
@@ -544,7 +563,8 @@ class AdminModel
                 'clientSecret' => '',
                 'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback',
                 'debugLogging' => false,
-                'allowDemote'    => false,
+                'allowDemote'  => false,
+                'publicClient' => false,
             ],
             'loginOptions'          => [
                 'disableFormLogin' => false,

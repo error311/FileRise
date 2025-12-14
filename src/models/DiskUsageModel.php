@@ -31,6 +31,70 @@ class DiskUsageModel
     private const TOP_FILE_LIMIT = 1000;
 
     /**
+     * Location of the background scan log file.
+     */
+    public static function scanLogPath(): string
+    {
+        $meta   = rtrim((string)META_DIR, '/\\');
+        $logDir = $meta . DIRECTORY_SEPARATOR . 'logs';
+        if (!is_dir($logDir)) {
+            @mkdir($logDir, 0775, true);
+        }
+        return $logDir . DIRECTORY_SEPARATOR . 'disk_usage_scan.log';
+    }
+
+    /**
+     * Read the tail of the scan log to surface recent failures in the UI.
+     *
+     * @return array|null
+     */
+    public static function readScanLogTail(int $maxBytes = 4000): ?array
+    {
+        $path = self::scanLogPath();
+        if (!is_file($path) || !is_readable($path)) {
+            return null;
+        }
+
+        $size = @filesize($path);
+        $fp   = @fopen($path, 'rb');
+        if (!$fp) {
+            return null;
+        }
+
+        if ($size !== false && $size > $maxBytes) {
+            fseek($fp, -$maxBytes, SEEK_END);
+        }
+        $buf = @stream_get_contents($fp);
+        @fclose($fp);
+        if ($buf === false) {
+            return null;
+        }
+
+        $buf   = str_replace(["\r\n", "\r"], "\n", (string)$buf);
+        $lines = array_filter(array_map('trim', explode("\n", $buf)), 'strlen');
+        $tail  = implode("\n", array_slice($lines, -30));
+
+        return [
+            'path'       => $path,
+            'modifiedAt' => (int)@filemtime($path),
+            'tail'       => $tail,
+            'hasError'   => stripos($tail, 'error') !== false,
+        ];
+    }
+
+    /**
+     * Delete the on-disk snapshot JSON, if present.
+     */
+    public static function deleteSnapshot(): bool
+    {
+        $path = self::snapshotPath();
+        if (!is_file($path)) {
+            return false;
+        }
+        return @unlink($path);
+    }
+
+    /**
      * Absolute path to the snapshot JSON file.
      */
     public static function snapshotPath(): string

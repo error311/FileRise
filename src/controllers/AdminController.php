@@ -198,6 +198,7 @@ class AdminController
                     'hasClientSecret' => !empty($config['oidc']['clientSecret']),
                     'debugLogging'    => !empty($config['oidc']['debugLogging']),
                     'allowDemote'     => !empty($config['oidc']['allowDemote']),
+                    'publicClient'    => !empty($config['oidc']['publicClient']),
                 ]),
                 'onlyoffice' => [
                     'enabled'      => $effEnabled,
@@ -1140,7 +1141,8 @@ class AdminController
                 'providerUrl' => '',
                 'clientId'    => '',
                 'clientSecret' => '',
-                'redirectUri' => ''
+                'redirectUri' => '',
+                'publicClient' => false,
             ],
             'branding'            => [
                 'customLogoUrl' => '',
@@ -1220,6 +1222,16 @@ class AdminController
                     $val = filter_var($val, FILTER_SANITIZE_URL);
                 }
                 $merged['oidc'][$f] = $val;
+            }
+        }
+
+        // OIDC public client flag (and optional secret wipe)
+        if (array_key_exists('publicClient', $data['oidc'])) {
+            $isPublic = filter_var($data['oidc']['publicClient'], FILTER_VALIDATE_BOOLEAN);
+            $merged['oidc']['publicClient'] = $isPublic;
+            if ($isPublic) {
+                // Ensure secret is cleared when switching to public client mode
+                $merged['oidc']['clientSecret'] = '';
             }
         }
 

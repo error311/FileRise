@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 12/14/2025 (v2.8.0)
+
+release(v2.8.0): OIDC public clients + Storage scan log/snapshot controls + sidebar zone order
+
+**Added**  
+
+- **OIDC “Public Client” mode** (no client secret) via new `oidc.publicClient` flag, with automatic secret clearing when enabled.
+- Admin UI toggle + guidance for Public Clients (PKCE S256 / token endpoint auth method “none”).
+- **Storage / Disk Usage**
+  - Centralized scan log path + “tail” reader and snapshot delete helper in `DiskUsageModel`.
+  - New admin endpoint: `POST /api/admin/diskUsageDeleteSnapshot.php` (admin-only, best-effort CSRF).
+  - Admin Storage UI button **“Delete snapshot”** wired into the panel.
+
+**Improved**  
+
+- OIDC client creation:
+  - Trims secrets, sets `clientSecret = null` for public clients.
+  - Defaults token endpoint auth to **`none`** for public clients vs **`client_secret_basic`** for confidential clients (unless explicitly overridden).
+- Storage scan UX:
+  - API includes scan log tail metadata in disk usage summary responses and avoids noisy 404s when snapshot is missing.
+  - Trigger scan uses the shared log path, returns `logMtime`, and falls back to a foreground run if background exec fails.
+  - Polling detects stalls/timeouts and surfaces log tail/path in the UI.
+- Drag/drop zones: persist **sidebar card order** (not just zone placement) + minor animation tuning.
+- `FR_OIDC_DEBUG` can now be enabled via env var parsing (`1/true/yes/on`).
+- Reduced console noise: `diskUsageChildren` returns HTTP 200 (`ok=false`) for `no_snapshot` instead of 404.
+
+**UI / CSS**  
+
+- `styles.css` cleanup with a table of contents + section headers/comments for easier navigation.
+
+---
+
 ## Changes 12/13/2025 (v2.7.1)
 
 release(v2.7.1): harden share endpoint headers + suppress deprecated output

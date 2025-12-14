@@ -23,6 +23,8 @@ const ZONES = {
 };
 const LAYOUT_KEY = 'userZonesSnapshot.v2';          // {cardId: zoneId}
 const RESPONSIVE_STASH_KEY = 'responsiveSidebarSnapshot.v2'; // [cardId]
+const ORDER_DATA_KEY = '__zoneOrder';
+const ORDER_TRACKED_ZONES = [ZONES.SIDEBAR];
 
 // -------------------- small helpers --------------------
 function $(id) { return document.getElementById(id); }
@@ -43,7 +45,16 @@ function writeLayout(layout) {
 }
 function setLayoutFor(cardId, zoneId) {
   const layout = readLayout();
+  const prevZone = layout[cardId];
   layout[cardId] = zoneId;
+  if (ORDER_TRACKED_ZONES.includes(zoneId)) captureZoneOrder(layout, zoneId);
+  if (
+    prevZone &&
+    prevZone !== zoneId &&
+    ORDER_TRACKED_ZONES.includes(prevZone)
+  ) {
+    captureZoneOrder(layout, prevZone);
+  }
   writeLayout(layout);
 }
 
@@ -309,7 +320,42 @@ function saveCurrentLayout() {
     const zone = currentZoneForCard(card);
     if (zone) layout[card.id] = zone;
   });
+  ORDER_TRACKED_ZONES.forEach(zoneId => captureZoneOrder(layout, zoneId));
   writeLayout(layout);
+}
+
+function getZoneOrder(layout, zoneId) {
+  if (!layout || typeof layout !== 'object') return [];
+  const store = layout[ORDER_DATA_KEY];
+  if (!store || !Array.isArray(store[zoneId])) return [];
+  return store[zoneId];
+}
+
+function captureZoneOrder(layout, zoneId) {
+  if (!layout || !ORDER_TRACKED_ZONES.includes(zoneId)) return;
+  const host = getZoneHost(zoneId);
+  if (!host) return;
+  const ids = Array.from(
+    host.querySelectorAll('#uploadCard, #folderManagementCard')
+  ).map(el => el.id).filter(Boolean);
+
+  if (!ids.length) return;
+
+  layout[ORDER_DATA_KEY] = layout[ORDER_DATA_KEY] || {};
+  layout[ORDER_DATA_KEY][zoneId] = ids;
+}
+
+function applyZoneOrder(layout, zoneId, placedSet) {
+  if (!placedSet) return;
+  const ids = getZoneOrder(layout, zoneId);
+  if (!ids.length) return;
+  ids.forEach(cardId => {
+    if (placedSet.has(cardId)) return;
+    const card = $(cardId);
+    if (!card || layout[cardId] !== zoneId) return;
+    placeCardInZone(card, zoneId, { animate: false });
+    placedSet.add(cardId);
+  });
 }
 
 // -------------------- responsive stash --------------------
@@ -384,6 +430,10 @@ function hideHeaderDockPersistent() {
   }
 }
 
+const COLLAPSE_ANIMATION_MS = 420;
+const COLLAPSE_TARGET_SCALE = 0.45;
+const COLLAPSE_OPACITY_END = 0.2;
+
 function animateCardsIntoHeaderAndThen(done) {
   const sb  = getSidebar();
   const top = getTopZone();
@@ -414,9 +464,13 @@ function animateCardsIntoHeaderAndThen(done) {
   const ghosts = [];
 
   snapshots.forEach(({ card, rect }) => {
-    // remember the size for the expand animation later
+    // remember the size and center for the expand animation later
     card.dataset.lastWidth  = String(rect.width);
     card.dataset.lastHeight = String(rect.height);
+    card.dataset.lastTargetLeft = String(rect.left);
+    card.dataset.lastTargetTop = String(rect.top);
+    card.dataset.lastTargetCx = String(rect.left + rect.width / 2);
+    card.dataset.lastTargetCy = String(rect.top + rect.height / 2);
 
     const iconBtn = card.headerIconButton;
     if (!iconBtn) return;
@@ -426,7 +480,7 @@ function animateCardsIntoHeaderAndThen(done) {
     const ghost = createCardGhost(card, rect, { scale: 1, opacity: 0.95 });
     ghost.id = card.id + '-ghost-collapse';
     ghost.classList.add('card-collapse-ghost');
-    ghost.style.transition = 'transform 0.4s cubic-bezier(.22,.61,.36,1), opacity 0.4s linear';
+    ghost.style.transition = 'transform 0.42s cubic-bezier(.33,.1,.25,1), opacity 0.32s linear';
 
     document.body.appendChild(ghost);
     ghosts.push({ ghost, from: rect, to: iconRect });
@@ -444,23 +498,17 @@ function animateCardsIntoHeaderAndThen(done) {
       const fromCy = from.top  + from.height / 2;
       const toCx   = to.left   + to.width   / 2;
       const toCy   = to.top    + to.height  / 2;
-
       const dx = toCx - fromCx;
       const dy = toCy - fromCy;
-
-      const rawScale = to.width / from.width;
-      const scale = Math.max(0.35, Math.min(0.6, rawScale * 0.9));
-
-      // ✨ more readable: clear slide + shrink, but don’t fully vanish mid-flight
-      ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-      ghost.style.opacity   = '0.35';
+      ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${COLLAPSE_TARGET_SCALE})`;
+      ghost.style.opacity = String(COLLAPSE_OPACITY_END);
     });
   });
 
   setTimeout(() => {
     ghosts.forEach(({ ghost }) => { try { ghost.remove(); } catch {} });
     done();
-  }, 430); // a bit over the 0.4s transition
+  }, COLLAPSE_ANIMATION_MS + 50);
 }
 
 function resolveTargetZoneForExpand(cardId) {
@@ -502,6 +550,7 @@ function getZoneHost(zoneId) {
   }
 }
 
+const EXPAND_START_SCALE = 0.94;
 
 // Animate cards "flying out" of header icons back into their zones.
 function animateCardsOutOfHeaderThen(done) {
@@ -518,48 +567,51 @@ function animateCardsOutOfHeaderThen(done) {
   if (top) top.style.display = '';
 
   const SAFE_TOP       = 16;
-  const START_OFFSET_Y = 32;   // a touch closer to header
+  const START_OFFSET_Y = 95;   // a touch closer to header
   const DEST_EXTRA_Y   = 120;
 
-  const ghosts = [];
+  const layout = readLayout();
+  const plan = [];
 
   cards.forEach(card => {
     const iconBtn = card.headerIconButton;
     if (!iconBtn) return;
-
     const zoneId = resolveTargetZoneForExpand(card.id);
-    if (!zoneId) return; // header-only card, stays as icon
+    if (!zoneId) return;
+    plan.push({ card, iconBtn, zoneId });
+  });
 
+  if (!plan.length) {
+    done();
+    return;
+  }
+
+  const savedHeights = {};
+  CARD_IDS.forEach(id => {
+    const val = parseFloat($(id)?.dataset.lastHeight || '');
+    savedHeights[id] = (!Number.isNaN(val) && val > 0) ? val : 190;
+  });
+
+  const sidebarOrder = getZoneOrder(layout, ZONES.SIDEBAR);
+  const fallbackSidebarOrder = sidebarOrder.length ? sidebarOrder : CARD_IDS;
+  const ghosts = [];
+
+  plan.forEach(({ card, iconBtn, zoneId }) => {
     const host = getZoneHost(zoneId);
     if (!host) return;
-
-    const iconRect = iconBtn.getBoundingClientRect();
     const zoneRect = host.getBoundingClientRect();
     if (!zoneRect.width) return;
 
+    const iconRect = iconBtn.getBoundingClientRect();
     const fromCx = iconRect.left + iconRect.width / 2;
     const fromCy = iconRect.bottom + START_OFFSET_Y;
 
-    let toCx = zoneRect.left + zoneRect.width / 2;
-    let toCy = zoneRect.top + Math.min(zoneRect.height / 2 || DEST_EXTRA_Y, DEST_EXTRA_Y);
-
-    if (zoneId === ZONES.SIDEBAR) {
-      if (card.id === 'uploadCard') {
-        toCy -= 48;
-      } else if (card.id === 'folderManagementCard') {
-        toCy += 48;
-      }
-    }
-
     const savedW = parseFloat(card.dataset.lastWidth  || '');
     const savedH = parseFloat(card.dataset.lastHeight || '');
-    const targetWidth  = !Number.isNaN(savedW)
-      ? savedW
-      : Math.min(280, Math.max(220, zoneRect.width * 0.85));
-    const targetHeight = !Number.isNaN(savedH) ? savedH : 190;
+    const targetWidth  = (!Number.isNaN(savedW) && savedW > 0) ? savedW : Math.min(280, Math.max(220, zoneRect.width * 0.85));
+    const targetHeight = (!Number.isNaN(savedH) && savedH > 0) ? savedH : 190;
 
     const startTop = Math.max(SAFE_TOP, fromCy - targetHeight / 2);
-
     const ghostRect = {
       left:  fromCx - targetWidth / 2,
       top:   startTop,
@@ -567,19 +619,49 @@ function animateCardsOutOfHeaderThen(done) {
       height: targetHeight
     };
 
-    const ghost = createCardGhost(card, ghostRect, { scale: 0.75, opacity: 0.25 });
+    const ghost = createCardGhost(card, ghostRect, { scale: EXPAND_START_SCALE, opacity: 0.55 });
     ghost.id = card.id + '-ghost-expand';
     ghost.classList.add('card-expand-ghost');
 
-    ghost.style.transform  = 'translate(0,0) scale(0.75)';
+    ghost.style.transform  = `translate(0,0) scale(${EXPAND_START_SCALE})`;
     ghost.style.transition = 'transform 0.4s cubic-bezier(.22,.61,.36,1), opacity 0.4s linear';
 
     document.body.appendChild(ghost);
+
+    const savedCx = parseFloat(card.dataset.lastTargetCx || '');
+    const savedCy = parseFloat(card.dataset.lastTargetCy || '');
+    const hasSavedCenter = !Number.isNaN(savedCx) && !Number.isNaN(savedCy);
+    const fallbackCenter = (() => {
+      const normalizedZoneHeight = zoneRect.height || DEST_EXTRA_Y;
+      const baseTop = zoneRect.top + 16;
+    const gap = 10;
+      let toCy;
+      if (zoneId === ZONES.SIDEBAR) {
+        const stack = fallbackSidebarOrder;
+        const idx = stack.indexOf(card.id);
+        const resolvedIndex = idx >= 0 ? idx : ((card.id === 'uploadCard') ? 0 : 1);
+        const precedingHeight = stack
+          .slice(0, resolvedIndex)
+          .reduce((sum, id) => sum + (savedHeights[id] || 190) + gap, 0);
+        const cardHeight = savedHeights[card.id] ?? targetHeight;
+        const rowTop = baseTop + precedingHeight;
+        toCy = rowTop + cardHeight / 2 - 8;
+      } else {
+        toCy = zoneRect.top + Math.min(normalizedZoneHeight / 2 || DEST_EXTRA_Y, DEST_EXTRA_Y);
+      }
+      const toCx = zoneRect.left + zoneRect.width / 2;
+      const drift = (zoneId === ZONES.SIDEBAR) ? (card.id === 'uploadCard' ? -8 : 8) : 0;
+      return { cx: toCx, cy: toCy + drift };
+    })();
+
+    const targetCenter = hasSavedCenter
+      ? { cx: savedCx, cy: savedCy }
+      : fallbackCenter;
+
     ghosts.push({
       ghost,
       from: { cx: fromCx, cy: fromCy },
-      to:   { cx: toCx,   cy: toCy },
-      zoneId
+      to: targetCenter
     });
   });
 
@@ -1075,9 +1157,15 @@ function applyUserLayoutOrDefault() {
   const hasAny = Object.keys(layout).length > 0;
 
   if (hasAny) {
+    const placed = new Set();
+    if (!isSmallScreen()) {
+      ORDER_TRACKED_ZONES.forEach(zoneId => applyZoneOrder(layout, zoneId, placed));
+    }
+
     getCards().forEach(card => {
       const targetZone = layout[card.id];
       if (!targetZone) return;
+      if (placed.has(card.id)) return;
       // On small screens: if saved zone is the sidebar, temporarily place in top cols
       if (isSmallScreen() && targetZone === ZONES.SIDEBAR) {
         const target = (card.id === 'uploadCard') ? ZONES.TOP_LEFT : ZONES.TOP_RIGHT;

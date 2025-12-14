@@ -41,7 +41,12 @@ $folderKey = isset($_GET['folder']) ? (string)$_GET['folder'] : 'root';
 try {
     /** @var array $result */
     $result = ProDiskUsage::getChildren($folderKey);
-    http_response_code(!empty($result['ok']) ? 200 : 404);
+    // Avoid noisy 404s in console when snapshot is missing; still return ok=false
+    if (empty($result['ok']) && ($result['error'] ?? '') === 'no_snapshot') {
+        http_response_code(200);
+    } else {
+        http_response_code(!empty($result['ok']) ? 200 : 404);
+    }
     echo json_encode($result, JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);

@@ -72,10 +72,7 @@ try {
         throw new RuntimeException('No working php CLI found.');
     }
 
-    $meta   = rtrim((string)META_DIR, '/\\');
-    $logDir = $meta . DIRECTORY_SEPARATOR . 'logs';
-    @mkdir($logDir, 0775, true);
-    $logFile = $logDir . DIRECTORY_SEPARATOR . 'disk_usage_scan.log';
+    $logFile = DiskUsageModel::scanLogPath();
 
     // nohup php disk_usage_scan.php >> log 2>&1 & echo $!
     $cmdStr =
@@ -85,12 +82,31 @@ try {
     $pid = @shell_exec('/bin/sh -c ' . escapeshellarg($cmdStr));
     $pid = is_string($pid) ? (int)trim($pid) : 0;
 
+    // If background launch failed (pid 0), fall back to a foreground run so the snapshot
+    // still completes and the UI doesn't spin forever on hosts that block background exec.
+    if ($pid <= 0) {
+        $rc = 1;
+        @exec(
+            escapeshellcmd($php) . ' ' . escapeshellarg($worker) .
+            ' >> ' . escapeshellarg($logFile) . ' 2>&1',
+            $out,
+            $rc
+        );
+
+        if ($rc !== 0) {
+            throw new RuntimeException('Failed to launch disk usage scan (exec/whitelist issue?). See log: ' . $logFile);
+        }
+        // Foreground run finished; no pid to return.
+        $pid = null;
+    }
+
     http_response_code(200);
     echo json_encode([
         'ok'      => true,
         'pid'     => $pid > 0 ? $pid : null,
         'message' => 'Disk usage scan started in the background.',
         'logFile' => $logFile,
+        'logMtime'=> is_file($logFile) ? (int)@filemtime($logFile) : null,
     ], JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);

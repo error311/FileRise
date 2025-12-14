@@ -75,7 +75,13 @@ if (!defined('FR_OIDC_ALLOW_DEMOTE')) {
     // so AuthModel::isOidcDemoteAllowed() will fall back to AdminModel::getConfig().
 }
 if (!defined('FR_OIDC_DEBUG')) {
-    define('FR_OIDC_DEBUG', false);
+    $envVal = getenv('FR_OIDC_DEBUG');
+    if ($envVal !== false && $envVal !== '') {
+        $val = strtolower(trim((string)$envVal));
+        define('FR_OIDC_DEBUG', in_array($val, ['1', 'true', 'yes', 'on'], true));
+    } else {
+        define('FR_OIDC_DEBUG', false);
+    }
 }
 // Antivirus / ClamAV (optional)
 // If VIRUS_SCAN_ENABLED is set in the environment, it overrides the admin setting.

@@ -100,9 +100,13 @@ class AuthController
             $cfg          = AdminModel::getConfig();
             $clientId     = $cfg['oidc']['clientId']     ?? null;
             $clientSecret = $cfg['oidc']['clientSecret'] ?? null;
+            $publicClient = !empty($cfg['oidc']['publicClient']);
 
             // When configured as a public client (no secret), pass null, not an empty string.
-            if ($clientSecret === '') {
+            if (is_string($clientSecret)) {
+                $clientSecret = trim($clientSecret);
+            }
+            if ($clientSecret === '' || $publicClient) {
                 $clientSecret = null;
             }
 
@@ -110,12 +114,17 @@ class AuthController
             if (defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD') && OIDC_TOKEN_ENDPOINT_AUTH_METHOD) {
                 $tokenAuthMethod = OIDC_TOKEN_ENDPOINT_AUTH_METHOD;
             }
+            // Default token endpoint auth: none for public clients, basic for confidential.
+            if (!$tokenAuthMethod) {
+                $tokenAuthMethod = $clientSecret ? 'client_secret_basic' : 'none';
+            }
 
             $this->logOidcDebug('Building OIDC client', [
                 'providerUrl'            => $cfg['oidc']['providerUrl'] ?? null,
                 'redirectUri'            => $cfg['oidc']['redirectUri'] ?? null,
                 'clientId'               => $clientId,
                 'hasClientSecret'        => $clientSecret ? 'yes' : 'no',
+                'publicClient'           => $publicClient ? 'yes' : 'no',
                 'tokenEndpointAuthMethod'=> $tokenAuthMethod ?: '(library default)',
             ]);
 

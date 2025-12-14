@@ -2460,6 +2460,7 @@ export function openAdminPanel() {
         const hasSecret = !!(config.oidc && config.oidc.hasClientSecret);
         const oidcDebugEnabled = !!(config.oidc && config.oidc.debugLogging);
         const oidcAllowDemote = !!(config.oidc && config.oidc.allowDemote);
+        const oidcPublicClient = !!(config.oidc && config.oidc.publicClient);
 
         document.getElementById("oidcContent").innerHTML = `
  <div class="admin-subsection-title" style="margin-top:2px;">
@@ -2499,6 +2500,21 @@ export function openAdminPanel() {
 
   ${renderMaskedInput({ id: "oidcClientId", label: t("oidc_client_id"), hasValue: hasId })}
   ${renderMaskedInput({ id: "oidcClientSecret", label: t("oidc_client_secret"), hasValue: hasSecret, isSecret: true })}
+
+  <div class="form-group" style="margin-top:6px;">
+    <div class="form-check fr-toggle">
+      <input type="checkbox"
+             class="form-check-input fr-toggle-input"
+             id="oidcPublicClient"
+             ${oidcPublicClient ? 'checked' : ''} />
+      <label class="form-check-label" for="oidcPublicClient">
+        ${tf("oidc_public_client_label", "This is a public OIDC client (no client secret)")}
+      </label>
+    </div>
+    <small class="text-muted d-block mt-1">
+      ${tf("oidc_public_client_help", "Uses PKCE (S256) with token auth method \"none\". Leave unchecked for confidential clients that send a client secret.")}
+    </small>
+  </div>
 
   <div class="form-group">
     <label for="oidcRedirectUri">${t("oidc_redirect_uri")}:</label>
@@ -3090,6 +3106,10 @@ ${t("shared_max_upload_size_bytes")}
         wireClamavTestButton(document.getElementById("uploadContent"));
         initVirusLogUI({ isPro });
         document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig?.providerUrl || "";
+        const publicClientChk = document.getElementById("oidcPublicClient");
+        if (publicClientChk) {
+          publicClientChk.checked = !!window.currentOIDCConfig?.publicClient;
+        }
         const idEl = document.getElementById("oidcClientId");
         const secEl = document.getElementById("oidcClientSecret");
         if (!hasId) idEl.value = window.currentOIDCConfig?.clientId || "";
@@ -3142,6 +3162,7 @@ function handleSave() {
   const enableBasicAuth = !!document.getElementById("enableBasicAuth")?.checked;
   const enableOIDCLogin = !!document.getElementById("enableOIDCLogin")?.checked;
   const proxyOnlyEnabled = !!document.getElementById("authBypass")?.checked;
+  const oidcPublicClient = !!document.getElementById("oidcPublicClient")?.checked;
 
   const authHeaderName =
     (document.getElementById("authHeaderName")?.value || "").trim() ||
@@ -3169,6 +3190,7 @@ function handleSave() {
         .value.trim(),
       debugLogging: !!document.getElementById("oidcDebugLogging")?.checked,
       allowDemote: !!document.getElementById("oidcAllowDemote")?.checked,
+      publicClient: oidcPublicClient,
       // clientId/clientSecret added conditionally below
     },
     globalOtpauthUrl: document
@@ -3197,7 +3219,10 @@ function handleSave() {
   if ((idEl?.dataset.replace === '1' || idFirstTime) && idVal !== '') {
     payload.oidc.clientId = idVal;
   }
-  if ((scEl?.dataset.replace === '1' || secFirstTime) && secVal !== '') {
+  if (oidcPublicClient) {
+    // Explicitly clear any stored secret when switching to public client mode
+    payload.oidc.clientSecret = '';
+  } else if ((scEl?.dataset.replace === '1' || secFirstTime) && secVal !== '') {
     payload.oidc.clientSecret = secVal;
   }
 

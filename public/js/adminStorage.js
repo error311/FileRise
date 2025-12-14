@@ -9,6 +9,16 @@ const tf = (key, fallback) => {
   return (v && v !== key) ? v : fallback;
 };
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function formatBytes(bytes) {
   bytes = Number(bytes) || 0;
   if (bytes <= 0) return '0 B';
@@ -34,6 +44,18 @@ function formatDate(ts) {
 
 function getCsrfToken() {
   return (document.querySelector('meta[name="csrf-token"]')?.content || '');
+}
+
+function getDefaultScanHint(isPro) {
+  return isPro
+    ? tf(
+        'storage_rescan_hint_pro',
+        'Run a fresh disk usage snapshot when storage changes.'
+      )
+    : tf(
+        'storage_rescan_cli_hint',
+        'Click Rescan to run a snapshot now, or schedule the CLI scanner via cron.'
+      );
 }
 
 let confirmModalEl = null;
@@ -118,6 +140,9 @@ function showConfirmDialog({ title, message, confirmLabel }) {
 // snapshot / scanning
 let lastGeneratedAt = 0;
 let scanPollTimer = null;
+let lastScanLogPath = '';
+let lastScanLogMtime = null;
+let defaultScanHint = '';
 
 // Pro-only dangerous mode: deep delete for folders
 let deepDeleteEnabled = false;
@@ -152,6 +177,30 @@ function setScanStatus(isScanning) {
     </div>
     <div class="small text-muted">
       ${tf('storage_scan_in_progress', 'Disk usage scan in progress...')}
+    </div>
+  `;
+}
+
+function renderScanProblem({ message, logTail, logPath }) {
+  const statusEl = document.getElementById('adminStorageScanStatus');
+  if (!statusEl) return;
+
+  const tailHtml = logTail
+    ? `<pre class="small bg-light p-2 rounded border mb-1" style="user-select:text; white-space:pre-wrap;">${escapeHtml(logTail)}</pre>`
+    : '';
+
+  const pathHtml = logPath
+    ? `<div class="small text-muted">${tf('storage_scan_log_path', 'Log file')}: <code>${escapeHtml(logPath)}</code></div>`
+    : '';
+
+  statusEl.innerHTML = `
+    <div class="alert alert-warning mb-2" style="border-radius: var(--menu-radius);">
+      <div class="fw-semibold mb-1">
+        ${tf('storage_scan_failed', 'Disk usage scan did not finish.')}
+      </div>
+      ${message ? `<div class="small mb-1">${escapeHtml(message)}</div>` : ''}
+      ${tailHtml}
+      ${pathHtml}
     </div>
   `;
 }
@@ -201,7 +250,7 @@ function updateDeleteButtonsForDeepDelete() {
 function renderBaseLayout(container, { isPro }) {
     container.innerHTML = `
     <div class="storage-section mt-2">
-      <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-2">
           <div>
             <h5 class="mb-1">${tf('storage_disk_usage', 'Storage / Disk Usage')}</h5>
             <small class="text-muted">
@@ -220,20 +269,17 @@ function renderBaseLayout(container, { isPro }) {
                 <i class="material-icons" style="vertical-align:middle;font-size:18px;color:currentColor;">refresh</i>
                 <span style="vertical-align:middle;">${tf('rescan_now', 'Rescan')}</span>
               </button>
+              <button
+                type="button"
+                id="adminStorageDeleteSnapshot"
+                class="btn btn-sm btn-danger">
+                <i class="material-icons" style="vertical-align:middle;font-size:18px;color:currentColor;">delete_forever</i>
+                <span style="vertical-align:middle;">${tf('storage_delete_snapshot','Delete snapshot')}</span>
+              </button>
             </div>
             <div>
               <small class="text-muted d-block" id="adminStorageScanHint">
-                ${
-                  isPro
-                    ? tf(
-                        'storage_rescan_hint_pro',
-                        'Run a fresh disk usage snapshot when storage changes.'
-                      )
-                    : tf(
-                        'storage_rescan_cli_hint',
-                        'Click Rescan to run a snapshot now, or schedule the CLI scanner via cron.'
-                      )
-                }
+                ${getDefaultScanHint(isPro)}
               </small>
             </div>
           </div>
@@ -345,7 +391,28 @@ async function refreshStorageSummary() {
   summaryEl.innerHTML = `<div class="text-muted">${tf('loading', 'Loading...')}</div>`;
 
   const data = await fetchSummaryRaw();
+  const logInfo = data && typeof data === 'object' ? data.scanLog : null;
+  if (logInfo && logInfo.path) {
+    lastScanLogPath = logInfo.path;
+  }
+  if (logInfo && typeof logInfo.modifiedAt === 'number' && logInfo.modifiedAt > 0) {
+    lastScanLogMtime = logInfo.modifiedAt;
+  }
+
   if (!data || !data.ok) {
+    const reason = data && data.message
+      ? String(data.message)
+      : data && data.error
+        ? String(data.error)
+        : '';
+    const logPath = (logInfo && logInfo.path) || lastScanLogPath || '';
+    const tailHtml = logInfo && logInfo.tail
+      ? `<pre class="small bg-light p-2 rounded border mt-2" style="user-select:text; white-space:pre-wrap;">${escapeHtml(logInfo.tail)}</pre>`
+      : '';
+    const pathHtml = logPath
+      ? `<div class="small text-muted mt-1">${tf('storage_scan_log_path','Log file')}: <code>${escapeHtml(logPath)}</code></div>`
+      : '';
+
     if (data && data.error === 'no_snapshot') {
       const cmd = 'php src/cli/disk_usage_scan.php';
       summaryEl.innerHTML = `
@@ -354,19 +421,31 @@ async function refreshStorageSummary() {
             'storage_no_snapshot',
             'No disk usage snapshot found. Run the CLI scanner once to generate the first snapshot.'
           )}
+          ${pathHtml}
         </div>
         <pre class="small bg-light p-2 rounded border" style="user-select:text; white-space:pre-wrap;">
 ${cmd}
         </pre>
+        ${tailHtml}
       `;
       return;
     }
 
     summaryEl.innerHTML = `
-      <div class="text-danger">
-        ${tf('storage_summary_error', 'Unable to load disk usage summary.')}
+      <div class="alert alert-danger mb-2" style="border-radius: var(--menu-radius);">
+        <div class="fw-semibold">${tf('storage_summary_error', 'Unable to load disk usage summary.')}</div>
+        ${reason ? `<div class="small">${escapeHtml(reason)}</div>` : ''}
+        ${pathHtml}
+        ${tailHtml}
       </div>
     `;
+    if (logInfo && logInfo.tail) {
+      renderScanProblem({
+        message: reason || tf('storage_summary_error', 'Unable to load disk usage summary.'),
+        logTail: logInfo.tail,
+        logPath
+      });
+    }
     return;
   }
 
@@ -648,7 +727,7 @@ const displayTopFolders = (isProGlobal && showAllTopFolders)
  * We don't know real progress %, but as soon as generatedAt increases
  * we refresh the summary and stop polling.
  */
-function startScanPolling(initialGeneratedAt) {
+function startScanPolling(initialGeneratedAt, { logPath = '', logMtime = null } = {}) {
   if (scanPollTimer) {
     clearInterval(scanPollTimer);
     scanPollTimer = null;
@@ -657,22 +736,76 @@ function startScanPolling(initialGeneratedAt) {
   setScanStatus(true);
   const startTime = Date.now();
   const maxMs = 10 * 60 * 1000; // 10 minutes safety
+  let lastSeenLogMtime = logMtime ?? null;
+  let lastSeenLogTail = '';
+  let lastSeenErrorMsg = '';
+  let lastSeenLogPath = logPath || '';
+  const stallWarnMs = 60 * 1000; // warn if nothing moves after 60s
 
   scanPollTimer = window.setInterval(async () => {
     if (Date.now() - startTime > maxMs) {
       clearInterval(scanPollTimer);
       scanPollTimer = null;
       setScanStatus(false);
+      renderScanProblem({
+        message: lastSeenErrorMsg || tf('storage_scan_timeout', 'Disk usage scan did not finish within 10 minutes. See the scan log for details.'),
+        logTail: lastSeenLogTail,
+        logPath: lastSeenLogPath || lastScanLogPath
+      });
       return;
     }
 
     const data = await fetchSummaryRaw();
-    if (!data || !data.ok) {
+    if (!data) return;
+
+    const logInfo = data.scanLog || null;
+    const gen = data.generatedAt || 0;
+
+    if (logInfo) {
+      if (logInfo.path) {
+        lastSeenLogPath = logInfo.path;
+        lastScanLogPath = logInfo.path;
+      }
+      if (typeof logInfo.modifiedAt === 'number' && logInfo.modifiedAt > 0) {
+        if (lastSeenLogMtime === null) {
+          lastSeenLogMtime = logInfo.modifiedAt;
+        } else if (logInfo.hasError && logInfo.modifiedAt > lastSeenLogMtime && (!gen || gen <= initialGeneratedAt)) {
+          clearInterval(scanPollTimer);
+          scanPollTimer = null;
+          setScanStatus(false);
+          renderScanProblem({
+            message: lastSeenErrorMsg || (logInfo.tail ? logInfo.tail.split('\n').pop() : ''),
+            logTail: logInfo.tail || lastSeenLogTail,
+            logPath: lastSeenLogPath
+          });
+          return;
+        }
+        lastSeenLogMtime = logInfo.modifiedAt;
+      }
+      if (logInfo.tail) {
+        lastSeenLogTail = logInfo.tail;
+      }
+    }
+
+    if (!data.ok) {
+      if (data.message) {
+        lastSeenErrorMsg = String(data.message);
+      }
+      if (!lastSeenLogMtime && Date.now() - startTime > stallWarnMs) {
+        // No snapshot change and no log activity: likely worker not running or empty
+        clearInterval(scanPollTimer);
+        scanPollTimer = null;
+        setScanStatus(false);
+        renderScanProblem({
+          message: tf('storage_scan_no_progress', 'Disk usage scan did not produce a snapshot yet. Verify the CLI worker (src/cli/disk_usage_scan.php) and PHP CLI path.'),
+          logTail: lastSeenLogTail,
+          logPath: lastSeenLogPath || lastScanLogPath
+        });
+      }
       // still no snapshot / error, keep waiting
       return;
     }
 
-    const gen = data.generatedAt || 0;
     if (gen && gen > initialGeneratedAt) {
       clearInterval(scanPollTimer);
       scanPollTimer = null;
@@ -681,6 +814,18 @@ function startScanPolling(initialGeneratedAt) {
       await refreshStorageSummary();
       setScanStatus(false);
       showToast(tf('storage_scan_complete', 'Disk usage scan completed.'));
+      // refresh explorer data if visible
+      if (isProGlobal) {
+        if (currentExplorerTab === 'folders') {
+          loadFolderChildren(currentFolderKey);
+        } else {
+          loadTopFiles();
+        }
+      }
+      const hintEl = document.getElementById('adminStorageScanHint');
+      if (hintEl) {
+        hintEl.textContent = defaultScanHint || getDefaultScanHint(isProGlobal);
+      }
     }
   }, 4000);
 }
@@ -691,6 +836,7 @@ function startScanPolling(initialGeneratedAt) {
 function wireRescan(/* isPro */) {
   const btn = document.getElementById('adminStorageRescan');
   const hintEl = document.getElementById('adminStorageScanHint');
+  const deleteBtn = document.getElementById('adminStorageDeleteSnapshot');
   if (!btn) return;
 
   if (btn.dataset.wired === '1') return;
@@ -719,13 +865,18 @@ function wireRescan(/* isPro */) {
         showToast(
           tf('storage_rescan_started', 'Disk usage scan started in the background.')
         );
+        lastScanLogPath = payload.logFile || '';
+        lastScanLogMtime = payload.logMtime || null;
         if (hintEl) {
           hintEl.textContent = tf(
             'storage_rescan_hint_with_log',
             'Scan is running in the background. The summary will update when it finishes.'
           );
         }
-        startScanPolling(initialGenerated);
+        startScanPolling(initialGenerated, {
+          logPath: lastScanLogPath,
+          logMtime: lastScanLogMtime
+        });
       }
     } catch (err) {
       console.error('Rescan error', err);
@@ -738,6 +889,59 @@ function wireRescan(/* isPro */) {
       btn.innerHTML = oldHtml;
     }
   });
+
+  if (deleteBtn && !deleteBtn.dataset.wired) {
+    deleteBtn.dataset.wired = '1';
+    deleteBtn.addEventListener('click', async () => {
+      const ok = await showConfirmDialog({
+        title: tf('storage_delete_snapshot','Delete snapshot'),
+        message: tf(
+          'storage_delete_snapshot_confirm',
+          'Delete the current disk usage snapshot? The Storage view will be empty until a new scan finishes.'
+        ),
+        confirmLabel: tf('delete','Delete')
+      });
+      if (!ok) return;
+
+      deleteBtn.disabled = true;
+      const old = deleteBtn.innerHTML;
+      deleteBtn.innerHTML = `
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        <span class="ms-1">${tf('deleting','Deleting...')}</span>
+      `;
+
+      try {
+        const resp = await sendRequest('/api/admin/diskUsageDeleteSnapshot.php', 'POST', null, {
+          'X-CSRF-Token': getCsrfToken()
+        });
+        if (!resp || resp.ok !== true) {
+          showToast(tf('storage_delete_snapshot_failed','Failed to delete snapshot. See logs.'));
+        } else {
+          lastGeneratedAt = 0;
+          lastScanLogMtime = null;
+          refreshStorageSummary();
+          if (isProGlobal) {
+            if (currentExplorerTab === 'folders') {
+              loadFolderChildren('root');
+            } else {
+              loadTopFiles();
+            }
+          }
+          showToast(tf('storage_delete_snapshot_ok','Snapshot deleted. Run Rescan to build a new one.'));
+          const hintEl = document.getElementById('adminStorageScanHint');
+          if (hintEl) {
+            hintEl.textContent = defaultScanHint || getDefaultScanHint(isProGlobal);
+          }
+        }
+      } catch (e) {
+        console.error('Delete snapshot error', e);
+        showToast(tf('storage_delete_snapshot_failed','Failed to delete snapshot. See logs.'));
+      } finally {
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = old;
+      }
+    });
+  }
 }
 
 // ---------- Pro Explorer (ncdu-style) ----------
@@ -1655,6 +1859,7 @@ export function initAdminStorageSection({ isPro, modalEl }) {
   if (!container) return;
 
   isProGlobal = !!isPro;
+  defaultScanHint = getDefaultScanHint(isProGlobal);
 
   // Make it safe to call multiple times
   if (!container.dataset.inited) {

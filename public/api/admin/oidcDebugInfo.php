@@ -31,14 +31,15 @@ try {
     // Client ID / secret presence flags (never leak actual values)
     $clientId     = $oidcCfg['clientId']     ?? ($cfg['oidc_client_id'] ?? null);
     $clientSecret = $oidcCfg['clientSecret'] ?? ($cfg['oidc_client_secret'] ?? null);
+    $publicClient = !empty($oidcCfg['publicClient']);
 
     $clientIdMode = 'unset';
     if ($clientId !== null && $clientId !== '') {
         $clientIdMode = 'present';
     }
 
-    $clientSecretMode = 'none';
-    if ($clientSecret !== null && $clientSecret !== '') {
+    $clientSecretMode = $publicClient ? 'public_client' : 'none';
+    if (!$publicClient && $clientSecret !== null && $clientSecret !== '') {
         $clientSecretMode = 'present';
     }
 
@@ -46,6 +47,9 @@ try {
     $tokenAuthMethod = null;
     if (defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD') && OIDC_TOKEN_ENDPOINT_AUTH_METHOD) {
         $tokenAuthMethod = OIDC_TOKEN_ENDPOINT_AUTH_METHOD;
+    }
+    if (!$tokenAuthMethod) {
+        $tokenAuthMethod = $publicClient ? 'none' : 'client_secret_basic';
     }
 
     $loginOptions = is_array($cfg['loginOptions'] ?? null) ? $cfg['loginOptions'] : [];
@@ -56,6 +60,7 @@ try {
 
         'clientIdMode'     => $clientIdMode,
         'clientSecretMode' => $clientSecretMode,
+        'publicClient'     => $publicClient,
 
         'debugFlag' => [
             'FR_OIDC_DEBUG' => defined('FR_OIDC_DEBUG') ? (bool)FR_OIDC_DEBUG : false,
