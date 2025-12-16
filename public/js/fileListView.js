@@ -52,9 +52,8 @@ let pendingSearchSelection = null;
 function decodeHtmlEntities(str) {
   if (!str) return "";
   try {
-    const tmp = document.createElement('textarea');
-    tmp.innerHTML = str;
-    return tmp.value;
+    const doc = new DOMParser().parseFromString(`<!doctype html><body>${str}`, 'text/html');
+    return (doc && doc.body && doc.body.textContent) ? doc.body.textContent : "";
   } catch (e) {
     return str;
   }

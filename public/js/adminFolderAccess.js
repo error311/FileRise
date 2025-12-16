@@ -11,6 +11,14 @@ const tf = (key, fallback) => {
 function qs(scope, sel) { return (scope || document).querySelector(sel); }
 function qsa(scope, sel) { return Array.from((scope || document).querySelectorAll(sel)); }
 
+function escapeFolderSelectorValue(folder) {
+  const value = String(folder ?? '');
+  if (window.CSS && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
+  return value.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+}
+
 function enforceShareFolderRule(row) {
   const manage = qs(row, 'input[data-cap="manage"]');
   const viewAll = qs(row, 'input[data-cap="view"]');
@@ -339,8 +347,7 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
     const managedPrefixes = new Set();
     const inheritPrefixes = new Set();
     const safeFolderSelector = (folder) => {
-      if (window.CSS && CSS.escape) return `.folder-access-row[data-folder="${CSS.escape(folder)}"]`;
-      return `.folder-access-row[data-folder="${folder.replace(/"/g, '\\"')}"]`;
+      return `.folder-access-row[data-folder="${escapeFolderSelectorValue(folder)}"]`;
     };
     rows.forEach(row => {
       if (row.dataset.admin === '1') {
@@ -796,8 +803,7 @@ function applyGroupLocksForUser(username, grantsBox, groupMask, groupsForUser = 
     : tf("granted_via_groups", "Granted via groups");
 
   const safeSelect = (folder) => {
-    if (window.CSS && CSS.escape) return `.folder-access-row[data-folder="${CSS.escape(folder)}"]`;
-    return `.folder-access-row[data-folder="${folder.replace(/"/g, '\\"')}"]`;
+    return `.folder-access-row[data-folder="${escapeFolderSelectorValue(folder)}"]`;
   };
 
   Object.keys(groupMask).forEach(folder => {

@@ -1,8 +1,9 @@
 # Changelog
 
-## Changes 12/15/2025 (v2.9.0)
+## Changes 12/15/2025 (v2.9.0 & v2.9.1)
 
 release(v2.9.0): add Pro Search Everywhere, ACL inheritance, and UI polish
+release(v2.9.1): Fix selector escaping and safe entity decoding for admin folder access and search
 
 **Search Everywhere (Pro)**  
 
