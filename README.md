@@ -34,7 +34,7 @@ Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI w
 
 Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
-![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.3.4.png)
+![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.9.0.png)
 
 > 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
 > Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open-source (MIT).
