@@ -19,7 +19,7 @@
     const scale   = clamped / 100;
 
     document.documentElement.style.setProperty('--app-zoom', String(scale));
-    try { localStorage.setItem(STORAGE_KEY, String(clamped)); } catch {}
+    try { localStorage.setItem(STORAGE_KEY, String(clamped)); } catch (e) {}
 
     updateDisplay(clamped);
     return clamped;
@@ -32,7 +32,7 @@
         const n = parseInt(raw, 10);
         if (Number.isFinite(n) && n > 0) return clampPercent(n);
       }
-    } catch {}
+    } catch (e) {}
 
     const v = getComputedStyle(document.documentElement)
       .getPropertyValue('--app-zoom')

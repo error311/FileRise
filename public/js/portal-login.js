@@ -22,7 +22,7 @@ function sanitizeRedirect(raw, { fallback = '/' } = {}) {
 
     // Return a relative URL (prevents host changes)
     return candidate.pathname + candidate.search + candidate.hash;
-  } catch {
+  } catch (e) {
     return fallback;
   }
 }
@@ -45,7 +45,7 @@ function getRedirectTarget() {
     }
 
     return target || '/';
-  } catch {
+  } catch (e) {
     return '/';
   }
 }
@@ -121,7 +121,7 @@ function getRedirectTarget() {
     window.csrfToken = token;
     try {
       localStorage.setItem('csrf', token);
-    } catch { /* ignore */ }
+    } catch (e) { /* ignore */ }
   
     let meta = document.querySelector('meta[name="csrf-token"]');
     if (!meta) {
@@ -153,7 +153,7 @@ function getRedirectTarget() {
       let body = {};
       try {
         body = await res.json();
-      } catch {
+      } catch (e) {
         body = {};
       }
   
@@ -192,7 +192,7 @@ function getRedirectTarget() {
       let data = {};
       try {
         data = text ? JSON.parse(text) : {};
-      } catch {
+      } catch (e) {
         data = {};
       }
       if (!res.ok || !data || !data.success || !data.portal) {
@@ -260,7 +260,7 @@ function getRedirectTarget() {
     // Document title
     try {
       document.title = 'Sign in – ' + title;
-    } catch { /* ignore */ }
+    } catch (e) { /* ignore */ }
   
     // Accent: portal brandColor -> CSS var
     const brand = portal.brandColor && portal.brandColor.trim();
@@ -324,7 +324,7 @@ function getRedirectTarget() {
     let body = {};
     try {
       body = text ? JSON.parse(text) : {};
-    } catch {
+    } catch (e) {
       body = {};
     }
   

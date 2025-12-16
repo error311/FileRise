@@ -55,7 +55,7 @@ function makeUid(prefix = 'uid') {
 async function safeJson(res) {
   const text = await res.text();
   let body = null;
-  try { body = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+  try { body = text ? JSON.parse(text) : null; } catch (e) { /* ignore */ }
   if (!res.ok) {
     const msg = (body && (body.error || body.message)) || (text && text.trim()) || `HTTP ${res.status}`;
     const err = new Error(msg);
@@ -133,11 +133,11 @@ function peekHasFolders(folder) {
       try {
         const res = await fetchChildrenOnce(folder);
         return !!(Array.isArray(res?.items) && res.items.length > 0) || !!res?.nextCursor;
-      } catch { return false; }
+      } catch (e) { return false; }
     })();
     cache.set(folder, p);
     return p;
-  } catch { return Promise.resolve(false); }
+  } catch (e) { return Promise.resolve(false); }
 }
 // small helper to clear peek cache for specific folders (or all if none provided)
 function clearPeekCache(folders) {
@@ -146,9 +146,9 @@ function clearPeekCache(folders) {
     if (!c) return;
     if (!folders || !folders.length) { c.clear(); return; }
     folders.forEach(f => c.delete(f));
-  } catch {}
+  } catch (e) {}
 }
-try { window.peekHasFolders = peekHasFolders; } catch {}
+try { window.peekHasFolders = peekHasFolders; } catch (e) {}
 // ---- end peekHasFolders ----
 
 function loadFolderTreeState() {
@@ -199,7 +199,7 @@ async function getFolderCapabilities(folder) {
       const caps = await res.json();
       _capsCache.set(folder, caps || null);
       return caps || null;
-    } catch {
+    } catch (e) {
       _capsCache.set(folder, null);
       return null;
     } finally {
@@ -222,7 +222,7 @@ async function applyFolderCapabilities(folder) {
     setControlEnabled(document.getElementById('colorFolderBtn'),  !isRoot && !!caps.canEdit);
     setControlEnabled(document.getElementById('deleteFolderBtn'), !isRoot && !!caps.canDeleteFolder);
     setControlEnabled(document.getElementById('shareFolderBtn'),  !isRoot && !!caps.canShareFolder);
-  } catch {
+  } catch (e) {
     disableAllFolderControls();
   }
 }
@@ -238,7 +238,7 @@ async function canViewFolder(folder) {
       caps.canReadOwn ??
       caps.isAdmin
     );
-  } catch { return false; }
+  } catch (e) { return false; }
 }
 
 /**
@@ -279,7 +279,7 @@ async function findFirstAccessibleFolder(startFolder = 'root') {
         if (!visited.has(child)) q.push(child);
       }
       // If there are more pages, we only need one page to keep BFS order lightweight
-    } catch { /* ignore and continue */ }
+    } catch (e) { /* ignore and continue */ }
   }
   return null; // none found
 }
@@ -467,7 +467,7 @@ async function checkUserFolderPermission() {
       window.currentFolder = username;
     }
     return isFolderOnly;
-  } catch {
+  } catch (e) {
     window.userFolderOnly = false;
     localStorage.setItem("folderOnly", "false");
     return false;
@@ -514,7 +514,7 @@ async function hasUnlockedDescendant(folder, maxDepth = 2) {
         if (await hasUnlockedDescendant(child, maxDepth - 1)) return true;
       }
     }
-  } catch {}
+  } catch (e) {}
   return false;
 }
 
@@ -525,6 +525,31 @@ async function chooseInitialFolder(effectiveRoot, selectedFolder) {
   // 2) sticky lastOpenedFolder
   const last = localStorage.getItem("lastOpenedFolder");
   if (last && await canViewFolderCached(last)) return last;
+
+  // 2b) Ground truth from folder list API (matches getFileList 403 behavior)
+  try {
+    const res = await fetch('/api/folder/getFolderList.php', { credentials: 'include' });
+    const data = await res.json().catch(() => []);
+    const names = Array.isArray(data)
+      ? Array.from(new Set(data.map(row => {
+          const f = (row && (row.folder || row)) || '';
+          const trimmed = String(f).trim().replace(/^\/+|\/+$/g, '');
+          return trimmed === '' ? 'root' : trimmed;
+        })))
+      : [];
+
+    if (names.length) {
+      const preferred = (last || '').trim();
+      if (preferred && names.includes(preferred)) return preferred;
+      // pick shallowest, then alpha
+      names.sort((a, b) => {
+        const depth = (p) => (p === 'root') ? 0 : p.split('/').filter(Boolean).length;
+        const d = depth(a) - depth(b);
+        return d !== 0 ? d : a.localeCompare(b);
+      });
+      if (names[0]) return names[0];
+    }
+  } catch (e) { /* best effort */ }
 
   // 3) NEW: if root itself is viewable, prefer (Root)
   if (await canViewFolderCached(effectiveRoot)) return effectiveRoot;
@@ -544,7 +569,7 @@ async function chooseInitialFolder(effectiveRoot, selectedFolder) {
       const child = effectiveRoot === 'root' ? name : `${effectiveRoot}/${name}`;
       if (await hasUnlockedDescendant(child, 2)) return child;
     }
-  } catch {}
+  } catch (e) {}
 
   // 6) fallback: BFS
   return await findFirstAccessibleFolder(effectiveRoot);
@@ -634,7 +659,7 @@ async function expandAncestors(targetFolder) {
       await ensureChildrenLoaded(acc, ul);
     }
     saveFolderTreeState(newState);
-  } catch {}
+  } catch (e) {}
 }
 
 /* ----------------------
@@ -852,7 +877,7 @@ async function loadFolderColors() {
       const r = await fetch('/api/folder/getFolderColors.php', { credentials: 'include' });
       if (!r.ok) { window.folderColorMap = {}; return; }
       window.folderColorMap = await r.json() || {};
-    } catch { window.folderColorMap = {}; }
+    } catch (e) { window.folderColorMap = {}; }
     finally { window.__FR_COLORS_PROMISE = null; }
   })();
   return window.__FR_COLORS_PROMISE;
@@ -940,7 +965,7 @@ async function loadMoreChildren(folder, ulEl, moreLi) {
     const li = makeChildLi(folder, it);
     ulEl.insertBefore(li, moreLi);
     const full = (folder === 'root') ? it.name : `${folder}/${it.name}`;
-    try { applyFolderColorToOption(full, (window.folderColorMap||{})[full] || ''); } catch {}
+    try { applyFolderColorToOption(full, (window.folderColorMap||{})[full] || ''); } catch (e) {}
     ensureFolderIcon(full);
   });
 
@@ -972,7 +997,7 @@ async function ensureChildrenLoaded(folder, ulEl) {
       const li = makeChildLi(folder, it);
       ulEl.appendChild(li);
       const full = (folder === 'root') ? it.name : `${folder}/${it.name}`;
-      try { applyFolderColorToOption(full, (window.folderColorMap||{})[full] || ''); } catch {}
+      try { applyFolderColorToOption(full, (window.folderColorMap||{})[full] || ''); } catch (e) {}
       ensureFolderIcon(full);
     });
     ulEl._renderedOnce = true;
@@ -1021,7 +1046,7 @@ async function ensureChildrenLoaded(folder, ulEl) {
   primeChildToggles(ulEl);
   const hasKidsNow = !!ulEl.querySelector(':scope > li.folder-item');
   updateToggleForOption(folder, hasKidsNow);
-  peekHasFolders(folder).then(h => { try { updateToggleForOption(folder, !!h); } catch {} });
+  peekHasFolders(folder).then(h => { try { updateToggleForOption(folder, !!h); } catch (e) {} });
 }
 
 /* ----------------------
@@ -1031,7 +1056,7 @@ function primeChildToggles(ulEl) {
   ulEl.querySelectorAll('.folder-option[data-folder]').forEach(opt => {
     const f = opt.dataset.folder;
     if (f === 'recycle_bin') return;
-    try { setFolderIconForOption(opt, 'empty'); } catch {}
+    try { setFolderIconForOption(opt, 'empty'); } catch (e) {}
 
     Promise.all([
       fetchFolderCounts(f).catch(() => ({ folders: 0, files: 0 })),
@@ -1041,9 +1066,9 @@ function primeChildToggles(ulEl) {
       const files   = Number(cnt?.files || 0);
       const hasAny  = (folders + files) > 0;
 
-      try { setFolderIconForOption(opt, hasAny ? 'paper' : 'empty'); } catch {}
+      try { setFolderIconForOption(opt, hasAny ? 'paper' : 'empty'); } catch (e) {}
       // IMPORTANT: chevron is true if EITHER we have subfolders (peek) OR counts say so
-      try { updateToggleForOption(f, !!hasKids || folders > 0); } catch {}
+      try { updateToggleForOption(f, !!hasKids || folders > 0); } catch (e) {}
     });
   });
 }
@@ -1461,7 +1486,7 @@ function getAppZoomFactor() {
       .trim();
     const n = parseFloat(v);
     if (Number.isFinite(n) && n > 0) return n;
-  } catch {}
+  } catch (e) {}
   return 1;
 }
 
@@ -1470,8 +1495,8 @@ function handleFolderDragStart(ev, fullPath, optEl) {
   if (!dt) return;
 
   // Drag payload
-  try { dt.setData('application/x-filerise-folder', fullPath); } catch {}
-  try { dt.setData('text/plain', fullPath); } catch {}
+  try { dt.setData('application/x-filerise-folder', fullPath); } catch (e) {}
+  try { dt.setData('text/plain', fullPath); } catch (e) {}
   dt.effectAllowed = 'move';
 
   const row = optEl.closest('.folder-row') || optEl;
@@ -1491,7 +1516,7 @@ function handleFolderDragStart(ev, fullPath, optEl) {
       backColor   = (cs.getPropertyValue('--filr-folder-back')   || '').trim();
       strokeColor = (cs.getPropertyValue('--filr-folder-stroke') || '').trim();
     }
-  } catch {
+  } catch (e) {
     // fall through to defaults
   }
 
@@ -1590,7 +1615,7 @@ function handleFolderDragStart(ev, fullPath, optEl) {
       line.setAttribute('stroke', isDark ? '#60a5fa' : '#4da3ff');
       line.setAttribute('stroke-width', '.9');
     });
-  } catch {
+  } catch (e) {
     // non-fatal: worst case the icon is default-colored
   }
 
@@ -1613,7 +1638,7 @@ function handleFolderDragStart(ev, fullPath, optEl) {
 
   try {
     dt.setDragImage(ghost, offsetX, offsetY);
-  } catch {
+  } catch (e) {
     // fall back to browser default ghost
   }
 
@@ -1722,7 +1747,7 @@ async function carryFolderColor(sourceFolder, newPath) {
   try {
     await saveFolderColor(newPath, oldColor);
     await saveFolderColor(sourceFolder, '');
-  } catch {}
+  } catch (e) {}
 }
 
 /* ----------------------
@@ -1806,7 +1831,7 @@ function handleDropOnFolder(event, dropFolder) {
   try {
     const jsonStr = event.dataTransfer.getData("application/json") || "";
     if (jsonStr) dragData = JSON.parse(jsonStr);
-  } catch {
+  } catch (e) {
     dragData = null;
   }
 
@@ -1852,7 +1877,7 @@ function handleDropOnFolder(event, dropFolder) {
       (event.dataTransfer && event.dataTransfer.getData("application/x-filerise-folder")) ||
       (event.dataTransfer && event.dataTransfer.getData("text/plain")) ||
       "";
-  } catch {
+  } catch (e) {
     plainSource = "";
   }
 
@@ -1955,7 +1980,7 @@ async function selectFolder(selected) {
     // can't jump into forbidden folders.
     try {
       allowed = await canViewFolder(selected);
-    } catch {
+    } catch (e) {
       allowed = false;
     }
   }
@@ -2006,7 +2031,7 @@ async function selectFolder(selected) {
     const st = loadFolderTreeState();
     st[selected] = 'block';
     saveFolderTreeState(st);
-    try { await ensureChildrenLoaded(selected, ul); primeChildToggles(ul); } catch {}
+    try { await ensureChildrenLoaded(selected, ul); primeChildToggles(ul); } catch (e) {}
   }
 
   // Keep the 3-dot action aligned to the active folder
@@ -2035,7 +2060,7 @@ async function expandAndLoadSavedState() {
       li = opt ? opt.closest('li[role="treeitem"]') : null;
     }
     if (li) li.setAttribute('aria-expanded', 'true');
-    try { await ensureChildrenLoaded(key, ul); } catch {}
+    try { await ensureChildrenLoaded(key, ul); } catch (e) {}
   }
 }
 
@@ -2088,7 +2113,7 @@ export async function loadFolderTree(selectedFolder) {
       const caps = await getFolderCapabilities(effectiveRoot);
       const canView = !!(caps?.canView ?? caps?.canRead ?? caps?.canReadOwn ?? caps?.isAdmin);
       rootLocked = !canView;
-    } catch {}
+    } catch (e) {}
     if (rootOpt && rootLocked) markOptionLocked(rootOpt, true);
     applyFolderCapabilities(effectiveRoot);
     // Root DnD + prime icon/chevron
@@ -2101,12 +2126,12 @@ export async function loadFolderTree(selectedFolder) {
           ro.addEventListener('dragleave', folderDragLeaveHandler);
           ro.addEventListener('drop', (e) => handleDropOnFolder(e, effectiveRoot));
         }
-        try { setFolderIconForOption(ro, 'empty'); } catch {}
+        try { setFolderIconForOption(ro, 'empty'); } catch (e) {}
         fetchFolderCounts(effectiveRoot).then(({ folders, files }) => {
           const hasAny = (folders + files) > 0;
-          try { setFolderIconForOption(ro, hasAny ? 'paper' : 'empty'); } catch {}
+          try { setFolderIconForOption(ro, hasAny ? 'paper' : 'empty'); } catch (e) {}
           return peekHasFolders(effectiveRoot).then(hasKids => {
-            try { updateToggleForOption(effectiveRoot, !!hasKids || folders > 0); } catch {}
+            try { updateToggleForOption(effectiveRoot, !!hasKids || folders > 0); } catch (e) {}
           });
         }).catch(() => {});
       }
@@ -2567,7 +2592,7 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
   const selectedFolder = window.currentFolder || "root";
   const parent = selectedFolder === "root" ? "" : selectedFolder;
 
-  try { await loadCsrfToken(); } catch { return showToast("Could not refresh CSRF token. Please reload."); }
+  try { await loadCsrfToken(); } catch (e) { return showToast("Could not refresh CSRF token. Please reload."); }
 
   fetchWithCsrf("/api/folder/createFolder.php", {
     method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
@@ -2583,7 +2608,7 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
       const li = makeChildLi(parentFolder, folderInput);
       const moreLi = parentUL.querySelector('.load-more');
       parentUL.insertBefore(li, moreLi || null);
-      try { applyFolderColorToOption(full, (window.folderColorMap || {})[full] || ''); } catch {}
+      try { applyFolderColorToOption(full, (window.folderColorMap || {})[full] || ''); } catch (e) {}
       const opt = li.querySelector('.folder-option');
       if (opt) setFolderIconForOption(opt, 'empty');
       ensureFolderIcon(full);
@@ -2712,7 +2737,7 @@ document.addEventListener("DOMContentLoaded", () => {
 /* ----------------------
    Expand path helper
 ----------------------*/
-function expandTreePath(path, opts = {}) {
+export function expandTreePath(path, opts = {}) {
   const { force = false, persist = false, includeLeaf = false } = opts;
   const state = loadFolderTreeState();
   const parts = (path || '').split('/').filter(Boolean);
@@ -2732,6 +2757,34 @@ function expandTreePath(path, opts = {}) {
     li.setAttribute('aria-expanded', String(!!shouldExpand));
     if (persist && shouldExpand) state[cumulative] = 'block';
   });
+  if (persist) saveFolderTreeState(state);
+}
+
+// Async variant that loads children as it expands so deep paths become visible.
+export async function expandTreePathAsync(path, opts = {}) {
+  const { force = false, persist = false, includeLeaf = false } = opts;
+  const state = loadFolderTreeState();
+  const parts = (path || '').split('/').filter(Boolean);
+  let cumulative = '';
+  const lastIndex = includeLeaf ? parts.length - 1 : Math.max(0, parts.length - 2);
+
+  for (let i = 0; i < parts.length; i++) {
+    cumulative = i === 0 ? parts[i] : `${cumulative}/${parts[i]}`;
+    if (i > lastIndex) break;
+    const option = document.querySelector(`.folder-option[data-folder="${CSS.escape(cumulative)}"]`);
+    if (!option) continue;
+    const li = option.closest('li[role="treeitem"]');
+    const nestedUl = li ? li.querySelector(':scope > ul') : null;
+    if (!nestedUl) continue;
+    const shouldExpand = force || state[cumulative] === 'block';
+    nestedUl.classList.toggle('expanded', shouldExpand);
+    nestedUl.classList.toggle('collapsed', !shouldExpand);
+    li.setAttribute('aria-expanded', String(!!shouldExpand));
+    if (persist && shouldExpand) state[cumulative] = 'block';
+    if (shouldExpand) {
+      try { await ensureChildrenLoaded(cumulative, nestedUl); } catch (e) {}
+    }
+  }
   if (persist) saveFolderTreeState(state);
 }
 

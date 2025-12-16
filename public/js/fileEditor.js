@@ -82,7 +82,7 @@ async function fetchOnlyOfficeCapsOnce() {
       __ooCaps.exts = new Set(Array.isArray(j.exts) ? j.exts : []);
       __ooCaps.docsOrigin = j.docsOrigin || null; // harmless if server doesn't send it
     }
-  } catch { /* ignore; keep defaults */ }
+  } catch (e) { /* ignore; keep defaults */ }
   __ooCaps.fetched = true;
   return __ooCaps;
 }
@@ -104,7 +104,7 @@ function loadScriptOnce(url, timeoutMs = 12000) {
     if (_loadedScripts.has(url)) return resolve();
     const s = document.createElement("script");
     const timer = setTimeout(() => {
-      try { s.remove(); } catch { }
+      try { s.remove(); } catch (e) { }
       reject(new Error(`Timeout loading: ${url}`));
     }, timeoutMs);
     s.src = url;
@@ -177,7 +177,7 @@ function injectOOPreconnect(origin) {
     const make = (rel) => { const l = document.createElement('link'); l.rel = rel; l.href = origin; return l; };
     document.head.appendChild(make('dns-prefetch'));
     document.head.appendChild(make('preconnect'));
-  } catch { }
+  } catch (e) { }
 }
 
 async function ensureOnlyOfficeApi(srcFromConfig, originFromConfig) {
@@ -373,9 +373,9 @@ async function warmDocServerOnce(cfg){
 
     warmEditor = new window.DocsAPI.DocEditor(host.id, warmCfg);
     await new Promise(res => setTimeout(res, OO_WARM_MS));
-  }catch{} finally{
-    try{ warmEditor?.destroyEditor?.(); }catch{}
-    try{ host?.remove(); }catch{}
+  }catch (e) {} finally{
+    try{ warmEditor?.destroyEditor?.(); }catch (e) {}
+    try{ host?.remove(); }catch (e) {}
   }
 }
 
@@ -392,9 +392,9 @@ async function openOnlyOffice(fileName, folder){
   if (titleEl) titleEl.innerHTML = `${t("editing")}: ${escapeHTML(fileName)}`;
 
   const destroy = (removeModal = true) => {
-    try { editor?.destroyEditor?.(); } catch {}
-    try { removeThemeListener(); } catch {}
-    if (removeModal) { try { modal.remove(); } catch {} }
+    try { editor?.destroyEditor?.(); } catch (e) {}
+    try { removeThemeListener(); } catch (e) {}
+    if (removeModal) { try { modal.remove(); } catch (e) {} }
     lockPageScroll(false);
   };
   const onClose = () => { userClosed = true; destroy(true); };
@@ -408,7 +408,7 @@ async function openOnlyOffice(fileName, folder){
     const resp = await fetch(url, { credentials: 'include' });
     const text = await resp.text();
 
-    try { cfg = JSON.parse(text); } catch {
+    try { cfg = JSON.parse(text); } catch (e) {
       throw new Error(`ONLYOFFICE config parse failed (HTTP ${resp.status}). First 120 chars: ${text.slice(0,120)}`);
     }
     if (!resp.ok) throw new Error(cfg?.error || `ONLYOFFICE config HTTP ${resp.status}`);
@@ -559,7 +559,7 @@ export async function editFile(fileName, folder) {
       const h = await fetch(url, { method: "HEAD", credentials: "include" });
       const len = h.headers.get("content-length") ?? h.headers.get("Content-Length");
       if (len && !Number.isNaN(parseInt(len, 10))) return parseInt(len, 10);
-    } catch { }
+    } catch (e) { }
     try {
       const r = await fetch(url, {
         method: "GET",
@@ -570,7 +570,7 @@ export async function editFile(fileName, folder) {
       const cr = r.headers.get("content-range") ?? r.headers.get("Content-Range");
       const m = cr && cr.match(/\/(\d+)\s*$/);
       if (m) return parseInt(m[1], 10);
-    } catch { }
+    } catch (e) { }
     return null;
   }
 

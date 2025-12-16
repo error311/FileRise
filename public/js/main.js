@@ -17,7 +17,7 @@
         if (out === null) return;           // suppressed
         msgOrKey = out;                     // rewritten/translated
       }
-    } catch { }
+    } catch (e) { }
 
     if (typeof window.__REAL_TOAST__ === 'function') {
       return window.__REAL_TOAST__(msgOrKey, duration);
@@ -46,7 +46,7 @@ async function ensureToastReady() {
           window.__FR_LAST_OK = false;
           return real('Done.', dur);
         }
-      } catch { }
+      } catch (e) { }
       return real(msg, dur);
     };
 
@@ -56,7 +56,7 @@ async function ensureToastReady() {
     const q = window.__FR_TOAST_Q || [];
     window.__FR_TOAST_Q = [];
     q.forEach(([m, d]) => window.__REAL_TOAST__(m, d));
-  } catch {
+  } catch (e) {
     window.__REAL_TOAST__ = (m, d) => console.log('TOAST:', m, d);
   }
 }
@@ -67,7 +67,7 @@ function isDemoHost() {
     if (typeof cfg.demoMode !== 'undefined') {
       return !!cfg.demoMode;
     }
-  } catch {
+  } catch (e) {
     // ignore
   }
   // Fallback for older configs / direct demo host:
@@ -103,7 +103,7 @@ function showLoginTip(message) {
 
 async function hideOverlaySmoothly(overlay) {
   if (!overlay) return;
-  try { await document.fonts?.ready; } catch { }
+  try { await document.fonts?.ready; } catch (e) { }
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   overlay.style.display = 'none';
 }
@@ -168,7 +168,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
         sorted.set(k, params.get(k));
       });
       return url.pathname + (sorted.toString() ? '?' + sorted.toString() : '');
-    } catch { return String(u || ''); }
+    } catch (e) { return String(u || ''); }
   }
 
   async function toStableBody(init) {
@@ -182,14 +182,14 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
           // remove volatile fields like csrf
           delete j.csrf; delete j.csrf_token; delete j._;
           return 'JSON:' + JSON.stringify(j, Object.keys(j).sort());
-        } catch {
+        } catch (e) {
           // maybe urlencoded
           const p = new URLSearchParams(b);
           ['csrf', 'csrf_token', '_'].forEach(k => p.delete(k));
           return 'FORM:' + [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('&');
         }
       }
-    } catch { }
+    } catch (e) { }
     return 'B:' + String(b);
   }
 
@@ -250,12 +250,12 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       try {
         const clone = res.clone();
         let okJson = null;
-        try { okJson = await clone.json(); } catch { }
+        try { okJson = await clone.json(); } catch (e) { }
         const okFlag = res.ok && okJson && (
           okJson.success === true || okJson.status === 'ok' || okJson.result === 'ok'
         );
         window.__FR_LAST_OK = !!okFlag;
-      } catch { }
+      } catch (e) { }
       return res;
     }).finally(() => {
       // let it linger briefly so very-rapid duplicates still coalesce
@@ -287,7 +287,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
   
         // Return relative URL
         return candidate.pathname + candidate.search + candidate.hash;
-      } catch {
+      } catch (e) {
         return fallback;
       }
     }
@@ -307,7 +307,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
           const dur = (typeof maybeDuration === 'number') ? maybeDuration : undefined;
           return origToast('Done.', dur);
         }
-      } catch { }
+      } catch (e) { }
       const dur = (typeof maybeDuration === 'number') ? maybeDuration : undefined;
       return origToast(msg, dur);
     };
@@ -364,8 +364,8 @@ function dispatchLegacyReadyOnce() {
   if (window.__FR_FLAGS.domReadyFired) return;
   window.__FR_FLAGS.domReadyFired = true;
   // Fire synthetic DOMContentLoaded/load once so legacy listeners in imported modules bind.
-  try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch { }
-  try { window.dispatchEvent(new Event('load')); } catch { }
+  try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch (e) { }
+  try { window.dispatchEvent(new Event('load')); } catch (e) { }
 }
 
 // -------- username label ( --------
@@ -381,7 +381,7 @@ function wireUserNameLabel(state) {
 // -------- DARK MODE (persist + system fallback + a11y labels) --------
 function applyDarkMode({ fromSystemChange = false } = {}) {
   let stored = null;
-  try { stored = localStorage.getItem('darkMode'); } catch { }
+  try { stored = localStorage.getItem('darkMode'); } catch (e) { }
 
   let isDark = (stored === null)
     ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -431,7 +431,7 @@ function bindDarkMode() {
     btn.addEventListener('click', () => {
       // Toggle relative to current DOM state
       const isDarkNext = !(document.documentElement.classList.contains('dark-mode') || document.body.classList.contains('dark-mode'));
-      try { localStorage.setItem('darkMode', isDarkNext ? '1' : '0'); } catch { }
+      try { localStorage.setItem('darkMode', isDarkNext ? '1' : '0'); } catch (e) { }
       applyDarkMode();
     });
   }
@@ -439,11 +439,11 @@ function bindDarkMode() {
   // Listen to system changes only if user has NOT set a preference
   if (!window.__FR_FLAGS.wired.sysDarkMO) {
     window.__FR_FLAGS.wired.sysDarkMO = true;
-    let stored = null; try { stored = localStorage.getItem('darkMode'); } catch { }
+    let stored = null; try { stored = localStorage.getItem('darkMode'); } catch (e) { }
     if (stored === null && window.matchMedia) {
       const mq = window.matchMedia('(prefers-color-scheme: dark)');
       const handler = () => applyDarkMode({ fromSystemChange: true });
-      try { mq.addEventListener('change', handler); } catch { mq.addListener(handler); }
+      try { mq.addEventListener('change', handler); } catch (e) { mq.addListener(handler); }
     }
   }
 }
@@ -471,13 +471,33 @@ function bindDarkMode() {
     function applySiteConfig(cfg, { phase = 'final' } = {}) {
       try {
         // Make config available globally
-    window.siteConfig = cfg || {};
-    window.__FR_FLAGS = window.__FR_FLAGS || {};
+        window.siteConfig = cfg || {};
+        window.__FR_FLAGS = window.__FR_FLAGS || {};
+        try {
+          const proMeta = (cfg && cfg.pro && typeof cfg.pro === 'object') ? cfg.pro : {};
+          window.__FR_IS_PRO = !!proMeta.active;
+          window.__FR_PRO_VERSION = proMeta.version || '';
+        } catch (e) {
+          window.__FR_IS_PRO = false;
+          window.__FR_PRO_VERSION = '';
+        }
+        try {
+          const ps = (cfg && cfg.proSearch && typeof cfg.proSearch === 'object') ? cfg.proSearch : {};
+          const lim = Math.max(1, Math.min(200, Number(ps.defaultLimit || 50)));
+          const isPro = window.__FR_IS_PRO === true;
+          window.__FR_PRO_SEARCH_CFG__ = {
+            enabled: isPro && !!ps.enabled,
+            defaultLimit: lim,
+            lockedByEnv: !!ps.lockedByEnv,
+          };
+        } catch (e) {
+          window.__FR_PRO_SEARCH_CFG__ = { enabled: false, defaultLimit: 50, lockedByEnv: false };
+        }
 
-    // Expose a simple boolean for ClamAV scanning
-    if (cfg && cfg.clamav && typeof cfg.clamav.scanUploads !== 'undefined') {
-      window.__FR_FLAGS.clamavScanUploads = !!cfg.clamav.scanUploads;
-    }
+        // Expose a simple boolean for ClamAV scanning
+        if (cfg && cfg.clamav && typeof cfg.clamav.scanUploads !== 'undefined') {
+          window.__FR_FLAGS.clamavScanUploads = !!cfg.clamav.scanUploads;
+        }
 
         const title = (cfg && cfg.header_title) ? String(cfg.header_title) : 'FileRise';
   
@@ -595,13 +615,13 @@ function bindDarkMode() {
             }
           }
         }
-      } catch { }
+      } catch (e) { }
     }
 
   async function readyToReveal() {
     // Wait for CSS + fonts so the first revealed frame is fully styled
-    try { await (window.__CSS_PROMISE__ || Promise.resolve()); } catch { }
-    try { await document.fonts?.ready; } catch { }
+    try { await (window.__CSS_PROMISE__ || Promise.resolve()); } catch (e) { }
+    try { await document.fonts?.ready; } catch (e) { }
     // Give layout one paint to settle
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   }
@@ -629,7 +649,7 @@ function bindDarkMode() {
       // Early pass: title + login options (skip touching <h1> to avoid flicker)
       applySiteConfig(window.__FR_SITE_CFG__, { phase: 'early' });
       return window.__FR_SITE_CFG__;
-    } catch {
+    } catch (e) {
       window.__FR_SITE_CFG__ = {};
       window.__FR_DEMO__ = false; 
       applySiteConfig({}, { phase: 'early' });
@@ -642,8 +662,8 @@ function bindDarkMode() {
     try {
       const tr = await fetch('/api/auth/token.php', { credentials: 'include' });
       const tj = await tr.json().catch(() => ({}));
-      if (tj?.csrf_token) { setMeta('csrf-token', tj.csrf_token); window.csrfToken = tj.csrf_token; try { localStorage.setItem('csrf', tj.csrf_token); } catch { } }
-    } catch { }
+      if (tj?.csrf_token) { setMeta('csrf-token', tj.csrf_token); window.csrfToken = tj.csrf_token; try { localStorage.setItem('csrf', tj.csrf_token); } catch (e) { } }
+    } catch (e) { }
   }
   async function checkAuth() {
     try {
@@ -653,18 +673,18 @@ function bindDarkMode() {
       if (j?.csrf_token) {
         setMeta('csrf-token', j.csrf_token);
         window.csrfToken = j.csrf_token;
-        try { localStorage.setItem('csrf', j.csrf_token); } catch { }
+        try { localStorage.setItem('csrf', j.csrf_token); } catch (e) { }
       }
       if (typeof j?.isAdmin !== 'undefined') {
-        try { localStorage.setItem('isAdmin', j.isAdmin ? '1' : '0'); } catch { }
+        try { localStorage.setItem('isAdmin', j.isAdmin ? '1' : '0'); } catch (e) { }
       }
       if (typeof j?.username !== 'undefined') {
-        try { localStorage.setItem('username', j.username || ''); } catch { }
+        try { localStorage.setItem('username', j.username || ''); } catch (e) { }
       }
 
       const setup = !!j?.setup || !!j?.setup_mode || j?.mode === 'setup' || j?.status === 'setup' || !!j?.requires_setup || !!j?.needs_setup;
       return { authed: !!j?.authenticated, setup, raw: j };
-    } catch {
+    } catch (e) {
       return { authed: false, setup: false, raw: {} };
     }
   }
@@ -842,7 +862,7 @@ function bindDarkMode() {
     });
 
     let j = {};
-    try { j = await res.json(); } catch { }
+    try { j = await res.json(); } catch (e) { }
     if (!res.ok || j.error) throw new Error(j.error || `Add user failed (${res.status})`);
     return true;
   }
@@ -898,13 +918,13 @@ function bindDarkMode() {
       if (body && (body.totp_required === true || body.error === 'TOTP_REQUIRED')) {
         return true;
       }
-    } catch { }
+    } catch (e) { }
     return false;
   }
 
   async function openTotpNow() {
     // refresh CSRF for the upcoming /totp_verify call
-    try { await primeCsrf(); } catch { }
+    try { await primeCsrf(); } catch (e) { }
     window.pendingTOTP = true;
     // reuse the function you already export from auth.js
     try {
@@ -940,7 +960,7 @@ function bindDarkMode() {
       (async () => {
         const qp = new URLSearchParams(location.search);
         if (qp.get('totp_required') === '1') {
-          try { await primeCsrf(); } catch { }
+          try { await primeCsrf(); } catch (e) { }
           window.pendingTOTP = true;
           try {
             const auth = await import('/js/auth.js?v={{APP_QVER}}');
@@ -964,7 +984,7 @@ function bindDarkMode() {
         if (looksLikeTOTP(r, j)) { await openTotpNow(); return; }
 
         if (j && (j.authenticated || j.success || j.status === 'ok' || j.result === 'ok')) return afterLogin();
-      } catch { }
+      } catch (e) { }
 
       // fallback form
       try {
@@ -981,7 +1001,7 @@ function bindDarkMode() {
         if (looksLikeTOTP(r2, j2)) { await openTotpNow(); return; }
 
         if (j2 && (j2.authenticated || j2.success || j2.status === 'ok' || j2.result === 'ok')) return afterLogin();
-      } catch { }
+      } catch (e) { }
       alert('Login failed');
     });
   }
@@ -995,7 +1015,7 @@ function bindDarkMode() {
         window.location.href = safe;
         return;
       }
-    } catch {
+    } catch (e) {
       // ignore URL/param issues and fall back to normal behavior
     }
 
@@ -1022,8 +1042,8 @@ function bindDarkMode() {
     window.setupMode = true;
     await primeCsrf();
 
-    try { await import('/js/adminPanel.js?v={{APP_QVER}}'); } catch { }
-    try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch { }
+    try { await import('/js/adminPanel.js?v={{APP_QVER}}'); } catch (e) { }
+    try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch (e) { }
 
     const addModal = document.getElementById('addUserModal'); if (addModal) addModal.style.display = 'block';
 
@@ -1057,7 +1077,7 @@ function bindDarkMode() {
           if (state && state.username) localStorage.setItem('username', state.username);
           if (typeof state.isAdmin !== 'undefined') localStorage.setItem('isAdmin', state.isAdmin ? '1' : '0');
           window.__FR_AUTH_STATE = state;
-        } catch { }
+        } catch (e) { }
 
         // authed → heavy boot path
         document.body.classList.add('authed');
@@ -1065,15 +1085,23 @@ function bindDarkMode() {
         // 1) i18n (safe)
         // i18n: honor saved language first, then apply translations
         try {
-          const i18n = await import('/js/i18n.js?v={{APP_QVER}}').catch(() => import('/js/i18n.js'));
+          const i18n = await import('/js/i18n.js?v={{APP_QVER}}').catch(async (err) => {
+            console.error('[boot] import i18n.js failed (versioned)', err && err.message, err && err.sourceURL);
+            return import('/js/i18n.js');
+          });
           let saved = 'en';
-          try { saved = localStorage.getItem('language') || 'en'; } catch { }
+          try { saved = localStorage.getItem('language') || 'en'; } catch (e) { }
           if (typeof i18n.setLocale === 'function') { await i18n.setLocale(saved); }
           if (typeof i18n.applyTranslations === 'function') { i18n.applyTranslations(); }
-          try { document.documentElement.setAttribute('lang', saved); } catch { }
-        } catch { }
+          try { document.documentElement.setAttribute('lang', saved); } catch (e) { }
+        } catch (e) {
+          console.error('[boot] i18n import/apply failed', e && e.message, e && e.sourceURL);
+        }
         // 2) core app — **initialize exactly once** (this calls initUpload/initFileActions/loadFolderTree/etc.)
-        const app = await import('/js/appCore.js?v={{APP_QVER}}');
+        const app = await import('/js/appCore.js?v={{APP_QVER}}').catch(async (err) => {
+          console.error('[boot] import appCore.js failed (versioned)', err && err.message, err && err.sourceURL);
+          return import('/js/appCore.js');
+        });
         if (!window.__FR_FLAGS.initialized) {
           if (typeof app.loadCsrfToken === 'function') await app.loadCsrfToken();
           if (typeof app.initializeApp === 'function') app.initializeApp();
@@ -1099,14 +1127,17 @@ function bindDarkMode() {
               window.showToast(safe ? `Welcome back, ${safe}!` : 'Welcome!', 3000);
               sessionStorage.setItem('__fr_welcomed', '1'); // prevent repeats on reload
             }
-          } catch { }
+          } catch (e) { }
         }
 
 
         // 3) auth/header bits — pass real state so “Admin Panel” shows up
         if (!window.__FR_FLAGS.wired.auth) {
           try {
-            const auth = await import('/js/auth.js?v={{APP_QVER}}');
+            const auth = await import('/js/auth.js?v={{APP_QVER}}').catch(async (err) => {
+              console.error('[boot] import auth.js failed (versioned)', err && err.message, err && err.sourceURL);
+              return import('/js/auth.js');
+            });
             auth.updateLoginOptionsUIFromStorage && auth.updateLoginOptionsUIFromStorage();
             auth.applyProxyBypassUI && auth.applyProxyBypassUI();
             auth.updateAuthenticatedUI && auth.updateAuthenticatedUI(state);
@@ -1137,7 +1168,7 @@ function bindDarkMode() {
 
 
       } catch (e) {
-        console.error('[main] heavy boot failed', e);
+        console.error('[main] heavy boot failed', e && e.message ? e.message : e, e && e.sourceURL, e && e.line, e && e.stack);
         alert('Failed to load app');
       } finally {
         if (ov) ov.style.display = 'none';
@@ -1220,7 +1251,7 @@ function bindDarkMode() {
       const el = document.getElementById(id);
       if (!el) return;
       el.setAttribute('aria-hidden', 'true');
-      try { el.inert = true; } catch { }
+      try { el.inert = true; } catch (e) { }
     });
 
     bindLogin();

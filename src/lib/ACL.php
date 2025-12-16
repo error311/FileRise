@@ -8,6 +8,7 @@ class ACL
 {
     private static $cache = null;
     private static $path  = null;
+    private static $memo  = [];
 
     private const BUCKETS = [
         'owners',
@@ -33,6 +34,11 @@ class ACL
         return self::$path;
     }
 
+    private static function resetMemo(): void
+    {
+        self::$memo = [];
+    }
+
     public static function normalizeFolder(string $f): string
     {
         $f = trim(str_replace('\\', '/', $f), "/ \t\r\n");
@@ -50,6 +56,15 @@ class ACL
                 $before = is_array($rec[$k] ?? null) ? $rec[$k] : [];
                 $rec[$k] = array_values(array_filter($before, fn($u) => strcasecmp((string)$u, $user) !== 0));
                 if ($rec[$k] !== $before) $changed = true;
+            }
+            if (isset($rec['inherit']) && is_array($rec['inherit'])) {
+                $beforeInherit = $rec['inherit'];
+                foreach ($rec['inherit'] as $k => $v) {
+                    if (strcasecmp((string)$k, $user) === 0) {
+                        unset($rec['inherit'][$k]);
+                    }
+                }
+                if ($beforeInherit !== $rec['inherit']) $changed = true;
             }
         }
         unset($rec);
@@ -112,6 +127,8 @@ class ACL
             if (is_array($entry)) {
                 $clean = [];
                 foreach (self::BUCKETS as $b) if (array_key_exists($b, $entry)) $clean[$b] = $entry[$b];
+                if (array_key_exists('inherit', $entry)) $clean['inherit'] = $entry['inherit'];
+                if (array_key_exists('explicit', $entry)) $clean['explicit'] = $entry['explicit'];
                 $entry = $clean ?: $entry;
             }
 
@@ -125,6 +142,7 @@ class ACL
             @file_put_contents($file, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
             @chmod($file, 0664);
             self::$cache = $new; // keep in-process cache fresh if you use it
+            self::resetMemo();
         }
 
         return ['changed' => $changed, 'moved' => $moved];
@@ -168,6 +186,8 @@ class ACL
                         'write'   => ['admin'],
                         'share'   => ['admin'],
                         'read_own' => [],
+                        'inherit' => [],
+                        'explicit' => [],
                         'create'       => [],
                         'upload'       => [],
                         'edit'         => [],
@@ -198,6 +218,18 @@ class ACL
                 'write'    => ['admin'],
                 'share'    => ['admin'],
                 'read_own' => [],
+                'inherit'  => [],
+                'explicit' => [],
+                'create'       => [],
+                'upload'       => [],
+                'edit'         => [],
+                'rename'       => [],
+                'copy'         => [],
+                'move'         => [],
+                'delete'       => [],
+                'extract'      => [],
+                'share_file'   => [],
+                'share_folder' => [],
             ];
         }
 
@@ -205,6 +237,40 @@ class ACL
         foreach ($data['folders'] as $folder => &$rec) {
             if (!is_array($rec)) {
                 $rec = [];
+                $healed = true;
+            }
+            if (!isset($rec['inherit']) || !is_array($rec['inherit'])) {
+                $rec['inherit'] = [];
+                $healed = true;
+            }
+            if (!isset($rec['explicit']) || !is_array($rec['explicit'])) {
+                $rec['explicit'] = [];
+                $healed = true;
+            }
+            // Normalize inherit map to associative: username => true
+            $inheritNorm = [];
+            foreach ($rec['inherit'] as $k => $v) {
+                if (is_int($k)) {
+                    $key = (string)$v;
+                } else {
+                    $key = (string)$k;
+                }
+                if ($key === '') continue;
+                $inheritNorm[$key] = (bool)$v;
+            }
+            if ($rec['inherit'] !== $inheritNorm) {
+                $rec['inherit'] = $inheritNorm;
+                $healed = true;
+            }
+            // Normalize explicit map to associative: username => true
+            $explicitNorm = [];
+            foreach ($rec['explicit'] as $k => $v) {
+                $key = is_int($k) ? (string)$v : (string)$k;
+                if ($key === '') continue;
+                $explicitNorm[$key] = (bool)$v;
+            }
+            if ($rec['explicit'] !== $explicitNorm) {
+                $rec['explicit'] = $explicitNorm;
                 $healed = true;
             }
             foreach (self::BUCKETS as $k) {
@@ -223,6 +289,7 @@ class ACL
         unset($rec);
 
         self::$cache = $data;
+        self::resetMemo();
         if ($healed) @file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
         return $data;
     }
@@ -346,6 +413,31 @@ class ACL
         return false;
     }
 
+    private static function groupGrantsExplicit(array $grants): bool
+    {
+        if (array_key_exists('explicit', $grants) && $grants['explicit'] !== null) {
+            return (bool)$grants['explicit'];
+        }
+        if (array_key_exists('__explicit', $grants) && $grants['__explicit'] !== null) {
+            return (bool)$grants['__explicit'];
+        }
+
+        $uiCaps = [
+            'view', 'viewOwn', 'manage', 'create', 'upload', 'edit', 'rename',
+            'copy', 'move', 'delete', 'extract', 'shareFile', 'shareFolder', 'share'
+        ];
+
+        foreach ($uiCaps as $k) {
+            if (!empty($grants[$k])) return true;
+        }
+
+        foreach (self::BUCKETS as $k) {
+            if (!empty($grants[$k])) return true;
+        }
+
+        return false;
+    }
+
     /**
      * Check whether any Pro group the user belongs to grants this cap for folder.
      * Groups are additive only; they never remove access.
@@ -377,11 +469,26 @@ class ACL
             }
             if (!$isMember) continue;
 
-            $folderGrants = $g['grants'][$folder] ?? null;
-            if (!is_array($folderGrants)) continue;
+            $grantsMap = isset($g['grants']) && is_array($g['grants']) ? $g['grants'] : [];
 
-            if (self::groupGrantsCap($folderGrants, $capKey)) {
+            $folderGrants = $grantsMap[$folder] ?? null;
+            if (is_array($folderGrants) && self::groupGrantsCap($folderGrants, $capKey)) {
                 return true;
+            }
+
+            if (is_array($folderGrants) && self::groupGrantsExplicit($folderGrants)) {
+                continue; // explicit entry blocks ancestor inheritance for this folder
+            }
+
+            $ancestors = self::ancestors($folder);
+            foreach ($ancestors as $ancestor) {
+                $ancestorGrants = $grantsMap[$ancestor] ?? null;
+                if (!is_array($ancestorGrants)) continue;
+                $inheritFlag = (!empty($ancestorGrants['inherit'])) || (!empty($ancestorGrants['__inherit']));
+                if (!$inheritFlag) continue;
+                if (self::groupGrantsCap($ancestorGrants, $capKey)) {
+                    return true;
+                }
             }
         }
 
@@ -391,6 +498,7 @@ class ACL
     {
         $ok = @file_put_contents(self::path(), json_encode($acl, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX) !== false;
         if ($ok) self::$cache = $acl;
+        if ($ok) self::resetMemo();
         return $ok;
     }
 
@@ -399,6 +507,81 @@ class ACL
         $acl = self::$cache ?? self::loadFresh();
         $f   = $acl['folders'][$folder] ?? null;
         return is_array($f[$key] ?? null) ? $f[$key] : [];
+    }
+
+    private static function inheritMap(string $folder): array
+    {
+        $acl = self::$cache ?? self::loadFresh();
+        $f   = $acl['folders'][$folder] ?? null;
+        if (!is_array($f)) return [];
+        $raw = $f['inherit'] ?? [];
+        if (!is_array($raw)) return [];
+        $out = [];
+        foreach ($raw as $k => $v) {
+            $key = is_int($k) ? (string)$v : (string)$k;
+            if ($key === '') continue;
+            $out[$key] = (bool)$v;
+        }
+        return $out;
+    }
+
+    private static function inheritFlag(string $folder, string $user): bool
+    {
+        $map = self::inheritMap($folder);
+        foreach ($map as $k => $v) {
+            if (strcasecmp((string)$k, $user) === 0) return $v === true;
+        }
+        return false;
+    }
+
+    private static function ancestors(string $folder): array
+    {
+        $folder = self::normalizeFolder($folder);
+        if ($folder === 'root' || $folder === '') return [];
+        $parts = explode('/', $folder);
+        $out = [];
+        while (count($parts) > 0) {
+            array_pop($parts);
+            if (empty($parts)) {
+                $out[] = 'root';
+                break;
+            }
+            $out[] = implode('/', $parts);
+        }
+        return $out;
+    }
+
+    private static function hasExplicitUserGrant(string $user, string $folder, string $capKey): bool
+    {
+        $arr = self::listFor($folder, $capKey);
+        foreach ($arr as $u) {
+            if (strcasecmp((string)$u, $user) === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function hasAnyExplicitEntry(string $user, string $folder): bool
+    {
+        $acl = self::$cache ?? self::loadFresh();
+        $rec = $acl['folders'][$folder] ?? [];
+        $explicit = $rec['explicit'] ?? [];
+        if (is_array($explicit)) {
+            foreach ($explicit as $k => $v) {
+                $key = is_int($k) ? (string)$v : (string)$k;
+                if ($key === '') continue;
+                if (strcasecmp($key, $user) === 0 && $v !== null) return true;
+            }
+        }
+        foreach (self::BUCKETS as $k) {
+            $arr = $rec[$k] ?? [];
+            if (!is_array($arr) || !count($arr)) continue;
+            foreach ($arr as $u) {
+                if (strcasecmp((string)$u, $user) === 0) return true;
+            }
+        }
+        return false;
     }
 
     public static function ensureFolderRecord(string $folder, string $owner = 'admin'): void
@@ -412,6 +595,8 @@ class ACL
                 'write'    => [$owner],
                 'share'    => [$owner],
                 'read_own' => [],
+                'inherit'  => [],
+                'explicit' => [],
                 'create'       => [],
                 'upload'       => [],
                 'edit'         => [],
@@ -447,20 +632,34 @@ class ACL
         $folder = self::normalizeFolder($folder);
         $capKey = ($cap === 'owner') ? 'owners' : $cap;
 
+        $memoKey = strtolower((string)$user) . '|' . $folder . '|' . $capKey;
+        if (array_key_exists($memoKey, self::$memo)) {
+            return self::$memo[$memoKey];
+        }
+
         // 1) Core per-folder ACL buckets (folder_acl.json)
-        $arr = self::listFor($folder, $capKey);
-        foreach ($arr as $u) {
-            if (strcasecmp((string)$u, $user) === 0) {
-                return true;
-            }
+        if (self::hasExplicitUserGrant($user, $folder, $capKey)) {
+            return self::$memo[$memoKey] = true;
         }
 
         // 2) Pro user groups (if enabled) – additive only
         if (self::groupHasGrant($user, $folder, $capKey)) {
-            return true;
+            return self::$memo[$memoKey] = true;
         }
 
-        return false;
+        // 3) Inherit from nearest ancestor where inherit=true for this principal
+        $hasExplicitAny = self::hasAnyExplicitEntry($user, $folder);
+        if (!$hasExplicitAny) {
+        $ancestors = self::ancestors($folder);
+        foreach ($ancestors as $ancestor) {
+            if (!self::inheritFlag($ancestor, $user)) continue;
+            if (self::hasExplicitUserGrant($user, $ancestor, $capKey) || self::groupHasGrant($user, $ancestor, $capKey)) {
+                return self::$memo[$memoKey] = true;
+            }
+        }
+        }
+
+        return self::$memo[$memoKey] = false;
     }
 
     public static function isOwner(string $user, array $perms, string $folder): bool
@@ -535,6 +734,22 @@ class ACL
             $v = array_map('strval', $v);
             return array_values(array_unique($v));
         };
+        $inheritMap = [];
+        if (isset($rec['inherit']) && is_array($rec['inherit'])) {
+            foreach ($rec['inherit'] as $k => $v) {
+                $key = is_int($k) ? (string)$v : (string)$k;
+                if ($key === '') continue;
+                $inheritMap[$key] = (bool)$v;
+            }
+        }
+        $explicitMap = [];
+        if (isset($rec['explicit']) && is_array($rec['explicit'])) {
+            foreach ($rec['explicit'] as $k => $v) {
+                $key = is_int($k) ? (string)$v : (string)$k;
+                if ($key === '') continue;
+                $explicitMap[$key] = (bool)$v;
+            }
+        }
         return [
             'owners'       => $norm($rec['owners']       ?? []),
             'read'         => $norm($rec['read']         ?? []),
@@ -551,6 +766,8 @@ class ACL
             'extract'      => $norm($rec['extract']      ?? []),
             'share_file'   => $norm($rec['share_file']   ?? []),
             'share_folder' => $norm($rec['share_folder'] ?? []),
+            'inherit'      => $inheritMap,
+            'explicit'     => $explicitMap,
         ];
     }
 
@@ -570,6 +787,8 @@ class ACL
             'read_own' => isset($existing['read_own']) && is_array($existing['read_own'])
                 ? array_values(array_unique(array_map('strval', $existing['read_own'])))
                 : [],
+            'inherit'      => isset($existing['inherit'])      && is_array($existing['inherit'])      ? $existing['inherit']      : [],
+            'explicit'     => isset($existing['explicit'])     && is_array($existing['explicit'])     ? $existing['explicit']     : [],
             'create'       => isset($existing['create'])       && is_array($existing['create'])       ? array_values(array_unique(array_map('strval', $existing['create'])))       : [],
             'upload'       => isset($existing['upload'])       && is_array($existing['upload'])       ? array_values(array_unique(array_map('strval', $existing['upload'])))       : [],
             'edit'         => isset($existing['edit'])         && is_array($existing['edit'])         ? array_values(array_unique(array_map('strval', $existing['edit'])))         : [],
@@ -614,12 +833,22 @@ class ACL
                 foreach (self::BUCKETS as $k) {
                     if (!isset($rec[$k]) || !is_array($rec[$k])) $rec[$k] = [];
                 }
+                if (!isset($rec['inherit']) || !is_array($rec['inherit'])) $rec['inherit'] = [];
+                if (!isset($rec['explicit']) || !is_array($rec['explicit'])) $rec['explicit'] = [];
                 foreach (self::BUCKETS as $k) {
                     $arr = is_array($rec[$k]) ? $rec[$k] : [];
                     $rec[$k] = array_values(array_filter(
                         array_map('strval', $arr),
                         fn($u) => strcasecmp((string)$u, $user) !== 0
                     ));
+                }
+                // Remove explicit marker for this user before re-applying
+                $explicitRaw = is_array($rec['explicit']) ? $rec['explicit'] : [];
+                $explicitNorm = [];
+                foreach ($explicitRaw as $k => $v) {
+                    $key = is_int($k) ? (string)$v : (string)$k;
+                    if ($key === '' || strcasecmp($key, $user) === 0) continue;
+                    $explicitNorm[$key] = (bool)$v;
                 }
 
                 $v   = !empty($caps['view']);
@@ -638,6 +867,8 @@ class ACL
                 $ex  = !empty($caps['extract']);
                 $sf  = !empty($caps['shareFile'])   || !empty($caps['share_file']);
                 $sfo = !empty($caps['shareFolder']) || !empty($caps['share_folder']);
+                $inheritRequested = !empty($caps['inherit']);
+                $explicitRequested = !empty($caps['explicit']);
 
                 if ($m) {
                     $v = true;
@@ -667,6 +898,29 @@ class ACL
                 if ($sf) $rec['share_file'][]   = $user;
                 if ($sfo) $rec['share_folder'][] = $user;
 
+                $inheritRaw = is_array($rec['inherit']) ? $rec['inherit'] : [];
+                $inheritNorm = [];
+                foreach ($inheritRaw as $k => $v) {
+                    $key = is_int($k) ? (string)$v : (string)$k;
+                    if ($key === '') continue;
+                    $inheritNorm[$key] = (bool)$v;
+                }
+                if ($inheritRequested) {
+                    $inheritNorm[$user] = true;
+                } else {
+                    foreach ($inheritNorm as $k => $_) {
+                        if (strcasecmp((string)$k, $user) === 0) unset($inheritNorm[$k]);
+                    }
+                }
+                $rec['inherit'] = $inheritNorm;
+
+                // Mark this folder as explicitly set for the user even if no caps are true
+                $anyCapsTrue = $v || $vo || $u || $m || $s || $w || $c || $ed || $rn || $cp || $mv || $dl || $ex || $sf || $sfo;
+                if ($explicitRequested || $inheritRequested || $anyCapsTrue) {
+                    $explicitNorm[$user] = true;
+                }
+                $rec['explicit'] = $explicitNorm;
+
                 foreach (self::BUCKETS as $k) {
                     $rec[$k] = array_values(array_unique(array_map('strval', $rec[$k])));
                 }
@@ -681,6 +935,7 @@ class ACL
             if (!$ok) throw new RuntimeException('Write failed');
 
             self::$cache = $acl;
+            self::resetMemo();
             return ['ok' => true, 'updated' => $changed];
         } finally {
             fflush($fh);

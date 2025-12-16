@@ -112,6 +112,11 @@ class AdminModel
 
     public static function buildPublicSubset(array $config): array
     {
+        $isProActive = (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE === true);
+        $proVersion = $config['pro']['version'] ?? ($config['proVersion'] ?? null);
+        if (!$proVersion && defined('FR_PRO_BUNDLE_VERSION')) {
+            $proVersion = FR_PRO_BUNDLE_VERSION;
+        }
         $public = [
             'header_title'        => $config['header_title'] ?? 'FileRise',
             'loginOptions'        => [
@@ -184,9 +189,46 @@ class AdminModel
             $clamLockedByEnv = false;
         }
 
+        // Pro search (public awareness + env lock)
+        $proSearchCfg = isset($config['proSearch']) && is_array($config['proSearch'])
+            ? $config['proSearch']
+            : [];
+        $proVersionNorm = is_string($proVersion) ? trim(ltrim($proVersion, "vV")) : '';
+        $proVersionOk = $proVersionNorm !== '' && version_compare($proVersionNorm, '1.3.0', '>=');
+        $proSearchExplicitDisabled = array_key_exists('enabled', $proSearchCfg) && !$proSearchCfg['enabled'];
+        // Only respect opt-out when Pro is active; otherwise allow auto-enable after upgrade
+        $proSearchOptOut = ($isProActive && !empty($proSearchCfg['optOut'])) || $proSearchExplicitDisabled;
+        // Require Pro for Search Everywhere to remain on
+        $proSearchEnabled = $isProActive && !empty($proSearchCfg['enabled']);
+        $proSearchDefaultLimit = isset($proSearchCfg['defaultLimit']) ? (int)$proSearchCfg['defaultLimit'] : 50;
+        $envProSearchRaw = getenv('FR_PRO_SEARCH_ENABLED');
+        $proSearchLockedByEnv = ($envProSearchRaw !== false && $envProSearchRaw !== '');
+        if ($proSearchLockedByEnv) {
+            $val = strtolower(trim((string)$envProSearchRaw));
+            $proSearchEnabled = in_array($val, ['1', 'true', 'yes', 'on'], true);
+            // Env can only force-enable if Pro is active
+            if (!$isProActive) {
+                $proSearchEnabled = false;
+            }
+        } elseif ($isProActive && $proVersionOk && !$proSearchOptOut) {
+            // Auto-enable for active Pro on v1.3.0+ unless user explicitly opted out or env locked
+            $proSearchEnabled = true;
+        }
+
         $public['clamav'] = [
             'scanUploads' => $clamScanUploads,
             'lockedByEnv' => $clamLockedByEnv,
+        ];
+
+        $public['proSearch'] = [
+            'enabled'      => $proSearchEnabled,
+            'defaultLimit' => max(1, min(200, $proSearchDefaultLimit)),
+            'lockedByEnv'  => $proSearchLockedByEnv,
+        ];
+
+        $public['pro'] = [
+            'active'  => $isProActive,
+            'version' => is_string($proVersion) ? $proVersion : '',
         ];
 
         return $public;
@@ -331,6 +373,25 @@ class AdminModel
             }
 
             $configUpdate['onlyoffice'] = $norm;
+        }
+
+        // Pro search toggle
+        if (!isset($configUpdate['proSearch']) || !is_array($configUpdate['proSearch'])) {
+            $configUpdate['proSearch'] = [
+                'enabled' => true,
+                'defaultLimit' => 50,
+                'optOut' => false,
+            ];
+        } else {
+            $configUpdate['proSearch']['enabled'] = !empty($configUpdate['proSearch']['enabled']);
+            $lim = isset($configUpdate['proSearch']['defaultLimit'])
+                ? (int)$configUpdate['proSearch']['defaultLimit']
+                : 50;
+            $configUpdate['proSearch']['defaultLimit'] = max(1, min(200, $lim));
+            $configUpdate['proSearch']['optOut'] =
+                (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE)
+                    ? !$configUpdate['proSearch']['enabled']
+                    : false;
         }
 
         if (!isset($configUpdate['branding']) || !is_array($configUpdate['branding'])) {
@@ -522,6 +583,31 @@ class AdminModel
                 $config['onlyoffice']['publicOrigin'] = self::sanitizeHttpUrl($config['onlyoffice']['publicOrigin'] ?? '');
             }
 
+            // Pro search toggle
+            if (!isset($config['proSearch']) || !is_array($config['proSearch'])) {
+                $config['proSearch'] = [
+                    'enabled' => true,
+                    'defaultLimit' => 50,
+                    'optOut' => false,
+                ];
+            } else {
+                $config['proSearch']['enabled'] = !empty($config['proSearch']['enabled']);
+                $lim = isset($config['proSearch']['defaultLimit'])
+                    ? (int)$config['proSearch']['defaultLimit']
+                    : 50;
+                $config['proSearch']['defaultLimit'] = max(1, min(200, $lim));
+                $config['proSearch']['optOut'] = !empty($config['proSearch']['optOut']);
+                $explicitDisabled = array_key_exists('enabled', $config['proSearch']) && !$config['proSearch']['enabled'];
+                // Auto-enable for active Pro v1.3.0+ if not explicitly opted out/disabled
+                $isProActive = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE === true;
+                $proVersion = $config['pro']['version'] ?? ($config['proVersion'] ?? (defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : ''));
+                $proVersionNorm = is_string($proVersion) ? trim(ltrim($proVersion, "vV")) : '';
+                $proVersionOk = $proVersionNorm !== '' && version_compare($proVersionNorm, '1.3.0', '>=');
+                if ($isProActive && $proVersionOk && empty($config['proSearch']['optOut']) && !$explicitDisabled) {
+                    $config['proSearch']['enabled'] = true;
+                }
+            }
+
             // Branding
             if (!isset($config['branding']) || !is_array($config['branding'])) {
                 $config['branding'] = [
@@ -578,6 +664,10 @@ class AdminModel
                 'enabled'      => false,
                 'docsOrigin'   => '',
                 'publicOrigin' => '',
+            ],
+            'proSearch'             => [
+                'enabled' => true,
+                'defaultLimit' => 50,
             ],
             'branding'              => [
                 'customLogoUrl' => '',

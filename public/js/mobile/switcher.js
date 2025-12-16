@@ -42,7 +42,7 @@
       url.password = '';
       url.pathname = url.pathname.replace(/\/+$/,'');
       return url.toString();
-    } catch { return ''; }
+    } catch (e) { return ''; }
   };
 
   // Append/overwrite a query param safely on a normalized URL
@@ -51,17 +51,17 @@
       const u = new URL(normalize(base));
       u.searchParams.set(k, v);
       return u.toString();
-    } catch { return ''; }
+    } catch (e) { return ''; }
   };
 
   const host = u => {
-    try { return new URL(normalize(u)).hostname; } catch { return ''; }
+    try { return new URL(normalize(u)).hostname; } catch (e) { return ''; }
   };
   const originOf = u => {
-    try { return new URL(normalize(u)).origin; } catch { return ''; }
+    try { return new URL(normalize(u)).origin; } catch (e) { return ''; }
   };
   const faviconUrl = u => {
-    try { const x = new URL(normalize(u)); return x.origin + '/favicon.ico'; } catch { return ''; }
+    try { const x = new URL(normalize(u)); return x.origin + '/favicon.ico'; } catch (e) { return ''; }
   };
   const initialsIcon = (hn='FR') => {
     const t=(hn||'FR').replace(/^www\./,'').slice(0,2).toUpperCase();
@@ -74,7 +74,7 @@
 
   async function getStatusCache(){
     const raw=(await Pref.get({key:K_STATUS})).value;
-    try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+    try { return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
   }
   async function writeStatus(origin, ok){
     const cache=await getStatusCache();
@@ -121,12 +121,12 @@
         img.onload=()=>done(true); img.onerror=()=>done(false);
         img.src = ico + (ico.includes('?')?'&':'?') + '__fr=' + Date.now();
       });
-    }catch{ return false; }
+    }catch (e) { return false; }
   }
 
   async function loadInstances(){
     const raw=(await Pref.get({key:K_INST})).value;
-    try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+    try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
   }
   async function saveInstances(list){
     await Pref.set({key:K_INST, value:JSON.stringify(list)});
@@ -220,7 +220,7 @@
   function hide(){ scrim.classList.remove('show'); sheet.classList.remove('show'); fab.style.display='grid'; }
   $('#frx-close').addEventListener('click', hide);
   $('#frx-add-cancel').addEventListener('click', hide);
-  $('#frx-home').addEventListener('click', ()=>{ try{ location.href='capacitor://localhost/index.html'; }catch{} });
+  $('#frx-home').addEventListener('click', ()=>{ try{ location.href='capacitor://localhost/index.html'; }catch (e) {} });
   scrim.addEventListener('click', hide);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') hide(); });
 

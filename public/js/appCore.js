@@ -61,7 +61,7 @@ export async function loadCsrfToken() {
 
   // body (if provided)
   let body = {};
-  try { body = await res.json(); } catch { /* token endpoint may return empty */ }
+  try { body = await res.json(); } catch (e) { /* token endpoint may return empty */ }
 
   const token = body.csrf_token || getCsrfToken();
   setCsrfToken(token);
@@ -152,7 +152,7 @@ export function initializeApp() {
         const relay = new DragEvent('drop', { bubbles: true, cancelable: true });
         Object.defineProperty(relay, 'dataTransfer', { value: e.dataTransfer });
         uploadArea.dispatchEvent(relay);
-      } catch {
+      } catch (e) {
         // Fallback: stash DataTransfer and fire a plain event; handler will read the stash
         window.__pendingDropData = e.dataTransfer || null;
         uploadArea.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
@@ -197,7 +197,7 @@ export function triggerLogout() {
       // if you also used the per-user (all-tabs) guard, clear that too:
       const u = localStorage.getItem('username') || '';
       if (u) localStorage.removeItem(`__fr_welcomed_${u}`);
-    } catch { }
+    } catch (e) { }
   };
 
   _nativeFetch("/api/auth/logout.php", {

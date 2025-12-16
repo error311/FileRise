@@ -14,7 +14,7 @@ function isHoverPreviewDisabled() {
   if (window.disableHoverPreview === true) return true;
   try {
     return localStorage.getItem('disableHoverPreview') === 'true';
-  } catch {
+  } catch (e) {
     return false;
   }
 }

@@ -12,7 +12,7 @@
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
 
 **FileRise** is a modern, self-hosted web file manager / WebDAV server.  
-Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI — all in a single PHP app that you control.
+Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI which all in a single PHP app that you control.
 
 - 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external DB required.
 - 🔐 **Granular per-folder ACLs** – Manage, View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share… all enforced centrally across the UI, API, and WebDAV.
@@ -30,7 +30,7 @@ Drag & drop uploads, ACL-aware sharing, OnlyOffice integration, and a clean UI �
 - 🌐 **Internationalization** – English, Spanish, French, German, and Simplified Chinese included; community translations welcome.
 - 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.) with optional auto-provisioning, IdP-driven admin role, and Pro user-group mapping.
 - 🛡️ **ClamAV virus scanning (Core) + Pro virus log** – Optional ClamAV upload scanning, with a Pro virus detection log in the admin panel and CSV export.
-- 👥 **Pro: user groups, client portals & storage explorer** – Group-based ACLs, brandable client upload portals, and an ncdu-style storage explorer for drilling into largest folders/files and cleaning up space inline.
+- 👥 **Pro: user groups, client portals, search everywhere & storage explorer** – Group-based ACLs, brandable client upload portals, ACL search everywhere and an ncdu-style storage explorer for drilling into largest folders/files and cleaning up space inline.
 
 Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 

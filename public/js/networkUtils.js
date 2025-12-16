@@ -19,7 +19,7 @@ export function sendRequest(url, method = "GET", data = null, customHeaders = {}
       let payload;
       try {
         payload = JSON.parse(text);
-      } catch {
+      } catch (e) {
         payload = text;
       }
       if (!res.ok) {

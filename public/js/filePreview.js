@@ -38,7 +38,7 @@ function loadSavedMediaVolume(el) {
     if (m !== null) {
       el.muted = (m === '1');
     }
-  } catch {
+  } catch (e) {
     // ignore storage errors
   }
 }
@@ -50,11 +50,11 @@ function attachVolumePersistence(el) {
       try {
         localStorage.setItem(MEDIA_VOLUME_KEY, String(el.volume));
         localStorage.setItem(MEDIA_MUTED_KEY, el.muted ? '1' : '0');
-      } catch {
+      } catch (e) {
         // ignore storage errors
       }
     });
-  } catch {
+  } catch (e) {
     // ignore
   }
 }
@@ -333,7 +333,7 @@ function ensureMediaModal() {
   closeBtn.addEventListener('mouseleave', onCloseHoverLeave);
 
   function closeModal() {
-    try { overlay.querySelectorAll("video,audio").forEach(m => { try{m.pause()}catch(_){}}); } catch {}
+    try { overlay.querySelectorAll("video,audio").forEach(m => { try{m.pause()}catch(_){}}); } catch (e) {}
     if (overlay._onKey) window.removeEventListener('keydown', overlay._onKey);
     overlay.remove();
   }
@@ -469,7 +469,7 @@ function setRowWatchedBadge(name, watched) {
     } else if (old) {
       old.remove();
     }
-  } catch {}
+  } catch (e) {}
 }
 
 /* -------------------------------- Entry -------------------------------- */
@@ -514,7 +514,7 @@ export function previewFile(fileUrl, fileName) {
         // cache-bust so we don’t get stale frames
         u.searchParams.set('t', String(Date.now()));
         return u.toString();
-      } catch {
+      } catch (e) {
         // Fallback: go through generic download/inline endpoint
         return buildPreviewUrl(folder, newName);
       }
@@ -689,7 +689,7 @@ if (isVideo) {
       const res = await fetch(`/api/media/getProgress.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(nm)}&t=${Date.now()}`, { credentials: "include" });
       const data = await res.json();
       return data && data.state ? data.state : null;
-    } catch { return null; }
+    } catch (e) { return null; }
   }
 
   async function sendProgress({nm, seconds, duration, completed, clear}) {
@@ -769,7 +769,7 @@ if (isVideo) {
         if (ls) video.currentTime = parseFloat(ls);
       }
       renderStatus(state || null);
-    } catch {
+    } catch (e) {
       renderStatus(null);
     }
   });
@@ -785,7 +785,7 @@ if (isVideo) {
 
     sendProgress({ nm, seconds, duration });
     setFileProgressBadge(nm, seconds, duration);
-    try { localStorage.setItem(lsKey(nm), String(seconds)); } catch {}
+    try { localStorage.setItem(lsKey(nm), String(seconds)); } catch (e) {}
     renderStatus({ seconds, duration, completed: false });
   });
 
@@ -793,7 +793,7 @@ if (isVideo) {
     const nm = currentName;
     const duration = Math.floor(video.duration || 0);
     await sendProgress({ nm, seconds: duration, duration, completed: true });
-    try { localStorage.removeItem(lsKey(nm)); } catch {}
+    try { localStorage.removeItem(lsKey(nm)); } catch (e) {}
     showToast(t("marked_viewed") || "Marked as viewed");
     setFileWatchedBadge(nm, true);
     renderStatus({ seconds: duration, duration, completed: true });
@@ -811,7 +811,7 @@ if (isVideo) {
   clearBtnIcon.onclick = async () => {
     const nm = currentName;
     await sendProgress({ nm, seconds: 0, duration: null, completed: false, clear: true });
-    try { localStorage.removeItem(lsKey(nm)); } catch {}
+    try { localStorage.removeItem(lsKey(nm)); } catch (e) {}
     showToast(t("progress_cleared") || "Progress cleared");
     setFileWatchedBadge(nm, false);
     renderStatus(null);

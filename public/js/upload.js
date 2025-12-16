@@ -26,7 +26,7 @@ function isVirusScanLikelyEnabled() {
       null;
 
     return !!(cfg && cfg.clamav && cfg.clamav.scanUploads);
-  } catch {
+  } catch (e) {
     return false;
   }
 }
@@ -1015,7 +1015,7 @@ async function initResumableUpload() {
       if (parsed && parsed.error) {
         msgText = parsed.error; // e.g. "Upload blocked: virus detected in file."
       }
-    } catch {
+    } catch (e) {
       // message wasn't JSON, ignore
     }
     showToast(msgText);
@@ -1076,7 +1076,7 @@ async function initResumableUpload() {
 function submitFiles(allFiles) {
   const folderToUse = (() => {
     const f = window.currentFolder || "root";
-    try { return decodeURIComponent(f); } catch { return f; }
+    try { return decodeURIComponent(f); } catch (e) { return f; }
   })();
 
   const progressContainer = document.getElementById("uploadProgressContainer");

@@ -2513,45 +2513,172 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
   display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0 6px;
 }
 .folder-access-list {
-  --col-perm: 84px;
-  --col-folder-min: 340px;
-  max-height: 320px;
+  max-height: 520px;
   overflow: auto;
   border: 1px solid #ccc;
-  border-radius: 6px;
-  padding: 0;
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 .dark-mode .folder-access-list { border-color:#555; }
 
-.folder-access-header,
-.folder-access-row {
-  display: grid;
-  grid-template-columns: minmax(var(--col-folder-min), 1fr) repeat(14, var(--col-perm));
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-}
-.folder-access-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: #fff;
-  font-weight: 700;
-  border-bottom: 1px solid rgba(0,0,0,0.12);
-}
-.dark-mode .folder-access-header { background:#2c2c2c; }
+.folder-access-header { display:none; }
 
-.folder-access-row { border-bottom: 1px solid rgba(0,0,0,0.06); }
-.folder-access-row:last-child { border-bottom: none; }
+.folder-access-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 10px;
+}
+.folder-access-row:last-child { margin-bottom: 0; }
+.dark-mode .folder-access-row { border-color: rgba(255,255,255,0.14); }
+
+.perm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 3fr 1fr 1fr; /* desktop: all in one row; give Write/Modify extra room */
+  gap: 6px;
+}
+.perm-group.perm-group-wide {
+  grid-column: auto; /* default: stay on the same row */
+}
+@media (max-width: 900px) {
+  .perm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .perm-group.perm-group-wide {
+    grid-column: 1 / -1; /* tablet/mobile: force its own row */
+  }
+}
+@media (max-width: 480px) {
+  .perm-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.perm-group {
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.dark-mode .perm-group { border-color: rgba(255,255,255,0.14); }
+.perm-group.group-locked { background: rgba(32,132,255,0.08); }
+.dark-mode .perm-group.group-locked { background: rgba(32,132,255,0.14); }
+
+.perm-group-title {
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.perm-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.perm-group-body.perm-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.perm-group-body.perm-write-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 3px;
+}
+.perm-group-body.perm-write-grid .perm-toggle {
+  justify-content: flex-start;
+  text-align: left;
+}
+.perm-group-body.perm-write-grid > .perm-toggle:nth-child(3n+2) {
+  justify-self: center;
+}
+.perm-group-body.perm-write-grid > .perm-toggle:nth-child(3n) {
+  justify-self: end;
+}
+.perm-group-body.perm-write-grid .perm-toggle {
+  justify-content: flex-start;
+}
+.perm-group-body.perm-write-grid .perm-toggle:nth-child(3n+2) {
+  justify-content: center;
+}
+.perm-group-body.perm-write-grid .perm-toggle:nth-child(3n) {
+  justify-content: flex-end;
+  text-align: right;
+}
+.perm-group-body.perm-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
 
 .perm-col { text-align:center; white-space:nowrap; }
-.folder-access-header > div { white-space: nowrap; }
+.folder-access-list .perm-col .fr-toggle { justify-content:center; }
+.perm-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 4px;
+}
+.folder-badge .inherit-inline {
+  margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  transform: translateY(1px);
+}
 
 .folder-badge {
   display:inline-flex; align-items:center; gap:6px;
   font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
   min-width: 0;
 }
+.inherit-flag-note {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff4d6;
+  color: #8a6d3b;
+  font-size: 11px;
+}
+.inherit-flag-note.pill-note-strong {
+  background: #f0f4ff;
+  color: #2c3e50;
+}
+.group-flag-note {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef7ff;
+  color: #1f4f8a;
+  font-size: 11px;
+}
+.group-flag-note.pill-note-strong {
+  background: #dfeafe;
+  color: #1c3a6b;
+}
+.dark-mode .group-flag-note {
+  background: rgba(140, 194, 255, 0.12);
+  color: #a9cfff;
+}
+.dark-mode .inherit-flag-note {
+  background: rgba(255, 212, 138, 0.12);
+  color: #f2d49a;
+}
+.folder-access-row input[data-group-lock="1"]{cursor:not-allowed;}
 
 .muted { opacity:.65; font-size:.9em; }
 
@@ -2559,6 +2686,13 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
 .inherited-row {
   opacity: 0.8;
   background: rgba(32, 132, 255, 0.06);
+}
+.admin-locked-row {
+  opacity: 0.9;
+  background: rgba(0, 0, 0, 0.03);
+}
+.dark-mode .admin-locked-row {
+  background: rgba(255, 255, 255, 0.05);
 }
 .inherited-tag {
   font-size: 11px;
@@ -2593,6 +2727,7 @@ display:inline-flex; align-items:center; gap:6px;
 font-weight:600;
 min-width:0; /* allow child to be as wide as needed inside scroller */
 }
+.user-permission-row{margin-bottom:6px;}
     .group-members-chips {
   display: flex;
   flex-wrap: wrap;
@@ -3208,7 +3343,8 @@ margin-bottom: 20px;
 
 
 /* Toggle-style switches for admin panel (OIDC etc.) */
-#adminPanelModal .form-check.fr-toggle {
+#adminPanelModal .form-check.fr-toggle,
+.folder-grants-box .form-check.fr-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -3216,7 +3352,8 @@ margin-bottom: 20px;
 }
 
 /* Base switch track */
-#adminPanelModal .form-check.fr-toggle .fr-toggle-input {
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input,
+.folder-grants-box .form-check.fr-toggle .fr-toggle-input {
   appearance: none;
   -webkit-appearance: none;
   width: 2.6rem;
@@ -3235,7 +3372,8 @@ margin-bottom: 20px;
 }
 
 /* Knob */
-#adminPanelModal .form-check.fr-toggle .fr-toggle-input::before {
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input::before,
+.folder-grants-box .form-check.fr-toggle .fr-toggle-input::before {
   content: "";
   position: absolute;
   top: 2px;
@@ -3249,32 +3387,38 @@ margin-bottom: 20px;
 }
 
 /* ON state */
-#adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked {
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked,
+.folder-grants-box .form-check.fr-toggle .fr-toggle-input:checked {
   background-color: var(--filr-accent-400, #0d6efd);
   border-color: var(--filr-accent-400, #0d6efd);
 }
 
-#adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked::before {
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked::before,
+.folder-grants-box .form-check.fr-toggle .fr-toggle-input:checked::before {
   transform: translateX(1.1rem);
 }
 
 /* Focus outline */
-#adminPanelModal .form-check.fr-toggle .fr-toggle-input:focus-visible {
+#adminPanelModal .form-check.fr-toggle .fr-toggle-input:focus-visible,
+.folder-grants-box .form-check.fr-toggle .fr-toggle-input:focus-visible {
   box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.35);
 }
 
 /* Dark mode tweaks */
-.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input {
+.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input,
+.dark-mode .folder-grants-box .form-check.fr-toggle .fr-toggle-input {
   border-color: rgba(255, 255, 255, 0.18);
   background-color: rgba(255, 255, 255, 0.1);
 }
 
-.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked {
+.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked,
+.dark-mode .folder-grants-box .form-check.fr-toggle .fr-toggle-input:checked {
   background-color: var(--filr-accent-400, #0d6efd);
   border-color: var(--filr-accent-400, #0d6efd);
 }
 
-.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input::before {
+.dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input::before,
+.dark-mode .folder-grants-box .form-check.fr-toggle .fr-toggle-input::before {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
 

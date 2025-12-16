@@ -37,7 +37,7 @@ function formatDate(ts) {
     const d = new Date(ts * 1000);
     if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleString();
-  } catch {
+  } catch (e) {
     return '';
   }
 }

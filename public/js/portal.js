@@ -97,7 +97,7 @@ function applyUploadRateLimit(desiredCount) {
         state = parsed;
       }
     }
-  } catch {
+  } catch (e) {
     // ignore
   }
 
@@ -134,7 +134,7 @@ function bumpUploadRateCounter(delta) {
         state = parsed.date === today ? parsed : state;
       }
     }
-  } catch {
+  } catch (e) {
     // ignore
   }
 
@@ -147,7 +147,7 @@ function bumpUploadRateCounter(delta) {
 
   try {
     localStorage.setItem(key, JSON.stringify(state));
-  } catch {
+  } catch (e) {
     // ignore
   }
 }
@@ -269,7 +269,7 @@ async function sendRequest(url, method = 'GET', data = null, customHeaders = {})
   let payload;
   try {
     payload = JSON.parse(text);
-  } catch {
+  } catch (e) {
     payload = text;
   }
   if (!res.ok) {
@@ -441,7 +441,7 @@ function setCsrfToken(token) {
   window.csrfToken = token;
   try {
     localStorage.setItem('csrf', token);
-  } catch {
+  } catch (e) {
     // ignore
   }
   let meta = document.querySelector('meta[name="csrf-token"]');
@@ -466,7 +466,7 @@ async function loadCsrfToken() {
   let body = {};
   try {
     body = await res.json();
-  } catch {
+  } catch (e) {
     body = {};
   }
 
@@ -905,7 +905,7 @@ async function uploadFiles(fileList) {
         let data;
         try {
           data = JSON.parse(text);
-        } catch {
+        } catch (e) {
           data = {};
         }
 
@@ -1050,7 +1050,7 @@ function getPortalSlugFromUrl() {
           if (innerSlug && innerSlug.trim()) {
             return innerSlug.trim();
           }
-        } catch {
+        } catch (e) {
           // ignore parse errors
         }
   
@@ -1064,7 +1064,7 @@ function getPortalSlugFromUrl() {
       const qs = window.location.search || '';
       const m2 = qs.match(/[?&]slug=([^&]+)/);
       return m2 && m2[1] ? decodeURIComponent(m2[1]).trim() : '';
-    } catch {
+    } catch (e) {
       const qs = window.location.search || '';
       const m = qs.match(/[?&]slug=([^&]+)/);
       return m && m[1] ? decodeURIComponent(m[1]).trim() : '';

@@ -38,7 +38,7 @@ function getCards() { return CARD_IDS.map(id => $(id)).filter(Boolean); }
 
 function readLayout() {
   try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); }
-  catch { return {}; }
+  catch (e) { return {}; }
 }
 function writeLayout(layout) {
   localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout || {}));
@@ -367,7 +367,7 @@ function stashSidebarCardsBeforeSmall() {
 }
 function readSidebarStash() {
   try { return JSON.parse(localStorage.getItem(RESPONSIVE_STASH_KEY) || '[]'); }
-  catch { return []; }
+  catch (e) { return []; }
 }
 function clearSidebarStash() { localStorage.removeItem(RESPONSIVE_STASH_KEY); }
 
@@ -458,7 +458,7 @@ function animateCardsIntoHeaderAndThen(done) {
 
   // Move real cards into header (hidden container + icons)
   snapshots.forEach(({ card }) => {
-    try { insertCardInHeader(card); } catch {}
+    try { insertCardInHeader(card); } catch (e) {}
   });
 
   const ghosts = [];
@@ -506,7 +506,7 @@ function animateCardsIntoHeaderAndThen(done) {
   });
 
   setTimeout(() => {
-    ghosts.forEach(({ ghost }) => { try { ghost.remove(); } catch {} });
+    ghosts.forEach(({ ghost }) => { try { ghost.remove(); } catch (e) {} });
     done();
   }, COLLAPSE_ANIMATION_MS + 50);
 }
@@ -681,7 +681,7 @@ function animateCardsOutOfHeaderThen(done) {
 
   setTimeout(() => {
     ghosts.forEach(({ ghost }) => {
-      try { ghost.remove(); } catch {}
+      try { ghost.remove(); } catch (e) {}
     });
     done();
   }, 430);

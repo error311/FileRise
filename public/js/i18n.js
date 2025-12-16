@@ -9,6 +9,16 @@ const translations = {
     "search_placeholder_advanced": "Advanced Search: files, tags, uploader & content...",
     "basic_search_tooltip": "Basic Search: Search by file name, tags, and uploader.",
     "advanced_search_tooltip": "Advanced Search: Includes file content, in addition to file name, tags, and uploader.",
+    "search_everywhere_title": "Search Everywhere",
+    "search_everywhere_desc": "ACL-aware search across all folders you can access.",
+    "search_everywhere_label": "Search everywhere",
+    "search_everywhere_placeholder": "Type to search across all folders",
+    "search_everywhere_limit": "Result limit",
+    "search_everywhere_run": "Search",
+    "search_everywhere_hint": "Results will appear here.",
+    "search_everywhere_no_results": "No results",
+    "search_everywhere_reindexed": "Index refreshed.",
+    "search_everywhere_error": "Search failed.",
     "file_name": "File Name",
     "date_modified": "Date Modified",
     "upload_date": "Upload Date",
@@ -358,6 +368,7 @@ const translations = {
     "more_actions": "More Actions",
     "folder_actions": "Folder Actions",
     "disable_hover_preview": "Disable hover preview in file list",
+    "view_options": "View Options",
     "zoom_in": "Zoom In",
     "zoom_out": "Zoom Out",
     "rotate_left": "Rotate Left",
@@ -380,7 +391,14 @@ const translations = {
     "oidc_test_button": "Test OIDC discovery",
     "clamav_enable_label": "Enable ClamAV scanning for uploads",
     "clamav_scan_uploads_help": "Files are scanned with ClamAV before being accepted. This may impact upload speed.",
-    "clamav_env_locked_help": "Controlled by container env VIRUS_SCAN_ENABLED ({state}). Change it in your Docker/host env."
+    "clamav_env_locked_help": "Controlled by container env VIRUS_SCAN_ENABLED ({state}). Change it in your Docker/host env.",
+
+    "filter_folders": "Filter folders by name",
+    "view_own": "View (Own)",
+    "view_all": "View (All)",
+    "write": "Write",
+    "manage": "Manage",
+    "enter_search_term": "Enter search term"
   
   },
   es: {

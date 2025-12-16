@@ -1,5 +1,41 @@
 # Changelog
 
+## Changes 12/15/2025 (v2.9.0)
+
+release(v2.9.0): add Pro Search Everywhere, ACL inheritance, and UI polish
+
+**Search Everywhere (Pro)**  
+
+- Backend: Pro search helper builds a JSON index from folder metadata/tags/owners, stores index+manifest with locks/throttling, and enforces ACL (read vs read_own) at query time; new `/api/pro/search/query.php` endpoint for authenticated Pro users.
+- Admin UI: Dedicated “Search Everywhere” section with enable toggle, default limit, Pro gating (env lock + v1.3.0+), opt-out persistence, and Pro pill/warnings when missing or outdated.
+- Frontend UX: “Search Everywhere” button opens a dark-mode-aware modal; results respect limits/ACL, support reindex hint, and jumping to a hit expands the folder tree, updates breadcrumb, navigates to the folder, and auto-selects/highlights the target row (with retries/HTML entity handling).
+- Config/cache: siteConfig regeneration now carries `proSearch` (and Pro status/version) even across upgrades; auto-enable for Pro v1.3.0+ unless explicitly disabled/env-locked; trims/normalizes versions and honors explicit opt-outs.
+
+**ACL Folder Access changes**  
+
+- ACL core (`src/lib/ACL.php`):
+  - Adds inherit/explicit maps to folder ACL records, normalizes them, and memoizes `hasGrant` results with cache resets on updates.
+  - Group grant checks now honor ancestor inheritance when inherit is set and stop at explicit overrides.
+  - Removal/ensure routines clean up inherit entries and initialize explicit/inherit buckets.
+- Admin Folder Access UI (`public/js/adminFolderAccess.js`, `public/css/styles.css`):
+  - Wider Write/Modify card and denser grid; pill styling for inherit/group notes; switch styling reused for folder grants.
+  - Group ACL modal rebuilt to use the shared folder-grants UI; chips for group members; collapsible group cards.
+  - Layout/spacing tweaks for rows, cards, and toggles; admin rows locked visually.
+- Folder ACL inheritance: explicit child overrides block inherited caps; ancestor inherit is applied only when enabled for the user/group; memoization cleared on ACL writes to avoid stale permissions.
+- Group ACL inheritance: ancestor grants with inherit propagate to descendants unless explicitly blocked.
+
+**Sponsor / Thanks section**  
+
+- Added a themed “Thanks” card that spotlights founders/early supporters with pill chips, an anonymous shout-out, and light/dark gradients.
+- Refreshed Sponsor and Ko‑fi blocks with icons, dashed highlight containers, and unified copy/open controls to match the new card.
+- Kept translation-friendly labels and safe escaping; still allows future supporter list growth.
+
+**Notes**  
+
+- No breaking API changes were introduced; features are additive and compatible with existing configs (auto-fallback to defaults when missing).
+
+---
+
 ## Changes 12/14/2025 (v2.8.0)
 
 release(v2.8.0): OIDC public clients + Storage scan log/snapshot controls + sidebar zone order

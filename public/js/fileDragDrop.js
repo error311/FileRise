@@ -121,7 +121,7 @@ function makeDragImage(labelText, iconName = 'insert_drive_file') {
 
 /* ---------------- drag start (rows/cards) ---------------- */
 export function fileDragStartHandler(event) {
-  try { cancelHoverPreview(); } catch {}
+  try { cancelHoverPreview(); } catch (e) {}
   const row = getRowEl(event.currentTarget);
   if (!row) return;
 
@@ -146,7 +146,7 @@ export function fileDragStartHandler(event) {
   const ghost = makeDragImage(dragLabel, names.length === 1 ? 'insert_drive_file' : 'folder');
   event.dataTransfer.setDragImage(ghost, 6, 6);
   // clean up the ghost as soon as the browser has captured it
-  setTimeout(() => { try { document.body.removeChild(ghost); } catch { } }, 0);
+  setTimeout(() => { try { document.body.removeChild(ghost); } catch (e) { } }, 0);
 }
 
 /* ---------------- folder targets ---------------- */
@@ -171,7 +171,7 @@ export async function folderDropHandler(event) {
   try {
     const raw = event.dataTransfer.getData('application/json') || '{}';
     dragData = JSON.parse(raw);
-  } catch {
+  } catch (e) {
     dragData = null;
   }
 
@@ -230,7 +230,7 @@ export async function folderDropHandler(event) {
 
       const text = await res.text();
       let data = {};
-      try { data = text ? JSON.parse(text) : {}; } catch { /* ignore double-echo edge cases */ }
+      try { data = text ? JSON.parse(text) : {}; } catch (e) { /* ignore double-echo edge cases */ }
 
       if (!res.ok || (data && data.error)) {
         const msg = (data && data.error) || text || `HTTP ${res.status}`;

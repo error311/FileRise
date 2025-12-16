@@ -177,12 +177,13 @@ class AdminController
             'maxMajor' => $proMaxMajor,
         ];
 
-        $public = AdminModel::buildPublicSubset($config); 
+        $public = AdminModel::buildPublicSubset($config);
 
-                // Safe public view of Pro status (no license string)
-                $public['pro'] = [
-                    'version' => $proVersion ?: '',
-                ];
+        // Safe public view of Pro status (no license string)
+        $public['pro'] = [
+            'active'  => (bool)$proActive,
+            'version' => $proVersion ?: '',
+        ];
 
         $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
 
@@ -213,6 +214,24 @@ class AdminController
                     ),
                 ],
                 'pro' => $proInfo,
+                'proSearch' => (function () use ($config) {
+                    $raw = isset($config['proSearch']) && is_array($config['proSearch'])
+                        ? $config['proSearch']
+                        : [];
+                    $enabled = !empty($raw['enabled']);
+                    $defaultLimit = isset($raw['defaultLimit']) ? (int)$raw['defaultLimit'] : 50;
+                    $env = getenv('FR_PRO_SEARCH_ENABLED');
+                    $locked = ($env !== false && $env !== '');
+                    if ($locked) {
+                        $val = strtolower(trim((string)$env));
+                        $enabled = in_array($val, ['1', 'true', 'yes', 'on'], true);
+                    }
+                    return [
+                        'enabled'      => $enabled,
+                        'defaultLimit' => max(1, min(200, $defaultLimit)),
+                        'lockedByEnv'  => $locked,
+                    ];
+                })(),
             ];
 
             header('Cache-Control: no-store'); // don’t cache admin config
@@ -1353,6 +1372,28 @@ if (isset($data['oidc']['allowDemote'])) {
                     $data['clamav']['scanUploads'],
                     FILTER_VALIDATE_BOOLEAN
                 );
+            }
+        }
+
+        // --- Pro Search Everywhere: respect env lock, otherwise persist toggle/limit ---
+        $envProSearch    = getenv('FR_PRO_SEARCH_ENABLED');
+        $proSearchLocked = ($envProSearch !== false && $envProSearch !== '');
+        if (!$proSearchLocked && isset($data['proSearch']) && is_array($data['proSearch'])) {
+            if (!isset($merged['proSearch']) || !is_array($merged['proSearch'])) {
+                $merged['proSearch'] = [
+                    'enabled' => true,
+                    'defaultLimit' => 50,
+                ];
+            }
+            if (array_key_exists('enabled', $data['proSearch'])) {
+                $merged['proSearch']['enabled'] = filter_var(
+                    $data['proSearch']['enabled'],
+                    FILTER_VALIDATE_BOOLEAN
+                );
+            }
+            if (array_key_exists('defaultLimit', $data['proSearch'])) {
+                $lim = filter_var($data['proSearch']['defaultLimit'], FILTER_VALIDATE_INT);
+                $merged['proSearch']['defaultLimit'] = max(1, min(200, $lim !== false ? $lim : 50));
             }
         }
 

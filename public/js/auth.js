@@ -43,7 +43,7 @@ async function fetchUserPermissionsOnce() {
       const data = await r.json();
       window.__FR_PERMISSIONS_CACHE = data || {};
       return window.__FR_PERMISSIONS_CACHE;
-    } catch {
+    } catch (e) {
       window.__FR_PERMISSIONS_CACHE = {};
       return {};
     } finally {
@@ -76,7 +76,7 @@ async function fetchUserPermissionsOnce() {
     try {
       const maybe = t(msgKeyOrText);
       if (typeof maybe === 'string' && maybe !== msgKeyOrText) return maybe;
-    } catch { }
+    } catch (e) { }
     return msgKeyOrText;
   };
 })();
@@ -89,12 +89,12 @@ function queueWelcomeToast(name) {
     window.dispatchEvent(new CustomEvent('filerise:toast', {
       detail: { message: `Welcome back, ${uname}!`, duration: 2000 }
     }));
-  } catch { }
+  } catch (e) { }
 
   // and persist for after-reload (flushed by main.js on boot)
   try {
     sessionStorage.setItem('welcomeMessage', `Welcome back, ${uname}!`);
-  } catch { }
+  } catch (e) { }
 }
 
 /* ----------------- TOTP & Toast Overrides ----------------- */
@@ -125,7 +125,7 @@ function showToast(msgKeyOrText, type) {
     if (typeof translated === "string" && translated !== msgKeyOrText) {
       msg = translated;
     }
-  } catch { }
+  } catch (e) { }
 
   return originalShowToast(msg);
 }
@@ -258,7 +258,7 @@ export function loadAdminConfigFunc() {
     .then(async (response) => {
       // If a proxy or some edge returns 204/empty, handle gracefully
       let config = {};
-      try { config = await response.json(); } catch { config = {}; }
+      try { config = await response.json(); } catch (e) { config = {}; }
 
       const headerTitle = config.header_title || "FileRise";
       localStorage.setItem("headerTitle", headerTitle);
@@ -550,7 +550,7 @@ function toFormBody(obj) {
 async function safeJson(res) {
   const ct = res.headers.get('content-type') || '';
   if (!/application\/json/i.test(ct)) return null;
-  try { return await res.clone().json(); } catch { return null; }
+  try { return await res.clone().json(); } catch (e) { return null; }
 }
 
 async function sniffTOTP(res, bodyMaybe) {
@@ -561,7 +561,7 @@ async function sniffTOTP(res, bodyMaybe) {
   try {
     const txt = await res.clone().text();
     if (/\btotp_required\s*=\s*1\b/i.test(txt)) return true;
-  } catch { }
+  } catch (e) { }
   return false;
 }
 
@@ -570,7 +570,7 @@ async function isAuthedNow() {
     const r = await fetch('/api/auth/checkAuth.php', { credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     return !!j.authenticated;
-  } catch { return false; }
+  } catch (e) { return false; }
 }
 
 function rafTick(times = 2) {
@@ -584,7 +584,7 @@ async function fetchAuthSnapshot() {
   try {
     const r = await fetch('/api/auth/checkAuth.php', { credentials: 'include' });
     return await r.json();
-  } catch { return {}; }
+  } catch (e) { return {}; }
 }
 
 async function syncPermissionsToLocalStorage() {
@@ -595,7 +595,7 @@ async function syncPermissionsToLocalStorage() {
       localStorage.setItem('readOnly', perm.readOnly ? 'true' : 'false');
       localStorage.setItem('disableUpload', perm.disableUpload ? 'true' : 'false');
     }
-  } catch { /* non-fatal */ }
+  } catch (e) { /* non-fatal */ }
 }
 
 // ——— main ———
@@ -628,12 +628,12 @@ async function submitLogin(data) {
 
     // TOTP requested?
     if (await sniffTOTP(res, body)) {
-      try { await primeCsrfStrict(); } catch { }
+      try { await primeCsrfStrict(); } catch (e) { }
       window.pendingTOTP = true;
       try {
         const auth = await import('/js/auth.js?v={{APP_QVER}}');
         if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
-      } catch { }
+      } catch (e) { }
       return;
     }
 
@@ -662,12 +662,12 @@ async function submitLogin(data) {
     body = await safeJson(res);
 
     if (await sniffTOTP(res, body)) {
-      try { await primeCsrfStrict(); } catch { }
+      try { await primeCsrfStrict(); } catch (e) { }
       window.pendingTOTP = true;
       try {
         const auth = await import('/js/auth.js?v={{APP_QVER}}');
         if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
-      } catch { }
+      } catch (e) { }
       return;
     }
 

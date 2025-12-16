@@ -27,7 +27,9 @@ import {
   refreshFolderIcon,
   openColorFolderModal,
   openMoveFolderUI,
-  folderSVG
+  folderSVG,
+  expandTreePath,
+  expandTreePathAsync
 } from './folderManager.js?v={{APP_QVER}}';
 import { openFolderShareModal } from './folderShareModal.js?v={{APP_QVER}}';
 import {
@@ -38,6 +40,38 @@ import {
 
 export let fileData = [];
 export let sortOrder = { column: "modified", ascending: false };
+
+let searchEverywhereBtn = null;
+let searchEverywhereModal = null;
+let searchEverywhereCard = null;
+let searchEverywhereResultsEl = null;
+let searchEverywhereInputEl = null;
+let searchEverywhereLimitEl = null;
+let pendingSearchSelection = null;
+
+function decodeHtmlEntities(str) {
+  if (!str) return "";
+  try {
+    const tmp = document.createElement('textarea');
+    tmp.innerHTML = str;
+    return tmp.value;
+  } catch (e) {
+    return str;
+  }
+}
+
+function compareSemverLite(a, b) {
+  const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '').split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
 
 
 const FOLDER_STRIP_PAGE_SIZE = 50;
@@ -52,8 +86,8 @@ let OO_EXTS = new Set();
   if (window.__FR_READY_REPLAYED__) return;
   if (document.readyState === 'loading') return; // native event still pending
   window.__FR_READY_REPLAYED__ = true;
-  try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch { }
-  try { window.dispatchEvent(new Event('load')); } catch { }
+  try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch (e) { }
+  try { window.dispatchEvent(new Event('load')); } catch (e) { }
 })();
 
 export async function initOnlyOfficeCaps() {
@@ -65,7 +99,7 @@ export async function initOnlyOfficeCaps() {
       const j = await r.json();
       OO_ENABLED = !!j.enabled;
       OO_EXTS = new Set(Array.isArray(j.exts) ? j.exts : []);
-    } catch {
+    } catch (e) {
       OO_ENABLED = false;
       OO_EXTS = new Set();
     } finally {
@@ -340,7 +374,7 @@ async function fillFileSnippet(file, snippetEl) {
       _fileSnippetCache.set(key, finalSnippet);
       snippetEl.textContent = finalSnippet;
 
-    } catch {
+    } catch (e) {
       snippetEl.textContent = "";
       snippetEl.style.display = "none";
       _fileSnippetCache.set(key, "");
@@ -408,7 +442,7 @@ async function fillFileSnippet(file, snippetEl) {
     _fileSnippetCache.set(key, finalSnippet);
     snippetEl.textContent = finalSnippet;
 
-  } catch {
+  } catch (e) {
     snippetEl.textContent = "";
     snippetEl.style.display = "none";
     _fileSnippetCache.set(key, "");
@@ -454,7 +488,7 @@ export function cancelHoverPreview() {
       clearTimeout(hoverPreviewTimer);
       hoverPreviewTimer = null;
     }
-  } catch {}
+  } catch (e) {}
 
   hoverPreviewActiveRow = null;
   hoverPreviewContext = null;
@@ -472,11 +506,11 @@ function isHoverPreviewDisabled() {
   try {
     const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
     if (coarse) return true;
-  } catch {}
+  } catch (e) {}
 
   try {
     return localStorage.getItem("disableHoverPreview") === "true";
-  } catch {
+  } catch (e) {
     return false;
   }
 }
@@ -630,7 +664,7 @@ function ensureHoverPreviewEl() {
       const dest = ctx.folder;
       if (dest) {
         window.currentFolder = dest;
-        try { localStorage.setItem("lastOpenedFolder", dest); } catch {}
+        try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) {}
         updateBreadcrumbTitle(dest);
         loadFileList(dest);
       }
@@ -665,7 +699,7 @@ function invalidateFolderStats(folders) {
     window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
       detail: { folders: arr }
     }));
-  } catch {
+  } catch (e) {
     // best effort only
   }
 }
@@ -712,7 +746,7 @@ window.addEventListener('folderColorChanged', (e) => {
   repaintStripIcon(folder);
 
   // 2) Refresh the tree icon (existing function)
-  try { refreshFolderIcon(folder); } catch { }
+  try { refreshFolderIcon(folder); } catch (e) { }
 
   // 3) Repaint any inline folder rows in the file table
   try {
@@ -723,7 +757,7 @@ window.addEventListener('folderColorChanged', (e) => {
         // reuse the same helper we used when injecting inline rows
         attachStripIconAsync(row, folder, 28);
       });
-  } catch {
+  } catch (e) {
     // CSS.escape might not exist on very old browsers; fail silently
   }
 });
@@ -756,7 +790,7 @@ try {
 
   window.showFoldersInList = storedStrip === null ? true : storedStrip === 'true';
   window.showInlineFolders = storedInline === null ? true : storedInline === 'true';
-} catch {
+} catch (e) {
   // if localStorage blows up, fall back to both enabled
   window.showFoldersInList = true;
   window.showInlineFolders = true;
@@ -809,7 +843,7 @@ async function refreshSelectedFolderCaps(folder) {
   try {
     const caps = await fetchFolderCaps(folder);
     window.selectedFolderCaps = caps || null;
-  } catch {
+  } catch (e) {
     window.selectedFolderCaps = null;
   }
   updateFileActionButtons();
@@ -840,7 +874,7 @@ function handleFolderCheckboxChange(cb) {
 function setCurrentFolderContext(folder) {
   if (!folder) return;
   window.currentFolder = folder;
-  try { localStorage.setItem("lastOpenedFolder", folder); } catch { /* ignore */ }
+  try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { /* ignore */ }
   updateBreadcrumbTitle(folder);
 }
 
@@ -862,7 +896,7 @@ function applyRowHeight(v) {
     document.documentElement.removeAttribute('data-row-compact');
   }
 
-  try { syncFolderIconSizeToRowHeight(); } catch {}
+  try { syncFolderIconSizeToRowHeight(); } catch (e) {}
   return h;
 }
 
@@ -957,7 +991,7 @@ async function fetchFolderPeek(folder) {
             name
           }));
         }
-      } catch {
+      } catch (e) {
         // ignore file errors; we can still show folders
       }
 
@@ -982,7 +1016,7 @@ async function fetchFolderPeek(folder) {
             })
             .map(p => p.split("/").pop() || p);
         }
-      } catch {
+      } catch (e) {
         // ignore folder errors
       }
 
@@ -1012,7 +1046,7 @@ async function fetchFolderPeek(folder) {
       const truncated = totalCandidates > items.length;
 
       return { items, truncated };
-    } catch {
+    } catch (e) {
       return null;
     }
   })();
@@ -1045,7 +1079,7 @@ async function fetchFolderPeek(folder) {
           }
         }
       }
-    } catch { /* best-effort only */ }
+    } catch (e) { /* best-effort only */ }
   
     return `/api/file/download.php?${q.toString()}`;
   }
@@ -1415,7 +1449,7 @@ fetchFolderPeek(folderPath).then(result => {
             if (Number.isFinite(dur) && dur > 1) {
               video.currentTime = Math.min(1, dur / 3);
             }
-          } catch {
+          } catch (e) {
             // best effort; ignore errors
           }
         });
@@ -1655,7 +1689,7 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
   iconSpan.innerHTML = folderSVG('empty');
 
   // make sure this brand-new SVG is sized correctly
-  try { syncFolderIconSizeToRowHeight(); } catch {}
+  try { syncFolderIconSizeToRowHeight(); } catch (e) {}
 
   fetchFolderStats(fullPath)
   .then(stats => {
@@ -1666,7 +1700,7 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
     if ((folders + files) > 0 && iconSpan.dataset.kind !== 'paper') {
       iconSpan.dataset.kind = 'paper';
       iconSpan.innerHTML = folderSVG('paper');
-      try { syncFolderIconSizeToRowHeight(); } catch {}
+      try { syncFolderIconSizeToRowHeight(); } catch (e) {}
     }
   })
   .catch(() => {});
@@ -1679,7 +1713,7 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
 async function safeJson(res) {
   const text = await res.text();
   let body = null;
-  try { body = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+  try { body = text ? JSON.parse(text) : null; } catch (e) { /* ignore */ }
 
   if (!res.ok) {
     const msg =
@@ -1691,6 +1725,40 @@ async function safeJson(res) {
     throw err;
   }
   return body ?? {};
+}
+
+function normalizeFolderPath(folder) {
+  if (!folder) return "";
+  const trimmed = String(folder).trim().replace(/^\/+|\/+$/g, "");
+  return trimmed === "" ? "root" : trimmed;
+}
+
+function folderDepthScore(folder) {
+  if (!folder || folder === "root") return 0;
+  return folder.split("/").filter(Boolean).length;
+}
+
+async function findBestAccessibleFolder({ lastOpenedFolder } = {}) {
+  try {
+    const res = await fetch('/api/folder/getFolderList.php', { credentials: 'include' });
+    const data = await safeJson(res);
+    const names = Array.isArray(data)
+      ? data.map(row => normalizeFolderPath(row?.folder || row)).filter(Boolean)
+      : [];
+    if (!names.length) return null;
+
+    const unique = Array.from(new Set(names));
+    const preferred = normalizeFolderPath(lastOpenedFolder);
+    if (preferred && unique.includes(preferred)) return preferred;
+
+    unique.sort((a, b) => {
+      const depthDiff = folderDepthScore(a) - folderDepthScore(b);
+      return depthDiff !== 0 ? depthDiff : a.localeCompare(b);
+    });
+    return unique[0] || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // --- Folder capabilities + owner cache ----------------------
@@ -1721,7 +1789,7 @@ async function fetchFolderCaps(folder) {
         _folderOwnerCache.set(folder, data.owner || data.user || "");
       }
       return data || null;
-    } catch {
+    } catch (e) {
       _folderCapsCache.set(folder, null);
       return null;
     } finally {
@@ -1738,7 +1806,7 @@ async function refreshCurrentFolderCaps(folder) {
   try {
     const caps = await fetchFolderCaps(folder);
     window.currentFolderCaps = caps || null;
-  } catch {
+  } catch (e) {
     window.currentFolderCaps = null;
   }
   updateFileActionButtons();
@@ -1758,7 +1826,7 @@ async function fetchFolderOwner(folder) {
     const owner = data && (data.owner || data.user || "");
     _folderOwnerCache.set(folder, owner || "");
     return owner || "";
-  } catch {
+  } catch (e) {
     _folderOwnerCache.set(folder, "");
     return "";
   }
@@ -1845,7 +1913,7 @@ export async function refreshViewedBadges(folder) {
     const res = await fetch(`/api/media/getViewedMap.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`, { credentials: 'include' });
     const j = await res.json();
     map = j?.map || null;
-  } catch { /* ignore */ }
+  } catch (e) { /* ignore */ }
 
   // Clear any existing badges
   document.querySelectorAll(
@@ -2236,6 +2304,288 @@ export function createViewToggleButton() {
   return toggleBtn;
 }
 
+function ensureSearchEverywhereButton() {
+  const cfg = window.__FR_PRO_SEARCH_CFG__ || {};
+  const isPro = window.__FR_IS_PRO === true;
+  const ver = window.__FR_PRO_VERSION || '';
+  const hasMinVersion = isPro && compareSemverLite(ver, '1.3.0') >= 0;
+  const enabled = isPro && hasMinVersion && !!cfg.enabled;
+  const actionsBar = document.getElementById("fileActionsBar");
+  if (!enabled || !actionsBar) {
+    if (searchEverywhereBtn && searchEverywhereBtn.parentElement) {
+      searchEverywhereBtn.parentElement.removeChild(searchEverywhereBtn);
+    }
+    return null;
+  }
+
+  if (!searchEverywhereBtn) {
+    searchEverywhereBtn = document.createElement("button");
+    searchEverywhereBtn.id = "searchEverywhereBtn";
+    searchEverywhereBtn.className = "btn btn-light action-btn";
+    searchEverywhereBtn.innerHTML = `
+      <i class="material-icons" aria-hidden="true">travel_explore</i>
+      <span style="margin-left:4px;">${t("search_everywhere_label") || "Search everywhere"}</span>
+    `;
+    searchEverywhereBtn.addEventListener("click", openSearchEverywhereModal);
+  }
+
+  if (searchEverywhereBtn.parentElement !== actionsBar) {
+    actionsBar.appendChild(searchEverywhereBtn);
+  }
+  return searchEverywhereBtn;
+}
+
+function ensureSearchEverywhereModal() {
+  if (searchEverywhereModal) return searchEverywhereModal;
+
+  const overlay = document.createElement("div");
+  overlay.id = "searchEverywhereModal";
+  overlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 4000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  `;
+
+  const card = document.createElement("div");
+  card.className = "search-everywhere-card";
+  card.style.cssText = `
+    max-width: 720px;
+    width: 100%;
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    box-shadow: 0 12px 35px rgba(0,0,0,0.35);
+  `;
+  card.innerHTML = `
+    <button type="button"
+            class="editor-close-btn"
+            aria-label="${t("close") || "Close"}"
+            id="searchEverywhereClose"
+            style="top:8px; right:8px;">&times;</button>
+    <div class="d-flex align-items-center" style="gap:10px; margin-bottom:10px;">
+      <i class="material-icons" aria-hidden="true">travel_explore</i>
+      <div>
+        <div style="font-weight:600;">${t("search_everywhere_title") || "Search Everywhere"}</div>
+        <div class="text-muted" style="font-size:12px;">${t("search_everywhere_desc") || "ACL-aware search across all folders you can access."}</div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:8px;">
+      <input type="text" id="searchEverywhereInput" class="form-control" placeholder="${t("search_everywhere_placeholder") || "Type to search across all folders"}" autocomplete="off" />
+    </div>
+    <div class="d-flex align-items-center" style="gap:8px; margin-bottom:10px;">
+      <label for="searchEverywhereLimit" class="mb-0" style="font-size:12px;">${t("search_everywhere_limit") || "Result limit"}</label>
+      <input type="number" id="searchEverywhereLimit" class="form-control" style="max-width:100px;" min="1" max="200" />
+      <button type="button" class="btn btn-primary btn-sm" id="searchEverywhereRun">${t("search_everywhere_run") || "Search"}</button>
+    </div>
+    <div id="searchEverywhereResults" style="max-height:320px; overflow:auto; border:1px solid #e0e0e0; border-radius:10px; padding:8px; background:rgba(0,0,0,0.02);">
+      <div class="text-muted" style="font-size:12px;">${t("search_everywhere_hint") || "Results will appear here."}</div>
+    </div>
+  `;
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  searchEverywhereCard = card;
+  const closeBtn = card.querySelector("#searchEverywhereClose");
+  closeBtn?.addEventListener("click", closeSearchEverywhereModal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeSearchEverywhereModal();
+  });
+
+  searchEverywhereModal = overlay;
+  searchEverywhereResultsEl = card.querySelector("#searchEverywhereResults");
+  searchEverywhereInputEl = card.querySelector("#searchEverywhereInput");
+  searchEverywhereLimitEl = card.querySelector("#searchEverywhereLimit");
+
+  const runBtn = card.querySelector("#searchEverywhereRun");
+  runBtn?.addEventListener("click", () => {
+    if (searchEverywhereInputEl) {
+      runSearchEverywhere(searchEverywhereInputEl.value || '');
+    }
+  });
+  searchEverywhereInputEl?.addEventListener("keydown", (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runSearchEverywhere(searchEverywhereInputEl.value || '');
+    }
+  });
+
+  const dmToggle = document.getElementById('darkModeToggle');
+  if (dmToggle && !dmToggle.__searchEverywhereTheme) {
+    dmToggle.__searchEverywhereTheme = true;
+    dmToggle.addEventListener('click', () => applySearchEverywhereTheme());
+  }
+  applySearchEverywhereTheme();
+
+  return searchEverywhereModal;
+}
+
+function applySearchEverywhereTheme() {
+  if (!searchEverywhereModal) return;
+  const overlay = searchEverywhereModal;
+  const card = searchEverywhereCard || overlay.querySelector(".search-everywhere-card");
+  const isDark = document.body.classList.contains("dark-mode");
+
+  overlay.style.background = isDark ? "rgba(0,0,0,0.72)" : "rgba(0,0,0,0.55)";
+  if (card) {
+    card.style.background = isDark ? "#141414" : "#ffffff";
+    card.style.color = isDark ? "#f4f4f4" : "#000000";
+    card.style.boxShadow = isDark ? "0 18px 45px rgba(0,0,0,0.65)" : "0 12px 35px rgba(0,0,0,0.2)";
+    card.style.border = isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e0e0e0";
+  }
+
+  if (searchEverywhereResultsEl) {
+    searchEverywhereResultsEl.style.border = isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e0e0e0";
+    searchEverywhereResultsEl.style.background = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)";
+  }
+
+  const inputs = searchEverywhereModal.querySelectorAll("#searchEverywhereInput, #searchEverywhereLimit");
+  inputs.forEach((inp) => {
+    if (isDark) {
+      inp.style.background = "#1f1f1f";
+      inp.style.color = "#f4f4f4";
+      inp.style.borderColor = "#444";
+    } else {
+      inp.style.background = "";
+      inp.style.color = "";
+      inp.style.borderColor = "";
+    }
+  });
+
+  searchEverywhereModal.querySelectorAll(".text-muted").forEach((el) => {
+    el.style.color = isDark ? "rgba(255,255,255,0.72)" : "";
+  });
+}
+
+function openSearchEverywhereModal() {
+  ensureSearchEverywhereModal();
+  if (!searchEverywhereModal) return;
+  const cfg = window.__FR_PRO_SEARCH_CFG__ || {};
+  const limit = Math.max(1, Math.min(200, Number(cfg.defaultLimit || 50)));
+  if (searchEverywhereLimitEl) {
+    searchEverywhereLimitEl.value = String(limit);
+  }
+  applySearchEverywhereTheme();
+  searchEverywhereModal.style.display = "flex";
+  requestAnimationFrame(() => {
+    searchEverywhereInputEl?.focus();
+  });
+}
+
+function closeSearchEverywhereModal() {
+  if (searchEverywhereModal) {
+    searchEverywhereModal.style.display = "none";
+  }
+}
+
+function renderSearchEverywhereResults(items) {
+  if (!searchEverywhereResultsEl) return;
+  if (!Array.isArray(items) || !items.length) {
+    searchEverywhereResultsEl.innerHTML = `<div class="text-muted" style="font-size:12px;">${t("search_everywhere_no_results") || "No results"}</div>`;
+    return;
+  }
+
+  const rows = items.map((item) => {
+    const icon = item.type === 'folder' ? 'folder' : 'insert_drive_file';
+    const name = escapeHTML(item.name || '');
+    const path = escapeHTML(item.path || '');
+    const meta = escapeHTML(item.uploader ? `Uploaded by ${item.uploader}` : '');
+    return `
+      <div class="d-flex align-items-center search-everywhere-row" data-path="${path}" data-folder="${escapeHTML(item.folder || '')}" data-name="${escapeHTML(item.name || '')}" data-type="${item.type}" style="padding:6px 4px; border-bottom:1px solid rgba(0,0,0,0.05); cursor:pointer;">
+        <i class="material-icons" aria-hidden="true" style="margin-right:8px;">${icon}</i>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
+          <div class="text-muted" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${path}</div>
+          ${meta ? `<div class="text-muted" style="font-size:12px;">${meta}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  searchEverywhereResultsEl.innerHTML = rows;
+  searchEverywhereResultsEl.querySelectorAll('.search-everywhere-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const folder = row.getAttribute('data-folder') || 'root';
+      const name = row.getAttribute('data-name') || '';
+      navigateToSearchResult(folder, name);
+    });
+  });
+}
+
+async function runSearchEverywhere(term) {
+  if (!term || !term.trim()) {
+    showToast(t("enter_search_term") || "Enter a search term.");
+    return;
+  }
+  ensureSearchEverywhereModal();
+  if (searchEverywhereResultsEl) {
+    searchEverywhereResultsEl.innerHTML = `<div class="text-muted" style="font-size:12px;">${t("loading") || "Loading..."} </div>`;
+  }
+
+  const limitVal = searchEverywhereLimitEl ? Number(searchEverywhereLimitEl.value || 50) : 50;
+  const limit = Math.max(1, Math.min(200, limitVal || 50));
+
+  try {
+    const res = await fetch(`/api/pro/search/query.php?q=${encodeURIComponent(term)}&limit=${limit}`, {
+      credentials: 'include',
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    renderSearchEverywhereResults(data.items || []);
+    if (data.reindexed) {
+      showToast(t("search_everywhere_reindexed") || "Index refreshed.");
+    }
+  } catch (e) {
+    console.error('Search everywhere error', e);
+    if (searchEverywhereResultsEl) {
+      searchEverywhereResultsEl.innerHTML = `<div class="text-danger" style="font-size:12px;">${t("search_everywhere_error") || "Search failed."}</div>`;
+    }
+    showToast(t("search_everywhere_error") || "Search failed.");
+  }
+}
+
+async function navigateToSearchResult(folder, name) {
+  if (!folder) return;
+  closeSearchEverywhereModal();
+  const dest = decodeHtmlEntities(folder || 'root') || 'root';
+  const targetName = decodeHtmlEntities(name || '');
+  pendingSearchSelection = targetName ? { folder: dest, name: targetName } : null;
+  window.currentFolder = dest;
+  try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) { /* ignore */ }
+  updateBreadcrumbTitle(dest);
+
+  // Refresh tree + strip selections to match the jumped folder
+  try {
+    await expandTreePathAsync(dest, { force: true, includeLeaf: true, persist: false });
+    document.querySelectorAll(".folder-option.selected")
+      .forEach(o => o.classList.remove("selected"));
+    const treeNode = document.querySelector(`.folder-option[data-folder="${CSS.escape(dest)}"]`);
+    if (treeNode) treeNode.classList.add("selected");
+  } catch (e) { /* best effort */ }
+
+  try {
+    const strip = document.getElementById("folderStripContainer");
+    if (strip) {
+      strip.querySelectorAll(".folder-item.selected").forEach(i => i.classList.remove("selected"));
+      const stripItem = strip.querySelector(`.folder-item[data-folder="${CSS.escape(dest)}"]`);
+      if (stripItem) stripItem.classList.add("selected");
+    }
+  } catch (e) { /* best effort */ }
+
+  await loadFileList(dest);
+  // Extra safety: attempt highlight again after render settles
+  setTimeout(() => maybeHighlightSearchedFile(dest), 80);
+  setTimeout(() => maybeHighlightSearchedFile(dest), 220);
+  setTimeout(() => maybeHighlightSearchedFile(dest), 500);
+}
+
 function bindFolderToolbarActions() {
   const map = [
     { id: "folderMoveInlineBtn",   handler: (folder) => openMoveFolderUI(folder) },
@@ -2399,7 +2749,7 @@ function currentZoomPercent() {
     if (window.fileriseZoom && typeof window.fileriseZoom.currentPercent === "function") {
       return window.fileriseZoom.currentPercent();
     }
-  } catch {}
+  } catch (e) {}
   const css = getComputedStyle(document.documentElement).getPropertyValue('--app-zoom') || "1";
   const n = parseFloat(css);
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 100;
@@ -2560,7 +2910,7 @@ export function formatFolderName(folder) {
 window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
-export async function loadFileList(folderParam) {
+export async function loadFileList(folderParam, options = {}) {
   
   await initOnlyOfficeCaps();
   hideHoverPreview();
@@ -2569,12 +2919,14 @@ export async function loadFileList(folderParam) {
     window.userFolderOnly === true ||
     localStorage.getItem("folderOnly") === "true";
   const username = (localStorage.getItem("username") || "").trim();
+  const lastOpenedFolder = (localStorage.getItem("lastOpenedFolder") || "").trim();
+  const { skipFallback } = options || {};
 
-  let folder = folderParam || window.currentFolder || "root";
+  let folder = folderParam || window.currentFolder || lastOpenedFolder || "root";
   if (folderOnly && (!folder || folder === "root") && username) {
     folder = username;
     window.currentFolder = folder;
-    try { localStorage.setItem("lastOpenedFolder", folder); } catch { }
+    try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { }
     updateBreadcrumbTitle(folder);
   }
 
@@ -2612,7 +2964,7 @@ export async function loadFileList(folderParam) {
           `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`,
           { credentials: "include" }
         );
-      } catch { /* ignore and fall through */ }
+      } catch (e) { /* ignore and fall through */ }
     }
     if (filesRes.status === 403 && username && folder !== username) {
       try {
@@ -2625,11 +2977,11 @@ export async function loadFileList(folderParam) {
           filesRes = alt;
           folder = username;
           window.currentFolder = folder;
-          try { localStorage.setItem("lastOpenedFolder", folder); } catch { }
+          try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { }
           updateBreadcrumbTitle(folder);
           // remember that this is a folder-only session
           window.userFolderOnly = true;
-          try { localStorage.setItem("folderOnly", "true"); } catch { }
+          try { localStorage.setItem("folderOnly", "true"); } catch (e) { }
           refreshCurrentFolderCaps(folder);
           // refresh folders promise for the new folder context
           foldersPromise = fetch(
@@ -2637,7 +2989,7 @@ export async function loadFileList(folderParam) {
             { credentials: 'include' }
           );
         }
-      } catch { /* ignore; will fall back to the normal 403 handling */ }
+      } catch (e) { /* ignore; will fall back to the normal 403 handling */ }
     }
 
     if (filesRes.status === 401) {
@@ -2646,6 +2998,13 @@ export async function loadFileList(folderParam) {
       throw new Error("Unauthorized");
     }
     if (filesRes.status === 403) {
+      if (!skipFallback) {
+        const fallback = await findBestAccessibleFolder({ lastOpenedFolder });
+        if (fallback && fallback !== folder) {
+          setCurrentFolderContext(fallback);
+          return await loadFileList(fallback, { skipFallback: true });
+        }
+      }
       // For folder-only users, treat 403 as "empty list" instead of hard error.
       if (folderOnly) {
         fileListContainer.innerHTML = `
@@ -2773,6 +3132,8 @@ export async function loadFileList(folderParam) {
     updateFileActionButtons();
     fileListContainer.style.visibility = "visible";
 
+    // Highlight a search-hit file if requested
+    maybeHighlightSearchedFile(folder);
 
     // ----- FOLDERS NEXT (populate strip when ready; doesn't block rows) -----
     try {
@@ -2825,7 +3186,7 @@ export async function loadFileList(folderParam) {
       if (window.viewMode === "table" && reqId === __fileListReqSeq) {
         renderFileTable(folder);
       }
-    } catch {
+    } catch (e) {
       // ignore folder errors; rows already rendered
     }
 
@@ -2922,7 +3283,7 @@ function makeInlineFolderDragImage(labelText) {
 }
 
 function folderRowDragStartHandler(event, fullPath) {
-  try { cancelHoverPreview(); } catch {}
+  try { cancelHoverPreview(); } catch (e) {}
 
   if (!fullPath) return;
 
@@ -2942,7 +3303,7 @@ function folderRowDragStartHandler(event, fullPath) {
   const ghost = makeInlineFolderDragImage(label);
   event.dataTransfer.setDragImage(ghost, 10, 10);
   setTimeout(() => {
-    try { document.body.removeChild(ghost); } catch {}
+    try { document.body.removeChild(ghost); } catch (e) {}
   }, 0);
 }
 
@@ -3126,7 +3487,7 @@ if (headerClass) {
       if (!dest) return;
     
       window.currentFolder = dest;
-      try { localStorage.setItem("lastOpenedFolder", dest); } catch { }
+      try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) { }
     
       updateBreadcrumbTitle(dest);
     
@@ -3175,7 +3536,7 @@ if (headerClass) {
       if (!dest) return;
   
       window.currentFolder = dest;
-      try { localStorage.setItem("lastOpenedFolder", dest); } catch { }
+      try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) { }
   
       const menuItems = [
         { label: t("create_folder"), action: () => document.getElementById("createFolderModal").style.display = "block" },
@@ -3536,6 +3897,9 @@ export async function renderFileTable(folder, container, subfolders) {
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "50", 10);
   let currentPage = window.currentPage || 1;
+  const targetSelection = (pendingSearchSelection && pendingSearchSelection.folder === folder)
+    ? pendingSearchSelection
+    : null;
 
   // Files (filtered by search)
   let filteredFiles = searchFiles(searchTerm);
@@ -3557,6 +3921,18 @@ const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
   const totalFolders = subfoldersSorted.length;
   const totalRows    = totalFiles + totalFolders;
   const hasFolders   = totalFolders > 0;
+
+  // If we have a pending search target, jump to the page that contains it
+  if (targetSelection && totalFiles > 0) {
+    const idx = filteredFiles.findIndex(f => f.name === targetSelection.name);
+    if (idx >= 0) {
+      const targetPage = Math.floor(idx / itemsPerPageSetting) + 1;
+      if (targetPage !== currentPage) {
+        currentPage = targetPage;
+        window.currentPage = currentPage;
+      }
+    }
+  }
 
   // Pagination is now over (folders + files)
   const totalPages = totalRows > 0
@@ -3929,6 +4305,7 @@ wireSelectAll(fileListContent);
   });
 
   createViewToggleButton();
+  ensureSearchEverywhereButton();
   bindViewOptionsButton();
 
   // search input
@@ -3976,6 +4353,7 @@ wireSelectAll(fileListContent);
   });
   bindFolderToolbarActions();
   updateFileActionButtons();
+  maybeHighlightSearchedFile(folder);
 
   // Dragstart only for file rows (skip folder rows)
   document.querySelectorAll("#fileList tbody tr").forEach(row => {
@@ -4326,7 +4704,9 @@ export function renderGalleryView(folder, container) {
   bindFolderToolbarActions();
   updateFileActionButtons();
   createViewToggleButton();
+  ensureSearchEverywhereButton();
   bindViewOptionsButton();
+  maybeHighlightSearchedFile(folder);
 }
 
 /**
@@ -4417,6 +4797,72 @@ function compareFilesForSort(a, b) {
   if (valA < valB) return ascending ? -1 : 1;
   if (valA > valB) return ascending ?  1 : -1;
   return 0;
+}
+
+function maybeHighlightSearchedFile(folder) {
+  if (!pendingSearchSelection) return;
+  const target = pendingSearchSelection;
+  if (!target || target.folder !== folder) return;
+  const name = target.name;
+  if (!name) return;
+
+  const findRow = () => {
+    const nodes = document.querySelectorAll('#fileList tr[data-file-name], .gallery-card[data-file-name]');
+    for (const row of nodes) {
+      const raw = row.getAttribute('data-file-name') || '';
+      const decoded = decodeHtmlEntities(raw);
+      if (raw === name || decoded === name) return row;
+    }
+    return null;
+  };
+
+  try {
+    const row = findRow();
+    if (!row) {
+      if (typeof target.retries !== 'number') target.retries = 10;
+      if (target.retries > 0) {
+        target.retries -= 1;
+        // Try again shortly in case the DOM finishes rendering
+        setTimeout(() => maybeHighlightSearchedFile(folder), 120);
+      }
+      pendingSearchSelection = target;
+      return;
+    }
+
+    const alreadySelected = row.classList.contains('row-selected') || row.classList.contains('selected');
+
+    // Select checkbox if present
+    const cb = row.querySelector('.file-checkbox');
+    if (cb && !alreadySelected) {
+      // clear other selections
+      document.querySelectorAll('#fileList .file-checkbox').forEach(box => {
+        if (box !== cb) {
+          box.checked = false;
+          updateRowHighlight(box);
+        }
+      });
+      cb.checked = true;
+      updateRowHighlight(cb);
+      updateFileActionButtons();
+    } else if (!cb && !alreadySelected) {
+      row.classList.add('row-selected', 'selected');
+    }
+
+    if (!alreadySelected) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    if (!target.clearTimer) {
+      const ref = target;
+      target.clearTimer = setTimeout(() => {
+        if (pendingSearchSelection === ref) {
+          pendingSearchSelection = null;
+        }
+      }, 900);
+    }
+  } catch (e) {
+    // best-effort highlight only; leave selection pending for a future render
+  }
 }
 
 

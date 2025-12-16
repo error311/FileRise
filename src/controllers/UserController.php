@@ -977,13 +977,57 @@ public function adminChangeUserPassword()
         $publicMtime = is_file($publicPath) ? (int)@filemtime($publicPath) : 0;
         $adminMtime  = is_file($adminEncPath) ? (int)@filemtime($adminEncPath) : 0;
 
-        // If public cache is present and fresh enough, serve it
+        // If public cache is present and fresh enough, serve it (unless missing new keys)
         if ($publicMtime > 0 && $publicMtime >= $adminMtime) {
             $raw = @file_get_contents($publicPath);
             $data = is_string($raw) ? json_decode($raw, true) : null;
-            if (is_array($data)) {
-                echo json_encode($data);
-                return;
+
+            // Pro search toggle is new; if it’s missing, fall through and regenerate.
+            // Also ensure the Pro block carries the new "active" flag.
+            if (is_array($data) && array_key_exists('proSearch', $data)) {
+                $proBlock = isset($data['pro']) && is_array($data['pro']) ? $data['pro'] : [];
+                $hasActive = array_key_exists('active', $proBlock);
+                $cachedProActive = !empty($proBlock['active']);
+                $cachedProVerRaw = isset($proBlock['version']) ? (string)$proBlock['version'] : '';
+                $cachedProVerNorm = trim(ltrim($cachedProVerRaw, "vV"));
+                $cachedEnabled = !empty($data['proSearch']['enabled']);
+                $cachedExplicitDisabled = array_key_exists('enabled', $data['proSearch']) && !$data['proSearch']['enabled'];
+
+                // Current runtime Pro state (can differ from cached values after an upgrade/activation)
+                $currentProActive = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE;
+                $currentProVerRaw = defined('FR_PRO_BUNDLE_VERSION') ? (string)FR_PRO_BUNDLE_VERSION : '';
+                $currentProVerNorm = trim(ltrim($currentProVerRaw, "vV"));
+                $runtimeProOk = $currentProActive
+                    && $currentProVerNorm !== ''
+                    && version_compare($currentProVerNorm, '1.3.0', '>=');
+                // If runtime version is missing, fall back to cached version when Pro shows active
+                $cachedProOk = $cachedProActive
+                    && $cachedProVerNorm !== ''
+                    && version_compare($cachedProVerNorm, '1.3.0', '>=');
+                $currentProOk = $runtimeProOk || $cachedProOk;
+
+                $shouldRegenerate = false;
+                // Missing pro.active flag in cache
+                if (!$hasActive) {
+                    $shouldRegenerate = true;
+                }
+                // Pro activation state changed since cache was written
+                if ($currentProActive !== $cachedProActive) {
+                    $shouldRegenerate = true;
+                }
+                // Pro version changed (e.g., upgrade to 1.3.0+)
+                if ($currentProActive && $currentProVerNorm !== '' && $cachedProVerNorm !== $currentProVerNorm) {
+                    $shouldRegenerate = true;
+                }
+                // Auto-enable after Pro 1.3.0+ upgrade if cache still shows disabled
+                if ($currentProOk && !$cachedEnabled && !$cachedExplicitDisabled) {
+                    $shouldRegenerate = true;
+                }
+
+                if (!$shouldRegenerate) {
+                    echo json_encode($data);
+                    return;
+                }
             }
         }
 
@@ -996,6 +1040,22 @@ public function adminChangeUserPassword()
         }
 
         $public = AdminModel::buildPublicSubset($cfg);
+
+        // Ensure Search Everywhere auto-enables in siteConfig after installing/updating Pro 1.3.0+
+        $envProSearchRaw = getenv('FR_PRO_SEARCH_ENABLED');
+        $proSearchLocked = ($envProSearchRaw !== false && $envProSearchRaw !== '');
+        $proSearchOptOut = !empty($cfg['proSearch']['optOut']);
+        $proSearchExplicitDisabled = array_key_exists('proSearch', $cfg)
+            && is_array($cfg['proSearch'])
+            && array_key_exists('enabled', $cfg['proSearch'])
+            && !$cfg['proSearch']['enabled'];
+        $proVersionRaw = $cfg['pro']['version'] ?? ($cfg['proVersion'] ?? (defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : ''));
+        $proVersionNorm = trim(ltrim((string)$proVersionRaw, "vV"));
+        $proVersionOk = $proVersionNorm !== '' && version_compare($proVersionNorm, '1.3.0', '>=');
+        if ((defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) && $proVersionOk && !$proSearchLocked && !$proSearchOptOut && !$proSearchExplicitDisabled) {
+            $public['proSearch']['enabled'] = true;
+        }
+
         $w = AdminModel::writeSiteConfig($public); // best effort
         echo json_encode($public);
     }

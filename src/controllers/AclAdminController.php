@@ -59,12 +59,36 @@ class AclAdminController
             $canViewOwn = $has($rec['read_own'], $user);
             $canShare   = $isOwner || $has($rec['share'], $user);
             $canUpload  = $isOwner || $has($rec['write'], $user) || $has($rec['upload'], $user);
+            $inheritMap = is_array($rec['inherit'] ?? null) ? $rec['inherit'] : [];
+            $explicitMap = is_array($rec['explicit'] ?? null) ? $rec['explicit'] : [];
+            $explicitFlag = false;
+            foreach ($explicitMap as $k => $v) {
+                $key = is_int($k) ? (string)$v : (string)$k;
+                if ($key === '') continue;
+                if (strcasecmp($key, $user) === 0 && $v) {
+                    $explicitFlag = true;
+                    break;
+                }
+            }
+            $inheritFlag = false;
+            foreach ($inheritMap as $k => $v) {
+                $key = is_int($k) ? (string)$v : (string)$k;
+                if ($key === '') continue;
+                if (strcasecmp($key, $user) === 0 && $v) {
+                    $inheritFlag = true;
+                    break;
+                }
+            }
+            if ($isOwner) {
+                $inheritFlag = true;
+            }
 
             if (
                 $canViewAll || $canViewOwn || $canUpload || $canShare || $isOwner
                 || $has($rec['create'], $user) || $has($rec['edit'], $user) || $has($rec['rename'], $user)
                 || $has($rec['copy'], $user) || $has($rec['move'], $user) || $has($rec['delete'], $user)
                 || $has($rec['extract'], $user) || $has($rec['share_file'], $user) || $has($rec['share_folder'], $user)
+                || $inheritFlag || $explicitFlag
             ) {
                 $out[$f] = [
                     'view'        => $canViewAll,
@@ -82,6 +106,8 @@ class AclAdminController
                     'extract'     => $isOwner || $has($rec['extract'], $user)|| $has($rec['write'], $user),
                     'shareFile'   => $isOwner || $has($rec['share_file'], $user) || $has($rec['share'], $user),
                     'shareFolder' => $isOwner || $has($rec['share_folder'], $user) || $has($rec['share'], $user),
+                    'inherit'     => $inheritFlag,
+                    'explicit'    => $explicitFlag,
                 ];
             }
         }
@@ -99,7 +125,7 @@ class AclAdminController
             $k = [
                 'view','viewOwn','upload','manage','share',
                 'create','edit','rename','copy','move','delete','extract',
-                'shareFile','shareFolder','write'
+                'shareFile','shareFolder','write','inherit','explicit'
             ];
             $out = [];
             foreach ($k as $kk) {

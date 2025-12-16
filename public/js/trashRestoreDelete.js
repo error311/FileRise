@@ -192,7 +192,7 @@ export function confirmEmptyRecycleBin() {
         }
     });
 }
-try { window.confirmEmptyRecycleBin = confirmEmptyRecycleBin; } catch {}
+try { window.confirmEmptyRecycleBin = confirmEmptyRecycleBin; } catch (e) {}
 
 export function setupTrashRestoreDelete() {
 
@@ -333,7 +333,7 @@ export async function refreshRecycleBinIndicator() {
         const hasItems = Array.isArray(trashItems) && trashItems.length > 0;
         updateRecycleBinState(hasItems);
         setHeaderIcon(hasItems);
-    } catch {
+    } catch (e) {
         updateRecycleBinState(false);
         setHeaderIcon(false);
     }
