@@ -52,10 +52,31 @@ let pendingSearchSelection = null;
 function decodeHtmlEntities(str) {
   if (!str) return "";
   try {
-    const doc = new DOMParser().parseFromString(`<!doctype html><body>${str}`, 'text/html');
-    return (doc && doc.body && doc.body.textContent) ? doc.body.textContent : "";
+    const input = String(str);
+    return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, code) => {
+      if (!code) return match;
+      if (code[0] === '#') {
+        const isHex = code[1] === 'x' || code[1] === 'X';
+        const num = isHex ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+        if (!Number.isFinite(num)) return match;
+        try { return String.fromCodePoint(num); } catch (e) { return match; }
+      }
+      const table = {
+        amp: '&',
+        lt: '<',
+        gt: '>',
+        quot: '"',
+        apos: "'",
+        nbsp: '\u00A0',
+        colon: ':',
+        slash: '/',
+        backslash: '\\'
+      };
+      const lower = code.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(table, lower) ? table[lower] : match;
+    });
   } catch (e) {
-    return str;
+    return String(str);
   }
 }
 

@@ -4,6 +4,7 @@
 
 release(v2.9.0): add Pro Search Everywhere, ACL inheritance, and UI polish
 release(v2.9.1): Fix selector escaping and safe entity decoding for admin folder access and search
+release(v2.9.2): Decode HTML entities without DOM parsing to satisfy CodeQL
 
 **Search Everywhere (Pro)**  
 
