@@ -36,6 +36,15 @@ function getHeaderDropArea() { return $(ZONES.HEADER); }
 function isSmallScreen() { return window.innerWidth < MEDIUM_MIN; }
 function getCards() { return CARD_IDS.map(id => $(id)).filter(Boolean); }
 
+function getAppZoomScale() {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue('--app-zoom')
+    .trim();
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return Math.min(4, Math.max(0.1, n));
+}
+
 function readLayout() {
   try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); }
   catch (e) { return {}; }
@@ -87,11 +96,21 @@ function createCardGhost(card, rect, opts) {
   const options = opts || {};
   const scale   = typeof options.scale === 'number' ? options.scale : 1;
   const opacity = typeof options.opacity === 'number' ? options.opacity : 1;
+  const transformOrigin = typeof options.transformOrigin === 'string'
+    ? options.transformOrigin
+    : 'center center';
+  const materialIcon = typeof options.materialIcon === 'string' ? options.materialIcon : '';
+  const materialIconOpacity = typeof options.materialIconOpacity === 'number' ? options.materialIconOpacity : 0;
+  const materialIconScale = typeof options.materialIconScale === 'number' ? options.materialIconScale : 1.15;
+  const bodyOpacity = typeof options.bodyOpacity === 'number' ? options.bodyOpacity : 0.6;
+  const appZoomScale = getAppZoomScale();
 
-  const ghost = card.cloneNode(true);
   const cs = window.getComputedStyle(card);
 
-  Object.assign(ghost.style, {
+  const wrap = document.createElement('div');
+  wrap.className = 'card-ghost-wrap';
+
+  Object.assign(wrap.style, {
     position: 'fixed',
     left: rect.left + 'px',
     top: rect.top + 'px',
@@ -100,7 +119,7 @@ function createCardGhost(card, rect, opts) {
     margin: '0',
     zIndex: '12000',
     pointerEvents: 'none',
-    transformOrigin: 'center center',
+    transformOrigin,
     transform: 'scale(' + scale + ')',
     opacity: String(opacity),
 
@@ -118,11 +137,59 @@ function createCardGhost(card, rect, opts) {
     backfaceVisibility: 'hidden'
   });
 
+  const ghost = card.cloneNode(true);
+  Object.assign(ghost.style, {
+    position: 'absolute',
+    left: '0',
+    top: '0',
+    zIndex: '1',
+    width: (rect.width / appZoomScale) + 'px',
+    height: (rect.height / appZoomScale) + 'px',
+    margin: '0',
+    pointerEvents: 'none',
+    transformOrigin: 'top left',
+    transform: `scale(${appZoomScale})`,
+    backgroundColor: 'transparent',
+    borderRadius: '0',
+    boxShadow: 'none',
+    border: 'none',
+    backdropFilter: 'none'
+  });
+
   // Subtle: de-emphasize inner text so it doesn’t look “smeared”
   const ghBody = ghost.querySelector('.card-body');
-  if (ghBody) ghBody.style.opacity = '0.6';
+  if (ghBody) ghBody.style.opacity = String(bodyOpacity);
 
-  return ghost;
+  if (ghBody) wrap.__ghostBody = ghBody;
+  wrap.appendChild(ghost);
+
+  if (materialIcon) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ghost-material-icon';
+    Object.assign(overlay.style, {
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      zIndex: '2',
+      transform: `translate(-50%, -50%) scale(${materialIconScale})`,
+      opacity: String(materialIconOpacity),
+      pointerEvents: 'none',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '36px',
+      height: '36px',
+      borderRadius: '18px',
+      color: cs.color || '#fff',
+      background: 'rgba(0,0,0,0.12)',
+      transition: 'opacity 0.22s ease, transform 0.32s ease'
+    });
+    overlay.innerHTML = `<i class="material-icons" style="font-size:24px;">${materialIcon}</i>`;
+    wrap.appendChild(overlay);
+    wrap.__ghostIconOverlay = overlay;
+  }
+
+  return wrap;
 }
 
 // -------------------- header (icon+modal) --------------------
@@ -431,8 +498,11 @@ function hideHeaderDockPersistent() {
 }
 
 const COLLAPSE_ANIMATION_MS = 420;
-const COLLAPSE_TARGET_SCALE = 0.45;
-const COLLAPSE_OPACITY_END = 0.2;
+const COLLAPSE_TARGET_SCALE = 0.14;
+const COLLAPSE_OPACITY_END = 0.06;
+const COLLAPSE_RISE_MS = 120;
+const COLLAPSE_RISE_PX = 14;
+const COLLAPSE_RISE_SCALE = 1.02;
 
 function animateCardsIntoHeaderAndThen(done) {
   const sb  = getSidebar();
@@ -477,10 +547,24 @@ function animateCardsIntoHeaderAndThen(done) {
 
     const iconRect = iconBtn.getBoundingClientRect();
 
-    const ghost = createCardGhost(card, rect, { scale: 1, opacity: 0.95 });
+    const iconName = card.id === 'uploadCard'
+      ? 'cloud_upload'
+      : card.id === 'folderManagementCard'
+        ? 'folder'
+        : 'insert_drive_file';
+
+    const ghost = createCardGhost(card, rect, {
+      scale: 1,
+      opacity: 0.95,
+      transformOrigin: 'center center',
+      materialIcon: iconName,
+      materialIconOpacity: 0,
+      materialIconScale: 1.25,
+      bodyOpacity: 0.55
+    });
     ghost.id = card.id + '-ghost-collapse';
     ghost.classList.add('card-collapse-ghost');
-    ghost.style.transition = 'transform 0.42s cubic-bezier(.33,.1,.25,1), opacity 0.32s linear';
+    ghost.style.transition = `transform ${COLLAPSE_RISE_MS}ms ease-out, opacity ${COLLAPSE_RISE_MS}ms ease-out`;
 
     document.body.appendChild(ghost);
     ghosts.push({ ghost, from: rect, to: iconRect });
@@ -493,16 +577,39 @@ function animateCardsIntoHeaderAndThen(done) {
 
   // Kick off motion on next frame
   requestAnimationFrame(() => {
-    ghosts.forEach(({ ghost, from, to }) => {
-      const fromCx = from.left + from.width  / 2;
-      const fromCy = from.top  + from.height / 2;
-      const toCx   = to.left   + to.width   / 2;
-      const toCy   = to.top    + to.height  / 2;
-      const dx = toCx - fromCx;
-      const dy = toCy - fromCy;
-      ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${COLLAPSE_TARGET_SCALE})`;
-      ghost.style.opacity = String(COLLAPSE_OPACITY_END);
+    // Stage 1: “rise” a touch (FileRise 😄)
+    ghosts.forEach(({ ghost }) => {
+      ghost.style.transform = `translate(0px, ${-COLLAPSE_RISE_PX}px) scale(${COLLAPSE_RISE_SCALE})`;
+      ghost.style.opacity = '0.92';
     });
+
+    // Stage 2: fly to the header icon + shrink into it
+    setTimeout(() => {
+      const flightMs = Math.max(180, COLLAPSE_ANIMATION_MS - COLLAPSE_RISE_MS);
+      ghosts.forEach(({ ghost, from, to }) => {
+        ghost.style.transition = `transform ${flightMs}ms cubic-bezier(.33,.1,.25,1), opacity ${Math.min(320, flightMs)}ms linear`;
+
+        const fromCx = from.left + from.width  / 2;
+        const fromCy = from.top  + from.height / 2;
+        const toCx   = to.left   + to.width   / 2;
+        const toCy   = to.top    + to.height  / 2;
+        const dx = toCx - fromCx;
+        const dy = toCy - fromCy;
+        ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${COLLAPSE_TARGET_SCALE})`;
+        ghost.style.opacity = String(COLLAPSE_OPACITY_END);
+
+        const body = ghost.__ghostBody;
+        if (body) {
+          body.style.transition = 'opacity 0.18s ease';
+          body.style.opacity = '0.1';
+        }
+        const overlay = ghost.__ghostIconOverlay;
+        if (overlay) {
+          overlay.style.opacity = '1';
+          overlay.style.transform = 'translate(-50%, -50%) scale(1)';
+        }
+      });
+    }, COLLAPSE_RISE_MS);
   });
 
   setTimeout(() => {
@@ -550,7 +657,8 @@ function getZoneHost(zoneId) {
   }
 }
 
-const EXPAND_START_SCALE = 0.94;
+const EXPAND_START_SCALE = 0.62;
+let __cleanupTopZonePreExpand = null;
 
 // Animate cards "flying out" of header icons back into their zones.
 function animateCardsOutOfHeaderThen(done) {
@@ -568,7 +676,6 @@ function animateCardsOutOfHeaderThen(done) {
 
   const SAFE_TOP       = 16;
   const START_OFFSET_Y = 95;   // a touch closer to header
-  const DEST_EXTRA_Y   = 120;
 
   const layout = readLayout();
   const plan = [];
@@ -596,6 +703,32 @@ function animateCardsOutOfHeaderThen(done) {
   const fallbackSidebarOrder = sidebarOrder.length ? sidebarOrder : CARD_IDS;
   const ghosts = [];
 
+  // Reserve top-zone height up front so the file list resizes BEFORE the ghosts land.
+  __cleanupTopZonePreExpand = null;
+  if (top) {
+    const targetsTop = plan.filter(p => p.zoneId === ZONES.TOP_LEFT || p.zoneId === ZONES.TOP_RIGHT);
+    if (targetsTop.length) {
+      const prevMinHeight = top.style.minHeight;
+      const reserved = Math.max(
+        220,
+        ...targetsTop.map(p => savedHeights[p.card.id] || 190)
+      );
+
+      top.style.display = '';
+      top.style.minHeight = `${reserved}px`;
+      void top.offsetHeight;
+
+      const left = getLeftCol();
+      const right = getRightCol();
+      if (left) { left.style.display = ''; left.style.margin = ''; }
+      if (right) { right.style.display = ''; right.style.margin = ''; }
+
+      __cleanupTopZonePreExpand = () => {
+        top.style.minHeight = prevMinHeight;
+      };
+    }
+  }
+
   plan.forEach(({ card, iconBtn, zoneId }) => {
     const host = getZoneHost(zoneId);
     if (!host) return;
@@ -619,7 +752,21 @@ function animateCardsOutOfHeaderThen(done) {
       height: targetHeight
     };
 
-    const ghost = createCardGhost(card, ghostRect, { scale: EXPAND_START_SCALE, opacity: 0.55 });
+    const iconName = card.id === 'uploadCard'
+      ? 'cloud_upload'
+      : card.id === 'folderManagementCard'
+        ? 'folder'
+        : 'insert_drive_file';
+
+    const ghost = createCardGhost(card, ghostRect, {
+      scale: EXPAND_START_SCALE,
+      opacity: 0.5,
+      transformOrigin: 'top left',
+      materialIcon: iconName,
+      materialIconOpacity: 1,
+      materialIconScale: 1,
+      bodyOpacity: 0
+    });
     ghost.id = card.id + '-ghost-expand';
     ghost.classList.add('card-expand-ghost');
 
@@ -628,41 +775,53 @@ function animateCardsOutOfHeaderThen(done) {
 
     document.body.appendChild(ghost);
 
-    const savedCx = parseFloat(card.dataset.lastTargetCx || '');
-    const savedCy = parseFloat(card.dataset.lastTargetCy || '');
-    const hasSavedCenter = !Number.isNaN(savedCx) && !Number.isNaN(savedCy);
-    const fallbackCenter = (() => {
-      const normalizedZoneHeight = zoneRect.height || DEST_EXTRA_Y;
-      const baseTop = zoneRect.top + 16;
-    const gap = 10;
-      let toCy;
+    const savedLeft = parseFloat(card.dataset.lastTargetLeft || '');
+    const savedTop  = parseFloat(card.dataset.lastTargetTop  || '');
+    const hasSavedPos = !Number.isNaN(savedLeft) && !Number.isNaN(savedTop);
+
+    const savedIsPlausible = (() => {
+      if (!hasSavedPos) return false;
+      const pad = 80;
+      return (
+        savedLeft >= (zoneRect.left - pad) &&
+        savedLeft <= (zoneRect.right + pad) &&
+        savedTop >= (zoneRect.top - pad) &&
+        savedTop <= (zoneRect.bottom + pad)
+      );
+    })();
+
+    const fallbackPos = (() => {
+      const hostStyle = window.getComputedStyle(host);
+      const insetLeft =
+        (parseFloat(hostStyle.borderLeftWidth) || 0) +
+        (parseFloat(hostStyle.paddingLeft) || 0);
+      const insetTop =
+        (parseFloat(hostStyle.borderTopWidth) || 0) +
+        (parseFloat(hostStyle.paddingTop) || 0);
+
+      const baseLeft = zoneRect.left + insetLeft;
+      const baseTop = zoneRect.top + insetTop + 10;
+
       if (zoneId === ZONES.SIDEBAR) {
         const stack = fallbackSidebarOrder;
         const idx = stack.indexOf(card.id);
         const resolvedIndex = idx >= 0 ? idx : ((card.id === 'uploadCard') ? 0 : 1);
+        const gap = parseFloat(window.getComputedStyle(card).marginBottom || '') || 10;
         const precedingHeight = stack
           .slice(0, resolvedIndex)
           .reduce((sum, id) => sum + (savedHeights[id] || 190) + gap, 0);
-        const cardHeight = savedHeights[card.id] ?? targetHeight;
-        const rowTop = baseTop + precedingHeight;
-        toCy = rowTop + cardHeight / 2 - 8;
-      } else {
-        toCy = zoneRect.top + Math.min(normalizedZoneHeight / 2 || DEST_EXTRA_Y, DEST_EXTRA_Y);
+        return { left: baseLeft, top: baseTop + precedingHeight };
       }
-      const toCx = zoneRect.left + zoneRect.width / 2;
-      const drift = (zoneId === ZONES.SIDEBAR) ? (card.id === 'uploadCard' ? -8 : 8) : 0;
-      return { cx: toCx, cy: toCy + drift };
+
+      const left = zoneRect.left + Math.max(0, (zoneRect.width - targetWidth) / 2);
+      return { left, top: zoneRect.top + 10 };
     })();
 
-    const targetCenter = hasSavedCenter
-      ? { cx: savedCx, cy: savedCy }
-      : fallbackCenter;
+    const targetPos = savedIsPlausible
+      ? { left: savedLeft, top: savedTop }
+      : fallbackPos;
 
-    ghosts.push({
-      ghost,
-      from: { cx: fromCx, cy: fromCy },
-      to: targetCenter
-    });
+    ghosts.push({ ghost, from: ghostRect, to: targetPos });
   });
 
   if (!ghosts.length) {
@@ -672,10 +831,21 @@ function animateCardsOutOfHeaderThen(done) {
 
   requestAnimationFrame(() => {
     ghosts.forEach(({ ghost, from, to }) => {
-      const dx = to.cx - from.cx;
-      const dy = to.cy - from.cy;
+      const dx = to.left - from.left;
+      const dy = to.top - from.top;
       ghost.style.transform = `translate(${dx}px, ${dy}px) scale(1)`;
       ghost.style.opacity   = '1';
+
+      const body = ghost.__ghostBody;
+      if (body) {
+        body.style.transition = 'opacity 0.22s ease 0.08s';
+        body.style.opacity = '0.65';
+      }
+      const overlay = ghost.__ghostIconOverlay;
+      if (overlay) {
+        overlay.style.opacity = '0';
+        overlay.style.transform = 'translate(-50%, -50%) scale(0.92)';
+      }
     });
   });
 
@@ -751,6 +921,11 @@ function setZonesCollapsed(collapsed) {
       animateCardsOutOfHeaderThen(() => {
         // After ghosts land, put the REAL cards back into their proper zones
         applyUserLayoutOrDefault();
+        if (__cleanupTopZonePreExpand) {
+          try { __cleanupTopZonePreExpand(); } catch (e) {}
+          __cleanupTopZonePreExpand = null;
+          updateTopZoneLayout();
+        }
         loadHeaderOrder();
         hideHeaderDockPersistent();
         updateSidebarVisibility();

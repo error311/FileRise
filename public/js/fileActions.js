@@ -7,7 +7,7 @@ import {
   downloadSelectedFilesIndividually,
   MAX_NONZIP_MULTI_DOWNLOAD
 } from './fileListView.js?v={{APP_QVER}}';
-import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
+import { refreshFolderIcon, updateRecycleBinState } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 
 export function handleDeleteSelected(e) {
@@ -130,6 +130,8 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(data => {
           if (data.success) {
             showToast("Selected files deleted successfully!");
+            // deleteFiles.php moves items into Trash; update the recycle bin indicator immediately.
+            updateRecycleBinState(true);
             loadFileList(window.currentFolder);
             refreshFolderIcon(window.currentFolder);
           } else {

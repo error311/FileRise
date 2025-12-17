@@ -1,6 +1,21 @@
 # Changelog
 
-## Changes 12/15/2025 (v2.9.0 & v2.9.1)
+## Changes 12/17/2025 (v2.9.3)
+
+release(v2.9.3): fix recycle bin button binding, polish trash UI, and improve card dock animations
+
+- Recycle Bin: switch to delegated (capture-phase) click handling so the button still works after folder tree re-renders
+- Recycle Bin: remove repeating poll; refresh indicator once on load and expose `refreshRecycleBinIndicator` for explicit callers
+- Trash icon: refine recycle SVG “overflow” look and clip area; add deterministic crumple/wobble + new crease paths for paper balls
+- Delete action: update recycle bin indicator immediately after delete-to-trash via `updateRecycleBinState(true)`
+- Card dock/undock: overhaul ghost rendering to avoid smeared text and respect `--app-zoom`
+- Card dock/undock: add material icon overlay during fly animations + add “rise” stage on collapse
+- Card expand: reserve top-zone height before animation so the file list resizes before ghosts land; restore + relayout after
+- Header UI: apply pill radius styling to header card icons (`.header-card-icon`) to match header buttons
+
+---
+
+## Changes 12/15/2025 (v2.9.0 / v2.9.1 / v2.9.2)
 
 release(v2.9.0): add Pro Search Everywhere, ACL inheritance, and UI polish
 release(v2.9.1): Fix selector escaping and safe entity decoding for admin folder access and search

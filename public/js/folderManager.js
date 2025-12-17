@@ -1285,10 +1285,10 @@ export function recycleBinSVG(filled = false, size = 24) {
     <!-- Level 3: overflow, STILL behind gray bar.
          Positioned higher so tops are visible above the bar. -->
     <g clip-path="url(#${uid}-mouthOverflowClip)" opacity="0.99">
-      ${paperBall(7.0, 2.55, 1.85, true)}
-      ${paperBall(10.0, 2.30, 1.75, true)}
-      ${paperBall(12.9, 2.50, 1.95, true)}
-      ${paperBall(15.6, 2.55, 1.60, true)}
+      ${paperBall(7.0, 2.15, 2.05, true)}
+      ${paperBall(10.0, 1.98, 1.95, true)}
+      ${paperBall(12.9, 2.12, 2.15, true)}
+      ${paperBall(15.7, 2.20, 1.85, true)}
     </g>
   ` : '';
 
@@ -1335,7 +1335,7 @@ export function recycleBinSVG(filled = false, size = 24) {
 
         <!-- Constrain overflow to mouth width so it never reads "outside" -->
         <clipPath id="${uid}-mouthOverflowClip">
-          <rect x="5.35" y="1.20" width="13.3" height="8.20" rx="3.0"/>
+          <rect x="5.35" y="0.30" width="13.3" height="9.10" rx="3.0"/>
         </clipPath>
       </defs>
 
@@ -1389,27 +1389,48 @@ export function recycleBinSVG(filled = false, size = 24) {
   }
 
   function paperBall(cx, cy, r, extra = false) {
-    const k = r * 0.72;
-    const d = `
-      M ${cx - r} ${cy}
-      C ${cx - r} ${cy - k}, ${cx - k} ${cy - r}, ${cx} ${cy - r}
-      C ${cx + k} ${cy - r}, ${cx + r} ${cy - k}, ${cx + r} ${cy}
-      C ${cx + r} ${cy + k}, ${cx + k} ${cy + r}, ${cx} ${cy + r}
-      C ${cx - k} ${cy + r}, ${cx - r} ${cy + k}, ${cx - r} ${cy}
-      Z
+    // Deterministic "crumple" wobble so the paper balls don't look perfectly round.
+    const seed = (((Math.round(cx * 10) * 73856093) ^ (Math.round(cy * 10) * 19349663)) >>> 0);
+    const rot = seed % 8;
+    const base = [0.00, -0.12, 0.10, -0.16, 0.12, -0.08, 0.10, -0.14];
+    const wobble = extra ? 0.85 : 0.55;
+    const pts = [];
+    for (let i = 0; i < 8; i++) {
+      const idx = (i + rot) % 8;
+      const a = (Math.PI * 2 * i) / 8;
+      const m = 1 + (base[idx] * wobble);
+      pts.push({
+        x: cx + Math.cos(a) * r * m,
+        y: cy + Math.sin(a) * r * m
+      });
+    }
+
+    const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const start = mid(pts[pts.length - 1], pts[0]);
+    let d = `M ${start.x} ${start.y}`;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const n = pts[(i + 1) % pts.length];
+      const m = mid(p, n);
+      d += ` Q ${p.x} ${p.y} ${m.x} ${m.y}`;
+    }
+    d += ' Z';
+
+    const crease1 = `
+      M ${cx - r*0.62} ${cy - r*0.08}
+      C ${cx - r*0.12} ${cy - r*0.78}, ${cx + r*0.52} ${cy - r*0.46}, ${cx + r*0.35} ${cy + r*0.05}
+    `;
+    const crease2 = `
+      M ${cx - r*0.45} ${cy + r*0.25}
+      C ${cx - r*0.05} ${cy + r*0.10}, ${cx + r*0.20} ${cy + r*0.55}, ${cx + r*0.55} ${cy + r*0.30}
     `;
     return `
       <path d="${d}" fill="#f7f9ff" stroke="#c7d2e4" stroke-width="0.48"/>
-      <path d="M ${cx - r*0.55} ${cy - r*0.05}
-               C ${cx - r*0.15} ${cy - r*0.65}, ${cx + r*0.35} ${cy - r*0.40}, ${cx + r*0.35} ${cy - r*0.05}"
-            fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="0.55" stroke-linecap="round"/>
-      <path d="M ${cx - r*0.28} ${cy + r*0.15} l ${r*0.60} ${-r*0.38}"
-            fill="none" stroke="#8fa7cf" stroke-opacity="0.55" stroke-width="0.50" stroke-linecap="round"/>
-      <path d="M ${cx - r*0.08} ${cy + r*0.50} l ${r*0.35} ${-r*0.25}"
-            fill="none" stroke="#8fa7cf" stroke-opacity="0.45" stroke-width="0.45" stroke-linecap="round"/>
+      <path d="${crease1}" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="0.55" stroke-linecap="round"/>
+      <path d="${crease2}" fill="none" stroke="#8fa7cf" stroke-opacity="0.48" stroke-width="0.50" stroke-linecap="round"/>
       ${extra ? `
-        <path d="M ${cx - r*0.55} ${cy - r*0.10} l ${r*0.38} ${r*0.28}"
-              fill="none" stroke="#8fa7cf" stroke-opacity="0.50" stroke-width="0.45" stroke-linecap="round"/>
+        <path d="M ${cx - r*0.18} ${cy + r*0.62} l ${r*0.62} ${-r*0.42}"
+              fill="none" stroke="#8fa7cf" stroke-opacity="0.40" stroke-width="0.45" stroke-linecap="round"/>
       ` : ''}
     `;
   }

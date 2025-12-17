@@ -196,29 +196,33 @@ try { window.confirmEmptyRecycleBin = confirmEmptyRecycleBin; } catch (e) {}
 
 export function setupTrashRestoreDelete() {
 
-    const wireTrigger = () => {
-        const btn = document.getElementById("recycleBinBtn");
-        if (!btn) return false;
-        btn.addEventListener("click", () => {
+    // Delegated binding: folder tree re-renders (and replaces #recycleBinBtn), so
+    // we attach a single capture-phase handler that survives DOM rebuilds.
+    if (!window.__frRecycleBinDelegated) {
+        window.__frRecycleBinDelegated = true;
+        document.addEventListener("click", (e) => {
+            const btn = e.target?.closest?.("#recycleBinBtn");
+            if (!btn) return;
+            e.preventDefault();
+            e.stopPropagation();
             toggleVisibility("restoreFilesModal", true);
             loadTrashItems();
-        });
-        return true;
-    };
-
-    if (!wireTrigger()) {
-        setTimeout(wireTrigger, 500);
+        }, true);
     }
 
-    // Sync recycle bin icon on load, but don't hammer the API
-    const runRecyclePoll = () => {
-        if (document.visibilityState === "hidden") return;
+    // Sync recycle bin icon once on load (no repeating polling).
+    try {
+        if (window.__frRecyclePoll) {
+            clearInterval(window.__frRecyclePoll);
+            window.__frRecyclePoll = null;
+        }
+    } catch (e) {}
+
+    if (document.visibilityState !== "hidden") {
         refreshRecycleBinIndicator();
-    };
-    runRecyclePoll();
-    if (!window.__frRecyclePoll) {
-        window.__frRecyclePoll = setInterval(runRecyclePoll, 60000);
     }
+
+    // Expose for any explicit callers (e.g., after delete-to-trash)
     window.refreshRecycleBinIndicator = refreshRecycleBinIndicator;
 
     const {
