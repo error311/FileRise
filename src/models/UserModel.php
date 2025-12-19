@@ -5,11 +5,176 @@ require_once PROJECT_ROOT . '/config/config.php';
 
 class userModel
 {
+    private static $caseMigrationChecked = false;
+
+    private static function writeAtomic(string $path, string $data): bool
+    {
+        $dir = dirname($path);
+        $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
+        if (!is_dir($dir)) {
+            return false;
+        }
+        if (file_put_contents($tmp, $data, LOCK_EX) === false) {
+            if (is_file($tmp)) {
+                @unlink($tmp);
+            }
+            return false;
+        }
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            return false;
+        }
+        return true;
+    }
+
+    private static function mergePermissionsMostRestrictive($base, $incoming): array
+    {
+        $a = is_array($base) ? $base : [];
+        $b = is_array($incoming) ? $incoming : [];
+        $restrictiveTrue = ['folderOnly', 'readOnly', 'disableUpload', 'viewOwnOnly'];
+        $out = $a;
+
+        foreach ($b as $k => $v) {
+            if (in_array($k, $restrictiveTrue, true)) {
+                $out[$k] = !empty($a[$k]) || !empty($v);
+                continue;
+            }
+            $aHasBool = array_key_exists($k, $a) && is_bool($a[$k]);
+            if (is_bool($v) || $aHasBool) {
+                $out[$k] = !empty($a[$k]) && !empty($v);
+                continue;
+            }
+            if (!array_key_exists($k, $out)) {
+                $out[$k] = $v;
+            }
+        }
+
+        return $out;
+    }
+
+    private static function ensureUserCaseMigration(): void
+    {
+        if (self::$caseMigrationChecked) {
+            return;
+        }
+        self::$caseMigrationChecked = true;
+
+        $usersDir = rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $marker   = $usersDir . 'user_case_migration.done';
+        if (is_file($marker)) {
+            return;
+        }
+
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (!is_file($usersFile)) {
+            return;
+        }
+
+        $fp = fopen($usersFile, 'c+');
+        if (!$fp || !flock($fp, LOCK_EX)) {
+            if ($fp) {
+                fclose($fp);
+            }
+            return;
+        }
+        $contents = stream_get_contents($fp);
+        $lines = $contents === '' ? [] : preg_split("/\r\n|\n|\r/", $contents);
+        if ($lines === false) {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+            return;
+        }
+        if (!empty($lines) && $lines[count($lines) - 1] === '') {
+            array_pop($lines);
+        }
+
+        $canonical = [];
+        $out = [];
+        $changedUsers = false;
+
+        foreach ($lines as $line) {
+            if ($line === '') {
+                $out[] = $line;
+                continue;
+            }
+            $parts = explode(':', $line);
+            if (count($parts) < 3) {
+                $out[] = $line;
+                continue;
+            }
+            $user = $parts[0];
+            $lc = strtolower($user);
+            if (!isset($canonical[$lc])) {
+                $canonical[$lc] = $user;
+                $out[] = $line;
+            } else {
+                $changedUsers = true;
+            }
+        }
+
+        $ok = true;
+        if ($changedUsers) {
+            $payload = implode(PHP_EOL, $out) . PHP_EOL;
+            $ok = ftruncate($fp, 0) !== false;
+            if ($ok) {
+                rewind($fp);
+                $ok = fwrite($fp, $payload) !== false;
+                if ($ok) {
+                    fflush($fp);
+                }
+            }
+        }
+        flock($fp, LOCK_UN);
+        fclose($fp);
+
+        if ($ok) {
+            $permissionsFile = USERS_DIR . "userPermissions.json";
+            if (is_file($permissionsFile)) {
+                global $encryptionKey;
+                $raw = file_get_contents($permissionsFile);
+                $decrypted = decryptData($raw, $encryptionKey);
+                $permissions = $decrypted !== false ? json_decode($decrypted, true) : json_decode($raw, true);
+                if (is_array($permissions)) {
+                    $permOut = [];
+                    $changedPerm = false;
+                    foreach ($permissions as $k => $v) {
+                        $key = (string)$k;
+                        $lc = strtolower($key);
+                        $targetKey = $canonical[$lc] ?? $key;
+                        if (isset($permOut[$targetKey])) {
+                            $merged = self::mergePermissionsMostRestrictive($permOut[$targetKey], $v);
+                            if ($merged !== $permOut[$targetKey]) {
+                                $changedPerm = true;
+                            }
+                            $permOut[$targetKey] = $merged;
+                        } else {
+                            $permOut[$targetKey] = $v;
+                        }
+                        if ($targetKey !== $key) {
+                            $changedPerm = true;
+                        }
+                    }
+                    if ($changedPerm) {
+                        $plain = json_encode($permOut, JSON_PRETTY_PRINT);
+                        $enc   = encryptData($plain, $encryptionKey);
+                        $ok = self::writeAtomic($permissionsFile, $enc);
+                    }
+                }
+            }
+        }
+
+        if ($ok) {
+            $stamp = json_encode(['migratedAt' => time()], JSON_PRETTY_PRINT);
+            self::writeAtomic($marker, $stamp);
+        }
+    }
+
     /**
      * Retrieve all users (username + role).
      */
     public static function getAllUsers()
     {
+        self::ensureUserCaseMigration();
         $usersFile = USERS_DIR . USERS_FILE;
         $users = [];
         if (file_exists($usersFile)) {
@@ -56,7 +221,7 @@ class userModel
         $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
         foreach ($existingUsers as $line) {
             $parts = explode(':', trim($line));
-            if (isset($parts[0]) && $username === $parts[0]) {
+            if (isset($parts[0]) && strcasecmp($username, $parts[0]) === 0) {
                 return ["error" => "User already exists"];
             }
         }
@@ -135,7 +300,7 @@ class userModel
             }
             $plain = json_encode($permissionsArray, JSON_PRETTY_PRINT);
             $enc   = encryptData($plain, $encryptionKey);
-            file_put_contents($permissionsFile, $enc, LOCK_EX);
+            self::writeAtomic($permissionsFile, $enc);
         }
     }
 
@@ -174,6 +339,7 @@ class userModel
      */
     public static function getUserPermissions()
     {
+        self::ensureUserCaseMigration();
         global $encryptionKey;
         $permissionsFile = USERS_DIR . "userPermissions.json";
         $permissionsArray = [];
@@ -211,6 +377,7 @@ class userModel
      */
     public static function updateUserPermissions($permissions)
 {
+    self::ensureUserCaseMigration();
     global $encryptionKey;
     $permissionsFile = USERS_DIR . "userPermissions.json";
     $existingPermissions = [];
@@ -272,7 +439,7 @@ class userModel
 
     $plain = json_encode($existingPermissions, JSON_PRETTY_PRINT);
     $encrypted = encryptData($plain, $encryptionKey);
-    if (file_put_contents($permissionsFile, $encrypted) === false) {
+    if (!self::writeAtomic($permissionsFile, $encrypted)) {
         return ["error" => "Failed to save user permissions."];
     }
     return ["success" => "User permissions updated successfully."];
@@ -305,7 +472,7 @@ class userModel
             $storedUser = $parts[0];
             $storedHash = $parts[1];
 
-            if ($storedUser === $username) {
+            if (strcasecmp($storedUser, $username) === 0) {
                 $userFound = true;
                 if (!password_verify($oldPassword, $storedHash)) {
                     return ["error" => "Old password is incorrect."];
@@ -355,7 +522,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
         }
         $storedUser = $parts[0];
 
-        if ($storedUser === $targetUsername) {
+        if (strcasecmp($storedUser, $targetUsername) === 0) {
             $userFound = true;
             // index 1 is the hash; preserve TOTP/extra fields in the rest of the line
             $parts[1] = password_hash($newPassword, PASSWORD_BCRYPT);
@@ -401,7 +568,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
                     $newLines[] = $line;
                     continue;
                 }
-                if ($parts[0] === $username) {
+                if (strcasecmp($parts[0], $username) === 0) {
                     while (count($parts) < 4) {
                         $parts[] = "";
                     }
@@ -440,7 +607,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
                 $newLines[] = $line;
                 continue;
             }
-            if ($parts[0] === $username) {
+            if (strcasecmp($parts[0], $username) === 0) {
                 while (count($parts) < 4) {
                     $parts[] = "";
                 }
@@ -586,7 +753,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
 
         foreach ($lines as $line) {
             $parts = explode(':', trim($line));
-            if (count($parts) >= 4 && $parts[0] === $username && !empty($parts[3])) {
+            if (count($parts) >= 4 && strcasecmp($parts[0], $username) === 0 && !empty($parts[3])) {
                 $totpSecret = decryptData($parts[3], $encryptionKey);
                 break;
             }
@@ -607,7 +774,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
             $newLines = [];
             foreach ($lines as $line) {
                 $parts = explode(':', trim($line));
-                if (count($parts) >= 3 && $parts[0] === $username) {
+                if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
                     if (count($parts) >= 4) {
                         $parts[3] = $encryptedSecret;
                     } else {
@@ -672,7 +839,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
         $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
         foreach ($lines as $line) {
             $parts = explode(':', trim($line));
-            if (count($parts) >= 4 && $parts[0] === $username && !empty($parts[3])) {
+            if (count($parts) >= 4 && strcasecmp($parts[0], $username) === 0 && !empty($parts[3])) {
                 return decryptData($parts[3], $encryptionKey);
             }
         }
@@ -684,13 +851,14 @@ public static function adminResetPassword($targetUsername, $newPassword)
      */
     public static function getUserRole($username)
     {
+        self::ensureUserCaseMigration();
         $usersFile = USERS_DIR . USERS_FILE;
         if (!file_exists($usersFile)) {
             return null;
         }
         foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
             $parts = explode(':', trim($line));
-            if (count($parts) >= 3 && $parts[0] === $username) {
+            if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
                 return trim($parts[2]);
             }
         }
@@ -702,6 +870,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
      */
     public static function getUser(string $username): array
     {
+        self::ensureUserCaseMigration();
         $usersFile = USERS_DIR . USERS_FILE;
         if (!file_exists($usersFile)) {
             return [];
@@ -709,7 +878,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
 
         foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
             $parts = explode(':', $line);
-            if ($parts[0] !== $username) {
+            if (strcasecmp($parts[0], $username) !== 0) {
                 continue;
             }
             $isAdmin     = (isset($parts[2]) && $parts[2] === '1');
@@ -754,7 +923,7 @@ public static function adminResetPassword($targetUsername, $newPassword)
         foreach ($lines as $line) {
             if ($line === '') { $out[] = $line; continue; }
             $parts = explode(':', $line);
-            if ($parts[0] === $username) {
+            if (strcasecmp($parts[0], $username) === 0) {
                 $found = true;
                 while (count($parts) < 5) {
                     $parts[] = '';

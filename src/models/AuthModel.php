@@ -350,23 +350,177 @@ class AuthModel
      */
     public static function validateRememberToken(string $token): ?array
     {
-        $tokFile = USERS_DIR . 'persistent_tokens.json';
-        if (! file_exists($tokFile)) {
+        $all = self::loadRememberTokenStore();
+        if (!$all) {
             return null;
         }
 
-        // Decrypt and decode the full token store
+        $hash = self::rememberTokenHash($token);
+        $payload = $all[$hash] ?? ($all[$token] ?? null);
+        if (empty($payload) || !isset($payload['expiry']) || $payload['expiry'] < time()) {
+            if (!empty($payload)) {
+                unset($all[$hash], $all[$token]);
+                self::saveRememberTokenStore($all);
+            }
+            return null;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Validate and rotate a remember-me token.
+     *
+     * @param string $token
+     * @return array|null Returns payload + new token on success, or null if invalid/expired.
+     */
+    public static function consumeRememberToken(string $token): ?array
+    {
+        $all = self::loadRememberTokenStore();
+        if (!$all) {
+            return null;
+        }
+
+        $hash = self::rememberTokenHash($token);
+        $payload = $all[$hash] ?? null;
+        $legacyKey = null;
+
+        if ($payload === null && isset($all[$token])) {
+            $payload = $all[$token];
+            $legacyKey = $token;
+        }
+
+        if (empty($payload) || !isset($payload['expiry']) || $payload['expiry'] < time()) {
+            if (!empty($payload)) {
+                unset($all[$hash]);
+                if ($legacyKey !== null) {
+                    unset($all[$legacyKey]);
+                }
+                self::saveRememberTokenStore($all);
+            }
+            return null;
+        }
+
+        $username = (string)($payload['username'] ?? '');
+        if ($username === '') {
+            unset($all[$hash]);
+            if ($legacyKey !== null) {
+                unset($all[$legacyKey]);
+            }
+            self::saveRememberTokenStore($all);
+            return null;
+        }
+
+        $expiry = (int)$payload['expiry'];
+        $isAdmin = !empty($payload['isAdmin']);
+
+        $newToken = bin2hex(random_bytes(32));
+        $newHash = self::rememberTokenHash($newToken);
+
+        $all[$newHash] = [
+            'username' => $username,
+            'expiry'   => $expiry,
+            'isAdmin'  => $isAdmin
+        ];
+
+        unset($all[$hash]);
+        if ($legacyKey !== null) {
+            unset($all[$legacyKey]);
+        }
+
+        self::saveRememberTokenStore($all);
+
+        return [
+            'username' => $username,
+            'expiry'   => $expiry,
+            'isAdmin'  => $isAdmin,
+            'token'    => $newToken
+        ];
+    }
+
+    /**
+     * Issue a new remember-me token and store it hashed on disk.
+     *
+     * @param string $username
+     * @param bool   $isAdmin
+     * @param int|null $expiry
+     * @return array{token:string,expiry:int}
+     */
+    public static function issueRememberToken(string $username, bool $isAdmin, ?int $expiry = null): array
+    {
+        $expiry = $expiry ?? (time() + 30 * 24 * 60 * 60);
+        $token = bin2hex(random_bytes(32));
+
+        $all = self::loadRememberTokenStore();
+        $all[self::rememberTokenHash($token)] = [
+            'username' => $username,
+            'expiry'   => $expiry,
+            'isAdmin'  => $isAdmin
+        ];
+        self::saveRememberTokenStore($all);
+
+        return ['token' => $token, 'expiry' => $expiry];
+    }
+
+    /**
+     * Revoke a remember-me token (hashed or legacy).
+     *
+     * @param string $token
+     * @return void
+     */
+    public static function revokeRememberToken(string $token): void
+    {
+        $all = self::loadRememberTokenStore();
+        if (!$all) {
+            return;
+        }
+
+        $hash = self::rememberTokenHash($token);
+        $changed = false;
+
+        if (isset($all[$hash])) {
+            unset($all[$hash]);
+            $changed = true;
+        }
+        if (isset($all[$token])) {
+            unset($all[$token]);
+            $changed = true;
+        }
+
+        if ($changed) {
+            self::saveRememberTokenStore($all);
+        }
+    }
+
+    protected static function rememberTokenHash(string $token): string
+    {
+        $key = $GLOBALS['encryptionKey'] ?? '';
+        return hash_hmac('sha256', $token, $key);
+    }
+
+    protected static function loadRememberTokenStore(): array
+    {
+        $tokFile = USERS_DIR . 'persistent_tokens.json';
+        if (!file_exists($tokFile)) {
+            return [];
+        }
+
         $encrypted = file_get_contents($tokFile);
         $json      = decryptData($encrypted, $GLOBALS['encryptionKey']);
-        $all       = json_decode($json, true) ?: [];
+        $decoded   = ($json !== false) ? $json : $encrypted;
+        $all       = json_decode($decoded, true);
 
-        // Lookup and expiry check
-        if (empty($all[$token]) || !isset($all[$token]['expiry']) || $all[$token]['expiry'] < time()) {
-            return null;
-        }
+        return is_array($all) ? $all : [];
+    }
 
-        // Valid token—return its payload
-        return $all[$token];
+    protected static function saveRememberTokenStore(array $tokens): void
+    {
+        $tokFile = USERS_DIR . 'persistent_tokens.json';
+        file_put_contents(
+            $tokFile,
+            encryptData(json_encode($tokens, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
+            LOCK_EX
+        );
     }
 
      /**

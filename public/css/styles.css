@@ -3457,6 +3457,7 @@ margin-bottom: 20px;
 
 /* Toggle-style switches for admin panel (OIDC etc.) */
 #adminPanelModal .form-check.fr-toggle,
+#userPanelModal .form-check.fr-toggle,
 .folder-grants-box .form-check.fr-toggle {
   display: flex;
   align-items: center;
@@ -3466,6 +3467,7 @@ margin-bottom: 20px;
 
 /* Base switch track */
 #adminPanelModal .form-check.fr-toggle .fr-toggle-input,
+#userPanelModal .form-check.fr-toggle .fr-toggle-input,
 .folder-grants-box .form-check.fr-toggle .fr-toggle-input {
   appearance: none;
   -webkit-appearance: none;
@@ -3486,6 +3488,7 @@ margin-bottom: 20px;
 
 /* Knob */
 #adminPanelModal .form-check.fr-toggle .fr-toggle-input::before,
+#userPanelModal .form-check.fr-toggle .fr-toggle-input::before,
 .folder-grants-box .form-check.fr-toggle .fr-toggle-input::before {
   content: "";
   position: absolute;
@@ -3501,36 +3504,42 @@ margin-bottom: 20px;
 
 /* ON state */
 #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked,
+#userPanelModal .form-check.fr-toggle .fr-toggle-input:checked,
 .folder-grants-box .form-check.fr-toggle .fr-toggle-input:checked {
   background-color: var(--filr-accent-400, #0d6efd);
   border-color: var(--filr-accent-400, #0d6efd);
 }
 
 #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked::before,
+#userPanelModal .form-check.fr-toggle .fr-toggle-input:checked::before,
 .folder-grants-box .form-check.fr-toggle .fr-toggle-input:checked::before {
   transform: translateX(1.1rem);
 }
 
 /* Focus outline */
 #adminPanelModal .form-check.fr-toggle .fr-toggle-input:focus-visible,
+#userPanelModal .form-check.fr-toggle .fr-toggle-input:focus-visible,
 .folder-grants-box .form-check.fr-toggle .fr-toggle-input:focus-visible {
   box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.35);
 }
 
 /* Dark mode tweaks */
 .dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input,
+.dark-mode #userPanelModal .form-check.fr-toggle .fr-toggle-input,
 .dark-mode .folder-grants-box .form-check.fr-toggle .fr-toggle-input {
   border-color: rgba(255, 255, 255, 0.18);
   background-color: rgba(255, 255, 255, 0.1);
 }
 
 .dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input:checked,
+.dark-mode #userPanelModal .form-check.fr-toggle .fr-toggle-input:checked,
 .dark-mode .folder-grants-box .form-check.fr-toggle .fr-toggle-input:checked {
   background-color: var(--filr-accent-400, #0d6efd);
   border-color: var(--filr-accent-400, #0d6efd);
 }
 
 .dark-mode #adminPanelModal .form-check.fr-toggle .fr-toggle-input::before,
+.dark-mode #userPanelModal .form-check.fr-toggle .fr-toggle-input::before,
 .dark-mode .folder-grants-box .form-check.fr-toggle .fr-toggle-input::before {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }

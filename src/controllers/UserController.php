@@ -285,7 +285,7 @@ public function adminChangeUserPassword()
             echo json_encode(["error" => "Invalid username format"]);
             exit;
         }
-        if (!empty($_SESSION['username']) && $_SESSION['username'] === $usernameToRemove) {
+        if (!empty($_SESSION['username']) && strcasecmp($_SESSION['username'], $usernameToRemove) === 0) {
             echo json_encode(["error" => "Cannot remove yourself"]);
             exit;
         }
@@ -534,6 +534,7 @@ public function adminChangeUserPassword()
             http_response_code(403);
             header('Content-Type: application/json');
             echo json_encode(['error' => 'TOTP setup is disabled for the demo account.']);
+            exit;
         }
      
 
@@ -628,38 +629,13 @@ public function adminChangeUserPassword()
                  $isAdmin = true; // IdP admin group can only elevate, never downgrade
              }
  
-             // Issue remember-me token if requested
-             if ($rememberMe) {
-                 $tokFile = USERS_DIR . 'persistent_tokens.json';
-                 $token   = bin2hex(random_bytes(32));
-                 $expiry  = time() + 30 * 24 * 60 * 60;
-                 $all     = [];
- 
-                 if (file_exists($tokFile)) {
-                     $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
-                     $all = json_decode($dec, true) ?: [];
-                 }
- 
-                 $perms = loadUserPermissions($username);
-                 $all[$token] = [
-                     'username'      => $username,
-                     'expiry'        => $expiry,
-                     'isAdmin'       => $isAdmin,
-                     'folderOnly'    => $perms['folderOnly']    ?? false,
-                     'readOnly'      => $perms['readOnly']      ?? false,
-                     'disableUpload' => $perms['disableUpload'] ?? false,
-                 ];
- 
-                 file_put_contents(
-                     $tokFile,
-                     encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
-                     LOCK_EX
-                 );
- 
-                 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-                 setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
-                 setcookie(session_name(), session_id(), $expiry, '/', '', $secure, true);
-             }
+            // Issue remember-me token if requested
+            if ($rememberMe) {
+                $issued = AuthModel::issueRememberToken($username, (bool)$isAdmin);
+                $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+                setcookie('remember_me_token', $issued['token'], $issued['expiry'], '/', '', $secure, true);
+                setcookie(session_name(), session_id(), $issued['expiry'], '/', '', $secure, true);
+            }
  
              // Finalize login
              session_regenerate_id(true);

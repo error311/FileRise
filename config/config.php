@@ -4,10 +4,28 @@ declare(strict_types=1);
 
 // Define constants
 define('PROJECT_ROOT', dirname(__DIR__));
-define('UPLOAD_DIR',    '/var/www/uploads/');
-define('USERS_DIR',     '/var/www/users/');
+$testUploadDir = getenv('FR_TEST_UPLOAD_DIR');
+$testUsersDir  = getenv('FR_TEST_USERS_DIR');
+$testMetaDir   = getenv('FR_TEST_META_DIR');
+define(
+    'UPLOAD_DIR',
+    ($testUploadDir !== false && $testUploadDir !== '')
+        ? rtrim($testUploadDir, "/\\") . '/'
+        : '/var/www/uploads/'
+);
+define(
+    'USERS_DIR',
+    ($testUsersDir !== false && $testUsersDir !== '')
+        ? rtrim($testUsersDir, "/\\") . '/'
+        : '/var/www/users/'
+);
 define('USERS_FILE',    'users.txt');
-define('META_DIR',      '/var/www/metadata/');
+define(
+    'META_DIR',
+    ($testMetaDir !== false && $testMetaDir !== '')
+        ? rtrim($testMetaDir, "/\\") . '/'
+        : '/var/www/metadata/'
+);
 define('META_FILE',     'file_metadata.json');
 define('TRASH_DIR',     UPLOAD_DIR . 'trash/');
 define('TIMEZONE',      'America/New_York');
@@ -210,36 +228,27 @@ if (empty($_SESSION['csrf_token'])) {
 
 // Auto-login via persistent token
 if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) {
-    $tokFile = USERS_DIR . 'persistent_tokens.json';
-    $tokens = [];
-    if (file_exists($tokFile)) {
-        $enc = file_get_contents($tokFile);
-        $dec = decryptData($enc, $encryptionKey);
-        $tokens = json_decode($dec, true) ?: [];
-    }
-    $token = $_COOKIE['remember_me_token'];
-    if (!empty($tokens[$token])) {
-        $data = $tokens[$token];
-        if ($data['expiry'] >= time()) {
-            // NEW: mitigate session fixation
-            if (session_status() === PHP_SESSION_ACTIVE) {
-                session_regenerate_id(true);
-            }
-
-            $_SESSION["authenticated"] = true;
-            $_SESSION["username"]      = $data["username"];
-            $_SESSION["folderOnly"]    = loadUserPermissions($data["username"]);
-            $_SESSION["isAdmin"]       = !empty($data["isAdmin"]);
-        } else {
-            // expired — clean up
-            unset($tokens[$token]);
-            file_put_contents(
-                $tokFile,
-                encryptData(json_encode($tokens, JSON_PRETTY_PRINT), $encryptionKey),
-                LOCK_EX
-            );
-            setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
+    require_once PROJECT_ROOT . '/src/models/AuthModel.php';
+    $payload = AuthModel::consumeRememberToken($_COOKIE['remember_me_token']);
+    if ($payload) {
+        // NEW: mitigate session fixation
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
         }
+
+        $_SESSION["authenticated"] = true;
+        $_SESSION["username"]      = $payload["username"];
+        $perms = loadUserPermissions($payload["username"]);
+        $_SESSION["folderOnly"]    = $perms['folderOnly']    ?? false;
+        $_SESSION["readOnly"]      = $perms['readOnly']      ?? false;
+        $_SESSION["disableUpload"] = $perms['disableUpload'] ?? false;
+        $_SESSION["isAdmin"]       = !empty($payload["isAdmin"]);
+
+        if (!empty($payload['token']) && !empty($payload['expiry'])) {
+            setcookie('remember_me_token', $payload['token'], (int)$payload['expiry'], '/', '', $secure, true);
+        }
+    } else {
+        setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
     }
 }
 

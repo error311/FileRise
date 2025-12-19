@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 12/19/2025 (v2.10.2)
+
+`release(v2.10.2): harden auth + remember-me rotation, user panel, and case-insensitive users`
+
+- Store remember-me tokens hashed (HMAC) and rotate on use; centralize issue/consume/revoke in AuthModel and clear invalid cookies.
+- Add auth security regression tests (auto-login, token rotation, expiry) + test-only env overrides for USERS/UPLOAD/META dirs; ignore tests in Docker builds.
+- Make username handling case-insensitive and run a one-time users/permissions “canonical case” migration with atomic writes.
+- Refactor AuthController login flow (JSON parsing, TOTP step, OIDC flow + group extraction / Pro mapping) for clarity and safer handling.
+- Extract the User Panel into its own module (fixed-height modal), add “show hover preview” i18n, and reuse the toggle switch styling.
+
+---
+
 ## Changes 12/18/2025 (v2.10.0 & 2.10.1)
 
 `release(v2.10.1): tighten DOM safety & sanitize admin logo URL`

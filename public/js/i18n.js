@@ -368,6 +368,7 @@ const translations = {
     "more_actions": "More Actions",
     "folder_actions": "Folder Actions",
     "disable_hover_preview": "Disable hover preview in file list",
+    "show_hover_preview": "Show hover preview in file list",
     "view_options": "View Options",
     "zoom_in": "Zoom In",
     "zoom_out": "Zoom Out",
@@ -629,6 +630,7 @@ const translations = {
     "your_recovery_code": "Su código de recuperación",
     "please_save_recovery_code": "Por favor, guarde este código de forma segura. No se mostrará de nuevo y solo podrá usarse una vez.",
     "ok": "OK",
+    "show_hover_preview": "Mostrar vista previa al pasar el ratón en la lista de archivos",
     "columns": "Columnas"
   },
   fr: {
@@ -858,6 +860,7 @@ const translations = {
     "your_recovery_code": "Votre code de récupération",
     "please_save_recovery_code": "Veuillez sauvegarder ce code en toute sécurité. Il ne sera plus affiché et ne pourra être utilisé qu'une seule fois.",
     "ok": "OK",
+    "show_hover_preview": "Afficher l'aperçu au survol dans la liste des fichiers",
     "columns": "Colonnes"
   },
   de: {
@@ -1096,6 +1099,7 @@ const translations = {
     "your_recovery_code": "Ihr Wiederherstellungscode",
     "please_save_recovery_code": "Bitte speichern Sie diesen Code sicher. Er wird nicht erneut angezeigt und kann nur einmal verwendet werden.",
     "ok": "OK",
+    "show_hover_preview": "Hover-Vorschau in der Dateiliste anzeigen",
     "show": "Zeige",
     "items_per_page": "elemente pro seite",
     "columns": "Spalten"
@@ -1346,6 +1350,7 @@ const translations = {
     "your_recovery_code": "您的恢复代码",
     "please_save_recovery_code": "请妥善保存此代码。此代码仅显示一次且只能使用一次。",
     "ok": "确定",
+    "show_hover_preview": "在文件列表中显示悬停预览",
     "show": "显示",
     "items_per_page": "每页项目数",
     "columns": "列",

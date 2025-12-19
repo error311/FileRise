@@ -12,12 +12,12 @@ import { renderFileTable } from './fileListView.js?v={{APP_QVER}}';
 import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
 import {
   openTOTPLoginModal as originalOpenTOTPLoginModal,
-  openUserPanel,
   openTOTPModal,
   closeTOTPModal,
   setLastLoginData,
   openApiModal
 } from './authModals.js?v={{APP_QVER}}';
+import { openUserPanel } from './userPanel.js?v={{APP_QVER}}';
 import { openAdminPanel } from './adminPanel.js?v={{APP_QVER}}';
 import { initializeApp, triggerLogout } from './appCore.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';

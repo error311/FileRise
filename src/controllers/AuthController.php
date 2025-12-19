@@ -3,7 +3,10 @@
 
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/AuthModel.php';
-require_once PROJECT_ROOT . '/vendor/autoload.php';
+$autoload = PROJECT_ROOT . '/vendor/autoload.php';
+if (file_exists($autoload)) {
+    require_once $autoload;
+}
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 use RobThree\Auth\Algorithm;
@@ -54,292 +57,328 @@ class AuthController
         });
 
         // Decode any JSON payload
-        $data       = json_decode(file_get_contents('php://input'), true) ?: [];
+        $data       = $this->readJsonInput();
         $username   = trim($data['username']   ?? '');
         $password   = trim($data['password']   ?? '');
         $totpCode   = trim($data['totp_code']  ?? '');
         $rememberMe = !empty($data['remember_me']);
 
-        //
-        // 1) TOTP-only step: user already passed credentials and we asked for TOTP,
-        //    now they POST just totp_code.
-        //
-        if ($totpCode && isset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret'])) {
-            $username    = $_SESSION['pending_login_user'];
-            $secret      = $_SESSION['pending_login_secret'];
-            $rememberMe  = $_SESSION['pending_login_remember_me'] ?? false;
-
-            $tfa = new TwoFactorAuth(new GoogleChartsQrCodeProvider(), 'FileRise', 6, 30, Algorithm::Sha1);
-            if (!$tfa->verifyCode($secret, $totpCode)) {
-                echo json_encode(['error' => 'Invalid TOTP code']);
-                exit();
-            }
-
-            // clear the pending markers
-            unset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret']);
-            // now finish login
-            $this->finalizeLogin($username, $rememberMe);
+        // 1) TOTP-only step
+        if ($this->handleTotpStep($totpCode)) {
+            return;
         }
 
-        //
         // 2) OIDC flow
-        //
+        if ($this->handleOidcFlow()) {
+            return;
+        }
+
+        // 3) Form-based / AJAX login
+        $this->handleFormLogin($username, $password, $rememberMe);
+    }
+
+    protected function readJsonInput(): array
+    {
+        $raw = file_get_contents('php://input');
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : [];
+    }
+
+    protected function handleTotpStep(string $totpCode): bool
+    {
+        if ($totpCode === '' || !isset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret'])) {
+            return false;
+        }
+
+        $username   = $_SESSION['pending_login_user'];
+        $secret     = $_SESSION['pending_login_secret'];
+        $rememberMe = $_SESSION['pending_login_remember_me'] ?? false;
+
+        $tfa = new TwoFactorAuth(new GoogleChartsQrCodeProvider(), 'FileRise', 6, 30, Algorithm::Sha1);
+        if (!$tfa->verifyCode($secret, $totpCode)) {
+            echo json_encode(['error' => 'Invalid TOTP code']);
+            exit();
+        }
+
+        unset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret']);
+        $this->finalizeLogin($username, (bool)$rememberMe);
+        return true;
+    }
+
+    protected function getOidcAction(): ?string
+    {
         $oidcAction = $_GET['oidc'] ?? null;
         if (!$oidcAction && isset($_GET['code'])) {
             $oidcAction = 'callback';
         }
-
-        if ($oidcAction) {
-            $this->logOidcDebug('Incoming OIDC request', [
-                'action'       => $oidcAction,
-                'has_code'     => isset($_GET['code']),
-                'issuer_param' => $_GET['iss'] ?? null,
-                'request_uri'  => $_SERVER['REQUEST_URI'] ?? null,
-            ]);
-
-            $cfg          = AdminModel::getConfig();
-            $clientId     = $cfg['oidc']['clientId']     ?? null;
-            $clientSecret = $cfg['oidc']['clientSecret'] ?? null;
-            $publicClient = !empty($cfg['oidc']['publicClient']);
-
-            // When configured as a public client (no secret), pass null, not an empty string.
-            if (is_string($clientSecret)) {
-                $clientSecret = trim($clientSecret);
-            }
-            if ($clientSecret === '' || $publicClient) {
-                $clientSecret = null;
-            }
-
-            $tokenAuthMethod = null;
-            if (defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD') && OIDC_TOKEN_ENDPOINT_AUTH_METHOD) {
-                $tokenAuthMethod = OIDC_TOKEN_ENDPOINT_AUTH_METHOD;
-            }
-            // Default token endpoint auth: none for public clients, basic for confidential.
-            if (!$tokenAuthMethod) {
-                $tokenAuthMethod = $clientSecret ? 'client_secret_basic' : 'none';
-            }
-
-            $this->logOidcDebug('Building OIDC client', [
-                'providerUrl'            => $cfg['oidc']['providerUrl'] ?? null,
-                'redirectUri'            => $cfg['oidc']['redirectUri'] ?? null,
-                'clientId'               => $clientId,
-                'hasClientSecret'        => $clientSecret ? 'yes' : 'no',
-                'publicClient'           => $publicClient ? 'yes' : 'no',
-                'tokenEndpointAuthMethod'=> $tokenAuthMethod ?: '(library default)',
-            ]);
-
-            $oidc = new OpenIDConnectClient(
-                $cfg['oidc']['providerUrl'],
-                $clientId ?: null,
-                $clientSecret
-            );
-
-            // Always send PKCE (S256). Required by Authelia for public clients, safe for confidential ones.
-            if (method_exists($oidc, 'setCodeChallengeMethod')) {
-                $oidc->setCodeChallengeMethod('S256');
-            }
-
-            // client_secret_post with Authelia using config.php
-            if (method_exists($oidc, 'setTokenEndpointAuthMethod') && $tokenAuthMethod) {
-                $oidc->setTokenEndpointAuthMethod($tokenAuthMethod);
-            }
-
-            $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
-            $oidc->addScope(['openid', 'profile', 'email']);
-
-            if ($oidcAction === 'callback') {
-                try {
-                    $this->logOidcDebug('OIDC callback starting authenticate()');
-                    $oidc->authenticate();
-                    $this->logOidcDebug('OIDC authenticate() succeeded, fetching user info');
-
-                    // Resolve username from claims (same as your original)
-                    $username =
-                        $oidc->requestUserInfo('preferred_username')
-                        ?: $oidc->requestUserInfo('email')
-                        ?: $oidc->requestUserInfo('sub');
-
-                    $username = trim((string)$username);
-                    if ($username === '') {
-                        http_response_code(401);
-                        echo json_encode(['error' => 'Authentication failed: no username in OIDC claims.']);
-                        exit();
-                    }
-
-                    // Pull full userinfo once so we can inspect groups / roles
-                    $userinfo = $oidc->requestUserInfo();
-
-                    // Collect groups/roles from various fields (same logic as before)
-                    $rawTags = [];
-
-                    $addTags = function ($val) use (&$rawTags) {
-                        if (is_array($val)) {
-                            foreach ($val as $v) {
-                                $v = trim((string)$v);
-                                if ($v !== '') {
-                                    $rawTags[] = $v;
-                                }
-                            }
-                        } elseif (is_string($val)) {
-                            // support comma or space separated lists
-                            foreach (preg_split('/[,\s]+/', $val) as $v) {
-                                $v = trim($v);
-                                if ($v !== '') {
-                                    $rawTags[] = $v;
-                                }
-                            }
-                        }
-                    };
-
-                    // 1) Common flat claims (includes "usergroups" which you mentioned)
-                    foreach (['groups', 'group', 'usergroups', 'user_groups', 'roles'] as $field) {
-                        if (isset($userinfo->$field)) {
-                            $addTags($userinfo->$field);
-                        }
-                    }
-
-                    // 2) realm_access.roles (Keycloak realm roles)
-                    if (isset($userinfo->realm_access) && is_object($userinfo->realm_access)
-                        && isset($userinfo->realm_access->roles) && is_array($userinfo->realm_access->roles)
-                    ) {
-                        $addTags($userinfo->realm_access->roles);
-                    }
-
-                    // 3) resource_access.<client>.roles (Keycloak client roles)
-                    if (isset($userinfo->resource_access) && is_object($userinfo->resource_access)) {
-                        foreach (get_object_vars($userinfo->resource_access) as $clientObj) {
-                            if (is_object($clientObj) && isset($clientObj->roles) && is_array($clientObj->roles)) {
-                                $addTags($clientObj->roles);
-                            }
-                        }
-                    }
-
-                    // Normalize tags: strip leading '/', trim, drop empties
-                    $normalizedTags = [];
-                    foreach ($rawTags as $g) {
-                        $g = trim((string)$g);
-                        if ($g === '') {
-                            continue;
-                        }
-                        // Keycloak groups often look like "/filerise-admins" or "/frp_staff"
-                        $g = ltrim($g, '/');
-                        if ($g === '') {
-                            continue;
-                        }
-                        $normalizedTags[] = $g;
-                    }
-
-                    $this->logOidcDebug('OIDC userinfo summary', [
-                        'username'      => $username,
-                        'has_email'     => isset($userinfo->email),
-                        'has_preferred' => isset($userinfo->preferred_username),
-                        'group_count'   => count($normalizedTags),
-                    ]);
-
-                    // Determine whether IdP says this user is an admin
-                    $isAdminByIdp = false;
-                    if (!empty($normalizedTags) && defined('FR_OIDC_ADMIN_GROUP') && FR_OIDC_ADMIN_GROUP !== '') {
-                        $adminNeedle = strtolower(FR_OIDC_ADMIN_GROUP);
-                        foreach ($normalizedTags as $tag) {
-                            if (strtolower($tag) === $adminNeedle) {
-                                $isAdminByIdp = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Determine which Pro groups this user should be in.
-// Uses FR_OIDC_PRO_GROUP_PREFIX for backward compatibility.
-// - If prefix is '', ALL groups are mapped into Pro groups.
-// - If prefix is non-empty, only groups starting with that prefix are used.
-$proGroupSlugs = [];
-$prefix        = defined('FR_OIDC_PRO_GROUP_PREFIX') ? (string)FR_OIDC_PRO_GROUP_PREFIX : '';
-$prefixLc      = strtolower($prefix);
-
-foreach ($normalizedTags as $tag) {
-    $tagLc = strtolower($tag);
-
-    if ($prefixLc === '') {
-        // Empty prefix → import all IdP groups as-is
-        $proGroupSlugs[] = $tag;
-    } elseif (strpos($tagLc, $prefixLc) === 0) {
-        // Non-empty prefix → only groups starting with it
-        $proGroupSlugs[] = $tag;
+        return $oidcAction ?: null;
     }
-}
 
-                    // Make sure a local FileRise account exists, and upgrade to admin if IdP says so
-                    $ensure = AuthModel::ensureLocalOidcUser($username, $isAdminByIdp);
-                    if (isset($ensure['error'])) {
-                        error_log('OIDC local user ensure failed for ' . $username . ': ' . $ensure['error']);
-                        http_response_code(403);
-                        echo json_encode(['error' => 'OIDC login rejected: ' . $ensure['error']]);
-                        exit();
-                    }
+    protected function handleOidcFlow(): bool
+    {
+        $oidcAction = $this->getOidcAction();
+        if (!$oidcAction) {
+            return false;
+        }
 
-                    // Best-effort: map IdP groups into FileRise Pro groups
-                    try {
-                        if (method_exists('AuthModel', 'applyOidcGroupsToPro')) {
-                            AuthModel::applyOidcGroupsToPro($username, $proGroupSlugs);
-                        }
-                    } catch (\Throwable $syncEx) {
-                        error_log('OIDC Pro group sync error for ' . $username . ': ' . $syncEx->getMessage());
-                    }
+        $this->logOidcDebug('Incoming OIDC request', [
+            'action'       => $oidcAction,
+            'has_code'     => isset($_GET['code']),
+            'issuer_param' => $_GET['iss'] ?? null,
+            'request_uri'  => $_SERVER['REQUEST_URI'] ?? null,
+        ]);
 
-                    // check if this user has a TOTP secret
-                    $totp_secret = null;
-                    $usersFile   = USERS_DIR . USERS_FILE;
-                    if (file_exists($usersFile)) {
-                        foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-                            $parts = explode(':', trim($line));
-                            if (count($parts) >= 4 && $parts[0] === $username && $parts[3] !== '') {
-                                $totp_secret = decryptData($parts[3], $GLOBALS['encryptionKey']);
-                                break;
-                            }
-                        }
-                    }
+        $cfg          = AdminModel::getConfig();
+        $clientId     = $cfg['oidc']['clientId']     ?? null;
+        $clientSecret = $cfg['oidc']['clientSecret'] ?? null;
+        $publicClient = !empty($cfg['oidc']['publicClient']);
 
-                    if ($totp_secret) {
-                        $_SESSION['pending_login_user']   = $username;
-                        $_SESSION['pending_login_secret'] = $totp_secret;
-                        header('Location: ' . fr_with_base_path('/index.html?totp_required=1'));
-                        exit();
-                    }
+        // When configured as a public client (no secret), pass null, not an empty string.
+        if (is_string($clientSecret)) {
+            $clientSecret = trim($clientSecret);
+        }
+        if ($clientSecret === '' || $publicClient) {
+            $clientSecret = null;
+        }
 
-                    // no TOTP → finish immediately (this recomputes isAdmin from users.txt)
-                    $this->finishBrowserLogin($username);
-                } catch (\Exception $e) {
-                    $this->logOidcDebug('OIDC authenticate() threw exception', [
-                        'exception' => get_class($e),
-                        'message'   => $e->getMessage(),
-                    ]);
-                    error_log("OIDC auth error: " . $e->getMessage());
+        $tokenAuthMethod = null;
+        if (defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD') && OIDC_TOKEN_ENDPOINT_AUTH_METHOD) {
+            $tokenAuthMethod = OIDC_TOKEN_ENDPOINT_AUTH_METHOD;
+        }
+        // Default token endpoint auth: none for public clients, basic for confidential.
+        if (!$tokenAuthMethod) {
+            $tokenAuthMethod = $clientSecret ? 'client_secret_basic' : 'none';
+        }
+
+        $this->logOidcDebug('Building OIDC client', [
+            'providerUrl'            => $cfg['oidc']['providerUrl'] ?? null,
+            'redirectUri'            => $cfg['oidc']['redirectUri'] ?? null,
+            'clientId'               => $clientId,
+            'hasClientSecret'        => $clientSecret ? 'yes' : 'no',
+            'publicClient'           => $publicClient ? 'yes' : 'no',
+            'tokenEndpointAuthMethod'=> $tokenAuthMethod ?: '(library default)',
+        ]);
+
+        $oidc = new OpenIDConnectClient(
+            $cfg['oidc']['providerUrl'],
+            $clientId ?: null,
+            $clientSecret
+        );
+
+        // Always send PKCE (S256). Required by Authelia for public clients, safe for confidential ones.
+        if (method_exists($oidc, 'setCodeChallengeMethod')) {
+            $oidc->setCodeChallengeMethod('S256');
+        }
+
+        // client_secret_post with Authelia using config.php
+        if (method_exists($oidc, 'setTokenEndpointAuthMethod') && $tokenAuthMethod) {
+            $oidc->setTokenEndpointAuthMethod($tokenAuthMethod);
+        }
+
+        $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
+        $oidc->addScope(['openid', 'profile', 'email']);
+
+        if ($oidcAction === 'callback') {
+            try {
+                $this->logOidcDebug('OIDC callback starting authenticate()');
+                $oidc->authenticate();
+                $this->logOidcDebug('OIDC authenticate() succeeded, fetching user info');
+
+                // Resolve username from claims (same as your original)
+                $username =
+                    $oidc->requestUserInfo('preferred_username')
+                    ?: $oidc->requestUserInfo('email')
+                    ?: $oidc->requestUserInfo('sub');
+
+                $username = trim((string)$username);
+                if ($username === '') {
                     http_response_code(401);
-                    echo json_encode(['error' => 'Authentication failed.']);
+                    echo json_encode(['error' => 'Authentication failed: no username in OIDC claims.']);
                     exit();
                 }
-            } else {
-                // initial OIDC redirect
+
+                // Pull full userinfo once so we can inspect groups / roles
+                $userinfo = $oidc->requestUserInfo();
+
+                $normalizedTags = $this->extractOidcGroupTags($userinfo);
+
+                $this->logOidcDebug('OIDC userinfo summary', [
+                    'username'      => $username,
+                    'has_email'     => isset($userinfo->email),
+                    'has_preferred' => isset($userinfo->preferred_username),
+                    'group_count'   => count($normalizedTags),
+                ]);
+
+                // Determine whether IdP says this user is an admin
+                $isAdminByIdp = false;
+                if (!empty($normalizedTags) && defined('FR_OIDC_ADMIN_GROUP') && FR_OIDC_ADMIN_GROUP !== '') {
+                    $adminNeedle = strtolower(FR_OIDC_ADMIN_GROUP);
+                    foreach ($normalizedTags as $tag) {
+                        if (strtolower($tag) === $adminNeedle) {
+                            $isAdminByIdp = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Determine which Pro groups this user should be in.
+                // Uses FR_OIDC_PRO_GROUP_PREFIX for backward compatibility.
+                // - If prefix is '', ALL groups are mapped into Pro groups.
+                // - If prefix is non-empty, only groups starting with that prefix are used.
+                $proGroupSlugs = [];
+                $prefix        = defined('FR_OIDC_PRO_GROUP_PREFIX') ? (string)FR_OIDC_PRO_GROUP_PREFIX : '';
+                $prefixLc      = strtolower($prefix);
+
+                foreach ($normalizedTags as $tag) {
+                    $tagLc = strtolower($tag);
+
+                    if ($prefixLc === '') {
+                        // Empty prefix → import all IdP groups as-is
+                        $proGroupSlugs[] = $tag;
+                    } elseif (strpos($tagLc, $prefixLc) === 0) {
+                        // Non-empty prefix → only groups starting with it
+                        $proGroupSlugs[] = $tag;
+                    }
+                }
+
+                // Make sure a local FileRise account exists, and upgrade to admin if IdP says so
+                $ensure = AuthModel::ensureLocalOidcUser($username, $isAdminByIdp);
+                if (isset($ensure['error'])) {
+                    error_log('OIDC local user ensure failed for ' . $username . ': ' . $ensure['error']);
+                    http_response_code(403);
+                    echo json_encode(['error' => 'OIDC login rejected: ' . $ensure['error']]);
+                    exit();
+                }
+
+                // Best-effort: map IdP groups into FileRise Pro groups
                 try {
-                    $this->logOidcDebug('Starting OIDC authentication redirect');
-                    $oidc->authenticate();
+                    if (method_exists('AuthModel', 'applyOidcGroupsToPro')) {
+                        AuthModel::applyOidcGroupsToPro($username, $proGroupSlugs);
+                    }
+                } catch (\Throwable $syncEx) {
+                    error_log('OIDC Pro group sync error for ' . $username . ': ' . $syncEx->getMessage());
+                }
+
+                // check if this user has a TOTP secret
+                $totp_secret = null;
+                $usersFile   = USERS_DIR . USERS_FILE;
+                if (file_exists($usersFile)) {
+                    foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                        $parts = explode(':', trim($line));
+                        if (count($parts) >= 4 && $parts[0] === $username && $parts[3] !== '') {
+                            $totp_secret = decryptData($parts[3], $GLOBALS['encryptionKey']);
+                            break;
+                        }
+                    }
+                }
+
+                if ($totp_secret) {
+                    $_SESSION['pending_login_user']   = $username;
+                    $_SESSION['pending_login_secret'] = $totp_secret;
+                    header('Location: ' . fr_with_base_path('/index.html?totp_required=1'));
                     exit();
-                } catch (\Exception $e) {
-                    $this->logOidcDebug('OIDC initiation exception', [
-                        'exception' => get_class($e),
-                        'message'   => $e->getMessage(),
-                    ]);
-                    error_log("OIDC initiation error: " . $e->getMessage());
-                    http_response_code(401);
-                    echo json_encode(['error' => 'Authentication initiation failed.']);
-                    exit();
+                }
+
+                // no TOTP → finish immediately (this recomputes isAdmin from users.txt)
+                $this->finishBrowserLogin($username);
+            } catch (\Exception $e) {
+                $this->logOidcDebug('OIDC authenticate() threw exception', [
+                    'exception' => get_class($e),
+                    'message'   => $e->getMessage(),
+                ]);
+                error_log("OIDC auth error: " . $e->getMessage());
+                http_response_code(401);
+                echo json_encode(['error' => 'Authentication failed.']);
+                exit();
+            }
+        } else {
+            // initial OIDC redirect
+            try {
+                $this->logOidcDebug('Starting OIDC authentication redirect');
+                $oidc->authenticate();
+                exit();
+            } catch (\Exception $e) {
+                $this->logOidcDebug('OIDC initiation exception', [
+                    'exception' => get_class($e),
+                    'message'   => $e->getMessage(),
+                ]);
+                error_log("OIDC initiation error: " . $e->getMessage());
+                http_response_code(401);
+                echo json_encode(['error' => 'Authentication initiation failed.']);
+                exit();
+            }
+        }
+
+        return true;
+    }
+
+    protected function extractOidcGroupTags(object $userinfo): array
+    {
+        // Collect groups/roles from various fields (same logic as before)
+        $rawTags = [];
+
+        $addTags = function ($val) use (&$rawTags) {
+            if (is_array($val)) {
+                foreach ($val as $v) {
+                    $v = trim((string)$v);
+                    if ($v !== '') {
+                        $rawTags[] = $v;
+                    }
+                }
+            } elseif (is_string($val)) {
+                // support comma or space separated lists
+                foreach (preg_split('/[,\s]+/', $val) as $v) {
+                    $v = trim($v);
+                    if ($v !== '') {
+                        $rawTags[] = $v;
+                    }
+                }
+            }
+        };
+
+        // 1) Common flat claims (includes "usergroups" which you mentioned)
+        foreach (['groups', 'group', 'usergroups', 'user_groups', 'roles'] as $field) {
+            if (isset($userinfo->$field)) {
+                $addTags($userinfo->$field);
+            }
+        }
+
+        // 2) realm_access.roles (Keycloak realm roles)
+        if (isset($userinfo->realm_access) && is_object($userinfo->realm_access)
+            && isset($userinfo->realm_access->roles) && is_array($userinfo->realm_access->roles)
+        ) {
+            $addTags($userinfo->realm_access->roles);
+        }
+
+        // 3) resource_access.<client>.roles (Keycloak client roles)
+        if (isset($userinfo->resource_access) && is_object($userinfo->resource_access)) {
+            foreach (get_object_vars($userinfo->resource_access) as $clientObj) {
+                if (is_object($clientObj) && isset($clientObj->roles) && is_array($clientObj->roles)) {
+                    $addTags($clientObj->roles);
                 }
             }
         }
 
-        //
-        // 3) Form-based / AJAX login
-        //
+        // Normalize tags: strip leading '/', trim, drop empties
+        $normalizedTags = [];
+        foreach ($rawTags as $g) {
+            $g = trim((string)$g);
+            if ($g === '') {
+                continue;
+            }
+            // Keycloak groups often look like "/filerise-admins" or "/frp_staff"
+            $g = ltrim($g, '/');
+            if ($g === '') {
+                continue;
+            }
+            $normalizedTags[] = $g;
+        }
+
+        return $normalizedTags;
+    }
+
+    protected function handleFormLogin(string $username, string $password, bool $rememberMe): void
+    {
         if (!$username || !$password) {
             http_response_code(400);
             echo json_encode(['error' => 'Username and password are required']);
@@ -413,36 +452,14 @@ foreach ($normalizedTags as $tag) {
 
         // remember-me
         if ($rememberMe) {
-            $tokFile = USERS_DIR . 'persistent_tokens.json';
-            $token   = bin2hex(random_bytes(32));
-            $expiry  = time() + 30 * 24 * 60 * 60;
-            $all     = [];
-
-            if (file_exists($tokFile)) {
-                $dec = decryptData(file_get_contents($tokFile), $GLOBALS['encryptionKey']);
-                $all = json_decode($dec, true) ?: [];
-            }
-
-            $all[$token] = [
-                'username' => $username,
-                'expiry'   => $expiry,
-                'isAdmin'  => $_SESSION['isAdmin']
-            ];
-
-            file_put_contents(
-                $tokFile,
-                encryptData(json_encode($all, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']),
-                LOCK_EX
-            );
-
+            $issued = AuthModel::issueRememberToken($username, (bool)$_SESSION['isAdmin']);
             $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-
-            setcookie('remember_me_token', $token, $expiry, '/', '', $secure, true);
+            setcookie('remember_me_token', $issued['token'], $issued['expiry'], '/', '', $secure, true);
 
             setcookie(
                 session_name(),
                 session_id(),
-                $expiry,
+                $issued['expiry'],
                 '/',
                 '',
                 $secure,
@@ -496,7 +513,7 @@ foreach ($normalizedTags as $tag) {
     {
         // 1) Remember-me re-login
         if (empty($_SESSION['authenticated']) && !empty($_COOKIE['remember_me_token'])) {
-            $payload = AuthModel::validateRememberToken($_COOKIE['remember_me_token']);
+            $payload = AuthModel::consumeRememberToken($_COOKIE['remember_me_token']);
             if ($payload) {
                 $old = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
                 session_regenerate_id(true);
@@ -504,9 +521,15 @@ foreach ($normalizedTags as $tag) {
                 $_SESSION['authenticated']  = true;
                 $_SESSION['username']       = $payload['username'];
                 $_SESSION['isAdmin']        = !empty($payload['isAdmin']);
-                $_SESSION['folderOnly']     = $payload['folderOnly']    ?? false;
-                $_SESSION['readOnly']       = $payload['readOnly']      ?? false;
-                $_SESSION['disableUpload']  = $payload['disableUpload'] ?? false;
+                $perms = loadUserPermissions($payload['username']);
+                $_SESSION['folderOnly']     = $perms['folderOnly']    ?? false;
+                $_SESSION['readOnly']       = $perms['readOnly']      ?? false;
+                $_SESSION['disableUpload']  = $perms['disableUpload'] ?? false;
+
+                if (!empty($payload['token']) && !empty($payload['expiry'])) {
+                    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+                    setcookie('remember_me_token', $payload['token'], (int)$payload['expiry'], '/', '', $secure, true);
+                }
 
                 // TOTP enabled? (same logic as below)
                 $usersFile = USERS_DIR . USERS_FILE;
@@ -533,6 +556,9 @@ foreach ($normalizedTags as $tag) {
                 ]);
                 exit();
             }
+
+            $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+            setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
         }
 
         $usersFile = USERS_DIR . USERS_FILE;
@@ -631,20 +657,7 @@ foreach ($normalizedTags as $tag) {
                 exit();
             }
 
-            // Finalize login.
-            session_regenerate_id(true);
-            $_SESSION["authenticated"] = true;
-            $_SESSION["username"]      = $username;
-            $_SESSION["isAdmin"]       = (AuthModel::getUserRole($username) === "1");
-
-            // load _all_ the permissions
-            $userPerms = loadUserPermissions($username);
-            $_SESSION["folderOnly"]    = $userPerms["folderOnly"]    ?? false;
-            $_SESSION["readOnly"]      = $userPerms["readOnly"]      ?? false;
-            $_SESSION["disableUpload"] = $userPerms["disableUpload"] ?? false;
-
-            header("Location: " . fr_with_base_path("/index.html"));
-            exit();
+            $this->finishBrowserLogin($username);
         }
 
         // Invalid credentials; prompt again.
@@ -668,17 +681,7 @@ foreach ($normalizedTags as $tag) {
         // Remove the "remember_me_token" from persistent tokens.
         if (isset($_COOKIE['remember_me_token'])) {
             $token = $_COOKIE['remember_me_token'];
-            $persistentTokensFile = USERS_DIR . 'persistent_tokens.json';
-            if (file_exists($persistentTokensFile)) {
-                $encryptedContent = file_get_contents($persistentTokensFile);
-                $decryptedContent = decryptData($encryptedContent, $GLOBALS['encryptionKey']);
-                $persistentTokens = json_decode($decryptedContent, true);
-                if (is_array($persistentTokens) && isset($persistentTokens[$token])) {
-                    unset($persistentTokens[$token]);
-                    $newEncryptedContent = encryptData(json_encode($persistentTokens, JSON_PRETTY_PRINT), $GLOBALS['encryptionKey']);
-                    file_put_contents($persistentTokensFile, $newEncryptedContent, LOCK_EX);
-                }
-            }
+            AuthModel::revokeRememberToken($token);
             // Clear the cookie.
             $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
             setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
