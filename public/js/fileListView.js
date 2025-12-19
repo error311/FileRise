@@ -107,13 +107,19 @@ function updateEncryptedFolderBanner(folder) {
   const rootLabel = inherited && root ? ` (inherited from ${root})` : '';
 
   el.style.display = 'flex';
-  // nosemgrep: javascript.browser.security.dom-xss.innerhtml
-  el.innerHTML = `
-    <span class="fr-enc-pill">Encrypted</span>
-    <div class="fr-enc-text">
-      This folder${rootLabel} is encrypted. Video/audio previews, WebDAV, ONLYOFFICE, and ZIP create/extract are disabled.
-    </div>
-  `;
+  el.textContent = '';
+
+  const pill = document.createElement('span');
+  pill.className = 'fr-enc-pill';
+  pill.textContent = 'Encrypted';
+
+  const text = document.createElement('div');
+  text.className = 'fr-enc-text';
+  text.textContent =
+    `This folder${rootLabel} is encrypted. ` +
+    'Video/audio previews, WebDAV, ONLYOFFICE, and ZIP create/extract are disabled.';
+
+  el.append(pill, text);
 }
 
 function applyEncryptedFolderUiRestrictions() {

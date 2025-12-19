@@ -1,6 +1,14 @@
 # Changelog
 
-## Changes 12/18/2025 (v2.10.0)
+## Changes 12/18/2025 (v2.10.0 & 2.10.1)
+
+`release(v2.10.1): tighten DOM safety & sanitize admin logo URL`
+
+- Fix encrypted folder banner to avoid setting raw innerHTML,
+  instead building elements with textContent for safer DOM updates.
+- Improve admin panel branding logo URL handling with a
+  dedicated sanitizer function that normalizes site-relative paths,
+  strips CR/LF, enforces valid http/https, and respects base paths.
 
 `release(v2.10.0): encryption at rest + firewall/proxy settings + subpath/base-path support (closes #73)`
 

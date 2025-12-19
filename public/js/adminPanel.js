@@ -342,24 +342,36 @@ function updateHeaderLogoFromAdmin() {
     const logoImg = document.querySelector('.header-logo img');
     if (!logoImg) return;
 
-    let url = (input && input.value.trim()) || '';
+    const sanitizeLogoUrl = (raw) => {
+      let url = (raw || '').trim();
+      if (!url) return '';
 
-    // If they used a bare "uploads/..." path, normalize to "/uploads/..."
-    if (url && !url.startsWith('/') && url.startsWith('uploads/')) {
-      url = '/' + url;
-    }
+      // If they used a bare "uploads/..." path, normalize to "/uploads/..."
+      if (!url.startsWith('/') && url.startsWith('uploads/')) {
+        url = '/' + url;
+      }
 
-    // ---- Sanitize URL (mirror AdminModel::sanitizeLogoUrl) ----
-    const isHttp = /^https?:\/\//i.test(url);
-    const isSiteRelative = url.startsWith('/') && !url.includes('://');
+      // Strip any CR/LF just in case
+      url = url.replace(/[\r\n]+/g, '');
 
-    // Strip any CR/LF just in case
-    url = url.replace(/[\r\n]+/g, '');
+      if (url.startsWith('/')) {
+        if (url.includes('://')) return '';
+        return withBase(url);
+      }
 
-    if (url && (isHttp || isSiteRelative)) {
-      // safe enough for <img src="...">
-      // Note: when mounted under a subpath (e.g. /fr), site-relative paths must be base-aware.
-      logoImg.setAttribute('src', isSiteRelative ? withBase(url) : url);
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+        return parsed.toString();
+      } catch (e) {
+        return '';
+      }
+    };
+
+    const safeUrl = sanitizeLogoUrl((input && input.value) || '');
+
+    if (safeUrl) {
+      logoImg.setAttribute('src', safeUrl);
       logoImg.setAttribute('alt', 'Site logo');
     } else {
       // fall back to default FileRise logo
