@@ -332,11 +332,13 @@ export async function openUserPanel() {
       const f = this.files[0];
       if (!f) return;
       // preview immediately
-      // #nosec
-      img.src = URL.createObjectURL(f);
       const blobUrl = URL.createObjectURL(f);
-      // use setAttribute + encodeURI to avoid “DOM text reinterpreted as HTML” alerts
-      img.setAttribute('src', encodeURI(blobUrl));
+      if (typeof blobUrl !== 'string' || !blobUrl.startsWith('blob:')) {
+        showToast(t('error_updating_picture'));
+        return;
+      }
+      img.src = blobUrl;
+      img.addEventListener('load', () => URL.revokeObjectURL(blobUrl), { once: true });
       // upload
       const fd = new FormData();
       fd.append('profile_picture', f);

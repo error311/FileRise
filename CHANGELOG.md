@@ -1,6 +1,12 @@
 # Changelog
 
-## Changes 12/19/2025 (v2.10.2)
+## Changes 12/19/2025 (v2.10.2 & v2.10.3)
+
+`release(v2.10.3): harden profile picture preview (blob URL validation + cleanup)`
+
+- Validate the generated ObjectURL is a `blob:` URL before assigning to the preview image.
+- Revoke the ObjectURL after the image loads to prevent memory leaks.
+- Keep the same user-facing behavior while tightening security hygiene and robustness.
 
 `release(v2.10.2): harden auth + remember-me rotation, user panel, and case-insensitive users`
 
