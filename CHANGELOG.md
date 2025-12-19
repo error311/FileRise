@@ -1,5 +1,17 @@
 # Changelog
 
+## Changes 12/19/2025 (v2.10.5)
+
+`release(v2.10.5): cleanup stale crypto jobs + tighten encryption key-file UX`
+
+- Auto-delete crypto job JSON/lock files when a job completes successfully, preventing orphaned job artifacts.
+- Treat long-stale error jobs as gone (return 404 after 7 days) and purge their job files to keep the jobs directory clean.
+- Improve admin encryption key controls:
+  - Disable “Generate key file” when a key file already exists or when locked by env.
+  - Add clearer “force remove key file” confirmation context (why removal is blocked + scan details).
+
+---
+
 ## Changes 12/19/2025 (v2.10.2 & v2.10.3 & v2.10.4)
 
 `release(v2.10.4): restrict profile picture uploads to safe image MIME types`

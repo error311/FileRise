@@ -603,6 +603,7 @@ function renderAdminEncryptionSection({ config, dark }) {
   const lockedByEnv = !!enc.lockedByEnv;
   const envPresent = !!enc.envPresent;
   const filePresent = !!enc.filePresent;
+  const canGenerateKey = !lockedByEnv && !filePresent;
 
   const statusPill = (ok, label) => `
     <span class="badge badge-pill ${ok ? 'badge-success' : 'badge-secondary'}" style="margin-left:6px;">
@@ -642,7 +643,7 @@ function renderAdminEncryptionSection({ config, dark }) {
       <hr class="admin-divider" style="margin:10px 0;">
 
       <div class="d-flex flex-wrap" style="gap:8px; align-items:center;">
-        <button type="button" class="btn btn-sm btn-secondary" id="frEncGenerateKeyBtn" ${lockedByEnv ? 'disabled' : ''}>
+        <button type="button" class="btn btn-sm btn-secondary" id="frEncGenerateKeyBtn" ${canGenerateKey ? '' : 'disabled'}>
           ${tf("generate_key_file", "Generate key file")}
         </button>
         <button type="button" class="btn btn-sm btn-outline-danger" id="frEncClearKeyBtn" ${lockedByEnv ? 'disabled' : ''}>
@@ -700,13 +701,13 @@ function renderAdminEncryptionSection({ config, dark }) {
         }
         showToast(tf("key_file_created", "Key file created."));
         await refresh();
-      } catch (e) {
-        console.error(e);
-        showToast((e && e.message) ? e.message : tf("error", "Error"), 'error');
-      } finally {
-        genBtn.disabled = lockedByEnv;
-      }
-    });
+    } catch (e) {
+      console.error(e);
+      showToast((e && e.message) ? e.message : tf("error", "Error"), 'error');
+    } finally {
+      genBtn.disabled = !canGenerateKey;
+    }
+  });
   }
 
   const clearBtn = document.getElementById('frEncClearKeyBtn');
@@ -745,14 +746,23 @@ function renderAdminEncryptionSection({ config, dark }) {
           if (encCount > 0) parts.push(`${encCount} encrypted folder(s)`);
           if (jobCount > 0) parts.push(`${jobCount} active crypto job(s)`);
           if (scan && scan.scanned) {
-            parts.push(`scan checked ${Number(scan.scanned || 0)} file(s)` + (scan.truncated ? ' (truncated)' : ''));
+            parts.push(`scan checked previous encrypt ${Number(scan.scanned || 0)} file(s)` + (scan.truncated ? ' (truncated)' : ''));
           }
           const extra = parts.length ? `Detected: ${parts.join(', ')}.` : '';
+          const reasonLine = (() => {
+            if (errCode === 'encrypted_files_detected') return 'Encrypted files detected on disk.';
+            if (errCode === 'encrypted_files_scan_truncated') return 'Encrypted file scan was truncated.';
+            if (errCode === 'encrypted_files_scan_failed') return 'Encrypted file scan failed.';
+            if (errCode === 'encrypted_folders_exist') return 'Encrypted folders still exist.';
+            if (errCode === 'crypto_job_active') return 'An encryption job is still running.';
+            return '';
+          })();
 
           const forceOk = await showTypedConfirmModal({
             title: "Force remove key file",
             message:
               "This will permanently break access to encrypted files.\n\n" +
+              (reasonLine ? reasonLine + "\n\n" : "") +
               extra +
               (errCode === '' ? "\n\nServer returned 409 without details; assume encrypted data exists." : '') +
               "\n\nType REMOVE to confirm.",

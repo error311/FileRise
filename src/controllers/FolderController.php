@@ -2003,6 +2003,22 @@ class FolderController
             return;
         }
 
+        if (($job['state'] ?? '') === 'error') {
+            $updatedAt = (int)($job['updatedAt'] ?? 0);
+            if ($updatedAt <= 0) {
+                $updatedAt = (int)($job['createdAt'] ?? 0);
+            }
+            if ($updatedAt <= 0) {
+                $updatedAt = (int)@filemtime($path);
+            }
+            if ($updatedAt > 0 && (time() - $updatedAt) >= (7 * 24 * 60 * 60)) {
+                self::cryptoDeleteJobFiles($jobId);
+                http_response_code(404);
+                echo json_encode(['error' => 'Job not found.']);
+                return;
+            }
+        }
+
         // Return a redacted snapshot (don’t expose queue paths to clients)
         echo json_encode([
             'ok' => true,
@@ -2078,6 +2094,7 @@ class FolderController
             return;
         }
 
+        $cleanupJobFiles = false;
         try {
             $rawJob = @file_get_contents($path);
             $job = is_string($rawJob) ? json_decode($rawJob, true) : null;
@@ -2218,6 +2235,7 @@ class FolderController
                 } catch (\Throwable $e) {
                     error_log('Failed to clear crypto job marker: ' . $e->getMessage());
                 }
+                $cleanupJobFiles = true;
             } elseif (($job['state'] ?? '') === 'error') {
                 // Persist error on folder marker (best-effort)
                 try {
@@ -2255,6 +2273,9 @@ class FolderController
         } finally {
             @flock($lock, LOCK_UN);
             @fclose($lock);
+            if ($cleanupJobFiles) {
+                self::cryptoDeleteJobFiles($jobId);
+            }
         }
     }
 
@@ -2282,6 +2303,18 @@ class FolderController
     {
         $id = strtolower($jobId);
         return self::cryptoJobsDir() . DIRECTORY_SEPARATOR . 'job_' . $id . '.lock';
+    }
+
+    private static function cryptoDeleteJobFiles(string $jobId): void
+    {
+        $path = self::cryptoJobPath($jobId);
+        if (is_file($path)) {
+            @unlink($path);
+        }
+        $lockPath = self::cryptoJobLockPath($jobId);
+        if (is_file($lockPath)) {
+            @unlink($lockPath);
+        }
     }
 
     private static function cryptoResolveUploadDir(string $folder): array
