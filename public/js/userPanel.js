@@ -331,6 +331,11 @@ export async function openUserPanel() {
     fileInput.addEventListener('change', async function () {
       const f = this.files[0];
       if (!f) return;
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (!allowedTypes.includes(f.type)) {
+        showToast(t('error_updating_picture'));
+        return;
+      }
       // preview immediately
       const blobUrl = URL.createObjectURL(f);
       if (typeof blobUrl !== 'string' || !blobUrl.startsWith('blob:')) {

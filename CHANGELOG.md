@@ -1,6 +1,11 @@
 # Changelog
 
-## Changes 12/19/2025 (v2.10.2 & v2.10.3)
+## Changes 12/19/2025 (v2.10.2 & v2.10.3 & v2.10.4)
+
+`release(v2.10.4): restrict profile picture uploads to safe image MIME types`
+
+- Validate selected profile pictures are only JPEG/PNG/GIF before preview/upload.
+- Show a friendly error toast and abort on unsupported file types.
 
 `release(v2.10.3): harden profile picture preview (blob URL validation + cleanup)`
 
