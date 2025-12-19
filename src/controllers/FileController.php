@@ -6,6 +6,8 @@ require_once PROJECT_ROOT . '/src/models/FileModel.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/models/FolderModel.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
+require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
+require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
 class FileController
 {
@@ -1088,6 +1090,95 @@ class FileController
         exit;
     }
 
+    /**
+     * Stream an encrypted-at-rest file by decrypting it on the fly (no Range support).
+     *
+     * @param string $fullPath     Absolute filesystem path (ciphertext on disk)
+     * @param string $downloadName Name shown in Content-Disposition
+     * @param string $mimeType     MIME type (detected from ciphertext path / extension)
+     * @param bool   $inline       true => inline, false => attachment
+     */
+    private function streamEncryptedFileNoRange(string $fullPath, string $downloadName, string $mimeType, bool $inline): void
+    {
+        if (!is_file($fullPath) || !is_readable($fullPath)) {
+            http_response_code(404);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'File not found']);
+            exit;
+        }
+
+        if (!CryptoAtRest::masterKeyIsConfigured()) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Encryption master key is not configured on this server.']);
+            exit;
+        }
+
+        $hdr = CryptoAtRest::readHeader($fullPath);
+        if (!$hdr) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Encrypted file header is invalid.']);
+            exit;
+        }
+
+        $plainSize = (int)($hdr['plainSize'] ?? 0);
+
+        // No Range support for v1 encryption-at-rest.
+        if (!empty($_SERVER['HTTP_RANGE'])) {
+            http_response_code(416);
+            header('X-Content-Type-Options: nosniff');
+            header('Accept-Ranges: none');
+            if ($plainSize > 0) {
+                header('Content-Range: bytes */' . $plainSize);
+            }
+            exit;
+        }
+
+        // Close session + disable output buffering for streaming
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+        if (function_exists('apache_setenv')) {
+            @apache_setenv('no-gzip', '1');
+        }
+        @ini_set('zlib.output_compression', '0');
+        @ini_set('output_buffering', 'off');
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        $disposition = $inline ? 'inline' : 'attachment';
+        $mime = $mimeType ?: 'application/octet-stream';
+
+        header('X-Content-Type-Options: nosniff');
+        header('Accept-Ranges: none');
+        header("Content-Type: {$mime}");
+        header("Content-Disposition: {$disposition}; filename=\"" . basename($downloadName) . "\"");
+        if ($plainSize > 0) {
+            header('Content-Length: ' . $plainSize);
+        }
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+            http_response_code(200);
+            exit;
+        }
+
+        http_response_code(200);
+
+        try {
+            $out = fopen('php://output', 'wb');
+            if ($out === false) {
+                throw new \RuntimeException('Unable to open output stream.');
+            }
+            CryptoAtRest::streamDecrypted($fullPath, $out);
+            @fclose($out);
+        } catch (\Throwable $e) {
+            error_log('Encrypted download failed: ' . $e->getMessage());
+        }
+        exit;
+    }
+
     public function downloadFile()
     {
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
@@ -1175,6 +1266,18 @@ class FileController
         } else {
             // Inline is allowed only for the safe allowlist; ignore inline=1 for others
             $inline = in_array($ext, $inlineImageTypes, true) && $inlineParam;
+        }
+
+        // Encrypted-at-rest files: decrypt on download (no Range)
+        $isEncryptedFile = false;
+        try {
+            $isEncryptedFile = CryptoAtRest::isEncryptedFile($realFilePath);
+        } catch (\Throwable $e) {
+            $isEncryptedFile = false;
+        }
+
+        if ($isEncryptedFile) {
+            $this->streamEncryptedFileNoRange($realFilePath, basename($realFilePath), $mimeType, $inline);
         }
 
         // Stream with proper Range support for video/audio seeking
@@ -1685,7 +1788,7 @@ class FileController
 
             <body>
                 <h2>This file is protected by a password.</h2>
-                <form method="get" action="/api/file/share.php">
+                <form method="get" action="<?php echo htmlspecialchars(fr_with_base_path('/api/file/share.php'), ENT_QUOTES, 'UTF-8'); ?>">
                     <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
                     <label for="pass">Password:</label>
                     <input type="password" name="pass" id="pass" required>
@@ -1710,6 +1813,17 @@ class FileController
         $folder = trim($record['folder'], "/\\ ");
         $file   = $record['file'];
 
+        // Encrypted folders/files: sharing is blocked (v1).
+        try {
+            $fKey = ($folder === '' || strtolower($folder) === 'root') ? 'root' : $folder;
+            if (FolderCrypto::isEncryptedOrAncestor($fKey)) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "Sharing is disabled inside encrypted folders."]);
+                exit;
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         $filePath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
         if (!empty($folder) && strtolower($folder) !== 'root') {
             $filePath .= $folder . DIRECTORY_SEPARATOR;
@@ -1731,6 +1845,15 @@ class FileController
             echo json_encode(["error" => "File not found."]);
             exit;
         }
+
+        try {
+            if (CryptoAtRest::isEncryptedFile($realFilePath)) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "Sharing is disabled for encrypted files."]);
+                exit;
+            }
+        } catch (\Throwable $e) { /* ignore */ }
 
         $mimeType = mime_content_type($realFilePath) ?: 'application/octet-stream';
         $ext      = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
@@ -1833,6 +1956,13 @@ class FileController
                 return;
             }
 
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                    $this->_jsonOut(["error" => "Sharing is disabled inside encrypted folders."], 403);
+                    return;
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+
             // Ownership unless admin/folder-owner
             $ignoreOwnership = $this->isAdmin($userPermissions)
                 || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false))
@@ -1846,6 +1976,17 @@ class FileController
                     return;
                 }
             }
+
+            // Block share links for encrypted-at-rest files (even if folder marker is off).
+            try {
+                $info = FileModel::getDownloadInfo($folder, $file);
+                if (is_array($info) && empty($info['error']) && !empty($info['filePath'])) {
+                    if (CryptoAtRest::isEncryptedFile((string)$info['filePath'])) {
+                        $this->_jsonOut(["error" => "Sharing is disabled for encrypted files."], 403);
+                        return;
+                    }
+                }
+            } catch (\Throwable $e) { /* ignore */ }
 
             switch ($unit) {
                 case 'seconds':

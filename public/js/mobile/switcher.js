@@ -1,3 +1,5 @@
+import { withBase } from '../basePath.js?v={{APP_QVER}}';
+
 (function(){
   const isCap = !!window.Capacitor || /Capacitor/i.test(navigator.userAgent);
   if (!isCap) return;
@@ -185,7 +187,7 @@
   const sheet = el('div',{class:'frx-sheet', id:'frx-sheet'});
   const hdr = el('div',{class:'hdr'});
   const title = el('div',{class:'frx-title'});
-  const logo = el('img',{src:'/assets/logo.svg', alt:'FileRise'});
+  const logo = el('img',{src: withBase('/assets/logo.svg?v={{APP_QVER}}'), alt:'FileRise'});
   // inline handler via property, not attribute
   logo.onerror = function(){ this.style.display='none'; };
   title.append(logo, el('span',{},'FileRise Switcher'));

@@ -1,4 +1,8 @@
 // public/js/portal-login.js
+import { patchFetchForBasePath, withBase } from './basePath.js?v={{APP_QVER}}';
+
+// Ensure /api/* calls work when FileRise is mounted under a subpath (e.g. /fr).
+patchFetchForBasePath();
 
 // -------- URL helpers --------
 function sanitizeRedirect(raw, { fallback = '/' } = {}) {
@@ -7,8 +11,8 @@ function sanitizeRedirect(raw, { fallback = '/' } = {}) {
     const str = String(raw).trim();
     if (!str) return fallback;
 
-    // Resolve against current origin so relative URLs work
-    const candidate = new URL(str, window.location.origin);
+    // Resolve against current page so subpath mounts (e.g. /fr) are preserved
+    const candidate = new URL(str, window.location.href);
 
     // 1) Must stay on the same origin
     if (candidate.origin !== window.location.origin) {
@@ -33,20 +37,20 @@ function getRedirectTarget() {
     const raw = url.searchParams.get('redirect');
 
     // Default fallback: root
-    let target = sanitizeRedirect(raw, { fallback: '/' });
+    let target = sanitizeRedirect(raw, { fallback: withBase('/') });
 
     // If there was no *usable* redirect but we have a portal slug,
     // send them back to that portal by default.
     if (!target || target === '/') {
       const slug = getPortalSlugFromUrl();
       if (slug) {
-        target = sanitizeRedirect('/portal/' + encodeURIComponent(slug), { fallback: '/' });
+        target = sanitizeRedirect(withBase('/portal/' + encodeURIComponent(slug)), { fallback: withBase('/') });
       }
     }
 
-    return target || '/';
+    return target || withBase('/');
   } catch (e) {
-    return '/';
+    return withBase('/');
   }
 }
   
@@ -248,7 +252,7 @@ function getRedirectTarget() {
       logoSrc = portal.logoUrl.trim();
     } else if (portal.logoFile && portal.logoFile.trim()) {
       // Same convention as portal.html: files live in uploads/profile_pics
-      logoSrc = '/uploads/profile_pics/' + portal.logoFile.trim();
+      logoSrc = withBase('/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim()));
     }
 
     if (logoSrc) {

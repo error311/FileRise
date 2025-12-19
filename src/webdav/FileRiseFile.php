@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../src/lib/ACL.php';
 require_once __DIR__ . '/../../src/models/FileModel.php';
+require_once __DIR__ . '/../../src/models/FolderCrypto.php';
 require_once __DIR__ . '/CurrentUser.php';
 
 use Sabre\DAV\IFile;
@@ -39,6 +40,10 @@ class FileRiseFile implements IFile, INode {
     public function delete(): void {
         [$folderKey, $fileName] = $this->split();
     
+        if (\FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+            throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
+
         if (!$this->isAdmin && !\ACL::canDelete($this->user, $this->perms, $folderKey)) {
             throw new Forbidden('No delete permission in this folder');
         }
@@ -56,6 +61,9 @@ class FileRiseFile implements IFile, INode {
 
     public function get() {
         [$folderKey, $fileName] = $this->split();
+        if (\FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+            throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
         $canFull = $this->isAdmin || \ACL::canRead($this->user, $this->perms, $folderKey);
         if (!$canFull) {
             // own-only?
@@ -69,6 +77,10 @@ class FileRiseFile implements IFile, INode {
     public function put($data): ?string {
         [$folderKey, $fileName] = $this->split();
     
+        if (\FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+            throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
+
         $exists = is_file($this->path);
     
         if (!$this->isAdmin) {

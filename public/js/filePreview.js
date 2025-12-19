@@ -2,11 +2,12 @@
 import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { fileData, setFileProgressBadge, setFileWatchedBadge } from './fileListView.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 // Build a preview URL that always goes through the API layer (respects ACLs/UPLOAD_DIR)
 export function buildPreviewUrl(folder, name) {
   const f = (!folder || folder === '') ? 'root' : String(folder);
-  return `/api/file/download.php?folder=${encodeURIComponent(f)}&file=${encodeURIComponent(name)}&inline=1&t=${Date.now()}`;
+  return withBase(`/api/file/download.php?folder=${encodeURIComponent(f)}&file=${encodeURIComponent(name)}&inline=1&t=${Date.now()}`);
 }
 
 // New: build a download URL (attachment)
@@ -18,7 +19,7 @@ export function buildDownloadUrl(folder, name) {
     inline: '0',
     t: String(Date.now())
   });
-  return `/api/file/download.php?${params.toString()}`;
+  return withBase(`/api/file/download.php?${params.toString()}`);
 }
 
 const MEDIA_VOLUME_KEY = 'frMediaVolume';
@@ -148,7 +149,7 @@ export function openShareModal(file, folder) {
       .then(res => res.json())
       .then(data => {
         if (data.token) {
-          const url = `${window.location.origin}/api/file/share.php?token=${encodeURIComponent(data.token)}`;
+          const url = `${window.location.origin}${withBase(`/api/file/share.php?token=${encodeURIComponent(data.token)}`)}`;
           document.getElementById("shareLinkInput").value = url;
           document.getElementById("shareLinkDisplay").style.display = "block";
         } else {

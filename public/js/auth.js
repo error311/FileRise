@@ -20,6 +20,7 @@ import {
 } from './authModals.js?v={{APP_QVER}}';
 import { openAdminPanel } from './adminPanel.js?v={{APP_QVER}}';
 import { initializeApp, triggerLogout } from './appCore.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 // Production OIDC configuration (override via API as needed)
 const currentOIDCConfig = {
@@ -194,7 +195,7 @@ function openTOTPLoginModal() {
   const isFormLogin = Boolean(window.__lastLoginData);
   if (!isFormLogin) {
     // disable Basic‑Auth link
-    const basicLink = document.querySelector("a[href='/api/auth/login_basic.php']");
+    const basicLink = document.querySelector('a[href$="api/auth/login_basic.php"], a[href$="/api/auth/login_basic.php"]');
     if (basicLink) {
       basicLink.style.pointerEvents = 'none';
       basicLink.style.opacity = '0.5';
@@ -237,7 +238,7 @@ function updateLoginOptionsUI({ disableFormLogin, disableBasicAuth, disableOIDCL
       if (loginInput) loginInput.focus();
     }, 0);
   }
-  const basicAuthLink = document.querySelector("a[href='/api/auth/login_basic.php']");
+  const basicAuthLink = document.querySelector('a[href$="api/auth/login_basic.php"], a[href$="/api/auth/login_basic.php"]');
   if (basicAuthLink) basicAuthLink.style.display = disableBasicAuth ? "none" : "inline-block";
   const oidcLoginBtn = document.getElementById("oidcLoginBtn");
   if (oidcLoginBtn) oidcLoginBtn.style.display = disableOIDCLogin ? "none" : "inline-block";
@@ -312,8 +313,8 @@ async function fetchProfilePicture() {
     // strip any stray leading colons
     pic = pic.replace(/^:+/, '');
     // ensure exactly one leading slash
-    if (pic && !pic.startsWith('/')) pic = '/' + pic;
-    return pic;
+    if (pic) pic = '/' + pic.replace(/^\/+/, '');
+    return pic ? withBase(pic) : '';
   } catch (e) {
     console.warn('fetchProfilePicture failed:', e);
     return '';
@@ -631,7 +632,7 @@ async function submitLogin(data) {
       try { await primeCsrfStrict(); } catch (e) { }
       window.pendingTOTP = true;
       try {
-        const auth = await import('/js/auth.js?v={{APP_QVER}}');
+        const auth = await import(withBase('/js/auth.js?v={{APP_QVER}}'));
         if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
       } catch (e) { }
       return;
@@ -665,7 +666,7 @@ async function submitLogin(data) {
       try { await primeCsrfStrict(); } catch (e) { }
       window.pendingTOTP = true;
       try {
-        const auth = await import('/js/auth.js?v={{APP_QVER}}');
+        const auth = await import(withBase('/js/auth.js?v={{APP_QVER}}'));
         if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
       } catch (e) { }
       return;
@@ -916,7 +917,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const oidcLoginBtn = document.getElementById("oidcLoginBtn");
   if (oidcLoginBtn) {
     oidcLoginBtn.addEventListener("click", () => {
-      window.location.href = "/api/auth/auth.php?oidc=initiate";
+      window.location.href = withBase("/api/auth/auth.php?oidc=initiate");
     });
   }
 

@@ -302,7 +302,7 @@ foreach ($normalizedTags as $tag) {
                     if ($totp_secret) {
                         $_SESSION['pending_login_user']   = $username;
                         $_SESSION['pending_login_secret'] = $totp_secret;
-                        header('Location: /index.html?totp_required=1');
+                        header('Location: ' . fr_with_base_path('/index.html?totp_required=1'));
                         exit();
                     }
 
@@ -488,7 +488,7 @@ foreach ($normalizedTags as $tag) {
         $_SESSION['readOnly']      = $perms['readOnly']      ?? false;
         $_SESSION['disableUpload'] = $perms['disableUpload'] ?? false;
 
-        header('Location: /index.html');
+        header('Location: ' . fr_with_base_path('/index.html'));
         exit();
     }
 
@@ -627,7 +627,7 @@ foreach ($normalizedTags as $tag) {
                 // If TOTP is required, store pending values and redirect to prompt for TOTP.
                 $_SESSION['pending_login_user']   = $username;
                 $_SESSION['pending_login_secret'] = $secret;
-                header("Location: /index.html?totp_required=1");
+                header("Location: " . fr_with_base_path("/index.html?totp_required=1"));
                 exit();
             }
 
@@ -643,7 +643,7 @@ foreach ($normalizedTags as $tag) {
             $_SESSION["readOnly"]      = $userPerms["readOnly"]      ?? false;
             $_SESSION["disableUpload"] = $userPerms["disableUpload"] ?? false;
 
-            header("Location: /index.html");
+            header("Location: " . fr_with_base_path("/index.html"));
             exit();
         }
 
@@ -705,7 +705,7 @@ foreach ($normalizedTags as $tag) {
         session_destroy();
 
         // Redirect the user to the login page (or index) with a logout flag.
-        header("Location: /index.html?logout=1");
+        header("Location: " . fr_with_base_path("/index.html?logout=1"));
         exit();
     }
 }

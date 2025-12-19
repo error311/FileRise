@@ -9,32 +9,32 @@
     html,body,#loadingOverlay{background:var(--pre-bg,#ffffff) !important;}
   </style>
   <!-- Favicons (ordered: SVG -> PNGs -> ICO) -->
-  <link rel="icon" href="/assets/logo.svg?v={{APP_QVER}}" type="image/svg+xml" sizes="any">
-  <link rel="icon" href="/assets/logo.png?v={{APP_QVER}}" type="image/png" sizes="512x512">
-  <link rel="icon" href="/assets/logo-32.png?v={{APP_QVER}}" type="image/png" sizes="32x32">
-  <link rel="icon" href="/assets/logo-16.png?v={{APP_QVER}}" type="image/png" sizes="16x16">
-  <link rel="shortcut icon" href="/assets/favicon.ico?v={{APP_QVER}}">
+  <link rel="icon" href="assets/logo.svg?v={{APP_QVER}}" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="assets/logo.png?v={{APP_QVER}}" type="image/png" sizes="512x512">
+  <link rel="icon" href="assets/logo-32.png?v={{APP_QVER}}" type="image/png" sizes="32x32">
+  <link rel="icon" href="assets/logo-16.png?v={{APP_QVER}}" type="image/png" sizes="16x16">
+  <link rel="shortcut icon" href="assets/favicon.ico?v={{APP_QVER}}">
   
   <meta name="description" content="FileRise is a fast, self-hosted file manager with granular per-folder ACLs, drag-and-drop folder moves, WebDAV, tagging, and a clean UI.">
   <meta name="csrf-token" content=""><meta name="share-url" content=""><meta name="color-scheme" content="light dark">
-  <link rel="manifest" href="/manifest.webmanifest?v={{APP_QVER}}">
-  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png?v={{APP_QVER}}">
+  <link rel="manifest" href="manifest.webmanifest?v={{APP_QVER}}">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png?v={{APP_QVER}}">
   
   <!-- Critical CSS -->
-  <link rel="stylesheet" href="/vendor/bootstrap/4.6.2/bootstrap.min.css?v={{APP_QVER}}">
-  <link rel="stylesheet" href="/css/styles.css?v={{APP_QVER}}">
-  <link rel="stylesheet" href="/css/vendor/roboto.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="vendor/bootstrap/4.6.2/bootstrap.min.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="css/styles.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="css/vendor/roboto.css?v={{APP_QVER}}">
   
   <!-- Fonts -->
-  <link rel="preload" as="font" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3KUBHMdazTgWw.woff2?v={{APP_QVER}}" type="font/woff2" crossorigin>
-  <link rel="preload" as="font" href="/fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBHMdazQ.woff2?v={{APP_QVER}}" type="font/woff2" crossorigin>
+  <link rel="preload" as="font" href="fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3KUBHMdazTgWw.woff2?v={{APP_QVER}}" type="font/woff2" crossorigin>
+  <link rel="preload" as="font" href="fonts/roboto/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBHMdazQ.woff2?v={{APP_QVER}}" type="font/woff2" crossorigin>
   
   <!-- Vendor & version (deferred) -->
-  <script src="/vendor/dompurify/3.3.1/purify.min.js?v={{APP_QVER}}" defer></script>
-  <script src="/js/version.js?v={{APP_QVER}}" defer></script>
+  <script src="vendor/dompurify/3.3.1/purify.min.js?v={{APP_QVER}}" defer></script>
+  <script src="js/version.js?v={{APP_QVER}}" defer></script>
   
   <!-- App entry -->
-  <link rel="modulepreload" href="/js/main.js?v={{APP_QVER}}"><script type="module" src="/js/main.js?v={{APP_QVER}}"></script>
+  <link rel="modulepreload" href="js/main.js?v={{APP_QVER}}"><script type="module" src="js/main.js?v={{APP_QVER}}"></script>
   
 </head>
 <body>
@@ -45,7 +45,7 @@
       <a href="index.html">
         <div class="header-logo">
           <img
-  src="/assets/logo.svg?v={{APP_QVER}}"
+  src="assets/logo.svg?v={{APP_QVER}}"
   alt="FileRise"
   class="logo"
   width="50"
@@ -151,7 +151,7 @@
       </div>
       <!-- Basic HTTP Login Option -->
       <div class="text-center mt-3">
-        <a href="/api/auth/login_basic.php" class="btn btn-secondary" data-i18n-key="basic_http_login">Use Basic
+        <a href="api/auth/login_basic.php" class="btn btn-secondary" data-i18n-key="basic_http_login">Use Basic
           HTTP
           Login</a>
       </div>
@@ -350,6 +350,12 @@
                 </button>
                 <button id="folderColorInlineBtn" class="btn action-btn icon-only" title="Color folder" data-i18n-title="color_folder">
                   <span class="material-icons" aria-hidden="true">palette</span>
+                </button>
+                <button id="folderEncryptInlineBtn" class="btn action-btn icon-only" title="Encrypt folder">
+                  <span class="material-icons" aria-hidden="true">lock</span>
+                </button>
+                <button id="folderDecryptInlineBtn" class="btn action-btn icon-only" title="Decrypt folder">
+                  <span class="material-icons" aria-hidden="true">lock_open</span>
                 </button>
                 <button id="folderShareInlineBtn" class="btn action-btn icon-only" title="Share folder" data-i18n-title="folder_share">
                   <span class="material-icons" aria-hidden="true">share</span>

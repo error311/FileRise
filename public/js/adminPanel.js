@@ -3,6 +3,7 @@ import { t } from './i18n.js?v={{APP_QVER}}';
 import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
 import { showToast, toggleVisibility, attachEnterKeyListener, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 import { initAdminStorageSection } from './adminStorage.js?v={{APP_QVER}}';
 import { initAdminSponsorSection } from './adminSponsor.js?v={{APP_QVER}}';
 import { initOnlyOfficeUI, collectOnlyOfficeSettingsForSave } from './adminOnlyOffice.js?v={{APP_QVER}}';
@@ -357,11 +358,12 @@ function updateHeaderLogoFromAdmin() {
 
     if (url && (isHttp || isSiteRelative)) {
       // safe enough for <img src="...">
-      logoImg.setAttribute('src', url);
+      // Note: when mounted under a subpath (e.g. /fr), site-relative paths must be base-aware.
+      logoImg.setAttribute('src', isSiteRelative ? withBase(url) : url);
       logoImg.setAttribute('alt', 'Site logo');
     } else {
       // fall back to default FileRise logo
-      logoImg.setAttribute('src', '/assets/logo.svg?v={{APP_QVER}}');
+      logoImg.setAttribute('src', withBase('/assets/logo.svg?v={{APP_QVER}}'));
       logoImg.setAttribute('alt', 'FileRise');
     }
   } catch (e) {
@@ -576,6 +578,197 @@ function wireClamavTestButton(scope = document) {
       showToast('ClamAV test failed – see console.', 'error');
     }
   });
+}
+
+function renderAdminEncryptionSection({ config, dark }) {
+  const host = document.getElementById("encryptionContent");
+  if (!host) return;
+
+  const enc = (config && config.encryption && typeof config.encryption === 'object') ? config.encryption : {};
+  const supported = !!enc.supported;
+  const hasMasterKey = !!enc.hasMasterKey;
+  const source = String(enc.source || 'missing');
+  const lockedByEnv = !!enc.lockedByEnv;
+  const envPresent = !!enc.envPresent;
+  const filePresent = !!enc.filePresent;
+
+  const statusPill = (ok, label) => `
+    <span class="badge badge-pill ${ok ? 'badge-success' : 'badge-secondary'}" style="margin-left:6px;">
+      ${label}
+    </span>
+  `;
+
+  const sourceLabel = (() => {
+    if (source === 'env') return 'Env (FR_ENCRYPTION_MASTER_KEY)';
+    if (source === 'env_invalid') return 'Env present but invalid';
+    if (source === 'file') return 'Key file (META_DIR/encryption_master.key)';
+    if (source === 'file_invalid') return 'Key file present but invalid';
+    return 'Missing';
+  })();
+
+  host.innerHTML = `
+    <div class="card" style="border:1px solid ${dark ? '#3a3a3a' : '#eaeaea'}; border-radius:10px; padding:12px; background:${dark ? '#1f1f1f' : '#fdfdfd'};">
+      <div class="d-flex align-items-center" style="gap:10px; margin-bottom:6px;">
+        <i class="material-icons" aria-hidden="true">enhanced_encryption</i>
+        <div style="font-weight:600;">
+          ${tf("encryption_at_rest", "Encryption at rest")}
+          ${statusPill(supported, supported ? tf("supported", "Supported") : tf("not_supported", "Not supported"))}
+          ${statusPill(hasMasterKey, hasMasterKey ? tf("configured", "Configured") : tf("missing", "Missing"))}
+        </div>
+      </div>
+
+      <div class="small text-muted" style="margin-bottom:8px;">
+        ${tf("encryption_help_short", "Folder encryption requires a server master key. Env overrides the key file.")}
+      </div>
+
+      <div class="small" style="line-height:1.5;">
+        <div><strong>${tf("master_key_source", "Master key source")}:</strong> ${escapeHTML(sourceLabel)}</div>
+        <div><strong>${tf("env_present", "Env present")}:</strong> ${envPresent ? 'Yes' : 'No'}${lockedByEnv ? ' (locked)' : ''}</div>
+        <div><strong>${tf("key_file_present", "Key file present")}:</strong> ${filePresent ? 'Yes' : 'No'}</div>
+      </div>
+
+      <hr class="admin-divider" style="margin:10px 0;">
+
+      <div class="d-flex flex-wrap" style="gap:8px; align-items:center;">
+        <button type="button" class="btn btn-sm btn-secondary" id="frEncGenerateKeyBtn" ${lockedByEnv ? 'disabled' : ''}>
+          ${tf("generate_key_file", "Generate key file")}
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-danger" id="frEncClearKeyBtn" ${lockedByEnv ? 'disabled' : ''}>
+          ${tf("clear_key_file", "Clear key file")}
+        </button>
+        ${lockedByEnv ? `<div class="small text-warning">${tf("locked_by_env", "Locked by FR_ENCRYPTION_MASTER_KEY env override.")}</div>` : ''}
+      </div>
+
+      <div class="small text-muted" style="margin-top:8px;">
+        ${tf("encryption_v1_note", "Admin notes:<ul style=\"margin:6px 0 0 18px; padding:0;\"><li>Master key can be set via <code>FR_ENCRYPTION_MASTER_KEY</code> (env overrides the key file) or via <code>META_DIR/encryption_master.key</code> (32 raw bytes).</li><li>Encrypted folders are recursive; shares, shared-folder uploads, WebDAV, and ZIP create/extract are blocked under encrypted folders.</li><li>Video/audio previews are disabled (no HTTP Range) but users can still download files normally.</li></ul>")}
+      </div>
+    </div>
+  `;
+
+  const post = async (action, key, extra = {}) => {
+    const res = await fetch(withBase('/api/admin/setEncryptionKey.php'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': window.csrfToken || ''
+      },
+      body: JSON.stringify({ action, ...(key ? { key } : {}), ...extra })
+    });
+    const text = await res.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch (e) { /* ignore */ }
+    return {
+      ok: res.ok,
+      status: res.status,
+      body: body || {},
+      raw: text || ''
+    };
+  };
+
+  const refresh = async () => {
+    const r = await fetch(withBase('/api/admin/getConfig.php?ts=' + Date.now()), {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-store' }
+    });
+    const next = await safeJson(r);
+    renderAdminEncryptionSection({ config: next, dark });
+  };
+
+  const genBtn = document.getElementById('frEncGenerateKeyBtn');
+  if (genBtn && !genBtn.__wired) {
+    genBtn.__wired = true;
+    genBtn.addEventListener('click', async () => {
+      try {
+        genBtn.disabled = true;
+        const res = await post('generate');
+        if (!res.ok) {
+          throw new Error(res.body?.message || res.body?.error || `HTTP ${res.status}`);
+        }
+        showToast(tf("key_file_created", "Key file created."));
+        await refresh();
+      } catch (e) {
+        console.error(e);
+        showToast((e && e.message) ? e.message : tf("error", "Error"), 'error');
+      } finally {
+        genBtn.disabled = lockedByEnv;
+      }
+    });
+  }
+
+  const clearBtn = document.getElementById('frEncClearKeyBtn');
+  if (clearBtn && !clearBtn.__wired) {
+    clearBtn.__wired = true;
+    clearBtn.addEventListener('click', async () => {
+      try {
+        clearBtn.disabled = true;
+        const ok = await showCustomConfirmModal(
+          "Removing the encryption key file can make encrypted files permanently unreadable. Continue?"
+        );
+        if (!ok) {
+          clearBtn.disabled = lockedByEnv;
+          return;
+        }
+
+        let res = await post('clear');
+        if (!res.ok && res.status === 409) {
+          const errCode = res.body?.error || '';
+          if (errCode === 'locked_by_env') {
+            showToast(res.body?.message || 'Key file is locked by env override.', 'error');
+            clearBtn.disabled = lockedByEnv;
+            return;
+          }
+          if (errCode === 'not_supported') {
+            showToast(res.body?.message || 'Encryption at rest is not supported on this server.', 'error');
+            clearBtn.disabled = lockedByEnv;
+            return;
+          }
+
+          const summary = res.body?.summary || {};
+          const encCount = Number(summary.encryptedCount || 0);
+          const jobCount = Number(summary.activeJobs || 0);
+          const scan = summary.scan || null;
+          const parts = [];
+          if (encCount > 0) parts.push(`${encCount} encrypted folder(s)`);
+          if (jobCount > 0) parts.push(`${jobCount} active crypto job(s)`);
+          if (scan && scan.scanned) {
+            parts.push(`scan checked ${Number(scan.scanned || 0)} file(s)` + (scan.truncated ? ' (truncated)' : ''));
+          }
+          const extra = parts.length ? `Detected: ${parts.join(', ')}.` : '';
+
+          const forceOk = await showTypedConfirmModal({
+            title: "Force remove key file",
+            message:
+              "This will permanently break access to encrypted files.\n\n" +
+              extra +
+              (errCode === '' ? "\n\nServer returned 409 without details; assume encrypted data exists." : '') +
+              "\n\nType REMOVE to confirm.",
+            confirmText: "REMOVE",
+            placeholder: "Type REMOVE to continue"
+          });
+          if (!forceOk) {
+            clearBtn.disabled = lockedByEnv;
+            return;
+          }
+
+          res = await post('clear', null, { force: true });
+        }
+
+        if (!res.ok) {
+          throw new Error(res.body?.message || res.body?.error || `HTTP ${res.status}`);
+        }
+
+        showToast(tf("key_file_cleared", "Key file cleared."));
+        await refresh();
+      } catch (e) {
+        console.error(e);
+        showToast((e && e.message) ? e.message : tf("error", "Error"), 'error');
+      } finally {
+        clearBtn.disabled = lockedByEnv;
+      }
+    });
+  }
 }
 
 function initVirusLogSection({ isPro }) {
@@ -861,6 +1054,7 @@ function captureInitialAdminConfig() {
   const ht = document.getElementById("headerTitle");
   originalAdminConfig = {
     headerTitle: ht ? ht.value.trim() : "",
+    publishedUrl: (document.getElementById("publishedUrl")?.value || "").trim(),
 
     oidcProviderUrl: (document.getElementById("oidcProviderUrl")?.value || "").trim(),
     oidcClientId: (document.getElementById("oidcClientId")?.value || "").trim(),
@@ -895,6 +1089,7 @@ function hasUnsavedChanges() {
 
   return (
     getVal("headerTitle") !== o.headerTitle ||
+    getVal("publishedUrl") !== (o.publishedUrl || "") ||
 
     getVal("oidcProviderUrl") !== o.oidcProviderUrl ||
     getVal("oidcClientId") !== o.oidcClientId ||
@@ -938,6 +1133,66 @@ function showCustomConfirmModal(message) {
     }
     function onYes() { clean(); resolve(true); }
     function onNo() { clean(); resolve(false); }
+    yes.addEventListener("click", onYes);
+    no.addEventListener("click", onNo);
+  });
+}
+
+function showTypedConfirmModal({ title, message, confirmText, placeholder }) {
+  return new Promise(resolve => {
+    let modal = document.getElementById("typedConfirmModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "typedConfirmModal";
+      modal.className = "modal";
+      modal.style.zIndex = "4000";
+      modal.style.display = "none";
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width:520px;">
+          <div id="typedConfirmTitle" style="font-weight:600; margin-bottom:6px;"></div>
+          <div id="typedConfirmMessage" style="white-space:pre-wrap; margin-bottom:10px;"></div>
+          <input id="typedConfirmInput" class="form-control" type="text" autocomplete="off" />
+          <div class="modal-actions" style="margin-top:12px;">
+            <button id="typedConfirmYesBtn" class="btn btn-danger" disabled>Confirm</button>
+            <button id="typedConfirmNoBtn" class="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    const titleEl = document.getElementById("typedConfirmTitle");
+    const msgEl = document.getElementById("typedConfirmMessage");
+    const input = document.getElementById("typedConfirmInput");
+    const yes = document.getElementById("typedConfirmYesBtn");
+    const no = document.getElementById("typedConfirmNoBtn");
+
+    if (!titleEl || !msgEl || !input || !yes || !no) {
+      resolve(false);
+      return;
+    }
+
+    titleEl.textContent = title || "Confirm";
+    msgEl.textContent = message || "";
+    input.value = "";
+    input.placeholder = placeholder || "";
+    yes.disabled = true;
+    modal.style.display = "block";
+    input.focus();
+
+    const onInput = () => {
+      yes.disabled = (input.value !== confirmText);
+    };
+    const cleanup = () => {
+      modal.style.display = "none";
+      input.removeEventListener("input", onInput);
+      yes.removeEventListener("click", onYes);
+      no.removeEventListener("click", onNo);
+    };
+    const onYes = () => { cleanup(); resolve(true); };
+    const onNo = () => { cleanup(); resolve(false); };
+
+    input.addEventListener("input", onInput);
     yes.addEventListener("click", onYes);
     no.addEventListener("click", onNo);
   });
@@ -1951,10 +2206,11 @@ export function openAdminPanel() {
             ${[
             { id: "userManagement", label: t("user_management") },
             { id: "headerSettings", label: tf("header_footer_settings", "Header & Footer settings") },
-            { id: "loginOptions", label: t("login_webdav") },
+            { id: "loginOptions", label: t("login_webdav") + " (OIDC/TOTP)" },
+            { id: "network", label: tf("firewall_proxy_settings", "Firewall and Proxy Settings") },
+            { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
             { id: "onlyoffice", label: "ONLYOFFICE" },
             { id: "upload", label: tf("antivirus_settings", "Antivirus") },
-            { id: "oidc", label: t("oidc_configuration") + " & TOTP" },
             { id: "shareLinks", label: t("manage_shared_links_size") },
             { id: "storage", label: "Storage / Disk Usage" },
             { id: "proSearch", label: "Search Everywhere" },
@@ -1983,9 +2239,10 @@ export function openAdminPanel() {
           "userManagement",
           "headerSettings",
           "loginOptions",
+          "network",
+          "encryption",
           "onlyoffice",
           "upload",
-          "oidc",
           "shareLinks",
           "storage",
           "proSearch",
@@ -2342,6 +2599,62 @@ export function openAdminPanel() {
   </div>
 `;
 
+        // --- Firewall / Proxy Settings (Published URL) ---
+        const deployInfo = (config && typeof config === 'object' && config.deployment && typeof config.deployment === 'object')
+          ? config.deployment
+          : {};
+        const publishedLocked = !!deployInfo.publishedUrlLockedByEnv;
+        const publishedEffective = (deployInfo.publishedUrlEffective || '').toString();
+        const publishedCfg = (deployInfo.publishedUrl || '').toString();
+        const basePathEff = (deployInfo.basePath || '').toString();
+        const shareUrlEff = (deployInfo.shareUrl || '').toString();
+
+        document.getElementById("networkContent").innerHTML = `
+  <div class="admin-subsection-title">
+    ${tf("published_server_uris", "Published server URIs")}
+  </div>
+
+  <div class="form-group">
+    <label for="publishedUrl">${tf("published_url_label", "Published URL (optional)")}</label>
+    <input
+      type="url"
+      id="publishedUrl"
+      class="form-control"
+      placeholder="https://example.com/fr"
+      ${publishedLocked ? "disabled data-locked='1'" : ""}
+    />
+    <small class="text-muted d-block mt-1">
+      ${tf(
+        "published_url_help",
+        "Overrides the base URL FileRise uses when generating share links and redirects (useful behind reverse proxies and subpath installs). Leave blank to use auto-detection."
+      )}
+    </small>
+    ${publishedLocked ? `
+      <small class="text-muted d-block mt-1">
+        Controlled by env <code>FR_PUBLISHED_URL</code>.
+      </small>` : ``}
+  </div>
+
+  <hr class="admin-divider">
+
+  <div class="form-group">
+    <label>${tf("effective_base_path", "Effective base path")}</label>
+    <input type="text" class="form-control" value="${escapeHTML(basePathEff || (window.__FR_BASE_PATH__ || ""))}" disabled />
+  </div>
+
+  <div class="form-group">
+    <label>${tf("effective_share_url", "Effective share URL")}</label>
+    <input type="text" class="form-control" value="${escapeHTML(shareUrlEff || "")}" disabled />
+  </div>
+
+  <div class="form-group">
+    <label>${tf("effective_published_url", "Effective published URL")}</label>
+    <input type="text" class="form-control" value="${escapeHTML(publishedEffective || "")}" disabled />
+  </div>
+`;
+
+        renderAdminEncryptionSection({ config, dark });
+
         document.getElementById("uploadContent").innerHTML = `
       <div class="admin-subsection-title" style="margin-top:2px;">
     Antivirus upload scanning
@@ -2513,7 +2826,9 @@ export function openAdminPanel() {
         const oidcAllowDemote = !!(config.oidc && config.oidc.allowDemote);
         const oidcPublicClient = !!(config.oidc && config.oidc.publicClient);
 
-        document.getElementById("oidcContent").innerHTML = `
+        const oidcHtml = `
+  <hr class="admin-divider">
+
  <div class="admin-subsection-title" style="margin-top:2px;">
     OIDC Configuration
   </div>
@@ -2669,9 +2984,13 @@ export function openAdminPanel() {
   </div>
 `;
 
-        wireReplaceButtons(document.getElementById("oidcContent"));
-        wireOidcTestButton(document.getElementById("oidcContent"));
-        wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
+        const loginOptsHost = document.getElementById("loginOptionsContent");
+        if (loginOptsHost) {
+          loginOptsHost.insertAdjacentHTML('beforeend', oidcHtml);
+          wireReplaceButtons(loginOptsHost);
+          wireOidcTestButton(loginOptsHost);
+          wireOidcDebugSnapshotButton(loginOptsHost);
+        }
 
         const shareLinksHost = document.getElementById("shareLinksContent");
         if (shareLinksHost) {
@@ -3162,6 +3481,21 @@ ${t("shared_max_upload_size_bytes")}
 
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
+
+        // Published URL (optional)
+        const deploy = (config && config.deployment && typeof config.deployment === 'object') ? config.deployment : {};
+        const pubEl = document.getElementById("publishedUrl");
+        if (pubEl) {
+          pubEl.value = (deploy.publishedUrl || "").toString();
+          if (deploy.publishedUrlLockedByEnv) {
+            pubEl.disabled = true;
+            pubEl.dataset.locked = "1";
+            pubEl.value = (deploy.publishedUrlEffective || deploy.publishedUrl || "").toString();
+          } else {
+            pubEl.disabled = false;
+            pubEl.dataset.locked = "0";
+          }
+        }
         // --- ClamAV toggle wiring ---
         const cfgClam = config.clamav || {};
         const clamChk = document.getElementById("clamavScanUploads");
@@ -3211,6 +3545,21 @@ ${t("shared_max_upload_size_bytes")}
 
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
+
+        // Published URL (optional)
+        const deploy2 = (config && config.deployment && typeof config.deployment === 'object') ? config.deployment : {};
+        const pubEl2 = document.getElementById("publishedUrl");
+        if (pubEl2) {
+          pubEl2.value = (deploy2.publishedUrl || "").toString();
+          if (deploy2.publishedUrlLockedByEnv) {
+            pubEl2.disabled = true;
+            pubEl2.dataset.locked = "1";
+            pubEl2.value = (deploy2.publishedUrlEffective || deploy2.publishedUrl || "").toString();
+          } else {
+            pubEl2.disabled = false;
+            pubEl2.dataset.locked = "0";
+          }
+        }
         // --- ClamAV toggle wiring (refresh) ---
         const cfgClam = config.clamav || {};
         const clamChk = document.getElementById("clamavScanUploads");
@@ -3237,6 +3586,7 @@ ${t("shared_max_upload_size_bytes")}
         }
         wireClamavTestButton(document.getElementById("uploadContent"));
         initVirusLogUI({ isPro });
+        renderAdminEncryptionSection({ config, dark });
         document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig?.providerUrl || "";
         const publicClientChk = document.getElementById("oidcPublicClient");
         if (publicClientChk) {
@@ -3246,8 +3596,11 @@ ${t("shared_max_upload_size_bytes")}
         const secEl = document.getElementById("oidcClientSecret");
         if (!hasId) idEl.value = window.currentOIDCConfig?.clientId || "";
         if (!hasSecret) secEl.value = window.currentOIDCConfig?.clientSecret || "";
-        wireReplaceButtons(document.getElementById("oidcContent"));
-        wireOidcTestButton(document.getElementById("oidcContent"));
+        const oidcScope = document.getElementById("oidcContent") || document.getElementById("loginOptionsContent");
+        if (oidcScope) {
+          wireReplaceButtons(oidcScope);
+          wireOidcTestButton(oidcScope);
+        }
         document.getElementById("ooEnabled").checked = !!(config.onlyoffice && config.onlyoffice.enabled);
         document.getElementById("ooDocsOrigin").value = (config.onlyoffice && config.onlyoffice.docsOrigin) ? config.onlyoffice.docsOrigin : "";
         const ooCont = document.getElementById("onlyofficeContent");
@@ -3263,7 +3616,9 @@ ${t("shared_max_upload_size_bytes")}
         if (oidcAllowDemoteEl) {
           oidcAllowDemoteEl.checked = !!(config.oidc && config.oidc.allowDemote);
         }
-        wireOidcDebugSnapshotButton(document.getElementById("oidcContent"));
+        if (oidcScope) {
+          wireOidcDebugSnapshotButton(oidcScope);
+        }
 
         // Refresh Search Everywhere section when reopening
         const psHeader = document.getElementById('proSearchHeader');
@@ -3335,6 +3690,12 @@ function handleSave() {
 
   const payload = {
     header_title: document.getElementById("headerTitle")?.value || "",
+    publishedUrl: (() => {
+      const el = document.getElementById("publishedUrl");
+      if (!el) return "";
+      if (el.dataset.locked === "1") return el.value || "";
+      return (el.value || "").trim();
+    })(),
     loginOptions: {
       // Backend still expects “disable*” flags:
       disableFormLogin: !enableFormLogin,

@@ -48,6 +48,8 @@ export function updateFileActionButtons() {
   const folderMoveBtn = document.getElementById("folderMoveInlineBtn");
   const folderRenameBtn = document.getElementById("folderRenameInlineBtn");
   const folderColorBtn = document.getElementById("folderColorInlineBtn");
+  const folderEncryptBtn = document.getElementById("folderEncryptInlineBtn");
+  const folderDecryptBtn = document.getElementById("folderDecryptInlineBtn");
   const folderShareBtn = document.getElementById("folderShareInlineBtn");
   const folderDeleteBtn = document.getElementById("folderDeleteInlineBtn");
   const secondaryActions = document.querySelector("#fileActionsBar .secondary-actions");
@@ -72,6 +74,7 @@ export function updateFileActionButtons() {
   const allowDelete   = currentFolderCaps ? !!currentFolderCaps.canDelete : true;
   const allowShare    = currentFolderCaps ? !!(currentFolderCaps.canShareFile || currentFolderCaps.canShare) : true;
   const allowExtract  = currentFolderCaps ? !!currentFolderCaps.canExtract : true;
+  const inEncryptedFolder = !!(currentFolderCaps && currentFolderCaps.encryption && currentFolderCaps.encryption.encrypted);
 
   const folderCaps    = selectedFolderCaps || currentFolderCaps || {};
   const allowFolderMove   = !!(folderCaps.canMoveFolder   ?? true);
@@ -79,6 +82,10 @@ export function updateFileActionButtons() {
   const allowFolderColor  = !!(folderCaps.canEdit         ?? true);
   const allowFolderShare  = !!(folderCaps.canShareFolder  ?? true);
   const allowFolderDelete = !!(folderCaps.canDeleteFolder ?? true);
+  const folderEnc = (folderCaps && folderCaps.encryption) ? folderCaps.encryption : {};
+  const allowFolderEncrypt = !!(folderEnc && folderEnc.canEncrypt);
+  const allowFolderDecrypt = !!(folderEnc && folderEnc.canDecrypt);
+  const folderIsEncrypted = !!(folderEnc && folderEnc.encrypted);
 
   const setEnabled = (el, enabled) => {
     if (!el) return;
@@ -118,6 +125,13 @@ export function updateFileActionButtons() {
   setEnabled(folderMoveBtn,   anyFolderSelected && allowFolderMove);
   setEnabled(folderRenameBtn, anyFolderSelected && allowFolderRename);
   setEnabled(folderColorBtn,  anyFolderSelected && allowFolderColor);
+  // Show only the valid action (encrypt OR decrypt), not both.
+  const showFolderEncrypt = anyFolderSelected && !folderIsEncrypted && allowFolderEncrypt;
+  const showFolderDecrypt = anyFolderSelected && folderIsEncrypted && allowFolderDecrypt;
+  if (folderEncryptBtn) folderEncryptBtn.style.display = showFolderEncrypt ? "" : "none";
+  if (folderDecryptBtn) folderDecryptBtn.style.display = showFolderDecrypt ? "" : "none";
+  setEnabled(folderEncryptBtn, showFolderEncrypt);
+  setEnabled(folderDecryptBtn, showFolderDecrypt);
   setEnabled(folderShareBtn,  anyFolderSelected && allowFolderShare);
   setEnabled(folderDeleteBtn, anyFolderSelected && allowFolderDelete);
 
@@ -141,11 +155,11 @@ export function updateFileActionButtons() {
   if (moveBtn) moveBtn.style.display = showFileActions ? "" : "none";
   if (zipBtn) zipBtn.style.display = showFileActions ? "" : "none";
   if (renameBtn) renameBtn.style.display = showFileActions ? "" : "none";
-  if (shareBtn) shareBtn.style.display = showFileActions ? "" : "none";
+  if (shareBtn) shareBtn.style.display = (showFileActions && !inEncryptedFolder) ? "" : "none";
   if (createBtn) createBtn.style.display = "";
 
   // Extract ZIP still appears only when a .zip is selected (and file mode)
-  if (extractZipBtn) extractZipBtn.style.display = showFileActions && anyZip ? "" : "none";
+  if (extractZipBtn) extractZipBtn.style.display = (showFileActions && anyZip && !inEncryptedFolder) ? "" : "none";
 
   // Finally disable the ones that are shown but shouldn’t be clickable
   setEnabled(createBtn, allowCreate);
@@ -154,8 +168,8 @@ export function updateFileActionButtons() {
   setEnabled(moveBtn,   showFileActions && anySelected && allowMove);
   setEnabled(zipBtn,    showFileActions && anySelected && allowDownload);
   setEnabled(renameBtn, showFileActions && singleSelected && allowRename);
-  setEnabled(shareBtn,  showFileActions && singleSelected && allowShare);
-  setEnabled(extractZipBtn, showFileActions && anyZip && allowExtract);
+  setEnabled(shareBtn,  showFileActions && singleSelected && allowShare && !inEncryptedFolder);
+  setEnabled(extractZipBtn, showFileActions && anyZip && allowExtract && !inEncryptedFolder);
 
   // Collapse/expand the toolbar for a slimmer default view
   if (bar) {

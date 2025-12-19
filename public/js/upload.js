@@ -5,6 +5,7 @@ import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 // --- ClamAV scanning UI helpers ----------------------------------------
 
@@ -378,7 +379,7 @@ function traverseFileTreePromise(item, path = "") {
 }
 
 // --- Lazy loader for Resumable.js (no CSP inline, cached, safe) ---
-const RESUMABLE_SRC = '/vendor/resumable/1.1.0/resumable.min.js?v={{APP_QVER}}';
+const RESUMABLE_SRC = withBase('/vendor/resumable/1.1.0/resumable.min.js?v={{APP_QVER}}');
 let _resumableLoadPromise = null;
 
 function loadScriptOnce(src) {
@@ -513,7 +514,7 @@ function removeChunkFolderRepeatedly(identifier, csrfToken, maxAttempts = 3, int
     // Prefix with "resumable_" to match your PHP regex.
     params.append('folder', 'resumable_' + identifier);
     params.append('csrf_token', csrfToken);
-    fetch('/api/upload/removeChunks.php', {
+    fetch(withBase('/api/upload/removeChunks.php'), {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -810,7 +811,7 @@ async function initResumableUpload() {
   // Construct the instance once
   if (!resumableInstance) {
     resumableInstance = new ResumableCtor({
-      target: "/api/upload/upload.php",
+      target: withBase("/api/upload/upload.php"),
       chunkSize: 1.5 * 1024 * 1024,
       simultaneousUploads: 3,
       forceChunkSize: true,
@@ -1159,7 +1160,7 @@ function submitFiles(allFiles) {
         console.warn("CSRF expired during upload, retrying chunk", file.uploadIndex);
         // 1) update global token + header
         window.csrfToken = jsonResponse.csrf_token;
-        xhr.open("POST", "/api/upload/upload.php", true);
+        xhr.open("POST", withBase("/api/upload/upload.php"), true);
         xhr.withCredentials = true;
         xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
         // 2) re-send the same formData
@@ -1183,6 +1184,16 @@ function submitFiles(allFiles) {
         // real failure
         if (li && li.progressBar) {
           li.progressBar.innerText = "Error";
+        }
+        try {
+          const msg =
+            (jsonResponse && (jsonResponse.error || jsonResponse.message))
+              ? String(jsonResponse.error || jsonResponse.message)
+              : `Upload failed (HTTP ${xhr.status || 0}).`;
+          console.error("Upload failed:", xhr.status, jsonResponse || xhr.responseText);
+          showToast(msg, 7000);
+        } catch (e) {
+          // ignore toast failures
         }
         allSucceeded = false;
       }
@@ -1217,6 +1228,9 @@ function submitFiles(allFiles) {
       if (li && li.progressBar) {
         li.progressBar.innerText = "Error";
       }
+      try {
+        showToast("Upload failed due to a network error.", 6000);
+      } catch (e) {}
       uploadResults[file.uploadIndex] = false;
       allSucceeded = false;
       finishedCount++;
@@ -1233,6 +1247,9 @@ function submitFiles(allFiles) {
       if (li && li.progressBar) {
         li.progressBar.innerText = "Aborted";
       }
+      try {
+        showToast("Upload was aborted.", 5000);
+      } catch (e) {}
       uploadResults[file.uploadIndex] = false;
       allSucceeded = false;
       finishedCount++;
@@ -1241,7 +1258,7 @@ function submitFiles(allFiles) {
       }
     });
 
-    xhr.open("POST", "/api/upload/upload.php", true);
+    xhr.open("POST", withBase("/api/upload/upload.php"), true);
     xhr.withCredentials = true;
     xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
     xhr.send(formData);

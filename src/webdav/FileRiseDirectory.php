@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';    // SabreDAV
 require_once __DIR__ . '/../../src/lib/ACL.php';
 require_once __DIR__ . '/../../src/models/FolderModel.php';
 require_once __DIR__ . '/../../src/models/FileModel.php';
+require_once __DIR__ . '/../../src/models/FolderCrypto.php';
 require_once __DIR__ . '/FileRiseFile.php';
 
 use Sabre\DAV\ICollection;
@@ -61,6 +62,11 @@ class FileRiseDirectory implements ICollection, INode {
         // Determine “folder key” relative to UPLOAD_DIR for ACL checks
         $folderKey = $this->folderKeyForPath($this->path);
 
+        // Hard-block WebDAV access inside encrypted folders (and descendants)
+        if (\FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+            throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
+
         // Check view permission on *this* directory
         $canFull  = \ACL::canRead($this->user, $this->perms, $folderKey);
         $canOwn   = \ACL::hasGrant($this->user, $folderKey, 'read_own');
@@ -106,8 +112,15 @@ class FileRiseDirectory implements ICollection, INode {
         $folderKey = $this->folderKeyForPath($this->path);
         $isDir     = is_dir($full);
 
+        if (\FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+            return false;
+        }
+
         if ($isDir) {
             $childKey = $this->folderKeyForPath($full);
+            if (\FolderCrypto::isEncryptedOrAncestor($childKey)) {
+                return false;
+            }
             return $this->isAdmin
                 || \ACL::canRead($this->user, $this->perms, $childKey)
                 || \ACL::hasGrant($this->user, $childKey, 'read_own');
@@ -126,8 +139,14 @@ class FileRiseDirectory implements ICollection, INode {
         if (!file_exists($full)) throw new NotFound("Not found: $name");
 
         $folderKey = $this->folderKeyForPath($this->path);
+        if (\FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+            throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
         if (is_dir($full)) {
             $childKey = $this->folderKeyForPath($full);
+            if (\FolderCrypto::isEncryptedOrAncestor($childKey)) {
+                throw new Forbidden('WebDAV is disabled inside encrypted folders');
+            }
             $canDir = $this->isAdmin
                    || \ACL::canRead($this->user, $this->perms, $childKey)
                    || \ACL::hasGrant($this->user, $childKey, 'read_own');
@@ -147,6 +166,10 @@ class FileRiseDirectory implements ICollection, INode {
 
     public function createFile($name, $data = null): INode {
         $folderKey = $this->folderKeyForPath($this->path);
+
+        if (\FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+            throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
 
         if (!$this->isAdmin && !\ACL::canWrite($this->user, $this->perms, $folderKey)) {
             throw new Forbidden('No write access to this folder');
@@ -168,6 +191,9 @@ class FileRiseDirectory implements ICollection, INode {
 
     public function createDirectory($name): INode {
         $parentKey = $this->folderKeyForPath($this->path);
+        if (\FolderCrypto::isEncryptedOrAncestor($parentKey)) {
+            throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
         if (!$this->isAdmin && !\ACL::canManage($this->user, $this->perms, $parentKey)) {
                         throw new Forbidden('No permission to create subfolders here');
             }

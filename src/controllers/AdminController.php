@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
+require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
+require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 
 class AdminController
 {
@@ -188,7 +190,41 @@ class AdminController
         $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
 
         if ($isAdmin) {
+            // ---- Encryption at rest (master key status) ----
+            $encSupported = CryptoAtRest::isAvailable();
+            $encKeyBytes = (defined('SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES')
+                ? (int)SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES
+                : 32);
+            $envEncRaw = getenv('FR_ENCRYPTION_MASTER_KEY');
+            $envEncPresent = ($envEncRaw !== false && trim((string)$envEncRaw) !== '');
+            $envEncValid = false;
+            if ($envEncPresent) {
+                $envEncValid = (CryptoAtRest::decodeKeyString((string)$envEncRaw) !== null);
+            }
+
+            $keyFile = rtrim((string)META_DIR, "/\\") . DIRECTORY_SEPARATOR . 'encryption_master.key';
+            $filePresent = is_file($keyFile);
+            $fileValid = false;
+            if ($filePresent && $encSupported) {
+                $sz = @filesize($keyFile);
+                $fileValid = (is_int($sz) && $sz === $encKeyBytes);
+            }
+
+            $encSource = 'missing';
+            if ($envEncPresent) {
+                $encSource = $envEncValid ? 'env' : 'env_invalid';
+            } elseif ($filePresent) {
+                $encSource = $fileValid ? 'file' : 'file_invalid';
+            }
+
+            $encHasMasterKey = CryptoAtRest::masterKeyIsConfigured();
+
             // admin-only extras: presence flags + proxy options + ONLYOFFICE effective view
+            $envPublished = getenv('FR_PUBLISHED_URL');
+            $publishedLockedByEnv = ($envPublished !== false && trim((string)$envPublished) !== '');
+            $publishedCfg = (string)($config['publishedUrl'] ?? '');
+            $publishedEffective = $publishedLockedByEnv ? trim((string)$envPublished) : $publishedCfg;
+
             $adminExtra = [
                 'loginOptions' => array_merge($public['loginOptions'], [
                     'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
@@ -214,6 +250,21 @@ class AdminController
                     ),
                 ],
                 'pro' => $proInfo,
+                'deployment' => [
+                    'basePath' => (defined('FR_BASE_PATH') ? (string)FR_BASE_PATH : ''),
+                    'shareUrl' => (defined('SHARE_URL') ? (string)SHARE_URL : ''),
+                    'publishedUrl' => $publishedCfg,
+                    'publishedUrlEffective' => $publishedEffective,
+                    'publishedUrlLockedByEnv' => $publishedLockedByEnv,
+                ],
+                'encryption' => [
+                    'supported'   => (bool)$encSupported,
+                    'hasMasterKey'=> (bool)$encHasMasterKey,
+                    'source'      => (string)$encSource, // env|env_invalid|file|file_invalid|missing
+                    'lockedByEnv' => (bool)$envEncValid,
+                    'envPresent'  => (bool)$envEncPresent,
+                    'filePresent' => (bool)$filePresent,
+                ],
                 'proSearch' => (function () use ($config) {
                     $raw = isset($config['proSearch']) && is_array($config['proSearch'])
                         ? $config['proSearch']
@@ -243,6 +294,236 @@ class AdminController
         header('Cache-Control: no-store');
         echo json_encode($public, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return;
+    }
+
+    public function setEncryptionKey(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            self::requireAuth();
+            self::requireAdmin();
+            self::requireCsrf();
+
+            if (!CryptoAtRest::isAvailable()) {
+                http_response_code(409);
+                echo json_encode([
+                    'ok' => false,
+                    'error' => 'not_supported',
+                    'message' => 'libsodium secretstream is not available on this PHP build.',
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+
+            $envRaw = getenv('FR_ENCRYPTION_MASTER_KEY');
+            $envPresent = ($envRaw !== false && trim((string)$envRaw) !== '');
+            $envValid = $envPresent && (CryptoAtRest::decodeKeyString((string)$envRaw) !== null);
+            if ($envValid) {
+                http_response_code(409);
+                echo json_encode([
+                    'ok' => false,
+                    'error' => 'locked_by_env',
+                    'message' => 'FR_ENCRYPTION_MASTER_KEY is set; admin key file is disabled.',
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+
+            $in = self::readJson();
+            $action = isset($in['action']) ? trim((string)$in['action']) : '';
+            $force = !empty($in['force']);
+
+            $keyFile = rtrim((string)META_DIR, "/\\") . DIRECTORY_SEPARATOR . 'encryption_master.key';
+            if (!is_dir(META_DIR)) {
+                @mkdir(META_DIR, 0775, true);
+            }
+
+            if ($action === 'clear') {
+                if (!$force) {
+                    $summary = self::folderCryptoSummary();
+                    $encCount = (int)($summary['encryptedCount'] ?? 0);
+                    $jobCount = (int)($summary['activeJobs'] ?? 0);
+                    if ($encCount > 0 || $jobCount > 0) {
+                        http_response_code(409);
+                        echo json_encode([
+                            'ok' => false,
+                            'error' => ($jobCount > 0 ? 'crypto_job_active' : 'encrypted_folders_exist'),
+                            'message' => 'Encrypted folders or active crypto jobs detected. Decrypt folders before removing the key, or force removal.',
+                            'summary' => [
+                                'encryptedCount' => $encCount,
+                                'activeJobs' => $jobCount,
+                            ],
+                        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        return;
+                    }
+
+                    $scan = self::scanEncryptedFilesOnDisk();
+                    $scanFound = !empty($scan['found']);
+                    $scanTruncated = !empty($scan['truncated']);
+                    $scanError = (string)($scan['error'] ?? '');
+                    if ($scanFound || $scanTruncated || $scanError !== '') {
+                        http_response_code(409);
+                        echo json_encode([
+                            'ok' => false,
+                            'error' => $scanFound
+                                ? 'encrypted_files_detected'
+                                : ($scanError !== '' ? 'encrypted_files_scan_failed' : 'encrypted_files_scan_truncated'),
+                            'message' => $scanFound
+                                ? 'Encrypted files detected on disk. Decrypt folders before removing the key, or force removal.'
+                                : ($scanError !== ''
+                                    ? 'Unable to confirm that no encrypted files remain. Fix errors or force removal.'
+                                    : 'Scan truncated. Unable to confirm that no encrypted files remain. Force removal only if you accept the risk.'),
+                            'summary' => [
+                                'encryptedCount' => $encCount,
+                                'activeJobs' => $jobCount,
+                                'scan' => [
+                                    'found' => $scanFound,
+                                    'scanned' => (int)($scan['scanned'] ?? 0),
+                                    'truncated' => $scanTruncated,
+                                    'error' => $scanError,
+                                ],
+                            ],
+                        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        return;
+                    }
+                }
+                if (is_file($keyFile)) {
+                    @unlink($keyFile);
+                }
+                echo json_encode(['ok' => true, 'cleared' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+
+            $keyBin = null;
+            if ($action === 'generate') {
+                $keyBin = random_bytes((int)SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
+            } elseif ($action === 'set') {
+                $keyStr = isset($in['key']) ? (string)$in['key'] : '';
+                $keyBin = CryptoAtRest::decodeKeyString($keyStr);
+                if ($keyBin === null) {
+                    http_response_code(400);
+                    echo json_encode(['ok' => false, 'error' => 'invalid_key', 'message' => 'Key must be 64 hex chars or base64:... for 32 bytes.']);
+                    return;
+                }
+            } else {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'invalid_action']);
+                return;
+            }
+
+            if (!is_string($keyBin) || strlen($keyBin) !== (int)SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES) {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'error' => 'key_gen_failed']);
+                return;
+            }
+
+            if (@file_put_contents($keyFile, $keyBin, LOCK_EX) === false) {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'error' => 'write_failed']);
+                return;
+            }
+            @chmod($keyFile, 0600);
+
+            echo json_encode(['ok' => true, 'written' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'exception', 'message' => $e->getMessage()]);
+        }
+    }
+
+    private static function folderCryptoSummary(): array
+    {
+        $encryptedCount = 0;
+        $activeJobs = 0;
+
+        try {
+            $doc = FolderCrypto::load();
+            $folders = is_array($doc['folders'] ?? null) ? $doc['folders'] : [];
+            foreach ($folders as $row) {
+                if (!is_array($row)) continue;
+                if (!empty($row['encrypted'])) $encryptedCount++;
+                if (!empty($row['job']) && is_array($row['job'])) {
+                    $state = strtolower((string)($row['job']['state'] ?? ''));
+                    if ($state !== '' && $state !== 'done') $activeJobs++;
+                }
+            }
+        } catch (\Throwable $e) {
+            // best-effort only
+        }
+
+        return [
+            'encryptedCount' => $encryptedCount,
+            'activeJobs' => $activeJobs,
+        ];
+    }
+
+    private static function scanEncryptedFilesOnDisk(int $limit = 40000): array
+    {
+        $root = realpath((string)UPLOAD_DIR);
+        if ($root === false || !is_dir($root)) {
+            return [
+                'found' => false,
+                'scanned' => 0,
+                'truncated' => true,
+                'error' => 'upload_dir_unavailable',
+            ];
+        }
+
+        $skipDirs = ['trash', 'profile_pics', '@eadir'];
+        $scanned = 0;
+        $truncated = false;
+
+        try {
+            $it = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::SELF_FIRST
+            );
+
+            foreach ($it as $info) {
+                if ($scanned >= $limit) { $truncated = true; break; }
+                if (!$info instanceof SplFileInfo) continue;
+
+                $name = $info->getFilename();
+                if ($name === '' || $name[0] === '.') continue;
+                $lower = strtolower($name);
+                if (in_array($lower, $skipDirs, true)) {
+                    continue;
+                }
+                if (str_starts_with($lower, 'resumable_')) {
+                    continue;
+                }
+                if ($info->isDir() || $info->isLink()) {
+                    continue;
+                }
+
+                $scanned++;
+                try {
+                    if (CryptoAtRest::isEncryptedFile($info->getPathname())) {
+                        return [
+                            'found' => true,
+                            'scanned' => $scanned,
+                            'truncated' => false,
+                            'error' => '',
+                        ];
+                    }
+                } catch (\Throwable $e) {
+                    // ignore per-file errors
+                }
+            }
+        } catch (\Throwable $e) {
+            return [
+                'found' => false,
+                'scanned' => $scanned,
+                'truncated' => true,
+                'error' => 'scan_failed',
+            ];
+        }
+
+        return [
+            'found' => false,
+            'scanned' => $scanned,
+            'truncated' => $truncated,
+            'error' => '',
+        ];
     }
 
 
@@ -1146,6 +1427,7 @@ class AdminController
         // Ensure minimal structure if the file was partially missing.
         $merged = $existing + [
             'header_title'        => '',
+            'publishedUrl'        => '',
             'loginOptions'        => [
                 'disableFormLogin' => false,
                 'disableBasicAuth' => true,
@@ -1182,6 +1464,26 @@ class AdminController
                 $title = mb_substr($title, 0, 100);
             }
             $merged['header_title'] = $title;
+        }
+
+        // publishedUrl: optional advertised base URL (e.g. https://example.com/fr)
+        // Env var FR_PUBLISHED_URL (if set) is the source of truth; admin value becomes read-only.
+        $envPublished = getenv('FR_PUBLISHED_URL');
+        $publishedLockedByEnv = ($envPublished !== false && trim((string)$envPublished) !== '');
+        if (!$publishedLockedByEnv && array_key_exists('publishedUrl', $data)) {
+            $u = trim((string)$data['publishedUrl']);
+            if ($u === '') {
+                $merged['publishedUrl'] = '';
+            } else {
+                $valid = filter_var($u, FILTER_VALIDATE_URL);
+                $scheme = strtolower(parse_url($u, PHP_URL_SCHEME) ?: '');
+                if (!$valid || ($scheme !== 'http' && $scheme !== 'https')) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Invalid Published URL (must be http(s) URL).']);
+                    exit;
+                }
+                $merged['publishedUrl'] = $u;
+            }
         }
 
         // loginOptions: inherit existing then override if provided

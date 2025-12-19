@@ -8,6 +8,7 @@ import { initTagSearch } from './fileTags.js?v={{APP_QVER}}';
 import { initFileActions, openUploadModal } from './fileActions.js?v={{APP_QVER}}';
 import { initUpload } from './upload.js?v={{APP_QVER}}';
 import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 window.__pendingDropData = null;
 
@@ -53,7 +54,7 @@ export function getCsrfToken() {
  * Uses the native fetch to avoid wrapper loops and accepts rotated tokens via header.
  */
 export async function loadCsrfToken() {
-  const res = await _nativeFetch('/api/auth/token.php', { method: 'GET', credentials: 'include' });
+  const res = await _nativeFetch(withBase('/api/auth/token.php'), { method: 'GET', credentials: 'include' });
 
   // header-based rotation
   const hdr = res.headers.get('X-CSRF-Token');
@@ -66,8 +67,9 @@ export async function loadCsrfToken() {
   const token = body.csrf_token || getCsrfToken();
   setCsrfToken(token);
 
-  // share-url meta should reflect the actual origin
-  const actualShare = window.location.origin;
+  // share-url meta should reflect the actual origin + base path (e.g. https://host/fr)
+  const base = withBase('/').replace(/\/$/, '');
+  const actualShare = window.location.origin + base;
   let shareMeta = document.querySelector('meta[name="share-url"]');
   if (!shareMeta) {
     shareMeta = document.createElement('meta');
@@ -89,7 +91,7 @@ export function initializeApp() {
   // Ensure zoom script is loaded for toolbar controls
   try {
     const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
-    import(`/js/zoom.js?v=${encodeURIComponent(QVER)}`).catch(err => {
+    import(withBase(`/js/zoom.js?v=${encodeURIComponent(QVER)}`)).catch(err => {
       console.warn('[zoom] failed to load zoom.js', err);
     });
   } catch (err) {
@@ -200,7 +202,7 @@ export function triggerLogout() {
     } catch (e) { }
   };
 
-  _nativeFetch("/api/auth/logout.php", {
+  _nativeFetch(withBase("/api/auth/logout.php"), {
     method: "POST",
     credentials: "include",
     headers: { "X-CSRF-Token": getCsrfToken() }

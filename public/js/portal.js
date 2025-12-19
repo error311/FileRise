@@ -1,5 +1,9 @@
 // public/js/portal.js
 // Standalone client portal logic – no imports from main app JS to avoid DOM coupling.
+import { patchFetchForBasePath, withBase } from './basePath.js?v={{APP_QVER}}';
+
+// Ensure /api/* calls work when FileRise is mounted under a subpath (e.g. /fr).
+patchFetchForBasePath();
 
 let portal = null;
 let portalFormDone = false;
@@ -481,7 +485,7 @@ async function ensureAuthenticated() {
     if (!data || !data.username) {
       // redirect to main UI/login; after login, user can re-open portal link
       const target = encodeURIComponent(window.location.href);
-window.location.href = '/portal-login.html?redirect=' + target;
+      window.location.href = withBase('/portal-login.html?redirect=' + target);
       return null;
     }
     const lbl = qs('portalUserLabel');
@@ -491,7 +495,7 @@ window.location.href = '/portal-login.html?redirect=' + target;
     return data;
   } catch (e) {
     const target = encodeURIComponent(window.location.href);
-window.location.href = '/portal-login.html?redirect=' + target;
+    window.location.href = withBase('/portal-login.html?redirect=' + target);
     return null;
   }
 }
@@ -568,7 +572,7 @@ function renderPortalInfo() {
       logoImg.src = portal.logoUrl.trim();
     } else if (portal.logoFile && portal.logoFile.trim()) {
       // Fallback if backend only supplies logoFile
-      logoImg.src = '/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim());
+      logoImg.src = withBase('/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim()));
     }
   }
 
@@ -735,11 +739,12 @@ async function loadPortalFiles() {
       const folder = portalFolder();
 
       if (isImageName(fname)) {
-        const thumbUrl =
+        const thumbUrl = withBase(
           '/api/file/download.php?folder=' +
           encodeURIComponent(folder) +
           '&file=' + encodeURIComponent(fname) +
-          '&inline=1&t=' + Date.now();
+          '&inline=1&t=' + Date.now()
+        );
 
         const img = document.createElement('img');
         img.src = thumbUrl;
@@ -762,9 +767,11 @@ async function loadPortalFiles() {
 
       if (portalCanDownload()) {
         const a = document.createElement('a');
-        a.href = '/api/file/download.php?folder=' +
+        a.href = withBase(
+          '/api/file/download.php?folder=' +
           encodeURIComponent(folder) +
-          '&file=' + encodeURIComponent(fname);
+          '&file=' + encodeURIComponent(fname)
+        );
         a.textContent = 'Download';
         a.className = 'portal-file-card-download';
         a.target = '_blank';

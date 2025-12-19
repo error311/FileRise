@@ -1,4 +1,9 @@
 // /js/main.js — light bootstrap
+import { getBasePath, stripBase, withBase, patchFetchForBasePath } from './basePath.js?v={{APP_QVER}}';
+
+// Expose base path for non-module scripts / debugging.
+try { window.__FR_BASE_PATH__ = getBasePath(); } catch (e) {}
+try { patchFetchForBasePath(); } catch (e) {}
 
 // ---- Toast bridge (global, early, race-proof) ----
 (function installToastBridge() {
@@ -35,7 +40,7 @@
 async function ensureToastReady() {
   if (window.__REAL_TOAST__) return;
   try {
-    const dom = await import('/js/domUtils.js?v={{APP_QVER}}');  // real toast
+    const dom = await import(withBase('/js/domUtils.js?v={{APP_QVER}}'));  // real toast
     const real = dom.showToast || ((m, d) => console.log('TOAST:', m, d));
 
     // (Optional) “false-negative to success” normalizer
@@ -194,6 +199,28 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
   }
 
   window.fetch = async (input, init = {}) => {
+    // Base-path aware: if mounted under /fr, rewrite /api/* -> /fr/api/*
+    const base = (window.__FR_BASE_PATH__ && String(window.__FR_BASE_PATH__)) || '';
+    if (base) {
+      try {
+        if (typeof input === 'string') {
+          if (input.startsWith('/api/') && !input.startsWith(base + '/api/')) {
+            input = base + input;
+          }
+        } else if (input && typeof input.url === 'string') {
+          const u = new URL(input.url, window.location.origin);
+          if (
+            u.origin === window.location.origin &&
+            u.pathname.startsWith('/api/') &&
+            !u.pathname.startsWith(base + '/api/')
+          ) {
+            const rewritten = new URL(base + u.pathname + u.search + u.hash, window.location.origin);
+            input = new Request(rewritten.toString(), input);
+          }
+        }
+      } catch (e) { }
+    }
+
     const method = (init.method || 'GET').toUpperCase();
     const urlKey = normalizeUrl(typeof input === 'string' ? input : (input && input.url) || '');
     const bodyKey = await toStableBody(init);
@@ -206,7 +233,8 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       return existing.promise.then(r => r.clone());
     }
 
-    const urlPath = (typeof input === 'string') ? input : new URL(input.url).pathname;
+    const urlPathRaw = (typeof input === 'string') ? new URL(input, window.location.origin).pathname : new URL(input.url).pathname;
+    const urlPath = stripBase(urlPathRaw);
 
     // 1) Only coalesce mutating methods OR specific noisy GETs
     const isCoalescableGet =
@@ -273,7 +301,8 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
         const str = String(raw).trim();
         if (!str) return fallback;
   
-        const candidate = new URL(str, window.location.origin);
+        // Resolve against current page so relative paths keep subpath mounts (e.g. /fr).
+        const candidate = new URL(str, window.location.href);
   
         // Enforce same-origin
         if (candidate.origin !== window.location.origin) {
@@ -515,7 +544,7 @@ function bindDarkMode() {
               logoImg.setAttribute('alt', 'Site logo');
             } else {
               // fall back to default FileRise logo
-              logoImg.setAttribute('src', '/assets/logo.svg?v={{APP_QVER}}');
+              logoImg.setAttribute('src', withBase('/assets/logo.svg?v={{APP_QVER}}'));
               logoImg.setAttribute('alt', 'FileRise');
             }
           }
@@ -574,7 +603,8 @@ function bindDarkMode() {
         const loginWrap = $('#loginForm');         // outer wrapper that contains buttons + form
         const authForm = $('#authForm');          // inner username/password form
         const oidcBtn = $('#oidcLoginBtn');      // OIDC button
-        const basicLink = document.querySelector('a[href="/api/auth/login_basic.php"]');
+        const basicSel = 'a[href$="api/auth/login_basic.php"], a[href$="/api/auth/login_basic.php"]';
+        const basicLink = document.querySelector(basicSel);
   
         // 1) Show the wrapper if ANY method is enabled (form OR OIDC OR basic)
         if (loginWrap) {
@@ -593,7 +623,7 @@ function bindDarkMode() {
         if (oidcBtn) oidcBtn.style.display = showOIDC ? '' : 'none';
         if (basicLink) basicLink.style.display = showBasic ? '' : 'none';
         const oidc = $('#oidcLoginBtn'); if (oidc) oidc.style.display = disableOIDC ? 'none' : '';
-        const basic = document.querySelector('a[href="/api/auth/login_basic.php"]');
+        const basic = document.querySelector(basicSel);
         if (basic) basic.style.display = disableBasic ? 'none' : '';
   
         // --- Header <h1> only in the FINAL phase (prevents visible flips) ---
@@ -928,7 +958,7 @@ function bindDarkMode() {
     window.pendingTOTP = true;
     // reuse the function you already export from auth.js
     try {
-      const auth = await import('/js/auth.js?v={{APP_QVER}}');
+      const auth = await import(withBase('/js/auth.js?v={{APP_QVER}}'));
       if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
     } catch (e) {
       console.warn('Could not import auth.js to open TOTP modal:', e);
@@ -940,7 +970,7 @@ function bindDarkMode() {
     const oidcBtn = $('#oidcLoginBtn');
     if (oidcBtn && !oidcBtn.__bound) {
       oidcBtn.__bound = true;
-      oidcBtn.addEventListener('click', () => { window.location.href = '/api/auth/auth.php?oidc=initiate'; });
+      oidcBtn.addEventListener('click', () => { window.location.href = withBase('/api/auth/auth.php?oidc=initiate'); });
     }
 
     const form = $('#authForm');
@@ -963,7 +993,7 @@ function bindDarkMode() {
           try { await primeCsrf(); } catch (e) { }
           window.pendingTOTP = true;
           try {
-            const auth = await import('/js/auth.js?v={{APP_QVER}}');
+            const auth = await import(withBase('/js/auth.js?v={{APP_QVER}}'));
             if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
           } catch (e) {
             console.warn('openTOTPLoginModal import failed', e);
@@ -1042,7 +1072,7 @@ function bindDarkMode() {
     window.setupMode = true;
     await primeCsrf();
 
-    try { await import('/js/adminPanel.js?v={{APP_QVER}}'); } catch (e) { }
+    try { await import(withBase('/js/adminPanel.js?v={{APP_QVER}}')); } catch (e) { }
     try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch (e) { }
 
     const addModal = document.getElementById('addUserModal'); if (addModal) addModal.style.display = 'block';
@@ -1085,9 +1115,9 @@ function bindDarkMode() {
         // 1) i18n (safe)
         // i18n: honor saved language first, then apply translations
         try {
-          const i18n = await import('/js/i18n.js?v={{APP_QVER}}').catch(async (err) => {
+          const i18n = await import(withBase('/js/i18n.js?v={{APP_QVER}}')).catch(async (err) => {
             console.error('[boot] import i18n.js failed (versioned)', err && err.message, err && err.sourceURL);
-            return import('/js/i18n.js');
+            return import(withBase('/js/i18n.js'));
           });
           let saved = 'en';
           try { saved = localStorage.getItem('language') || 'en'; } catch (e) { }
@@ -1098,9 +1128,9 @@ function bindDarkMode() {
           console.error('[boot] i18n import/apply failed', e && e.message, e && e.sourceURL);
         }
         // 2) core app — **initialize exactly once** (this calls initUpload/initFileActions/loadFolderTree/etc.)
-        const app = await import('/js/appCore.js?v={{APP_QVER}}').catch(async (err) => {
+        const app = await import(withBase('/js/appCore.js?v={{APP_QVER}}')).catch(async (err) => {
           console.error('[boot] import appCore.js failed (versioned)', err && err.message, err && err.sourceURL);
-          return import('/js/appCore.js');
+          return import(withBase('/js/appCore.js'));
         });
         if (!window.__FR_FLAGS.initialized) {
           if (typeof app.loadCsrfToken === 'function') await app.loadCsrfToken();
@@ -1113,7 +1143,7 @@ function bindDarkMode() {
           }
           const link = document.createElement('link');
           link.rel = 'stylesheet';
-          link.href = '/css/vendor/material-icons.css?v={{APP_QVER}}';
+          link.href = withBase('/css/vendor/material-icons.css?v={{APP_QVER}}');
           document.head.appendChild(link);
 
 
@@ -1134,9 +1164,9 @@ function bindDarkMode() {
         // 3) auth/header bits — pass real state so “Admin Panel” shows up
         if (!window.__FR_FLAGS.wired.auth) {
           try {
-            const auth = await import('/js/auth.js?v={{APP_QVER}}').catch(async (err) => {
+            const auth = await import(withBase('/js/auth.js?v={{APP_QVER}}')).catch(async (err) => {
               console.error('[boot] import auth.js failed (versioned)', err && err.message, err && err.sourceURL);
-              return import('/js/auth.js');
+              return import(withBase('/js/auth.js'));
             });
             auth.updateLoginOptionsUIFromStorage && auth.updateLoginOptionsUIFromStorage();
             auth.applyProxyBypassUI && auth.applyProxyBypassUI();
@@ -1293,7 +1323,7 @@ function bindDarkMode() {
   const QVER = (window.APP_QVER && String(window.APP_QVER)) || '{{APP_QVER}}';
 
   if (shouldLoadSwitcher) {
-    import(`/js/mobile/switcher.js?v=${encodeURIComponent(QVER)}`)
+    import(withBase(`/js/mobile/switcher.js?v=${encodeURIComponent(QVER)}`))
       .then(() => {
         if (hasFrAppHint && !sessionStorage.getItem('frx_opened_once')) {
           sessionStorage.setItem('frx_opened_once', '1');
@@ -1307,7 +1337,7 @@ function bindDarkMode() {
   const onHttps = location.protocol === 'https:' || location.hostname === 'localhost';
   if ('serviceWorker' in navigator && onHttps && !hasCapBridge && !isCapUA) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register(`/js/pwa/sw.js?v=${encodeURIComponent(QVER)}`).catch(() => { });
+      navigator.serviceWorker.register(withBase(`/sw.js?v=${encodeURIComponent(QVER)}`)).catch(() => { });
     });
   }
 })();

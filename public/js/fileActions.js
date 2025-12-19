@@ -9,6 +9,7 @@ import {
 } from './fileListView.js?v={{APP_QVER}}';
 import { refreshFolderIcon, updateRecycleBinState } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 export function handleDeleteSelected(e) {
   e.preventDefault();
@@ -159,7 +160,21 @@ export function handleDownloadMultiSelected(e) {
   }
 
   const limit = getDownloadLimit();
-  if (files.length >= limit) {
+  const caps = window.currentFolderCaps || null;
+  const inEncryptedFolder = !!(caps && caps.encryption && caps.encryption.encrypted);
+
+  // In encrypted folders, ZIP create is disabled. Allow plain downloads up to the limit only.
+  if (inEncryptedFolder) {
+    if (files.length > limit) {
+      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`);
+      return;
+    }
+    downloadSelectedFilesIndividually(files);
+    return;
+  }
+
+  // Normal behavior: download individually up to the limit; ZIP for more than the limit.
+  if (files.length > limit) {
     handleDownloadZipSelected(e || new Event("click"));
     return;
   }
@@ -169,8 +184,25 @@ export function handleDownloadMultiSelected(e) {
 
 attachEnterKeyListener("downloadZipModal", "confirmDownloadZip");
 export function handleDownloadZipSelected(e) {
-  e.preventDefault();
-  e.stopImmediatePropagation();
+  if (e) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
+  const caps = window.currentFolderCaps || null;
+  const inEncryptedFolder = !!(caps && caps.encryption && caps.encryption.encrypted);
+  if (inEncryptedFolder) {
+    const files = getSelectedFileObjects();
+    const limit = getDownloadLimit();
+    if (files.length > limit) {
+      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`);
+      return;
+    }
+    // If we got here via an old/hidden ZIP action, fall back to plain download.
+    downloadSelectedFilesIndividually(files);
+    return;
+  }
+
   const checkboxes = document.querySelectorAll(".file-checkbox:checked");
   if (checkboxes.length === 0) {
     showToast("No files selected for download.");
@@ -285,7 +317,7 @@ export function confirmSingleDownload() {
 
   // 3) Build the direct download URL
   const folder = window.currentFolder || "root";
-  const downloadURL = "/api/file/download.php"
+  const downloadURL = withBase("/api/file/download.php")
     + "?folder=" + encodeURIComponent(folder)
     + "&file=" + encodeURIComponent(window.singleFileToDownload);
 

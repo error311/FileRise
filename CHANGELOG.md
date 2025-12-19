@@ -1,5 +1,43 @@
 # Changelog
 
+## Changes 12/18/2025 (v2.10.0)
+
+`release(v2.10.0): encryption at rest + firewall/proxy settings + subpath/base-path support (closes #73)`
+
+**Added**  
+
+- **Encryption at rest (folder-based)** using libsodium secretstream (XChaCha20-Poly1305), including:
+  - Master key support via `FR_ENCRYPTION_MASTER_KEY` or `META_DIR/encryption_master.key`, plus admin UI to generate/clear the key file.
+  - Folder encryption metadata tracking (`folder_crypto.json`) with inherited encryption for descendants.
+  - Background **encrypt/decrypt jobs** with progress UI (minimizable) and resumable status.
+
+- **Firewall / Proxy settings**: “Published URL” support for correct share-link/redirect generation behind reverse proxies and subpath installs:
+  - `FR_PUBLISHED_URL` env override (locks admin field), or admin-config stored `publishedUrl`.
+
+**Changed**  
+
+- **Subpath / base-path installs** now supported end-to-end:
+  - Server-side base path detection + helpers (`FR_BASE_PATH`, `X-Forwarded-Prefix`, `fr_with_base_path()`).
+  - Frontend base path utilities (`basePath.js`) applied across app, portals, PWA/service worker, and asset URLs (favicons, manifest, fonts).
+- Share-link generation now prefers `FR_PUBLISHED_URL_EFFECTIVE` / published URL when present; otherwise uses base-path-aware paths.
+
+**Security / Restrictions (encryption v1 behavior)**  
+
+- When a folder is encrypted (or within an encrypted tree), the following are **disabled/blocked** to prevent leakage of ciphertext or unsupported flows:
+  - WebDAV access
+  - File/folder sharing + shared-folder uploads/downloads
+  - ZIP create/extract operations
+  - ONLYOFFICE (editor bypassed)
+- Encrypted files download via **on-the-fly decryption** (no HTTP Range support).
+
+**Fixes / Polish**  
+
+- Improve UI behavior in encrypted folders (hide/disable share/zip actions, banner + encrypted badge overlays).
+- PWA/service worker + manifest updated to work under subpath scopes.
+- Minor robustness improvements (context-menu SVG repair, better upload error toasts, throttled folder stats calls).
+
+---
+
 ## Changes 12/17/2025 (v2.9.3)
 
 release(v2.9.3): fix recycle bin button binding, polish trash UI, and improve card dock animations

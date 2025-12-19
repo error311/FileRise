@@ -44,7 +44,7 @@ function localizeMenu() {
 }
 
 // Show/hide items based on selection state
-function configureVisibility({ any, one, many, anyZip, canEdit }) {
+function configureVisibility({ any, one, many, anyZip, canEdit, allowShare, allowZip, allowExtractZip }) {
   const m = qMenu(); if (!m) return;
 
   const show = (sel, on) => sel.forEach(el => el.hidden = !on);
@@ -55,6 +55,16 @@ function configureVisibility({ any, one, many, anyZip, canEdit }) {
   show(m.querySelectorAll('[data-when="many"]'),  many);
   show(m.querySelectorAll('[data-when="zip"]'),   anyZip);
   show(m.querySelectorAll('[data-when="can-edit"]'), canEdit);
+
+  // Capability gates (e.g. encrypted folders disable share/zip actions)
+  try {
+    const share = m.querySelector('.mi[data-action="share_file"]');
+    if (share) share.hidden = share.hidden || !allowShare;
+    const dlZip = m.querySelector('.mi[data-action="download_zip"]');
+    if (dlZip) dlZip.hidden = dlZip.hidden || !allowZip;
+    const exZip = m.querySelector('.mi[data-action="extract_zip"]');
+    if (exZip) exZip.hidden = exZip.hidden || !allowExtractZip;
+  } catch (e) { /* ignore */ }
 
   // Hide separators at edges or duplicates
   cleanupSeparators(m);
@@ -130,13 +140,22 @@ function currentSelection() {
   const file = one ? files[0] : null;
   const canEditFlag = !!(file && canEditFile(file.name));
 
+  const caps = window.currentFolderCaps || null;
+  const inEncrypted = !!(caps && caps.encryption && caps.encryption.encrypted);
+  const allowShare = !inEncrypted && (caps ? !!(caps.canShareFile || caps.canShare) : true);
+  const allowExtractZip = !inEncrypted && (caps ? !!caps.canExtract : true);
+  const allowZip = !inEncrypted; // zip-create is blocked inside encrypted folders
+
   // also return the raw names if any caller needs them
   return {
     files,                   // <— real file objects for modals
     all: files.map(f => f.name),
     any, one, many, anyZip,
     file,
-    canEdit: canEditFlag
+    canEdit: canEditFlag,
+    allowShare,
+    allowZip,
+    allowExtractZip
   };
 }
 

@@ -2,12 +2,13 @@
 // Lazy folder tree with persisted expansion, root DnD, color-carry on moves, and state migration.
 // Smart initial selection: if the default folder isn't viewable, pick the first accessible folder (BFS).
 
-import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
-import { showToast, escapeHTML, attachEnterKeyListener } from './domUtils.js?v={{APP_QVER}}';
+import { loadFileList, repairBlankFolderIcons } from './fileListView.js?v={{APP_QVER}}';
+import { showToast, escapeHTML, attachEnterKeyListener, showCustomConfirmModal } from './domUtils.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { openFolderShareModal } from './folderShareModal.js?v={{APP_QVER}}';
 import { fetchWithCsrf } from './auth.js?v={{APP_QVER}}';
 import { loadCsrfToken } from './appCore.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 
 function detachFolderModalsToBody() {
@@ -81,7 +82,7 @@ function markOptionLocked(optEl, locked) {
   const iconEl = optEl.querySelector('.folder-icon');
   if (iconEl) {
     const currentKind = iconEl?.dataset?.kind || 'empty';
-    iconEl.innerHTML = folderSVG(currentKind, { locked: !!locked });
+    iconEl.innerHTML = folderSVG(currentKind, { locked: !!locked, encrypted: optEl.classList.contains('encrypted') });
   }
 }
 
@@ -115,6 +116,7 @@ function normalizeItem(it) {
       locked: !!it.locked,
       hasSubfolders: (typeof it.hasSubfolders === 'boolean') ? it.hasSubfolders : undefined,
       nonEmpty: (typeof it.nonEmpty === 'boolean') ? it.nonEmpty : undefined,
+      encrypted: (typeof it.encrypted === 'boolean') ? it.encrypted : undefined,
     };
   }
   return null;
@@ -215,6 +217,9 @@ async function applyFolderCapabilities(folder) {
     const caps = await getFolderCapabilities(folder);
     if (!caps) { disableAllFolderControls(); return; }
     if (folder === window.currentFolder) window.currentFolderCaps = caps;
+    try {
+      window.dispatchEvent(new CustomEvent('folderCapsUpdated', { detail: { folder, caps } }));
+    } catch (e) { /* ignore */ }
     const isRoot = (folder === 'root');
     setControlEnabled(document.getElementById('createFolderBtn'), !!caps.canCreate);
     setControlEnabled(document.getElementById('moveFolderBtn'),   !!caps.canMoveFolder);
@@ -605,7 +610,7 @@ function _runCount(url) {
 async function fetchFolderCounts(folder) {
   if (_folderCountCache.has(folder)) return _folderCountCache.get(folder);
   if (_inflightCounts.has(folder)) return _inflightCounts.get(folder);
-  const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`;
+  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`);
   const p = _runCount(url).then(data => {
     const result = { folders: Number(data?.folders || 0), files: Number(data?.files || 0) };
     _folderCountCache.set(folder, result);
@@ -665,7 +670,7 @@ async function expandAncestors(targetFolder) {
 /* ----------------------
    SVG icon helpers
 ----------------------*/
-export function folderSVG(kind = 'empty', { locked = false } = {}) {
+export function folderSVG(kind = 'empty', { locked = false, encrypted = false } = {}) {
   const gid = makeUid('g');
   return `
 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="display:block;shape-rendering:geometricPrecision">
@@ -705,6 +710,15 @@ export function folderSVG(kind = 'empty', { locked = false } = {}) {
     <circle class="lock-keyhole" cx="3.8" cy="6" r="0.7"></circle>
   </g>` : ``}
 
+  ${(!locked && encrypted) ? `
+  <!-- Small "encrypted" badge (distinct from ACL lock) -->
+  <g class="enc-overlay" transform="translate(2.0, 11.9) scale(1.12)" pointer-events="none">
+    <circle class="enc-badge" cx="4.5" cy="4.35" r="3.95"></circle>
+    <path class="enc-mark-shackle" d="M3.25 4.05 V3.65 C3.25 2.95 3.80 2.40 4.50 2.40 C5.20 2.40 5.75 2.95 5.75 3.65 V4.05" />
+    <rect class="enc-mark-body" x="2.55" y="4.05" width="3.9" height="2.9" rx="0.65"></rect>
+    <circle class="enc-mark-keyhole" cx="4.5" cy="5.6" r="0.45"></circle>
+  </g>` : ``}
+
   <path class="lip-highlight" d="M3 10.5 H11.5 L13.5 8.5 H20.3"/>
 </svg>`;
 }
@@ -713,8 +727,9 @@ function setFolderIconForOption(optEl, kind) {
   if (!iconEl) return;
   if (optEl.dataset && optEl.dataset.folder === 'recycle_bin') return; // keep recycle icon intact
   const isLocked = optEl.classList.contains('locked');
+  const isEncrypted = optEl.classList.contains('encrypted');
   iconEl.dataset.kind = kind;
-  iconEl.innerHTML = folderSVG(kind, { locked: isLocked });
+  iconEl.innerHTML = folderSVG(kind, { locked: isLocked, encrypted: isEncrypted });
 }
 export function refreshFolderIcon(folder) {
   if (folder === 'recycle_bin') return;
@@ -1673,6 +1688,7 @@ function makeChildLi(parentPath, item) {
   const it = normalizeItem(item);
   if (!it) return document.createElement('li');
   const { name, locked } = it;
+  const encrypted = !locked && !!it.encrypted;
 
   const fullPath = parentPath === 'root' ? name : `${parentPath}/${name}`;
   if (!isSafeFolderPath(fullPath)) {
@@ -1697,7 +1713,7 @@ function makeChildLi(parentPath, item) {
 
   // <span class="folder-option[ locked]" [draggable]>
   const opt = document.createElement('span');
-  opt.className = 'folder-option' + (locked ? ' locked' : '');
+  opt.className = 'folder-option' + (locked ? ' locked' : '') + (encrypted ? ' encrypted' : '');
   if (!locked) opt.setAttribute('draggable', 'true');
   // Use dataset instead of attribute string interpolation.
   opt.dataset.folder = fullPath;
@@ -1709,7 +1725,7 @@ function makeChildLi(parentPath, item) {
   icon.dataset.kind = 'empty';
   // Safe: SVG is generated locally, not from user input.
   // nosemgrep: javascript.browser.security.dom-xss.innerhtml
-  icon.innerHTML = folderSVG('empty', { locked });
+  icon.innerHTML = folderSVG('empty', { locked, encrypted });
 
   // <span class="folder-label">name</span>
   const label = document.createElement('span');
@@ -2345,6 +2361,15 @@ export function showFolderManagerContextMenu(x, y, menuItems) {
 
   menu.style.left = `${Math.max(6, nx)}px`;
   menu.style.top  = `${Math.max(6, ny)}px`;
+
+  // Defensive: opening a context menu can (rarely) blank out inline SVGs in other parts of the UI.
+  // Repair after the menu is painted (and again shortly after) without forcing a full re-render.
+  try {
+    const kick = () => { try { repairBlankFolderIcons({ force: true }); } catch (e) {} };
+    queueMicrotask(kick);
+    setTimeout(kick, 80);
+    setTimeout(kick, 250);
+  } catch (e) { /* ignore */ }
 }
 
 export function hideFolderManagerContextMenu() {
@@ -2375,6 +2400,10 @@ async function openFolderActionsMenu(folder, targetEl, clientX, clientY) {
   updateFolderActionButtons();
 
   const canColor = !!(window.currentFolderCaps && window.currentFolderCaps.canEdit);
+  const enc = (window.currentFolderCaps && window.currentFolderCaps.encryption) ? window.currentFolderCaps.encryption : {};
+  const canEncrypt = !!enc.canEncrypt;
+  const canDecrypt = !!enc.canDecrypt;
+  const canShareFolder = !!window.currentFolderCaps?.canShareFolder;
 
   const menuItems = [
     {
@@ -2389,18 +2418,396 @@ async function openFolderActionsMenu(folder, targetEl, clientX, clientY) {
     { label: t('move_folder'),   action: () => openMoveFolderUI(folder) },
     { label: t('rename_folder'), action: () => openRenameFolderModal()  },
     ...(canColor ? [{ label: t('color_folder'), action: () => openColorFolderModal(folder) }] : []),
-    { label: t('folder_share'),  action: () => openFolderShareModal(folder) },
+    ...(canEncrypt ? [{ label: 'Encrypt folder', icon: 'lock', action: () => startFolderCryptoJobFlow(folder, 'encrypt') }] : []),
+    ...(canDecrypt ? [{ label: 'Decrypt folder', icon: 'lock_open', action: () => startFolderCryptoJobFlow(folder, 'decrypt') }] : []),
+    ...(canShareFolder ? [{ label: t('folder_share'),  action: () => openFolderShareModal(folder) }] : []),
     { label: t('delete_folder'), action: () => openDeleteFolderModal()  },
   ];
 
   showFolderManagerContextMenu(clientX, clientY, menuItems);
 }
 
+async function setFolderEncryption(folder, encrypted) {
+  try {
+    const resp = await fetchWithCsrf('/api/folder/setFolderEncryption.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder, encrypted: !!encrypted })
+    });
+    const data = await safeJson(resp);
+
+    if (!data || data.ok !== true) {
+      showToast((data && (data.error || data.message)) || 'Failed to update folder encryption.', 'error');
+      return;
+    }
+
+    // Update local UI for this folder + any rendered descendants
+    const esc = CSS.escape(folder);
+    const sel = `.folder-option[data-folder="${esc}"], .folder-option[data-folder^="${esc}/"]`;
+    document.querySelectorAll(sel).forEach(opt => {
+      opt.classList.toggle('encrypted', !!encrypted);
+      const iconEl = opt.querySelector('.folder-icon');
+      if (iconEl) {
+        const kind = iconEl?.dataset?.kind || 'empty';
+        // nosemgrep: javascript.browser.security.dom-xss.innerhtml
+        iconEl.innerHTML = folderSVG(kind, { locked: opt.classList.contains('locked'), encrypted: opt.classList.contains('encrypted') });
+      }
+    });
+
+    invalidateFolderCaches(folder);
+    await applyFolderCapabilities(folder);
+    showToast(encrypted ? 'Folder encryption enabled.' : 'Folder encryption disabled.');
+  } catch (e) {
+    console.error('setFolderEncryption failed', e);
+    showToast((e && e.message) ? e.message : 'Failed to update folder encryption.', 'error');
+  }
+}
+
+/* ----------------------
+   Encryption v2: confirm + progress UI (minimizable)
+----------------------*/
+const CRYPTO_JOB_STORAGE_KEY = 'frCryptoJob';
+let __cryptoRunner = null;
+let __cryptoUiReady = false;
+
+function formatBytes(n) {
+  const num = Number(n || 0);
+  if (!Number.isFinite(num) || num <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let v = num;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  const dp = (i === 0) ? 0 : (i === 1 ? 0 : 1);
+  return `${v.toFixed(dp)} ${units[i]}`;
+}
+
+function setEncryptedClassForRenderedSubtree(folder, encrypted) {
+  try {
+    const esc = CSS.escape(folder);
+    const sel = `.folder-option[data-folder="${esc}"], .folder-option[data-folder^="${esc}/"]`;
+    document.querySelectorAll(sel).forEach(opt => {
+      opt.classList.toggle('encrypted', !!encrypted);
+      const iconEl = opt.querySelector('.folder-icon');
+      if (iconEl) {
+        const kind = iconEl?.dataset?.kind || 'empty';
+        // nosemgrep: javascript.browser.security.dom-xss.innerhtml
+        iconEl.innerHTML = folderSVG(kind, { locked: opt.classList.contains('locked'), encrypted: opt.classList.contains('encrypted') });
+      }
+    });
+  } catch (e) { }
+}
+
+function ensureCryptoJobUi() {
+  if (__cryptoUiReady) return;
+  __cryptoUiReady = true;
+
+  if (!document.getElementById('frCryptoJobModal')) {
+    const modal = document.createElement('div');
+    modal.id = 'frCryptoJobModal';
+    modal.className = 'fr-crypto-job-modal';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+      <div class="fr-crypto-job-card" role="dialog" aria-modal="true" aria-label="Folder encryption progress">
+        <div class="fr-crypto-job-head">
+          <div class="fr-crypto-job-title" id="frCryptoJobTitle">Working…</div>
+          <div class="fr-crypto-job-actions">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="frCryptoJobMinBtn">Minimize</button>
+          </div>
+        </div>
+        <div class="fr-crypto-job-body">
+          <div class="fr-crypto-job-sub" id="frCryptoJobSub"></div>
+          <div class="fr-crypto-job-bar">
+            <div class="fr-crypto-job-bar-fill" id="frCryptoJobBarFill" style="width:0%"></div>
+          </div>
+          <div class="fr-crypto-job-metrics" id="frCryptoJobMetrics"></div>
+          <div class="fr-crypto-job-error" id="frCryptoJobError" style="display:none"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  if (!document.getElementById('frCryptoJobPill')) {
+    const pill = document.createElement('div');
+    pill.id = 'frCryptoJobPill';
+    pill.className = 'fr-crypto-job-pill';
+    pill.style.display = 'none';
+    pill.innerHTML = `
+      <button type="button" class="fr-crypto-job-pill-btn" id="frCryptoJobPillBtn">
+        <span class="fr-crypto-job-pill-title" id="frCryptoJobPillTitle">Working…</span>
+        <span class="fr-crypto-job-pill-pct" id="frCryptoJobPillPct">0%</span>
+      </button>
+    `;
+    document.body.appendChild(pill);
+  }
+
+  document.getElementById('frCryptoJobMinBtn')?.addEventListener('click', () => {
+    setCryptoUiMinimized(true);
+  });
+  document.getElementById('frCryptoJobPillBtn')?.addEventListener('click', () => {
+    setCryptoUiMinimized(false);
+  });
+}
+
+function setCryptoUiMinimized(min) {
+  ensureCryptoJobUi();
+  const modal = document.getElementById('frCryptoJobModal');
+  const pill = document.getElementById('frCryptoJobPill');
+  if (modal) modal.style.display = min ? 'none' : 'flex';
+  if (pill) pill.style.display = min ? 'block' : 'none';
+  try {
+    const cur = JSON.parse(localStorage.getItem(CRYPTO_JOB_STORAGE_KEY) || 'null');
+    if (cur && typeof cur === 'object') {
+      cur.minimized = !!min;
+      localStorage.setItem(CRYPTO_JOB_STORAGE_KEY, JSON.stringify(cur));
+    }
+  } catch (e) { }
+}
+
+function renderCryptoJobUi({ folder, mode, job }) {
+  ensureCryptoJobUi();
+  const titleEl = document.getElementById('frCryptoJobTitle');
+  const subEl = document.getElementById('frCryptoJobSub');
+  const barFill = document.getElementById('frCryptoJobBarFill');
+  const metrics = document.getElementById('frCryptoJobMetrics');
+  const errEl = document.getElementById('frCryptoJobError');
+  const pillTitle = document.getElementById('frCryptoJobPillTitle');
+  const pillPct = document.getElementById('frCryptoJobPillPct');
+
+  const act = (mode === 'decrypt') ? 'Decrypting' : 'Encrypting';
+  const folderLabel = folder || (job && job.folder) || 'root';
+  const totalFiles = Number(job?.totalFiles || 0);
+  const totalBytes = Number(job?.totalBytes || 0);
+  const doneFiles = Number(job?.doneFiles || 0);
+  const doneBytes = Number(job?.doneBytes || 0);
+
+  const pct = totalFiles > 0
+    ? Math.min(100, Math.round((doneFiles / totalFiles) * 100))
+    : (totalBytes > 0 ? Math.min(100, Math.round((doneBytes / totalBytes) * 100)) : 0);
+
+  if (titleEl) titleEl.textContent = `${act} ${folderLabel}`;
+  if (subEl) subEl.textContent = (job?.state === 'running')
+    ? 'Running in the background. You can keep using FileRise.'
+    : (job?.state === 'done' ? 'Complete.' : '');
+
+  if (barFill) barFill.style.width = `${pct}%`;
+  if (metrics) {
+    const fPart = totalFiles > 0 ? `${doneFiles}/${totalFiles} files` : `${doneFiles} files`;
+    const bPart = totalBytes > 0 ? `${formatBytes(doneBytes)} / ${formatBytes(totalBytes)}` : `${formatBytes(doneBytes)}`;
+    metrics.textContent = `${fPart} • ${bPart}`;
+  }
+
+  if (pillTitle) pillTitle.textContent = act;
+  if (pillPct) pillPct.textContent = `${pct}%`;
+
+  if (errEl) {
+    const err = job?.error ? String(job.error) : '';
+    errEl.style.display = err ? 'block' : 'none';
+    errEl.textContent = err;
+  }
+}
+
+async function startCryptoRunner({ jobId, folder, mode, minimized }) {
+  if (__cryptoRunner) {
+    clearTimeout(__cryptoRunner);
+    __cryptoRunner = null;
+  }
+
+  ensureCryptoJobUi();
+  const modal = document.getElementById('frCryptoJobModal');
+  if (modal) modal.style.display = minimized ? 'none' : 'flex';
+  setCryptoUiMinimized(!!minimized);
+
+  const tickOnce = async () => {
+    const resp = await fetchWithCsrf(withBase('/api/folder/encryptionJobTick.php'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId, maxFiles: 1 })
+    });
+    return safeJson(resp);
+  };
+
+  const statusOnce = async () => {
+    const resp = await fetch(withBase(`/api/folder/encryptionJobStatus.php?jobId=${encodeURIComponent(jobId)}`), { credentials: 'include' });
+    return safeJson(resp);
+  };
+
+  const loop = async () => {
+    try {
+      const st = await statusOnce();
+      const job = st?.job || null;
+      renderCryptoJobUi({ folder, mode, job });
+
+      if (!job || job.state === 'done') {
+        finalizeCryptoJobUi({ folder, mode, jobId, ok: true });
+        return;
+      }
+      if (job.state === 'error') {
+        finalizeCryptoJobUi({ folder, mode, jobId, ok: false, error: job.error });
+        return;
+      }
+
+      const tk = await tickOnce();
+      const job2 = tk?.job || job;
+      renderCryptoJobUi({ folder, mode, job: job2 });
+
+      if (job2?.state === 'done') {
+        finalizeCryptoJobUi({ folder, mode, jobId, ok: true });
+        return;
+      }
+      if (job2?.state === 'error') {
+        finalizeCryptoJobUi({ folder, mode, jobId, ok: false, error: job2.error });
+        return;
+      }
+    } catch (e) {
+      // transient errors: retry with backoff
+      console.error('crypto job loop error', e);
+      const status = Number(e?.status || 0);
+      if (status === 401 || status === 403 || status === 404) {
+        finalizeCryptoJobUi({ folder, mode, jobId, ok: false, error: e?.message || 'Crypto job failed.' });
+        return;
+      }
+    }
+
+    __cryptoRunner = setTimeout(loop, 700);
+  };
+
+  loop();
+}
+
+function finalizeCryptoJobUi({ folder, mode, jobId, ok, error }) {
+  try { localStorage.removeItem(CRYPTO_JOB_STORAGE_KEY); } catch (e) { }
+  if (__cryptoRunner) {
+    clearTimeout(__cryptoRunner);
+    __cryptoRunner = null;
+  }
+
+  // Update folder tree visuals best-effort
+  if (mode === 'decrypt' && ok) {
+    setEncryptedClassForRenderedSubtree(folder, false);
+  } else if (mode === 'encrypt' && ok) {
+    setEncryptedClassForRenderedSubtree(folder, true);
+  }
+
+  try { invalidateFolderCaches(folder); } catch (e) { }
+  try { refreshFolderIcon(folder); } catch (e) { }
+  try { applyFolderCapabilities(folder); } catch (e) { }
+  // If the current view is showing the affected folder (or its parent), refresh the list so
+  // folder-row icons/capability-driven toolbar state update immediately.
+  if (ok) {
+    try {
+      const cur = window.currentFolder || 'root';
+      const parent = getParentFolder(folder || 'root');
+      if (cur === (folder || 'root') || cur === parent) {
+        loadFileList(cur);
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Hide UI
+  const modal = document.getElementById('frCryptoJobModal');
+  const pill = document.getElementById('frCryptoJobPill');
+  if (modal) modal.style.display = 'none';
+  if (pill) pill.style.display = 'none';
+
+  if (ok) {
+    showToast(mode === 'decrypt' ? 'Folder decryption completed.' : 'Folder encryption completed.');
+  } else {
+    showToast(error ? (`Folder crypto failed: ${error}`) : 'Folder crypto failed.');
+  }
+}
+
+export async function startFolderCryptoJobFlow(folder, mode) {
+  try {
+    const planUrl = withBase(`/api/folder/encryptionPlan.php?folder=${encodeURIComponent(folder)}&mode=${encodeURIComponent(mode)}`);
+    const planRes = await fetch(planUrl, { credentials: 'include' });
+    const plan = await safeJson(planRes);
+    if (!plan || plan.ok !== true) {
+      showToast((plan && (plan.error || plan.message)) || 'Failed to estimate folder encryption work.');
+      return;
+    }
+
+    const totalFiles = Number(plan.totalFiles || 0);
+    const totalBytes = Number(plan.totalBytes || 0);
+    const truncated = !!plan.truncated;
+
+    const label = mode === 'decrypt' ? 'decrypt' : 'encrypt';
+    const msg =
+      `Are you sure you want to ${label} "${folder}"?\n\n` +
+      `This will process ${totalFiles} file(s) (~${formatBytes(totalBytes)}).` +
+      (truncated ? `\n\nNote: estimate was truncated for very large trees.` : '') +
+      `\n\nThis may take a while. A progress window will appear and can be minimized while you continue using FileRise.`;
+
+    const ok = await showCustomConfirmModal(msg);
+    if (!ok) return;
+
+    const startRes = await fetchWithCsrf(withBase('/api/folder/encryptionJobStart.php'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder, mode, totalFiles, totalBytes })
+    });
+    let start = null;
+    if (startRes.ok) {
+      start = await safeJson(startRes);
+    } else {
+      // If a job is already running, reconnect to it.
+      const body = await startRes.json().catch(() => ({}));
+      if (startRes.status === 409 && body && body.job && body.job.id) {
+        start = { ok: true, jobId: body.job.id, folder, mode };
+      } else {
+        const msg = (body && (body.error || body.message)) || `HTTP ${startRes.status}`;
+        showToast(msg);
+        return;
+      }
+    }
+
+    // Update local UI immediately
+    if (mode === 'encrypt') setEncryptedClassForRenderedSubtree(folder, true);
+    try { await applyFolderCapabilities(folder); } catch (e) { }
+
+    const st = { jobId: start.jobId, folder, mode, minimized: false };
+    try { localStorage.setItem(CRYPTO_JOB_STORAGE_KEY, JSON.stringify(st)); } catch (e) { }
+
+    renderCryptoJobUi({
+      folder,
+      mode,
+      job: { state: 'running', totalFiles, totalBytes, doneFiles: 0, doneBytes: 0 }
+    });
+
+    await startCryptoRunner(st);
+  } catch (e) {
+    console.error('startFolderCryptoJobFlow error', e);
+    showToast((e && e.message) ? e.message : 'Failed to start folder encryption.');
+  }
+}
+
+function resumeCryptoJobUiFromStorage() {
+  try {
+    const raw = localStorage.getItem(CRYPTO_JOB_STORAGE_KEY);
+    if (!raw) return;
+    const st = JSON.parse(raw);
+    if (!st || typeof st !== 'object' || !st.jobId) return;
+    startCryptoRunner(st);
+  } catch (e) { }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // best-effort resume
+  resumeCryptoJobUiFromStorage();
+});
+
 async function folderManagerContextMenuHandler(e) {
   const target = e.target.closest('.folder-option, .breadcrumb-link');
   if (!target) return;
   e.preventDefault();
   e.stopPropagation();
+
+  // Defensive: some browsers can blank unrelated inline SVGs when a context menu opens.
+  // Kick a best-effort repair immediately (before any async awaits) and let the menu helper
+  // schedule additional passes after paint.
+  try {
+    queueMicrotask(() => { try { repairBlankFolderIcons({ force: true }); } catch (e) {} });
+  } catch (e) { /* ignore */ }
 
   // Toggle-only for locked nodes (no menu)
   if (target.classList && target.classList.contains('locked')) {
@@ -2530,6 +2937,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
       clearPeekCache([parent, oldPath, newFolderFull]);
       const ul = getULForFolder(parent);
       if (ul) { ul._renderedOnce = false; ul.innerHTML = ""; await ensureChildrenLoaded(parent, ul); }
+      if (parent === 'root') placeRecycleBinNode();
 
       // restore any open nodes we had saved
       await expandAndLoadSavedState();
@@ -2579,6 +2987,7 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
       clearPeekCache([parent, selectedFolder]);
       const ul = getULForFolder(parent);
       if (ul) { ul._renderedOnce = false; ul.innerHTML = ""; await ensureChildrenLoaded(parent, ul); }
+      if (parent === 'root') placeRecycleBinNode();
       selectFolder(parent);
     } else {
       showToast("Error: " + (data.error || "Could not delete folder"));
@@ -2636,6 +3045,7 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
       updateToggleForOption(parentFolder, true);
       invalidateFolderCaches(parentFolder);
       clearPeekCache([parentFolder, full]);
+      if (parentFolder === 'root') placeRecycleBinNode();
     }
 
     window.currentFolder = full;
@@ -2725,6 +3135,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updateToggleForOption(srcParent, !!srcUl && !!srcUl.querySelector(':scope > li.folder-item'));
         if (srcUl) { srcUl._renderedOnce = false; srcUl.innerHTML = ""; await ensureChildrenLoaded(srcParent, srcUl); }
         if (dstUl) { dstUl._renderedOnce = false; dstUl.innerHTML = ""; await ensureChildrenLoaded(dstParent, dstUl); }
+        if (srcParent === 'root' || dstParent === 'root') placeRecycleBinNode();
 
         updateToggleForOption(dstParent, true);
         ensureFolderIcon(dstParent);

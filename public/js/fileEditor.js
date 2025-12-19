@@ -3,13 +3,14 @@ import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { buildPreviewUrl } from './filePreview.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 // thresholds for editor behavior
 const EDITOR_PLAIN_THRESHOLD = 5 * 1024 * 1024;  // >5 MiB => force plain text, lighter settings
 const EDITOR_BLOCK_THRESHOLD = 10 * 1024 * 1024; // >10 MiB => block editing
 
 // ==== CodeMirror lazy loader ===============================================
-const CM_BASE = "/vendor/codemirror/5.65.18/";
+const CM_BASE = withBase("/vendor/codemirror/5.65.18/");
 
 // Stamp-friendly helpers (the stamper will replace {{APP_QVER}})
 const coreUrl = (p) => `${CM_BASE}${p}?v={{APP_QVER}}`;
@@ -94,6 +95,25 @@ async function shouldUseOnlyOffice(fileName) {
 
 function isAbsoluteHttpUrl(u) { return /^https?:\/\//i.test(u || ''); }
 
+// Folder encryption check (used to bypass ONLYOFFICE in encrypted folders)
+const __folderEncryptedCache = new Map(); // folder -> Promise<bool>
+async function isFolderEncrypted(folder) {
+  const f = (!folder || folder === '') ? 'root' : String(folder);
+  if (__folderEncryptedCache.has(f)) return __folderEncryptedCache.get(f);
+  const p = (async () => {
+    try {
+      const r = await fetch(withBase(`/api/folder/capabilities.php?folder=${encodeURIComponent(f)}&t=${Date.now()}`), { credentials: 'include' });
+      if (!r.ok) return false;
+      const j = await r.json().catch(() => null);
+      return !!(j && j.encryption && j.encryption.encrypted);
+    } catch (e) {
+      return false;
+    }
+  })();
+  __folderEncryptedCache.set(f, p);
+  return p;
+}
+
 // ---- script/css single-load with timeout guards ----
 const _loadedScripts = new Set();
 const _loadedCss = new Set();
@@ -143,7 +163,7 @@ async function ensureCore() {
 async function loadSingleMode(name) {
   const rel = MODE_URL[name];
   if (!rel) return;
-  const url = rel.startsWith("http") ? rel : (rel.startsWith("/") ? rel : (CM_BASE + rel));
+  const url = rel.startsWith("http") ? rel : (rel.startsWith("/") ? withBase(rel) : (CM_BASE + rel));
   await loadScriptOnce(url);
 }
 
@@ -305,7 +325,7 @@ function ensureOoFullscreenModal(){
     modal.id = 'ooEditorModal';
     modal.innerHTML = `
       <div class="editor-header">
-        <img class="editor-logo" src="/assets/logo.svg" alt="FileRise logo" />
+        <img class="editor-logo" src="${withBase('/assets/logo.svg?v={{APP_QVER}}')}" alt="FileRise logo" />
         <h3 class="editor-title"></h3>
         <button id="closeEditorX" class="editor-close-btn" aria-label="${t("close") || "Close"}">&times;</button>
       </div>
@@ -321,7 +341,7 @@ function ensureOoFullscreenModal(){
     if (!header.querySelector('.editor-logo')){
       const img = document.createElement('img');
       img.className = 'editor-logo';
-      img.src = '/assets/logo.svg';
+      img.src = withBase('/assets/logo.svg?v={{APP_QVER}}');
       img.alt = 'FileRise logo';
       header.insertBefore(img, header.querySelector('.editor-title'));
     } else {
@@ -548,9 +568,14 @@ export async function editFile(fileName, folder) {
   const folderUsed = folder || window.currentFolder || "root";
   const fileUrl = buildPreviewUrl(folderUsed, fileName);
 
-  if (await shouldUseOnlyOffice(fileName)) {
-    await openOnlyOffice(fileName, folderUsed);
-    return;
+  const wantOO = await shouldUseOnlyOffice(fileName);
+  if (wantOO) {
+    const enc = await isFolderEncrypted(folderUsed);
+    if (!enc) {
+      await openOnlyOffice(fileName, folderUsed);
+      return;
+    }
+    showToast('ONLYOFFICE is disabled inside encrypted folders.');
   }
 
   // Probe size safely via API. Prefer HEAD; if missing Content-Length, fall back to a 1-byte Range GET.

@@ -3,6 +3,8 @@
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once __DIR__ . '/../../src/lib/ACL.php';
+require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
+require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
 class FileModel
 {
@@ -64,6 +66,13 @@ class FileModel
         $sourceDir .= DIRECTORY_SEPARATOR;
         $destDir   .= DIRECTORY_SEPARATOR;
 
+        $destEncrypted = false;
+        try {
+            $destEncrypted = FolderCrypto::isEncryptedOrAncestor((string)$destinationFolder);
+        } catch (\Throwable $e) {
+            $destEncrypted = false;
+        }
+
         // Metadata paths
         $srcMetaFile  = self::getMetadataFilePath($sourceFolder);
         $destMetaFile = self::getMetadataFilePath($destinationFolder);
@@ -99,8 +108,22 @@ class FileModel
                 $destPath = $destDir . $basename;
             }
 
-            if (!copy($srcPath, $destPath)) {
-                $errors[] = "Failed to copy $basename.";
+            try {
+                $srcIsEncryptedFile = CryptoAtRest::isEncryptedFile($srcPath);
+                if ($srcIsEncryptedFile && !$destEncrypted) {
+                    CryptoAtRest::decryptFileToPath($srcPath, $destPath);
+                } else {
+                    if (!copy($srcPath, $destPath)) {
+                        $errors[] = "Failed to copy $basename.";
+                        continue;
+                    }
+                    if (!$srcIsEncryptedFile && $destEncrypted) {
+                        CryptoAtRest::encryptFileInPlace($destPath);
+                    }
+                }
+            } catch (\Throwable $e) {
+                @unlink($destPath);
+                $errors[] = "Failed to copy {$basename}: " . $e->getMessage();
                 continue;
             }
 
@@ -302,6 +325,13 @@ class FileModel
             $destMetadata = [];
         }
 
+        $destEncrypted = false;
+        try {
+            $destEncrypted = FolderCrypto::isEncryptedOrAncestor((string)$destinationFolder);
+        } catch (\Throwable $e) {
+            $destEncrypted = false;
+        }
+
         $movedFiles = [];
         $safeFileNamePattern = REGEX_FILE_NAME;
 
@@ -332,8 +362,36 @@ class FileModel
                 $destPath = $destDir . $uniqueName;
             }
 
-            if (!rename($srcPath, $destPath)) {
-                $errors[] = "Failed to move $basename.";
+            $srcIsEncryptedFile = false;
+            try {
+                $srcIsEncryptedFile = CryptoAtRest::isEncryptedFile($srcPath);
+            } catch (\Throwable $e) {
+                $srcIsEncryptedFile = false;
+            }
+
+            try {
+                if ($srcIsEncryptedFile && !$destEncrypted) {
+                    // decrypt while moving, then remove the encrypted source
+                    CryptoAtRest::decryptFileToPath($srcPath, $destPath);
+                    @unlink($srcPath);
+                } else {
+                    if (!rename($srcPath, $destPath)) {
+                        $errors[] = "Failed to move $basename.";
+                        continue;
+                    }
+                    if (!$srcIsEncryptedFile && $destEncrypted) {
+                        try {
+                            CryptoAtRest::encryptFileInPlace($destPath);
+                        } catch (\Throwable $e) {
+                            // best-effort rollback
+                            @rename($destPath, $srcPath);
+                            throw $e;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                @unlink($destPath);
+                $errors[] = "Failed to move {$basename}: " . $e->getMessage();
                 continue;
             }
 
@@ -468,6 +526,16 @@ class FileModel
             if (file_put_contents($filePath, (string)$content, LOCK_EX) === false) {
                 return ["error" => "Error saving file"];
             }
+        }
+
+        // Encrypt at rest if folder is marked encrypted
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                CryptoAtRest::encryptFileInPlace($filePath);
+            }
+        } catch (\Throwable $e) {
+            @unlink($filePath);
+            return ["error" => "Error encrypting file at rest: " . $e->getMessage()];
         }
 
         // Metadata
@@ -635,6 +703,13 @@ class FileModel
      */
     public static function createZipArchive($folder, $files)
     {
+        // Block ZIP creation inside encrypted folders (v1).
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor((string)$folder)) {
+                return ["error" => "ZIP operations are disabled inside encrypted folders."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         // Purge old temp zips > 6h (best-effort)
         $zipRoot = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
         $now = time();
@@ -748,6 +823,13 @@ class FileModel
      */
     public static function extractZipArchive($folder, $files)
     {
+        // Block ZIP extraction inside encrypted folders (v1).
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor((string)$folder)) {
+                return ["error" => "ZIP operations are disabled inside encrypted folders."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         $errors = [];
         $allSuccess = true;
         $extractedFiles = [];
@@ -1036,6 +1118,12 @@ class FileModel
      */
     public static function createShareLink($folder, $file, $expirationSeconds = 3600, $password = "")
     {
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor((string)$folder)) {
+                return ["error" => "Sharing is disabled inside encrypted folders."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         // Validate folder if necessary (this can also be done in the controller).
         if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             return ["error" => "Invalid folder name."];

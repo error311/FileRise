@@ -4,6 +4,8 @@
 require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/FS.php';
+require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
+require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
 class FolderModel
 {
@@ -167,6 +169,13 @@ class FolderModel
         $folder  = ACL::normalizeFolder($folder);
         $limit   = max(1, min(2000, $limit));
         $cursor  = ($cursor !== null && $cursor !== '') ? $cursor : null;
+
+        $parentEncrypted = false;
+        try {
+            $parentEncrypted = FolderCrypto::isEncryptedOrAncestor($folder);
+        } catch (\Throwable $e) {
+            $parentEncrypted = false;
+        }
     
         $baseReal = realpath((string)UPLOAD_DIR);
         if ($baseReal === false) return ['items' => [], 'nextCursor' => null];
@@ -254,11 +263,20 @@ class FolderModel
                     ];
                 }
             } else {
+                $encrypted = $parentEncrypted;
+                if (!$encrypted) {
+                    try {
+                        $encrypted = FolderCrypto::isEncryptedOrAncestor($rel);
+                    } catch (\Throwable $e) {
+                        $encrypted = false;
+                    }
+                }
                 $rows[] = [
                     'name'          => $item,
                     'locked'        => false,
                     'hasSubfolders' => $hasSubs,
                     'nonEmpty'      => $nonEmpty,
+                    'encrypted'     => $encrypted,
                 ];
             }
         }
@@ -557,6 +575,10 @@ class FolderModel
 
     // Remove ownership mappings for the subtree.
     self::removeOwnerForTree($relative);
+    // Remove folder encryption markers for the subtree (best-effort).
+    try {
+        FolderCrypto::removeSubtree($relative);
+    } catch (\Throwable $e) { /* ignore */ }
 
     if ($errors) {
         return ['error' => implode('; ', $errors)];
@@ -597,6 +619,10 @@ class FolderModel
 
         // Remove ownership mappings for the subtree.
         self::removeOwnerForTree($relative);
+        // Remove folder encryption markers for the subtree (best-effort).
+        try {
+            FolderCrypto::removeSubtree($relative);
+        } catch (\Throwable $e) { /* ignore */ }
 
         return ["success" => true];
     }
@@ -661,6 +687,10 @@ class FolderModel
         self::renameOwnersForTree($oldRel, $newRel);
         // Re-key explicit ACLs for the moved subtree
         ACL::renameTree($oldRel, $newRel);
+        // Migrate folder encryption markers for the moved subtree (best-effort).
+        try {
+            FolderCrypto::migrateSubtree($oldRel, $newRel);
+        } catch (\Throwable $e) { /* ignore */ }
 
         return ["success" => true];
     }
@@ -773,8 +803,16 @@ class FolderModel
             return ["error" => "Invalid password."];
         }
 
-        // Resolve shared folder
+        // Encrypted folders/descendants: shared access is blocked (v1).
         $folder = trim((string)$record['folder'], "/\\ ");
+        $folderKey = ($folder === '' ? 'root' : $folder);
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+                return ["error" => "This shared folder is not accessible (encrypted folders cannot be shared)."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
+        // Resolve shared folder
         [$realFolderPath, $relative, $err] = self::resolveFolderPath($folder === '' ? 'root' : $folder, false);
         if ($err || !is_dir($realFolderPath)) {
             return ["error" => "Shared folder not found."];
@@ -814,6 +852,12 @@ class FolderModel
      */
     public static function createShareFolderLink(string $folder, int $expirationSeconds = 3600, string $password = "", int $allowUpload = 0): array
     {
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                return ["error" => "Sharing is disabled inside encrypted folders."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         // Validate folder (and ensure it exists)
         [$real, $relative, $err] = self::resolveFolderPath($folder, false);
         if ($err) return ["error" => $err];
@@ -857,8 +901,13 @@ class FolderModel
             || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
         $scheme  = $https ? 'https' : 'http';
         $host    = $_SERVER['HTTP_HOST'] ?? gethostbyname(gethostname());
-        $baseUrl = $scheme . '://' . rtrim($host, '/');
-        $link    = $baseUrl . "/api/folder/shareFolder.php?token=" . urlencode($token);
+        $publishedBase = defined('FR_PUBLISHED_URL_EFFECTIVE') ? trim((string)FR_PUBLISHED_URL_EFFECTIVE) : '';
+        if ($publishedBase !== '') {
+            $link = rtrim($publishedBase, '/') . "/api/folder/shareFolder.php?token=" . urlencode($token);
+        } else {
+            $baseUrl = $scheme . '://' . rtrim($host, '/');
+            $link    = $baseUrl . fr_with_base_path("/api/folder/shareFolder.php?token=" . urlencode($token));
+        }
 
         return ["token" => $token, "expires" => $expires, "link" => $link];
     }
@@ -881,6 +930,15 @@ class FolderModel
             return ["error" => "This share link has expired."];
         }
 
+        // Encrypted folders/descendants: shared access is blocked (v1).
+        $folderKey = trim((string)($record['folder'] ?? ''), "/\\ ");
+        $folderKey = ($folderKey === '' ? 'root' : $folderKey);
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+                return ["error" => "This shared folder is not accessible (encrypted folders cannot be shared)."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         [$realFolderPath,, $err] = self::resolveFolderPath((string)$record['folder'], false);
         if ($err || !is_dir($realFolderPath)) {
             return ["error" => "Shared folder not found."];
@@ -896,6 +954,13 @@ class FolderModel
         if ($real === false || strpos($real, $realFolderPath) !== 0 || !is_file($real)) {
             return ["error" => "File not found."];
         }
+
+        // Never allow shared downloads of encrypted-at-rest files (v1).
+        try {
+            if (CryptoAtRest::isEncryptedFile($real)) {
+                return ["error" => "This file is not available for shared download (encrypted)."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
 
         $mime = function_exists('mime_content_type') ? mime_content_type($real) : 'application/octet-stream';
         return ["realFilePath" => $real, "mimeType" => $mime];
@@ -947,6 +1012,16 @@ class FolderModel
         if (empty($record['allowUpload']) || (int)$record['allowUpload'] !== 1) {
             return ["error" => "File uploads are not allowed for this share."];
         }
+
+        // Encrypted folders/descendants: shared access is blocked (v1).
+        $folderKey = trim((string)($record['folder'] ?? ''), "/\\ ");
+        $folderKey = ($folderKey === '' ? 'root' : $folderKey);
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
+                @unlink($fileUpload['tmp_name'] ?? '');
+                return ["error" => "Uploads are disabled for encrypted folders."];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
 
         if (($fileUpload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             return ["error" => "File upload error. Code: " . (int)$fileUpload['error']];

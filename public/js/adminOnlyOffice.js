@@ -68,7 +68,7 @@ function getTrustedDocsOrigin(raw) {
     if (!/^https?:$/.test(u.protocol)) return null; // only http/https
     if (u.username || u.password) return null;      // no creds in URL
     return u.origin;
-  } catch {
+  } catch (e) {
     return null;
   }
 }
@@ -85,7 +85,7 @@ function buildOnlyOfficeApiUrl(origin) {
 async function safeJsonLocal(res) {
   const txt = await res.text();
   let body = null;
-  try { body = txt ? JSON.parse(txt) : null; } catch { /* ignore */ }
+  try { body = txt ? JSON.parse(txt) : null; } catch (e) { /* ignore */ }
   if (!res.ok) {
     const msg =
       (body && (body.error || body.message)) ||
@@ -115,7 +115,7 @@ async function ooProbeScript(docsOrigin) {
     const nonce = document.querySelector('meta[name="csp-nonce"]')?.content;
     if (nonce) s.setAttribute('nonce', nonce);
 
-    const cleanup = () => { try { s.remove(); } catch { /* ignore */ } };
+    const cleanup = () => { try { s.remove(); } catch (e) { /* ignore */ } };
 
     s.onload = () => { cleanup(); resolve({ ok: true }); };
     s.onerror = () => { cleanup(); resolve({ ok: false }); };
@@ -138,7 +138,7 @@ async function ooProbeFrame(docsOrigin, timeoutMs = 4000) {
     f.src = base;
     f.style.display = 'none';
 
-    const cleanup = () => { try { f.remove(); } catch { /* ignore */ } };
+    const cleanup = () => { try { f.remove(); } catch (e) { /* ignore */ } };
     const t = setTimeout(() => {
       cleanup();
       resolve({ ok: false, timeout: true });
@@ -168,7 +168,7 @@ async function copyToClipboard(text) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
-    } catch {
+    } catch (e) {
       // fall through
     }
   }
@@ -183,7 +183,7 @@ async function copyToClipboard(text) {
     const ok = document.execCommand('copy');
     document.body.removeChild(ta);
     return ok;
-  } catch {
+  } catch (e) {
     return false;
   }
 }
@@ -275,7 +275,7 @@ function attachOnlyOfficeTests(container) {
           hasSecret ? 'Present' : 'Missing'
         )
       );
-    } catch {
+    } catch (e) {
       out.appendChild(ooRow('JWT secret saved', 'warn', 'Could not verify'));
     }
 
@@ -287,7 +287,7 @@ function attachOnlyOfficeTests(container) {
       });
       if (r.ok) out.appendChild(ooRow('Callback endpoint', 'ok', 'Reachable'));
       else out.appendChild(ooRow('Callback endpoint', 'fail', `HTTP ${r.status}`));
-    } catch {
+    } catch (e) {
       out.appendChild(ooRow('Callback endpoint', 'fail', 'Network error'));
     }
 
@@ -426,7 +426,7 @@ function attachOnlyOfficeCspHelper(container) {
     if (ok) {
       showToast('CSP line copied.');
     } else {
-      try { selectElementContents(cspPre); } catch { /* ignore */ }
+      try { selectElementContents(cspPre); } catch (e) { /* ignore */ }
       const reason = window.isSecureContext ? '' : ' (page is not HTTPS or localhost)';
       showToast('Copy failed' + reason + '. Press Ctrl/Cmd+C to copy.');
     }
@@ -436,7 +436,7 @@ function attachOnlyOfficeCspHelper(container) {
     try {
       selectElementContents(cspPre);
       showToast('Selected — press Ctrl/Cmd+C');
-    } catch {
+    } catch (e) {
       /* ignore */
     }
   });

@@ -1,5 +1,6 @@
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { showToast } from './domUtils.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 // ─────────────────────────────
 //  Portal intake presets
@@ -117,7 +118,7 @@ const PORTAL_INTAKE_PRESETS = {
 async function safeJson(res) {
   const text = await res.text();
   let body = null;
-  try { body = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+  try { body = text ? JSON.parse(text) : null; } catch (e) { /* ignore */ }
   if (!res.ok) {
     const msg =
       (body && (body.error || body.message)) ||
@@ -413,7 +414,7 @@ async function loadClientPortalsList(useCacheOnly) {
     let html = '';
     slugs.forEach(slug => {
       const origin = window.location.origin || '';
-      const portalPath = '/portal/' + encodeURIComponent(slug);
+      const portalPath = withBase('/portal/' + encodeURIComponent(slug));
       const portalUrl = origin ? origin + portalPath : portalPath;
 
       const p = __portalsCache[slug] || {};
@@ -1290,7 +1291,7 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
             second: '2-digit'
           }));
         }
-      } catch {
+      } catch (e) {
         headerParts.push(String(created));
       }
     }

@@ -12,6 +12,7 @@ import {
   toggleRowSelection,
   attachEnterKeyListener
 } from './domUtils.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { bindFileListContextMenu } from './fileMenu.js?v={{APP_QVER}}';
 import { openDownloadModal } from './fileActions.js?v={{APP_QVER}}';
@@ -27,6 +28,7 @@ import {
   refreshFolderIcon,
   openColorFolderModal,
   openMoveFolderUI,
+  startFolderCryptoJobFlow,
   folderSVG,
   expandTreePath,
   expandTreePathAsync
@@ -48,6 +50,125 @@ let searchEverywhereResultsEl = null;
 let searchEverywhereInputEl = null;
 let searchEverywhereLimitEl = null;
 let pendingSearchSelection = null;
+
+try {
+  window.addEventListener('folderCapsUpdated', (e) => {
+    const d = (e && e.detail) || {};
+    const folder = d.folder || window.currentFolder || 'root';
+    // Banner is only relevant for the currently viewed folder, but icons in the list may reference
+    // other folders (e.g. decrypting from a parent folder view), so always refresh icons.
+    if (folder === (window.currentFolder || 'root')) {
+      updateEncryptedFolderBanner(folder);
+      applyEncryptedFolderUiRestrictions();
+    }
+
+    // Best-effort: update icons for this specific folder if it's visible in the list/strip.
+    try {
+      const stripItem = document.querySelector(`#folderStripContainer .folder-item[data-folder="${CSS.escape(folder)}"]`);
+      if (stripItem) attachStripIconAsync(stripItem, folder, 48);
+    } catch (e2) { /* ignore */ }
+    try {
+      const row = document.querySelector(`#fileList tr.folder-row[data-folder="${CSS.escape(folder)}"]`);
+      if (row) attachStripIconAsync(row, folder, 28);
+    } catch (e3) { /* ignore */ }
+
+    refreshEncryptedFolderIconsInList();
+  });
+} catch (e) { /* ignore */ }
+
+function ensureEncryptedFolderBanner() {
+  const titleEl = document.getElementById('fileListTitle');
+  if (!titleEl) return null;
+  let el = document.getElementById('frEncryptedFolderBanner');
+  if (el) return el;
+
+  el = document.createElement('div');
+  el.id = 'frEncryptedFolderBanner';
+  el.className = 'fr-enc-banner';
+  el.style.display = 'none';
+  titleEl.insertAdjacentElement('afterend', el);
+  return el;
+}
+
+function updateEncryptedFolderBanner(folder) {
+  const el = ensureEncryptedFolderBanner();
+  if (!el) return;
+
+  const enc = window.currentFolderCaps?.encryption || null;
+  const isEncrypted = !!enc?.encrypted;
+  if (!isEncrypted) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+
+  const inherited = !!enc?.inherited;
+  const root = (enc && enc.root) ? String(enc.root) : (folder || 'root');
+  const rootLabel = inherited && root ? ` (inherited from ${root})` : '';
+
+  el.style.display = 'flex';
+  // nosemgrep: javascript.browser.security.dom-xss.innerhtml
+  el.innerHTML = `
+    <span class="fr-enc-pill">Encrypted</span>
+    <div class="fr-enc-text">
+      This folder${rootLabel} is encrypted. Video/audio previews, WebDAV, ONLYOFFICE, and ZIP create/extract are disabled.
+    </div>
+  `;
+}
+
+function applyEncryptedFolderUiRestrictions() {
+  const caps = window.currentFolderCaps || null;
+  const inEncrypted = !!(caps && caps.encryption && caps.encryption.encrypted);
+  const allowShare = !inEncrypted && (caps ? !!(caps.canShareFile || caps.canShare) : true);
+
+  try {
+    document.querySelectorAll('#fileList .share-btn').forEach(btn => {
+      btn.style.display = allowShare ? '' : 'none';
+    });
+  } catch (e) { /* ignore */ }
+}
+
+function isEncryptedForFolderIcon(folder) {
+  try {
+    const enc = window.currentFolderCaps?.encryption || null;
+    if (enc && enc.encrypted) return true;
+  } catch (e) { /* ignore */ }
+  try {
+    const el = document.querySelector(`.folder-option[data-folder="${CSS.escape(folder)}"]`);
+    return !!(el && el.classList.contains('encrypted'));
+  } catch (e) {
+    return false;
+  }
+}
+
+function refreshEncryptedFolderIconsInList() {
+  // Folder strip icons
+  try {
+    const strip = document.getElementById('folderStripContainer');
+    if (strip) {
+      strip.querySelectorAll('.folder-item').forEach(item => {
+        const folder = item.getAttribute('data-folder') || '';
+        if (!folder) return;
+        const iconSpan = item.querySelector('.folder-svg');
+        if (!iconSpan) return;
+        const kind = iconSpan.dataset.kind || 'empty';
+        iconSpan.innerHTML = folderSVG(kind, { encrypted: isEncryptedForFolderIcon(folder) });
+      });
+    }
+  } catch (e) { /* best effort */ }
+
+  // Inline folder rows
+  try {
+    document.querySelectorAll('#fileList tr.folder-row[data-folder]').forEach(row => {
+      const folder = row.getAttribute('data-folder') || '';
+      if (!folder) return;
+      const iconSpan = row.querySelector('.folder-svg');
+      if (!iconSpan) return;
+      const kind = iconSpan.dataset.kind || 'empty';
+      iconSpan.innerHTML = folderSVG(kind, { encrypted: isEncryptedForFolderIcon(folder) });
+    });
+  } catch (e) { /* best effort */ }
+}
 
 function decodeHtmlEntities(str) {
   if (!str) return "";
@@ -114,7 +235,7 @@ export async function initOnlyOfficeCaps() {
   if (window.__FR_OO_PROMISE) return window.__FR_OO_PROMISE;
   window.__FR_OO_PROMISE = (async () => {
     try {
-      const r = await fetch('/api/onlyoffice/status.php', { credentials: 'include' });
+      const r = await fetch(withBase('/api/onlyoffice/status.php'), { credentials: 'include' });
       if (!r.ok) throw 0;
       const j = await r.json();
       OO_ENABLED = !!j.enabled;
@@ -165,9 +286,6 @@ function wireFolderStripItems(strip) {
       const dest = el.dataset.folder;
       if (!dest) return;
 
-      window.currentFolder = dest;
-      localStorage.setItem("lastOpenedFolder", dest);
-
       strip.querySelectorAll(".folder-item.selected")
         .forEach(i => i.classList.remove("selected"));
       el.classList.add("selected");
@@ -175,15 +293,25 @@ function wireFolderStripItems(strip) {
       const menuItems = [
         {
           label: t("create_folder"),
-          action: () => document.getElementById("createFolderModal").style.display = "block"
+          action: () => {
+            // Create inside this folder (without changing the current view yet)
+            window.currentFolder = dest;
+            const modal = document.getElementById("createFolderModal");
+            if (modal) modal.style.display = "block";
+            const input = document.getElementById("newFolderName");
+            if (input) input.focus();
+          }
         },
         {
           label: t("move_folder"),
-          action: () => openMoveFolderUI()
+          action: () => openMoveFolderUI(dest)
         },
         {
           label: t("rename_folder"),
-          action: () => openRenameFolderModal()
+          action: () => {
+            window.currentFolder = dest;
+            openRenameFolderModal();
+          }
         },
         {
           label: t("color_folder"),
@@ -195,10 +323,24 @@ function wireFolderStripItems(strip) {
         },
         {
           label: t("delete_folder"),
-          action: () => openDeleteFolderModal()
+          action: () => {
+            window.currentFolder = dest;
+            openDeleteFolderModal();
+          }
         }
       ];
       showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+
+      // Defensive: some browsers/styles occasionally blank the SVG after a contextmenu.
+      // If it happens, repaint just this icon.
+      try {
+        queueMicrotask(() => {
+          const iconSpan = el.querySelector('.folder-svg');
+          if (iconSpan && String(iconSpan.innerHTML || '').trim() === '') {
+            attachStripIconAsync(el, dest, 48);
+          }
+        });
+      } catch (e2) { /* ignore */ }
     });
   });
 
@@ -290,7 +432,7 @@ function repaintStripIcon(folder) {
   el.style.setProperty('--filr-folder-stroke', stroke);
 
   const kind = iconSpan.dataset.kind || 'empty';
-  iconSpan.innerHTML = folderSVG(kind);
+  iconSpan.innerHTML = folderSVG(kind, { encrypted: isEncryptedForFolderIcon(folder) });
 }
 const TEXT_PREVIEW_MAX_BYTES = 512 * 1024;
 const MAX_IMAGE_PREVIEW_BYTES = 8 * 1024 * 1024; // shared cap for hover + gallery thumbs
@@ -345,7 +487,7 @@ async function fillFileSnippet(file, snippetEl) {
     snippetEl.textContent   = t("loading") || "Loading...";
 
     try {
-      const url = `/api/file/snippet.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(file.name)}&t=${Date.now()}`;
+      const url = withBase(`/api/file/snippet.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(file.name)}&t=${Date.now()}`);
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw 0;
 
@@ -943,6 +1085,27 @@ window.galleryColumns = clampGalleryColumns(localStorage.getItem('galleryColumns
 
 // --- Folder stats cache (for isEmpty.php) ---
 const _folderStatsCache = new Map();
+const MAX_CONCURRENT_FOLDER_STATS_REQS = 6;
+let _activeFolderStatsReqs = 0;
+const _folderStatsQueue = [];
+
+function _runFolderStats(url) {
+  return new Promise(resolve => {
+    const start = () => {
+      _activeFolderStatsReqs++;
+      _fetchJSONWithTimeout(url, 2500)
+        .then(resolve)
+        .finally(() => {
+          _activeFolderStatsReqs--;
+          const next = _folderStatsQueue.shift();
+          if (next) next();
+        });
+    };
+
+    if (_activeFolderStatsReqs < MAX_CONCURRENT_FOLDER_STATS_REQS) start();
+    else _folderStatsQueue.push(start);
+  });
+}
 
 function fetchFolderStats(folder) {
   if (!folder) return Promise.resolve(null);
@@ -951,12 +1114,15 @@ function fetchFolderStats(folder) {
     return _folderStatsCache.get(folder);
   }
 
-  const url = `/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`;
-  const p = _fetchJSONWithTimeout(url, 2500)
-    .catch(() => ({ folders: 0, files: 0 }))
-    .finally(() => {
-      // keep the resolved value; the Promise itself stays in the map
-    });
+  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`);
+  const p = _runFolderStats(url).then(data => {
+    // If this was a transient network/server failure, don't poison the cache.
+    if (data && data.__fr_err) {
+      _folderStatsCache.delete(folder);
+      return { folders: 0, files: 0 };
+    }
+    return data || { folders: 0, files: 0 };
+  });
 
   _folderStatsCache.set(folder, p);
   return p;
@@ -999,7 +1165,7 @@ async function fetchFolderPeek(folder) {
       let files = [];
       try {
         const res = await fetch(
-          `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`,
+          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`),
           { credentials: "include" }
         );
         const raw = await safeJson(res);
@@ -1019,7 +1185,7 @@ async function fetchFolderPeek(folder) {
       let subfolderNames = [];
       try {
         const res2 = await fetch(
-          `/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`,
+          withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`),
           { credentials: "include" }
         );
         const raw2 = await safeJson(res2);
@@ -1101,8 +1267,8 @@ async function fetchFolderPeek(folder) {
       }
     } catch (e) { /* best-effort only */ }
   
-    return `/api/file/download.php?${q.toString()}`;
-  }
+	    return withBase(`/api/file/download.php?${q.toString()}`);
+	  }
 // Wire "select all" header checkbox for the current table render
 function wireSelectAll(fileListContent) {
   // Be flexible about how the header checkbox is identified
@@ -1233,6 +1399,15 @@ thumbEl.style.minHeight = "0";
     fetchFolderCaps(folderPath).then(caps => {
       if (!caps || !document.body.contains(el)) return;
       if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
+
+      // Update the type label to include "(encrypted)" when applicable
+      const isEnc = !!(caps && caps.encryption && caps.encryption.encrypted);
+      props[0] = `
+        <div class="hover-prop-line" style="display:flex;align-items:center;margin-bottom:4px;">
+          <span class="hover-preview-icon material-icons" style="margin-right:6px;">folder</span>
+          <strong>${t("folder") || "Folder"}${isEnc ? " (encrypted)" : ""}</strong>
+        </div>
+      `;
 
       const owner = caps.owner || caps.user || "";
       if (owner) {
@@ -1685,13 +1860,54 @@ function _fetchJSONWithTimeout(url, ms = 2500) {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), ms);
   return fetch(url, { credentials: 'include', signal: ctrl.signal })
-    .then(r => r.ok ? r.json() : { folders: 0, files: 0 })
-    .catch(() => ({ folders: 0, files: 0 }))
+    .then(r => r.ok ? r.json() : { folders: 0, files: 0, __fr_err: 1 })
+    .catch(() => ({ folders: 0, files: 0, __fr_err: 1 }))
     .finally(() => clearTimeout(tid));
 }
 
+// Defensive: some browsers occasionally blank out inline SVGs elsewhere when a context menu opens.
+// This only repaints *blank* strip/inline-folder icons (no re-render churn when nothing is wrong).
+export function repairBlankFolderIcons({ force = false } = {}) {
+  const isBroken = (el) => {
+    if (!el) return true;
+    const html = String(el.innerHTML || '').trim();
+    if (!html) return true;
+    const svg = el.querySelector('svg');
+    if (!svg) return true;
+    // If the SVG exists but is missing expected parts, treat it as broken.
+    // (Some Safari/WebKit glitches leave an empty <svg> shell.)
+    if (!svg.querySelector('.folder-front') && !svg.querySelector('.folder-back')) return true;
+    return false;
+  };
+
+  // Folder strip icons
+  try {
+    const strip = document.getElementById('folderStripContainer');
+    if (strip) {
+      strip.querySelectorAll('.folder-item[data-folder]').forEach(item => {
+        const folder = item.getAttribute('data-folder') || '';
+        if (!folder) return;
+        const iconSpan = item.querySelector('.folder-svg');
+        if (!force && !isBroken(iconSpan)) return;
+        attachStripIconAsync(item, folder, 48, { preserveKind: true });
+      });
+    }
+  } catch (e) { /* best effort */ }
+
+  // Inline folder rows
+  try {
+    document.querySelectorAll('#fileList tr.folder-row[data-folder]').forEach(row => {
+      const folder = row.getAttribute('data-folder') || '';
+      if (!folder) return;
+      const iconSpan = row.querySelector('.folder-svg');
+      if (!force && !isBroken(iconSpan)) return;
+      attachStripIconAsync(row, folder, 28, { preserveKind: true });
+    });
+  } catch (e) { /* best effort */ }
+}
+
 // Paint initial icon, then flip to "paper" if non-empty
-function attachStripIconAsync(hostEl, fullPath, size = 28) {
+function attachStripIconAsync(hostEl, fullPath, size = 28, { preserveKind = false } = {}) {
   const hex = (window.folderColorMap && window.folderColorMap[fullPath]) || '#f6b84e';
   const front = hex;
   const back = _lighten(hex, 14);
@@ -1704,9 +1920,13 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
   const iconSpan = hostEl.querySelector('.folder-svg');
   if (!iconSpan) return;
 
-  // 1) initial "empty" icon
-  iconSpan.dataset.kind = 'empty';
-  iconSpan.innerHTML = folderSVG('empty');
+  const encrypted = isEncryptedForFolderIcon(fullPath);
+
+  // 1) initial icon
+  const currentKind = iconSpan.dataset.kind || 'empty';
+  const firstKind = preserveKind ? currentKind : 'empty';
+  iconSpan.dataset.kind = firstKind;
+  iconSpan.innerHTML = folderSVG(firstKind, { encrypted });
 
   // make sure this brand-new SVG is sized correctly
   try { syncFolderIconSizeToRowHeight(); } catch (e) {}
@@ -1719,7 +1939,7 @@ function attachStripIconAsync(hostEl, fullPath, size = 28) {
 
     if ((folders + files) > 0 && iconSpan.dataset.kind !== 'paper') {
       iconSpan.dataset.kind = 'paper';
-      iconSpan.innerHTML = folderSVG('paper');
+      iconSpan.innerHTML = folderSVG('paper', { encrypted });
       try { syncFolderIconSizeToRowHeight(); } catch (e) {}
     }
   })
@@ -1760,7 +1980,7 @@ function folderDepthScore(folder) {
 
 async function findBestAccessibleFolder({ lastOpenedFolder } = {}) {
   try {
-    const res = await fetch('/api/folder/getFolderList.php', { credentials: 'include' });
+    const res = await fetch(withBase('/api/folder/getFolderList.php'), { credentials: 'include' });
     const data = await safeJson(res);
     const names = Array.isArray(data)
       ? data.map(row => normalizeFolderPath(row?.folder || row)).filter(Boolean)
@@ -1796,10 +2016,10 @@ async function fetchFolderCaps(folder) {
     return _folderCapsInflight.get(folder);
   }
 
-  const p = (async () => {
+      const p = (async () => {
     try {
       const res  = await fetch(
-        `/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`,
+        withBase(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`),
         { credentials: 'include' }
       );
       const data = await safeJson(res);
@@ -1829,6 +2049,9 @@ async function refreshCurrentFolderCaps(folder) {
   } catch (e) {
     window.currentFolderCaps = null;
   }
+  updateEncryptedFolderBanner(folder);
+  refreshEncryptedFolderIconsInList();
+  applyEncryptedFolderUiRestrictions();
   updateFileActionButtons();
 }
 
@@ -1930,7 +2153,7 @@ export function setFileProgressBadge(name, seconds, duration) {
 export async function refreshViewedBadges(folder) {
   let map = null;
   try {
-    const res = await fetch(`/api/media/getViewedMap.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`, { credentials: 'include' });
+    const res = await fetch(withBase(`/api/media/getViewedMap.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`), { credentials: 'include' });
     const j = await res.json();
     map = j?.map || null;
   } catch (e) { /* ignore */ }
@@ -2194,7 +2417,7 @@ window.cacheImage = cacheImage;
  * Fuse.js fuzzy search helper
  */
 // --- Lazy Fuse loader (drop-in, CSP-safe, no inline) ---
-const FUSE_SRC = '/vendor/fuse/7.1.0/fuse.min.js?v={{APP_QVER}}';
+const FUSE_SRC = withBase('/vendor/fuse/7.1.0/fuse.min.js?v={{APP_QVER}}');
 let _fuseLoadingPromise = null;
 
 function loadScriptOnce(src) {
@@ -2551,7 +2774,7 @@ async function runSearchEverywhere(term) {
   const limit = Math.max(1, Math.min(200, limitVal || 50));
 
   try {
-    const res = await fetch(`/api/pro/search/query.php?q=${encodeURIComponent(term)}&limit=${limit}`, {
+    const res = await fetch(withBase(`/api/pro/search/query.php?q=${encodeURIComponent(term)}&limit=${limit}`), {
       credentials: 'include',
     });
     const data = await res.json();
@@ -2606,14 +2829,16 @@ async function navigateToSearchResult(folder, name) {
   setTimeout(() => maybeHighlightSearchedFile(dest), 500);
 }
 
-function bindFolderToolbarActions() {
-  const map = [
-    { id: "folderMoveInlineBtn",   handler: (folder) => openMoveFolderUI(folder) },
-    { id: "folderRenameInlineBtn", handler: () => openRenameFolderModal() },
-    { id: "folderColorInlineBtn",  handler: (folder) => openColorFolderModal(folder) },
-    { id: "folderShareInlineBtn",  handler: (folder) => openFolderShareModal(folder) },
-    { id: "folderDeleteInlineBtn", handler: () => openDeleteFolderModal() }
-  ];
+  function bindFolderToolbarActions() {
+    const map = [
+      { id: "folderMoveInlineBtn",   handler: (folder) => openMoveFolderUI(folder) },
+      { id: "folderRenameInlineBtn", handler: () => openRenameFolderModal() },
+      { id: "folderColorInlineBtn",  handler: (folder) => openColorFolderModal(folder) },
+      { id: "folderEncryptInlineBtn", handler: (folder) => startFolderCryptoJobFlow(folder, 'encrypt') },
+      { id: "folderDecryptInlineBtn", handler: (folder) => startFolderCryptoJobFlow(folder, 'decrypt') },
+      { id: "folderShareInlineBtn",  handler: (folder) => openFolderShareModal(folder) },
+      { id: "folderDeleteInlineBtn", handler: () => openDeleteFolderModal() }
+    ];
 
   const selectedOrToast = () => {
     const folder = getSelectedFolderPath();
@@ -2963,11 +3188,11 @@ export async function loadFileList(folderParam, options = {}) {
     // Kick off both in parallel, but render as soon as FILES are ready
     const recursiveParam = folderOnly ? 0 : 1;
     const filesPromise = fetch(
-      `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=${recursiveParam}&t=${Date.now()}`,
+      withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=${recursiveParam}&t=${Date.now()}`),
       { credentials: 'include' }
     );
     let foldersPromise = fetch(
-      `/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`,
+      withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`),
       { credentials: 'include' }
     );
 
@@ -2981,7 +3206,7 @@ export async function loadFileList(folderParam, options = {}) {
     if (filesRes.status === 403 && folder !== "root") {
       try {
         filesRes = await fetch(
-          `/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`,
+          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`),
           { credentials: "include" }
         );
       } catch (e) { /* ignore and fall through */ }
@@ -2989,7 +3214,7 @@ export async function loadFileList(folderParam, options = {}) {
     if (filesRes.status === 403 && username && folder !== username) {
       try {
         const alt = await fetch(
-          `/api/file/getFileList.php?folder=${encodeURIComponent(username)}&recursive=0&t=${Date.now()}`,
+          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(username)}&recursive=0&t=${Date.now()}`),
           { credentials: "include" }
         );
         if (alt.ok) {
@@ -3005,7 +3230,7 @@ export async function loadFileList(folderParam, options = {}) {
           refreshCurrentFolderCaps(folder);
           // refresh folders promise for the new folder context
           foldersPromise = fetch(
-            `/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`,
+            withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`),
             { credentials: 'include' }
           );
         }
@@ -3014,7 +3239,7 @@ export async function loadFileList(folderParam, options = {}) {
 
     if (filesRes.status === 401) {
       // session expired — bounce to logout
-      window.location.href = "/api/auth/logout.php";
+      window.location.href = withBase("/api/auth/logout.php");
       throw new Error("Unauthorized");
     }
     if (filesRes.status === 403) {
@@ -3555,18 +3780,34 @@ if (headerClass) {
       const dest = sf.full;
       if (!dest) return;
   
-      window.currentFolder = dest;
-      try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) { }
-  
       const menuItems = [
-        { label: t("create_folder"), action: () => document.getElementById("createFolderModal").style.display = "block" },
-        { label: t("move_folder"),   action: () => openMoveFolderUI() },
-        { label: t("rename_folder"), action: () => openRenameFolderModal() },
+        {
+          label: t("create_folder"),
+          action: () => {
+            window.currentFolder = dest;
+            const modal = document.getElementById("createFolderModal");
+            if (modal) modal.style.display = "block";
+            const input = document.getElementById("newFolderName");
+            if (input) input.focus();
+          }
+        },
+        { label: t("move_folder"),   action: () => openMoveFolderUI(dest) },
+        { label: t("rename_folder"), action: () => { window.currentFolder = dest; openRenameFolderModal(); } },
         { label: t("color_folder"),  action: () => openColorFolderModal(dest) },
         { label: t("folder_share"),  action: () => openFolderShareModal(dest) },
-        { label: t("delete_folder"), action: () => openDeleteFolderModal() }
+        { label: t("delete_folder"), action: () => { window.currentFolder = dest; openDeleteFolderModal(); } }
       ];
       showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+
+      // Defensive: repaint icon if it was blanked by the contextmenu interaction.
+      try {
+        queueMicrotask(() => {
+          const iconSpan = tr.querySelector('.folder-svg');
+          if (iconSpan && String(iconSpan.innerHTML || '').trim() === '') {
+            attachStripIconAsync(tr, dest, 28);
+          }
+        });
+      } catch (e2) { /* ignore */ }
     });
   
     // insert row above first file row
@@ -4410,7 +4651,7 @@ export function renderGalleryView(folder, container) {
   }
 
   // API preview base (we’ll build per-file URLs)
-  const apiBase = `/api/file/download.php?folder=${encodeURIComponent(folder)}&file=`;
+	  const apiBase = withBase(`/api/file/download.php?folder=${encodeURIComponent(folder)}&file=`);
 
   // pagination settings
   const itemsPerPage = window.itemsPerPage;
@@ -4775,9 +5016,10 @@ export function downloadSelectedFilesIndividually(fileObjs) {
 
   const limit = window.maxNonZipDownloads || MAX_NONZIP_MULTI_DOWNLOAD;
   if (mapped.length > limit) {
-    const msg =
-      t('too_many_plain_downloads') ||
-      `You selected ${mapped.length} files. For more than ${limit} files, please use "Download as ZIP".`;
+    const inEncrypted = !!(window.currentFolderCaps && window.currentFolderCaps.encryption && window.currentFolderCaps.encryption.encrypted);
+    const msg = inEncrypted
+      ? `You selected ${mapped.length} files. In encrypted folders, downloads are limited to ${limit} files at a time.`
+      : (t('too_many_plain_downloads') || `You selected ${mapped.length} files. For more than ${limit} files, please use "Download as ZIP".`);
     showToast(msg, 'warning');
     return;
   }

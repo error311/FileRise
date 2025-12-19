@@ -307,14 +307,132 @@ $proto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? (
          );
 $host  = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
+// Base path support (optional):
+// - If FileRise is served under a subpath (e.g. https://example.com/fr),
+//   set `FR_BASE_PATH=/fr` or send `X-Forwarded-Prefix: /fr` from the proxy.
+// - When not set, defaults to "" (root install) to preserve existing behavior.
+function fr_normalize_base_path($raw)
+{
+    $p = trim((string)$raw);
+    if ($p === '' || $p === '/') return '';
+    // Reject full URLs or scheme-relative prefixes to avoid open redirects.
+    if (preg_match('~^[a-z][a-z0-9+.-]*://~i', $p)) return '';
+    if (strpos($p, '//') === 0) return '';
+    // Normalize slashes and strip query/fragment if provided.
+    $p = str_replace('\\', '/', $p);
+    $p = preg_replace('/[?#].*$/', '', $p);
+    if ($p === '' || $p === '/') return '';
+    if ($p[0] !== '/') $p = '/' . $p;
+    $p = preg_replace('~/+~', '/', $p);
+    // Disallow path traversal segments.
+    if (preg_match('~(^|/)\.\.(?:/|$)~', $p)) return '';
+    // strip trailing slashes
+    return preg_replace('~/+$~', '', $p) ?: '';
+}
+
+function fr_detect_base_path()
+{
+    // 1) Explicit env override
+    $env = getenv('FR_BASE_PATH');
+    if ($env !== false && trim((string)$env) !== '') {
+        return fr_normalize_base_path($env);
+    }
+
+    // 2) Reverse proxies often provide this
+    $xfp = $_SERVER['HTTP_X_FORWARDED_PREFIX'] ?? '';
+    if (is_string($xfp) && trim($xfp) !== '') {
+        return fr_normalize_base_path($xfp);
+    }
+
+    // 3) If deployed in a real subdirectory (not stripped by proxy),
+    //    SCRIPT_NAME/REQUEST_URI will include the prefix (e.g. /fr/api/...).
+    $candidates = [];
+    if (!empty($_SERVER['SCRIPT_NAME']) && is_string($_SERVER['SCRIPT_NAME'])) $candidates[] = $_SERVER['SCRIPT_NAME'];
+    if (!empty($_SERVER['REQUEST_URI']) && is_string($_SERVER['REQUEST_URI'])) {
+        $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        if (is_string($path) && $path !== '') $candidates[] = $path;
+    }
+
+    foreach ($candidates as $p) {
+        if (preg_match('~^(.*)/api(?:/|\\.php$)~i', $p, $m)) return fr_normalize_base_path($m[1]);
+        if (preg_match('~^(.*)/webdav\\.php$~i', $p, $m)) return fr_normalize_base_path($m[1]);
+        if (preg_match('~^(.*)/index\\.html$~i', $p, $m)) return fr_normalize_base_path($m[1]);
+        if (preg_match('~^(.*)/portal-login\\.html$~i', $p, $m)) return fr_normalize_base_path($m[1]);
+        if (preg_match('~^(.*)/portal\\.html$~i', $p, $m)) return fr_normalize_base_path($m[1]);
+    }
+
+    return '';
+}
+
+if (!defined('FR_BASE_PATH')) {
+    define('FR_BASE_PATH', fr_detect_base_path());
+}
+
+function fr_with_base_path($path)
+{
+    $p = (string)$path;
+    $bp = defined('FR_BASE_PATH') ? (string)FR_BASE_PATH : '';
+    if ($bp === '' || $p === '' || $p[0] !== '/') return $p;
+    if ($p === $bp || strpos($p, $bp . '/') === 0) return $p;
+    return $bp . $p;
+}
+
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
-    $defaultShare = "{$proto}://{$host}/api/file/share.php";
+    $defaultShare = "{$proto}://{$host}" . fr_with_base_path("/api/file/share.php");
 } else {
     $defaultShare = rtrim(BASE_URL, '/') . "/api/file/share.php";
 }
 
 // Final: env var wins, else fallback
-define('SHARE_URL', getenv('SHARE_URL') ?: $defaultShare);
+// Optional: Published URL override (preferred: env, optional: admin config).
+// This is the canonical URL FileRise should advertise (e.g. "https://example.com/fr").
+function fr_sanitize_http_url($url)
+{
+    $u = trim((string)$url);
+    if ($u === '') return '';
+    if (!filter_var($u, FILTER_VALIDATE_URL)) return '';
+    $scheme = strtolower(parse_url($u, PHP_URL_SCHEME) ?: '');
+    if ($scheme !== 'http' && $scheme !== 'https') return '';
+    return $u;
+}
+
+function fr_read_admin_config_raw(): array
+{
+    try {
+        $configFile = USERS_DIR . 'adminConfig.json';
+        if (!is_file($configFile)) return [];
+        $encryptedContent = @file_get_contents($configFile);
+        if (!is_string($encryptedContent) || $encryptedContent === '') return [];
+        $dec = decryptData($encryptedContent, $GLOBALS['encryptionKey']);
+        if ($dec === false) return [];
+        $cfg = json_decode($dec, true);
+        return is_array($cfg) ? $cfg : [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+$envPublished = getenv('FR_PUBLISHED_URL');
+$published = '';
+if ($envPublished !== false && trim((string)$envPublished) !== '') {
+    $published = fr_sanitize_http_url($envPublished);
+} else {
+    $adminCfg = fr_read_admin_config_raw();
+    $published = fr_sanitize_http_url($adminCfg['publishedUrl'] ?? '');
+}
+
+if (!defined('FR_PUBLISHED_URL_EFFECTIVE')) {
+    define('FR_PUBLISHED_URL_EFFECTIVE', $published);
+}
+
+$envShare = getenv('SHARE_URL');
+if ($envShare !== false && trim((string)$envShare) !== '') {
+    define('SHARE_URL', (string)$envShare);
+} elseif ($published !== '') {
+    define('SHARE_URL', rtrim($published, '/') . '/api/file/share.php');
+} else {
+    define('SHARE_URL', $defaultShare);
+}
 
 // ------------------------------------------------------------
 // FileRise Pro bootstrap wiring

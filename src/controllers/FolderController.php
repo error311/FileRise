@@ -8,6 +8,8 @@ require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/FolderMeta.php';
 require_once PROJECT_ROOT . '/src/lib/FS.php';
 require_once PROJECT_ROOT . '/src/models/UploadModel.php';
+require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
+require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
 class FolderController
 {
@@ -101,6 +103,62 @@ class FolderController
         $canShareFile  = $gShareFile   && $inScope;
         $canShareFold  = $gShareFolder && $inScope;
 
+        // Encryption-at-rest status for this folder (and descendants)
+        $enc = [
+            'supported' => false,
+            'hasMasterKey' => false,
+            'encrypted' => false,
+            'rootEncrypted' => false,
+            'inherited' => false,
+            'root' => null,
+            'job' => [
+                'active' => false,
+                'root' => null,
+                'id' => null,
+                'type' => null,
+                'state' => null,
+                'error' => null,
+            ],
+            'canEncrypt' => false,
+            'canDecrypt' => false,
+        ];
+        try {
+            $enc['supported'] = CryptoAtRest::isAvailable();
+            $enc['hasMasterKey'] = CryptoAtRest::masterKeyIsConfigured();
+            $st = FolderCrypto::getStatus($folder);
+            $enc['encrypted'] = !empty($st['encrypted']);
+            $enc['rootEncrypted'] = !empty($st['rootEncrypted']);
+            $enc['inherited'] = !empty($st['inherited']);
+            $enc['root'] = $st['root'] ?? null;
+
+            $jobSt = FolderCrypto::getJobStatus($folder);
+            if (!empty($jobSt['active']) && !empty($jobSt['job']) && is_array($jobSt['job'])) {
+                $enc['job'] = [
+                    'active' => true,
+                    'root' => $jobSt['root'] ?? null,
+                    'id' => $jobSt['job']['id'] ?? null,
+                    'type' => $jobSt['job']['type'] ?? null,
+                    'state' => $jobSt['job']['state'] ?? null,
+                    'error' => $jobSt['job']['error'] ?? null,
+                ];
+            }
+        } catch (\Throwable $e) {
+            // keep defaults
+        }
+
+        // Treat folders as restricted during an active crypto job (even if not fully encrypted yet).
+        if (!empty($enc['job']['active'])) {
+            $enc['encrypted'] = true;
+        }
+
+        if (!empty($enc['encrypted'])) {
+            // v1 enforcement: no shares / no ZIP operations inside encrypted folders
+            $canShareEff = false;
+            $canShareFile = false;
+            $canShareFold = false;
+            $canExtract = false;
+        }
+
         $isRoot = ($folder === 'root');
         $canMoveFolder = false;
         if ($isRoot) {
@@ -116,6 +174,23 @@ class FolderController
         try {
             if (class_exists('FolderModel') && method_exists('FolderModel', 'getOwnerFor')) $owner = FolderModel::getOwnerFor($folder);
         } catch (\Throwable $e) {
+        }
+
+        // Allow folder encryption toggles for admins and folder-managers/owners (not within inherited encrypted trees)
+        $canManageForEncryption = $isAdmin
+            || ACL::canManage($username, $perms, $folder)
+            || $isOwner;
+        if ($isRoot && !$isAdmin) $canManageForEncryption = false;
+
+        if (!empty($enc['supported']) && !empty($enc['hasMasterKey']) && $canManageForEncryption && empty($enc['inherited'])) {
+            $enc['canEncrypt'] = empty($enc['encrypted']) && !$readOnly;
+            $enc['canDecrypt'] = !empty($enc['rootEncrypted']) && !$readOnly;
+        }
+
+        // During a crypto job, disable toggles to avoid multiple concurrent operations.
+        if (!empty($enc['job']['active'])) {
+            $enc['canEncrypt'] = false;
+            $enc['canDecrypt'] = false;
         }
 
         return [
@@ -149,6 +224,8 @@ class FolderController
             'canShare'       => $canShareEff,       // legacy umbrella
             'canShareFile'   => $canShareFile,
             'canShareFolder' => $canShareFold,
+
+            'encryption'     => $enc,
         ];
     }
 
@@ -894,7 +971,7 @@ class FolderController
                 <div class="container">
                     <h2>Folder Protected</h2>
                     <p>This folder is protected by a password. Please enter the password to view its contents.</p>
-                    <form method="get" action="/api/folder/shareFolder.php"><input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>"><label for="pass">Password:</label><input type="password" name="pass" id="pass" required><button type="submit">Submit</button></form>
+                    <form method="get" action="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>"><input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>"><label for="pass">Password:</label><input type="password" name="pass" id="pass" required><button type="submit">Submit</button></form>
                 </div>
             </body>
 
@@ -1091,7 +1168,7 @@ class FolderController
                                     $safeName   = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
                                     $filePath   = $data['realFolderPath'] . DIRECTORY_SEPARATOR . $file;
                                     $sizeString = (is_file($filePath) ? self::formatBytes((int)@filesize($filePath)) : "Unknown");
-                                    $downloadLink = "/api/folder/downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file);
+                                    $downloadLink = fr_with_base_path("/api/folder/downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file));
                                 ?>
                                     <tr>
                                         <td><a href="<?php echo htmlspecialchars($downloadLink, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $safeName; ?> <span class="download-icon">&#x21E9;</span></a></td>
@@ -1105,24 +1182,24 @@ class FolderController
                 <div id="galleryViewContainer" style="display:none;"></div>
                 <div class="pagination">
                     <?php if ($currentPage > 1): ?>
-                        <a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
+                        <a href="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
                     <?php else: ?><span>Prev</span><?php endif; ?>
                     <?php $startPage = max(1, $currentPage - 2);
                     $endPage = min($totalPages, $currentPage + 2);
                     for ($i = $startPage; $i <= $endPage; $i++): ?>
                         <?php if ($i == $currentPage): ?><span class="current"><?php echo $i; ?></span>
-                        <?php else: ?><a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $i; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>"><?php echo $i; ?></a>
+                        <?php else: ?><a href="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>?token=<?php echo urlencode($token); ?>&page=<?php echo $i; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>"><?php echo $i; ?></a>
                     <?php endif;
                     endfor; ?>
                     <?php if ($currentPage < $totalPages): ?>
-                        <a href="/api/folder/shareFolder.php?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
+                        <a href="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
                     <?php else: ?><span>Next</span><?php endif; ?>
                 </div>
 
                 <?php if (isset($data['record']['allowUpload']) && (int)$data['record']['allowUpload'] === 1): ?>
                     <div class="upload-container">
                         <h3>Upload File <?php if ($sharedMaxUploadSize !== null): ?>(<?php echo self::formatBytes($sharedMaxUploadSize); ?> max size)<?php endif; ?></h3>
-                        <form action="/api/folder/uploadToSharedFolder.php" method="post" enctype="multipart/form-data">
+                        <form action="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/uploadToSharedFolder.php'), ENT_QUOTES, 'UTF-8'); ?>" method="post" enctype="multipart/form-data">
                             <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="file" name="fileToUpload" required><br><br><button type="submit">Upload</button>
                         </form>
@@ -1136,7 +1213,7 @@ class FolderController
                     "files": <?php echo json_encode($files, JSON_HEX_TAG); ?>
                 }
             </script>
-            <script src="/js/sharedFolderView.js" defer></script>
+            <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/sharedFolderView.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
         </body>
 
         </html>
@@ -1195,6 +1272,14 @@ class FolderController
             echo json_encode(["error" => "Forbidden: you are not the owner of this folder."]);
             exit;
         }
+
+        try {
+            if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                http_response_code(403);
+                echo json_encode(["error" => "Sharing is disabled inside encrypted folders."]);
+                exit;
+            }
+        } catch (\Throwable $e) { /* ignore */ }
 
         if ($allowUpload === 1 && !empty($perms['disableUpload']) && !$isAdmin) {
             http_response_code(403);
@@ -1359,7 +1444,7 @@ class FolderController
         }
 
         $_SESSION['upload_message'] = "File uploaded successfully.";
-        $redirectUrl = "/api/folder/shareFolder.php?token=" . urlencode($token);
+        $redirectUrl = fr_with_base_path("/api/folder/shareFolder.php?token=" . urlencode($token));
         header("Location: " . $redirectUrl);
         exit;
     }
@@ -1625,6 +1710,718 @@ class FolderController
             error_log('moveFolder error: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['error' => 'Internal error moving folder']);
+        }
+    }
+
+    /* -------------------- API: Folder encryption jobs (v2) -------------------- */
+    public function encryptionPlan(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+
+        self::requireAuth();
+
+        $folder = isset($_GET['folder']) ? (string)$_GET['folder'] : 'root';
+        $folder = str_replace('\\', '/', trim($folder));
+        $folder = ($folder === '' || strcasecmp($folder, 'root') === 0) ? 'root' : trim($folder, '/');
+
+        $mode = isset($_GET['mode']) ? strtolower(trim((string)$_GET['mode'])) : 'encrypt';
+        if ($mode !== 'encrypt' && $mode !== 'decrypt') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid mode.']);
+            return;
+        }
+
+        // Validate folder path segments
+        if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid folder name.']);
+            return;
+        }
+
+        $username = (string)($_SESSION['username'] ?? '');
+        if ($username === '') {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+
+        // Permission gate via capabilities (keeps rules centralized)
+        $caps = self::capabilities($folder, $username);
+        $encCaps = (is_array($caps) && isset($caps['encryption']) && is_array($caps['encryption'])) ? $caps['encryption'] : [];
+        if ($mode === 'encrypt' && empty($encCaps['canEncrypt'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden: cannot encrypt this folder.']);
+            return;
+        }
+        if ($mode === 'decrypt' && empty($encCaps['canDecrypt'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden: cannot decrypt this folder.']);
+            return;
+        }
+
+        // Plan scan does not require master key (it only counts), but v2 is useless without it.
+        if (!CryptoAtRest::isAvailable()) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Encryption at rest is not supported on this server (libsodium secretstream missing).']);
+            return;
+        }
+        if (!CryptoAtRest::masterKeyIsConfigured()) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).']);
+            return;
+        }
+
+        $resolved = self::cryptoResolveUploadDir($folder);
+        if (isset($resolved['error'])) {
+            http_response_code((int)($resolved['status'] ?? 400));
+            echo json_encode(['error' => $resolved['error']]);
+            return;
+        }
+
+        $dir = (string)$resolved['dir'];
+        $tot = self::cryptoPlanScan($dir);
+
+        echo json_encode([
+            'ok' => true,
+            'folder' => $folder,
+            'mode' => $mode,
+            'totalFiles' => $tot['files'],
+            'totalBytes' => $tot['bytes'],
+            'truncated' => $tot['truncated'],
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function encryptionJobStart(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+
+        self::requireAuth();
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed.']);
+            return;
+        }
+        self::requireCsrf();
+        self::requireNotReadOnly();
+
+        $raw = file_get_contents('php://input') ?: '';
+        $in = json_decode($raw, true);
+        if (!is_array($in)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid input.']);
+            return;
+        }
+
+        $folder = isset($in['folder']) ? (string)$in['folder'] : 'root';
+        $folder = str_replace('\\', '/', trim($folder));
+        $folder = ($folder === '' || strcasecmp($folder, 'root') === 0) ? 'root' : trim($folder, '/');
+
+        $mode = isset($in['mode']) ? strtolower(trim((string)$in['mode'])) : 'encrypt';
+        if ($mode !== 'encrypt' && $mode !== 'decrypt') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid mode.']);
+            return;
+        }
+
+        if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid folder name.']);
+            return;
+        }
+
+        $username = (string)($_SESSION['username'] ?? '');
+        if ($username === '') {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+
+        if (!CryptoAtRest::isAvailable()) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Encryption at rest is not supported on this server (libsodium secretstream missing).']);
+            return;
+        }
+        if (!CryptoAtRest::masterKeyIsConfigured()) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).']);
+            return;
+        }
+
+        // Permission gate via capabilities (keeps rules centralized)
+        $caps = self::capabilities($folder, $username);
+        $encCaps = (is_array($caps) && isset($caps['encryption']) && is_array($caps['encryption'])) ? $caps['encryption'] : [];
+        if ($mode === 'encrypt' && empty($encCaps['canEncrypt'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden: cannot encrypt this folder.']);
+            return;
+        }
+        if ($mode === 'decrypt' && empty($encCaps['canDecrypt'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden: cannot decrypt this folder.']);
+            return;
+        }
+
+        // Prevent concurrent jobs on this folder or ancestors.
+        $existingJob = FolderCrypto::getJobStatus($folder);
+        if (!empty($existingJob['active']) && !empty($existingJob['job']) && is_array($existingJob['job'])) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'A folder encryption job is already running.',
+                'job' => [
+                    'id' => $existingJob['job']['id'] ?? null,
+                    'type' => $existingJob['job']['type'] ?? null,
+                    'state' => $existingJob['job']['state'] ?? null,
+                    'root' => $existingJob['root'] ?? null,
+                ],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+
+        $resolved = self::cryptoResolveUploadDir($folder);
+        if (isset($resolved['error'])) {
+            http_response_code((int)($resolved['status'] ?? 400));
+            echo json_encode(['error' => $resolved['error']]);
+            return;
+        }
+        $dir = (string)$resolved['dir'];
+
+        // v2 behavior: encryption is enabled immediately so new uploads are encrypted.
+        // Decryption keeps the folder encrypted until completion (job will clear it at the end).
+        if ($mode === 'encrypt') {
+            $res = FolderCrypto::setEncrypted($folder, true, $username);
+            if (empty($res['ok'])) {
+                http_response_code(500);
+                echo json_encode(['error' => $res['error'] ?? 'Failed to enable encryption for this folder.']);
+                return;
+            }
+        }
+
+        $totalFiles = isset($in['totalFiles']) ? (int)$in['totalFiles'] : 0;
+        $totalBytes = isset($in['totalBytes']) ? (int)$in['totalBytes'] : 0;
+        if ($totalFiles < 0) $totalFiles = 0;
+        if ($totalBytes < 0) $totalBytes = 0;
+
+        $jobId = bin2hex(random_bytes(16));
+        $job = [
+            'v' => 1,
+            'id' => $jobId,
+            'type' => $mode,
+            'folder' => $folder,
+            'startedBy' => $username,
+            'createdAt' => time(),
+            'updatedAt' => time(),
+            'state' => 'running',
+            'error' => null,
+            'totalFiles' => $totalFiles,
+            'totalBytes' => $totalBytes,
+            'doneFiles' => 0,
+            'doneBytes' => 0,
+            // directory-walk state (relative to $dir)
+            'queue' => [''], // '' means root dir
+            'currentDir' => null,
+            'currentOffset' => 0,
+        ];
+
+        self::cryptoEnsureJobsDir();
+        $path = self::cryptoJobPath($jobId);
+        $ok = @file_put_contents($path, json_encode($job, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+        if ($ok === false) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to create encryption job.']);
+            return;
+        }
+        @chmod($path, 0664);
+
+        // Record job marker in folder metadata so the UI can reconnect after refresh.
+        try {
+            FolderCrypto::setJob($folder, [
+                'id' => $jobId,
+                'type' => $mode,
+                'state' => 'running',
+                'startedAt' => time(),
+            ], $username);
+        } catch (\Throwable $e) {
+            // best-effort; job can still run via jobId
+            error_log('Failed to record crypto job marker: ' . $e->getMessage());
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'jobId' => $jobId,
+            'folder' => $folder,
+            'mode' => $mode,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function encryptionJobStatus(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+
+        self::requireAuth();
+
+        $jobId = isset($_GET['jobId']) ? trim((string)$_GET['jobId']) : '';
+        if (!preg_match('/^[a-f0-9]{16,64}$/i', $jobId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid job id.']);
+            return;
+        }
+
+        $path = self::cryptoJobPath($jobId);
+        if (!is_file($path)) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Job not found.']);
+            return;
+        }
+
+        $raw = @file_get_contents($path);
+        $job = is_string($raw) ? json_decode($raw, true) : null;
+        if (!is_array($job)) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Corrupt job state.']);
+            return;
+        }
+
+        // Basic authz: only the user who started the job (or admins) can view it.
+        $username = (string)($_SESSION['username'] ?? '');
+        if ($username === '') {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+        $perms = self::getPerms();
+        $isAdmin = self::isAdmin($perms);
+        $startedBy = (string)($job['startedBy'] ?? '');
+        if (!$isAdmin && $startedBy !== '' && strcasecmp($startedBy, $username) !== 0) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden.']);
+            return;
+        }
+
+        // Return a redacted snapshot (don’t expose queue paths to clients)
+        echo json_encode([
+            'ok' => true,
+            'job' => [
+                'id' => $job['id'] ?? $jobId,
+                'type' => $job['type'] ?? null,
+                'folder' => $job['folder'] ?? null,
+                'state' => $job['state'] ?? null,
+                'error' => $job['error'] ?? null,
+                'createdAt' => $job['createdAt'] ?? null,
+                'updatedAt' => $job['updatedAt'] ?? null,
+                'totalFiles' => $job['totalFiles'] ?? 0,
+                'totalBytes' => $job['totalBytes'] ?? 0,
+                'doneFiles' => $job['doneFiles'] ?? 0,
+                'doneBytes' => $job['doneBytes'] ?? 0,
+            ],
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function encryptionJobTick(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+
+        self::requireAuth();
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed.']);
+            return;
+        }
+        self::requireCsrf();
+        self::requireNotReadOnly();
+
+        $raw = file_get_contents('php://input') ?: '';
+        $in = json_decode($raw, true);
+        if (!is_array($in)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid input.']);
+            return;
+        }
+
+        $jobId = isset($in['jobId']) ? trim((string)$in['jobId']) : '';
+        if (!preg_match('/^[a-f0-9]{16,64}$/i', $jobId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid job id.']);
+            return;
+        }
+
+        $maxFiles = isset($in['maxFiles']) ? (int)$in['maxFiles'] : 2;
+        if ($maxFiles < 1) $maxFiles = 1;
+        if ($maxFiles > 10) $maxFiles = 10;
+
+        $path = self::cryptoJobPath($jobId);
+        if (!is_file($path)) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Job not found.']);
+            return;
+        }
+
+        // Serialize tick processing per job to avoid overlapping conversion runs.
+        $lockPath = self::cryptoJobLockPath($jobId);
+        $lock = @fopen($lockPath, 'c');
+        if ($lock === false) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to open job lock.']);
+            return;
+        }
+        if (!@flock($lock, LOCK_EX)) {
+            @fclose($lock);
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to lock job.']);
+            return;
+        }
+
+        try {
+            $rawJob = @file_get_contents($path);
+            $job = is_string($rawJob) ? json_decode($rawJob, true) : null;
+            if (!is_array($job)) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Corrupt job state.']);
+                return;
+            }
+
+            $username = (string)($_SESSION['username'] ?? '');
+            $perms = self::getPerms();
+            $isAdmin = self::isAdmin($perms);
+            $startedBy = (string)($job['startedBy'] ?? '');
+            if (!$isAdmin && $startedBy !== '' && strcasecmp($startedBy, $username) !== 0) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Forbidden.']);
+                return;
+            }
+
+            $state = (string)($job['state'] ?? '');
+            if ($state !== 'running') {
+                echo json_encode(['ok' => true, 'job' => $job, 'note' => 'Job is not running.'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+
+            $folder = (string)($job['folder'] ?? 'root');
+            $mode = (string)($job['type'] ?? 'encrypt');
+            if ($mode !== 'encrypt' && $mode !== 'decrypt') {
+                $job['state'] = 'error';
+                $job['error'] = 'Invalid job type.';
+                $job['updatedAt'] = time();
+                @file_put_contents($path, json_encode($job, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+                echo json_encode(['ok' => false, 'error' => $job['error']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+
+            // Permission gate via capabilities (re-check each tick so scope changes don’t keep running)
+            $caps = self::capabilities($folder, $username);
+            $encCaps = (is_array($caps) && isset($caps['encryption']) && is_array($caps['encryption'])) ? $caps['encryption'] : [];
+            if ($mode === 'encrypt' && empty($encCaps['encrypted']) && empty($encCaps['canEncrypt'])) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Forbidden: cannot encrypt this folder.']);
+                return;
+            }
+            if ($mode === 'decrypt') {
+                // Note: capabilities intentionally disables canDecrypt during an active job to prevent starting
+                // another job, but ticks must still be allowed for the job owner/admin to proceed.
+                $canManageForEncryption = $isAdmin
+                    || ACL::canManage($username, $perms, $folder)
+                    || ACL::isOwner($username, $perms, $folder);
+                if ($folder === 'root' && !$isAdmin) $canManageForEncryption = false;
+
+                $st = FolderCrypto::getStatus($folder);
+                $rootEncrypted = !empty($st['rootEncrypted']);
+                $inherited = !empty($st['inherited']);
+
+                if (!$canManageForEncryption || !$rootEncrypted || $inherited) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Forbidden: cannot decrypt this folder.']);
+                    return;
+                }
+            }
+
+            $resolved = self::cryptoResolveUploadDir($folder);
+            if (isset($resolved['error'])) {
+                $job['state'] = 'error';
+                $job['error'] = $resolved['error'];
+                $job['updatedAt'] = time();
+                @file_put_contents($path, json_encode($job, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+                http_response_code((int)($resolved['status'] ?? 400));
+                echo json_encode(['error' => $resolved['error']]);
+                return;
+            }
+            $rootDir = (string)$resolved['dir'];
+
+            $processed = 0;
+            $processedBytes = 0;
+
+            while ($processed < $maxFiles) {
+                $next = self::cryptoJobNextFile($job, $rootDir);
+                if ($next === null) {
+                    // done scanning
+                    $job['state'] = 'done';
+                    break;
+                }
+
+                $filePath = $next['path'];
+                $fileSize = $next['size'];
+                $processed++;
+                $processedBytes += $fileSize;
+
+                $didWork = false;
+                try {
+                    if ($mode === 'encrypt') {
+                        if (!CryptoAtRest::isEncryptedFile($filePath)) {
+                            CryptoAtRest::encryptFileInPlace($filePath);
+                            $didWork = true;
+                        }
+                    } else {
+                        if (CryptoAtRest::isEncryptedFile($filePath)) {
+                            CryptoAtRest::decryptFileInPlace($filePath);
+                            $didWork = true;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    $job['state'] = 'error';
+                    $job['error'] = $e->getMessage() ?: 'Crypto job failed.';
+                    break;
+                }
+
+                // Progress always advances by visited file count/bytes (even if we skipped)
+                $job['doneFiles'] = (int)($job['doneFiles'] ?? 0) + 1;
+                $job['doneBytes'] = (int)($job['doneBytes'] ?? 0) + (int)$fileSize;
+
+                // Best-effort: keep updatedAt reasonably fresh while the job runs
+                if ($didWork) {
+                    $job['updatedAt'] = time();
+                }
+            }
+
+            $job['updatedAt'] = time();
+            @file_put_contents($path, json_encode($job, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+
+            // Finalization hooks
+            if (($job['state'] ?? '') === 'done') {
+                if ($mode === 'decrypt') {
+                    // v2 behavior: clear folder encryption marker after bulk decrypt finishes
+                    try {
+                        FolderCrypto::setEncrypted($folder, false, $username);
+                    } catch (\Throwable $e) {
+                        // don’t fail the job response; folder will remain encrypted
+                        error_log('decrypt job finalization failed: ' . $e->getMessage());
+                    }
+                }
+                // Clear job marker
+                try {
+                    FolderCrypto::setJob($folder, null, $username);
+                } catch (\Throwable $e) {
+                    error_log('Failed to clear crypto job marker: ' . $e->getMessage());
+                }
+            } elseif (($job['state'] ?? '') === 'error') {
+                // Persist error on folder marker (best-effort)
+                try {
+                    FolderCrypto::setJob($folder, [
+                        'id' => $jobId,
+                        'type' => $mode,
+                        'state' => 'error',
+                        'error' => (string)($job['error'] ?? 'Crypto job failed.'),
+                        'startedAt' => (int)($job['createdAt'] ?? time()),
+                    ], $username);
+                } catch (\Throwable $e) {
+                    error_log('Failed to record crypto job error marker: ' . $e->getMessage());
+                }
+            }
+
+            echo json_encode([
+                'ok' => true,
+                'job' => [
+                    'id' => $job['id'] ?? $jobId,
+                    'type' => $job['type'] ?? null,
+                    'folder' => $job['folder'] ?? null,
+                    'state' => $job['state'] ?? null,
+                    'error' => $job['error'] ?? null,
+                    'totalFiles' => $job['totalFiles'] ?? 0,
+                    'totalBytes' => $job['totalBytes'] ?? 0,
+                    'doneFiles' => $job['doneFiles'] ?? 0,
+                    'doneBytes' => $job['doneBytes'] ?? 0,
+                    'updatedAt' => $job['updatedAt'] ?? null,
+                ],
+                'tick' => [
+                    'processedFiles' => $processed,
+                    'processedBytes' => $processedBytes,
+                ],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } finally {
+            @flock($lock, LOCK_UN);
+            @fclose($lock);
+        }
+    }
+
+    /* -------------------- v2 crypto job helpers -------------------- */
+    private static function cryptoJobsDir(): string
+    {
+        return rtrim((string)META_DIR, "/\\") . DIRECTORY_SEPARATOR . 'crypto_jobs';
+    }
+
+    private static function cryptoEnsureJobsDir(): void
+    {
+        $dir = self::cryptoJobsDir();
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+    }
+
+    private static function cryptoJobPath(string $jobId): string
+    {
+        $id = strtolower($jobId);
+        return self::cryptoJobsDir() . DIRECTORY_SEPARATOR . 'job_' . $id . '.json';
+    }
+
+    private static function cryptoJobLockPath(string $jobId): string
+    {
+        $id = strtolower($jobId);
+        return self::cryptoJobsDir() . DIRECTORY_SEPARATOR . 'job_' . $id . '.lock';
+    }
+
+    private static function cryptoResolveUploadDir(string $folder): array
+    {
+        $base = realpath((string)UPLOAD_DIR);
+        if ($base === false) {
+            return ['status' => 500, 'error' => 'Server misconfiguration.'];
+        }
+
+        if ($folder === 'root') {
+            $dir = $base;
+        } else {
+            $guess = rtrim((string)UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+            $dir = realpath($guess);
+        }
+
+        if ($dir === false || !is_dir($dir) || strpos($dir, $base) !== 0) {
+            return ['status' => 404, 'error' => 'Folder not found.'];
+        }
+
+        return ['dir' => $dir, 'base' => $base];
+    }
+
+    /**
+     * @return array{files:int,bytes:int,truncated:bool}
+     */
+    private static function cryptoPlanScan(string $rootDir): array
+    {
+        $skipDirs = ['trash', 'profile_pics', '@eadir'];
+        $files = 0;
+        $bytes = 0;
+        $truncated = false;
+
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($rootDir, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        $seen = 0;
+        foreach ($it as $p => $info) {
+            if (++$seen > 250000) { $truncated = true; break; }
+            $name = $info->getFilename();
+            if ($name === '' || $name[0] === '.') continue;
+            $lower = strtolower($name);
+            if (in_array($lower, $skipDirs, true)) {
+                continue;
+            }
+            if (str_starts_with($lower, 'resumable_')) {
+                continue;
+            }
+            if ($info->isFile() && !$info->isLink()) {
+                $files++;
+                $sz = $info->getSize();
+                if (is_int($sz) && $sz > 0) $bytes += $sz;
+            }
+        }
+
+        return ['files' => $files, 'bytes' => $bytes, 'truncated' => $truncated];
+    }
+
+    /**
+     * Finds the next file path to process for this job and advances its walk state.
+     *
+     * @return array{path:string,size:int}|null
+     */
+    private static function cryptoJobNextFile(array &$job, string $rootDir): ?array
+    {
+        $skipDirs = ['trash', 'profile_pics', '@eadir'];
+
+        if (!isset($job['queue']) || !is_array($job['queue'])) {
+            $job['queue'] = [''];
+        }
+
+        while (true) {
+            $currentDir = $job['currentDir'] ?? null;
+            if ($currentDir === null || $currentDir === false) {
+                $nextDir = array_shift($job['queue']);
+                if ($nextDir === null) {
+                    return null;
+                }
+                $job['currentDir'] = (string)$nextDir;
+                $job['currentOffset'] = 0;
+                $currentDir = $job['currentDir'];
+            }
+
+            $abs = rtrim($rootDir, "/\\");
+            if ($currentDir !== '') {
+                $abs .= DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string)$currentDir);
+            }
+
+            if (!is_dir($abs)) {
+                // skip missing dirs
+                $job['currentDir'] = null;
+                $job['currentOffset'] = 0;
+                continue;
+            }
+
+            $names = @scandir($abs);
+            if (!is_array($names)) {
+                $job['currentDir'] = null;
+                $job['currentOffset'] = 0;
+                continue;
+            }
+
+            $names = array_values(array_filter($names, fn($n) => $n !== '.' && $n !== '..'));
+            sort($names, SORT_STRING);
+
+            $offset = (int)($job['currentOffset'] ?? 0);
+            $count = count($names);
+            while ($offset < $count) {
+                $name = (string)$names[$offset];
+                $offset++;
+                $job['currentOffset'] = $offset;
+
+                if ($name === '' || $name[0] === '.') continue;
+                $lower = strtolower($name);
+                if (in_array($lower, $skipDirs, true)) continue;
+                if (str_starts_with($lower, 'resumable_')) continue;
+
+                $childAbs = $abs . DIRECTORY_SEPARATOR . $name;
+                if (@is_link($childAbs)) {
+                    continue; // never follow symlinks
+                }
+
+                if (is_dir($childAbs)) {
+                    $rel = ($currentDir === '') ? $name : ($currentDir . '/' . $name);
+                    $job['queue'][] = $rel;
+                    continue;
+                }
+
+                if (is_file($childAbs)) {
+                    $sz = @filesize($childAbs);
+                    if (!is_int($sz) || $sz < 0) $sz = 0;
+                    return ['path' => $childAbs, 'size' => $sz];
+                }
+            }
+
+            // end of directory
+            $job['currentDir'] = null;
+            $job['currentOffset'] = 0;
         }
     }
 }

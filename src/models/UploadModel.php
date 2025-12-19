@@ -2,7 +2,10 @@
 // src/models/UploadModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
+require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
+require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
 class UploadModel
 {
@@ -215,6 +218,28 @@ class UploadModel
                 return $scanResult; // e.g. "Upload blocked: virus detected in file."
             }
 
+            // Encrypt at rest if folder is marked encrypted
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
+                    if (!CryptoAtRest::isAvailable()) {
+                        throw new \RuntimeException('Upload failed: encryption at rest is not supported on this server (libsodium secretstream missing).');
+                    }
+                    if (!CryptoAtRest::masterKeyIsConfigured()) {
+                        throw new \RuntimeException('Upload failed: destination folder is encrypted but the encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).');
+                    }
+                    CryptoAtRest::encryptFileInPlace($targetPath);
+                }
+            } catch (\Throwable $e) {
+                error_log('Upload encryption failed: ' . $e->getMessage());
+                @unlink($targetPath);
+                self::rrmdir($tempDir);
+                $msg = $e->getMessage();
+                if (!is_string($msg) || trim($msg) === '') {
+                    $msg = 'Upload failed: could not encrypt file at rest.';
+                }
+                return ['error' => $msg];
+            }
+
             // Metadata
             $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
             $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
@@ -321,6 +346,27 @@ class UploadModel
             if (is_array($scanResult) && isset($scanResult['error'])) {
                 // scanFileIfEnabled already unlinks the file on failure/infection
                 return $scanResult;
+            }
+
+            // Encrypt at rest if destination folder is encrypted
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
+                    if (!CryptoAtRest::isAvailable()) {
+                        throw new \RuntimeException('Upload failed: encryption at rest is not supported on this server (libsodium secretstream missing).');
+                    }
+                    if (!CryptoAtRest::masterKeyIsConfigured()) {
+                        throw new \RuntimeException('Upload failed: destination folder is encrypted but the encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).');
+                    }
+                    CryptoAtRest::encryptFileInPlace($targetPath);
+                }
+            } catch (\Throwable $e) {
+                error_log('Upload encryption failed: ' . $e->getMessage());
+                @unlink($targetPath);
+                $msg = $e->getMessage();
+                if (!is_string($msg) || trim($msg) === '') {
+                    $msg = 'Upload failed: could not encrypt file at rest.';
+                }
+                return ['error' => $msg];
             }
 
             $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;

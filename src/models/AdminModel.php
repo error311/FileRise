@@ -637,6 +637,13 @@ class AdminModel
                 $config['clamav']['scanUploads'] = !empty($config['clamav']['scanUploads']);
             }
 
+            // ---- Published URL (optional): used for generating share links behind proxies/subpaths ----
+            if (!isset($config['publishedUrl']) || !is_string($config['publishedUrl'])) {
+                $config['publishedUrl'] = '';
+            } else {
+                $config['publishedUrl'] = self::sanitizeHttpUrl($config['publishedUrl']);
+            }
+
             return $config;
         }
 
@@ -678,6 +685,7 @@ class AdminModel
             'clamav'                => [
                 'scanUploads' => false,
             ],
+            'publishedUrl'          => '',
         ];
     }
 }

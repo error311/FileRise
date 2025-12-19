@@ -2,6 +2,7 @@ import { showToast, toggleVisibility, attachEnterKeyListener } from './domUtils.
 import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
 import { t, applyTranslations, setLocale } from './i18n.js?v={{APP_QVER}}';
 import { loadAdminConfigFunc, updateAuthenticatedUI } from './auth.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 let lastLoginData = null;
 export function setLastLoginData(data) {
@@ -98,7 +99,7 @@ export function openTOTPLoginModal() {
         .then(res => res.json())
         .then(json => {
           if (json.status === "ok") {
-            window.location.href = "/index.html";
+            window.location.href = withBase("/index.html");
           } else {
             showToast(json.message || t("recovery_code_verification_failed"));
           }
@@ -135,7 +136,7 @@ export function openTOTPLoginModal() {
       if (res.ok) {
         const json = await res.json();
         if (json.status === "ok") {
-          window.location.href = "/index.html";
+          window.location.href = withBase("/index.html");
           return;
         }
         showToast(json.message || t("totp_verification_failed"));
@@ -185,16 +186,16 @@ function normalizePicUrl(raw) {
   let pic = parts[parts.length - 1];
   // strip any stray colons
   pic = pic.replace(/^:+/, '');
-  // ensure leading slash
-  if (pic && !pic.startsWith('/')) pic = '/' + pic;
-  return pic;
+  // ensure exactly one leading slash
+  if (pic) pic = '/' + pic.replace(/^\/+/, '');
+  return pic ? withBase(pic) : '';
 }
 
 export async function openUserPanel() {
   // 1) load data
   const { username = 'User', profile_picture = '', totp_enabled = false } = await fetchCurrentUser();
   const raw = profile_picture;
-  const picUrl = normalizePicUrl(raw) || '/assets/default-avatar.png';
+  const picUrl = normalizePicUrl(raw) || withBase('/assets/default-avatar.png');
 
   // 2) dark‐mode helpers
   const isDark = document.body.classList.contains('dark-mode');
@@ -515,7 +516,7 @@ export async function openUserPanel() {
     Object.assign(modal.style, { background: overlayBg });
     const content = modal.querySelector('.modal-content');
     content.style.cssText = contentStyle;
-    modal.querySelector('#profilePicPreview').src = picUrl || '/assets/default-avatar.png';
+    modal.querySelector('#profilePicPreview').src = picUrl || withBase('/assets/default-avatar.png');
     modal.querySelector('#userTOTPEnabled').checked = totp_enabled;
     modal.querySelector('#languageSelector').value = localStorage.getItem('language') || 'en';
     modal.querySelector('h3').textContent = `${t('user_panel')} (${username})`;
