@@ -47,7 +47,11 @@ Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/
 
 ![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.9.0.png)
 
-[▶️ Watch FileRise v2.11.1 demo video](https://raw.githubusercontent.com/error311/FileRise/master/resources/FileRise-v2.11.1.mp4)
+
+
+https://github.com/user-attachments/assets/87b06f1a-1400-4df1-bf1d-aaae88fcdfbd
+
+
 
 > 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
 > Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open-source (MIT).
