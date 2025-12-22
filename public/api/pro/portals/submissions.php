@@ -1,5 +1,20 @@
 <?php
 declare(strict_types=1);
+/**
+ * @OA\Get(
+ *   path="/api/pro/portals/submissions.php",
+ *   summary="List portal submissions",
+ *   description="Returns submissions for a portal (admin only, Pro).",
+ *   operationId="proPortalsSubmissions",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="slug", in="query", required=true, @OA\Schema(type="string"), example="client-portal"),
+ *   @OA\Response(response=200, description="Submissions payload"),
+ *   @OA\Response(response=400, description="Missing slug"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 
 header('Content-Type: application/json; charset=utf-8');
 

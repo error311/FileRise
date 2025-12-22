@@ -8,6 +8,8 @@
      *     description="Generates (or retrieves) the TOTP secret for the user and builds a QR code image for scanning.",
      *     operationId="setupTOTP",
      *     tags={"TOTP"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
      *     @OA\Response(
      *         response=200,
      *         description="QR code image for TOTP setup",
@@ -16,8 +18,12 @@
      *         )
      *     ),
      *     @OA\Response(
+     *         response=400,
+     *         description="Missing username"
+     *     ),
+     *     @OA\Response(
      *         response=403,
-     *         description="Unauthorized or invalid CSRF token"
+     *         description="Not authorized or invalid CSRF token"
      *     ),
      *     @OA\Response(
      *         response=500,

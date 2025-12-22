@@ -8,6 +8,8 @@
      *     description="Allows an authenticated user to change their password by verifying the old password and updating to a new one.",
      *     operationId="changePassword",
      *     tags={"Users"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
@@ -35,6 +37,10 @@
      *     @OA\Response(
      *         response=403,
      *         description="Invalid CSRF token"
+     *     ),
+     *     @OA\Response(
+     *         response=405,
+     *         description="Method not allowed"
      *     )
      * )
      */

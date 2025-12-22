@@ -1,5 +1,20 @@
 <?php
 // public/api/pro/portals/publicMeta.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/portals/publicMeta.php",
+ *   summary="Get public portal metadata",
+ *   description="Returns the public metadata needed for the portal login page.",
+ *   operationId="proPortalsPublicMeta",
+ *   tags={"Pro"},
+ *   @OA\Parameter(name="slug", in="query", required=true, @OA\Schema(type="string"), example="client-portal"),
+ *   @OA\Response(response=200, description="Public portal payload"),
+ *   @OA\Response(response=400, description="Missing slug"),
+ *   @OA\Response(response=404, description="Portal not found or Pro inactive"),
+ *   @OA\Response(response=410, description="Portal expired"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

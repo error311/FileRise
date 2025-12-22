@@ -1,5 +1,20 @@
 <?php
 declare(strict_types=1);
+/**
+ * @OA\Get(
+ *   path="/api/folder/listChildren.php",
+ *   summary="List folder children",
+ *   description="Returns a paged list of child folders for tree navigation.",
+ *   operationId="listFolderChildren",
+ *   tags={"Folders"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="root"),
+ *   @OA\Parameter(name="limit", in="query", required=false, @OA\Schema(type="integer", minimum=1, maximum=2000), example=500),
+ *   @OA\Parameter(name="cursor", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Response(response=200, description="Child list payload"),
+ *   @OA\Response(response=401, description="Unauthorized")
+ * )
+ */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');

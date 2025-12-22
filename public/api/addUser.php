@@ -5,9 +5,12 @@
      * @OA\Post(
      *     path="/api/addUser.php",
      *     summary="Add a new user",
-     *     description="Adds a new user to the system. In setup mode, the new user is automatically made admin.",
+     *     description="Adds a new user to the system. In setup mode (setup=1 with no users), auth/CSRF is not required and the new user is automatically made admin.",
      *     operationId="addUser",
      *     tags={"Users"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="setup", in="query", required=false, @OA\Schema(type="string"), description="Use setup=1 to enable first-run bootstrap"),
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=false, @OA\Schema(type="string"), description="Required outside setup mode"),
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
@@ -31,6 +34,10 @@
      *     @OA\Response(
      *         response=401,
      *         description="Unauthorized"
+     *     ),
+     *     @OA\Response(
+     *         response=405,
+     *         description="Method not allowed"
      *     )
      * )
      */

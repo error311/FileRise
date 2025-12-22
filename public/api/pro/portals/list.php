@@ -1,5 +1,19 @@
 <?php
 // public/api/pro/portals/list.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/portals/list.php",
+ *   summary="List portals",
+ *   description="Returns all portals (admin only, Pro).",
+ *   operationId="proPortalsList",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Response(response=200, description="Portals payload"),
+ *   @OA\Response(response=400, description="Invalid input"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

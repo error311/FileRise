@@ -1,5 +1,17 @@
 <?php
 // public/api/pro/portals/get.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/portals/get.php",
+ *   summary="Get portal by slug",
+ *   description="Returns portal metadata (public).",
+ *   operationId="proPortalsGet",
+ *   tags={"Pro"},
+ *   @OA\Parameter(name="slug", in="query", required=true, @OA\Schema(type="string"), example="client-portal"),
+ *   @OA\Response(response=200, description="Portal payload"),
+ *   @OA\Response(response=404, description="Portal not found")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

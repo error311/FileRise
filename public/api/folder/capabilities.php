@@ -1,5 +1,18 @@
 <?php
 declare(strict_types=1);
+/**
+ * @OA\Get(
+ *   path="/api/folder/capabilities.php",
+ *   summary="Get folder capabilities",
+ *   description="Returns effective permissions and capability flags for a folder.",
+ *   operationId="getFolderCapabilities",
+ *   tags={"Folders"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="root"),
+ *   @OA\Response(response=200, description="Capabilities payload"),
+ *   @OA\Response(response=401, description="Unauthorized")
+ * )
+ */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 

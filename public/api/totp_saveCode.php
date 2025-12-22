@@ -8,6 +8,8 @@
      *     description="Generates a new TOTP recovery code for the authenticated user, stores its hash, and returns the plain text recovery code.",
      *     operationId="totpSaveCode",
      *     tags={"TOTP"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
      *     @OA\Response(
      *         response=200,
      *         description="Recovery code generated successfully",
@@ -21,12 +23,20 @@
      *         description="Bad Request"
      *     ),
      *     @OA\Response(
+     *         response=401,
+     *         description="Unauthorized"
+     *     ),
+     *     @OA\Response(
      *         response=403,
      *         description="Invalid CSRF token or unauthorized"
      *     ),
      *     @OA\Response(
      *         response=405,
      *         description="Method not allowed"
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error"
      *     )
      * )
      */

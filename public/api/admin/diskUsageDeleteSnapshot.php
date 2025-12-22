@@ -1,5 +1,20 @@
 <?php
 // public/api/admin/diskUsageDeleteSnapshot.php
+/**
+ * @OA\Post(
+ *   path="/api/admin/diskUsageDeleteSnapshot.php",
+ *   summary="Delete disk usage snapshot",
+ *   description="Deletes the cached disk usage snapshot file.",
+ *   operationId="adminDiskUsageDeleteSnapshot",
+ *   tags={"Admin"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="X-CSRF-Token", in="header", required=false, @OA\Schema(type="string")),
+ *   @OA\Response(response=200, description="Snapshot deleted"),
+ *   @OA\Response(response=400, description="CSRF mismatch"),
+ *   @OA\Response(response=403, description="Forbidden"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

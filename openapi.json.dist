@@ -2,7 +2,7 @@
     "openapi": "3.0.0",
     "info": {
         "title": "FileRise API",
-        "version": "1.5.2"
+        "version": "2.11.1"
     },
     "servers": [
         {
@@ -17,8 +17,28 @@
                     "Users"
                 ],
                 "summary": "Add a new user",
-                "description": "Adds a new user to the system. In setup mode, the new user is automatically made admin.",
+                "description": "Adds a new user to the system. In setup mode (setup=1 with no users), auth/CSRF is not required and the new user is automatically made admin.",
                 "operationId": "addUser",
+                "parameters": [
+                    {
+                        "name": "setup",
+                        "in": "query",
+                        "description": "Use setup=1 to enable first-run bootstrap",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "description": "Required outside setup mode",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -69,8 +89,16 @@
                     },
                     "401": {
                         "description": "Unauthorized"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/admin/acl/getGrants.php": {
@@ -78,93 +106,29 @@
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Get per-folder grants for a user (admin-only)",
-                "description": "Returns the explicit ACL grants for the specified user across all known folders. Booleans mean: `view` = full view, `viewOwn` = view own uploads only, `upload` = write (upload/edit/delete), `manage` = owner, `share` = can create share links.",
-                "operationId": "adminGetUserFolderGrants",
+                "summary": "Get ACL grants for a user",
+                "description": "Returns explicit and inherited folder grants for a user.",
+                "operationId": "adminGetAclGrants",
                 "parameters": [
                     {
                         "name": "user",
                         "in": "query",
-                        "description": "Username to inspect.",
                         "required": true,
                         "schema": {
-                            "type": "string",
-                            "minLength": 1
-                        }
+                            "type": "string"
+                        },
+                        "example": "johndoe"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Map of folder → grants for the requested user.",
+                        "description": "Grants map",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "required": [
-                                        "grants"
-                                    ],
                                     "properties": {
                                         "grants": {
-                                            "type": "object",
-                                            "example": {
-                                                "root": {
-                                                    "view": true,
-                                                    "viewOwn": false,
-                                                    "upload": true,
-                                                    "manage": false,
-                                                    "share": true
-                                                },
-                                                "projects/acme": {
-                                                    "view": true,
-                                                    "viewOwn": false,
-                                                    "upload": true,
-                                                    "manage": true,
-                                                    "share": true
-                                                },
-                                                "teams/ops": {
-                                                    "view": false,
-                                                    "viewOwn": true,
-                                                    "upload": true,
-                                                    "manage": false,
-                                                    "share": false
-                                                }
-                                            },
-                                            "additionalProperties": {
-                                                "required": [
-                                                    "view",
-                                                    "viewOwn",
-                                                    "upload",
-                                                    "manage",
-                                                    "share"
-                                                ],
-                                                "properties": {
-                                                    "view": {
-                                                        "description": "Full view of all files in the folder.",
-                                                        "type": "boolean",
-                                                        "example": true
-                                                    },
-                                                    "viewOwn": {
-                                                        "description": "View only files uploaded by the user.",
-                                                        "type": "boolean",
-                                                        "example": false
-                                                    },
-                                                    "upload": {
-                                                        "description": "Write (upload/edit/rename/move/delete).",
-                                                        "type": "boolean",
-                                                        "example": true
-                                                    },
-                                                    "manage": {
-                                                        "description": "Is folder owner (implicit full rights).",
-                                                        "type": "boolean",
-                                                        "example": false
-                                                    },
-                                                    "share": {
-                                                        "description": "Can create share links.",
-                                                        "type": "boolean",
-                                                        "example": true
-                                                    }
-                                                },
-                                                "type": "object"
-                                            }
+                                            "type": "object"
                                         }
                                     },
                                     "type": "object"
@@ -173,10 +137,13 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid user (missing or fails validation)."
+                        "description": "Invalid user"
                     },
                     "401": {
-                        "description": "Unauthorized (not logged in or not admin)."
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Server error"
                     }
                 },
                 "security": [
@@ -191,14 +158,13 @@
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Save per-folder grants for one or many users (admin-only)",
-                "description": "Accepts either a single-user payload `{user, grants}` or a batch payload `{changes:[{user, grants},...]}`. Booleans map to: `view`=full view, `viewOwn`=view only own uploads, `upload`=write (upload/edit/rename/move/delete), `manage`=owner, `share`=can create share links.",
-                "operationId": "adminSaveUserFolderGrants",
+                "summary": "Save ACL grants",
+                "description": "Saves per-folder ACL grants for one user or a batch of users.",
+                "operationId": "adminSaveAclGrants",
                 "parameters": [
                     {
                         "name": "X-CSRF-Token",
                         "in": "header",
-                        "description": "CSRF token bound to the current session.",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -219,54 +185,11 @@
                                         "properties": {
                                             "user": {
                                                 "type": "string",
-                                                "example": "alice"
+                                                "example": "johndoe"
                                             },
                                             "grants": {
-                                                "description": "Map of folder → flags.",
-                                                "type": "object",
-                                                "example": {
-                                                    "root": {
-                                                        "view": true,
-                                                        "viewOwn": false,
-                                                        "upload": true,
-                                                        "manage": false,
-                                                        "share": true
-                                                    },
-                                                    "projects/acme": {
-                                                        "view": true,
-                                                        "viewOwn": false,
-                                                        "upload": true,
-                                                        "manage": true,
-                                                        "share": true
-                                                    }
-                                                },
-                                                "additionalProperties": {
-                                                    "required": [
-                                                        "view",
-                                                        "viewOwn",
-                                                        "upload",
-                                                        "manage",
-                                                        "share"
-                                                    ],
-                                                    "properties": {
-                                                        "view": {
-                                                            "type": "boolean"
-                                                        },
-                                                        "viewOwn": {
-                                                            "type": "boolean"
-                                                        },
-                                                        "upload": {
-                                                            "type": "boolean"
-                                                        },
-                                                        "manage": {
-                                                            "type": "boolean"
-                                                        },
-                                                        "share": {
-                                                            "type": "boolean"
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                }
+                                                "description": "Map of folder -> capabilities",
+                                                "type": "object"
                                             }
                                         },
                                         "type": "object"
@@ -286,81 +209,17 @@
                                                     "properties": {
                                                         "user": {
                                                             "type": "string",
-                                                            "example": "bob"
+                                                            "example": "johndoe"
                                                         },
                                                         "grants": {
-                                                            "type": "object",
-                                                            "example": {
-                                                                "teams/ops": {
-                                                                    "view": false,
-                                                                    "viewOwn": true,
-                                                                    "upload": true,
-                                                                    "manage": false,
-                                                                    "share": false
-                                                                }
-                                                            },
-                                                            "additionalProperties": {
-                                                                "required": [
-                                                                    "view",
-                                                                    "viewOwn",
-                                                                    "upload",
-                                                                    "manage",
-                                                                    "share"
-                                                                ],
-                                                                "properties": {
-                                                                    "view": {
-                                                                        "type": "boolean"
-                                                                    },
-                                                                    "viewOwn": {
-                                                                        "type": "boolean"
-                                                                    },
-                                                                    "upload": {
-                                                                        "type": "boolean"
-                                                                    },
-                                                                    "manage": {
-                                                                        "type": "boolean"
-                                                                    },
-                                                                    "share": {
-                                                                        "type": "boolean"
-                                                                    }
-                                                                },
-                                                                "type": "object"
-                                                            }
+                                                            "type": "object"
                                                         }
                                                     },
                                                     "type": "object"
                                                 }
                                             }
                                         },
-                                        "type": "object",
-                                        "example": {
-                                            "changes": [
-                                                {
-                                                    "user": "alice",
-                                                    "grants": {
-                                                        "root": {
-                                                            "view": true,
-                                                            "viewOwn": false,
-                                                            "upload": true,
-                                                            "manage": false,
-                                                            "share": true
-                                                        }
-                                                    }
-                                                },
-                                                {
-                                                    "user": "bob",
-                                                    "grants": {
-                                                        "teams/ops": {
-                                                            "view": false,
-                                                            "viewOwn": true,
-                                                            "upload": true,
-                                                            "manage": false,
-                                                            "share": false
-                                                        }
-                                                    }
-                                                }
-                                            ]
-                                        }
+                                        "type": "object"
                                     }
                                 ]
                             }
@@ -369,82 +228,261 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Grants saved.",
+                        "description": "Save result (model-defined JSON)"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/changeUserPassword.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Admin reset user password",
+                "description": "Resets a user's password (admin only).",
+                "operationId": "adminChangeUserPassword",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "username",
+                                    "newPassword"
+                                ],
+                                "properties": {
+                                    "username": {
+                                        "type": "string",
+                                        "example": "johndoe"
+                                    },
+                                    "newPassword": {
+                                        "type": "string",
+                                        "example": "newpass123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Password updated"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/clamavTest.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Run ClamAV connectivity test",
+                "description": "Runs a test scan of a temporary file and returns engine info.",
+                "operationId": "adminClamavTest",
+                "responses": {
+                    "200": {
+                        "description": "Test result",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "oneOf": [
-                                        {
-                                            "description": "Single-user result (whatever ACL::applyUserGrantsAtomic returns).",
-                                            "type": "object",
-                                            "example": {
-                                                "updated": {
-                                                    "root": {
-                                                        "view": true,
-                                                        "viewOwn": false,
-                                                        "upload": true,
-                                                        "manage": false,
-                                                        "share": true
-                                                    }
-                                                }
-                                            },
-                                            "additionalProperties": true
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
                                         },
-                                        {
-                                            "properties": {
-                                                "ok": {
-                                                    "type": "boolean",
-                                                    "example": true
-                                                },
-                                                "updated": {
-                                                    "description": "Per-user results from ACL::applyUserGrantsAtomic.",
-                                                    "type": "object",
-                                                    "additionalProperties": {
-                                                        "type": "object"
-                                                    }
-                                                }
-                                            },
-                                            "type": "object",
-                                            "example": {
-                                                "ok": true,
-                                                "updated": {
-                                                    "alice": {
-                                                        "root": {
-                                                            "view": true,
-                                                            "viewOwn": false,
-                                                            "upload": true,
-                                                            "manage": false,
-                                                            "share": true
-                                                        }
-                                                    },
-                                                    "bob": {
-                                                        "teams/ops": {
-                                                            "view": false,
-                                                            "viewOwn": true,
-                                                            "upload": true,
-                                                            "manage": false,
-                                                            "share": false
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                        "command": {
+                                            "type": "string"
+                                        },
+                                        "engine": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "details": {
+                                            "type": "string"
+                                        },
+                                        "error": {
+                                            "type": "string"
                                         }
-                                    ]
+                                    },
+                                    "type": "object"
                                 }
                             }
                         }
                     },
-                    "400": {
-                        "description": "Invalid JSON / invalid user / invalid payload shape."
-                    },
                     "401": {
-                        "description": "Unauthorized (not logged in or not admin)."
+                        "description": "Unauthorized"
                     },
                     "403": {
-                        "description": "Invalid CSRF token."
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
                     },
                     "500": {
-                        "description": "Failed to save grants."
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/diskUsageDeleteSnapshot.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Delete disk usage snapshot",
+                "description": "Deletes the cached disk usage snapshot file.",
+                "operationId": "adminDiskUsageDeleteSnapshot",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Snapshot deleted"
+                    },
+                    "400": {
+                        "description": "CSRF mismatch"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/diskUsageSummary.php": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get disk usage snapshot summary",
+                "description": "Returns snapshot summary and optional scan log tail.",
+                "operationId": "adminDiskUsageSummary",
+                "parameters": [
+                    {
+                        "name": "topFolders",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "example": 5
+                    },
+                    {
+                        "name": "topFiles",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "example": 0
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Summary payload"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "Snapshot not found"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/diskUsageTriggerScan.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Trigger disk usage scan",
+                "description": "Starts a background disk usage scan to build a new snapshot.",
+                "operationId": "adminDiskUsageTriggerScan",
+                "responses": {
+                    "200": {
+                        "description": "Scan started"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "500": {
+                        "description": "Server error"
                     }
                 },
                 "security": [
@@ -486,19 +524,146 @@
                 }
             }
         },
+        "/api/admin/installProBundle.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Install Pro bundle",
+                "description": "Uploads and installs a FileRise Pro bundle zip.",
+                "operationId": "adminInstallProBundle",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "bundle"
+                                ],
+                                "properties": {
+                                    "bundle": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Install result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "413": {
+                        "description": "Bundle too large"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/oidcDebugInfo.php": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get OIDC debug info",
+                "description": "Returns OIDC diagnostics for admins.",
+                "operationId": "adminOidcDebugInfo",
+                "responses": {
+                    "200": {
+                        "description": "Debug info"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/oidcTest.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Test OIDC discovery",
+                "description": "Fetches the discovery document for a provider URL.",
+                "operationId": "adminOidcTest",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "providerUrl": {
+                                        "type": "string",
+                                        "example": "https://issuer.example.com"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Discovery result"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                }
+            }
+        },
         "/api/admin/readMetadata.php": {
             "get": {
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Read share metadata (admin-only)",
-                "description": "Returns the requested metadata JSON (either `share_links.json` or `share_folder_links.json`). Expired entries are pruned before returning. If the file does not exist, this returns `{}` with 200.",
-                "operationId": "adminReadMetadata",
+                "summary": "Read share metadata JSON",
+                "description": "Admin-only: returns the cleaned metadata for file or folder share links.",
+                "operationId": "readMetadata",
                 "parameters": [
                     {
                         "name": "file",
                         "in": "query",
-                        "description": "Which metadata file to read.",
+                        "description": "Which metadata file to read",
                         "required": true,
                         "schema": {
                             "type": "string",
@@ -511,92 +676,16 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Cleaned metadata map keyed by token.",
+                        "description": "OK",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "oneOf": [
                                         {
-                                            "description": "File share links (token → record).",
-                                            "type": "object",
-                                            "additionalProperties": {
-                                                "required": [
-                                                    "folder",
-                                                    "file",
-                                                    "expires"
-                                                ],
-                                                "properties": {
-                                                    "folder": {
-                                                        "type": "string",
-                                                        "example": "team"
-                                                    },
-                                                    "file": {
-                                                        "type": "string",
-                                                        "example": "report.pdf"
-                                                    },
-                                                    "expires": {
-                                                        "description": "Unix timestamp (seconds).",
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "example": 1704067200
-                                                    },
-                                                    "password": {
-                                                        "description": "Hashed password if set.",
-                                                        "type": "string",
-                                                        "example": "$2y$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                                                        "nullable": true
-                                                    },
-                                                    "createdBy": {
-                                                        "type": "string",
-                                                        "example": "alice",
-                                                        "nullable": true
-                                                    }
-                                                },
-                                                "type": "object"
-                                            }
+                                            "$ref": "#/components/schemas/ShareLinksMap"
                                         },
                                         {
-                                            "description": "Folder share links (token → record).",
-                                            "type": "object",
-                                            "additionalProperties": {
-                                                "required": [
-                                                    "folder",
-                                                    "expires"
-                                                ],
-                                                "properties": {
-                                                    "folder": {
-                                                        "type": "string",
-                                                        "example": "team/sub"
-                                                    },
-                                                    "expires": {
-                                                        "description": "Unix timestamp (seconds).",
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "example": 1704067200
-                                                    },
-                                                    "password": {
-                                                        "description": "Hashed password if set.",
-                                                        "type": "string",
-                                                        "example": "$2y$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                                                        "nullable": true
-                                                    },
-                                                    "allowUpload": {
-                                                        "description": "Whether uploads are allowed on the shared folder.",
-                                                        "type": "integer",
-                                                        "enum": [
-                                                            0,
-                                                            1
-                                                        ],
-                                                        "example": 1
-                                                    },
-                                                    "createdBy": {
-                                                        "type": "string",
-                                                        "example": "alice",
-                                                        "nullable": true
-                                                    }
-                                                },
-                                                "type": "object"
-                                            }
+                                            "$ref": "#/components/schemas/ShareFolderLinksMap"
                                         }
                                     ]
                                 }
@@ -604,13 +693,267 @@
                         }
                     },
                     "400": {
-                        "description": "Missing `file` parameter."
+                        "description": "Missing or invalid file param"
                     },
                     "403": {
-                        "description": "Forbidden (not admin or invalid filename)."
+                        "description": "Forbidden (admin only)"
                     },
                     "500": {
-                        "description": "Corrupted JSON on disk."
+                        "description": "Corrupted JSON"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/setEncryptionKey.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Configure encryption master key",
+                "description": "Generates or clears the encryption master key file.",
+                "operationId": "adminSetEncryptionKey",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "action"
+                                ],
+                                "properties": {
+                                    "action": {
+                                        "type": "string",
+                                        "enum": [
+                                            "generate",
+                                            "clear"
+                                        ]
+                                    },
+                                    "force": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Operation result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "409": {
+                        "description": "Conflict"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/setLicense.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Set Pro license key",
+                "description": "Stores the FileRise Pro license key.",
+                "operationId": "adminSetLicense",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "license"
+                                ],
+                                "properties": {
+                                    "license": {
+                                        "type": "string",
+                                        "example": "FRPRO-XXXX-XXXX"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "License stored"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/updateConfig.php": {
+            "put": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update admin configuration",
+                "description": "Merges the provided settings into the on-disk configuration and persists them. Requires an authenticated admin session and a valid CSRF token. When OIDC is enabled (disableOIDCLogin=false), `providerUrl`, `redirectUri`, and `clientId` are required and must be HTTPS (HTTP allowed only for localhost).",
+                "operationId": "updateAdminConfig",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdminUpdateConfigRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Configuration updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SimpleSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error (e.g., bad authHeaderName, missing OIDC fields when enabled, or negative upload limit)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SimpleError"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Unauthorized access or invalid CSRF token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SimpleError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error while loading or saving configuration",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SimpleError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": [],
+                        "CsrfHeader": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/virusLog.php": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Fetch virus detections log",
+                "description": "Returns virus detections as JSON or CSV (Pro only).",
+                "operationId": "adminVirusLog",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "example": 200
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "json",
+                                "csv"
+                            ]
+                        },
+                        "example": "json"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Log entries or CSV"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "500": {
+                        "description": "Server error"
                     }
                 },
                 "security": [
@@ -707,37 +1050,49 @@
                     "Auth"
                 ],
                 "summary": "Check authentication status",
-                "description": "Checks if the current session is authenticated. If the users file is missing or empty, returns a setup flag. Also returns information about admin privileges, TOTP status, and folder-only access.",
                 "operationId": "checkAuth",
                 "responses": {
                     "200": {
-                        "description": "Returns authentication status and user details",
+                        "description": "Authenticated status or setup flag",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "authenticated": {
-                                            "type": "boolean",
-                                            "example": true
+                                    "oneOf": [
+                                        {
+                                            "properties": {
+                                                "authenticated": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "isAdmin": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "totp_enabled": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                },
+                                                "username": {
+                                                    "type": "string",
+                                                    "example": "johndoe"
+                                                },
+                                                "folderOnly": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
                                         },
-                                        "isAdmin": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "totp_enabled": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "username": {
-                                            "type": "string",
-                                            "example": "johndoe"
-                                        },
-                                        "folderOnly": {
-                                            "type": "boolean",
-                                            "example": false
+                                        {
+                                            "properties": {
+                                                "setup": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                }
+                                            },
+                                            "type": "object"
                                         }
-                                    },
-                                    "type": "object"
+                                    ]
                                 }
                             }
                         }
@@ -784,6 +1139,16 @@
                 "summary": "Logout user",
                 "description": "Clears the session, removes persistent login tokens, and redirects the user to the login page.",
                 "operationId": "logoutUser",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "302": {
                         "description": "Redirects to the login page with a logout flag."
@@ -791,7 +1156,12 @@
                     "401": {
                         "description": "Unauthorized"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/auth/token.php": {
@@ -834,6 +1204,16 @@
                 "summary": "Change user password",
                 "description": "Allows an authenticated user to change their password by verifying the old password and updating to a new one.",
                 "operationId": "changePassword",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -888,8 +1268,16 @@
                     },
                     "403": {
                         "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/file/copyFiles.php": {
@@ -1204,7 +1592,7 @@
                 "requestBody": {
                     "required": true,
                     "content": {
-                        "application/json": {
+                        "application/x-www-form-urlencoded": {
                             "schema": {
                                 "required": [
                                     "token"
@@ -1446,6 +1834,52 @@
                 ]
             }
         },
+        "/api/file/downloadZipFile.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Download a finished ZIP by token",
+                "description": "Streams the zip once; token is one-shot.",
+                "operationId": "downloadZipFile",
+                "parameters": [
+                    {
+                        "name": "k",
+                        "in": "query",
+                        "description": "Job token",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Suggested filename",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ZIP stream"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
         "/api/file/extractZip.php": {
             "post": {
                 "tags": [
@@ -1560,14 +1994,14 @@
                 ]
             }
         },
-        "/api/file/getFileTags.php": {
+        "/api/file/getFileTag.php": {
             "get": {
                 "tags": [
                     "Tags"
                 ],
                 "summary": "Get global file tags",
                 "description": "Returns tag metadata (no auth in current implementation).",
-                "operationId": "getFileTags",
+                "operationId": "getFileTag",
                 "responses": {
                     "200": {
                         "description": "Tags map (model-defined JSON)"
@@ -1609,6 +2043,36 @@
                     },
                     "500": {
                         "description": "Internal error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/file/moveFiles.php": {
+            "post": {
+                "tags": [
+                    "Files"
+                ],
+                "operationId": "moveFiles",
+                "requestBody": {
+                    "$ref": "#/components/requestBodies/MoveFilesRequest"
+                },
+                "responses": {
+                    "200": {
+                        "description": "Moved"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
                     }
                 },
                 "security": [
@@ -1912,13 +2376,14 @@
                 "tags": [
                     "Shares"
                 ],
-                "summary": "Open a shared file by token",
-                "description": "If the link is password-protected and no password is supplied, an HTML password form is returned. Otherwise the file is streamed.",
-                "operationId": "shareFile",
+                "summary": "Download a shared file",
+                "description": "Returns a shared file stream. If a password is required, an HTML prompt is returned.",
+                "operationId": "shareFileDownload",
                 "parameters": [
                     {
                         "name": "token",
                         "in": "query",
+                        "description": "Share token",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -1927,6 +2392,7 @@
                     {
                         "name": "pass",
                         "in": "query",
+                        "description": "Share password",
                         "required": false,
                         "schema": {
                             "type": "string"
@@ -1935,22 +2401,17 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Binary file (or HTML password form when missing password)",
+                        "description": "File stream or password prompt",
                         "content": {
-                            "application/octet-stream": {
-                                "schema": {
-                                    "type": "string",
-                                    "format": "binary"
-                                }
-                            },
+                            "application/octet-stream": {},
                             "text/html": {}
                         }
                     },
                     "400": {
-                        "description": "Missing token / invalid input"
+                        "description": "Missing/invalid token"
                     },
                     "403": {
-                        "description": "Expired or invalid password"
+                        "description": "Forbidden or expired"
                     },
                     "404": {
                         "description": "Not found"
@@ -1958,119 +2419,46 @@
                 }
             }
         },
-        "/api/folder/capabilities.php": {
+        "/api/file/snippet.php": {
             "get": {
                 "tags": [
-                    "Folders"
+                    "Files"
                 ],
-                "summary": "Get effective capabilities for the current user in a folder",
-                "description": "Computes the caller's capabilities for a given folder by combining account flags (readOnly/disableUpload), ACL grants (read/write/share), and the user-folder-only scope. Returns booleans indicating what the user can do.",
-                "operationId": "getFolderCapabilities",
+                "summary": "Get a small text snippet from a file for hover previews",
+                "description": "Returns a short UTF-8 text snippet from supported file types (txt, md, csv, code, DOCX, XLSX, PPTX, etc.) for use in quick previews.",
+                "operationId": "getFileSnippet",
                 "parameters": [
                     {
                         "name": "folder",
                         "in": "query",
-                        "description": "Target folder path. Defaults to 'root'. Supports nested paths like 'team/reports'.",
+                        "description": "Logical folder path (e.g. root, clients/acme)",
                         "required": false,
                         "schema": {
                             "type": "string"
-                        },
-                        "example": "projects/acme"
+                        }
+                    },
+                    {
+                        "name": "file",
+                        "in": "query",
+                        "description": "File name",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Capabilities computed successfully.",
+                        "description": "Snippet JSON",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "required": [
-                                        "user",
-                                        "folder",
-                                        "isAdmin",
-                                        "flags",
-                                        "canView",
-                                        "canUpload",
-                                        "canCreate",
-                                        "canRename",
-                                        "canDelete",
-                                        "canMoveIn",
-                                        "canShare"
-                                    ],
                                     "properties": {
-                                        "user": {
-                                            "type": "string",
-                                            "example": "alice"
+                                        "snippet": {
+                                            "type": "string"
                                         },
-                                        "folder": {
-                                            "type": "string",
-                                            "example": "projects/acme"
-                                        },
-                                        "isAdmin": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "flags": {
-                                            "required": [
-                                                "folderOnly",
-                                                "readOnly",
-                                                "disableUpload"
-                                            ],
-                                            "properties": {
-                                                "folderOnly": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                },
-                                                "readOnly": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                },
-                                                "disableUpload": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                }
-                                            },
-                                            "type": "object"
-                                        },
-                                        "owner": {
-                                            "type": "string",
-                                            "example": "alice",
-                                            "nullable": true
-                                        },
-                                        "canView": {
-                                            "description": "User can view items in this folder.",
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "canUpload": {
-                                            "description": "User can upload/edit/rename/move/delete items (i.e., WRITE).",
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "canCreate": {
-                                            "description": "User can create subfolders here.",
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "canRename": {
-                                            "description": "User can rename items here.",
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "canDelete": {
-                                            "description": "User can delete items here.",
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "canMoveIn": {
-                                            "description": "User can move items into this folder.",
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "canShare": {
-                                            "description": "User can create share links for this folder.",
-                                            "type": "boolean",
-                                            "example": false
+                                        "truncated": {
+                                            "type": "boolean"
                                         }
                                     },
                                     "type": "object"
@@ -2079,10 +2467,87 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid folder name."
+                        "description": "Missing/invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "File not found"
+                    },
+                    "500": {
+                        "description": "Internal error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/file/zipStatus.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Check status of a background ZIP build",
+                "description": "Returns status for the authenticated user's token.",
+                "operationId": "zipStatus",
+                "parameters": [
+                    {
+                        "name": "k",
+                        "in": "query",
+                        "description": "Job token",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Status payload"
                     },
                     "401": {
-                        "$ref": "#/components/responses/Unauthorized"
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/capabilities.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Get folder capabilities",
+                "description": "Returns effective permissions and capability flags for a folder.",
+                "operationId": "getFolderCapabilities",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Capabilities payload"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
                     }
                 },
                 "security": [
@@ -2436,6 +2901,322 @@
                 }
             }
         },
+        "/api/folder/encryptionJobStart.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Start folder encryption/decryption job",
+                "description": "Queues an encryption or decryption job for a folder.",
+                "operationId": "startFolderEncryptionJob",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "mode"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "team/reports"
+                                    },
+                                    "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                            "encrypt",
+                                            "decrypt"
+                                        ]
+                                    },
+                                    "totalFiles": {
+                                        "type": "integer",
+                                        "example": 0
+                                    },
+                                    "totalBytes": {
+                                        "type": "integer",
+                                        "example": 0
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Job started"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "409": {
+                        "description": "Conflict"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/encryptionJobStatus.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Get folder encryption job status",
+                "operationId": "getFolderEncryptionJobStatus",
+                "parameters": [
+                    {
+                        "name": "jobId",
+                        "in": "query",
+                        "description": "Job id",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Job status"
+                    },
+                    "400": {
+                        "description": "Invalid job id"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Job not found"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/encryptionJobTick.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Process encryption job tick",
+                "description": "Processes a small batch for an active encryption/decryption job.",
+                "operationId": "tickFolderEncryptionJob",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "jobId"
+                                ],
+                                "properties": {
+                                    "jobId": {
+                                        "type": "string",
+                                        "example": "a1b2c3d4e5f6"
+                                    },
+                                    "maxFiles": {
+                                        "type": "integer",
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Tick result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Job not found"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/encryptionPlan.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Plan folder encryption/decryption",
+                "description": "Scans a folder to estimate file/byte counts for encryption jobs.",
+                "operationId": "planFolderEncryption",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    },
+                    {
+                        "name": "mode",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "encrypt",
+                                "decrypt"
+                            ]
+                        },
+                        "example": "encrypt"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Plan result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "409": {
+                        "description": "Conflict"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/getFolderColors.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Get folder color map",
+                "operationId": "getFolderColors",
+                "responses": {
+                    "200": {
+                        "description": "Folder color map"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/getFolderEncryption.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Get folder encryption capabilities",
+                "operationId": "getFolderEncryption",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Encryption capability payload"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
         "/api/folder/getFolderList.php": {
             "get": {
                 "tags": [
@@ -2525,6 +3306,162 @@
                 ]
             }
         },
+        "/api/folder/isEmpty.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Check if folder is empty",
+                "description": "ACL-aware check used for folder tree icons.",
+                "operationId": "folderIsEmpty",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Stats payload"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/listChildren.php": {
+            "get": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "List folder children",
+                "description": "Returns a paged list of child folders for tree navigation.",
+                "operationId": "listFolderChildren",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 2000,
+                            "minimum": 1
+                        },
+                        "example": 500
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Child list payload"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/moveFolder.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Move a folder",
+                "description": "Moves a folder into a destination folder.",
+                "operationId": "moveFolder",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "source",
+                                    "destination"
+                                ],
+                                "properties": {
+                                    "source": {
+                                        "type": "string",
+                                        "example": "team/q1"
+                                    },
+                                    "destination": {
+                                        "type": "string",
+                                        "example": "archive"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Move result (model-defined JSON)"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
         "/api/folder/renameFolder.php": {
             "post": {
                 "tags": [
@@ -2582,6 +3519,148 @@
                     },
                     "405": {
                         "description": "Method not allowed"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/saveFolderColor.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Save folder color",
+                "description": "Sets or clears a custom folder color.",
+                "operationId": "saveFolderColor",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "team/reports"
+                                    },
+                                    "color": {
+                                        "description": "Empty string clears",
+                                        "type": "string",
+                                        "example": "#ff9900",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Save result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/folder/setFolderEncryption.php": {
+            "post": {
+                "tags": [
+                    "Folders"
+                ],
+                "summary": "Set folder encryption state",
+                "description": "Enables or disables folder encryption (v1 compatibility).",
+                "operationId": "setFolderEncryption",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "encrypted"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "team/reports"
+                                    },
+                                    "encrypted": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Update result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Folder not found"
+                    },
+                    "409": {
+                        "description": "Conflict"
+                    },
+                    "500": {
+                        "description": "Server error"
                     }
                 },
                 "security": [
@@ -2711,7 +3790,12 @@
                     "401": {
                         "description": "Unauthorized"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/getUsers.php": {
@@ -2749,7 +3833,1223 @@
                     "401": {
                         "description": "Unauthorized: the user is not authenticated or is not an admin"
                     }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/media/getProgress.php": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get media playback progress",
+                "operationId": "getMediaProgress",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    },
+                    {
+                        "name": "file",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "video.mp4"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Progress state"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/media/getViewedMap.php": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get viewed media map",
+                "operationId": "getViewedMediaMap",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Viewed map"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/media/updateProgress.php": {
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Update media playback progress",
+                "operationId": "updateMediaProgress",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "file"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "root"
+                                    },
+                                    "file": {
+                                        "type": "string",
+                                        "example": "video.mp4"
+                                    },
+                                    "seconds": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 42.5
+                                    },
+                                    "duration": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 3600,
+                                        "nullable": true
+                                    },
+                                    "completed": {
+                                        "type": "boolean",
+                                        "nullable": true
+                                    },
+                                    "clear": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Update result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/onlyoffice/callback.php": {
+            "post": {
+                "tags": [
+                    "ONLYOFFICE"
+                ],
+                "summary": "ONLYOFFICE save callback",
+                "responses": {
+                    "200": {
+                        "description": "OK / error JSON"
+                    }
                 }
+            }
+        },
+        "/api/onlyoffice/config.php": {
+            "get": {
+                "tags": [
+                    "ONLYOFFICE"
+                ],
+                "summary": "Get editor config for a file (signed URLs, callback)",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "file",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Editor config"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Disabled / Not found"
+                    }
+                }
+            }
+        },
+        "/api/onlyoffice/signed-download.php": {
+            "get": {
+                "tags": [
+                    "ONLYOFFICE"
+                ],
+                "summary": "Serve a signed file blob to ONLYOFFICE",
+                "parameters": [
+                    {
+                        "name": "tok",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File stream"
+                    },
+                    "403": {
+                        "description": "Signature/expiry invalid"
+                    }
+                }
+            }
+        },
+        "/api/onlyoffice/status.php": {
+            "get": {
+                "tags": [
+                    "ONLYOFFICE"
+                ],
+                "summary": "ONLYOFFICE availability & supported extensions",
+                "responses": {
+                    "200": {
+                        "description": "Status JSON"
+                    }
+                }
+            }
+        },
+        "/api/pro/audit/exportCsv.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Export audit log as CSV",
+                "description": "Exports audit log entries as CSV.",
+                "operationId": "proAuditExportCsv",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "team"
+                    },
+                    {
+                        "name": "user",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "action",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "source",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "ISO timestamp or epoch",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 5000,
+                            "minimum": 1
+                        },
+                        "example": 1000
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV stream",
+                        "content": {
+                            "text/csv": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/audit/list.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "List audit log entries",
+                "description": "Returns audit log entries for admins, or for a specific folder when non-admin.",
+                "operationId": "proAuditList",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "team"
+                    },
+                    {
+                        "name": "user",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "action",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "source",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "ISO timestamp or epoch",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 500,
+                            "minimum": 1
+                        },
+                        "example": 200
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Audit list payload"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/diskUsageChildren.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Get disk usage children",
+                "description": "Returns per-folder usage children for the storage explorer (Pro).",
+                "operationId": "proDiskUsageChildren",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Children payload"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "404": {
+                        "description": "Snapshot not found"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/diskUsageDeleteFilePermanent.php": {
+            "post": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Permanently delete a file",
+                "description": "Deletes a single file from storage explorer (Pro, admin).",
+                "operationId": "proDiskUsageDeleteFilePermanent",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "root"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "example": "large.zip"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Delete result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/diskUsageDeleteFolderRecursive.php": {
+            "post": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Permanently delete a folder",
+                "description": "Recursively deletes a folder from storage explorer (Pro, admin).",
+                "operationId": "proDiskUsageDeleteFolderRecursive",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "team/archive"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Delete result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/diskUsageTopFiles.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Get top files by size",
+                "description": "Returns the largest files across the instance (Pro).",
+                "operationId": "proDiskUsageTopFiles",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "example": 100
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Top files payload"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "404": {
+                        "description": "Snapshot not found"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/groups/list.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "List Pro groups",
+                "description": "Returns user groups defined in FileRise Pro.",
+                "operationId": "proGroupsList",
+                "responses": {
+                    "200": {
+                        "description": "Groups payload"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/groups/save.php": {
+            "post": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Save Pro groups",
+                "description": "Saves group definitions in FileRise Pro.",
+                "operationId": "proGroupsSave",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "groups"
+                                ],
+                                "properties": {
+                                    "groups": {
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Save result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/portals/get.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Get portal by slug",
+                "description": "Returns portal metadata (public).",
+                "operationId": "proPortalsGet",
+                "parameters": [
+                    {
+                        "name": "slug",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "client-portal"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Portal payload"
+                    },
+                    "404": {
+                        "description": "Portal not found"
+                    }
+                }
+            }
+        },
+        "/api/pro/portals/list.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "List portals",
+                "description": "Returns all portals (admin only, Pro).",
+                "operationId": "proPortalsList",
+                "responses": {
+                    "200": {
+                        "description": "Portals payload"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/portals/publicMeta.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Get public portal metadata",
+                "description": "Returns the public metadata needed for the portal login page.",
+                "operationId": "proPortalsPublicMeta",
+                "parameters": [
+                    {
+                        "name": "slug",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "client-portal"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Public portal payload"
+                    },
+                    "400": {
+                        "description": "Missing slug"
+                    },
+                    "404": {
+                        "description": "Portal not found or Pro inactive"
+                    },
+                    "410": {
+                        "description": "Portal expired"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                }
+            }
+        },
+        "/api/pro/portals/save.php": {
+            "post": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Save portals",
+                "description": "Saves portal definitions (admin only, Pro).",
+                "operationId": "proPortalsSave",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "portals"
+                                ],
+                                "properties": {
+                                    "portals": {
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Save result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/portals/submissions.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "List portal submissions",
+                "description": "Returns submissions for a portal (admin only, Pro).",
+                "operationId": "proPortalsSubmissions",
+                "parameters": [
+                    {
+                        "name": "slug",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "client-portal"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Submissions payload"
+                    },
+                    "400": {
+                        "description": "Missing slug"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/portals/submitForm.php": {
+            "post": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Submit portal form",
+                "description": "Submits a portal form payload (requires auth, Pro).",
+                "operationId": "proPortalsSubmitForm",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "slug",
+                                    "form"
+                                ],
+                                "properties": {
+                                    "slug": {
+                                        "type": "string",
+                                        "example": "client-portal"
+                                    },
+                                    "form": {
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "example": "Jane Doe"
+                                            },
+                                            "email": {
+                                                "type": "string",
+                                                "example": "jane@example.com"
+                                            },
+                                            "reference": {
+                                                "type": "string",
+                                                "example": "PO-123"
+                                            },
+                                            "notes": {
+                                                "type": "string",
+                                                "example": "Please review"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Submission saved"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/portals/uploadLogo.php": {
+            "post": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Upload portal logo",
+                "description": "Uploads a portal logo image (admin only, Pro).",
+                "operationId": "proPortalsUploadLogo",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "portal_logo"
+                                ],
+                                "properties": {
+                                    "portal_logo": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "slug": {
+                                        "type": "string",
+                                        "example": "client-portal"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Upload result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/search/query.php": {
+            "get": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Search files (Pro)",
+                "description": "Searches across folders using the Pro search index.",
+                "operationId": "proSearchQuery",
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "Search query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "example": 50
+                    },
+                    {
+                        "name": "force",
+                        "in": "query",
+                        "description": "Admins only: force refresh",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Search results"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "503": {
+                        "description": "Search disabled"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/pro/uploadBrandLogo.php": {
+            "post": {
+                "tags": [
+                    "Pro"
+                ],
+                "summary": "Upload branding logo",
+                "description": "Uploads a branding logo image (admin only, Pro).",
+                "operationId": "proUploadBrandLogo",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "brand_logo"
+                                ],
+                                "properties": {
+                                    "brand_logo": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Upload result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Forbidden or Pro required"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/profile/getCurrentUser.php": {
@@ -2757,50 +5057,36 @@
                 "tags": [
                     "Users"
                 ],
-                "summary": "Get the currently authenticated user's profile",
-                "description": "Returns basic info for the logged-in user. Requires a valid session cookie.",
                 "operationId": "getCurrentUser",
                 "responses": {
                     "200": {
-                        "description": "User profile returned. If the user record is missing, an empty result may be returned.",
+                        "description": "Current user",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "oneOf": [
-                                        {
-                                            "required": [
-                                                "username",
-                                                "isAdmin",
-                                                "totp_enabled",
-                                                "profile_picture"
-                                            ],
-                                            "properties": {
-                                                "username": {
-                                                    "type": "string",
-                                                    "example": "alice"
-                                                },
-                                                "isAdmin": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                },
-                                                "totp_enabled": {
-                                                    "type": "boolean",
-                                                    "example": true
-                                                },
-                                                "profile_picture": {
-                                                    "description": "Public URL path to the profile picture (leading slash).",
-                                                    "type": "string",
-                                                    "example": "/uploads/profile_pics/alice_9f3c2e1a8bcd.png"
-                                                }
-                                            },
-                                            "type": "object"
+                                    "required": [
+                                        "username",
+                                        "isAdmin",
+                                        "totp_enabled",
+                                        "profile_picture"
+                                    ],
+                                    "properties": {
+                                        "username": {
+                                            "type": "string",
+                                            "example": "ryan"
                                         },
-                                        {
-                                            "type": "array",
-                                            "maxItems": 0,
-                                            "example": []
+                                        "isAdmin": {
+                                            "type": "boolean"
+                                        },
+                                        "totp_enabled": {
+                                            "type": "boolean"
+                                        },
+                                        "profile_picture": {
+                                            "type": "string",
+                                            "example": "/uploads/profile_pics/ryan.png"
                                         }
-                                    ]
+                                    },
+                                    "type": "object"
                                 }
                             }
                         }
@@ -2906,8 +5192,18 @@
                     "Users"
                 ],
                 "summary": "Remove a user",
-                "description": "Removes the specified user from the system. Cannot remove the currently logged-in user.",
+                "description": "Removes the specified user from the system. Cannot remove the currently logged-in user. Accepts DELETE or POST.",
                 "operationId": "removeUser",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -2952,6 +5248,32 @@
                     },
                     "403": {
                         "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/siteConfig.php": {
+            "get": {
+                "tags": [
+                    "Config"
+                ],
+                "summary": "Get public site configuration",
+                "description": "Returns the public site configuration used by the frontend.",
+                "operationId": "getSiteConfig",
+                "responses": {
+                    "200": {
+                        "description": "Site config payload"
+                    },
+                    "500": {
+                        "description": "Server error"
                     }
                 }
             }
@@ -2962,8 +5284,18 @@
                     "TOTP"
                 ],
                 "summary": "Disable TOTP for the authenticated user",
-                "description": "Clears the TOTP secret from the users file for the current user.",
+                "description": "Clears the TOTP secret from the users file for the current user. Accepts PUT or POST.",
                 "operationId": "disableTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "TOTP disabled successfully",
@@ -2985,13 +5317,24 @@
                             }
                         }
                     },
+                    "400": {
+                        "description": "Missing username"
+                    },
                     "403": {
                         "description": "Not authenticated or invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
                     },
                     "500": {
                         "description": "Failed to disable TOTP"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/totp_recover.php": {
@@ -3002,6 +5345,16 @@
                 "summary": "Recover TOTP",
                 "description": "Verifies a recovery code to disable TOTP and finalize login.",
                 "operationId": "recoverTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3041,6 +5394,9 @@
                     "400": {
                         "description": "Invalid input or recovery code"
                     },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
                     "403": {
                         "description": "Invalid CSRF token"
                     },
@@ -3050,7 +5406,12 @@
                     "429": {
                         "description": "Too many attempts"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/totp_saveCode.php": {
@@ -3061,6 +5422,16 @@
                 "summary": "Generate and save a new TOTP recovery code",
                 "description": "Generates a new TOTP recovery code for the authenticated user, stores its hash, and returns the plain text recovery code.",
                 "operationId": "totpSaveCode",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Recovery code generated successfully",
@@ -3085,13 +5456,24 @@
                     "400": {
                         "description": "Bad Request"
                     },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
                     "403": {
                         "description": "Invalid CSRF token or unauthorized"
                     },
                     "405": {
                         "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/totp_setup.php": {
@@ -3102,6 +5484,16 @@
                 "summary": "Set up TOTP and generate a QR code",
                 "description": "Generates (or retrieves) the TOTP secret for the user and builds a QR code image for scanning.",
                 "operationId": "setupTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "QR code image for TOTP setup",
@@ -3109,13 +5501,21 @@
                             "image/png": {}
                         }
                     },
+                    "400": {
+                        "description": "Missing username"
+                    },
                     "403": {
-                        "description": "Unauthorized or invalid CSRF token"
+                        "description": "Not authorized or invalid CSRF token"
                     },
                     "500": {
                         "description": "Server error"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/totp_verify.php": {
@@ -3126,6 +5526,16 @@
                 "summary": "Verify TOTP code",
                 "description": "Verifies a TOTP code and completes login for pending users or validates TOTP for setup verification.",
                 "operationId": "verifyTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3175,7 +5585,12 @@
                     "429": {
                         "description": "Too many attempts. Try again later."
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/updateUserPanel.php": {
@@ -3184,8 +5599,18 @@
                     "Users"
                 ],
                 "summary": "Update user panel settings",
-                "description": "Updates user panel settings by disabling TOTP when not enabled. Accessible to authenticated users.",
+                "description": "Updates user panel settings. Accessible to authenticated users. Accepts PUT or POST.",
                 "operationId": "updateUserPanel",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3228,10 +5653,18 @@
                     "403": {
                         "description": "Invalid CSRF token"
                     },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
                     "400": {
                         "description": "Bad Request"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/updateUserPermissions.php": {
@@ -3240,8 +5673,18 @@
                     "Users"
                 ],
                 "summary": "Update user permissions",
-                "description": "Updates permissions for users. Only available to authenticated admin users.",
+                "description": "Updates permissions for users. Only available to authenticated admin users. Accepts PUT or POST.",
                 "operationId": "updateUserPermissions",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3304,10 +5747,18 @@
                     "403": {
                         "description": "Invalid CSRF token"
                     },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
                     "400": {
                         "description": "Bad Request"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/upload/removeChunks.php": {
@@ -3321,10 +5772,11 @@
                 "requestBody": {
                     "required": true,
                     "content": {
-                        "application/json": {
+                        "application/x-www-form-urlencoded": {
                             "schema": {
                                 "required": [
-                                    "folder"
+                                    "folder",
+                                    "csrf_token"
                                 ],
                                 "properties": {
                                     "folder": {
@@ -3368,7 +5820,169 @@
                     "403": {
                         "description": "Invalid CSRF token"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/upload/upload.php": {
+            "post": {
+                "tags": [
+                    "Uploads"
+                ],
+                "summary": "Upload a file (supports chunked + full uploads)",
+                "description": "Requires a session (cookie) and a CSRF token (header preferred; falls back to form field). Checks user/account flags and folder-level WRITE ACL, then delegates to the model. Returns JSON for chunked uploads; full uploads may redirect after success.",
+                "operationId": "handleUpload",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "description": "CSRF token for this session (preferred). If omitted, send as form field `csrf_token`.",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "fileToUpload"
+                                ],
+                                "properties": {
+                                    "fileToUpload": {
+                                        "description": "File or chunk payload.",
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "folder": {
+                                        "description": "Target folder (defaults to 'root' if omitted).",
+                                        "type": "string",
+                                        "example": "root"
+                                    },
+                                    "csrf_token": {
+                                        "description": "CSRF token (form fallback).",
+                                        "type": "string"
+                                    },
+                                    "upload_token": {
+                                        "description": "Legacy alias for CSRF token (accepted by server).",
+                                        "type": "string"
+                                    },
+                                    "resumableChunkNumber": {
+                                        "type": "integer"
+                                    },
+                                    "resumableTotalChunks": {
+                                        "type": "integer"
+                                    },
+                                    "resumableChunkSize": {
+                                        "type": "integer"
+                                    },
+                                    "resumableCurrentChunkSize": {
+                                        "type": "integer"
+                                    },
+                                    "resumableTotalSize": {
+                                        "type": "integer"
+                                    },
+                                    "resumableType": {
+                                        "type": "string"
+                                    },
+                                    "resumableIdentifier": {
+                                        "type": "string"
+                                    },
+                                    "resumableFilename": {
+                                        "type": "string"
+                                    },
+                                    "resumableRelativePath": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "JSON result (success, chunk status, or CSRF refresh).",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "properties": {
+                                                "success": {
+                                                    "type": "string",
+                                                    "example": "File uploaded successfully"
+                                                },
+                                                "newFilename": {
+                                                    "type": "string",
+                                                    "example": "5f2d7c123a_example.png"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "chunk uploaded"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        {
+                                            "properties": {
+                                                "csrf_expired": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "csrf_token": {
+                                                    "type": "string",
+                                                    "example": "b1c2...f9"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "302": {
+                        "description": "Redirect after a successful full upload.",
+                        "headers": {
+                            "Location": {
+                                "description": "Where the client is redirected",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request (missing/invalid fields, model error)"
+                    },
+                    "401": {
+                        "description": "Unauthorized (no session)"
+                    },
+                    "403": {
+                        "description": "Forbidden (upload disabled or no WRITE to folder)"
+                    },
+                    "500": {
+                        "description": "Server error while processing upload"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         }
     },
@@ -3469,6 +6083,9 @@
             "AdminGetConfigAdmin": {
                 "allOf": [
                     {
+                        "$ref": "#/components/schemas/AdminGetConfigPublic"
+                    },
+                    {
                         "properties": {
                             "loginOptions": {
                                 "allOf": [
@@ -3482,9 +6099,6 @@
                             }
                         },
                         "type": "object"
-                    },
-                    {
-                        "$ref": "#/components/schemas/AdminGetConfigPublic"
                     }
                 ]
             },
@@ -3601,34 +6215,41 @@
                         }
                     }
                 }
-            },
-            "200": {
-                "description": "Move result (model-defined)"
-            },
-            "400": {
-                "description": "Invalid input"
-            },
-            "401": {
-                "description": "Unauthorized"
-            },
-            "403": {
-                "description": "Forbidden"
-            },
-            "500": {
-                "description": "Internal error"
             }
         },
-        "parameters": {
-            "X-CSRF-Token": {
-                "name": "X-CSRF-Token",
-                "in": "header",
+        "requestBodies": {
+            "MoveFilesRequest": {
                 "required": true,
-                "schema": {
-                    "type": "string"
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "required": [
+                                "source",
+                                "destination",
+                                "files"
+                            ],
+                            "properties": {
+                                "source": {
+                                    "type": "string",
+                                    "example": "inbox"
+                                },
+                                "destination": {
+                                    "type": "string",
+                                    "example": "archive"
+                                },
+                                "files": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
                 }
             }
         },
-        "requestBodies": {},
         "securitySchemes": {
             "cookieAuth": {
                 "type": "apiKey",
@@ -3648,6 +6269,62 @@
         {
             "name": "Admin",
             "description": "Admin endpoints"
+        },
+        {
+            "name": "Users",
+            "description": "Users"
+        },
+        {
+            "name": "Auth",
+            "description": "Auth"
+        },
+        {
+            "name": "Files",
+            "description": "Files"
+        },
+        {
+            "name": "Shares",
+            "description": "Shares"
+        },
+        {
+            "name": "Trash",
+            "description": "Trash"
+        },
+        {
+            "name": "Tags",
+            "description": "Tags"
+        },
+        {
+            "name": "Folders",
+            "description": "Folders"
+        },
+        {
+            "name": "Shared Folders",
+            "description": "Shared Folders"
+        },
+        {
+            "name": "Media",
+            "description": "Media"
+        },
+        {
+            "name": "ONLYOFFICE",
+            "description": "ONLYOFFICE"
+        },
+        {
+            "name": "Pro",
+            "description": "Pro"
+        },
+        {
+            "name": "Config",
+            "description": "Config"
+        },
+        {
+            "name": "TOTP",
+            "description": "TOTP"
+        },
+        {
+            "name": "Uploads",
+            "description": "Uploads"
         }
     ]
 }

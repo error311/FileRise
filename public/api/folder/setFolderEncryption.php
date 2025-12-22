@@ -1,5 +1,31 @@
 <?php
 declare(strict_types=1);
+/**
+ * @OA\Post(
+ *   path="/api/folder/setFolderEncryption.php",
+ *   summary="Set folder encryption state",
+ *   description="Enables or disables folder encryption (v1 compatibility).",
+ *   operationId="setFolderEncryption",
+ *   tags={"Folders"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
+ *   @OA\RequestBody(
+ *     required=true,
+ *     @OA\JsonContent(
+ *       required={"folder","encrypted"},
+ *       @OA\Property(property="folder", type="string", example="team/reports"),
+ *       @OA\Property(property="encrypted", type="boolean", example=true)
+ *     )
+ *   ),
+ *   @OA\Response(response=200, description="Update result"),
+ *   @OA\Response(response=400, description="Invalid input"),
+ *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=403, description="Forbidden"),
+ *   @OA\Response(response=404, description="Folder not found"),
+ *   @OA\Response(response=409, description="Conflict"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');

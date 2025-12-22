@@ -1,5 +1,19 @@
 <?php
 // public/api/pro/groups/list.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/groups/list.php",
+ *   summary="List Pro groups",
+ *   description="Returns user groups defined in FileRise Pro.",
+ *   operationId="proGroupsList",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Response(response=200, description="Groups payload"),
+ *   @OA\Response(response=400, description="Invalid input"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

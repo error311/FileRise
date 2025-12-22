@@ -9,6 +9,7 @@ declare(strict_types=1);
  *   description="Returns a short UTF-8 text snippet from supported file types (txt, md, csv, code, DOCX, XLSX, PPTX, etc.) for use in quick previews.",
  *   operationId="getFileSnippet",
  *   tags={"Files"},
+ *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(
  *     name="folder",
  *     in="query",

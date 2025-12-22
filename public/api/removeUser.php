@@ -5,9 +5,11 @@
      * @OA\Delete(
      *     path="/api/removeUser.php",
      *     summary="Remove a user",
-     *     description="Removes the specified user from the system. Cannot remove the currently logged-in user.",
+     *     description="Removes the specified user from the system. Cannot remove the currently logged-in user. Accepts DELETE or POST.",
      *     operationId="removeUser",
      *     tags={"Users"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
@@ -33,6 +35,10 @@
      *     @OA\Response(
      *         response=403,
      *         description="Invalid CSRF token"
+     *     ),
+     *     @OA\Response(
+     *         response=405,
+     *         description="Method not allowed"
      *     )
      * )
      */

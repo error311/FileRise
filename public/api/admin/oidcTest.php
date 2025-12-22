@@ -1,5 +1,22 @@
 <?php
 // public/api/admin/oidcTest.php
+/**
+ * @OA\Post(
+ *   path="/api/admin/oidcTest.php",
+ *   summary="Test OIDC discovery",
+ *   description="Fetches the discovery document for a provider URL.",
+ *   operationId="adminOidcTest",
+ *   tags={"Admin"},
+ *   @OA\RequestBody(
+ *     required=false,
+ *     @OA\JsonContent(
+ *       @OA\Property(property="providerUrl", type="string", example="https://issuer.example.com")
+ *     )
+ *   ),
+ *   @OA\Response(response=200, description="Discovery result"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

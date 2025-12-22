@@ -25,6 +25,8 @@ RewriteRule - - [L]
 
 # 1) Block hidden files/dirs anywhere EXCEPT .well-known (path-aware)
 #    Prevents requests like /.env, /.git/config, /.ssh/id_rsa, etc.
+#    Allow dotpaths only through WebDAV (scoped to /webdav.php).
+RewriteCond %{REQUEST_URI} !^/webdav\.php/ [NC]
 RewriteRule "(^|/)\.(?!well-known/)" - [F]
 RewriteRule ^portal/([A-Za-z0-9_-]+)$ portal.html?slug=$1 [L,QSA]
 

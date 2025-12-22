@@ -8,6 +8,7 @@
      *     description="Returns the permissions for the current user, or all permissions if the user is an admin.",
      *     operationId="getUserPermissions",
      *     tags={"Users"},
+     *     security={{"cookieAuth": {}}},
      *     @OA\Response(
      *         response=200,
      *         description="Successful response with user permissions",

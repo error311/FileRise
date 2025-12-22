@@ -10,9 +10,12 @@
  *   tags={"Shares"},
  *   @OA\RequestBody(
  *     required=true,
- *     @OA\JsonContent(
- *       required={"token"},
- *       @OA\Property(property="token", type="string", example="abc123")
+ *     @OA\MediaType(
+ *       mediaType="application/x-www-form-urlencoded",
+ *       @OA\Schema(
+ *         required={"token"},
+ *         @OA\Property(property="token", type="string", example="abc123")
+ *       )
  *     )
  *   ),
  *   @OA\Response(response=200, description="Deletion result (success or not found)")

@@ -1,6 +1,32 @@
 <?php
 declare(strict_types=1);
 // public/api/pro/audit/exportCsv.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/audit/exportCsv.php",
+ *   summary="Export audit log as CSV",
+ *   description="Exports audit log entries as CSV.",
+ *   operationId="proAuditExportCsv",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="team"),
+ *   @OA\Parameter(name="user", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="action", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="source", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="from", in="query", required=false, @OA\Schema(type="string"), description="ISO timestamp or epoch"),
+ *   @OA\Parameter(name="to", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="limit", in="query", required=false, @OA\Schema(type="integer", minimum=1, maximum=5000), example=1000),
+ *   @OA\Response(
+ *     response=200,
+ *     description="CSV stream",
+ *     content={"text/csv": @OA\MediaType(mediaType="text/csv")}
+ *   ),
+ *   @OA\Response(response=400, description="Invalid input"),
+ *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');

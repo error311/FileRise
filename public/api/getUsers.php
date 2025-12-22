@@ -8,6 +8,7 @@
      *     description="Returns a JSON array of users. Only available to authenticated admin users.",
      *     operationId="getUsers",
      *     tags={"Users"},
+     *     security={{"cookieAuth": {}}},
      *     @OA\Response(
      *         response=200,
      *         description="Successful response with an array of users",

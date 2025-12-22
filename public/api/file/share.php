@@ -1,5 +1,27 @@
 <?php
 declare(strict_types=1);
+/**
+ * @OA\Get(
+ *   path="/api/file/share.php",
+ *   summary="Download a shared file",
+ *   description="Returns a shared file stream. If a password is required, an HTML prompt is returned.",
+ *   operationId="shareFileDownload",
+ *   tags={"Shares"},
+ *   @OA\Parameter(name="token", in="query", required=true, @OA\Schema(type="string"), description="Share token"),
+ *   @OA\Parameter(name="pass", in="query", required=false, @OA\Schema(type="string"), description="Share password"),
+ *   @OA\Response(
+ *     response=200,
+ *     description="File stream or password prompt",
+ *     content={
+ *       "application/octet-stream": @OA\MediaType(mediaType="application/octet-stream"),
+ *       "text/html": @OA\MediaType(mediaType="text/html")
+ *     }
+ *   ),
+ *   @OA\Response(response=400, description="Missing/invalid token"),
+ *   @OA\Response(response=403, description="Forbidden or expired"),
+ *   @OA\Response(response=404, description="Not found")
+ * )
+ */
 
 // Buffer any accidental output so headers still work
 if (ob_get_level() === 0) {

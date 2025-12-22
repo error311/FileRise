@@ -1,6 +1,19 @@
 <?php
 // Fast ACL-aware peek for tree icons/chevrons
 declare(strict_types=1);
+/**
+ * @OA\Get(
+ *   path="/api/folder/isEmpty.php",
+ *   summary="Check if folder is empty",
+ *   description="ACL-aware check used for folder tree icons.",
+ *   operationId="folderIsEmpty",
+ *   tags={"Folders"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="root"),
+ *   @OA\Response(response=200, description="Stats payload"),
+ *   @OA\Response(response=401, description="Unauthorized")
+ * )
+ */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');

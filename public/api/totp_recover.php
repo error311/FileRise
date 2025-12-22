@@ -8,6 +8,8 @@
      *     description="Verifies a recovery code to disable TOTP and finalize login.",
      *     operationId="recoverTOTP",
      *     tags={"TOTP"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
@@ -25,6 +27,10 @@
      *     @OA\Response(
      *         response=400,
      *         description="Invalid input or recovery code"
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthorized"
      *     ),
      *     @OA\Response(
      *         response=403,

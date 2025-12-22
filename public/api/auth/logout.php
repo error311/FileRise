@@ -8,6 +8,8 @@
      *     description="Clears the session, removes persistent login tokens, and redirects the user to the login page.",
      *     operationId="logoutUser",
      *     tags={"Auth"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=false, @OA\Schema(type="string")),
      *     @OA\Response(
      *         response=302,
      *         description="Redirects to the login page with a logout flag."

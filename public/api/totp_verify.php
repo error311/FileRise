@@ -8,6 +8,8 @@
      *     description="Verifies a TOTP code and completes login for pending users or validates TOTP for setup verification.",
      *     operationId="verifyTOTP",
      *     tags={"TOTP"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(

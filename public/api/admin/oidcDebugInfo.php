@@ -1,5 +1,18 @@
 <?php
 // public/api/admin/oidcDebugInfo.php
+/**
+ * @OA\Get(
+ *   path="/api/admin/oidcDebugInfo.php",
+ *   summary="Get OIDC debug info",
+ *   description="Returns OIDC diagnostics for admins.",
+ *   operationId="adminOidcDebugInfo",
+ *   tags={"Admin"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Response(response=200, description="Debug info"),
+ *   @OA\Response(response=403, description="Forbidden"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

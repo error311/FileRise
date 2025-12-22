@@ -3,10 +3,10 @@
 
 /**
  * @OA\Get(
- *   path="/api/file/getFileTags.php",
+ *   path="/api/file/getFileTag.php",
  *   summary="Get global file tags",
  *   description="Returns tag metadata (no auth in current implementation).",
- *   operationId="getFileTags",
+ *   operationId="getFileTag",
  *   tags={"Tags"},
  *   @OA\Response(response=200, description="Tags map (model-defined JSON)")
  * )

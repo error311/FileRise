@@ -1,5 +1,17 @@
 <?php
 declare(strict_types=1);
+/**
+ * @OA\Get(
+ *   path="/api/folder/getFolderColors.php",
+ *   summary="Get folder color map",
+ *   operationId="getFolderColors",
+ *   tags={"Folders"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Response(response=200, description="Folder color map"),
+ *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 
 require_once __DIR__ . '/../../../config/config.php';
 require_once PROJECT_ROOT . '/src/controllers/FolderController.php';

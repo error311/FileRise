@@ -8,12 +8,16 @@
  *   description="Deletes the temporary directory used for a chunked upload. Requires a valid CSRF token in the form field.",
  *   operationId="removeChunks",
  *   tags={"Uploads"},
+ *   security={{"cookieAuth": {}}},
  *   @OA\RequestBody(
  *     required=true,
- *     @OA\JsonContent(
- *       required={"folder"},
- *       @OA\Property(property="folder", type="string", example="resumable_myupload123"),
- *       @OA\Property(property="csrf_token", type="string", description="CSRF token for this session")
+ *     @OA\MediaType(
+ *       mediaType="application/x-www-form-urlencoded",
+ *       @OA\Schema(
+ *         required={"folder","csrf_token"},
+ *         @OA\Property(property="folder", type="string", example="resumable_myupload123"),
+ *         @OA\Property(property="csrf_token", type="string", description="CSRF token for this session")
+ *       )
  *     )
  *   ),
  *   @OA\Response(

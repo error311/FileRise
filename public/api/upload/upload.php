@@ -50,16 +50,16 @@
  *     description="JSON result (success, chunk status, or CSRF refresh).",
  *     @OA\JsonContent(
  *       oneOf={
- *         @OA\Schema(                       ; Success (full or model-returned)
+ *         @OA\Schema(
  *           type="object",
  *           @OA\Property(property="success", type="string", example="File uploaded successfully"),
  *           @OA\Property(property="newFilename", type="string", example="5f2d7c123a_example.png")
  *         ),
- *         @OA\Schema(                       ; Chunk flow
+ *         @OA\Schema(
  *           type="object",
  *           @OA\Property(property="status", type="string", example="chunk uploaded")
  *         ),
- *         @OA\Schema(                       ; CSRF soft-refresh path
+ *         @OA\Schema(
  *           type="object",
  *           @OA\Property(property="csrf_expired", type="boolean", example=true),
  *           @OA\Property(property="csrf_token", type="string", example="b1c2...f9")

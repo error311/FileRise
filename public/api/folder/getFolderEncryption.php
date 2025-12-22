@@ -1,5 +1,17 @@
 <?php
 declare(strict_types=1);
+/**
+ * @OA\Get(
+ *   path="/api/folder/getFolderEncryption.php",
+ *   summary="Get folder encryption capabilities",
+ *   operationId="getFolderEncryption",
+ *   tags={"Folders"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="root"),
+ *   @OA\Response(response=200, description="Encryption capability payload"),
+ *   @OA\Response(response=401, description="Unauthorized")
+ * )
+ */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -28,4 +40,3 @@ echo json_encode([
     'folder' => $folder,
     'encryption' => $enc,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-

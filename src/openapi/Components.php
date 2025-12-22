@@ -6,7 +6,7 @@ use OpenApi\Annotations as OA;
 /**
  * @OA\Info(
  *   title="FileRise API",
- *   version="1.5.2"
+ *   version="2.11.1"
  * )
  *
  * @OA\Server(
@@ -147,10 +147,7 @@ use OpenApi\Annotations as OA;
  *     )
  *   )
  * )
- */
-
-
-/**
+ *
  * @OA\RequestBody(
  *   request="MoveFilesRequest",
  *   required=true,
@@ -163,6 +160,4 @@ use OpenApi\Annotations as OA;
  *   )
  * )
  */
-
- 
 final class OpenAPIComponents {}

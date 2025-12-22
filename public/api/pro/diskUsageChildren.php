@@ -1,5 +1,20 @@
 <?php
 // public/api/pro/diskUsageChildren.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/diskUsageChildren.php",
+ *   summary="Get disk usage children",
+ *   description="Returns per-folder usage children for the storage explorer (Pro).",
+ *   operationId="proDiskUsageChildren",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="root"),
+ *   @OA\Response(response=200, description="Children payload"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required"),
+ *   @OA\Response(response=404, description="Snapshot not found"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

@@ -1,5 +1,20 @@
 <?php
 // public/api/pro/diskUsageTopFiles.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/diskUsageTopFiles.php",
+ *   summary="Get top files by size",
+ *   description="Returns the largest files across the instance (Pro).",
+ *   operationId="proDiskUsageTopFiles",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="limit", in="query", required=false, @OA\Schema(type="integer", minimum=1), example=100),
+ *   @OA\Response(response=200, description="Top files payload"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required"),
+ *   @OA\Response(response=404, description="Snapshot not found"),
+ *   @OA\Response(response=500, description="Server error")
+ * )
+ */
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');

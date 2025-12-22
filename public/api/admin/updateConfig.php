@@ -8,7 +8,7 @@
  *   description="Merges the provided settings into the on-disk configuration and persists them. Requires an authenticated admin session and a valid CSRF token. When OIDC is enabled (disableOIDCLogin=false), `providerUrl`, `redirectUri`, and `clientId` are required and must be HTTPS (HTTP allowed only for localhost).",
  *   operationId="updateAdminConfig",
  *   tags={"Admin"},
- *   security={ {{"cookieAuth": {}, "CsrfHeader": {}}} },
+ *   security={{"cookieAuth": {}, "CsrfHeader": {}}},
  *
  *   @OA\RequestBody(
  *     required=true,
@@ -29,8 +29,6 @@
  *     response=403,
  *     description="Unauthorized access or invalid CSRF token",
  *     @OA\JsonContent(ref="#/components/schemas/SimpleError")
- *     // or: ref to the reusable response
- *     // ref="#/components/responses/Forbidden"
  *   ),
  *   @OA\Response(
  *     response=500,

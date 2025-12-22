@@ -1,5 +1,14 @@
 # Changelog
 
+## Changes 12/22/2025 (v2.11.1)
+
+`release(v2.11.1): scope dotfile blocking to allow WebDAV dotpaths + add/revise OpenAPI annotations`
+
+- .htaccess: allow dotpaths only for /webdav.php/* while continuing to block hidden files/dirs elsewhere (keeps .well-known exception)
+- API: revise endpoints and add OpenAPI 3.0 annotations/spec updates (version 2.11.1)
+
+---
+
 ## Changes 12/21/2025 (Core v2.11.0 & Pro v1.4.0)
 
 `release(v2.11.0): add Pro audit logs + configurable hover preview limits`

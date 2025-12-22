@@ -17,7 +17,6 @@
  *       @OA\Property(property="isAdmin", type="boolean"),
  *       @OA\Property(property="totp_enabled", type="boolean"),
  *       @OA\Property(property="profile_picture", type="string", example="/uploads/profile_pics/ryan.png")
- *       // If you had an array: @OA\Property(property="roles", type="array", @OA\Items(type="string"))
  *     )
  *   ),
  *   @OA\Response(response=401, ref="#/components/responses/Unauthorized")

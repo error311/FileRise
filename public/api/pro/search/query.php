@@ -1,6 +1,24 @@
 <?php
 declare(strict_types=1);
 // Pro Search Everywhere query endpoint
+/**
+ * @OA\Get(
+ *   path="/api/pro/search/query.php",
+ *   summary="Search files (Pro)",
+ *   description="Searches across folders using the Pro search index.",
+ *   operationId="proSearchQuery",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="q", in="query", required=false, @OA\Schema(type="string"), description="Search query"),
+ *   @OA\Parameter(name="limit", in="query", required=false, @OA\Schema(type="integer", minimum=1), example=50),
+ *   @OA\Parameter(name="force", in="query", required=false, @OA\Schema(type="boolean"), description="Admins only: force refresh"),
+ *   @OA\Response(response=200, description="Search results"),
+ *   @OA\Response(response=400, description="Invalid input"),
+ *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required"),
+ *   @OA\Response(response=503, description="Search disabled")
+ * )
+ */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');

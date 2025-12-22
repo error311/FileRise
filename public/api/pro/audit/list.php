@@ -1,6 +1,27 @@
 <?php
 declare(strict_types=1);
 // public/api/pro/audit/list.php
+/**
+ * @OA\Get(
+ *   path="/api/pro/audit/list.php",
+ *   summary="List audit log entries",
+ *   description="Returns audit log entries for admins, or for a specific folder when non-admin.",
+ *   operationId="proAuditList",
+ *   tags={"Pro"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="team"),
+ *   @OA\Parameter(name="user", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="action", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="source", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="from", in="query", required=false, @OA\Schema(type="string"), description="ISO timestamp or epoch"),
+ *   @OA\Parameter(name="to", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="limit", in="query", required=false, @OA\Schema(type="integer", minimum=1, maximum=500), example=200),
+ *   @OA\Response(response=200, description="Audit list payload"),
+ *   @OA\Response(response=400, description="Invalid input"),
+ *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=403, description="Forbidden or Pro required")
+ * )
+ */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');

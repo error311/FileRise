@@ -5,9 +5,11 @@
      * @OA\Put(
      *     path="/api/updateUserPanel.php",
      *     summary="Update user panel settings",
-     *     description="Updates user panel settings by disabling TOTP when not enabled. Accessible to authenticated users.",
+     *     description="Updates user panel settings. Accessible to authenticated users. Accepts PUT or POST.",
      *     operationId="updateUserPanel",
      *     tags={"Users"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
@@ -29,6 +31,10 @@
      *     @OA\Response(
      *         response=403,
      *         description="Invalid CSRF token"
+     *     ),
+     *     @OA\Response(
+     *         response=405,
+     *         description="Method not allowed"
      *     ),
      *     @OA\Response(
      *         response=400,
