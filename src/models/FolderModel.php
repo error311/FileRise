@@ -575,6 +575,10 @@ class FolderModel
 
     // Remove ownership mappings for the subtree.
     self::removeOwnerForTree($relative);
+    // Remove ACL entries for the subtree (best-effort).
+    try {
+        ACL::deleteTree($relative);
+    } catch (\Throwable $e) { /* ignore */ }
     // Remove folder encryption markers for the subtree (best-effort).
     try {
         FolderCrypto::removeSubtree($relative);
@@ -619,6 +623,10 @@ class FolderModel
 
         // Remove ownership mappings for the subtree.
         self::removeOwnerForTree($relative);
+        // Remove ACL entries for the subtree (best-effort).
+        try {
+            ACL::deleteTree($relative);
+        } catch (\Throwable $e) { /* ignore */ }
         // Remove folder encryption markers for the subtree (best-effort).
         try {
             FolderCrypto::removeSubtree($relative);
@@ -963,7 +971,12 @@ class FolderModel
         } catch (\Throwable $e) { /* ignore */ }
 
         $mime = function_exists('mime_content_type') ? mime_content_type($real) : 'application/octet-stream';
-        return ["realFilePath" => $real, "mimeType" => $mime];
+        return [
+            "realFilePath" => $real,
+            "mimeType" => $mime,
+            "folder" => $folderKey,
+            "file" => $file,
+        ];
     }
 
     /**
@@ -1061,7 +1074,11 @@ class FolderModel
         ];
         file_put_contents($metadataFile, json_encode($meta, JSON_PRETTY_PRINT), LOCK_EX);
 
-        return ["success" => "File uploaded successfully.", "newFilename" => $newFilename];
+        return [
+            "success" => "File uploaded successfully.",
+            "newFilename" => $newFilename,
+            "folder" => $folderKey,
+        ];
     }
 
     public static function getAllShareFolderLinks(): array

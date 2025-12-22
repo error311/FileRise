@@ -6,6 +6,7 @@ require_once PROJECT_ROOT . '/src/models/FileModel.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/models/FolderModel.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
+require_once PROJECT_ROOT . '/src/lib/AuditHook.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
@@ -654,6 +655,18 @@ class FileController
 
             // --- Do the copy ----------------------------------------------------
             $result = FileModel::copyFiles($sourceFolder, $destinationFolder, $files);
+            if (isset($result['success'])) {
+                foreach ($files as $name) {
+                    $from = ($sourceFolder === 'root') ? $name : ($sourceFolder . '/' . $name);
+                    $to   = ($destinationFolder === 'root') ? $name : ($destinationFolder . '/' . $name);
+                    AuditHook::log('file.copy', [
+                        'user'   => $username,
+                        'folder' => $destinationFolder,
+                        'from'   => $from,
+                        'to'     => $to,
+                    ]);
+                }
+            }
             $this->_jsonOut($result);
         } catch (Throwable $e) {
             error_log('FileController::copyFiles error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -729,6 +742,16 @@ class FileController
 
             // --- Perform delete --------------------------------------------------
             $result = FileModel::deleteFiles($folder, $files);
+            if (isset($result['success'])) {
+                foreach ($files as $name) {
+                    $path = ($folder === 'root') ? $name : ($folder . '/' . $name);
+                    AuditHook::log('file.delete', [
+                        'user'   => $username,
+                        'folder' => $folder,
+                        'path'   => $path,
+                    ]);
+                }
+            }
             $this->_jsonOut($result);
         } catch (Throwable $e) {
             error_log('FileController::deleteFiles error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -822,6 +845,18 @@ class FileController
 
             // --- Perform move ----------------------------------------------------
             $result = FileModel::moveFiles($sourceFolder, $destinationFolder, $files);
+            if (isset($result['success'])) {
+                foreach ($files as $name) {
+                    $from = ($sourceFolder === 'root') ? $name : ($sourceFolder . '/' . $name);
+                    $to   = ($destinationFolder === 'root') ? $name : ($destinationFolder . '/' . $name);
+                    AuditHook::log('file.move', [
+                        'user'   => $username,
+                        'folder' => $destinationFolder,
+                        'from'   => $from,
+                        'to'     => $to,
+                    ]);
+                }
+            }
             $this->_jsonOut($result);
         } catch (Throwable $e) {
             error_log('FileController::moveFiles error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -890,6 +925,13 @@ class FileController
                 $this->_jsonOut($result, 400);
                 return;
             }
+            $finalName = isset($result['newName']) ? (string)$result['newName'] : $newName;
+            AuditHook::log('file.rename', [
+                'user'   => $username,
+                'folder' => $folder,
+                'from'   => ($folder === 'root') ? $oldName : ($folder . '/' . $oldName),
+                'to'     => ($folder === 'root') ? $finalName : ($folder . '/' . $finalName),
+            ]);
             $this->_jsonOut($result);
         } catch (Throwable $e) {
             error_log('FileController::renameFile error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -972,6 +1014,11 @@ class FileController
                 $this->_jsonOut($result, 400);
                 return;
             }
+            AuditHook::log('file.edit', [
+                'user'   => $username,
+                'folder' => $folder,
+                'path'   => ($folder === 'root') ? $fileName : ($folder . '/' . $fileName),
+            ]);
             $this->_jsonOut($result);
         } catch (Throwable $e) {
             error_log('FileController::saveFile error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -1268,6 +1315,24 @@ class FileController
             $inline = in_array($ext, $inlineImageTypes, true) && $inlineParam;
         }
 
+        $portalMeta = null;
+        if (!empty($_GET['source']) && strtolower((string)$_GET['source']) === 'portal') {
+            $slug = trim((string)($_GET['portal'] ?? ''));
+            if ($slug !== '') {
+                $slug = str_replace(["\r", "\n"], '', $slug);
+                $portalMeta = ['portal' => $slug];
+            }
+        }
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+            AuditHook::log('file.download', [
+                'user'   => $username,
+                'folder' => $folder,
+                'path'   => ($folder === 'root') ? $file : ($folder . '/' . $file),
+                'meta'   => $portalMeta,
+            ]);
+        }
+
         // Encrypted-at-rest files: decrypt on download (no Range)
         $isEncryptedFile = false;
         try {
@@ -1384,6 +1449,14 @@ class FileController
             echo "Not found";
             return;
         }
+
+        AuditHook::log('file.download_zip', [
+            'user'   => $username,
+            'folder' => (string)($job['folder'] ?? 'root'),
+            'meta'   => [
+                'files' => is_array($job['files'] ?? null) ? count($job['files']) : null,
+            ],
+        ]);
 
         @session_write_close();
         @set_time_limit(0);
@@ -1597,6 +1670,15 @@ class FileController
             }
 
             $result = FileModel::extractZipArchive($folder, $data['files']);
+            if (isset($result['success'])) {
+                AuditHook::log('file.extract_zip', [
+                    'user'   => $username,
+                    'folder' => $folder,
+                    'meta'   => [
+                        'files' => is_array($data['files']) ? count($data['files']) : null,
+                    ],
+                ]);
+            }
             $this->_jsonOut($result);
         } catch (Throwable $e) {
             error_log('FileController::extractZip error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -1909,6 +1991,16 @@ class FileController
         header("Pragma: no-cache");
         header('Content-Length: ' . filesize($realFilePath));
 
+        AuditHook::log('file.download', [
+            'user'   => 'share:' . $token,
+            'source' => 'share',
+            'folder' => ($folder === '' || strtolower($folder) === 'root') ? 'root' : $folder,
+            'path'   => ($folder === '' || strtolower($folder) === 'root') ? $file : ($folder . '/' . $file),
+            'meta'   => [
+                'token' => $token,
+            ],
+        ]);
+
         readfile($realFilePath);
         exit;
     }
@@ -2005,6 +2097,16 @@ class FileController
             }
 
             $result = FileModel::createShareLink($folder, $file, $expirationSeconds, $password);
+            if (isset($result['token'])) {
+                AuditHook::log('share.link.create', [
+                    'user'   => $username,
+                    'folder' => $folder,
+                    'path'   => ($folder === 'root') ? $file : ($folder . '/' . $file),
+                    'meta'   => [
+                        'token' => $result['token'],
+                    ],
+                ]);
+            }
             $this->_jsonOut($result);
         } catch (Throwable $e) {
             error_log('FileController::createShareLink error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -2357,6 +2459,15 @@ class FileController
         }
 
         $deleted = FileModel::deleteShareLink($token);
+        if ($deleted) {
+            $username = $_SESSION['username'] ?? 'Unknown';
+            AuditHook::log('share.link.delete', [
+                'user' => $username,
+                'meta' => [
+                    'token' => $token,
+                ],
+            ]);
+        }
         echo json_encode($deleted ? ['success' => true] : ['success' => false, 'error' => 'Not found']);
     }
 
@@ -2400,6 +2511,11 @@ class FileController
                 $this->_jsonOut(['success' => false, 'error' => $result['error'] ?? 'Failed to create file'], $result['code'] ?? 400);
                 return;
             }
+            AuditHook::log('file.create', [
+                'user'   => $username,
+                'folder' => $folder,
+                'path'   => ($folder === 'root') ? $filename : ($folder . '/' . $filename),
+            ]);
             $this->_jsonOut(['success' => true]);
         } catch (Throwable $e) {
             error_log('FileController::createFile error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());

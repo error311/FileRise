@@ -1,5 +1,35 @@
 # Changelog
 
+## Changes 12/21/2025 (Core v2.11.0 & Pro v1.4.0)
+
+`release(v2.11.0): add Pro audit logs + configurable hover preview limits`
+
+**Added**  
+
+- **Pro: Audit logging + activity history**
+  - New audit logging configuration (enable/level/rotation limits) and a new **Admin Panel → Pro Features** section with filters and CSV export.
+  - New endpoints:
+    - `GET /api/pro/audit/list.php`
+    - `GET /api/pro/audit/exportCsv.php`
+- **Audit hooks across the app (best-effort / non-blocking)**
+  - A new `AuditHook` shim records core actions when Pro Audit is available.
+  - Logs key events from **Web UI**, **WebDAV**, **share links**, and **client portals** (uploads/downloads, folder ops, etc.).
+- **Display setting: Hover preview max image size**
+  - New `display.hoverPreviewMaxImageMb` setting (clamped) controlling hover previews + gallery thumbnails.
+
+**Changed**  
+
+- Admin Panel: reorganized “Search Everywhere” under **Pro Features** and added audit controls.
+- Portal requests now tag downloads/uploads with `source=portal` and the portal slug for attribution.
+
+**Fixed**  
+
+- Folder deletion now also removes explicit ACL entries for the deleted subtree (best-effort cleanup).
+- Dark mode styling: number inputs now match other input theming.
+- Folder access UI: safer grants handling + improved help text and row styling.
+
+---
+
 ## Changes 12/19/2025 (v2.10.5)
 
 `release(v2.10.5): cleanup stale crypto jobs + tighten encryption key-file UX`

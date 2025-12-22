@@ -6,6 +6,7 @@ require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
+require_once PROJECT_ROOT . '/src/lib/AuditHook.php';
 
 class UploadModel
 {
@@ -39,6 +40,16 @@ class UploadModel
         }
 
         return $f; // safe, normalised, with spaces allowed
+    }
+
+    private static function portalMetaFromRequest(): ?array
+    {
+        $src = $_POST['source'] ?? $_GET['source'] ?? '';
+        if (strtolower((string)$src) !== 'portal') return null;
+        $slug = trim((string)($_POST['portal'] ?? $_GET['portal'] ?? ''));
+        if ($slug === '') return null;
+        $slug = str_replace(["\r", "\n"], '', $slug);
+        return ['portal' => $slug];
     }
 
     private static function isVirusScanEnabled(): bool
@@ -260,6 +271,13 @@ class UploadModel
                 file_put_contents($metadataFile, json_encode($collection, JSON_PRETTY_PRINT));
             }
 
+            AuditHook::log('file.upload', [
+                'user'   => $uploader,
+                'folder' => $folderForLog,
+                'path'   => ($folderForLog === 'root') ? $resumableFilename : ($folderForLog . '/' . $resumableFilename),
+                'meta'   => self::portalMetaFromRequest(),
+            ]);
+
             // Cleanup temp
             self::rrmdir($tempDir);
 
@@ -369,6 +387,14 @@ class UploadModel
                 return ['error' => $msg];
             }
 
+            $uploader = $_SESSION['username'] ?? 'Unknown';
+            AuditHook::log('file.upload', [
+                'user'   => $uploader,
+                'folder' => $folderForLog,
+                'path'   => ($folderForLog === 'root') ? $safeFileName : ($folderForLog . '/' . $safeFileName),
+                'meta'   => self::portalMetaFromRequest(),
+            ]);
+
             $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
             $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
             $metadataFile     = META_DIR . $metadataFileName;
@@ -385,7 +411,6 @@ class UploadModel
 
             if (!isset($metadataCollection[$metadataKey][$safeFileName])) {
                 $uploadedDate = date(DATE_TIME_FORMAT);
-                $uploader     = $_SESSION['username'] ?? 'Unknown';
                 $metadataCollection[$metadataKey][$safeFileName] = [
                     'uploaded' => $uploadedDate,
                     'uploader' => $uploader,

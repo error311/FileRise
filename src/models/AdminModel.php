@@ -145,6 +145,15 @@ class AdminModel
             ],
             'demoMode' => (defined('FR_DEMO_MODE') && FR_DEMO_MODE),
         ];
+        $displayCfg = (isset($config['display']) && is_array($config['display']))
+            ? $config['display']
+            : [];
+        $hoverPreviewMaxImageMb = isset($displayCfg['hoverPreviewMaxImageMb'])
+            ? (int)$displayCfg['hoverPreviewMaxImageMb']
+            : 8;
+        $public['display'] = [
+            'hoverPreviewMaxImageMb' => max(1, min(50, $hoverPreviewMaxImageMb)),
+        ];
 
         // --- ONLYOFFICE public flag ---
         $ooEnabled = null;
@@ -224,6 +233,23 @@ class AdminModel
             'enabled'      => $proSearchEnabled,
             'defaultLimit' => max(1, min(200, $proSearchDefaultLimit)),
             'lockedByEnv'  => $proSearchLockedByEnv,
+        ];
+
+        $proAuditCfg = (isset($config['proAudit']) && is_array($config['proAudit']))
+            ? $config['proAudit']
+            : [];
+        $proAuditAvailable = $isProActive && class_exists('ProAudit');
+        $proAuditLevelRaw = isset($proAuditCfg['level']) ? (string)$proAuditCfg['level'] : 'standard';
+        $proAuditLevel = ($proAuditLevelRaw === 'standard' || $proAuditLevelRaw === 'verbose') ? $proAuditLevelRaw : 'standard';
+        $proAuditMaxFileMb = isset($proAuditCfg['maxFileMb']) ? (int)$proAuditCfg['maxFileMb'] : 200;
+        $proAuditMaxFiles = isset($proAuditCfg['maxFiles']) ? (int)$proAuditCfg['maxFiles'] : 10;
+
+        $public['proAudit'] = [
+            'enabled'   => $proAuditAvailable && !empty($proAuditCfg['enabled']),
+            'level'     => $proAuditLevel,
+            'maxFileMb' => max(10, min(2048, $proAuditMaxFileMb)),
+            'maxFiles'  => max(1, min(50, $proAuditMaxFiles)),
+            'available' => $proAuditAvailable,
         ];
 
         $public['pro'] = [
@@ -392,6 +418,37 @@ class AdminModel
                 (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE)
                     ? !$configUpdate['proSearch']['enabled']
                     : false;
+        }
+
+        // Pro audit logging
+        if (!isset($configUpdate['proAudit']) || !is_array($configUpdate['proAudit'])) {
+            $configUpdate['proAudit'] = [
+                'enabled' => false,
+                'level' => 'standard',
+                'maxFileMb' => 200,
+                'maxFiles' => 10,
+            ];
+        } else {
+            $configUpdate['proAudit']['enabled'] = !empty($configUpdate['proAudit']['enabled']);
+            $levelRaw = isset($configUpdate['proAudit']['level']) ? (string)$configUpdate['proAudit']['level'] : 'standard';
+            $configUpdate['proAudit']['level'] = ($levelRaw === 'standard' || $levelRaw === 'verbose') ? $levelRaw : 'standard';
+
+            $maxFileMb = isset($configUpdate['proAudit']['maxFileMb']) ? (int)$configUpdate['proAudit']['maxFileMb'] : 200;
+            $configUpdate['proAudit']['maxFileMb'] = max(10, min(2048, $maxFileMb));
+
+            $maxFiles = isset($configUpdate['proAudit']['maxFiles']) ? (int)$configUpdate['proAudit']['maxFiles'] : 10;
+            $configUpdate['proAudit']['maxFiles'] = max(1, min(50, $maxFiles));
+        }
+
+        if (!isset($configUpdate['display']) || !is_array($configUpdate['display'])) {
+            $configUpdate['display'] = [
+                'hoverPreviewMaxImageMb' => 8,
+            ];
+        } else {
+            $hoverPreviewMaxImageMb = isset($configUpdate['display']['hoverPreviewMaxImageMb'])
+                ? (int)$configUpdate['display']['hoverPreviewMaxImageMb']
+                : 8;
+            $configUpdate['display']['hoverPreviewMaxImageMb'] = max(1, min(50, $hoverPreviewMaxImageMb));
         }
 
         if (!isset($configUpdate['branding']) || !is_array($configUpdate['branding'])) {
@@ -608,6 +665,35 @@ class AdminModel
                 }
             }
 
+            // Pro audit logging config
+            if (!isset($config['proAudit']) || !is_array($config['proAudit'])) {
+                $config['proAudit'] = [
+                    'enabled' => false,
+                    'level' => 'standard',
+                    'maxFileMb' => 200,
+                    'maxFiles' => 10,
+                ];
+            } else {
+                $config['proAudit']['enabled'] = !empty($config['proAudit']['enabled']);
+                $levelRaw = isset($config['proAudit']['level']) ? (string)$config['proAudit']['level'] : 'standard';
+                $config['proAudit']['level'] = ($levelRaw === 'standard' || $levelRaw === 'verbose') ? $levelRaw : 'standard';
+                $maxFileMb = isset($config['proAudit']['maxFileMb']) ? (int)$config['proAudit']['maxFileMb'] : 200;
+                $config['proAudit']['maxFileMb'] = max(10, min(2048, $maxFileMb));
+                $maxFiles = isset($config['proAudit']['maxFiles']) ? (int)$config['proAudit']['maxFiles'] : 10;
+                $config['proAudit']['maxFiles'] = max(1, min(50, $maxFiles));
+            }
+
+            if (!isset($config['display']) || !is_array($config['display'])) {
+                $config['display'] = [
+                    'hoverPreviewMaxImageMb' => 8,
+                ];
+            } else {
+                $hoverPreviewMaxImageMb = isset($config['display']['hoverPreviewMaxImageMb'])
+                    ? (int)$config['display']['hoverPreviewMaxImageMb']
+                    : 8;
+                $config['display']['hoverPreviewMaxImageMb'] = max(1, min(50, $hoverPreviewMaxImageMb));
+            }
+
             // Branding
             if (!isset($config['branding']) || !is_array($config['branding'])) {
                 $config['branding'] = [
@@ -675,6 +761,15 @@ class AdminModel
             'proSearch'             => [
                 'enabled' => true,
                 'defaultLimit' => 50,
+            ],
+            'proAudit'              => [
+                'enabled' => false,
+                'level' => 'standard',
+                'maxFileMb' => 200,
+                'maxFiles' => 10,
+            ],
+            'display'               => [
+                'hoverPreviewMaxImageMb' => 8,
             ],
             'branding'              => [
                 'customLogoUrl' => '',

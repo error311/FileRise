@@ -22,7 +22,7 @@ function portalCanUpload() {
     return !!portal.canUpload;
   }
 
-  // Fallbacks for older bundles (if you ever add these)
+  // Fallbacks for older bundles 
   if (typeof portal.allowUpload !== 'undefined') {
     return !!portal.allowUpload;
   }
@@ -703,6 +703,7 @@ async function loadPortalFiles() {
     }
 
     const accent = portal.brandColor && portal.brandColor.trim();
+    const portalSlug = getPortalSlug();
 
     listEl.innerHTML = '';
     listEl.classList.add('portal-files-grid'); // gallery layout
@@ -743,7 +744,9 @@ async function loadPortalFiles() {
           '/api/file/download.php?folder=' +
           encodeURIComponent(folder) +
           '&file=' + encodeURIComponent(fname) +
-          '&inline=1&t=' + Date.now()
+          '&inline=1&t=' + Date.now() +
+          '&source=portal' +
+          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '')
         );
 
         const img = document.createElement('img');
@@ -770,7 +773,9 @@ async function loadPortalFiles() {
         a.href = withBase(
           '/api/file/download.php?folder=' +
           encodeURIComponent(folder) +
-          '&file=' + encodeURIComponent(fname)
+          '&file=' + encodeURIComponent(fname) +
+          '&source=portal' +
+          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '')
         );
         a.textContent = 'Download';
         a.className = 'portal-file-card-download';
@@ -879,6 +884,7 @@ async function uploadFiles(fileList) {
   }
 
   const folder = portalFolder();
+  const portalSlug = getPortalSlug();
 
   setStatus('Uploading ' + files.length + ' file(s)…');
   let successCount = 0;
@@ -892,6 +898,10 @@ async function uploadFiles(fileList) {
     // Match main upload.js
     form.append('file[]', file);
     form.append('folder', folder);
+    form.append('source', 'portal');
+    if (portalSlug) {
+      form.append('portal', portalSlug);
+    }
     if (csrf) {
       form.append('upload_token', csrf);  // legacy alias, but your controller supports it
     }
@@ -903,7 +913,8 @@ async function uploadFiles(fileList) {
           method: 'POST',
           credentials: 'include',
           headers: {
-            'X-CSRF-Token': csrf || ''
+            'X-CSRF-Token': csrf || '',
+            'X-FR-Source': 'portal'
           },
           body: form
         });

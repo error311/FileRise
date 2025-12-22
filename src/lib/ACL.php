@@ -173,6 +173,36 @@ class ACL
         self::save($acl);
     }
 
+    /** Remove explicit ACL entries for a folder subtree. */
+    public static function deleteTree(string $folder): array
+    {
+        $prefix = self::normalizeFolder($folder);
+        if ($prefix === '' || $prefix === 'root') {
+            return ['changed' => false, 'removed' => 0];
+        }
+
+        $acl = self::$cache ?? self::loadFresh();
+        if (!isset($acl['folders']) || !is_array($acl['folders'])) {
+            return ['changed' => false, 'removed' => 0];
+        }
+
+        $needle = $prefix . '/';
+        $removed = 0;
+        foreach (array_keys($acl['folders']) as $key) {
+            if ($key === $prefix || strpos($key, $needle) === 0) {
+                unset($acl['folders'][$key]);
+                $removed++;
+            }
+        }
+
+        if ($removed > 0) {
+            self::save($acl);
+            return ['changed' => true, 'removed' => $removed];
+        }
+
+        return ['changed' => false, 'removed' => 0];
+    }
+
     private static function loadFresh(): array
     {
         $path = self::path();

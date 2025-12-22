@@ -2444,7 +2444,7 @@ body.dark-mode #fileList table.filr-table tbody tr.selected>td,body.dark-mode #f
 body.dark-mode .modal{background-color:rgba(0,0,0,.65)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body.dark-mode .modal .modal-content,body.dark-mode .editor-modal,body.dark-mode .image-preview-modal-content,body.dark-mode #restoreFilesModal .modal-content,body.dark-mode #downloadProgressModal .modal-content{background:var(--fr-surface-dark)!important;border-radius:12px!important;border:1px solid var(--fr-border-dark)!important;box-shadow:0 8px 24px rgba(0,0,0,.9)!important}
 body.dark-mode .modal .modal-content::before,body.dark-mode .editor-modal::before,body.dark-mode .image-preview-modal-content::before,body.dark-mode #restoreFilesModal .modal-content::before,body.dark-mode #downloadProgressModal .modal-content::before{box-shadow:none!important}
-body.dark-mode input[type=text],body.dark-mode input[type=password],body.dark-mode input[type=email],body.dark-mode input[type=url],body.dark-mode select,body.dark-mode textarea{background:#121212!important;border-color:#3d3d3d!important;color:#f1f1f1!important}
+body.dark-mode input[type=text],body.dark-mode input[type=password],body.dark-mode input[type=email],body.dark-mode input[type=url],body.dark-mode input[type=number],body.dark-mode select,body.dark-mode textarea{background:#121212!important;border-color:#3d3d3d!important;color:#f1f1f1!important}
 body.dark-mode input::placeholder,body.dark-mode textarea::placeholder{color:#777!important}
 body.dark-mode input:focus,body.dark-mode select:focus,body.dark-mode textarea:focus{border-color:#3ea6ff!important;box-shadow:0 0 0 1px rgba(62,166,255,.7)!important}
 #deleteFolderBtn,#confirmDeleteFolder{background-color:#b3261e!important;border-color:#b3261e!important;box-shadow:0 4px 10px rgba(0,0,0,.7)!important}
@@ -2650,6 +2650,22 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
 }
 .folder-access-row:last-child { margin-bottom: 0; }
 .dark-mode .folder-access-row { border-color: rgba(255,255,255,0.14); }
+.folder-access-row.row-even:not(.inherited-row):not(.admin-locked-row) {
+  background: rgba(0,0,0,0.02);
+  border-color: rgba(0,0,0,0.1);
+}
+.dark-mode .folder-access-row.row-even:not(.inherited-row):not(.admin-locked-row) {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.18);
+}
+.folder-access-row.is-active {
+  border-color: rgba(32,132,255,0.7);
+  box-shadow: 0 0 0 2px rgba(32,132,255,0.2);
+}
+.dark-mode .folder-access-row.is-active {
+  border-color: rgba(132,190,255,0.8);
+  box-shadow: 0 0 0 2px rgba(132,190,255,0.25);
+}
 
 .perm-grid {
   display: grid;
@@ -2754,6 +2770,13 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
   display:inline-flex; align-items:center; gap:6px;
   font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
   min-width: 0;
+}
+.folder-name-text {
+  font-weight: 700;
+  color: #111827;
+}
+.dark-mode .folder-name-text {
+  color: #f1f5f9;
 }
 .inherit-flag-note {
   display:inline-flex;

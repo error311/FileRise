@@ -59,6 +59,7 @@ const translations = {
     "download_zip": "Download Zip",
     "extract_zip": "Extract Zip",
     "preview": "Preview",
+    "preview_too_large": "Preview too large to display.",
     "edit": "Edit",
     "rename": "Rename",
     "trash_empty": "Trash is empty.",
@@ -197,7 +198,7 @@ const translations = {
 
     // Admin Panel
     "header_settings": "Header Settings",
-    "header_footer_settings": "Header & Footer Settings",
+    "header_footer_settings": "Header, Preview & Footer Settings",
     "shared_max_upload_size_bytes_title": "Shared Max Upload Size",
     "shared_max_upload_size_bytes": "Shared Max Upload Size (bytes)",
     "max_bytes_shared_uploads_note": "Enter maximum bytes allowed for shared-folder uploads",
@@ -304,6 +305,10 @@ const translations = {
     "error_loading_user_grants": "Error loading user grants",
     "click_to_edit": "Click to edit",
     "folder_access": "Folder Access",
+    "grant_folders_help": "Grant per-folder capabilities to each user. View (all) shows all contents; View (own) shows only the user's uploads. Write is file-level ops (upload/edit/rename/copy/delete/extract). Create is file-only; subfolders require Manage/Ownership. Manage/Ownership enables folder actions (create/rename/move/delete, grant access) and implies View (all), Write, and Share. Share File auto-enables View (own); Share Folder requires Manage/Ownership + View (all).",
+    "grant_folders_help_short": "Per-folder access. Create is file-only; subfolders need Manage/Ownership. Share Folder needs Manage + View (all).",
+    "help_more": "More",
+    "help_less": "Less",
     "move_folder": "Move Folder",
     "move_folder_message": "Select a destination folder to move this folder to:",
     "move_folder_title": "Move this folder",
@@ -604,6 +609,10 @@ const translations = {
     "add_user": "Agregar usuario",
     "remove_user": "Eliminar usuario",
     "user_permissions": "Permisos de Usuario",
+    "grant_folders_help": "Otorga capacidades por carpeta a cada usuario. Ver (todo) muestra todo el contenido; Ver (propio) muestra solo los archivos subidos por el usuario. Escribir es para operaciones de archivo (cargar/editar/renombrar/copiar/eliminar/extraer). Crear es solo archivos; las subcarpetas requieren Gestión/Propiedad. Gestión/Propiedad habilita acciones de carpeta (crear/renombrar/mover/eliminar, otorgar acceso) e implica Ver (todo), Escribir y Compartir. Compartir archivo activa Ver (propio); Compartir carpeta requiere Gestión/Propiedad + Ver (todo).",
+    "grant_folders_help_short": "Acceso por carpeta. Crear es solo archivos; las subcarpetas requieren Gestión/Propiedad. Compartir carpeta requiere Gestión + Ver (todo).",
+    "help_more": "Más",
+    "help_less": "Menos",
     "oidc_configuration": "Configuración OIDC",
     "oidc_provider_url": "URL del Proveedor OIDC",
     "oidc_client_id": "ID del Cliente OIDC",
@@ -834,6 +843,10 @@ const translations = {
     "add_user": "Ajouter un utilisateur",
     "remove_user": "Supprimer un utilisateur",
     "user_permissions": "Permissions des utilisateurs",
+    "grant_folders_help": "Attribuez des droits par dossier à chaque utilisateur. Voir (tout) affiche tout le contenu ; Voir (propre) affiche uniquement les fichiers téléversés par l'utilisateur. Écrire couvre les opérations de fichier (téléverser/éditer/renommer/copier/supprimer/extraire). Créer est réservé aux fichiers ; les sous-dossiers nécessitent Gestion/Propriété. Gestion/Propriété active les actions de dossier (créer/renommer/déplacer/supprimer, accorder l'accès) et implique Voir (tout), Écrire et Partager. Partager un fichier active Voir (propre) ; Partager un dossier nécessite Gestion/Propriété + Voir (tout).",
+    "grant_folders_help_short": "Accès par dossier. Créer concerne les fichiers uniquement ; les sous-dossiers nécessitent Gestion/Propriété. Partager un dossier requiert Gestion + Voir (tout).",
+    "help_more": "Plus",
+    "help_less": "Moins",
     "oidc_configuration": "Configuration OIDC",
     "oidc_provider_url": "URL du fournisseur OIDC",
     "oidc_client_id": "ID du client OIDC",
@@ -1073,6 +1086,10 @@ const translations = {
     "add_user": "Benutzer hinzufügen",
     "remove_user": "Benutzer entfernen",
     "user_permissions": "Benutzerberechtigungen",
+    "grant_folders_help": "Vergibt ordnerbezogene Berechtigungen pro Benutzer. Anzeigen (alle) zeigt alle Inhalte; Anzeigen (eigene) zeigt nur die Uploads des Benutzers. Schreiben umfasst Dateiaktionen (hochladen/bearbeiten/umbenennen/kopieren/löschen/extrahieren). Erstellen ist nur für Dateien; Unterordner erfordern Verwalten/Eigentümer. Verwalten/Eigentümer aktiviert Ordneraktionen (erstellen/umbenennen/verschieben/löschen, Zugriff vergeben) und impliziert Anzeigen (alle), Schreiben und Teilen. Datei teilen aktiviert Anzeigen (eigene); Ordner teilen erfordert Verwalten/Eigentümer + Anzeigen (alle).",
+    "grant_folders_help_short": "Ordnerbezogener Zugriff. Erstellen ist nur für Dateien; Unterordner benötigen Verwalten/Eigentümer. Ordner teilen erfordert Verwalten + Anzeigen (alle).",
+    "help_more": "Mehr",
+    "help_less": "Weniger",
     "oidc_configuration": "OIDC-Konfiguration",
     "oidc_provider_url": "OIDC-Anbieter-URL",
     "oidc_client_id": "OIDC-Client-ID",
@@ -1370,7 +1387,11 @@ const translations = {
     "bypass_ownership": "绕过所有权限制",
     "error_loading_user_grants": "加载用户授权时出错",
     "click_to_edit": "点击编辑",
-    "folder_access": "文件夹访问"
+    "folder_access": "文件夹访问",
+    "grant_folders_help": "为每个用户授予按文件夹的权限。查看（全部）显示所有内容；查看（自己的）仅显示用户上传的文件。写入是文件级操作（上传/编辑/重命名/复制/删除/解压）。创建仅限文件；创建子文件夹需要 管理/所有权。管理/所有权 启用文件夹操作（创建/重命名/移动/删除、授予访问），并隐含 查看（全部）、写入 和 分享。分享文件会自动启用 查看（自己的）；分享文件夹需要 管理/所有权 + 查看（全部）。",
+    "grant_folders_help_short": "按文件夹访问。创建仅限文件；子文件夹需 管理/所有权。分享文件夹需 管理 + 查看（全部）。",
+    "help_more": "更多",
+    "help_less": "收起"
   }
 
 };

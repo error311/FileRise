@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../src/lib/ACL.php';
 require_once __DIR__ . '/../../src/models/FileModel.php';
 require_once __DIR__ . '/../../src/models/FolderCrypto.php';
+require_once __DIR__ . '/../../src/lib/AuditHook.php';
 require_once __DIR__ . '/CurrentUser.php';
 
 use Sabre\DAV\IFile;
@@ -50,7 +51,15 @@ class FileRiseFile implements IFile, INode {
         if (!$this->canTouchOwnership($folderKey, $fileName)) {
             throw new Forbidden('You do not own this file');
         }
-        \FileModel::deleteFiles($folderKey, [$fileName]);
+        $result = \FileModel::deleteFiles($folderKey, [$fileName]);
+        if (is_array($result) && isset($result['success'])) {
+            AuditHook::log('file.delete', [
+                'user'   => $this->user,
+                'source' => 'webdav',
+                'folder' => $folderKey,
+                'path'   => ($folderKey === 'root') ? $fileName : ($folderKey . '/' . $fileName),
+            ]);
+        }
     }
 
     public function setName($newName): void {
@@ -71,6 +80,12 @@ class FileRiseFile implements IFile, INode {
                 throw new Forbidden('No view access to this file');
             }
         }
+        AuditHook::log('file.download', [
+            'user'   => $this->user,
+            'source' => 'webdav',
+            'folder' => $folderKey,
+            'path'   => ($folderKey === 'root') ? $fileName : ($folderKey . '/' . $fileName),
+        ]);
         return fopen($this->path, 'rb');
     }
 
@@ -113,6 +128,12 @@ class FileRiseFile implements IFile, INode {
         );
         $this->updateMetadata($folderKey, $fileName);
         if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+        AuditHook::log($exists ? 'file.edit' : 'file.upload', [
+            'user'   => $this->user,
+            'source' => 'webdav',
+            'folder' => $folderKey,
+            'path'   => ($folderKey === 'root') ? $fileName : ($folderKey . '/' . $fileName),
+        ]);
         return null;
     }
 

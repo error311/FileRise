@@ -1454,6 +1454,15 @@ class AdminController
             'clamav'              => [
                 'scanUploads' => false,
             ],
+            'proAudit'            => [
+                'enabled' => false,
+                'level' => 'standard',
+                'maxFileMb' => 200,
+                'maxFiles' => 10,
+            ],
+            'display'             => [
+                'hoverPreviewMaxImageMb' => 8,
+            ],
         ];
 
         // header_title (cap length and strip control chars)
@@ -1696,6 +1705,47 @@ if (isset($data['oidc']['allowDemote'])) {
             if (array_key_exists('defaultLimit', $data['proSearch'])) {
                 $lim = filter_var($data['proSearch']['defaultLimit'], FILTER_VALIDATE_INT);
                 $merged['proSearch']['defaultLimit'] = max(1, min(200, $lim !== false ? $lim : 50));
+            }
+        }
+
+        if (isset($data['proAudit']) && is_array($data['proAudit'])) {
+            if (!isset($merged['proAudit']) || !is_array($merged['proAudit'])) {
+                $merged['proAudit'] = [
+                    'enabled' => false,
+                    'level' => 'standard',
+                    'maxFileMb' => 200,
+                    'maxFiles' => 10,
+                ];
+            }
+            if (array_key_exists('enabled', $data['proAudit'])) {
+                $merged['proAudit']['enabled'] = filter_var(
+                    $data['proAudit']['enabled'],
+                    FILTER_VALIDATE_BOOLEAN
+                );
+            }
+            if (array_key_exists('level', $data['proAudit'])) {
+                $raw = trim((string)$data['proAudit']['level']);
+                $merged['proAudit']['level'] = ($raw === 'standard' || $raw === 'verbose') ? $raw : 'standard';
+            }
+            if (array_key_exists('maxFileMb', $data['proAudit'])) {
+                $lim = filter_var($data['proAudit']['maxFileMb'], FILTER_VALIDATE_INT);
+                $merged['proAudit']['maxFileMb'] = max(10, min(2048, $lim !== false ? $lim : 200));
+            }
+            if (array_key_exists('maxFiles', $data['proAudit'])) {
+                $lim = filter_var($data['proAudit']['maxFiles'], FILTER_VALIDATE_INT);
+                $merged['proAudit']['maxFiles'] = max(1, min(50, $lim !== false ? $lim : 10));
+            }
+        }
+
+        if (isset($data['display']) && is_array($data['display'])) {
+            if (!isset($merged['display']) || !is_array($merged['display'])) {
+                $merged['display'] = [
+                    'hoverPreviewMaxImageMb' => 8,
+                ];
+            }
+            if (array_key_exists('hoverPreviewMaxImageMb', $data['display'])) {
+                $lim = filter_var($data['display']['hoverPreviewMaxImageMb'], FILTER_VALIDATE_INT);
+                $merged['display']['hoverPreviewMaxImageMb'] = max(1, min(50, $lim !== false ? $lim : 8));
             }
         }
 

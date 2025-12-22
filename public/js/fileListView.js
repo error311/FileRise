@@ -441,13 +441,24 @@ function repaintStripIcon(folder) {
   iconSpan.innerHTML = folderSVG(kind, { encrypted: isEncryptedForFolderIcon(folder) });
 }
 const TEXT_PREVIEW_MAX_BYTES = 512 * 1024;
-const MAX_IMAGE_PREVIEW_BYTES = 8 * 1024 * 1024; // shared cap for hover + gallery thumbs
+const DEFAULT_HOVER_PREVIEW_MAX_MB = 8;
+const MIN_HOVER_PREVIEW_MAX_MB = 1;
+const MAX_HOVER_PREVIEW_MAX_MB = 50;
 const OFFICE_SNIPPET_EXTS = new Set([
   'doc', 'docx', 'docm', 'dotx',
   'xls', 'xlsx', 'xlsm', 'xltx',
   'ppt', 'pptx', 'pptm', 'potx'
 ]);
 const _fileSnippetCache = new Map();
+
+function getMaxImagePreviewBytes() {
+  const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
+  const display = (cfg && typeof cfg.display === 'object') ? cfg.display : {};
+  const raw = parseInt(display.hoverPreviewMaxImageMb, 10);
+  const mb = Number.isFinite(raw) ? raw : DEFAULT_HOVER_PREVIEW_MAX_MB;
+  const clamped = Math.max(MIN_HOVER_PREVIEW_MAX_MB, Math.min(MAX_HOVER_PREVIEW_MAX_MB, mb));
+  return clamped * 1024 * 1024;
+}
 
 function getFileExt(name) {
   const dot = name.lastIndexOf(".");
@@ -1598,7 +1609,8 @@ fetchFolderPeek(folderPath).then(result => {
     // Left: image / video preview OR text snippet OR "No preview"
     if (isImage) {
       const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
-      if (bytes != null && bytes > MAX_IMAGE_PREVIEW_BYTES) {
+      const maxImagePreviewBytes = getMaxImagePreviewBytes();
+      if (bytes != null && bytes > maxImagePreviewBytes) {
         thumbEl.innerHTML = `
           <div style="
             padding:6px 8px;
@@ -4713,6 +4725,7 @@ export function renderGalleryView(folder, container) {
   // slice current page
   const startIdx = (currentPage - 1) * itemsPerPage;
   const pageFiles = filteredFiles.slice(startIdx, startIdx + itemsPerPage);
+  const maxImagePreviewBytes = getMaxImagePreviewBytes();
 
   pageFiles.forEach((file, idx) => {
     const idSafe = encodeURIComponent(file.name) + "-" + (startIdx + idx);
@@ -4723,7 +4736,7 @@ export function renderGalleryView(folder, container) {
     let thumbnail;
     if (/\.(jpe?g|png|gif|bmp|webp|ico)$/i.test(file.name)) {
       const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
-      const tooBig = bytes != null && bytes > MAX_IMAGE_PREVIEW_BYTES;
+      const tooBig = bytes != null && bytes > maxImagePreviewBytes;
       if (tooBig) {
         const sizeLabel = bytes != null ? formatSize(bytes) : '';
         thumbnail = `

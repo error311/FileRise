@@ -11,8 +11,8 @@
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-❤-red)](https://github.com/sponsors/error311)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
 
-**FileRise** is a modern, self-hosted web file manager / WebDAV server.  
-Drag & drop uploads, ACL-aware sharing, **optional folder-level encryption at rest**, OnlyOffice integration, and a clean UI — all in a single PHP app that you control.
+**FileRise** is a self-hosted web file manager with WebDAV, sharing, and per-folder ACLs.
+Drag & drop uploads, OnlyOffice integration, and **optional folder-level encryption at rest** — all in one PHP app you control.
 
 - 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external database required.
 - 🔐 **Granular per-folder ACLs** – Manage View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share, and more — all enforced consistently across the UI, API, and WebDAV.
@@ -40,10 +40,10 @@ Drag & drop uploads, ACL-aware sharing, **optional folder-level encryption at re
   - Correct URL generation for assets, APIs, portals, PWA, and share links
   - Explicit “Published URL” setting for proxy / firewall environments
   - Works with `X-Forwarded-*` headers and Kubernetes ingress setups
-- 👥 **Pro: user groups, client portals, global search & storage explorer** –  
-  Group-based ACLs, brandable client upload portals, **ACL-aware global search across files, folders, users, and permissions**, and an ncdu-style storage explorer for identifying large folders/files and reclaiming disk space directly from the UI.
+- 👥 **Pro: user groups, client portals, global search, storage explorer & audit logs** –  
+  Group-based ACLs, brandable client upload portals, **ACL-aware global search across files, folders, users, and permissions**, an ncdu-style storage explorer for identifying large folders/files and reclaiming disk space directly from the UI, and **Pro Audit Logs** (configurable activity logging with filters + CSV export for tracking key actions across web, WebDAV, shares, and portals).
 
-Full list of features available at [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
+Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
 ![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.9.0.png)
 
@@ -54,48 +54,33 @@ Full list of features available at [Full Feature Wiki](https://github.com/error3
 
 ## Quick links
 
-- 🚀 **Live demo:** [Demo](https://demo.filerise.net) (username: `demo` / password: `demo`)  
-- 📚 **Docs & Wiki:** [Wiki](https://github.com/error311/FileRise/wiki)  
+- 🚀 **Live demo:** [Demo](https://demo.filerise.net) (username: `demo` / password: `demo`)
+- 📚 **Docs & Wiki:** [Wiki](https://github.com/error311/FileRise/wiki)
   - [Features overview](https://github.com/error311/FileRise/wiki/Features)
   - [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV)
   - [ONLYOFFICE](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
-- 🐳 **Docker image:** [Docker](https://github.com/error311/filerise-docker)
-- 💬 **Discord:** [Join the FileRise server](https://discord.com/invite/7WN6f56X2e)
-- 📝 **Changelog:** [Changes](https://github.com/error311/FileRise/blob/master/CHANGELOG.md)
+- 🐳 **Docker image:**  
+  - Docker Hub: [Docker](https://hub.docker.com/r/error311/filerise-docker)
+  - Build pipeline / tags: [Workflow](https://github.com/error311/filerise-docker)
+- 💬 **Discord:** [Discord](https://discord.gg/7WN6f56X2e)
+- 📝 **Changelog:** [Changelog](https://github.com/error311/FileRise/blob/master/CHANGELOG.md)
+
+### Support checklist (please include)
+
+If you open an issue/discussion, please include:
+
+- FileRise version + install method (Docker tag / release ZIP / git)
+- Reverse proxy (Nginx / Traefik / Caddy) + subpath (yes/no)
+- Browser console errors (if any)
+- Server/container logs around the error
 
 ---
 
-## 1. What FileRise does
-
-FileRise turns a folder on your server into a **web-based file explorer** with:
-
-- Folder tree + breadcrumbs for fast navigation
-- Multi-file/folder drag-and-drop uploads
-- Move / copy / rename / delete / extract ZIP
-- Public share links (optionally password-protected & expiring)
-- Tagging and search by name, tag, uploader, and content
-- Trash with restore/purge
-- Inline previews (images, audio, video, PDF) and a built-in code editor
-
-Everything flows through a single ACL engine, so permissions are enforced consistently whether users are in the browser UI, using WebDAV, or hitting the API.
-
-### Login & SSO (OIDC roles + groups)
-
-FileRise supports local accounts, TOTP 2FA, and modern OIDC providers (Auth0, Authentik, Keycloak, …).  
-Beyond “just login”, OIDC can now drive **roles** and **Pro user groups**:
-
-- 🧑‍💻 **Auto-provision users**  
-- 👑 **IdP-driven admin role**  
-- 👥 **Pro: OIDC groups → FileRise Pro user groups**  
-- 🧪 **Admin: OIDC connectivity test**  
-
-➡️ Full docs: [OIDC / SSO setup](https://github.com/error311/FileRise/wiki/OIDC-and-SSO)
-
----
-
-## 2. Install (Docker – recommended)
+## Install (Docker – recommended)
 
 The easiest way to run FileRise is the official Docker image.
+
+> ✅ **Tip:** For stability, pin a version tag (example: `error311/filerise-docker:v2.10.5`) instead of `:latest`.
 
 ### Option A – Quick start (docker run)
 
@@ -135,8 +120,6 @@ On first launch you’ll be guided through creating the **initial admin user**.
 > subfolder (e.g. `/mnt/user/media/filerise_root`) instead of the share root,
 > so scans and permission changes stay scoped to that folder.
 
----
-
 ### Option B – docker-compose.yml
 
 ```yaml
@@ -165,185 +148,123 @@ Bring it up with:
 docker compose up -d
 ```
 
----
-
 ### Common environment variables
 
-| Variable                | Required | Example                          | What it does                                                                                           |
-|-------------------------|----------|----------------------------------|--------------------------------------------------------------------------------------------------------|
-| `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone.                                                                              |
-| `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request (e.g. `5G`, `10G`). Also used to set PHP `upload_max_filesize` and `post_max_size`, and Apache `LimitRequestBody`. |
-| `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / a reverse proxy, else `false`.                                     |
-| `PERSISTENT_TOKENS_KEY` | ✅       | `change_me_super_secret`         | Secret used to sign “remember me”/persistent tokens. **Do not leave this at the default.**            |
-| `DATE_TIME_FORMAT`      | Optional | `Y-m-d H:i`                      | Overrides `DATE_TIME_FORMAT` in `config.php` (controls how dates/times are rendered in the UI).       |
-| `SCAN_ON_START`         | Optional | `true`                           | If `true`, runs `scan_uploads.php` once on container start to index existing files.                    |
-| `CHOWN_ON_START`        | Optional | `true`                           | If `true` (default), recursively `chown`s `uploads/`, `users/`, and `metadata/` to `www-data:www-data` on startup. Set to `false` if you manage ownership yourself. |
+| Variable                | Required | Example                          | What it does |
+|-------------------------|----------|----------------------------------|--------------|
+| `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone. |
+| `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request; also used to set PHP/Apache upload limits. |
+| `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / a reverse proxy, else `false`. |
+| `PERSISTENT_TOKENS_KEY` | ✅       | `change_me_super_secret`         | Secret used to sign “remember me” tokens. **Do not leave this at the default.** |
+| `SCAN_ON_START`         | Optional | `true`                           | If `true`, runs a scan once on container start to index existing files. |
+| `CHOWN_ON_START`        | Optional | `true`                           | If `true`, recursively `chown`s `uploads/`, `users/`, `metadata/` to `www-data`. |
 | `PUID`                  | Optional | `99`                             | If running as root, remap `www-data` user to this UID (e.g. Unraid’s 99).                             |
 | `PGID`                  | Optional | `100`                            | If running as root, remap `www-data` group to this GID (e.g. Unraid’s 100).                           |
-| `HTTP_PORT`             | Optional | `8080`                           | Override Apache `Listen 80` and vhost port with this port inside the container.                       |
-| `HTTPS_PORT`            | Optional | `8443`                           | If you terminate TLS inside the container, override `Listen 443` with this port.                      |
-| `SERVER_NAME`           | Optional | `files.example.com`              | Sets Apache’s `ServerName` (defaults to `FileRise` if not provided).                                  |
-| `LOG_STREAM`            | Optional | `error`                          | Controls which logs are streamed to container stdout: `error`, `access`, `both`, or `none`.           |
-| `VIRUS_SCAN_ENABLED`    | Optional | `true`                           | If `true`, enable ClamAV-based virus scanning for uploads.              |
-| `VIRUS_SCAN_CMD`        | Optional | `clamscan`                       | Command used to scan files. Can be `clamscan`, `clamdscan`, or a wrapper with flags.                  |
-| `CLAMAV_AUTO_UPDATE`    | Optional | `true`                           | If `true` and running as root, call `freshclam` on startup to update signatures.                      |
-| `SHARE_URL`             | Optional | `https://files.example.com`      | Overrides the base URL used when generating public share links (useful behind reverse proxies).       |
+| `FR_PUBLISHED_URL`      | Optional | `https://example.com/files`      | Public URL when behind proxies/subpaths (share links, portals, redirects). |
 
-> If `DATE_TIME_FORMAT` is not set, FileRise uses the default from `config/config.php`
-> (currently `m/d/y  h:iA`).
+> Full list of common env variables: [Common Environment variables](https://github.com/error311/FileRise/wiki/Common-Env-Variables)
 >
-> 🗂 **Using an existing folder tree**  
->
-> - Point `/var/www/uploads` at the folder you want FileRise to manage.
-> - Set `SCAN_ON_START="true"` on the first run to index existing files, then
->   usually set it to `"false"` so the container doesn’t rescan on every restart.
-> - `CHOWN_ON_START="true"` is handy on first run to fix permissions. If you map
->   a large share or already manage ownership yourself, set it to `"false"` to
->   avoid recursive `chown` on every start.
->
-> Volumes:  
->
-> - `/var/www/uploads` – your actual files  
-> - `/var/www/users` – user & pro jsons  
-> - `/var/www/metadata` – tags, search index, share links, etc.
-
-**More Docker / orchestration options (Unraid, Portainer, k8s, reverse proxy, etc.)**  
-
-- [Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)  
-- [Nginx](https://github.com/error311/FileRise/wiki/Nginx-Setup)  
-- [FAQ](https://github.com/error311/FileRise/wiki/FAQ)  
-- [Kubernetes / k8s deployment](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)  
-- Portainer templates: add this URL in Portainer → Settings → App Templates:  
-  `https://raw.githubusercontent.com/error311/filerise-portainer-templates/refs/heads/main/templates.json`
-- See also the Docker repo: [error311/filerise-docker](https://github.com/error311/filerise-docker)
+> 🧩 **Traefik + subpath note (Kubernetes):** use `StripPrefix` and rely on `X-Forwarded-Prefix` + `FR_PUBLISHED_URL`.  
+> See: [Deployments Wiki](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)
+> More deployment docs: [Install Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)
 
 ---
 
-## 3. Manual install (PHP web server)
+## Manual install (PHP web server)
 
-Prefer bare-metal or your own stack? FileRise is just PHP + a few extensions.
+> ⚠️ **Manual installs: understand the default paths (saves you 30 minutes of pain)**
+>
+> By default, FileRise writes data to **these absolute paths**:
+>
+> - `/var/www/uploads`
+> - `/var/www/users`
+> - `/var/www/metadata`
+>
+> Your web server must point to FileRise’s **public/** folder:
+>
+> - DocumentRoot → `/var/www/filerise/public` (example)
+>
+> ✅ **Recommended layout (no config changes):**
+>
+> - Install FileRise code in: `/var/www/filerise`
+> - Create data dirs in: `/var/www/uploads`, `/var/www/users`, `/var/www/metadata`
+>
+> If you install FileRise under `/var/www/html` (or anywhere else), you must either:
+>
+> - still create the data folders at `/var/www/{uploads,users,metadata}` **(simplest)**, or
+> - change the paths in `config/config.php` to match your layout.
+>
+>If you created `users/metadata/uploads` under `/var/www/html`, FileRise will still try to write to `/var/www/users` unless you change config.
 
-**Requirements**  
+### Requirements
 
 - PHP **8.3+**
 - Web server (Apache / Nginx / Caddy + PHP-FPM)
 - PHP extensions: `json`, `curl`, `zip` (and usual defaults)
 - No database required
 
-FileRise ships as a standard PHP app with this layout:
-
-- `config/`
-- `public/`  ← web server **DocumentRoot**
-- `src/`
-- `uploads/`, `users/`, `metadata/` (data directories; you can create them up front as shown below — FileRise will attempt to create them on first run if they’re missing and permissions allow)
+### Step 0: Create data directories (default locations)
 
 ```bash
-mkdir -p uploads users metadata
-chown -R www-data:www-data uploads users metadata   # adjust for your web user
-chmod -R 775 uploads users metadata
+sudo mkdir -p /var/www/uploads /var/www/users /var/www/metadata
+sudo chown -R www-data:www-data /var/www/uploads /var/www/users /var/www/metadata   # adjust web user if needed
+sudo chmod -R 775 /var/www/uploads /var/www/users /var/www/metadata
 ```
 
-You can install from a **release ZIP** (recommended) or from **git**.
+Quick write test:
+
+```bash
+sudo -u www-data touch /var/www/users/.write_test && echo OK
+```
+
+### Install from release ZIP (recommended)
+
+```bash
+cd /var/www
+sudo mkdir -p filerise
+sudo chown -R $USER:$USER /var/www/filerise
+cd /var/www/filerise
+
+VERSION="v2.10.5"  # replace with the tag you want
+ASSET="FileRise-${VERSION}.zip"
+
+curl -fsSL "https://github.com/error311/FileRise/releases/download/${VERSION}/${ASSET}" -o "${ASSET}"
+unzip "${ASSET}"
+```
+
+Point your web server at `public/`:
+
+- Apache: `DocumentRoot /var/www/filerise/public`
+- Nginx: `root /var/www/filerise/public;`
+
+> ✅ After setting DocumentRoot to `.../public`, access FileRise at:
+> `http://serverip/` (not `http://serverip/public/`)
+
+### Install from git (developer mode)
+
+```bash
+cd /var/www
+sudo git clone https://github.com/error311/FileRise.git filerise
+sudo chown -R $USER:$USER /var/www/filerise
+
+cd /var/www/filerise
+composer install
+```
+
+### Manual install troubleshooting (common mistakes)
+
+- **Browsing `/public` in the URL**
+  - Wrong: `http://serverip/public/`
+  - Correct: `http://serverip/`
+- **“Failed to write users file”**
+  - Check your server error log — it will show the exact write path.
+  - If it mentions `/var/www/users/users.txt`, fix permissions on `/var/www/users` (not `/var/www/html/users`).
+- **open_basedir restrictions**
+  - Ensure it includes `/var/www` and `/tmp` (example: `/var/www:/tmp`).
 
 ---
 
-### 3.1 Install from release ZIP (recommended)
-
-1. **Download the latest release ZIP to `/var/www`**
-
-   ```bash
-   cd /var/www
-
-   VERSION="v2.5.2"  # replace with the tag you want
-   ASSET="FileRise-${VERSION}.zip"
-
-   curl -fsSL "https://github.com/error311/FileRise/releases/download/${VERSION}/${ASSET}" -o "${ASSET}"
-   unzip "${ASSET}"
-   # The ZIP already contains config/, public/, src/, etc. at the top level
-   ```
-
-2. **Create data directories (if they don’t exist) and set permissions**
-
-   ```bash
-   mkdir -p uploads users metadata
-   chown -R www-data:www-data uploads users metadata   # adjust for your web user
-   chmod -R 775 uploads users metadata
-   ```
-
-3. **(Usually optional) Install PHP dependencies**
-
-   Release ZIPs are built with `vendor/` included for convenience.  
-   If `vendor/` is missing and you have Composer:
-
-   ```bash
-   cd /var/www
-   composer install --no-dev --optimize-autoloader
-   ```
-
-4. **Point your web server at `public/`**
-
-   - **Apache:** `DocumentRoot /var/www/public`
-   - **Nginx / Caddy:** root should also be `/var/www/public`  
-     (PHP via PHP-FPM)
-
-   Enable URL rewriting:
-
-   - Apache: allow `.htaccess` inside `public/` or copy its rules into your vhost.
-   - Nginx / Caddy: mirror the protections from `public/.htaccess`
-     (no directory listing, block `config`, `src`, etc.).
-
-5. **Open FileRise in the browser**
-
-   Go to your URL (e.g. `https://files.example.com`) and follow the **admin setup** screen.
-
----
-
-### 3.2 Install from git (developer mode)
-
-1. **Clone into `/var/www`**
-
-   ```bash
-   cd /var/www
-   git clone https://github.com/error311/FileRise.git .
-   ```
-
-2. **Create data directories and set permissions**
-
-   ```bash
-   mkdir -p uploads users metadata
-   chown -R www-data:www-data uploads users metadata   # adjust for your web user
-   chmod -R 775 uploads users metadata
-   ```
-
-3. **Install PHP dependencies**
-
-   ```bash
-   composer install
-   ```
-
-4. **Configure your web server**
-
-   - DocumentRoot → `/var/www/public`
-   - PHP-FPM / mod_php enabled
-   - Rewrites / protections as above
-
-5. **Hit your FileRise URL and complete setup**
-
-For detailed examples and reverse proxy snippets, see the Wiki:  
-[Install & Setup](https://github.com/error311/FileRise/wiki/Installation-Setup).
-
----
-
-## 4. Updating an existing manual install
-
-If you deployed FileRise directly in `/var/www`, you can use this helper script
-to update to a new release without touching your data.
-
-Save this as `scripts/update-filerise.sh` [update-filerise.sh](scripts/update-filerise.sh) (make it executable with `chmod +x scripts/update-filerise.sh`):
-
----
-
-## 4. WebDAV & ONLYOFFICE (optional)
+## WebDAV & ONLYOFFICE (optional)
 
 ### WebDAV
 
@@ -356,7 +277,7 @@ Once enabled in the Admin panel, FileRise exposes a WebDAV endpoint (e.g. `/webd
 
 WebDAV operations honor the same ACLs as the web UI.
 
-See: [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV)
+Docs: [WebDAV Wiki](https://github.com/error311/FileRise/wiki/WebDAV)
 
 ### ONLYOFFICE integration
 
@@ -369,41 +290,47 @@ Configure it in **Admin → ONLYOFFICE**:
 - Configure a shared JWT secret
 - Copy the suggested Content-Security-Policy header into your reverse proxy
 
-Docs: [ONLYOFFICE](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
+Docs: [ONLYOFFICE Wiki](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
 
 ---
 
-## 5. Security & updates
+## Security & updates
 
-- FileRise is actively maintained and has published security advisories.  
+- FileRise is actively maintained and has published security advisories.
 - See **SECURITY.md** and GitHub Security Advisories for details.
-- To upgrade:
-  - **Docker:** `docker pull error311/filerise-docker:latest` and recreate the container with the same volumes.
-  - **Manual:** replace app files with the latest release (keep `uploads/`, `users/`, `metadata/`, and your config).
+
+### Upgrading
+
+- **Docker:** pull the new tag and recreate the container with the same volumes.
+
+Example:  
+
+  ```bash
+  docker pull error311/filerise-docker:latest
+  # or pin a specific version from Releases
+  ```
+
+- **Manual:** replace app files with the latest release ZIP (keep `/var/www/uploads`, `/var/www/users`, `/var/www/metadata`, and your config).
 
 Please report vulnerabilities responsibly via the channels listed in **SECURITY.md**.
 
 ---
 
-## 6. Community, support & contributing
-
-- 🧵 **GitHub Discussions & Issues:** ask questions, report bugs, suggest features.  
-- 💬 **Unraid forum thread:** for Unraid-specific setup and tuning.  
-- 🌍 **Reddit / self-hosting communities:** occasional release posts & feedback threads.
+## Community, support & contributing
 
 Contributions are welcome — from bug fixes and docs to translations and UI polish.  
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See `CONTRIBUTING.md` for guidelines.
 
 If FileRise saves you time or becomes your daily driver, a ⭐ on GitHub or sponsorship is hugely appreciated:
 
 - ❤️ [GitHub Sponsors](https://github.com/sponsors/error311)
-- ☕ [Ko-fi](https://ko-fi.com/error311)
+- ☕ [Ko-Fi](https://ko-fi.com/error311)
 
 ---
 
-## 7. License & third-party code
+## License & third-party code
 
-FileRise Core is released under the **MIT License** – see [LICENSE](LICENSE).
+FileRise Core is released under the **MIT License** – see `LICENSE`.
 
 It bundles a small set of well-known client and server libraries (Bootstrap, CodeMirror, DOMPurify, Fuse.js, Resumable.js, sabre/dav, etc.).  
 All third-party code remains under its original licenses.
@@ -414,7 +341,7 @@ See `THIRD_PARTY.md` and the `licenses/` folder for full details.
 
 ---
 
-## 8. Press
+## Press
 
 - [Heise / iX Magazin – “FileRise 2.0: Web-Dateimanager mit Client Portals” (DE)](https://www.heise.de/news/FileRise-2-0-Web-Dateimanager-mit-Client-Portals-11092171.html)
 - [Heise / iX Magazin – “FileRise 2.0: Web File Manager with Client Portals” (EN)](https://www.heise.de/en/news/FileRise-2-0-Web-File-Manager-with-Client-Portals-11092376.html)

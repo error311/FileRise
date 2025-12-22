@@ -25,7 +25,7 @@ export {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.3.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.4.0';
 
 function compareSemver(a, b) {
   const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
@@ -742,13 +742,18 @@ function renderAdminEncryptionSection({ config, dark }) {
           const encCount = Number(summary.encryptedCount || 0);
           const jobCount = Number(summary.activeJobs || 0);
           const scan = summary.scan || null;
-          const parts = [];
-          if (encCount > 0) parts.push(`${encCount} encrypted folder(s)`);
-          if (jobCount > 0) parts.push(`${jobCount} active crypto job(s)`);
+          const details = [];
+          if (encCount > 0) details.push(`${encCount} encrypted folder(s).`);
+          if (jobCount > 0) details.push(`${jobCount} active crypto job(s).`);
           if (scan && scan.scanned) {
-            parts.push(`scan checked previous encrypt ${Number(scan.scanned || 0)} file(s)` + (scan.truncated ? ' (truncated)' : ''));
+            const scanned = Number(scan.scanned || 0);
+            if (errCode === 'encrypted_files_detected') {
+              details.push(`Scan found an encrypted file after checking ${scanned} file(s).`);
+            } else {
+              details.push(`Scan checked ${scanned} file(s) for encrypted headers${scan.truncated ? ' (truncated)' : ''}.`);
+            }
           }
-          const extra = parts.length ? `Detected: ${parts.join(', ')}.` : '';
+          const extra = details.length ? details.join('\n') : '';
           const reasonLine = (() => {
             if (errCode === 'encrypted_files_detected') return 'Encrypted files detected on disk.';
             if (errCode === 'encrypted_files_scan_truncated') return 'Encrypted file scan was truncated.';
@@ -763,7 +768,7 @@ function renderAdminEncryptionSection({ config, dark }) {
             message:
               "This will permanently break access to encrypted files.\n\n" +
               (reasonLine ? reasonLine + "\n\n" : "") +
-              extra +
+              (extra ? extra + "\n\n" : "") +
               (errCode === '' ? "\n\nServer returned 409 without details; assume encrypted data exists." : '') +
               "\n\nType REMOVE to confirm.",
             confirmText: "REMOVE",
@@ -1098,10 +1103,15 @@ function captureInitialAdminConfig() {
     brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
     brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
     brandingFooterHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
+    hoverPreviewMaxImageMb: (document.getElementById("hoverPreviewMaxImageMb")?.value || "").trim(),
 
     clamavScanUploads: !!document.getElementById("clamavScanUploads")?.checked,
     proSearchEnabled: !!document.getElementById("proSearchEnabled")?.checked,
     proSearchLimit: (document.getElementById("proSearchLimit")?.value || "").trim(),
+    proAuditEnabled: !!document.getElementById("proAuditEnabled")?.checked,
+    proAuditLevel: (document.getElementById("proAuditLevel")?.value || "").trim(),
+    proAuditMaxFileMb: (document.getElementById("proAuditMaxFileMb")?.value || "").trim(),
+    proAuditMaxFiles: (document.getElementById("proAuditMaxFiles")?.value || "").trim(),
   };
 }
 function hasUnsavedChanges() {
@@ -1133,9 +1143,14 @@ function hasUnsavedChanges() {
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
     getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
     getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "") ||
+    getVal("hoverPreviewMaxImageMb") !== (o.hoverPreviewMaxImageMb || "") ||
     getChk("clamavScanUploads") !== o.clamavScanUploads ||
     getChk("proSearchEnabled") !== o.proSearchEnabled ||
-    getVal("proSearchLimit") !== o.proSearchLimit
+    getVal("proSearchLimit") !== o.proSearchLimit ||
+    getChk("proAuditEnabled") !== o.proAuditEnabled ||
+    getVal("proAuditLevel") !== o.proAuditLevel ||
+    getVal("proAuditMaxFileMb") !== o.proAuditMaxFileMb ||
+    getVal("proAuditMaxFiles") !== o.proAuditMaxFiles
   );
 }
 
@@ -2194,11 +2209,27 @@ export function openAdminPanel() {
         Math.min(200, parseInt(proSearchCfg.defaultLimit || 50, 10) || 50)
       );
       const proSearchLocked = !!proSearchCfg.lockedByEnv;
+      const proAuditCfg = (config.proAudit && typeof config.proAudit === 'object')
+        ? config.proAudit
+        : {};
+      const proAuditAvailable = !!proAuditCfg.available;
+      const proAuditEnabled = (isPro && proAuditAvailable) ? !!proAuditCfg.enabled : false;
+      const proAuditLevelRaw = (typeof proAuditCfg.level === 'string') ? proAuditCfg.level : 'verbose';
+      const proAuditLevel = (proAuditLevelRaw === 'standard' || proAuditLevelRaw === 'verbose')
+        ? proAuditLevelRaw
+        : 'verbose';
+      const proAuditMaxFileMb = Math.max(10, parseInt(proAuditCfg.maxFileMb || 200, 10) || 200);
+      const proAuditMaxFiles = Math.max(1, Math.min(10, parseInt(proAuditCfg.maxFiles || 10, 10) || 10));
       const brandingCfg = config.branding || {};
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
       const brandingHeaderBgDark = brandingCfg.headerBgDark || "";
       const brandingFooterHtml = brandingCfg.footerHtml || "";
+      const displayCfg = (config.display && typeof config.display === 'object') ? config.display : {};
+      const hoverPreviewMaxImageMb = Math.max(
+        1,
+        Math.min(50, parseInt(displayCfg.hoverPreviewMaxImageMb || 8, 10) || 8)
+      );
       const bg = dark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
       const inner = `
         background:${dark ? "#2c2c2c" : "#fff"};
@@ -2227,7 +2258,7 @@ export function openAdminPanel() {
             <form id="adminPanelForm">
             ${[
             { id: "userManagement", label: t("user_management") },
-            { id: "headerSettings", label: tf("header_footer_settings", "Header & Footer settings") },
+            { id: "headerSettings", label: tf("header_footer_settings", "Header, Display & Footer settings") },
             { id: "loginOptions", label: t("login_webdav") + " (OIDC/TOTP)" },
             { id: "network", label: tf("firewall_proxy_settings", "Firewall and Proxy Settings") },
             { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
@@ -2235,7 +2266,7 @@ export function openAdminPanel() {
             { id: "upload", label: tf("antivirus_settings", "Antivirus") },
             { id: "shareLinks", label: t("manage_shared_links_size") },
             { id: "storage", label: "Storage / Disk Usage" },
-            { id: "proSearch", label: "Search Everywhere" },
+            { id: "proFeatures", label: "Pro Features" },
             { id: "pro", label: "FileRise Pro" },
             { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Thanks / Sponsor / Donations") : "Thanks / Sponsor / Donations") }
           ].map(sec => `
@@ -2267,7 +2298,7 @@ export function openAdminPanel() {
           "upload",
           "shareLinks",
           "storage",
-          "proSearch",
+          "proFeatures",
           "pro",
           "sponsor"
         ].forEach(id => {
@@ -2453,6 +2484,29 @@ export function openAdminPanel() {
             ? 'If left empty, FileRise uses its default blue and dark header colors.'
             : 'Requires FileRise Pro to enable custom color branding.'}
     </small>
+  </div>
+
+    <hr class="admin-divider">
+
+  <!-- Display: Hover preview max image size -->
+  <div class="form-group" style="margin-top:16px;">
+    <label for="hoverPreviewMaxImageMb">
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      ${tf("hover_preview_max_image_mb", "Hover preview max image size (MB)")}
+  </div>
+    </label>
+    <small class="text-muted d-block mb-1">
+      ${tf("hover_preview_max_image_help", "Applies to hover previews and gallery thumbnails; larger values can increase bandwidth and memory use.")}
+    </small>
+    <input
+      type="number"
+      id="hoverPreviewMaxImageMb"
+      class="form-control"
+      min="1"
+      max="50"
+      step="1"
+      value="${hoverPreviewMaxImageMb}"
+    />
   </div>
 
     <hr class="admin-divider">
@@ -3337,23 +3391,23 @@ ${t("shared_max_upload_size_bytes")}
         }
         // --- end FileRise Pro section ---
 
-        // Search Everywhere (Pro) section
-        const proSearchContainer = document.getElementById('proSearchContent');
-        const proSearchHeaderEl = document.getElementById('proSearchHeader');
-        if (proSearchHeaderEl) {
+        // Pro features (Search Everywhere + Audit Logs)
+        const proFeaturesContainer = document.getElementById('proFeaturesContent');
+        const proFeaturesHeaderEl = document.getElementById('proFeaturesHeader');
+        if (proFeaturesHeaderEl) {
           const iconHtml = '<i class="material-icons">expand_more</i>';
-          const pill = (!isPro || !proVersionOk)
+          const pill = (!isPro || !proVersionOk || !proAuditAvailable)
             ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin-left:6px;">Pro</span>'
             : '';
-          proSearchHeaderEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Search Everywhere ${pill}</span> ${iconHtml}`;
+          proFeaturesHeaderEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features ${pill}</span> ${iconHtml}`;
         }
-        if (proSearchContainer) {
+        if (proFeaturesContainer) {
           const proSearchBlockedReason = !isPro ? 'pro' : (!proVersionOk ? 'version' : null);
           const needsUpgradeText = (!isPro)
             ? 'Requires an active FileRise Pro license.'
             : (!proVersionOk ? `Requires FileRise Pro v${proMinVersion}+.` : '');
-          proSearchContainer.innerHTML = `
-            <div class="card" style="border:1px solid ${dark ? '#3a3a3a' : '#eaeaea'}; border-radius:10px; padding:12px; background:${dark ? '#1f1f1f' : '#fdfdfd'}; position:relative;">
+          const proSearchHtml = `
+            <div class="card" style="border:1px solid ${dark ? '#3a3a3a' : '#eaeaea'}; border-radius:10px; padding:12px; background:${dark ? '#1f1f1f' : '#fdfdfd'}; position:relative; margin-bottom:10px;">
               <div class="d-flex align-items-center" style="gap:8px; margin-bottom:6px;">
                 <i class="material-icons" aria-hidden="true">travel_explore</i>
                 <div>
@@ -3395,6 +3449,109 @@ ${t("shared_max_upload_size_bytes")}
             </div>
           `;
 
+          const auditBlockedReason = !isPro ? 'pro' : (!proAuditAvailable ? 'upgrade' : null);
+          const auditHelpText = (!isPro)
+            ? 'Requires an active FileRise Pro license.'
+            : (!proAuditAvailable ? 'Upgrade FileRise Pro to enable Audit Logs.' : '');
+          const auditHtml = `
+            <div class="card" style="border:1px solid ${dark ? '#3a3a3a' : '#eaeaea'}; border-radius:10px; padding:12px; background:${dark ? '#1f1f1f' : '#fdfdfd'}; position:relative; margin-bottom:10px;">
+              <div class="d-flex align-items-center" style="gap:8px; margin-bottom:6px;">
+                <i class="material-icons" aria-hidden="true">fact_check</i>
+                <div>
+                  <div style="font-weight:600;">Audit logging</div>
+                  <div class="text-muted" style="font-size:12px;">Who did what, when, and where. Stored in FR_PRO_BUNDLE_DIR/audit/</div>
+                </div>
+              </div>
+              <div class="form-check fr-toggle" style="margin-bottom:10px;">
+                <input type="checkbox"
+                       class="form-check-input fr-toggle-input"
+                       id="proAuditEnabled"
+                       ${proAuditEnabled ? 'checked' : ''}
+                       ${(auditBlockedReason) ? `disabled data-disabled-reason="${auditBlockedReason}"` : ''} />
+                <label class="form-check-label" for="proAuditEnabled">
+                  Enable audit logs
+                </label>
+                ${auditHelpText ? `<div class="small text-warning" style="margin-top:4px;">${auditHelpText}</div>` : ''}
+              </div>
+              <div class="form-group" style="margin-bottom:8px;">
+                <label for="proAuditLevel">Logging level</label>
+                <select id="proAuditLevel" class="form-control" ${(auditBlockedReason || !proAuditEnabled) ? 'disabled' : ''}>
+                  <option value="standard" ${proAuditLevel === 'standard' ? 'selected' : ''}>Standard (uploads, edits, renames, deletes)</option>
+                  <option value="verbose" ${proAuditLevel === 'verbose' ? 'selected' : ''}>Verbose (includes downloads)</option>
+                </select>
+              </div>
+              <div class="form-row" style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div class="form-group" style="flex:1; min-width:140px;">
+                  <label for="proAuditMaxFileMb">Rotate at (MB)</label>
+                  <input type="number" class="form-control" id="proAuditMaxFileMb" min="10" max="1024"
+                         value="${proAuditMaxFileMb}"
+                         ${(auditBlockedReason || !proAuditEnabled) ? 'disabled' : ''} />
+                </div>
+                <div class="form-group" style="flex:1; min-width:140px;">
+                  <label for="proAuditMaxFiles">Max log files</label>
+                  <input type="number" class="form-control" id="proAuditMaxFiles" min="1" max="10"
+                         value="${proAuditMaxFiles}"
+                         ${(auditBlockedReason || !proAuditEnabled) ? 'disabled' : ''} />
+                </div>
+              </div>
+              <small class="text-muted">Rotation keeps the newest file plus up to ${proAuditMaxFiles - 1} archives.</small>
+            </div>
+
+            <div class="card" style="border:1px solid ${dark ? '#3a3a3a' : '#eaeaea'}; border-radius:10px; padding:12px; background:${dark ? '#1f1f1f' : '#fdfdfd'}; position:relative;">
+              <div class="d-flex align-items-center" style="gap:8px; margin-bottom:8px;">
+                <i class="material-icons" aria-hidden="true">history</i>
+                <div>
+                  <div style="font-weight:600;">Activity history</div>
+                  <div class="text-muted" style="font-size:12px;">Filter and export audit events.</div>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:8px; align-items:center; margin:6px 0 8px;">
+                <button type="button" id="auditFiltersToggle" class="btn btn-light btn-sm">Show filters</button>
+                <div class="text-muted" style="font-size:12px;">User / action / source / folder / dates</div>
+              </div>
+
+              <div id="auditFiltersWrap" style="display:none; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                <input id="auditFilterUser" class="form-control" style="min-width:140px;" placeholder="User" />
+                <input id="auditFilterAction" class="form-control" style="min-width:140px;" placeholder="Action" />
+                <input id="auditFilterSource" class="form-control" style="min-width:120px;" placeholder="Source" />
+                <input id="auditFilterFolder" class="form-control" style="min-width:160px;" placeholder="Folder" />
+                <input id="auditFilterFrom" class="form-control" style="min-width:140px;" type="date" />
+                <input id="auditFilterTo" class="form-control" style="min-width:140px;" type="date" />
+                <input id="auditFilterLimit" class="form-control" style="min-width:120px;" type="number" min="10" max="500" value="200" placeholder="Limit" />
+              </div>
+
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+                <button type="button" id="auditRefreshBtn" class="btn btn-secondary btn-sm">Refresh</button>
+                <button type="button" id="auditExportBtn" class="btn btn-primary btn-sm">Download CSV</button>
+              </div>
+
+              <div id="auditStatus" class="text-muted" style="font-size:12px; margin-bottom:8px;"></div>
+
+              <div class="table-responsive">
+                <table class="table table-sm" style="margin-bottom:0;">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>User</th>
+                      <th>Action</th>
+                      <th>Source</th>
+                      <th>Folder</th>
+                      <th>Path</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>IP</th>
+                      <th>User Agent</th>
+                      <th>Meta</th>
+                    </tr>
+                  </thead>
+                  <tbody id="auditTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          `;
+          proFeaturesContainer.innerHTML = proSearchHtml + auditHtml;
+
           const proSearchToggle = document.getElementById('proSearchEnabled');
           const proSearchLimit = document.getElementById('proSearchLimit');
           const syncProSearchLimit = () => {
@@ -3409,11 +3566,170 @@ ${t("shared_max_upload_size_bytes")}
           }
           syncProSearchLimit();
 
+          const auditEnabledEl = document.getElementById('proAuditEnabled');
+          const auditLevelEl = document.getElementById('proAuditLevel');
+          const auditMaxFileMbEl = document.getElementById('proAuditMaxFileMb');
+          const auditMaxFilesEl = document.getElementById('proAuditMaxFiles');
+
+          const syncAuditConfigFields = () => {
+            if (!auditEnabledEl) return;
+            const locked = auditBlockedReason || !isPro || !proAuditAvailable;
+            const enabled = !!auditEnabledEl.checked;
+            if (auditLevelEl) auditLevelEl.disabled = !!locked || !enabled;
+            if (auditMaxFileMbEl) auditMaxFileMbEl.disabled = !!locked || !enabled;
+            if (auditMaxFilesEl) auditMaxFilesEl.disabled = !!locked || !enabled;
+          };
+          if (auditEnabledEl && !auditEnabledEl.__wired) {
+            auditEnabledEl.__wired = true;
+            auditEnabledEl.addEventListener('change', syncAuditConfigFields);
+          }
+          syncAuditConfigFields();
+
+          const auditStatusEl = document.getElementById('auditStatus');
+          const auditTableBody = document.getElementById('auditTableBody');
+
+          const auditFiltersWrap = document.getElementById('auditFiltersWrap');
+          const auditFiltersToggle = document.getElementById('auditFiltersToggle');
+          if (auditFiltersWrap && auditFiltersToggle && !auditFiltersToggle.__wired) {
+            auditFiltersToggle.__wired = true;
+            let isOpen = false;
+            try {
+              isOpen = localStorage.getItem('auditFiltersOpen') === '1';
+            } catch (e) { }
+            const setOpen = (open) => {
+              auditFiltersWrap.style.display = open ? 'flex' : 'none';
+              auditFiltersToggle.textContent = open ? 'Hide filters' : 'Show filters';
+            };
+            setOpen(isOpen);
+            auditFiltersToggle.addEventListener('click', () => {
+              isOpen = !isOpen;
+              try { localStorage.setItem('auditFiltersOpen', isOpen ? '1' : '0'); } catch (e) { }
+              setOpen(isOpen);
+            });
+          } else if (auditFiltersWrap) {
+            auditFiltersWrap.style.display = 'none';
+          }
+
+          const auditFilters = () => {
+            const params = new URLSearchParams();
+            const add = (k, v) => { if (v) params.set(k, v); };
+            add('user', (document.getElementById('auditFilterUser')?.value || '').trim());
+            add('action', (document.getElementById('auditFilterAction')?.value || '').trim());
+            add('source', (document.getElementById('auditFilterSource')?.value || '').trim());
+            add('folder', (document.getElementById('auditFilterFolder')?.value || '').trim());
+            add('from', (document.getElementById('auditFilterFrom')?.value || '').trim());
+            add('to', (document.getElementById('auditFilterTo')?.value || '').trim());
+            const lim = parseInt((document.getElementById('auditFilterLimit')?.value || '200'), 10);
+            if (lim > 0) params.set('limit', String(Math.min(500, lim)));
+            return params;
+          };
+
+          const renderAuditRows = (rows) => {
+            if (!auditTableBody) return;
+            auditTableBody.textContent = '';
+            if (!rows || !rows.length) {
+              const tr = document.createElement('tr');
+              const td = document.createElement('td');
+              td.colSpan = 11;
+              td.className = 'text-muted';
+              td.textContent = 'No audit entries found for this filter.';
+              tr.appendChild(td);
+              auditTableBody.appendChild(tr);
+              return;
+            }
+
+            rows.forEach(row => {
+              const tr = document.createElement('tr');
+              const cols = [
+                row.ts || '',
+                row.user || '',
+                row.action || '',
+                row.source || '',
+                row.folder || '',
+                row.path || '',
+                row.from || '',
+                row.to || '',
+                row.ip || '',
+                row.ua || '',
+                row.meta || ''
+              ];
+
+              cols.forEach((val, idx) => {
+                const td = document.createElement('td');
+                let text = val;
+                if (idx === 10 && val && typeof val === 'object') {
+                  try { text = JSON.stringify(val); } catch (e) { text = ''; }
+                }
+                if (idx === 9 && typeof text === 'string' && text.length > 30) {
+                  td.title = text;
+                  text = text.slice(0, 30) + '...';
+                }
+                if (idx === 10 && typeof text === 'string' && text.length > 160) {
+                  td.title = text;
+                  text = text.slice(0, 160) + '...';
+                }
+                td.textContent = (text == null ? '' : String(text));
+                tr.appendChild(td);
+              });
+              auditTableBody.appendChild(tr);
+            });
+          };
+
+          const loadAuditLogs = async () => {
+            if (!auditStatusEl) return;
+            if (!isPro || !proAuditAvailable) {
+              auditStatusEl.textContent = auditHelpText || 'Audit Logs are not available.';
+              return;
+            }
+            auditStatusEl.textContent = 'Loading audit logs...';
+            if (auditTableBody) auditTableBody.textContent = '';
+            try {
+              const params = auditFilters();
+              const url = withBase('/api/pro/audit/list.php?' + params.toString());
+              const res = await fetch(url, { credentials: 'include' });
+              const data = await safeJson(res);
+              const rows = data && Array.isArray(data.rows) ? data.rows : [];
+              renderAuditRows(rows);
+              auditStatusEl.textContent = data && data.truncated
+                ? 'Showing latest results (truncated).'
+                : 'Loaded ' + rows.length + ' entries.';
+            } catch (e) {
+              console.error('Audit log load error', e);
+              auditStatusEl.textContent = (e && e.message) ? e.message : 'Failed to load audit logs.';
+              renderAuditRows([]);
+            }
+          };
+
+          const refreshBtn = document.getElementById('auditRefreshBtn');
+          if (refreshBtn && !refreshBtn.__wired) {
+            refreshBtn.__wired = true;
+            refreshBtn.addEventListener('click', loadAuditLogs);
+          }
+
+          const exportBtn = document.getElementById('auditExportBtn');
+          if (exportBtn && !exportBtn.__wired) {
+            exportBtn.__wired = true;
+            exportBtn.addEventListener('click', () => {
+              if (!isPro || !proAuditAvailable) {
+                showToast('Audit Logs are not available.');
+                return;
+              }
+              const params = auditFilters();
+              const url = withBase('/api/pro/audit/exportCsv.php?' + params.toString());
+              window.location.href = url;
+            });
+          }
+
+          // Initial load for admins if available
+          if (isPro && proAuditAvailable) {
+            loadAuditLogs();
+          }
+
           // Ensure header toggle works even if the core listener missed it
-          const psHeader = document.getElementById('proSearchHeader');
-          if (psHeader && !psHeader.__wired) {
-            psHeader.__wired = true;
-            psHeader.addEventListener('click', () => toggleSection('proSearch'));
+          const pfHeader = document.getElementById('proFeaturesHeader');
+          if (pfHeader && !pfHeader.__wired) {
+            pfHeader.__wired = true;
+            pfHeader.addEventListener('click', () => toggleSection('proFeatures'));
           }
         }
 
@@ -3642,14 +3958,14 @@ ${t("shared_max_upload_size_bytes")}
           wireOidcDebugSnapshotButton(oidcScope);
         }
 
-        // Refresh Search Everywhere section when reopening
-        const psHeader = document.getElementById('proSearchHeader');
-        if (psHeader) {
+        // Refresh Pro features section when reopening
+        const pfHeader = document.getElementById('proFeaturesHeader');
+        if (pfHeader) {
           const iconHtml = '<i class="material-icons">expand_more</i>';
-          const pill = (!isPro || !proVersionOk)
+          const pill = (!isPro || !proVersionOk || !proAuditAvailable)
             ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin-left:6px;">Pro</span>'
             : '';
-          psHeader.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Search Everywhere ${pill}</span> ${iconHtml}`;
+          pfHeader.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features ${pill}</span> ${iconHtml}`;
         }
         const psToggle = document.getElementById("proSearchEnabled");
         const psLimit = document.getElementById("proSearchLimit");
@@ -3666,7 +3982,7 @@ ${t("shared_max_upload_size_bytes")}
         }
         const syncPs = () => {
           if (!psToggle || !psLimit) return;
-          const locked = psToggle.dataset.locked === "1" || !isPro;
+          const locked = psToggle.dataset.locked === "1" || !isPro || !proVersionOk;
           psLimit.disabled = locked || !psToggle.checked;
         };
         if (psToggle && !psToggle.__wired) {
@@ -3750,6 +4066,15 @@ function handleSave() {
       headerBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
       footerHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     },
+    display: {
+      hoverPreviewMaxImageMb: Math.max(
+        1,
+        Math.min(
+          50,
+          parseInt(document.getElementById("hoverPreviewMaxImageMb")?.value || "8", 10) || 8
+        )
+      ),
+    },
     clamav: {
       scanUploads: document.getElementById("clamavScanUploads").checked,
     },
@@ -3760,6 +4085,21 @@ function handleSave() {
         Math.min(
           200,
           parseInt(document.getElementById("proSearchLimit")?.value || "50", 10) || 50
+        )
+      ),
+    },
+    proAudit: {
+      enabled: !!document.getElementById("proAuditEnabled")?.checked,
+      level: (document.getElementById("proAuditLevel")?.value || "verbose").trim(),
+      maxFileMb: Math.max(
+        10,
+        parseInt(document.getElementById("proAuditMaxFileMb")?.value || "200", 10) || 200
+      ),
+      maxFiles: Math.max(
+        1,
+        Math.min(
+          10,
+          parseInt(document.getElementById("proAuditMaxFiles")?.value || "10", 10) || 10
         )
       ),
     },

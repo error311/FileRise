@@ -141,19 +141,22 @@ async function getUserGrants(username) {
     credentials: 'include'
   });
   const data = await safeJson(res).catch(() => ({}));
-  return (data && data.grants) ? data.grants : {};
+  const grants = (data && data.grants) ? data.grants : {};
+  return (grants && typeof grants === 'object' && !Array.isArray(grants)) ? grants : {};
 }
 
 function renderFolderGrantsUI(principal, container, folders, grants) {
   if (!Array.isArray(folders) || !container) return;
 
+  const grantsMap = (grants && typeof grants === 'object' && !Array.isArray(grants)) ? grants : {};
+
   // Preserve original grants map for save, including entries we may not render
-  container.__grantsFallback = grants || {};
+  container.__grantsFallback = grantsMap;
 
   const isAdmin =
     principal === "admin" ||
     String(principal).toLowerCase() === "admin" ||
-    (grants && grants.__isAdmin);
+    (grantsMap && grantsMap.__isAdmin);
 
   const toolbar = document.createElement('div');
   toolbar.className = 'folder-access-toolbar';
@@ -206,8 +209,8 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
   container.appendChild(toolbar);
   container.appendChild(list);
 
-  const rowHtml = (folder) => {
-    const g = grants && grants[folder] ? { ...grants[folder] } : {};
+  const rowHtml = (folder, idx) => {
+    const g = grantsMap[folder] ? { ...grantsMap[folder] } : {};
     const inheritChecked = g.__inherit === true || g.inherit === true;
     const explicitFlag =
       g.__explicit === true ||
@@ -251,12 +254,14 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
       </div>
     `;
 
+    const parity = (idx % 2 === 0) ? 'row-even' : 'row-odd';
+
     return `
-      <div class="folder-access-row" data-folder="${folder}" data-inherit="${inheritChecked ? '1' : '0'}" data-explicit="${hasExplicit ? '1' : '0'}" data-admin="${isAdmin ? '1' : '0'}">
+      <div class="folder-access-row ${parity}" data-folder="${folder}" data-inherit="${inheritChecked ? '1' : '0'}" data-explicit="${hasExplicit ? '1' : '0'}" data-admin="${isAdmin ? '1' : '0'}">
         <div class="folder-cell">
       <div class="folder-badge">
         <i class="material-icons" style="font-size:18px;">folder</i>
-        ${name}
+        <span class="folder-name-text">${name}</span>
         <span class="inherited-tag" style="display:none;"></span>
         <span class="inherit-flag-note pill-note" style="display:none;"></span>
         <span class="group-flag-note pill-note" style="display:none;"></span>
@@ -274,21 +279,21 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
       ${group(
         tf('view_all', 'View'),
         `
-              ${toggle('view', tf('view_all', 'View (all)'), g.view, false, tf('view_all_help', 'See all files in this folder (everyone’s files)'))}
-              ${toggle('viewOwn', tf('view_own', 'View (own)'), g.viewOwn, false, tf('view_own_help', 'See only files you uploaded in this folder'))}
+              ${toggle('view', tf('view_all', 'View (all)'), g.view, false, tf('view_all_help', 'See all contents in this folder (all owners). Required for folder share; Manage/Ownership implies this.'))}
+              ${toggle('viewOwn', tf('view_own', 'View (own)'), g.viewOwn, false, tf('view_own_help', 'See only files you uploaded in this folder. Disabled when View (all) is on.'))}
             `
           )}
           ${group(
             tf('create', 'Create'),
             `
-              ${toggle('create', tf('create', 'Create File'), g.create, false, tf('create_help', 'Create empty file'))}
+              ${toggle('create', tf('create', 'Create File'), g.create, false, tf('create_help', 'Create an empty file in this folder (not subfolders). Subfolders require Manage/Ownership.'))}
               ${toggle('upload', tf('upload', 'Upload File'), g.upload, false, tf('upload_help', 'Upload a file into this folder'))}
             `
           )}
           ${group(
             tf('write_full', 'Write/Modify'),
             `
-              ${toggle('write', tf('write_full', 'Write (file ops)'), writeMetaChecked, false, tf('write_help', 'File-level: upload, edit, rename, copy, delete, extract ZIPs'))}
+              ${toggle('write', tf('write_full', 'Write (file ops)'), writeMetaChecked, false, tf('write_help', 'File-level: upload, edit, rename, copy, delete, extract ZIPs (no folder creation).'))}
               ${toggle('edit', tf('edit', 'Edit File'), g.edit, false, tf('edit_help', 'Edit file contents'))}
               ${toggle('extract', tf('extract', 'Extract ZIP'), g.extract, false, tf('extract_help', 'Extract ZIP archives'))}
               ${toggle('rename', tf('rename', 'Rename File'), g.rename, false, tf('rename_help', 'Rename a file'))}
@@ -300,14 +305,14 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
           ${group(
             tf('share', 'Share'),
             `
-              ${toggle('shareFile', tf('share_file', 'Share File'), g.shareFile, false, tf('share_file_help', 'Create share links for files'))}
-              ${toggle('shareFolder', tf('share_folder', 'Share Folder'), g.shareFolder, shareFolderDisabled, tf('share_folder_help', 'Create share links for folders (requires Manage + View (all))'))}
+              ${toggle('shareFile', tf('share_file', 'Share File'), g.shareFile, false, tf('share_file_help', 'Create share links for files (requires View own/all; auto-enables View (own)).'))}
+              ${toggle('shareFolder', tf('share_folder', 'Share Folder'), g.shareFolder, shareFolderDisabled, tf('share_folder_help', 'Create share links for folders (requires Manage + View (all); Manage implies View (all)).'))}
             `
           )}
           ${group(
             tf('manage', 'Admin / Delete'),
             `
-              ${toggle('manage', tf('manage', 'Manage'), g.manage, false, tf('manage_help', 'Folder owner: can create/rename/move folders and grant access; implies View (all)'))}
+              ${toggle('manage', tf('manage', 'Manage'), g.manage, false, tf('manage_help', 'Folder owner/manager: can create subfolders, rename/move folders, and grant access; implies View (all), Write, and Share.'))}
               ${toggle('delete', tf('delete', 'Delete File'), g.delete, false, tf('delete_help', 'Delete a file'))}
             `,
             'perm-stack'
@@ -547,6 +552,13 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
       });
     }
 
+    const markActive = () => {
+      qsa(list, '.folder-access-row.is-active').forEach(r => r.classList.remove('is-active'));
+      row.classList.add('is-active');
+    };
+    row.addEventListener('click', markActive);
+    row.addEventListener('focusin', markActive);
+
     applyManage();
     enforceShareFolderRule(row);
     syncWriteFromGranular();
@@ -570,7 +582,7 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
   function appendChunk() {
     const slice = currentFiltered.slice(renderIndex, renderIndex + PAGE_SIZE);
     if (!slice.length) return;
-    const html = slice.map(rowHtml).join("");
+    const html = slice.map((folder, idx) => rowHtml(folder, renderIndex + idx)).join("");
     list.insertAdjacentHTML('beforeend', html);
     list.querySelectorAll('.folder-access-row').forEach(wireRow);
     renderIndex += slice.length;
@@ -635,7 +647,8 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
 }
 
 function collectGrantsFrom(container, fallback = {}) {
-  const out = JSON.parse(JSON.stringify(fallback || {}));
+  const base = (fallback && typeof fallback === 'object' && !Array.isArray(fallback)) ? fallback : {};
+  const out = JSON.parse(JSON.stringify(base));
   const get = (row, sel) => {
     const el = row.querySelector(sel);
     return el ? !!el.checked : false;
@@ -672,6 +685,7 @@ export async function fetchAllUsers() {
 }
 
 async function fetchAllGroups() {
+  if (window.__FR_IS_PRO !== true) return {};
   const res = await fetch('/api/pro/groups/list.php', {
     credentials: 'include',
     headers: { 'X-CSRF-Token': window.csrfToken || '' }
@@ -926,7 +940,7 @@ export function openUserPermissionsModal(initialUser = null) {
         <span id="closeUserPermissionsModal" class="editor-close-btn">&times;</span>
         <h3>${tf("folder_access", "Folder Access")}</h3>
         <div class="muted" style="margin:-4px 0 10px;">
-          ${tf("grant_folders_help", "Grant per-folder capabilities to each user. 'Write/Manage/Share' imply 'View'.")}
+          ${tf("grant_folders_help", "Grant per-folder capabilities to each user. View (all) shows all contents; View (own) shows only the user's uploads. Write is file-level ops (upload/edit/rename/copy/delete/extract). Create is file-only; subfolders require Manage/Ownership. Manage/Ownership enables folder actions (create/rename/move/delete, grant access) and implies View (all), Write, and Share. Share File auto-enables View (own); Share Folder requires Manage/Ownership + View (all).")}
         </div>
         <div id="userPermissionsList" style="max-height: 82vh; min-height: 420px; overflow-y: auto; margin-bottom: 15px;">
         </div>

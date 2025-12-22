@@ -8,6 +8,7 @@ require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/FolderMeta.php';
 require_once PROJECT_ROOT . '/src/lib/FS.php';
 require_once PROJECT_ROOT . '/src/models/UploadModel.php';
+require_once PROJECT_ROOT . '/src/lib/AuditHook.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
@@ -102,6 +103,8 @@ class FolderController
         $canShareEff   = $canShareBase && $inScope;
         $canShareFile  = $gShareFile   && $inScope;
         $canShareFold  = $gShareFolder && $inScope;
+
+        $canAudit      = $isAdmin || self::ownsFolderOrAncestor($folder, $username, $perms);
 
         // Encryption-at-rest status for this folder (and descendants)
         $enc = [
@@ -224,6 +227,7 @@ class FolderController
             'canShare'       => $canShareEff,       // legacy umbrella
             'canShareFile'   => $canShareFile,
             'canShareFolder' => $canShareFold,
+            'canAudit'       => $canAudit,
 
             'encryption'     => $enc,
         ];
@@ -617,6 +621,13 @@ class FolderController
                 return;
             }
 
+            $newFolder = ($parent === 'root') ? $folderName : ($parent . '/' . $folderName);
+            AuditHook::log('folder.create', [
+                'user'   => $username,
+                'folder' => $newFolder,
+                'path'   => $newFolder,
+            ]);
+
             echo json_encode($result);
         } catch (Throwable $e) {
             error_log('createFolder fatal: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -683,6 +694,13 @@ class FolderController
         }
 
         $result = FolderModel::deleteFolder($folder);
+        if (!empty($result['success'])) {
+            AuditHook::log('folder.delete', [
+                'user'   => $username,
+                'folder' => $folder,
+                'path'   => $folder,
+            ]);
+        }
         echo json_encode($result);
         exit;
     }
@@ -748,6 +766,14 @@ class FolderController
         }
 
         $result = FolderModel::renameFolder($oldFolder, $newFolder);
+        if (!empty($result['success'])) {
+            AuditHook::log('folder.rename', [
+                'user'   => $username,
+                'folder' => $newFolder,
+                'from'   => $oldFolder,
+                'to'     => $newFolder,
+            ]);
+        }
         echo json_encode($result);
         exit;
     }
@@ -895,6 +921,18 @@ class FolderController
         if (is_int($size)) {
             header('Content-Length: ' . $size);
         }
+
+        AuditHook::log('file.download', [
+            'user'   => 'share:' . $token,
+            'source' => 'share',
+            'folder' => $result['folder'] ?? 'root',
+            'path'   => !empty($result['folder']) && $result['folder'] !== 'root'
+                ? ($result['folder'] . '/' . $basename)
+                : $basename,
+            'meta'   => [
+                'token' => $token,
+            ],
+        ]);
 
         readfile($realFilePath);
         exit;
@@ -1306,6 +1344,16 @@ class FolderController
         $seconds = min($seconds, 31536000);
 
         $res = FolderModel::createShareFolderLink($folder, $seconds, $password, $allowUpload);
+        if (is_array($res) && !empty($res['token'])) {
+            AuditHook::log('share.link.create', [
+                'user'   => $username,
+                'folder' => $folder,
+                'path'   => $folder,
+                'meta'   => [
+                    'token' => $res['token'],
+                ],
+            ]);
+        }
         echo json_encode($res);
         exit;
     }
@@ -1443,6 +1491,20 @@ class FolderController
             exit;
         }
 
+        $folderKey = (string)($result['folder'] ?? 'root');
+        $newFilename = (string)($result['newFilename'] ?? '');
+        if ($newFilename !== '') {
+            AuditHook::log('file.upload', [
+                'user'   => 'share:' . $token,
+                'source' => 'share',
+                'folder' => $folderKey !== '' ? $folderKey : 'root',
+                'path'   => ($folderKey !== '' && $folderKey !== 'root') ? ($folderKey . '/' . $newFilename) : $newFilename,
+                'meta'   => [
+                    'token' => $token,
+                ],
+            ]);
+        }
+
         $_SESSION['upload_message'] = "File uploaded successfully.";
         $redirectUrl = fr_with_base_path("/api/folder/shareFolder.php?token=" . urlencode($token));
         header("Location: " . $redirectUrl);
@@ -1491,6 +1553,12 @@ class FolderController
 
         $deleted = FolderModel::deleteShareFolderLink($token);
         if ($deleted) {
+            AuditHook::log('share.link.delete', [
+                'user' => $_SESSION['username'] ?? 'Unknown',
+                'meta' => [
+                    'token' => $token,
+                ],
+            ]);
             echo json_encode(['success' => true]);
         } else {
             http_response_code(404);
@@ -1674,6 +1742,15 @@ class FolderController
             $result = FolderModel::renameFolder($source, $target);
 
             $result = FolderModel::renameFolder($source, $target);
+
+            if (is_array($result) && (!isset($result['success']) || $result['success'])) {
+                AuditHook::log('folder.move', [
+                    'user'   => $username,
+                    'folder' => $target,
+                    'from'   => $source,
+                    'to'     => $target,
+                ]);
+            }
 
             // migrate ACL subtree (best-effort; never block the move)
             $aclStats = [];

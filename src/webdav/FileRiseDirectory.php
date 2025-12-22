@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../src/lib/ACL.php';
 require_once __DIR__ . '/../../src/models/FolderModel.php';
 require_once __DIR__ . '/../../src/models/FileModel.php';
 require_once __DIR__ . '/../../src/models/FolderCrypto.php';
+require_once __DIR__ . '/../../src/lib/AuditHook.php';
 require_once __DIR__ . '/FileRiseFile.php';
 
 use Sabre\DAV\ICollection;
@@ -208,6 +209,14 @@ class FileRiseDirectory implements ICollection, INode {
         $parent = dirname(str_replace('\\','/',$rel));
         if ($parent === '.' || $parent === '/') $parent = '';
         \FolderModel::createFolder($name, $parent, $this->user);
+
+        $folderKey = $rel !== '' ? $rel : 'root';
+        AuditHook::log('folder.create', [
+            'user'   => $this->user,
+            'source' => 'webdav',
+            'folder' => $folderKey,
+            'path'   => $folderKey,
+        ]);
 
         return new self($full, $this->user, $this->isAdmin, $this->perms);
     }
