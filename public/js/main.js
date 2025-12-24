@@ -106,6 +106,64 @@ function showLoginTip(message) {
   tip.style.display = 'block';
 }
 
+const LOGIN_FAIL_STORAGE_KEY = 'fr_login_fail_state';
+const LOGIN_FAIL_WINDOW_MS = 30 * 60 * 1000;
+const LOGIN_FAIL_MAX = 5;
+
+function readLoginFailState(now = Date.now()) {
+  try {
+    const raw = sessionStorage.getItem(LOGIN_FAIL_STORAGE_KEY);
+    if (!raw) return { count: 0, last: 0 };
+    const parsed = JSON.parse(raw);
+    const count = Number(parsed.count) || 0;
+    const last = Number(parsed.last) || 0;
+    if (!last || (now - last) > LOGIN_FAIL_WINDOW_MS) {
+      return { count: 0, last: 0 };
+    }
+    return { count, last };
+  } catch (e) {
+    return { count: 0, last: 0 };
+  }
+}
+
+function writeLoginFailState(state) {
+  try {
+    sessionStorage.setItem(LOGIN_FAIL_STORAGE_KEY, JSON.stringify(state));
+  } catch (e) { }
+}
+
+function resetLoginFailState() {
+  try {
+    sessionStorage.removeItem(LOGIN_FAIL_STORAGE_KEY);
+  } catch (e) { }
+}
+
+function showLoginFailTip(count) {
+  if (count >= LOGIN_FAIL_MAX) {
+    showLoginTip('Too many failed login attempts. Please try again later.');
+    return;
+  }
+  showLoginTip(`Failed to log in: ${count} of ${LOGIN_FAIL_MAX} attempts used.`);
+}
+
+function recordLoginFailure() {
+  const now = Date.now();
+  const state = readLoginFailState(now);
+  const count = Math.min((state.count || 0) + 1, LOGIN_FAIL_MAX);
+  writeLoginFailState({ count, last: now });
+  showLoginFailTip(count);
+  return count;
+}
+
+function showLoginLockoutTip() {
+  showLoginTip('Too many failed login attempts. Please try again later.');
+}
+
+window.showLoginTip = showLoginTip;
+window.__frRecordLoginFailure = recordLoginFailure;
+window.__frResetLoginFailure = resetLoginFailState;
+window.__frShowLoginLockoutTip = showLoginLockoutTip;
+
 async function hideOverlaySmoothly(overlay) {
   if (!overlay) return;
   try { await document.fonts?.ready; } catch (e) { }
@@ -521,6 +579,21 @@ function bindDarkMode() {
           };
         } catch (e) {
           window.__FR_PRO_SEARCH_CFG__ = { enabled: false, defaultLimit: 50, lockedByEnv: false };
+        }
+        try {
+          const audit = (cfg && cfg.proAudit && typeof cfg.proAudit === 'object') ? cfg.proAudit : {};
+          const isPro = window.__FR_IS_PRO === true;
+          const levelRaw = (typeof audit.level === 'string') ? audit.level : 'standard';
+          const level = (levelRaw === 'standard' || levelRaw === 'verbose') ? levelRaw : 'standard';
+          window.__FR_PRO_AUDIT_CFG__ = {
+            enabled: isPro && !!audit.enabled,
+            level,
+            maxFileMb: Number(audit.maxFileMb || 200),
+            maxFiles: Number(audit.maxFiles || 10),
+            available: !!audit.available,
+          };
+        } catch (e) {
+          window.__FR_PRO_AUDIT_CFG__ = { enabled: false, level: 'standard', maxFileMb: 200, maxFiles: 10, available: false };
         }
 
         // Expose a simple boolean for ClamAV scanning
@@ -951,6 +1024,23 @@ function bindDarkMode() {
     } catch (e) { }
     return false;
   }
+  function isDefinitiveLoginError(message) {
+    return /invalid credentials|invalid username format|too many failed login attempts/i.test(String(message || ''));
+  }
+  function handleLoginFailureTip(message) {
+    const msg = String(message || '');
+    if (/too many failed login attempts/i.test(msg)) {
+      if (typeof window.__frShowLoginLockoutTip === 'function') {
+        window.__frShowLoginLockoutTip();
+      }
+      return;
+    }
+    if (/invalid credentials/i.test(msg)) {
+      if (typeof window.__frRecordLoginFailure === 'function') {
+        window.__frRecordLoginFailure();
+      }
+    }
+  }
 
   async function openTotpNow() {
     // refresh CSRF for the upcoming /totp_verify call
@@ -1011,9 +1101,26 @@ function bindDarkMode() {
         const j = await r.clone().json().catch(() => ({}));
 
         //  TOTP step-up?
-        if (looksLikeTOTP(r, j)) { await openTotpNow(); return; }
+        if (looksLikeTOTP(r, j)) {
+          if (typeof window.__frResetLoginFailure === 'function') {
+            window.__frResetLoginFailure();
+          }
+          await openTotpNow();
+          return;
+        }
 
-        if (j && (j.authenticated || j.success || j.status === 'ok' || j.result === 'ok')) return afterLogin();
+        if (j && (j.authenticated || j.success || j.status === 'ok' || j.result === 'ok')) {
+          if (typeof window.__frResetLoginFailure === 'function') {
+            window.__frResetLoginFailure();
+          }
+          return afterLogin();
+        }
+
+        if (j && j.error && isDefinitiveLoginError(j.error)) {
+          handleLoginFailureTip(j.error);
+          alert('Login failed');
+          return;
+        }
       } catch (e) { }
 
       // fallback form
@@ -1028,9 +1135,24 @@ function bindDarkMode() {
         const j2 = await r2.clone().json().catch(() => ({}));
 
         //  TOTP step-up on fallback too
-        if (looksLikeTOTP(r2, j2)) { await openTotpNow(); return; }
+        if (looksLikeTOTP(r2, j2)) {
+          if (typeof window.__frResetLoginFailure === 'function') {
+            window.__frResetLoginFailure();
+          }
+          await openTotpNow();
+          return;
+        }
 
-        if (j2 && (j2.authenticated || j2.success || j2.status === 'ok' || j2.result === 'ok')) return afterLogin();
+        if (j2 && (j2.authenticated || j2.success || j2.status === 'ok' || j2.result === 'ok')) {
+          if (typeof window.__frResetLoginFailure === 'function') {
+            window.__frResetLoginFailure();
+          }
+          return afterLogin();
+        }
+
+        if (j2 && j2.error) {
+          handleLoginFailureTip(j2.error);
+        }
       } catch (e) { }
       alert('Login failed');
     });

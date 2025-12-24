@@ -47,11 +47,7 @@ Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/
 
 ![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.9.0.png)
 
-
-
 https://github.com/user-attachments/assets/87b06f1a-1400-4df1-bf1d-aaae88fcdfbd
-
-
 
 > 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
 > Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open-source (MIT).
@@ -167,6 +163,8 @@ docker compose up -d
 | `PUID`                  | Optional | `99`                             | If running as root, remap `www-data` user to this UID (e.g. Unraid’s 99).                             |
 | `PGID`                  | Optional | `100`                            | If running as root, remap `www-data` group to this GID (e.g. Unraid’s 100).                           |
 | `FR_PUBLISHED_URL`      | Optional | `https://example.com/files`      | Public URL when behind proxies/subpaths (share links, portals, redirects). |
+| `FR_TRUSTED_PROXIES`    | Optional | `127.0.0.1,10.0.0.0/8`            | Comma-separated IPs/CIDRs for trusted proxies; only these can supply the client IP header. |
+| `FR_IP_HEADER`          | Optional | `X-Forwarded-For`                | Header to trust for the real client IP when the proxy is trusted. |
 
 > Full list of common env variables: [Common Environment variables](https://github.com/error311/FileRise/wiki/Common-Env-Variables)
 >
@@ -222,6 +220,12 @@ Quick write test:
 ```bash
 sudo -u www-data touch /var/www/users/.write_test && echo OK
 ```
+
+### Login security notes
+
+- Failed login attempts are throttled per **IP + username** and stored in `/var/www/users/failed_logins.json` by default.
+- Failed logins are also written to `/var/www/users/fail2ban.log` (rotate at 50MB, keep 5 files).
+- If you’re behind a reverse proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER` so rate limiting and logs use the real client IP.
 
 ### Install from release ZIP (recommended)
 

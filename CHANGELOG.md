@@ -1,5 +1,39 @@
 # Changelog
 
+## Changes 12/24/2025 (v2.11.2)
+
+`release(v2.11.2): fix PocketID OIDC token auth + harden login/WebDAV (closes #77)`
+
+**Fixed**  
+
+- **OIDC / PocketID compatibility:** token endpoint auth now defaults to **`client_secret_basic`** when a client secret exists, and **never attempts `client_secret_*`** when the secret is missing/blank (public client mode). *(Closes #77.)*
+- **WebDAV uploads:** stop buffering entire uploads into memory; uploads now stream to a temp file and then replace the target file.
+- **WebDAV path safety:** improved uploads path prefix/boundary checks (prevents edge cases like `/uploads` matching `/uploads2`).
+- **WebDAV metadata:** uploader no longer defaults to `Unknown` when the WebDAV user is not set.
+
+**Security / Hardening**  
+
+- **Login rate limiting:** rate-limit tracking is now keyed by **IP + username** (instead of only IP) and stale counters are reset after the lockout window.
+- **Trusted reverse proxy support:** client IP can be derived from a configured header (e.g. `X-Forwarded-For`) when `REMOTE_ADDR` is a trusted proxy.
+- **Fail2ban-friendly logging:** failed logins are written to `users/fail2ban.log` with basic rotation.
+
+**UI**  
+
+- Login screen now shows a clearer tip for definitive failures (e.g., “attempts used” and lockout messaging).
+
+**Configuration**  
+
+- New optional env/config knobs:
+  - `FR_TRUSTED_PROXIES` — comma-separated IPs/CIDRs to treat as trusted proxies
+  - `FR_IP_HEADER` — header to trust for the real client IP (default: `X-Forwarded-For`)
+  - `FR_WEBDAV_MAX_UPLOAD_BYTES` — WebDAV upload size limit in bytes (`0` = unlimited)
+
+**Misc**  
+
+- Updated sponsor list in Admin Panel.
+
+---
+
 ## Changes 12/22/2025 (v2.11.1)
 
 `release(v2.11.1): scope dotfile blocking to allow WebDAV dotpaths + add/revise OpenAPI annotations`

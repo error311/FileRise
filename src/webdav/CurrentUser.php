@@ -6,7 +6,7 @@ namespace FileRise\WebDAV;
  * Singleton holder for the current WebDAV username.
  */
 class CurrentUser {
-    private static string $user = 'Unknown';
+    private static string $user = '';
     public static function set(string $u): void {
         self::$user = $u;
     }

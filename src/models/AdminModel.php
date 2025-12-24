@@ -314,7 +314,7 @@ class AdminModel
 
             foreach ($required as $k) {
                 if (empty($oidc[$k]) || !is_string($oidc[$k])) {
-                    return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, redirectUri" . ($publicClient ? '' : ', clientSecret') . ")."];
+                    return ["error" => "Incomplete OIDC configuration (enable OIDC requires providerUrl, clientId, redirectUri" . ($publicClient ? '' : ', clientSecret') . "). If you want a blank secret, enable Public Client or disable OIDC login."];
                 }
             }
 

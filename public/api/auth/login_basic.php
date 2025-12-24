@@ -19,6 +19,10 @@
      *     @OA\Response(
      *         response=401,
      *         description="Unauthorized due to missing credentials or invalid credentials."
+     *     ),
+     *     @OA\Response(
+     *         response=429,
+     *         description="Too many failed login attempts."
      *     )
      * )
      *

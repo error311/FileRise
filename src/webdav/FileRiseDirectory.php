@@ -181,11 +181,10 @@ class FileRiseDirectory implements ICollection, INode {
 
         // Write directly to FS, then ensure metadata via FileRiseFile::put()
         $full    = $this->path . DIRECTORY_SEPARATOR . $name;
-        $content = is_resource($data) ? stream_get_contents($data) : (string)$data;
 
         // Let FileRiseFile handle metadata & overwrite semantics
         $fileNode = new FileRiseFile($full, $this->user, $this->isAdmin, $this->perms);
-        $fileNode->put($content);
+        $fileNode->put($data);
 
         return $fileNode;
     }
@@ -229,6 +228,10 @@ class FileRiseDirectory implements ICollection, INode {
         $real     = realpath($absPath) ?: $absPath;
 
         if (stripos($real, $realBase) !== 0) return 'root';
+        if (strlen($real) > strlen($realBase)) {
+            $next = $real[strlen($realBase)] ?? '';
+            if ($next !== '/' && $next !== '\\') return 'root';
+        }
         $rel = ltrim(str_replace('\\','/', substr($real, strlen($realBase))), '/');
         return ($rel === '' ? 'root' : $rel);
     }

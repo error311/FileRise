@@ -61,8 +61,10 @@ try {
     if (defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD') && OIDC_TOKEN_ENDPOINT_AUTH_METHOD) {
         $tokenAuthMethod = OIDC_TOKEN_ENDPOINT_AUTH_METHOD;
     }
-    if (!$tokenAuthMethod) {
-        $tokenAuthMethod = $publicClient ? 'none' : 'client_secret_basic';
+    if ($publicClient || $clientSecret === null || $clientSecret === '') {
+        $tokenAuthMethod = 'none';
+    } elseif (!$tokenAuthMethod) {
+        $tokenAuthMethod = 'client_secret_basic';
     }
 
     $loginOptions = is_array($cfg['loginOptions'] ?? null) ? $cfg['loginOptions'] : [];

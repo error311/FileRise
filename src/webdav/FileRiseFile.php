@@ -122,10 +122,64 @@ class FileRiseFile implements IFile, INode {
         }
     
         // write + metadata (unchanged)
-        file_put_contents(
-            $this->path,
-            is_resource($data) ? stream_get_contents($data) : (string)$data
-        );
+        $maxBytes = defined('FR_WEBDAV_MAX_UPLOAD_BYTES') ? (int)FR_WEBDAV_MAX_UPLOAD_BYTES : 0;
+        if ($maxBytes < 0) {
+            $maxBytes = 0;
+        }
+
+        if (is_resource($data)) {
+            $dir = dirname($this->path);
+            $tmp = $dir . DIRECTORY_SEPARATOR . '.' . basename($this->path) . '.tmp-' . bin2hex(random_bytes(8));
+            $out = @fopen($tmp, 'wb');
+            if ($out === false) {
+                throw new Forbidden('Unable to write file');
+            }
+            $written = 0;
+            while (!feof($data)) {
+                $chunk = fread($data, 1024 * 1024);
+                if ($chunk === false) {
+                    fclose($out);
+                    @unlink($tmp);
+                    throw new Forbidden('Unable to write file');
+                }
+                if ($chunk === '') {
+                    continue;
+                }
+                $len = strlen($chunk);
+                if ($maxBytes > 0 && ($written + $len) > $maxBytes) {
+                    fclose($out);
+                    @unlink($tmp);
+                    throw new Forbidden('Upload exceeds maximum size');
+                }
+                $offset = 0;
+                while ($offset < $len) {
+                    $wrote = fwrite($out, substr($chunk, $offset));
+                    if ($wrote === false || $wrote === 0) {
+                        fclose($out);
+                        @unlink($tmp);
+                        throw new Forbidden('Unable to write file');
+                    }
+                    $offset += $wrote;
+                }
+                $written += $len;
+            }
+            fclose($out);
+            if (!@rename($tmp, $this->path)) {
+                if ($exists) {
+                    @unlink($this->path);
+                }
+                if (!@rename($tmp, $this->path)) {
+                    @unlink($tmp);
+                    throw new Forbidden('Unable to write file');
+                }
+            }
+        } else {
+            $payload = (string)$data;
+            if ($maxBytes > 0 && strlen($payload) > $maxBytes) {
+                throw new Forbidden('Upload exceeds maximum size');
+            }
+            file_put_contents($this->path, $payload);
+        }
         $this->updateMetadata($folderKey, $fileName);
         if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
         AuditHook::log($exists ? 'file.edit' : 'file.upload', [

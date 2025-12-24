@@ -145,9 +145,11 @@ class AuthController
         if (defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD') && OIDC_TOKEN_ENDPOINT_AUTH_METHOD) {
             $tokenAuthMethod = OIDC_TOKEN_ENDPOINT_AUTH_METHOD;
         }
-        // Default token endpoint auth: none for public clients, basic for confidential.
-        if (!$tokenAuthMethod) {
-            $tokenAuthMethod = $clientSecret ? 'client_secret_basic' : 'none';
+        // Never send client_secret_* when no secret is available (public client or empty secret).
+        if ($clientSecret === null) {
+            $tokenAuthMethod = 'none';
+        } elseif (!$tokenAuthMethod) {
+            $tokenAuthMethod = 'client_secret_basic';
         }
 
         $this->logOidcDebug('Building OIDC client', [
@@ -170,7 +172,7 @@ class AuthController
             $oidc->setCodeChallengeMethod('S256');
         }
 
-        // client_secret_post with Authelia using config.php
+        // Apply explicit token endpoint auth method when configured.
         if (method_exists($oidc, 'setTokenEndpointAuthMethod') && $tokenAuthMethod) {
             $oidc->setTokenEndpointAuthMethod($tokenAuthMethod);
         }
@@ -391,14 +393,24 @@ class AuthController
         }
 
         // rate-limit
-        $ip           = $_SERVER['REMOTE_ADDR'];
+        $ip           = AuthModel::getClientIp($_SERVER);
+        $key          = AuthModel::getFailedLoginKey($ip, $username);
         $attemptsFile = USERS_DIR . 'failed_logins.json';
         $failed       = AuthModel::loadFailedAttempts($attemptsFile);
+        $now          = time();
+        if (isset($failed[$key])) {
+            $lastAttempt = (int)($failed[$key]['last_attempt'] ?? 0);
+            if ($lastAttempt <= 0 || ($now - $lastAttempt) >= 30 * 60) {
+                $failed[$key] = ['count' => 0, 'last_attempt' => 0];
+            }
+        }
         if (
-            isset($failed[$ip]) &&
-            $failed[$ip]['count'] >= 5 &&
-            time() - $failed[$ip]['last_attempt'] < 30 * 60
+            isset($failed[$key]) &&
+            ($failed[$key]['count'] ?? 0) >= 5 &&
+            ($failed[$key]['last_attempt'] ?? 0) > 0 &&
+            $now - $failed[$key]['last_attempt'] < 30 * 60
         ) {
+            AuthModel::logFailedLogin($ip, $username, 'lockout', $_SERVER['HTTP_USER_AGENT'] ?? '');
             http_response_code(429);
             echo json_encode(['error' => 'Too many failed login attempts. Please try again later.']);
             exit();
@@ -407,11 +419,12 @@ class AuthController
         $user = AuthModel::authenticate($username, $password);
         if ($user === false) {
             // record failure
-            $failed[$ip] = [
-                'count'        => ($failed[$ip]['count'] ?? 0) + 1,
-                'last_attempt' => time()
+            $failed[$key] = [
+                'count'        => ($failed[$key]['count'] ?? 0) + 1,
+                'last_attempt' => $now
             ];
             AuthModel::saveFailedAttempts($attemptsFile, $failed);
+            AuthModel::logFailedLogin($ip, $username, 'invalid_credentials', $_SERVER['HTTP_USER_AGENT'] ?? '');
             http_response_code(401);
             echo json_encode(['error' => 'Invalid credentials']);
             exit();
@@ -427,8 +440,8 @@ class AuthController
         }
 
         // otherwise clear rate-limit & finish
-        if (isset($failed[$ip])) {
-            unset($failed[$ip]);
+        if (isset($failed[$key])) {
+            unset($failed[$key]);
             AuthModel::saveFailedAttempts($attemptsFile, $failed);
         }
         $this->finalizeLogin($username, $rememberMe);
@@ -644,6 +657,30 @@ class AuthController
             exit();
         }
 
+        // rate-limit
+        $ip           = AuthModel::getClientIp($_SERVER);
+        $key          = AuthModel::getFailedLoginKey($ip, $username);
+        $attemptsFile = USERS_DIR . 'failed_logins.json';
+        $failed       = AuthModel::loadFailedAttempts($attemptsFile);
+        $now          = time();
+        if (isset($failed[$key])) {
+            $lastAttempt = (int)($failed[$key]['last_attempt'] ?? 0);
+            if ($lastAttempt <= 0 || ($now - $lastAttempt) >= 30 * 60) {
+                $failed[$key] = ['count' => 0, 'last_attempt' => 0];
+            }
+        }
+        if (
+            isset($failed[$key]) &&
+            ($failed[$key]['count'] ?? 0) >= 5 &&
+            ($failed[$key]['last_attempt'] ?? 0) > 0 &&
+            $now - $failed[$key]['last_attempt'] < 30 * 60
+        ) {
+            AuthModel::logFailedLogin($ip, $username, 'lockout', $_SERVER['HTTP_USER_AGENT'] ?? '');
+            header('HTTP/1.1 429 Too Many Requests');
+            echo json_encode(['error' => 'Too many failed login attempts. Please try again later.']);
+            exit();
+        }
+
         // Attempt authentication.
         $role = AuthModel::authenticate($username, $password);
         if ($role !== false) {
@@ -653,14 +690,28 @@ class AuthController
                 // If TOTP is required, store pending values and redirect to prompt for TOTP.
                 $_SESSION['pending_login_user']   = $username;
                 $_SESSION['pending_login_secret'] = $secret;
+                if (isset($failed[$key])) {
+                    unset($failed[$key]);
+                    AuthModel::saveFailedAttempts($attemptsFile, $failed);
+                }
                 header("Location: " . fr_with_base_path("/index.html?totp_required=1"));
                 exit();
             }
 
+            if (isset($failed[$key])) {
+                unset($failed[$key]);
+                AuthModel::saveFailedAttempts($attemptsFile, $failed);
+            }
             $this->finishBrowserLogin($username);
         }
 
         // Invalid credentials; prompt again.
+        $failed[$key] = [
+            'count'        => ($failed[$key]['count'] ?? 0) + 1,
+            'last_attempt' => $now
+        ];
+        AuthModel::saveFailedAttempts($attemptsFile, $failed);
+        AuthModel::logFailedLogin($ip, $username, 'invalid_credentials', $_SERVER['HTTP_USER_AGENT'] ?? '');
         header('WWW-Authenticate: Basic realm="FileRise Login"');
         header('HTTP/1.0 401 Unauthorized');
         echo 'Invalid credentials';

@@ -602,6 +602,25 @@ async function syncPermissionsToLocalStorage() {
 // ——— main ———
 let __loginInFlight = false;
 
+function isDefinitiveLoginError(message) {
+  return /invalid credentials|invalid username format|too many failed login attempts/i.test(String(message || ''));
+}
+
+function handleLoginFailureTip(message) {
+  const msg = String(message || '');
+  if (/too many failed login attempts/i.test(msg)) {
+    if (typeof window.__frShowLoginLockoutTip === 'function') {
+      window.__frShowLoginLockoutTip();
+    }
+    return;
+  }
+  if (/invalid credentials/i.test(msg)) {
+    if (typeof window.__frRecordLoginFailure === 'function') {
+      window.__frRecordLoginFailure();
+    }
+  }
+}
+
 async function submitLogin(data) {
   if (__loginInFlight) return;
   __loginInFlight = true;
@@ -629,6 +648,9 @@ async function submitLogin(data) {
 
     // TOTP requested?
     if (await sniffTOTP(res, body)) {
+      if (typeof window.__frResetLoginFailure === 'function') {
+        window.__frResetLoginFailure();
+      }
       try { await primeCsrfStrict(); } catch (e) { }
       window.pendingTOTP = true;
       try {
@@ -640,6 +662,9 @@ async function submitLogin(data) {
 
     // Full success (no TOTP)
     if (body && (body.success || body.status === 'ok' || body.authenticated)) {
+      if (typeof window.__frResetLoginFailure === 'function') {
+        window.__frResetLoginFailure();
+      }
 
       await syncPermissionsToLocalStorage();
       return afterLogin();
@@ -647,46 +672,19 @@ async function submitLogin(data) {
 
     // Cookie set but non-JSON body — double check session
     if (!body && await isAuthedNow()) {
+      if (typeof window.__frResetLoginFailure === 'function') {
+        window.__frResetLoginFailure();
+      }
 
       await syncPermissionsToLocalStorage();
 
       return afterLogin();
     }
 
-    // Attempt #2 — form fallback
-    res = await fetchWithCsrf('/api/auth/auth.php', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-      body: toFormBody(payload)
-    });
-    body = await safeJson(res);
-
-    if (await sniffTOTP(res, body)) {
-      try { await primeCsrfStrict(); } catch (e) { }
-      window.pendingTOTP = true;
-      try {
-        const auth = await import(withBase('/js/auth.js?v={{APP_QVER}}'));
-        if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
-      } catch (e) { }
-      return;
-    }
-
-    if (body && (body.success || body.status === 'ok' || body.authenticated)) {
-      await syncPermissionsToLocalStorage();
-
-      return afterLogin();
-    }
-
-    if (!body && await isAuthedNow()) {
-
-      await syncPermissionsToLocalStorage();
-
-      return afterLogin();
-    }
-
-    // Rate limit still respected
     if (body?.error && /Too many failed login attempts/i.test(body.error)) {
+      if (typeof window.__frShowLoginLockoutTip === 'function') {
+        window.__frShowLoginLockoutTip();
+      }
       showToast(body.error);
       const btn = document.querySelector("#authForm button[type='submit']");
       if (btn) {
@@ -699,6 +697,73 @@ async function submitLogin(data) {
       return;
     }
 
+    if (body?.error && isDefinitiveLoginError(body.error)) {
+      handleLoginFailureTip(body.error);
+      showToast('Login failed' + (body?.error ? `: ${body.error}` : ''));
+      return;
+    }
+
+    // Attempt #2 — form fallback
+    res = await fetchWithCsrf('/api/auth/auth.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: toFormBody(payload)
+    });
+    body = await safeJson(res);
+
+    if (await sniffTOTP(res, body)) {
+      if (typeof window.__frResetLoginFailure === 'function') {
+        window.__frResetLoginFailure();
+      }
+      try { await primeCsrfStrict(); } catch (e) { }
+      window.pendingTOTP = true;
+      try {
+        const auth = await import(withBase('/js/auth.js?v={{APP_QVER}}'));
+        if (typeof auth.openTOTPLoginModal === 'function') auth.openTOTPLoginModal();
+      } catch (e) { }
+      return;
+    }
+
+    if (body && (body.success || body.status === 'ok' || body.authenticated)) {
+      if (typeof window.__frResetLoginFailure === 'function') {
+        window.__frResetLoginFailure();
+      }
+      await syncPermissionsToLocalStorage();
+
+      return afterLogin();
+    }
+
+    if (!body && await isAuthedNow()) {
+      if (typeof window.__frResetLoginFailure === 'function') {
+        window.__frResetLoginFailure();
+      }
+
+      await syncPermissionsToLocalStorage();
+
+      return afterLogin();
+    }
+
+    // Rate limit still respected
+    if (body?.error && /Too many failed login attempts/i.test(body.error)) {
+      if (typeof window.__frShowLoginLockoutTip === 'function') {
+        window.__frShowLoginLockoutTip();
+      }
+      showToast(body.error);
+      const btn = document.querySelector("#authForm button[type='submit']");
+      if (btn) {
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.disabled = false;
+          showToast("You can now try logging in again.");
+        }, 30 * 60 * 1000);
+      }
+      return;
+    }
+
+    if (body?.error) {
+      handleLoginFailureTip(body.error);
+    }
     showToast('Login failed' + (body?.error ? `: ${body.error}` : ''));
 
   } catch (e) {

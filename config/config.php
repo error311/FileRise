@@ -101,6 +101,27 @@ if (!defined('FR_OIDC_DEBUG')) {
         define('FR_OIDC_DEBUG', false);
     }
 }
+// Optional: trusted proxy IP resolution for rate limiting/logging
+// Set FR_TRUSTED_PROXIES to a comma-separated list of IPs/CIDRs (e.g. "127.0.0.1,10.0.0.0/8").
+if (!defined('FR_TRUSTED_PROXIES')) {
+    $envVal = getenv('FR_TRUSTED_PROXIES');
+    define('FR_TRUSTED_PROXIES', ($envVal !== false && $envVal !== '') ? $envVal : '');
+}
+// Which header to trust when REMOTE_ADDR matches FR_TRUSTED_PROXIES.
+if (!defined('FR_IP_HEADER')) {
+    $envVal = getenv('FR_IP_HEADER');
+    define('FR_IP_HEADER', ($envVal !== false && $envVal !== '') ? $envVal : 'X-Forwarded-For');
+}
+// Optional: WebDAV max upload size in bytes (0 = unlimited)
+if (!defined('FR_WEBDAV_MAX_UPLOAD_BYTES')) {
+    $envVal = getenv('FR_WEBDAV_MAX_UPLOAD_BYTES');
+    if ($envVal !== false && $envVal !== '') {
+        $val = (int)$envVal;
+        define('FR_WEBDAV_MAX_UPLOAD_BYTES', $val > 0 ? $val : 0);
+    } else {
+        define('FR_WEBDAV_MAX_UPLOAD_BYTES', 0);
+    }
+}
 // Antivirus / ClamAV (optional)
 // If VIRUS_SCAN_ENABLED is set in the environment, it overrides the admin setting.
 // If it is not set, we don't define the constant and the admin checkbox controls scanning.

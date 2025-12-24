@@ -7,6 +7,8 @@ require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 class AuthModel
 {
+    private const FAIL2BAN_LOG_MAX_BYTES = 50 * 1024 * 1024;
+    private const FAIL2BAN_LOG_MAX_FILES = 5;
 
     public static function isOidcDemoteAllowed(): bool
 {
@@ -295,6 +297,218 @@ class AuthModel
     public static function saveFailedAttempts(string $file, array $data): void
     {
         file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT), LOCK_EX);
+    }
+
+    public static function getFailedLoginKey(string $ip, string $username): string
+    {
+        $ip = trim($ip);
+        $user = trim($username);
+        if ($user !== '') {
+            $user = strtolower($user);
+            $ipKey = $ip !== '' ? $ip : 'unknown';
+            return $ipKey . '|' . $user;
+        }
+        return $ip !== '' ? $ip : 'unknown';
+    }
+
+    public static function getClientIp(array $server = null): string
+    {
+        $server = $server ?? $_SERVER;
+        $remote = trim((string)($server['REMOTE_ADDR'] ?? ''));
+
+        $trusted = self::getTrustedProxies();
+        if ($remote !== '' && $trusted && self::isTrustedProxy($remote, $trusted)) {
+            $headerName = defined('FR_IP_HEADER') ? (string)FR_IP_HEADER : 'X-Forwarded-For';
+            $headerKey = self::normalizeHeaderKey($headerName);
+            $headerVal = trim((string)($server[$headerKey] ?? ''));
+            if ($headerVal !== '') {
+                $candidate = $headerVal;
+                if (strpos($candidate, ',') !== false) {
+                    $parts = explode(',', $candidate);
+                    $candidate = trim($parts[0]);
+                }
+                if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                    return $candidate;
+                }
+            }
+        }
+
+        if ($remote !== '' && filter_var($remote, FILTER_VALIDATE_IP)) {
+            return $remote;
+        }
+
+        return $remote !== '' ? $remote : 'unknown';
+    }
+
+    protected static function sanitizeLogValue(string $value, int $maxLen = 120): string
+    {
+        $value = str_replace(["\r", "\n", "\t"], ' ', $value);
+        $value = str_replace('"', "'", $value);
+        $value = trim($value);
+        if ($maxLen > 0 && strlen($value) > $maxLen) {
+            $value = substr($value, 0, $maxLen);
+        }
+        return $value;
+    }
+
+    public static function logFailedLogin(string $ip, string $username, string $reason, string $userAgent = ''): void
+    {
+        $logFile = USERS_DIR . 'fail2ban.log';
+        $ts = date('Y-m-d H:i:s');
+
+        $ip = self::sanitizeLogValue($ip, 64);
+        $username = self::sanitizeLogValue($username, 80);
+        $reason = self::sanitizeLogValue($reason, 60);
+        $ua = $userAgent !== '' ? $userAgent : ($_SERVER['HTTP_USER_AGENT'] ?? '');
+        $ua = self::sanitizeLogValue($ua, 200);
+
+        $line = $ts
+            . ' filerise_auth failed_login ip=' . ($ip !== '' ? $ip : 'unknown')
+            . ' user=' . ($username !== '' ? $username : 'unknown')
+            . ' reason=' . ($reason !== '' ? $reason : 'unknown');
+        if ($ua !== '') {
+            $line .= ' ua="' . $ua . '"';
+        }
+        $line .= "\n";
+
+        self::rotateFail2banLog($logFile);
+        @file_put_contents($logFile, $line, FILE_APPEND | LOCK_EX);
+    }
+
+    protected static function rotateFail2banLog(string $logFile): void
+    {
+        $maxBytes = self::FAIL2BAN_LOG_MAX_BYTES;
+        $maxFiles = self::FAIL2BAN_LOG_MAX_FILES;
+        if ($maxBytes <= 0 || $maxFiles <= 1) {
+            return;
+        }
+        if (!file_exists($logFile)) {
+            return;
+        }
+        $size = @filesize($logFile);
+        if ($size === false || $size < $maxBytes) {
+            return;
+        }
+
+        $maxRotated = $maxFiles - 1;
+        for ($i = $maxRotated; $i >= 1; $i--) {
+            $src = $logFile . '.' . $i;
+            if ($i === $maxRotated) {
+                if (file_exists($src)) {
+                    @unlink($src);
+                }
+                continue;
+            }
+            $dst = $logFile . '.' . ($i + 1);
+            if (file_exists($src)) {
+                @rename($src, $dst);
+            }
+        }
+        @rename($logFile, $logFile . '.1');
+    }
+
+    protected static function getTrustedProxies(): array
+    {
+        $raw = '';
+        if (defined('FR_TRUSTED_PROXIES')) {
+            $raw = FR_TRUSTED_PROXIES;
+        } else {
+            $env = getenv('FR_TRUSTED_PROXIES');
+            if ($env !== false && $env !== '') {
+                $raw = $env;
+            }
+        }
+
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (!is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+
+        $parts = array_map('trim', explode(',', $raw));
+        return array_values(array_filter($parts, fn($part) => $part !== ''));
+    }
+
+    protected static function normalizeHeaderKey(string $header): string
+    {
+        $key = strtoupper(str_replace('-', '_', trim($header)));
+        if ($key === 'REMOTE_ADDR') {
+            return $key;
+        }
+        if (strpos($key, 'HTTP_') !== 0) {
+            $key = 'HTTP_' . $key;
+        }
+        return $key;
+    }
+
+    protected static function isTrustedProxy(string $ip, array $trusted): bool
+    {
+        foreach ($trusted as $entry) {
+            $entry = trim((string)$entry);
+            if ($entry === '') {
+                continue;
+            }
+            if (strpos($entry, '/') === false) {
+                if ($ip === $entry) {
+                    return true;
+                }
+                continue;
+            }
+            if (self::ipInCidr($ip, $entry)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    protected static function ipInCidr(string $ip, string $cidr): bool
+    {
+        $cidr = trim($cidr);
+        if ($cidr === '' || strpos($cidr, '/') === false) {
+            return false;
+        }
+        [$subnet, $maskRaw] = explode('/', $cidr, 2);
+        $subnet = trim($subnet);
+        $mask = (int)trim($maskRaw);
+
+        if (!filter_var($ip, FILTER_VALIDATE_IP) || !filter_var($subnet, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+
+        if (strpos($ip, ':') !== false || strpos($subnet, ':') !== false) {
+            if ($mask < 0 || $mask > 128) {
+                return false;
+            }
+            $ipBin = inet_pton($ip);
+            $netBin = inet_pton($subnet);
+            if ($ipBin === false || $netBin === false) {
+                return false;
+            }
+            $bytes = intdiv($mask, 8);
+            $bits = $mask % 8;
+            if ($bytes > 0 && substr($ipBin, 0, $bytes) !== substr($netBin, 0, $bytes)) {
+                return false;
+            }
+            if ($bits > 0) {
+                $maskByte = (~((1 << (8 - $bits)) - 1)) & 0xFF;
+                if ((ord($ipBin[$bytes]) & $maskByte) !== (ord($netBin[$bytes]) & $maskByte)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        if ($mask < 0 || $mask > 32) {
+            return false;
+        }
+        $ipLong = ip2long($ip);
+        $netLong = ip2long($subnet);
+        if ($ipLong === false || $netLong === false) {
+            return false;
+        }
+        $maskLong = $mask === 0 ? 0 : (-1 << (32 - $mask));
+        return (($ipLong & $maskLong) === ($netLong & $maskLong));
     }
 
     /**

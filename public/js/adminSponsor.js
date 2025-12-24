@@ -24,7 +24,10 @@ const DEFAULT_SUPPORTERS = [
   'Matthias S',
   'Emerson Beltrán',
   'shucking',
-  'Sascha A.'
+  'Sascha A.',
+  'JBR0XN',
+  'Blaž Pivk',
+  'Rob Parker'
 ];
 
 /**
