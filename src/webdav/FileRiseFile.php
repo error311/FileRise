@@ -53,7 +53,7 @@ class FileRiseFile implements IFile, INode {
         }
         $result = \FileModel::deleteFiles($folderKey, [$fileName]);
         if (is_array($result) && isset($result['success'])) {
-            AuditHook::log('file.delete', [
+            \AuditHook::log('file.delete', [
                 'user'   => $this->user,
                 'source' => 'webdav',
                 'folder' => $folderKey,
@@ -80,7 +80,7 @@ class FileRiseFile implements IFile, INode {
                 throw new Forbidden('No view access to this file');
             }
         }
-        AuditHook::log('file.download', [
+        \AuditHook::log('file.download', [
             'user'   => $this->user,
             'source' => 'webdav',
             'folder' => $folderKey,
@@ -182,7 +182,7 @@ class FileRiseFile implements IFile, INode {
         }
         $this->updateMetadata($folderKey, $fileName);
         if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
-        AuditHook::log($exists ? 'file.edit' : 'file.upload', [
+        \AuditHook::log($exists ? 'file.edit' : 'file.upload', [
             'user'   => $this->user,
             'source' => 'webdav',
             'folder' => $folderKey,

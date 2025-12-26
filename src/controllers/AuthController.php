@@ -175,6 +175,11 @@ class AuthController
         // Apply explicit token endpoint auth method when configured.
         if (method_exists($oidc, 'setTokenEndpointAuthMethod') && $tokenAuthMethod) {
             $oidc->setTokenEndpointAuthMethod($tokenAuthMethod);
+        } elseif (method_exists($oidc, 'providerConfigParam') && $tokenAuthMethod) {
+            // Fallback for older OpenIDConnectClient: force supported methods list.
+            $oidc->providerConfigParam([
+                'token_endpoint_auth_methods_supported' => [$tokenAuthMethod],
+            ]);
         }
 
         $oidc->setRedirectURL($cfg['oidc']['redirectUri']);

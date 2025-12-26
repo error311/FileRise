@@ -84,6 +84,7 @@ class FileRiseDirectory implements ICollection, INode {
 
             $full = $item->getPathname();
 
+
             if ($item->isDir()) {
                 // Decide if the *child folder* should be visible
                 $childKey  = $this->folderKeyForPath($full);
@@ -210,7 +211,7 @@ class FileRiseDirectory implements ICollection, INode {
         \FolderModel::createFolder($name, $parent, $this->user);
 
         $folderKey = $rel !== '' ? $rel : 'root';
-        AuditHook::log('folder.create', [
+        \AuditHook::log('folder.create', [
             'user'   => $this->user,
             'source' => 'webdav',
             'folder' => $folderKey,

@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 12/26/2025 (v2.11.3)
+
+`release(v2.11.3): fix WebDAV baseUri + audit hook namespace; add OIDC token auth fallback (see #77)`
+
+**Fixed**  
+
+- WebDAV: prevent 500s after WebDAV write operations when audit logging is enabled by calling \AuditHook::log() with the correct (global) namespace from WebDAV nodes.
+- WebDAV: improve compatibility with clients hitting legacy paths by auto-detecting and setting the proper SabreDAV baseUri (supports /webdav.php/ and legacy /webdav.php/uploads/ behavior depending on request + filesystem layout).
+
+**Improved**  
+
+- OIDC: add a fallback for older OpenIDConnectClient builds by forcing token_endpoint_auth_methods_supported when setTokenEndpointAuthMethod() isn’t available, helping providers that require an explicit token auth method (e.g., PocketID setups).
+
+---
+
 ## Changes 12/24/2025 (v2.11.2)
 
 `release(v2.11.2): fix PocketID OIDC token auth + harden login/WebDAV (closes #77)`

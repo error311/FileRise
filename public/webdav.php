@@ -12,6 +12,7 @@ if (
     $_SERVER['PHP_AUTH_PW']   = $p;
 }
 
+
 // ─── 1) Bootstrap & load models ─────────────────────────────────────────────
 require_once __DIR__ . '/../config/config.php';        // UPLOAD_DIR, META_DIR, loadUserPermissions(), etc.
 require_once __DIR__ . '/../vendor/autoload.php';      // Composer & SabreDAV
@@ -63,10 +64,9 @@ CurrentUser::set($user);
 
 // ─── 5) Mount the real uploads root; ACL filters everything at node level ───
 $rootPath = rtrim(UPLOAD_DIR, '/\\');
+$rootNode = new FileRiseDirectory($rootPath, $user, $isAdmin, $perms);
 
-$server = new Server([
-    new FileRiseDirectory($rootPath, $user, $isAdmin, $perms),
-]);
+$server = new Server($rootNode);
 
 // Auth + Locks
 $server->addPlugin($authPlugin);
@@ -77,7 +77,17 @@ $server->addPlugin(
 );
 
 // Base URI (adjust if you serve from a subdir or rewrite rule)
-$server->setBaseUri('/webdav.php/');
+$baseUri = '/webdav.php/';
+$reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+$legacyPrefix = '/webdav.php/uploads';
+$hasNestedUploads = is_dir($rootPath . DIRECTORY_SEPARATOR . 'uploads');
+if (!$hasNestedUploads && strpos($reqPath, $legacyPrefix) === 0) {
+    $next = substr($reqPath, strlen($legacyPrefix), 1);
+    if ($next === '' || $next === '/') {
+        $baseUri = $legacyPrefix . '/';
+    }
+}
+$server->setBaseUri($baseUri);
 
 // Execute
 $server->exec();
