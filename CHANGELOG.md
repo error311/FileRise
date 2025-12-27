@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 12/26/2025 (v2.11.4)
+
+`release(v2.11.4): OIDC token auth method compatibility + authMethod logging (see #77)`
+
+**Improved OIDC token auth method handling**  
+
+- Add clearer debug output showing the configured token endpoint auth method (authMethod / library default).
+- Apply tokenEndpointAuthMethod more robustly across Jumbojett/OpenIDConnectClient versions by attempting:
+  - setTokenEndpointAuthMethod()
+  - setTokenEndpointAuthMethodsSupported()
+  - and a providerConfigParam() fallback to force token_endpoint_auth_methods_supported
+  - Helps prevent provider token failures like “client id or secret not provided” when an explicit auth method is required.
+
+---
+
 ## Changes 12/26/2025 (v2.11.3)
 
 `release(v2.11.3): fix WebDAV baseUri + audit hook namespace; add OIDC token auth fallback (see #77)`

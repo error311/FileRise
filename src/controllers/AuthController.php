@@ -158,6 +158,7 @@ class AuthController
             'clientId'               => $clientId,
             'hasClientSecret'        => $clientSecret ? 'yes' : 'no',
             'publicClient'           => $publicClient ? 'yes' : 'no',
+            'authMethod'             => $tokenAuthMethod ?: '(library default)',
             'tokenEndpointAuthMethod'=> $tokenAuthMethod ?: '(library default)',
         ]);
 
@@ -173,13 +174,19 @@ class AuthController
         }
 
         // Apply explicit token endpoint auth method when configured.
-        if (method_exists($oidc, 'setTokenEndpointAuthMethod') && $tokenAuthMethod) {
-            $oidc->setTokenEndpointAuthMethod($tokenAuthMethod);
-        } elseif (method_exists($oidc, 'providerConfigParam') && $tokenAuthMethod) {
-            // Fallback for older OpenIDConnectClient: force supported methods list.
-            $oidc->providerConfigParam([
-                'token_endpoint_auth_methods_supported' => [$tokenAuthMethod],
-            ]);
+        if ($tokenAuthMethod) {
+            if (method_exists($oidc, 'setTokenEndpointAuthMethod')) {
+                $oidc->setTokenEndpointAuthMethod($tokenAuthMethod);
+            }
+            if (method_exists($oidc, 'setTokenEndpointAuthMethodsSupported')) {
+                $oidc->setTokenEndpointAuthMethodsSupported([$tokenAuthMethod]);
+            }
+            if (method_exists($oidc, 'providerConfigParam')) {
+                // Fallback for older OpenIDConnectClient: force supported methods list.
+                $oidc->providerConfigParam([
+                    'token_endpoint_auth_methods_supported' => [$tokenAuthMethod],
+                ]);
+            }
         }
 
         $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
