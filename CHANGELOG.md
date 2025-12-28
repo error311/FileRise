@@ -1,5 +1,51 @@
 # Changelog
 
+## Changes 12/28/2025 (v2.12.0)
+
+`release(v2.12.0): dual-pane mode + keyboard shortcuts`
+
+**Added**  
+
+- **Dual-pane mode** for the file list (left/right panes) with per-pane folder state, active-pane switching, and persisted last folders.
+- Dual-pane toggle in **User Panel** and in the **View Options** popover.
+- **Keyboard shortcuts** (ignored when a modal is open or when typing):
+  - `/` focus search
+  - `?` show shortcuts hint
+  - `Delete` delete selected (folder delete if a folder is selected)
+  - `F3` preview
+  - `F4` edit (when editable)
+  - `F5` copy
+  - `F6` move
+  - `F7` new folder
+  - `F8` delete selected
+- **Folder summary pill** showing folders/files/size, with optional **deep totals** (recursive) via `deep=1`.
+- Modal accessibility helpers:
+  - Focus trap within modals
+  - Restore focus to opener when closing
+  - `Escape` closes the topmost visible modal
+- New i18n strings for dual-pane hints + an `filerise:i18n-applied` event to refresh UI text after locale changes.
+
+**Changed**  
+
+- Folder stats endpoint now supports returning **recursive totals** (folders/files/bytes) when requested (`deep=1`), computed ACL-aware and with a scan cap to avoid runaway traversal.
+- Copy/Move UX in dual-pane prefers the **other pane’s folder** as the default destination when applicable.
+- Dual-pane layout + file list controls are now more responsive (pane width classes, improved pagination/search wrapping).
+- Breadcrumb separators adjusted for clearer spacing.
+
+**Fixed**  
+
+- Better correctness in multi-pane contexts:
+  - Folder icons/strip refresh across both panes.
+  - Hover preview resolves files using the correct pane’s file data.
+  - Folder move/file move operations invalidate folder stats and refresh the right UI surfaces.
+- Secondary pane is properly hidden on logout / unauthenticated state.
+
+**Notes**  
+
+- Deep folder totals are best-effort and may report as **truncated** for very large trees due to the scan cap (to keep the UI responsive).
+
+---
+
 ## Changes 12/26/2025 (v2.11.4)
 
 `release(v2.11.4): OIDC token auth method compatibility + authMethod logging (see #77)`

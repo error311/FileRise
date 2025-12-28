@@ -343,7 +343,7 @@ function renderBreadcrumbFragment(folderPath) {
   // Separator after Root
   let sep = document.createElement('span');
   sep.className = 'file-breadcrumb-sep';
-  sep.textContent = '›';
+  sep.textContent = ' › ';
   frag.appendChild(sep);
 
   // Now add the rest of the path normally (folder1, folder1/subA, etc.)
@@ -363,7 +363,7 @@ function renderBreadcrumbFragment(folderPath) {
     if (i < crumbs.length - 1) {
       sep = document.createElement('span');
       sep.className = 'file-breadcrumb-sep';
-      sep.textContent = '›';
+      sep.textContent = ' › ';
       frag.appendChild(sep);
     }
   }
@@ -1964,6 +1964,14 @@ function handleDropOnFolder(event, dropFolder) {
       showToast(`File(s) moved successfully to ${dropFolder}!`);
       refreshFolderIcon(dragData.sourceFolder);
       refreshFolderIcon(dropFolder);
+      try {
+        const folders = [dragData.sourceFolder, dropFolder].filter(Boolean);
+        if (folders.length) {
+          window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
+            detail: { folders }
+          }));
+        }
+      } catch (e) { /* ignore */ }
       loadFileList(dragData.sourceFolder);
     } else {
       showToast("Error moving files: " + (data.error || "Unknown error"));
@@ -2000,6 +2008,19 @@ function updateFolderActionButtons() {
   if (kebab) {
     kebab.style.display = 'inline-flex';
   }
+}
+
+export function syncFolderTreeSelection(selected) {
+  const container = document.getElementById('folderTreeContainer');
+  if (!container) return;
+  container.querySelectorAll(".folder-option").forEach(el => el.classList.remove("selected"));
+  if (selected) {
+    try {
+      const opt = container.querySelector(`.folder-option[data-folder="${CSS.escape(selected)}"]`);
+      if (opt) opt.classList.add("selected");
+    } catch (e) { /* ignore */ }
+  }
+  updateFolderActionButtons();
 }
 
 async function selectFolder(selected) {

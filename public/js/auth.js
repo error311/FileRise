@@ -336,6 +336,9 @@ export async function updateAuthenticatedUI(data) {
   toggleVisibility("mainOperations", true);
   toggleVisibility("uploadFileForm", true);
   toggleVisibility("fileListContainer", true);
+  if (typeof window.applyDualPaneMode === 'function') {
+    window.applyDualPaneMode();
+  }
   attachEnterKeyListener("removeUserModal", "deleteUserBtn");
   attachEnterKeyListener("changePasswordModal", "saveNewPasswordBtn");
   document.querySelector(".header-buttons").style.visibility = "visible";
@@ -525,6 +528,8 @@ function checkAuthentication(showLoginToast = true) {
         toggleVisibility("mainOperations", false);
         toggleVisibility("uploadFileForm", false);
         toggleVisibility("fileListContainer", false);
+        const secondary = document.getElementById('fileListContainerSecondary');
+        if (secondary) secondary.style.display = 'none';
         document.querySelector(".header-buttons").style.visibility = "hidden";
         return false;
       }

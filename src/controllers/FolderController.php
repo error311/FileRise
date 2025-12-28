@@ -41,11 +41,13 @@ class FolderController
         return FolderModel::listChildren($folder, $user, $perms, $cursor, $limit);
     }
 
-    /** Stats for a folder (currently: empty/non-empty via folders/files counts). */
-    public static function stats(string $folder, string $user, array $perms): array
+    /** Stats for a folder (folders/files/bytes; deep totals are opt-in). */
+    public static function stats(string $folder, string $user, array $perms, bool $deep = false): array
     {
         // Normalize inside model; this is a thin action
-        return FolderModel::countVisible($folder, $user, $perms);
+        return $deep
+            ? FolderModel::countVisibleDeep($folder, $user, $perms)
+            : FolderModel::countVisible($folder, $user, $perms);
     }
 
     /** Capabilities for UI buttons/menus (unchanged semantics; just centralized). */

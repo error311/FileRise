@@ -197,6 +197,233 @@ function wireModalEnterDefault() {
   }, true); // capture so we beat other handlers
 }
 
+const MODAL_SELECTORS = [
+  '.modal',
+  '#adminPanelModal',
+  '#userPanelModal',
+  '#userPermissionsModal',
+  '#adminUserHubModal',
+  '#userFlagsModal',
+  '#userGroupsModal',
+  '#groupAclModal',
+  '#clientPortalsModal',
+  '#filePreviewModal',
+  '#shareModal',
+  '#tagModal',
+  '#multiTagModal',
+  '#searchEverywhereModal'
+];
+const MODAL_SELECTOR = MODAL_SELECTORS.join(', ');
+
+function isModalVisible(el) {
+  if (!el || !document.body || !document.body.contains(el)) return false;
+  const s = getComputedStyle(el);
+  return s.display !== 'none' && s.visibility !== 'hidden' && s.pointerEvents !== 'none';
+}
+
+function getOpenModals() {
+  return Array.from(document.querySelectorAll(MODAL_SELECTOR)).filter(isModalVisible);
+}
+
+function getTopmostModal() {
+  const open = getOpenModals();
+  return open.length ? open[open.length - 1] : null;
+}
+
+function isFocusableVisible(el) {
+  if (!el) return false;
+  const s = getComputedStyle(el);
+  if (s.display === 'none' || s.visibility === 'hidden') return false;
+  if (el.getAttribute('aria-hidden') === 'true') return false;
+  return true;
+}
+
+function getFocusableElements(root) {
+  if (!root) return [];
+  const selector = [
+    'a[href]',
+    'area[href]',
+    'button:not([disabled])',
+    'input:not([disabled]):not([type="hidden"])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    'iframe',
+    '[tabindex]:not([tabindex="-1"])',
+    '[contenteditable="true"]'
+  ].join(',');
+  return Array.from(root.querySelectorAll(selector)).filter(isFocusableVisible);
+}
+
+function recordModalOpener(modal) {
+  const active = document.activeElement;
+  if (active && active !== document.body && !modal.contains(active)) {
+    modal.__frPrevFocus = active;
+  }
+}
+
+function restoreModalOpener(modal) {
+  const prev = modal.__frPrevFocus;
+  modal.__frPrevFocus = null;
+  if (prev && typeof prev.focus === 'function' && document.contains(prev)) {
+    try { prev.focus({ preventScroll: true }); } catch (e) { prev.focus(); }
+  }
+}
+
+function focusFirstInModal(modal) {
+  if (!modal || !document.body.contains(modal)) return;
+  if (modal.contains(document.activeElement)) return;
+  const focusables = getFocusableElements(modal);
+  if (focusables.length) {
+    focusables[0].focus({ preventScroll: true });
+  } else {
+    modal.focus({ preventScroll: true });
+  }
+}
+
+function trapFocusInModal(modal) {
+  if (!modal || modal.__frTrapBound) return;
+  modal.__frTrapBound = true;
+  modal.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    if (getTopmostModal() !== modal) return;
+    const focusables = getFocusableElements(modal);
+    if (!focusables.length) {
+      e.preventDefault();
+      modal.focus();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || !modal.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !modal.contains(active)) {
+      e.preventDefault();
+      first.focus();
+    }
+  }, true);
+}
+
+function applyModalA11yAttrs(modal) {
+  if (!modal) return;
+  if (!modal.hasAttribute('role')) modal.setAttribute('role', 'dialog');
+  if (!modal.hasAttribute('aria-modal')) modal.setAttribute('aria-modal', 'true');
+  if (!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex', '-1');
+}
+
+function handleModalOpen(modal) {
+  if (!modal) return;
+  modal.__frOpen = true;
+  recordModalOpener(modal);
+  applyModalA11yAttrs(modal);
+  trapFocusInModal(modal);
+  setTimeout(() => {
+    if (!modal.contains(document.activeElement)) focusFirstInModal(modal);
+  }, 0);
+}
+
+function handleModalClose(modal) {
+  if (!modal) return;
+  modal.__frOpen = false;
+  restoreModalOpener(modal);
+}
+
+function refreshModalState(modal) {
+  if (!modal || !document.body.contains(modal)) return;
+  const visible = isModalVisible(modal);
+  if (visible && !modal.__frOpen) handleModalOpen(modal);
+  if (!visible && modal.__frOpen) handleModalClose(modal);
+}
+
+function closeModalElement(modal) {
+  if (!modal) return false;
+  if (typeof modal.__frClose === 'function') {
+    modal.__frClose();
+    return true;
+  }
+
+  const closeSelector = [
+    '[data-fr-modal-close]',
+    '.editor-close-btn',
+    '.restore-close-btn',
+    '.close-image-modal',
+    '.modal-close',
+    '.btn-close',
+    '[aria-label="Close"]',
+    '#confirmNoBtn',
+    '[id^="close"]',
+    '[id^="cancel"]'
+  ].join(',');
+  const closeBtn = modal.querySelector(closeSelector);
+  if (closeBtn && !closeBtn.disabled && closeBtn.getAttribute('aria-disabled') !== 'true') {
+    closeBtn.click();
+    return true;
+  }
+
+  modal.style.display = 'none';
+  return true;
+}
+
+function wireModalA11y() {
+  if (window.__FR_FLAGS.wired.modalA11y) return;
+  window.__FR_FLAGS.wired.modalA11y = true;
+
+  document.querySelectorAll(MODAL_SELECTOR).forEach(refreshModalState);
+
+  const modalObserver = new MutationObserver((mutations) => {
+    const toRefresh = new Set();
+    const toClose = new Set();
+
+    mutations.forEach((m) => {
+      if (m.type === 'attributes') {
+        if (m.target && m.target.matches && m.target.matches(MODAL_SELECTOR)) {
+          toRefresh.add(m.target);
+        }
+        return;
+      }
+      if (m.type !== 'childList') return;
+
+      m.addedNodes.forEach((node) => {
+        if (!node || node.nodeType !== 1) return;
+        if (node.matches && node.matches(MODAL_SELECTOR)) toRefresh.add(node);
+        node.querySelectorAll?.(MODAL_SELECTOR).forEach((el) => toRefresh.add(el));
+      });
+      m.removedNodes.forEach((node) => {
+        if (!node || node.nodeType !== 1) return;
+        if (node.matches && node.matches(MODAL_SELECTOR)) toClose.add(node);
+        node.querySelectorAll?.(MODAL_SELECTOR).forEach((el) => toClose.add(el));
+      });
+    });
+
+    toClose.forEach((modal) => {
+      if (modal.__frOpen) handleModalClose(modal);
+    });
+    toRefresh.forEach(refreshModalState);
+  });
+
+  modalObserver.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['style', 'class', 'hidden']
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const open = getOpenModals();
+    if (!open.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeModalElement(open[open.length - 1]);
+  }, true);
+}
+
+window.__frGetOpenModals = getOpenModals;
+window.__frIsModalOpen = () => getOpenModals().length > 0;
+
 // One-shot guards
 window.__FR_FLAGS = window.__FR_FLAGS || {
   booted: false,
@@ -1317,6 +1544,7 @@ function bindDarkMode() {
         if (!window.__FR_FLAGS.wired.cancel) { bindCancelSafeties(); window.__FR_FLAGS.wired.cancel = true; }
         if (!window.__FR_FLAGS.wired.dragScroll) { bindDragAutoScroll(); window.__FR_FLAGS.wired.dragScroll = true; }
         wireModalEnterDefault();
+        wireModalA11y();
 
 
       } catch (e) {

@@ -11,10 +11,47 @@ import { refreshFolderIcon, updateRecycleBinState } from './folderManager.js?v={
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
 
+function getActiveFileListRoot() {
+  return document.getElementById("fileList") || document;
+}
+
+function getActiveSelectedFileCheckboxes() {
+  const root = getActiveFileListRoot();
+  return Array.from(root.querySelectorAll(".file-checkbox:checked"));
+}
+
+function getOtherPaneFolder() {
+  if (!window.dualPaneEnabled || !window.__frPaneState) return "";
+  const active = window.activePane === "secondary" ? "secondary" : "primary";
+  const other = active === "secondary" ? "primary" : "secondary";
+  const otherFolder = window.__frPaneState?.[other]?.currentFolder || "";
+  if (!otherFolder || otherFolder === (window.currentFolder || "")) return "";
+  return otherFolder;
+}
+
+function selectPreferredFolderOption(folderSelect, preferredFolder) {
+  if (!folderSelect || !preferredFolder) return;
+  const options = Array.from(folderSelect.options || []);
+  const match = options.find(opt => opt.value === preferredFolder);
+  if (match) folderSelect.value = preferredFolder;
+}
+
+function markPaneNeedsReloadForFolder(folder) {
+  if (!window.dualPaneEnabled || !window.__frPaneState || !folder) return;
+  const active = window.activePane === "secondary" ? "secondary" : "primary";
+  ["primary", "secondary"].forEach(pane => {
+    if (pane === active) return;
+    const state = window.__frPaneState[pane];
+    if (state && state.currentFolder === folder) {
+      state.needsReload = true;
+    }
+  });
+}
+
 export function handleDeleteSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
-  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
     showToast("no_files_selected");
     return;
@@ -48,7 +85,7 @@ function portalFileModalsToBody() {
 }
 
 function getSelectedFileObjects() {
-  const selected = Array.from(document.querySelectorAll(".file-checkbox:checked")).map(cb => cb.value);
+  const selected = getActiveSelectedFileCheckboxes().map(cb => cb.value);
   if (!selected.length) return [];
   const selectedSet = new Set(selected);
   return fileData.filter(f => selectedSet.has(escapeHTML(f.name)));
@@ -203,7 +240,7 @@ export function handleDownloadZipSelected(e) {
     return;
   }
 
-  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
     showToast("No files selected for download.");
     return;
@@ -339,7 +376,7 @@ export function handleExtractZipSelected(e) {
     e.preventDefault();
     e.stopImmediatePropagation();
   }
-  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  const checkboxes = getActiveSelectedFileCheckboxes();
   if (!checkboxes.length) {
     showToast("No files selected.");
     return;
@@ -650,18 +687,19 @@ document.addEventListener("DOMContentLoaded", () => {
 export function handleCopySelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
-  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
     showToast("No files selected for copying.", 5000);
     return;
   }
   window.filesToCopy = Array.from(checkboxes).map(chk => chk.value);
   document.getElementById("copyFilesModal").style.display = "block";
-  loadCopyMoveFolderListForModal("copyTargetFolder");
+  loadCopyMoveFolderListForModal("copyTargetFolder", getOtherPaneFolder());
 }
 
-export async function loadCopyMoveFolderListForModal(dropdownId) {
+export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder = "") {
   const folderSelect = document.getElementById(dropdownId);
+  if (!folderSelect) return;
   folderSelect.innerHTML = "";
 
   if (window.userFolderOnly) {
@@ -690,6 +728,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
           folderSelect.appendChild(option);
         }
       });
+      selectPreferredFolderOption(folderSelect, preferredFolder);
     } catch (error) {
       console.error("Error loading folder list for modal:", error);
     }
@@ -717,6 +756,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
         folderSelect.appendChild(option);
       });
     }
+    selectPreferredFolderOption(folderSelect, preferredFolder);
   } catch (error) {
     console.error("Error loading folder list for modal:", error);
   }
@@ -725,14 +765,14 @@ export async function loadCopyMoveFolderListForModal(dropdownId) {
 export function handleMoveSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
-  const checkboxes = document.querySelectorAll(".file-checkbox:checked");
+  const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
     showToast("No files selected for moving.");
     return;
   }
   window.filesToMove = Array.from(checkboxes).map(chk => chk.value);
   document.getElementById("moveFilesModal").style.display = "block";
-  loadCopyMoveFolderListForModal("moveTargetFolder");
+  loadCopyMoveFolderListForModal("moveTargetFolder", getOtherPaneFolder());
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -775,6 +815,7 @@ document.addEventListener("DOMContentLoaded", function () {
             showToast("Selected files copied successfully!", 5000);
             loadFileList(window.currentFolder);
             refreshFolderIcon(targetFolder);
+            markPaneNeedsReloadForFolder(targetFolder);
           } else {
             showToast("Error: " + (data.error || "Could not copy files"), 5000);
           }
@@ -829,6 +870,8 @@ document.addEventListener("DOMContentLoaded", function () {
             loadFileList(window.currentFolder);
             refreshFolderIcon(targetFolder);
             refreshFolderIcon(window.currentFolder);
+            markPaneNeedsReloadForFolder(targetFolder);
+            markPaneNeedsReloadForFolder(window.currentFolder);
           } else {
             showToast("Error: " + (data.error || "Could not move files"));
           }

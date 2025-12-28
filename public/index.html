@@ -292,7 +292,8 @@
         </div> <!-- end mainOperations -->
 
         <!-- File List Section -->
-        <div id="fileListContainer" style="display: none;">
+        <div id="fileListShell" class="file-list-shell">
+        <div id="fileListContainer" class="file-list-pane primary-pane" style="display: none;">
           <h2 id="fileListTitle" data-i18n-key="file_list_title">Files in (Root)</h2>
           <div id="fileListActions" class="file-list-actions">
             <div class="file-actions-strip collapsed" aria-label="File actions" id="fileActionsBar">
@@ -436,6 +437,16 @@
             </div>
           </div>
           <div id="fileList"></div>
+        </div>
+        <div id="fileListContainerSecondary" class="file-list-pane secondary-pane" style="display: none;">
+          <h2 id="fileListTitleSecondary" class="file-list-title" data-i18n-key="file_list_title">Files in (Root)</h2>
+          <div class="file-list-actions">
+            <div class="file-list-dual-hint" data-i18n-key="dual_pane_secondary_hint">Select a folder to open here.</div>
+          </div>
+          <div id="fileListSecondary" class="file-list-secondary-empty">
+            <div class="empty-state" data-i18n-key="dual_pane_secondary_empty">Select a folder to open in the right pane.</div>
+          </div>
+        </div>
         </div>
       </div> <!-- end container-fluid -->
     </div> <!-- end mainColumn -->

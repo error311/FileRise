@@ -60,7 +60,8 @@ body{letter-spacing: 0.2px;
 :root{--filr-accent-500:#008CB4; 
   --filr-accent-600:#00789A; 
   --filr-accent-700:#006882; 
-  --filr-accent-ring:rgba(0,140,180,.4);}
+  --filr-accent-ring:rgba(0,140,180,.4);
+  --filr-focus-ring:0 0 0 2px var(--filr-accent-ring);}
 .btn-color-folder{display:inline-flex; align-items:center; gap:6px;
   background:var(--filr-accent-500);
   border:1px solid var(--filr-accent-700);
@@ -78,6 +79,16 @@ body{letter-spacing: 0.2px;
 .dark-mode .btn-color-folder:hover,
 .dark-mode .btn-color-folder:focus-visible{background:var(--filr-accent-700);}
 .btn-login{margin-top: 10px;}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible{
+  outline: none;
+  box-shadow: var(--filr-focus-ring);}
 .orange-icon{color: #2196F3 !important;
     font-size: 34px !important;
     transform: translateY(-3px) !important;}
@@ -693,125 +704,129 @@ body:not(.dark-mode) .material-icons.pauseResumeBtn:hover{background-color: rgba
 .dark-mode .dropdown-menu .dropdown-item{color: #e0e0e0 !important;}
 .dropdown-item:hover{background-color: rgba(0,0,0,0.05);}
 .dark-mode .dropdown-item:hover{background-color: rgba(255,255,255,0.1);}
-#fileList button.edit-btn{background-color: #007bff;
+:is(#fileList, #fileListSecondary) button.edit-btn{background-color: #007bff;
     color: white;}
 .rename-btn .material-icons,
   #renameFolderBtn .material-icons,
   .folder-rename-btn .material-icons{color: black !important;}
-#fileList table{background-color: transparent;
+:is(#fileList, #fileListSecondary) table{background-color: transparent;
     border-collapse: collapse !important;
     border-spacing: 0 !important;
     table-layout: auto !important;
     width: 100% !important;}
-#fileList table tr:nth-child(even){background-color: transparent;}
+:is(#fileList, #fileListSecondary) table tr:nth-child(even){background-color: transparent;}
 :root{--filr-row-hover-bg: rgba(122,179,255,.14);
   --filr-row-selected-bg: rgba(122,179,255,.24);}
-#fileList table{border-collapse: separate;
+:is(#fileList, #fileListSecondary) table{border-collapse: separate;
   border-spacing: 0;}
-#fileList table tbody tr,
-#fileList table tbody tr > td{background-color: transparent !important;}
-#fileList table.table-hover tbody tr:hover > *{background-color: transparent !important;}
-#fileList table.table-striped > tbody > tr:nth-of-type(odd) > *{background-color: transparent !important;}
-#fileList table.filr-table tbody tr,
-#fileList table.filr-table tbody td{transition: background-color .12s ease;}
-#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td{background: var(--filr-row-hover-bg) !important;}
-#fileList table.filr-table tbody tr.selected > td,
-#fileList table.filr-table tbody tr.row-selected > td,
-#fileList table.filr-table tbody tr.selected-row > td,
-#fileList table.filr-table tbody tr.is-selected > td{background: var(--filr-row-selected-bg) !important;
+:is(#fileList, #fileListSecondary) table tbody tr,
+:is(#fileList, #fileListSecondary) table tbody tr > td{background-color: transparent !important;}
+:is(#fileList, #fileListSecondary) table.table-hover tbody tr:hover > *{background-color: transparent !important;}
+:is(#fileList, #fileListSecondary) table.table-striped > tbody > tr:nth-of-type(odd) > *{background-color: transparent !important;}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr,
+:is(#fileList, #fileListSecondary) table.filr-table tbody td{transition: background-color .12s ease;}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td{background: var(--filr-row-hover-bg) !important;}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected > td,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected > td,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row > td,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected > td{background: var(--filr-row-selected-bg) !important;
   box-shadow: inset 0 0 0 1px rgba(122,179,255,.45);}
-#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:first-child,
-#fileList table.filr-table tbody tr.selected > td:first-child,
-#fileList table.filr-table tbody tr.row-selected > td:first-child,
-#fileList table.filr-table tbody tr.selected-row > td:first-child,
-#fileList table.filr-table tbody tr.is-selected > td:first-child{border-top-left-radius: 8px;
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected > td:first-child{border-top-left-radius: 8px;
   border-bottom-left-radius: 8px;}
-#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:last-child,
-#fileList table.filr-table tbody tr.selected > td:last-child,
-#fileList table.filr-table tbody tr.row-selected > td:last-child,
-#fileList table.filr-table tbody tr.selected-row > td:last-child,
-#fileList table.filr-table tbody tr.is-selected > td:last-child{border-top-right-radius: 8px;
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:last-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected > td:last-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected > td:last-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row > td:last-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected > td:last-child{border-top-right-radius: 8px;
   border-bottom-right-radius: 8px;}
-#fileList table.filr-table tbody tr:focus-within > td{outline: 2px solid #8ab4f8;
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:focus-within > td{outline: 2px solid #8ab4f8;
   outline-offset: -2px;
   border-top-left-radius: 8px; border-bottom-left-radius: 8px;
   border-top-right-radius: 8px; border-bottom-right-radius: 8px;}
-.dark-mode #fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td{background: var(--filr-row-hover-bg) !important;}
-.dark-mode #fileList table.filr-table tbody tr.selected > td,
-.dark-mode #fileList table.filr-table tbody tr.row-selected > td,
-.dark-mode #fileList table.filr-table tbody tr.selected-row > td,
-.dark-mode #fileList table.filr-table tbody tr.is-selected > td{background: var(--filr-row-selected-bg) !important;}
-#fileList table.filr-table{--bs-table-hover-color: inherit;
+.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td{background: var(--filr-row-hover-bg) !important;}
+.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected > td,
+.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected > td,
+.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row > td,
+.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected > td{background: var(--filr-row-selected-bg) !important;}
+:is(#fileList, #fileListSecondary) table.filr-table{--bs-table-hover-color: inherit;
   --bs-table-striped-color: inherit;}
-#fileList table.table-hover tbody tr:hover,
-#fileList table.table-hover tbody tr:hover > td{color: inherit !important;}
-.dark-mode #fileList table.filr-table tbody td a,
-.dark-mode #fileList table.filr-table tbody td a:hover{color: inherit !important;}
+:is(#fileList, #fileListSecondary) table.table-hover tbody tr:hover,
+:is(#fileList, #fileListSecondary) table.table-hover tbody tr:hover > td{color: inherit !important;}
+.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody td a,
+.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody td a:hover{color: inherit !important;}
 :root{--filr-row-outline: rgba(122,179,255,.45);
   --filr-row-outline-hover: rgba(122,179,255,.35);}
-#fileList table.filr-table > :not(caption) > * > *{border: 0 !important;}
-#fileList table.filr-table td,
-#fileList table.filr-table th{box-shadow: none !important;}
-#fileList table.filr-table tbody tr.selected > td,
-#fileList table.filr-table tbody tr.row-selected > td,
-#fileList table.filr-table tbody tr.selected-row > td,
-#fileList table.filr-table tbody tr.is-selected > td{background: var(--filr-row-selected-bg) !important;
+:is(#fileList, #fileListSecondary) table.filr-table > :not(caption) > * > *{border: 0 !important;}
+:is(#fileList, #fileListSecondary) table.filr-table td,
+:is(#fileList, #fileListSecondary) table.filr-table th{box-shadow: none !important;}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected > td,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected > td,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row > td,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected > td{background: var(--filr-row-selected-bg) !important;
   box-shadow:
     inset 0  1px 0 var(--filr-row-outline),
     inset 0 -1px 0 var(--filr-row-outline);}
-#fileList table.filr-table tbody tr.selected > td:first-child,
-#fileList table.filr-table tbody tr.row-selected > td:first-child,
-#fileList table.filr-table tbody tr.selected-row > td:first-child,
-#fileList table.filr-table tbody tr.is-selected > td:first-child{box-shadow:
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected > td:first-child{box-shadow:
     inset 1px 0  0 var(--filr-row-outline),
     inset 0  1px 0 var(--filr-row-outline),
     inset 0 -1px 0 var(--filr-row-outline);
   border-top-left-radius: 8px; border-bottom-left-radius: 8px;}
-#fileList table.filr-table tbody tr.selected > td:last-child,
-#fileList table.filr-table tbody tr.row-selected > td:last-child,
-#fileList table.filr-table tbody tr.selected-row > td:last-child,
-#fileList table.filr-table tbody tr.is-selected > td:last-child{box-shadow:
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected > td:last-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected > td:last-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row > td:last-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected > td:last-child{box-shadow:
     inset -1px 0  0 var(--filr-row-outline),
     inset  0  1px 0 var(--filr-row-outline),
     inset  0 -1px 0 var(--filr-row-outline);
   border-top-right-radius: 8px; border-bottom-right-radius: 8px;}
-#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td{background: var(--filr-row-hover-bg) !important;
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td{background: var(--filr-row-hover-bg) !important;
   box-shadow:
     inset 0  1px 0 var(--filr-row-outline-hover),
     inset 0 -1px 0 var(--filr-row-outline-hover);}
-#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:first-child{box-shadow:
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:first-child{box-shadow:
     inset 1px 0  0 var(--filr-row-outline-hover),
     inset 0  1px 0 var(--filr-row-outline-hover),
     inset 0 -1px 0 var(--filr-row-outline-hover);
   border-top-left-radius: 8px; border-bottom-left-radius: 8px;}
-#fileList table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:last-child{box-shadow:
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:hover:not(.selected, .row-selected, .selected-row, .is-selected) > td:last-child{box-shadow:
     inset -1px 0  0 var(--filr-row-outline-hover),
     inset  0  1px 0 var(--filr-row-outline-hover),
     inset  0 -1px 0 var(--filr-row-outline-hover);
   border-top-right-radius: 8px; border-bottom-right-radius: 8px;}
-#fileList table.filr-table tbody tr:focus-within > td{outline: none;}
-#fileList table.filr-table tbody tr:focus-within > td:first-child,
-#fileList table.filr-table tbody tr:focus-within > td:last-child{outline: 2px solid #8ab4f8; outline-offset: -2px;}
-#fileListTitle{white-space: normal !important;
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:focus-within > td{outline: none;}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:focus-within > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr:focus-within > td:last-child{outline: 2px solid #8ab4f8; outline-offset: -2px;}
+#fileListTitle,
+#fileListTitleSecondary,
+.file-list-title{white-space: normal !important;
     word-wrap: break-word !important;
     overflow-wrap: break-word !important;
     max-width: 100% !important;
     display: block !important;
     text-align: left !important;}
 @media (max-width: 600px) {
-  #fileListTitle{font-size: 1.4rem !important;}
+  #fileListTitle,
+  #fileListTitleSecondary,
+  .file-list-title{font-size: 1.4rem !important;}
 }
-#fileList table tr{box-shadow: none;
+:is(#fileList, #fileListSecondary) table tr{box-shadow: none;
     border: none !important;
     outline: none !important;}
-.dark-mode #fileList table tr{box-shadow: none;
+.dark-mode :is(#fileList, #fileListSecondary) table tr{box-shadow: none;
     border: none !important;
     outline: none !important;}
-#fileList table th,
-  #fileList table td{border: none !important;
+:is(#fileList, #fileListSecondary) table th,
+  :is(#fileList, #fileListSecondary) table td{border: none !important;
     white-space: nowrap;}
-#fileList table th[data-column="name"],
-  #fileList table td:nth-child(2){white-space: normal !important;
+:is(#fileList, #fileListSecondary) table th[data-column="name"],
+  :is(#fileList, #fileListSecondary) table td:nth-child(2){white-space: normal !important;
     word-wrap: break-word !important;
     overflow-wrap: break-word !important;
     word-break: break-word !important;
@@ -822,33 +837,33 @@ body:not(.dark-mode) .material-icons.pauseResumeBtn:hover{background-color: rgba
     max-width: 250px !important;
     min-width: 120px !important;}
 @media (min-width: 500px) {
-  #fileList table th[data-column="name"],
-    #fileList table td:nth-child(2){max-width: 250px !important;
+  :is(#fileList, #fileListSecondary) table th[data-column="name"],
+    :is(#fileList, #fileListSecondary) table td:nth-child(2){max-width: 250px !important;
       min-width: 120px !important;}
 }
 @media (min-width: 1024px) {
-  #fileList table th[data-column="name"],
-    #fileList table td:nth-child(2){max-width: 280px !important;
+  :is(#fileList, #fileListSecondary) table th[data-column="name"],
+    :is(#fileList, #fileListSecondary) table td:nth-child(2){max-width: 280px !important;
       min-width: 120px !important;}
 }
 @media (min-width: 1440px) {
-  #fileList table th[data-column="name"],
-    #fileList table td:nth-child(2){max-width: 510px !important;
+  :is(#fileList, #fileListSecondary) table th[data-column="name"],
+    :is(#fileList, #fileListSecondary) table td:nth-child(2){max-width: 510px !important;
       min-width: 240px !important;}
 }
-#fileList table th:not([data-column="name"]),
-  #fileList table td:not(:nth-child(2)){white-space: nowrap !important;}
-#fileList table td{vertical-align: middle !important;
+:is(#fileList, #fileListSecondary) table th:not([data-column="name"]),
+  :is(#fileList, #fileListSecondary) table td:not(:nth-child(2)){white-space: nowrap !important;}
+:is(#fileList, #fileListSecondary) table td{vertical-align: middle !important;
     padding: 8px 10px !important;}
 :root{--file-row-height: 48px;}
-#fileList table.table tbody tr{height: auto !important;
+:is(#fileList, #fileListSecondary) table.table tbody tr{height: auto !important;
     min-height: var(--file-row-height) !important;}
-#fileList table.table tbody td:not(.file-name-cell){height: var(--file-row-height) !important;
+:is(#fileList, #fileListSecondary) table.table tbody td:not(.file-name-cell){height: var(--file-row-height) !important;
     line-height: var(--file-row-height) !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     vertical-align: middle;}
-#fileList table.table tbody td.file-name-cell{white-space: normal;
+:is(#fileList, #fileListSecondary) table.table tbody td.file-name-cell{white-space: normal;
     word-break: break-word;
     line-height: 1.2em !important;
     height: auto !important;}
@@ -960,7 +975,38 @@ label{font-size: 0.9rem;}
 .button-wrap .btn i.material-icons{font-size: 16px !important;
     line-height: 1 !important;
     vertical-align: middle !important;}
-#fileListContainer{border: 1px solid #e0e0e0;
+.file-list-shell{display:grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    align-items: start;
+    width: 100%;}
+.file-list-shell.dual-pane{grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 18px;}
+.file-list-shell.dual-pane .file-list-pane{min-width: 0;}
+.file-list-shell.dual-pane #fileListContainer,
+.file-list-shell.dual-pane #fileListContainerSecondary{min-width: 0;}
+.file-list-shell.dual-pane :is(#fileList, #fileListSecondary){min-width: 0;}
+@media (max-width: 992px) {
+  .file-list-shell.dual-pane{grid-template-columns: minmax(0, 1fr);}
+}
+.file-list-pane{position: relative;
+    transition: outline-color 0.15s ease, box-shadow 0.15s ease;}
+.file-list-shell.dual-pane .file-list-pane.fr-pane-active{outline: 2px solid var(--filr-accent-500, #3b82f6);
+    outline-offset: 2px;}
+.file-list-shell.dual-pane .file-list-pane{width: 100%;}
+.file-list-shell.dual-pane .file-list-pane.fr-pane-sticky{
+    position: sticky;
+    top: 12px;
+    align-self: start;
+}
+.file-list-pane.fr-pane-narrow :is(#fileList, #fileListSecondary) .hide-small,
+.file-list-pane.fr-pane-narrow :is(#fileList, #fileListSecondary) .hide-medium{display: none !important;}
+.file-list-pane.fr-pane-medium :is(#fileList, #fileListSecondary) .hide-medium{display: none !important;}
+.file-list-pane.fr-pane-narrow :is(#fileList, #fileListSecondary) th[data-column="size"],
+.file-list-pane.fr-pane-narrow :is(#fileList, #fileListSecondary) td.size-cell,
+.file-list-pane.fr-pane-narrow :is(#fileList, #fileListSecondary) td.folder-size-cell{display: table-cell !important;}
+#fileListContainer,
+#fileListContainerSecondary{border: 1px solid #e0e0e0;
     background: white;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     border-radius: var(--menu-radius);
@@ -968,42 +1014,116 @@ label{font-size: 0.9rem;}
     padding-bottom: 10px !important;
     padding-left: 5px !important;
     padding-right: 5px !important;
-    margin: 0 auto 20px;}
+    margin: 0 0 20px;}
 @media (max-width: 750px) {
-  #fileListContainer{width: 99%;}
+  #fileListContainer,
+  #fileListContainerSecondary{width: 99%;}
 }
-.dark-mode #fileListContainer{background-color: #2c2c2c;
+.dark-mode #fileListContainer,
+.dark-mode #fileListContainerSecondary{background-color: #2c2c2c;
     color: #e0e0e0;
     border: 1px solid #444;
     border-radius: var(--menu-radius);}
 #fileListContainer>h2,
   #fileListContainer>.file-list-actions,
-  #fileListContainer>#fileList{margin-left: 15px;}
+  #fileListContainer>:is(#fileList, #fileListSecondary),
+  #fileListContainerSecondary>h2,
+  #fileListContainerSecondary>.file-list-actions,
+  #fileListContainerSecondary>#fileListSecondary{margin-left: 15px;}
 @media (max-width: 768px) {
   #fileListContainer>h2,
     #fileListContainer>.file-list-actions,
-    #fileListContainer>#fileList{margin-left: 1px;}
+    #fileListContainer>:is(#fileList, #fileListSecondary),
+    #fileListContainerSecondary>h2,
+    #fileListContainerSecondary>.file-list-actions,
+    #fileListContainerSecondary>#fileListSecondary{margin-left: 1px;}
 }
 .col-12.col-md-4.text-left{margin-left: -17px;}
 @media (max-width: 600px) {
   .col-12.col-md-4.text-left{margin-left: -15px;}
 }
+.file-list-top-controls{width: 100%;}
+.file-list-top-controls .fr-page-controls{flex-wrap: wrap;
+    gap: 6px;
+    max-width: 100%;}
+.file-list-pagination-col{display:flex;
+    align-items:center;}
+.file-list-pagination-col .fr-page-controls{width:100%;}
+.file-list-pane.fr-pane-narrow .file-list-top-controls,
+  .file-list-pane.fr-pane-medium .file-list-top-controls{margin-left: 0;
+    margin-right: 0;}
+.file-list-pane.fr-pane-narrow .file-list-top-controls > [class*="col-"],
+  .file-list-pane.fr-pane-medium .file-list-top-controls > [class*="col-"]{flex: 0 0 100%;
+    max-width: 100%;}
+.file-list-pane.fr-pane-narrow .file-list-pagination-col,
+  .file-list-pane.fr-pane-medium .file-list-pagination-col{margin-left: 0 !important;
+    margin-top: 8px;
+    justify-content:center;}
+.file-list-pane.fr-pane-narrow .file-list-pagination-col .fr-page-controls,
+  .file-list-pane.fr-pane-medium .file-list-pagination-col .fr-page-controls{justify-content:center !important;}
+.file-list-pane.fr-pane-narrow .page-indicator,
+  .file-list-pane.fr-pane-medium .page-indicator{white-space: normal;}
 
   .header-buttons button:not(#userDropdownToggle),
 #headerDropArea .header-card-icon {
   padding: 9px;
 }
-#fileListTitle{font-size: 1.8em;
+#fileListTitle,
+#fileListTitleSecondary,
+.file-list-title{font-size: 1.8em;
     margin-top: 10px;
     margin-bottom: 10px;}
 .file-list-actions{display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 5px;
-    margin-bottom: 15px;}
+    margin-bottom: 10px;}
+.file-list-pane.fr-pane-narrow #fileSummary,
+.file-list-pane.fr-pane-medium #fileSummary{
+    width:auto;
+    max-width:100%;
+    justify-content:center;
+    margin:6px auto 0;
+}
+@media (max-width: 900px) {
+  .file-list-pagination-col{margin-left:0 !important;
+      justify-content:center;}
+  .file-list-pagination-col .fr-page-controls{justify-content:center !important;}
+  #fileSummary{width:auto;
+      max-width:100%;
+      justify-content:center;
+      margin:6px auto 0;}
+}
+.file-list-dual-hint{opacity: 0.8;
+    font-size: 0.95em;
+    padding: 8px 6px;}
+.fr-dual-target-hint{display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--fr-border-light,#e5e5e5);
+    background: var(--fr-surface-light-2,#f1f1f1);
+    color: var(--fr-muted-light,#606060);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;}
+.file-list-actions .fr-dual-target-hint{margin-left: auto;}
+.dark-mode .fr-dual-target-hint{background: var(--fr-surface-dark,#212121);
+    border-color: var(--fr-border-dark,#303030);
+    color: var(--fr-muted-dark,#aaaaaa);}
+.file-list-pane.fr-pane-drop-target{outline: 2px dashed var(--filr-accent-500,#008CB4);
+    outline-offset: 3px;}
+.file-list-secondary-empty{min-height: 180px;
+    display: flex;
+    align-items: center;}
+.file-list-pane.fr-pane-has-content .file-list-dual-hint{display: none;}
 .file-actions-strip{display:flex;
     align-items:center;
     gap:10px;
+    row-gap:8px;
     flex-wrap:wrap;
     min-height:45px;
     padding:10px 10px;
@@ -1095,7 +1215,10 @@ label{font-size: 0.9rem;}
   pointer-events:none;
 }
 .file-actions-strip .view-actions{margin-left:10px;}
-.file-actions-strip.expanded .view-actions{margin-left:auto;}
+.file-actions-strip.expanded .view-actions{margin-left:0;}
+@media (max-width: 1100px) {
+  .file-actions-strip.expanded .view-actions{margin-left:0;}
+}
 
 /* View options popover */
 .filr-popover{
@@ -1177,6 +1300,60 @@ label{font-size: 0.9rem;}
   line-height:1;
   color: inherit;
 }
+#viewOptionsPopover .vo-toggle-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+#viewOptionsPopover .vo-toggle-text{
+  font-size:0.9rem;
+  color:var(--filr-muted-text,#606060);
+}
+.dark-mode #viewOptionsPopover .vo-toggle-text{color:#c3c7ce;}
+#viewOptionsPopover .vo-toggle-input{
+  appearance:none;
+  -webkit-appearance:none;
+  width:2.6rem;
+  height:1.4rem;
+  margin:0;
+  border-radius:999px;
+  border:1px solid var(--fr-border-light,#d6dbe3);
+  background-color:#e1e4ea;
+  position:relative;
+  cursor:pointer;
+  outline:none;
+  transition:background-color 0.15s ease,border-color 0.15s ease,box-shadow 0.15s ease;
+}
+#viewOptionsPopover .vo-toggle-input::before{
+  content:"";
+  position:absolute;
+  top:2px;
+  left:2px;
+  width:1rem;
+  height:1rem;
+  border-radius:999px;
+  background-color:#ffffff;
+  box-shadow:0 1px 2px rgba(0,0,0,0.35);
+  transition:transform 0.15s ease;
+}
+#viewOptionsPopover .vo-toggle-input:checked{
+  background-color:var(--filr-accent-400,#0d6efd);
+  border-color:var(--filr-accent-400,#0d6efd);
+}
+#viewOptionsPopover .vo-toggle-input:checked::before{
+  transform:translateX(1.1rem);
+}
+#viewOptionsPopover .vo-toggle-input:focus-visible{
+  box-shadow:0 0 0 2px rgba(13,110,253,0.35);
+}
+.dark-mode #viewOptionsPopover .vo-toggle-input{
+  border-color:var(--fr-border-dark,#2c2d33);
+  background-color:rgba(255,255,255,0.1);
+}
+.dark-mode #viewOptionsPopover .vo-toggle-input::before{
+  box-shadow:0 1px 2px rgba(0,0,0,0.7);
+}
 
 .modal-footer{margin-top: 15px;
     text-align: right;}
@@ -1184,7 +1361,8 @@ label{font-size: 0.9rem;}
     margin-top: 10px;}
 @media (max-width: 600px) {
   .file-actions-strip{width: 100%;}
-  #fileListTitle{font-size: 1.4em;}
+  #fileListTitle,
+  .file-list-title{font-size: 1.4em;}
   .file-list-actions{flex-direction: column;
       align-items: stretch;}
   .file-list-actions .action-btn{width: 100%;}
@@ -1799,14 +1977,41 @@ body:not(.dark-mode){--download-spinner-color: #000;}
       color: #aaa;
       pointer-events: none; /* optional, so it doesn't block drops */
     }
-#fileList tbody tr.clickable-row{-webkit-user-select: none; 
+:is(#fileList, #fileListSecondary) tbody tr.clickable-row{-webkit-user-select: none; 
     -moz-user-select: none;    
     -ms-user-select: none;     
     user-select: none;}
-#fileSummary{color: black;}
+#fileSummary{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-left:auto;
+  margin-top:0;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(15,23,42,0.12);
+  background: rgba(15,23,42,0.04);
+  color:#1f2937;
+  font-size:0.82rem;
+  font-weight:600;
+  line-height:1;
+  white-space:nowrap;
+}
+#fileSummary .fr-summary-item{display:inline-flex;
+  align-items:center;
+  gap:4px;}
+#fileSummary .fr-summary-count{font-variant-numeric: tabular-nums;}
+#fileSummary .fr-summary-sep{opacity:0.45;}
+#fileSummary .material-icons{font-size:18px;
+  opacity:0.7;}
+#fileSummary[data-truncated="1"]{border-style:dashed;}
 @media only screen and (max-width: 600px) {
-  #fileSummary,
-    #rowHeightSliderContainer,
+  #fileSummary{float: none !important;
+      margin: 6px auto 0 !important;
+      text-align: center !important;
+      display: flex !important;
+      justify-content: center;}
+  #rowHeightSliderContainer,
     #viewSliderContainer{float: none !important;
       margin: 0 auto !important;
       text-align: center !important;
@@ -1816,7 +2021,10 @@ body:not(.dark-mode){--download-spinner-color: #000;}
   #viewSliderContainer span{line-height: 1;
     margin: 0;
     padding: 0;}
-.dark-mode #fileSummary{color: white;}
+.dark-mode #fileSummary{
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.16);
+  color:#e5e7eb;}
 /* TODO: searchIcon also redefined later with alternate sizing/pill treatment; keep both until usages converge. */
 #searchIcon{border-radius: 4px;
     padding: 4px 8px;}
@@ -2241,42 +2449,42 @@ body.dark-mode #folderTreeContainer .folder-icon .enc-mark-keyhole{
 }
 
 /* File list (inline folder rows + folder strip icons rendered in fileListView.js) */
-#fileList .folder-svg .lock-body{fill: var(--filr-folder-stroke, #6b6b6b);
+:is(#fileList, #fileListSecondary) .folder-svg .lock-body{fill: var(--filr-folder-stroke, #6b6b6b);
   opacity: .95;}
-#fileList .folder-svg .lock-shackle{fill: none;
+:is(#fileList, #fileListSecondary) .folder-svg .lock-shackle{fill: none;
   stroke: var(--filr-folder-stroke, #6b6b6b);
   stroke-width: 1.4;
   stroke-linecap: round;}
-#fileList .folder-svg .lock-keyhole{fill: rgba(0,0,0,.28);}
-body.dark-mode #fileList .folder-svg .lock-keyhole{fill: rgba(255,255,255,.28);}
+:is(#fileList, #fileListSecondary) .folder-svg .lock-keyhole{fill: rgba(0,0,0,.28);}
+body.dark-mode :is(#fileList, #fileListSecondary) .folder-svg .lock-keyhole{fill: rgba(255,255,255,.28);}
 
-#fileList .folder-svg .enc-badge{
+:is(#fileList, #fileListSecondary) .folder-svg .enc-badge{
   fill: rgba(37, 99, 235, .92);
   stroke: rgba(0,0,0,.22);
   stroke-width: .6;
   paint-order: fill stroke;
   vector-effect: non-scaling-stroke;
 }
-body.dark-mode #fileList .folder-svg .enc-badge{
+body.dark-mode :is(#fileList, #fileListSecondary) .folder-svg .enc-badge{
   fill: rgba(96, 165, 250, .92);
 }
-#fileList .folder-svg .enc-mark-shackle{
+:is(#fileList, #fileListSecondary) .folder-svg .enc-mark-shackle{
   fill: none;
   stroke: rgba(255,255,255,.92);
   stroke-width: 0.95;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
-#fileList .folder-svg .enc-mark-body{
+:is(#fileList, #fileListSecondary) .folder-svg .enc-mark-body{
   fill: rgba(255,255,255,.92);
   stroke: rgba(0,0,0,.20);
   stroke-width: .35;
   vector-effect: non-scaling-stroke;
 }
-#fileList .folder-svg .enc-mark-keyhole{
+:is(#fileList, #fileListSecondary) .folder-svg .enc-mark-keyhole{
   fill: rgba(0,0,0,.28);
 }
-body.dark-mode #fileList .folder-svg .enc-mark-keyhole{
+body.dark-mode :is(#fileList, #fileListSecondary) .folder-svg .enc-mark-keyhole{
   fill: rgba(0,0,0,.22);
 }
 #folderTreeContainer li.load-more{padding: 4px 0 4px 28px;            
@@ -2439,8 +2647,8 @@ body.dark-mode{background:var(--fr-surface-dark-2)!important;color:#f1f1f1!impor
 body.dark-mode #fileListContainer,body.dark-mode #uploadCard,body.dark-mode #folderManagementCard,body.dark-mode .card,body.dark-mode .admin-panel-content,body.dark-mode .media-topbar{background:var(--fr-surface-dark)!important;border-color:var(--fr-border-dark)!important;box-shadow:0 1px 4px rgba(0,0,0,.9)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body.dark-mode #fileListContainer::before,body.dark-mode #uploadCard::before,body.dark-mode #folderManagementCard::before,body.dark-mode .card::before,body.dark-mode .admin-panel-content::before{box-shadow:none!important}
 body.dark-mode .card-header,body.dark-mode .custom-folder-card-body .drag-header{background:var(--fr-surface-dark-2)!important;border-bottom:1px solid var(--fr-border-dark)!important}
-body.dark-mode #fileList table thead th{background:var(--fr-surface-dark-2)!important;border-bottom:1px solid var(--fr-border-dark)!important}
-body.dark-mode #fileList table.filr-table tbody tr.selected>td,body.dark-mode #fileList table.filr-table tbody tr.row-selected>td,body.dark-mode #fileList table.filr-table tbody tr.selected-row>td,body.dark-mode #fileList table.filr-table tbody tr.is-selected>td{background:rgba(62,166,255,.16)!important;box-shadow:none!important}
+body.dark-mode :is(#fileList, #fileListSecondary) table thead th{background:var(--fr-surface-dark-2)!important;border-bottom:1px solid var(--fr-border-dark)!important}
+body.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected>td,body.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected>td,body.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row>td,body.dark-mode :is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected>td{background:rgba(62,166,255,.16)!important;box-shadow:none!important}
 body.dark-mode .modal{background-color:rgba(0,0,0,.65)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body.dark-mode .modal .modal-content,body.dark-mode .editor-modal,body.dark-mode .image-preview-modal-content,body.dark-mode #restoreFilesModal .modal-content,body.dark-mode #downloadProgressModal .modal-content{background:var(--fr-surface-dark)!important;border-radius:12px!important;border:1px solid var(--fr-border-dark)!important;box-shadow:0 8px 24px rgba(0,0,0,.9)!important}
 body.dark-mode .modal .modal-content::before,body.dark-mode .editor-modal::before,body.dark-mode .image-preview-modal-content::before,body.dark-mode #restoreFilesModal .modal-content::before,body.dark-mode #downloadProgressModal .modal-content::before{box-shadow:none!important}
@@ -2450,15 +2658,17 @@ body.dark-mode input:focus,body.dark-mode select:focus,body.dark-mode textarea:f
 #deleteFolderBtn,#confirmDeleteFolder{background-color:#b3261e!important;border-color:#b3261e!important;box-shadow:0 4px 10px rgba(0,0,0,.7)!important}
 body.dark-mode .folder-strip-container.folder-strip-mobile{background:var(--fr-surface-dark-2)!important;border:1px solid var(--fr-border-dark)!important}
 body.dark-mode #customToast{background:#212121!important;border:1px solid var(--fr-border-dark)!important;box-shadow:0 8px 20px rgba(0,0,0,.9)!important}
-body.dark-mode #fileSummary{color:var(--fr-muted-dark)!important}
+body.dark-mode #fileSummary{color:var(--fr-muted-dark)!important;
+  background: rgba(255,255,255,0.08)!important;
+  border-color: rgba(255,255,255,0.16)!important}
 body.dark-mode #createMenu,body.dark-mode .user-dropdown .user-menu,body.dark-mode #fileContextMenu,body.dark-mode #folderContextMenu,body.dark-mode #folderManagerContextMenu,body.dark-mode #adminPanelModal .modal-content,body.dark-mode #userPermissionsModal .modal-content,body.dark-mode #userPermissionsModal .modal-content,body.dark-mode #userFlagsModal .modal-content,body.dark-mode #userGroupsModal .modal-content,body.dark-mode #userPanelModal .modal-content,body.dark-mode #groupAclModal .modal-content,body.dark-mode .editor-modal,body.dark-mode #filePreviewModal .modal-content,body.dark-mode #loginForm,body.dark-mode .editor-header,#clientPortalsModal .modal-content{background:var(--fr-surface-dark)!important;border:1px solid var(--fr-border-dark)!important;color:#f1f1f1!important;border-radius:12px!important;box-shadow:0 8px 24px rgba(0,0,0,.9)!important}
 body.dark-mode .user-dropdown .user-menu,body.dark-mode #createMenu,body.dark-mode #fileContextMenu,body.dark-mode #folderContextMenu,body.dark-mode #folderManagerContextMenu{background-clip:padding-box}
 body:not(.dark-mode){background:var(--fr-bg-light)!important;color:#111!important;background-image:none!important}
 body:not(.dark-mode) #fileListContainer,body:not(.dark-mode) #uploadCard,body:not(.dark-mode) #folderManagementCard,body:not(.dark-mode) .card,body:not(.dark-mode) .admin-panel-content{background:var(--fr-surface-light)!important;border-color:var(--fr-border-light)!important;box-shadow:0 3px 8px rgba(0,0,0,.04)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body:not(.dark-mode) #fileListContainer::before,body:not(.dark-mode) #uploadCard::before,body:not(.dark-mode) #folderManagementCard::before,body:not(.dark-mode) .card::before,body:not(.dark-mode) .admin-panel-content::before{box-shadow:none!important}
 body:not(.dark-mode) .card-header,body:not(.dark-mode) .custom-folder-card-body .drag-header{background:var(--fr-surface-light-2)!important;border-bottom:1px solid var(--fr-border-light)!important}
-body:not(.dark-mode) #fileList table thead th{background:var(--fr-surface-light-2)!important;border-bottom:1px solid var(--fr-border-light)!important}
-body:not(.dark-mode) #fileList table.filr-table tbody tr.selected>td,body:not(.dark-mode) #fileList table.filr-table tbody tr.row-selected>td,body:not(.dark-mode) #fileList table.filr-table tbody tr.selected-row>td,body:not(.dark-mode) #fileList table.filr-table tbody tr.is-selected>td{background:rgba(33,150,243,.12)!important;box-shadow:none!important}
+body:not(.dark-mode) :is(#fileList, #fileListSecondary) table thead th{background:var(--fr-surface-light-2)!important;border-bottom:1px solid var(--fr-border-light)!important}
+body:not(.dark-mode) :is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected>td,body:not(.dark-mode) :is(#fileList, #fileListSecondary) table.filr-table tbody tr.row-selected>td,body:not(.dark-mode) :is(#fileList, #fileListSecondary) table.filr-table tbody tr.selected-row>td,body:not(.dark-mode) :is(#fileList, #fileListSecondary) table.filr-table tbody tr.is-selected>td{background:rgba(33,150,243,.12)!important;box-shadow:none!important}
 body:not(.dark-mode) .modal{background-color:rgba(0,0,0,.4)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body:not(.dark-mode) .modal .modal-content,body:not(.dark-mode) .editor-modal,body:not(.dark-mode) .image-preview-modal-content,body:not(.dark-mode) #restoreFilesModal .modal-content,body:not(.dark-mode) #downloadProgressModal .modal-content{background:var(--fr-surface-light)!important;border-radius:12px!important;border:1px solid var(--fr-border-light)!important;box-shadow:0 8px 24px rgba(0,0,0,.18)!important}
 body:not(.dark-mode) .modal .modal-content::before,body:not(.dark-mode) .editor-modal::before,body:not(.dark-mode) .image-preview-modal-content::before,body:not(.dark-mode) #restoreFilesModal .modal-content::before,body:not(.dark-mode) #downloadProgressModal .modal-content::before{box-shadow:none!important}
@@ -2468,7 +2678,9 @@ body:not(.dark-mode) input:focus,body:not(.dark-mode) select:focus,body:not(.dar
 body:not(.dark-mode) #deleteAllBtn,body:not(.dark-mode) #deleteTrashSelectedBtn{box-shadow:0 2px 6px rgba(244,67,54,.3)!important}
 body:not(.dark-mode) .folder-strip-container.folder-strip-mobile{background:#f1f1f1!important;border:1px solid var(--fr-border-light)!important}
 body:not(.dark-mode) #customToast{background:#212121!important;color:#fff!important;border:1px solid #000!important;box-shadow:0 8px 18px rgba(0,0,0,.45)!important}
-body:not(.dark-mode) #fileSummary{color:var(--fr-muted-light)!important}
+body:not(.dark-mode) #fileSummary{color:var(--fr-muted-light)!important;
+  background: rgba(15,23,42,0.04)!important;
+  border-color: rgba(15,23,42,0.12)!important}
 body:not(.dark-mode) #createMenu,body:not(.dark-mode) .user-dropdown .user-menu,body:not(.dark-mode) #fileContextMenu,body:not(.dark-mode) #folderContextMenu,body:not(.dark-mode) #folderManagerContextMenu,body:not(.dark-mode) #adminPanelModal .modal-content,body:not(.dark-mode) #userPermissionsModal .modal-content,body:not(.dark-mode) #userPermissionsModal .modal-content,body:not(.dark-mode) #userFlagsModal .modal-content,body:not(.dark-mode) #userGroupsModal .modal-content,body:not(.dark-mode) #userPanelModal .modal-content,body:not(.dark-mode) #groupAclModal .modal-content,body:not(.dark-mode) .editor-modal,body:not(.dark-mode) #filePreviewModal .modal-content,body:not(.dark-mode) #loginForm,body:not(.dark-mode) .editor-header,body:not(.dark-mode) #clientPortalsModal .modal-content{background:var(--fr-surface-light)!important;border:1px solid var(--fr-border-light)!important;color:#111!important;border-radius:12px!important;box-shadow:0 4px 12px rgba(0,0,0,.12)!important}
 #searchIcon{display:inline-flex;align-items:center;justify-content:center;width:38px;height:36px;padding:0;border-radius:999px 0 0 999px;border:1px solid rgba(0,0,0,.18);border-right:none;background:#fff;cursor:pointer;box-shadow:none;transform:none}
 #searchIcon .material-icons{font-size:20px;line-height:1;color:#555}
@@ -2496,28 +2708,28 @@ input[type=text]:not(#searchInput),input[type=password],input[type=email],input[
 body.dark-mode #decreaseFont,body.dark-mode #increaseFont{background:#212121;border-color:#3d3d3d;color:#f1f1f1}
 body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:not(:disabled):hover{background:#2a2a2a;border-color:#4a4a4a;box-shadow:0 1px 4px rgba(0,0,0,.7)}
 #closeEditorX{margin-right:10px}
-#fileList .folder-row-icon .folder-front{fill:var(--filr-folder-front,#f6b84e);stroke:var(--filr-folder-stroke,#a87312);stroke-width:.5;stroke-linejoin:round;stroke-linecap:round}
-#fileList .folder-row-icon .folder-back{fill:var(--filr-folder-back,#fcd68a);stroke:var(--filr-folder-stroke,#a87312);stroke-width:.5;stroke-linejoin:round;stroke-linecap:round}
-#fileList .folder-row-icon .paper{fill:#fff;stroke:#b2c2db;stroke-width:1;vector-effect:non-scaling-stroke}
-#fileList .folder-row-icon .paper-fold{fill:#b2c2db}
-#fileList .folder-row-icon .paper-line{stroke:#b2c2db;stroke-width:1;stroke-linecap:round;fill:none;vector-effect:non-scaling-stroke}
-#fileList .folder-row-icon .paper-ink{stroke:#4da3ff;stroke-width:.9;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.85}
-#fileList .folder-row-icon .lip-highlight{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
-#fileList .folder-row-name{font-weight:500;margin-right:4px}
-#fileList .folder-row-meta{margin-left:4px;opacity:.75;font-size:.86em}
-#fileList tbody tr.folder-row{height:var(--file-row-height,44px);cursor:pointer}
-#fileList tbody tr.folder-row .folder-name-cell{padding-top:0;padding-bottom:0}
-#fileList tbody tr.folder-row .folder-row-inner{cursor:inherit}
-#fileList tbody tr.folder-row .folder-icon-cell{text-align:left;vertical-align:middle}
-#fileList tbody tr.folder-row .folder-row-icon svg{display:block}
+:is(#fileList, #fileListSecondary) .folder-row-icon .folder-front{fill:var(--filr-folder-front,#f6b84e);stroke:var(--filr-folder-stroke,#a87312);stroke-width:.5;stroke-linejoin:round;stroke-linecap:round}
+:is(#fileList, #fileListSecondary) .folder-row-icon .folder-back{fill:var(--filr-folder-back,#fcd68a);stroke:var(--filr-folder-stroke,#a87312);stroke-width:.5;stroke-linejoin:round;stroke-linecap:round}
+:is(#fileList, #fileListSecondary) .folder-row-icon .paper{fill:#fff;stroke:#b2c2db;stroke-width:1;vector-effect:non-scaling-stroke}
+:is(#fileList, #fileListSecondary) .folder-row-icon .paper-fold{fill:#b2c2db}
+:is(#fileList, #fileListSecondary) .folder-row-icon .paper-line{stroke:#b2c2db;stroke-width:1;stroke-linecap:round;fill:none;vector-effect:non-scaling-stroke}
+:is(#fileList, #fileListSecondary) .folder-row-icon .paper-ink{stroke:#4da3ff;stroke-width:.9;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.85}
+:is(#fileList, #fileListSecondary) .folder-row-icon .lip-highlight{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
+:is(#fileList, #fileListSecondary) .folder-row-name{font-weight:500;margin-right:4px}
+:is(#fileList, #fileListSecondary) .folder-row-meta{margin-left:4px;opacity:.75;font-size:.86em}
+:is(#fileList, #fileListSecondary) tbody tr.folder-row{height:var(--file-row-height,44px);cursor:pointer}
+:is(#fileList, #fileListSecondary) tbody tr.folder-row .folder-name-cell{padding-top:0;padding-bottom:0}
+:is(#fileList, #fileListSecondary) tbody tr.folder-row .folder-row-inner{cursor:inherit}
+:is(#fileList, #fileListSecondary) tbody tr.folder-row .folder-icon-cell{text-align:left;vertical-align:middle}
+:is(#fileList, #fileListSecondary) tbody tr.folder-row .folder-row-icon svg{display:block}
 .folder-row-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;margin-right:6px;position:static;left:0;top:0}
 .folder-row-inner{display:flex;align-items:center;gap:8px}
-#fileList table.filr-table th.checkbox-col,#fileList table.filr-table td.checkbox-col,#fileList table.filr-table td.folder-icon-cell{width:30px!important;max-width:30px!important}
-#fileList tr.folder-row.folder-row-droptarget{background:var(--filr-accent-50,rgba(250,204,21,.12));box-shadow:inset 0 0 0 1px var(--filr-accent-400,rgba(250,204,21,.6))}
-#fileList tr.folder-row.folder-row-droptarget .folder-row-name{font-weight:600}
-#fileList table.filr-table tbody tr.folder-row>td{padding-top:0!important;padding-bottom:0!important}
-#fileList table.filr-table tbody tr.folder-row>td.folder-icon-cell{overflow:visible}
-#fileList tr.folder-row .folder-row-inner,#fileList tr.folder-row .folder-row-name{cursor:inherit}
+:is(#fileList, #fileListSecondary) table.filr-table th.checkbox-col,:is(#fileList, #fileListSecondary) table.filr-table td.checkbox-col,:is(#fileList, #fileListSecondary) table.filr-table td.folder-icon-cell{width:30px!important;max-width:30px!important}
+:is(#fileList, #fileListSecondary) tr.folder-row.folder-row-droptarget{background:var(--filr-accent-50,rgba(250,204,21,.12));box-shadow:inset 0 0 0 1px var(--filr-accent-400,rgba(250,204,21,.6))}
+:is(#fileList, #fileListSecondary) tr.folder-row.folder-row-droptarget .folder-row-name{font-weight:600}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.folder-row>td{padding-top:0!important;padding-bottom:0!important}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.folder-row>td.folder-icon-cell{overflow:visible}
+:is(#fileList, #fileListSecondary) tr.folder-row .folder-row-inner,:is(#fileList, #fileListSecondary) tr.folder-row .folder-row-name{cursor:inherit}
 
 /* === App Zoom Shell === */
 :root {

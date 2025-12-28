@@ -144,6 +144,124 @@ class FolderModel
     return $result;
 }
 
+    public static function countVisibleDeep(string $folder, string $user, array $perms, int $maxScan = 20000): array
+    {
+        $folder = ACL::normalizeFolder($folder);
+
+        $canViewFolder = ACL::isAdmin($perms)
+            || ACL::canRead($user, $perms, $folder)
+            || ACL::canReadOwn($user, $perms, $folder);
+        if (!$canViewFolder) {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
+        }
+
+        $base = realpath((string)UPLOAD_DIR);
+        if ($base === false) {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
+        }
+
+        if ($folder === 'root') {
+            $dir = $base;
+            $relPrefix = '';
+        } else {
+            $parts = array_filter(explode('/', $folder), fn($p) => $p !== '');
+            foreach ($parts as $seg) {
+                if (!self::isSafeSegment($seg)) {
+                    return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
+                }
+            }
+            $guess = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+            $dir = self::safeReal($base, $guess);
+            if ($dir === null || !is_dir($dir)) {
+                return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
+            }
+            $relPrefix = implode('/', $parts);
+        }
+
+        $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
+        $SKIP   = ['trash', 'profile_pics'];
+
+        $folderCount = 0;
+        $fileCount = 0;
+        $totalBytes = 0;
+        $scanned = 0;
+        $truncated = false;
+
+        $stack = [[$dir, $relPrefix]];
+        while ($stack) {
+            [$curAbs, $curRel] = array_pop($stack);
+
+            $relForAcl = ($curRel === '' ? 'root' : $curRel);
+            $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $relForAcl);
+
+            $entries = @scandir($curAbs);
+            if ($entries === false) {
+                continue;
+            }
+
+            foreach ($entries as $name) {
+                if (++$scanned > $maxScan) {
+                    $truncated = true;
+                    break 2;
+                }
+
+                if ($name === '.' || $name === '..') continue;
+                if ($name[0] === '.') continue;
+                if (in_array($name, $IGNORE, true)) continue;
+                if (in_array(strtolower($name), $SKIP, true)) continue;
+                if (!self::isSafeSegment($name)) continue;
+
+                $abs = $curAbs . DIRECTORY_SEPARATOR . $name;
+
+                if (@is_dir($abs)) {
+                    if (@is_link($abs)) {
+                        $safe = self::safeReal($base, $abs);
+                        if ($safe === null || !is_dir($safe)) {
+                            continue;
+                        }
+                        $abs = $safe;
+                    }
+
+                    $childRel = ($curRel === '' ? $name : $curRel . '/' . $name);
+                    $canViewChild = ACL::isAdmin($perms)
+                        || ACL::canRead($user, $perms, $childRel)
+                        || ACL::canReadOwn($user, $perms, $childRel);
+                    if ($canViewChild) {
+                        $folderCount++;
+                        $stack[] = [$abs, $childRel];
+                    } elseif (FS::hasReadableDescendant($base, $abs, $childRel, $user, $perms, 2)) {
+                        $stack[] = [$abs, $childRel];
+                    }
+                } elseif (@is_file($abs)) {
+                    if (@is_link($abs)) {
+                        $safe = self::safeReal($base, $abs);
+                        if ($safe === null || !is_file($safe)) {
+                            continue;
+                        }
+                        $abs = $safe;
+                    }
+
+                    if (!$hasFullRead) {
+                        continue;
+                    }
+
+                    $fileCount++;
+                    $sz = @filesize($abs);
+                    if (is_int($sz) && $sz > 0) {
+                        $totalBytes += $sz;
+                    }
+                }
+            }
+        }
+
+        return [
+            'folders' => $folderCount,
+            'files' => $fileCount,
+            'bytes' => $totalBytes,
+            'truncated' => $truncated,
+        ];
+    }
+
     /* Helpers (private) */
     private static function isSafeSegment(string $name): bool
     {

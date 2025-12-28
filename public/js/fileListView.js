@@ -15,7 +15,12 @@ import {
 import { withBase } from './basePath.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { bindFileListContextMenu } from './fileMenu.js?v={{APP_QVER}}';
-import { openDownloadModal } from './fileActions.js?v={{APP_QVER}}';
+import {
+  openDownloadModal,
+  handleCopySelected,
+  handleMoveSelected,
+  handleDeleteSelected
+} from './fileActions.js?v={{APP_QVER}}';
 import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
 import {
   getParentFolder,
@@ -31,7 +36,9 @@ import {
   startFolderCryptoJobFlow,
   folderSVG,
   expandTreePath,
-  expandTreePathAsync
+  expandTreePathAsync,
+  syncFolderTreeSelection,
+  syncTreeAfterFolderMove
 } from './folderManager.js?v={{APP_QVER}}';
 import { openFolderShareModal } from './folderShareModal.js?v={{APP_QVER}}';
 import {
@@ -80,7 +87,10 @@ function ensureEncryptedFolderBanner() {
   const titleEl = document.getElementById('fileListTitle');
   if (!titleEl) return null;
   let el = document.getElementById('frEncryptedFolderBanner');
-  if (el) return el;
+  if (el) {
+    titleEl.insertAdjacentElement('afterend', el);
+    return el;
+  }
 
   el = document.createElement('div');
   el.id = 'frEncryptedFolderBanner';
@@ -165,7 +175,7 @@ function refreshEncryptedFolderIconsInList() {
 
   // Inline folder rows
   try {
-    document.querySelectorAll('#fileList tr.folder-row[data-folder]').forEach(row => {
+    document.querySelectorAll('#fileList tr.folder-row[data-folder], #fileListSecondary tr.folder-row[data-folder]').forEach(row => {
       const folder = row.getAttribute('data-folder') || '';
       if (!folder) return;
       const iconSpan = row.querySelector('.folder-svg');
@@ -266,9 +276,7 @@ function wireFolderStripItems(strip) {
       const dest = el.dataset.folder;
       if (!dest) return;
 
-      window.currentFolder = dest;
-      localStorage.setItem("lastOpenedFolder", dest);
-      updateBreadcrumbTitle(dest);
+      setCurrentFolderContext(dest);
 
       document.querySelectorAll(".folder-option.selected")
         .forEach(o => o.classList.remove("selected"));
@@ -842,9 +850,7 @@ function ensureHoverPreviewEl() {
     } else if (ctx.type === "folder") {
       const dest = ctx.folder;
       if (dest) {
-        window.currentFolder = dest;
-        try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) {}
-        updateBreadcrumbTitle(dest);
+        setCurrentFolderContext(dest);
         loadFileList(dest);
       }
     }
@@ -916,6 +922,97 @@ window.addEventListener('resize', () => {
   }
 });
 
+window.addEventListener('keydown', async (e) => {
+  if (window.__frIsModalOpen && window.__frIsModalOpen()) return;
+  if (isTextEntryTarget(e.target)) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+  const key = e.key;
+  if (!['F3', 'F4', 'F5', 'F6', 'F7', 'F8'].includes(key)) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (key === 'F5') return handleCopySelected(new Event('click'));
+  if (key === 'F6') return handleMoveSelected(new Event('click'));
+  if (key === 'F8') return handleDeleteSelected(new Event('click'));
+
+  if (key === 'F7') {
+    const btn = document.getElementById('createFolderBtn');
+    if (btn && !btn.disabled) btn.click();
+    return;
+  }
+
+  const files = getActiveSelectedFileObjects();
+  if (!files.length) {
+    showToast(t('no_files_selected') || 'No files selected.');
+    return;
+  }
+  const file = files[0];
+  const folder = file.folder || window.currentFolder || 'root';
+
+  if (key === 'F3') {
+    try {
+      const url = apiFileUrl(folder, file.name, true);
+      const m = await import('./filePreview.js?v={{APP_QVER}}');
+      m.previewFile(url, file.name);
+    } catch (err) {
+      console.error('Failed to open preview', err);
+    }
+    return;
+  }
+
+  if (key === 'F4') {
+    if (!canEditFile(file.name) || !file.editable) {
+      showToast(t('file_not_editable') || 'File is not editable.');
+      return;
+    }
+    try {
+      const m = await import('./fileEditor.js?v={{APP_QVER}}');
+      m.editFile(file.name, folder);
+    } catch (err) {
+      console.error('Failed to open editor', err);
+    }
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (window.__frIsModalOpen && window.__frIsModalOpen()) return;
+  if (isTextEntryTarget(e.target)) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+  const key = e.key;
+
+  if (key === '/' && !e.shiftKey) {
+    const input = document.getElementById('searchInput');
+    if (input) {
+      e.preventDefault();
+      e.stopPropagation();
+      input.focus();
+      input.select();
+    }
+    return;
+  }
+
+  if (key === '?' || (key === '/' && e.shiftKey)) {
+    e.preventDefault();
+    e.stopPropagation();
+    showToast('Shortcuts: / search, ? help, Del delete, F3 preview, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete.', 6000);
+    return;
+  }
+
+  if (key === 'Delete') {
+    e.preventDefault();
+    e.stopPropagation();
+    const selectedFolder = getSelectedFolderPath();
+    if (selectedFolder) {
+      setCurrentFolderContext(selectedFolder);
+      openDeleteFolderModal();
+      return;
+    }
+    handleDeleteSelected(new Event('click'));
+  }
+});
+
 // Listen once: update strip + tree + inline rows when folder color changes
 window.addEventListener('folderColorChanged', (e) => {
   const { folder } = e.detail || {};
@@ -952,7 +1049,8 @@ window.__nonZipDownloadQueue = window.__nonZipDownloadQueue || [];
 window.__nonZipDownloadPanel = window.__nonZipDownloadPanel || null;
 
 // Latest-response-wins guard (prevents double render/flicker if loadFileList gets called twice)
-let __fileListReqSeq = 0;
+let __fileListReqSeq = { primary: 0, secondary: 0 };
+let __dualPaneRestoreRunning = false;
 
 window.itemsPerPage = parseInt(
   localStorage.getItem('itemsPerPage') || window.itemsPerPage || '50',
@@ -961,6 +1059,360 @@ window.itemsPerPage = parseInt(
 window.currentPage = window.currentPage || 1;
 window.viewMode = localStorage.getItem("viewMode") || "table";
 window.currentSubfolders = window.currentSubfolders || [];
+
+const PANE_FOLDER_STORAGE_KEYS = {
+  primary: 'frPaneFolderPrimary',
+  secondary: 'frPaneFolderSecondary'
+};
+
+function normalizePaneKey(pane) {
+  return pane === 'secondary' ? 'secondary' : 'primary';
+}
+
+function readStoredPaneFolder(pane) {
+  const key = PANE_FOLDER_STORAGE_KEYS[normalizePaneKey(pane)];
+  if (!key) return "";
+  try {
+    return String(localStorage.getItem(key) || '').trim();
+  } catch (e) {
+    return "";
+  }
+}
+
+function persistPaneFolder(pane, folder) {
+  const key = PANE_FOLDER_STORAGE_KEYS[normalizePaneKey(pane)];
+  if (!key || !folder) return;
+  try {
+    localStorage.setItem(key, folder);
+  } catch (e) { /* ignore */ }
+}
+
+(function seedLastOpenedFolderFromPaneStorage() {
+  try {
+    const dualEnabled = localStorage.getItem('dualPaneMode') === 'true';
+    if (!dualEnabled) return;
+    const active = normalizePaneKey(localStorage.getItem('activePane'));
+    const folder = readStoredPaneFolder(active);
+    if (folder) localStorage.setItem('lastOpenedFolder', folder);
+  } catch (e) { /* ignore */ }
+})();
+
+function ensurePaneState() {
+  if (window.__frPaneState) return;
+  const storedPrimary = readStoredPaneFolder('primary');
+  const storedSecondary = readStoredPaneFolder('secondary');
+  const initialFolder =
+    storedPrimary ||
+    window.currentFolder ||
+    localStorage.getItem("lastOpenedFolder") ||
+    "root";
+  window.__frPaneState = {
+    primary: {
+      currentFolder: initialFolder,
+      currentSubfolders: Array.isArray(window.currentSubfolders) ? window.currentSubfolders : [],
+      currentPage: window.currentPage || 1,
+      currentSearchTerm: window.currentSearchTerm || "",
+      currentFolderCaps: window.currentFolderCaps || null,
+      selectedFolderCaps: window.selectedFolderCaps || null,
+      fileData: Array.isArray(fileData) ? fileData : [],
+      hasLoaded: false,
+      needsReload: false
+    },
+    secondary: {
+      currentFolder: storedSecondary || null,
+      currentSubfolders: [],
+      currentPage: 1,
+      currentSearchTerm: "",
+      currentFolderCaps: null,
+      selectedFolderCaps: null,
+      fileData: [],
+      hasLoaded: false,
+      needsReload: false
+    }
+  };
+}
+
+function getPaneState(pane) {
+  ensurePaneState();
+  return window.__frPaneState[normalizePaneKey(pane)];
+}
+
+function savePaneState(pane, patch) {
+  const state = getPaneState(pane);
+  Object.assign(state, patch || {});
+  if (patch && Object.prototype.hasOwnProperty.call(patch, 'currentFolder')) {
+    persistPaneFolder(pane, state.currentFolder);
+  }
+}
+
+function syncPaneStateFromGlobals(pane) {
+  savePaneState(pane, {
+    currentFolder: window.currentFolder || "root",
+    currentSubfolders: Array.isArray(window.currentSubfolders) ? window.currentSubfolders : [],
+    currentPage: window.currentPage || 1,
+    currentSearchTerm: window.currentSearchTerm || "",
+    currentFolderCaps: window.currentFolderCaps || null,
+    selectedFolderCaps: window.selectedFolderCaps || null,
+    fileData: Array.isArray(fileData) ? fileData : []
+  });
+}
+
+function syncGlobalsFromPaneState(pane) {
+  const state = getPaneState(pane);
+  window.currentFolder = state.currentFolder || "root";
+  window.currentSubfolders = Array.isArray(state.currentSubfolders) ? state.currentSubfolders : [];
+  window.currentPage = state.currentPage || 1;
+  window.currentSearchTerm = state.currentSearchTerm || "";
+  window.currentFolderCaps = state.currentFolderCaps || null;
+  window.selectedFolderCaps = state.selectedFolderCaps || null;
+  fileData = Array.isArray(state.fileData) ? state.fileData : [];
+}
+
+function setPaneHasContent(pane, hasContent) {
+  const selector = normalizePaneKey(pane) === 'secondary'
+    ? '.secondary-pane'
+    : '.primary-pane';
+  const el = document.querySelector(selector);
+  if (!el) return;
+  el.classList.toggle('fr-pane-has-content', !!hasContent);
+}
+
+function getPaneLayoutMode(targetEl) {
+  const pane = targetEl && targetEl.closest ? targetEl.closest('.file-list-pane') : null;
+  const width = pane ? pane.getBoundingClientRect().width : window.innerWidth;
+  if (width <= 720) return 'narrow';
+  if (width <= 980) return 'medium';
+  return 'wide';
+}
+
+function updatePaneWidthClasses() {
+  const panes = document.querySelectorAll('.file-list-pane');
+  panes.forEach(pane => {
+    const width = pane.getBoundingClientRect().width;
+    if (!width) return;
+    const mode = width <= 720 ? 'narrow' : (width <= 980 ? 'medium' : 'wide');
+    pane.classList.toggle('fr-pane-narrow', mode === 'narrow');
+    pane.classList.toggle('fr-pane-medium', mode === 'medium');
+  });
+  updatePaneStickyClasses();
+}
+
+function updatePaneStickyClasses() {
+  const panes = document.querySelectorAll('.file-list-pane');
+  panes.forEach(pane => pane.classList.remove('fr-pane-sticky'));
+
+  if (!window.dualPaneEnabled || panes.length < 2) return;
+
+  const paneList = Array.from(panes);
+  const heights = paneList.map(pane => pane.getBoundingClientRect().height || 0);
+  const viewport = window.innerHeight || 0;
+  const buffer = 24;
+
+  if (!viewport || heights.every(h => h <= 0)) return;
+
+  const canStick = heights.map(h => h + buffer <= viewport);
+
+  if (canStick[0] && canStick[1]) {
+    paneList.forEach(pane => pane.classList.add('fr-pane-sticky'));
+    return;
+  }
+
+  if (canStick[0] && heights[0] < heights[1]) {
+    paneList[0].classList.add('fr-pane-sticky');
+  }
+  if (canStick[1] && heights[1] < heights[0]) {
+    paneList[1].classList.add('fr-pane-sticky');
+  }
+}
+
+function ensureDualPaneTargetHint() {
+  const actions = document.getElementById('fileListActions');
+  if (!actions) return null;
+  let hint = document.getElementById('dualPaneTargetHint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.id = 'dualPaneTargetHint';
+    hint.className = 'file-list-dual-hint fr-dual-target-hint';
+    actions.appendChild(hint);
+  }
+  return hint;
+}
+
+function updateDualPaneTargetHint() {
+  const hint = ensureDualPaneTargetHint();
+  if (!hint) return;
+  if (!window.dualPaneEnabled || !window.__frPaneState) {
+    hint.style.display = 'none';
+    return;
+  }
+  const active = normalizePaneKey(window.activePane);
+  const other = active === 'secondary' ? 'primary' : 'secondary';
+  const otherFolder = window.__frPaneState?.[other]?.currentFolder || '';
+  if (!otherFolder) {
+    hint.style.display = 'none';
+    return;
+  }
+  const sideLabel = other === 'secondary' ? 'Right' : 'Left';
+  const folderLabel = otherFolder === 'root' ? '(Root)' : otherFolder;
+  hint.textContent = `Target: ${sideLabel} -> ${folderLabel}`;
+  hint.title = `Copy/move target is the ${sideLabel.toLowerCase()} pane folder.`;
+  hint.style.display = 'inline-flex';
+}
+
+function updateInactivePanePlaceholder(inactiveKey) {
+  if (!window.dualPaneEnabled) return;
+  const container = document.getElementById('fileListContainerSecondary');
+  if (!container) return;
+
+  const ensurePlaceholderElements = () => {
+    let hintEl = container.querySelector('.file-list-dual-hint');
+    if (!hintEl) {
+      let actionsWrap = container.querySelector('.file-list-actions');
+      const hasToolbar = actionsWrap && actionsWrap.querySelector('#fileListActions');
+      if (!actionsWrap || hasToolbar) {
+        actionsWrap = document.createElement('div');
+        actionsWrap.className = 'file-list-actions';
+        const title = container.querySelector('#fileListTitleSecondary');
+        if (title && title.parentNode === container) {
+          title.insertAdjacentElement('afterend', actionsWrap);
+        } else {
+          container.insertBefore(actionsWrap, container.firstChild);
+        }
+      }
+
+      hintEl = document.createElement('div');
+      hintEl.className = 'file-list-dual-hint';
+      hintEl.setAttribute('data-i18n-key', 'dual_pane_secondary_hint');
+      hintEl.textContent = t('dual_pane_secondary_hint') || 'Select a folder to open here.';
+      actionsWrap.appendChild(hintEl);
+    }
+
+    let emptyEl = container.querySelector('#fileListSecondary .empty-state');
+    const listEl = container.querySelector('#fileListSecondary');
+    if (!emptyEl && listEl && listEl.childElementCount === 0) {
+      listEl.classList.add('file-list-secondary-empty');
+      emptyEl = document.createElement('div');
+      emptyEl.className = 'empty-state';
+      emptyEl.setAttribute('data-i18n-key', 'dual_pane_secondary_empty');
+      emptyEl.textContent = t('dual_pane_secondary_empty') || 'Select a folder to open in the right pane.';
+      listEl.appendChild(emptyEl);
+    }
+
+    return { hintEl, emptyEl };
+  };
+
+  const state = getPaneState(inactiveKey);
+  let folder = (state && typeof state.currentFolder === 'string')
+    ? state.currentFolder.trim()
+    : '';
+  if (!folder) {
+    folder = readStoredPaneFolder(inactiveKey);
+  }
+  const label = folder === 'root' ? 'root' : folder;
+
+  const ensured = ensurePlaceholderElements();
+
+  const titleEl = document.getElementById('fileListTitleSecondary');
+  if (titleEl && !titleEl.dataset.baseText) {
+    titleEl.dataset.baseText = titleEl.textContent || '';
+  }
+
+  const hintEl = ensured.hintEl || container.querySelector('.file-list-dual-hint');
+  if (hintEl && !hintEl.dataset.baseText) {
+    hintEl.dataset.baseText = hintEl.textContent || (t('dual_pane_secondary_hint') || 'Select a folder to open here.');
+  }
+
+  const emptyEl = ensured.emptyEl || container.querySelector('#fileListSecondary .empty-state');
+  if (emptyEl && !emptyEl.dataset.baseText) {
+    emptyEl.dataset.baseText = emptyEl.textContent || (t('dual_pane_secondary_empty') || 'Select a folder to open in the right pane.');
+  }
+
+  if (!folder) {
+    if (titleEl && titleEl.dataset.baseText) titleEl.textContent = titleEl.dataset.baseText;
+    if (hintEl && hintEl.dataset.baseText) hintEl.textContent = hintEl.dataset.baseText;
+    if (emptyEl && emptyEl.dataset.baseText) emptyEl.textContent = emptyEl.dataset.baseText;
+    return;
+  }
+
+  if (titleEl) {
+    const prefix = t('files_in') || 'Files in';
+    titleEl.textContent = `${prefix} (${formatBreadcrumbText(folder)})`;
+  }
+  if (hintEl) {
+    hintEl.textContent = `${hintEl.dataset.baseText} (${label})`;
+  }
+  if (emptyEl) {
+    emptyEl.textContent = `${emptyEl.dataset.baseText} (${label})`;
+  }
+}
+
+function resetInactivePaneBaseText() {
+  const titleEl = document.getElementById('fileListTitleSecondary');
+  if (titleEl && titleEl.dataset) {
+    delete titleEl.dataset.baseText;
+  }
+
+  const container = document.getElementById('fileListContainerSecondary');
+  if (!container) return;
+
+  const hintEl = container.querySelector('.file-list-dual-hint');
+  if (hintEl && hintEl.dataset) {
+    delete hintEl.dataset.baseText;
+  }
+
+  const emptyEl = container.querySelector('#fileListSecondary .empty-state');
+  if (emptyEl && emptyEl.dataset) {
+    delete emptyEl.dataset.baseText;
+  }
+}
+
+function formatBreadcrumbText(folder) {
+  const path = (typeof folder === 'string' && folder.length) ? folder : 'root';
+  if (path === 'root') return 'root';
+  const parts = path.split('/').filter(Boolean);
+  return ['root', ...parts].join(' › ');
+}
+
+function resolvePaneFolderForTitle(paneKey, { fallbackToCurrent = false } = {}) {
+  if (!paneKey) return '';
+  let folder = '';
+  try {
+    const state = getPaneState(paneKey);
+    folder = (state && typeof state.currentFolder === 'string')
+      ? state.currentFolder.trim()
+      : '';
+  } catch (e) {
+    folder = '';
+  }
+
+  if (!folder) {
+    folder = readStoredPaneFolder(paneKey);
+  }
+
+  if (!folder && fallbackToCurrent) {
+    folder = window.currentFolder || localStorage.getItem('lastOpenedFolder') || 'root';
+  }
+
+  return folder || '';
+}
+
+function refreshPaneTitlesFromState() {
+  ensurePaneState();
+  let storedActive = null;
+  try { storedActive = localStorage.getItem('activePane'); } catch (e) { storedActive = null; }
+
+  const active = normalizePaneKey(window.activePane || storedActive || 'primary');
+  const activeFolder = resolvePaneFolderForTitle(active, { fallbackToCurrent: true });
+  if (activeFolder) {
+    updateBreadcrumbTitle(activeFolder);
+  }
+
+  if (window.dualPaneEnabled) {
+    const other = active === 'secondary' ? 'primary' : 'secondary';
+    updateInactivePanePlaceholder(other);
+    updateDualPaneTargetHint();
+  }
+}
 
 // Default folder display settings from localStorage
 try {
@@ -975,6 +1427,415 @@ try {
   window.showInlineFolders = true;
 }
 
+// Dual pane mode (UI-only scaffolding)
+function setActivePane(pane, opts) {
+  ensurePaneState();
+  const next = normalizePaneKey(pane);
+  const current = normalizePaneKey(window.activePane);
+
+  if (current !== next) {
+    syncPaneStateFromGlobals(current);
+
+    const activeContainer = document.getElementById('fileListContainer');
+    const inactiveContainer = document.getElementById('fileListContainerSecondary');
+    if (activeContainer && inactiveContainer) {
+      activeContainer.id = 'fileListContainerSecondary';
+      inactiveContainer.id = 'fileListContainer';
+    }
+
+    const activeTitle = document.getElementById('fileListTitle');
+    const inactiveTitle = document.getElementById('fileListTitleSecondary');
+    if (activeTitle && inactiveTitle) {
+      activeTitle.id = 'fileListTitleSecondary';
+      inactiveTitle.id = 'fileListTitle';
+    }
+
+    const activeList = document.getElementById('fileList');
+    const inactiveList = document.getElementById('fileListSecondary');
+    if (activeList && inactiveList) {
+      activeList.id = 'fileListSecondary';
+      inactiveList.id = 'fileList';
+    }
+  }
+
+  window.activePane = next;
+
+  const activeContainer = document.getElementById('fileListContainer');
+  const inactiveContainer = document.getElementById('fileListContainerSecondary');
+  if (activeContainer) activeContainer.classList.add('fr-pane-active');
+  if (inactiveContainer) inactiveContainer.classList.remove('fr-pane-active');
+
+  const actions = document.getElementById('fileListActions');
+  if (actions && activeContainer) {
+    const title = activeContainer.querySelector('#fileListTitle');
+    if (title && title.parentNode === activeContainer) {
+      title.insertAdjacentElement('afterend', actions);
+    } else {
+      activeContainer.insertBefore(actions, activeContainer.firstChild);
+    }
+
+    const strip = document.getElementById('folderStripContainer');
+    if (strip) {
+      actions.parentNode.insertBefore(strip, actions);
+    }
+  }
+
+  syncGlobalsFromPaneState(next);
+  const state = getPaneState(next);
+  if (state.currentFolder) {
+    updateBreadcrumbTitle(state.currentFolder);
+    try { syncFolderTreeSelection(state.currentFolder); } catch (e) { /* ignore */ }
+  }
+  updateEncryptedFolderBanner(state.currentFolder || window.currentFolder || 'root');
+  refreshFileSummaryForPane(next);
+  if (state.needsReload && state.currentFolder) {
+    savePaneState(next, { needsReload: false });
+    state.needsReload = false;
+    loadFileList(state.currentFolder);
+  } else if (
+    window.dualPaneEnabled &&
+    !state.hasLoaded &&
+    state.currentFolder &&
+    !(opts && opts.skipAutoLoad)
+  ) {
+    // Lazy-load the pane's last folder only when it becomes active.
+    loadFileList(state.currentFolder);
+  }
+
+  setPaneHasContent(next, !!state.hasLoaded);
+  applyEncryptedFolderUiRestrictions();
+  updateFileActionButtons();
+  updatePaneWidthClasses();
+  updateDualPaneTargetHint();
+  updateInactivePanePlaceholder(next === 'secondary' ? 'primary' : 'secondary');
+
+  if (!opts || !opts.skipStore) {
+    try { localStorage.setItem('activePane', next); } catch (e) { /* ignore */ }
+  }
+}
+
+function applyDualPaneMode(force) {
+  let enabled = false;
+  try {
+    enabled = (typeof force === 'boolean')
+      ? force
+      : localStorage.getItem('dualPaneMode') === 'true';
+  } catch (e) { /* ignore */ }
+  window.dualPaneEnabled = enabled;
+
+  const shell = document.getElementById('fileListShell');
+  if (shell) shell.classList.toggle('dual-pane', enabled);
+
+  const storedActive = (function () {
+    try { return localStorage.getItem('activePane'); } catch (e) { return null; }
+  })();
+  if (enabled) {
+    setActivePane(storedActive === 'secondary' ? 'secondary' : 'primary', { skipStore: true, skipAutoLoad: true });
+  } else {
+    setActivePane('primary', { skipStore: true, skipAutoLoad: true });
+  }
+
+  const primaryPane = document.querySelector('.file-list-pane.primary-pane');
+  const secondaryPane = document.querySelector('.file-list-pane.secondary-pane');
+  if (enabled) {
+    if (primaryPane) primaryPane.style.display = '';
+    if (secondaryPane) secondaryPane.style.display = '';
+  } else {
+    if (primaryPane) primaryPane.style.display = '';
+    if (secondaryPane) secondaryPane.style.display = 'none';
+    if (primaryPane) primaryPane.classList.remove('fr-pane-active');
+    if (secondaryPane) secondaryPane.classList.remove('fr-pane-active');
+  }
+  updatePaneWidthClasses();
+  updateDualPaneTargetHint();
+}
+
+window.applyDualPaneMode = applyDualPaneMode;
+
+try {
+  window.addEventListener('filerise:i18n-applied', () => {
+    resetInactivePaneBaseText();
+    refreshPaneTitlesFromState();
+  });
+} catch (e) { /* ignore */ }
+
+// Activate pane on click
+document.addEventListener('click', (e) => {
+  const pane = e.target && e.target.closest
+    ? e.target.closest('.file-list-pane')
+    : null;
+  if (!pane) return;
+  setActivePane(pane.classList.contains('secondary-pane') ? 'secondary' : 'primary');
+}, true);
+
+function isPaneDropTargetAllowed(target) {
+  if (!target || !target.closest) return true;
+  return !target.closest('.folder-item, .folder-row, .folder-option, .folder-strip-container, .folder-tree');
+}
+
+function paneDragOverHandler(e) {
+  if (!window.dualPaneEnabled) return;
+  if (!isPaneDropTargetAllowed(e.target)) return;
+  e.preventDefault();
+  e.currentTarget.classList.add('fr-pane-drop-target');
+}
+
+function paneDragLeaveHandler(e) {
+  e.currentTarget.classList.remove('fr-pane-drop-target');
+}
+
+async function maybeRestoreInactivePane(activePaneKey) {
+  if (!window.dualPaneEnabled || __dualPaneRestoreRunning) return;
+  ensurePaneState();
+
+  const active = normalizePaneKey(activePaneKey || window.activePane);
+  const other = active === 'secondary' ? 'primary' : 'secondary';
+  const state = window.__frPaneState?.[other];
+  const otherFolder = (state && state.currentFolder) || readStoredPaneFolder(other);
+
+  if (!otherFolder || (state && state.hasLoaded)) return;
+
+  __dualPaneRestoreRunning = true;
+  try {
+    if (normalizePaneKey(window.activePane) !== other) {
+      setActivePane(other, { skipStore: true });
+    }
+    await loadFileList(otherFolder, { pane: other, skipFallback: true });
+  } catch (e) { /* ignore */ }
+  finally {
+    if (normalizePaneKey(window.activePane) !== active) {
+      setActivePane(active, { skipStore: true });
+    }
+    __dualPaneRestoreRunning = false;
+  }
+}
+
+function pruneMovedFolderFromInactivePane(sourceFolder, sourceParent) {
+  if (!window.dualPaneEnabled || !sourceFolder || !window.__frPaneState) return;
+
+  const inactiveKey = normalizePaneKey(window.activePane) === 'secondary'
+    ? 'primary'
+    : 'secondary';
+  const state = window.__frPaneState[inactiveKey];
+  if (!state || state.currentFolder !== sourceParent) return;
+
+  if (Array.isArray(state.currentSubfolders)) {
+    state.currentSubfolders = state.currentSubfolders.filter(sf => sf.full !== sourceFolder);
+  }
+
+  const list = document.getElementById('fileListSecondary');
+  if (!list) return;
+
+  try {
+    const row = list.querySelector(`tr.folder-row[data-folder="${CSS.escape(sourceFolder)}"]`);
+    if (row) row.remove();
+  } catch (e) { /* ignore */ }
+}
+
+function getPaneListForKey(paneKey) {
+  const pane = document.querySelector(
+    paneKey === 'secondary' ? '.file-list-pane.secondary-pane' : '.file-list-pane.primary-pane'
+  );
+  if (!pane) return null;
+  return pane.querySelector('#fileList, #fileListSecondary') || pane;
+}
+
+function pruneMovedFilesFromInactivePane(sourceFolder, movedFiles) {
+  if (!window.dualPaneEnabled || !sourceFolder || !window.__frPaneState) return;
+
+  const names = Array.isArray(movedFiles)
+    ? movedFiles.map(f => {
+        if (!f) return '';
+        if (typeof f === 'string') return f;
+        if (typeof f === 'object') {
+          return String(f.name || f.file || f.filename || f.fileName || '');
+        }
+        return String(f);
+      }).map(n => String(n || '').trim()).filter(Boolean)
+    : [];
+  if (!names.length) return;
+
+  const nameSet = new Set();
+  names.forEach(name => {
+    const raw = String(name || '').trim();
+    if (!raw) return;
+    nameSet.add(raw);
+    const decoded = decodeHtmlEntities(raw);
+    if (decoded && decoded !== raw) {
+      nameSet.add(decoded);
+    }
+  });
+  ['primary', 'secondary'].forEach(paneKey => {
+    const state = window.__frPaneState[paneKey];
+    if (!state || state.currentFolder !== sourceFolder) return;
+
+    if (Array.isArray(state.fileData)) {
+      state.fileData = state.fileData.filter(f => f && !nameSet.has(f.name));
+    }
+
+    const list = getPaneListForKey(paneKey);
+    if (!list) return;
+
+    list.querySelectorAll('tr[data-file-name], .gallery-card[data-file-name]').forEach(row => {
+      const raw = row.getAttribute('data-file-name') || '';
+      const decoded = decodeHtmlEntities(raw);
+      if (nameSet.has(raw) || nameSet.has(decoded)) {
+        row.remove();
+      }
+    });
+  });
+}
+
+async function paneDropHandler(e) {
+  if (!window.dualPaneEnabled) return;
+  if (!isPaneDropTargetAllowed(e.target)) return;
+  e.preventDefault();
+  e.currentTarget.classList.remove('fr-pane-drop-target');
+
+  const paneKey = e.currentTarget.classList.contains('secondary-pane') ? 'secondary' : 'primary';
+  const targetFolder = getPaneState(paneKey)?.currentFolder || '';
+  if (!targetFolder) return;
+
+  let dragData = null;
+  try {
+    const raw = e.dataTransfer.getData('application/json') || '{}';
+    dragData = JSON.parse(raw);
+  } catch (err) {
+    dragData = null;
+  }
+
+  if (!dragData) return;
+
+  const scheduleRepair = () => {
+    try {
+      const kick = () => { try { repairBlankFolderIcons({ force: true }); } catch (e) {} };
+      if (typeof queueMicrotask === 'function') queueMicrotask(kick);
+      setTimeout(kick, 80);
+      setTimeout(kick, 250);
+    } catch (e) { /* ignore */ }
+  };
+
+  if (dragData.dragType === 'folder' && dragData.folder) {
+    const sourceFolder = String(dragData.folder || '').trim();
+    if (!sourceFolder || sourceFolder === 'root') return;
+    if (targetFolder === sourceFolder || targetFolder.startsWith(sourceFolder + '/')) {
+      showToast('Invalid destination.');
+      return;
+    }
+
+    if (normalizePaneKey(window.activePane) !== paneKey) {
+      setActivePane(paneKey);
+    }
+
+    const sourceParent = dragData.sourceFolder || parentFolderOf(sourceFolder);
+
+    try {
+      const res = await fetch('/api/folder/moveFolder.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.csrfToken
+        },
+        body: JSON.stringify({
+          source: sourceFolder,
+          destination: targetFolder
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data && !data.error) {
+        showToast(`Folder moved to ${targetFolder}!`);
+        invalidateFolderStats([sourceParent, targetFolder]);
+        await syncTreeAfterFolderMove(sourceFolder, targetFolder);
+        markPaneNeedsReloadForFolder(sourceParent);
+        pruneMovedFolderFromInactivePane(sourceFolder, sourceParent);
+        scheduleRepair();
+      } else {
+        showToast(`Error: ${data && data.error || 'Could not move folder'}`);
+      }
+    } catch (err) {
+      console.error('Error moving folder:', err);
+      showToast('Error moving folder.');
+    }
+    return;
+  }
+
+  const files = Array.isArray(dragData.files) ? dragData.files : [];
+  if (!files.length) return;
+
+  const sourceFolder = dragData.sourceFolder || window.currentFolder || 'root';
+  if (targetFolder === sourceFolder) {
+    showToast('Already in target folder.');
+    return;
+  }
+
+  if (normalizePaneKey(window.activePane) !== paneKey) {
+    setActivePane(paneKey);
+  }
+
+  try {
+    const res = await fetch('/api/file/moveFiles.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': window.csrfToken
+      },
+      body: JSON.stringify({
+        source: sourceFolder,
+        files,
+        destination: targetFolder
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.success) {
+      showToast(`File(s) moved successfully to ${targetFolder}!`);
+      invalidateFolderStats([sourceFolder, targetFolder]);
+      loadFileList(targetFolder).finally(scheduleRepair);
+      refreshFolderIcon(targetFolder);
+      refreshFolderIcon(sourceFolder);
+      markPaneNeedsReloadForFolder(sourceFolder);
+      pruneMovedFilesFromInactivePane(sourceFolder, files);
+    } else {
+      showToast(`Error moving files: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    console.error('Error moving files:', err);
+    showToast('Error moving files.');
+  }
+}
+
+function bindPaneDropTargets() {
+  const panes = document.querySelectorAll('.file-list-pane');
+  panes.forEach(pane => {
+    if (pane.dataset.dropBound === '1') return;
+    pane.dataset.dropBound = '1';
+    pane.addEventListener('dragover', paneDragOverHandler);
+    pane.addEventListener('dragleave', paneDragLeaveHandler);
+    pane.addEventListener('drop', paneDropHandler);
+  });
+}
+
+// Apply initial dual-pane state once DOM is ready
+try { applyDualPaneMode(); } catch (e) { /* ignore */ }
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => applyDualPaneMode(), { once: true });
+}
+if (typeof window.__frDualPanePending !== 'undefined') {
+  try { applyDualPaneMode(!!window.__frDualPanePending); } catch (e) { /* ignore */ }
+  delete window.__frDualPanePending;
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => bindPaneDropTargets(), { once: true });
+} else {
+  bindPaneDropTargets();
+}
+
+try {
+  window.addEventListener('resize', debounce(updatePaneWidthClasses, 150));
+} catch (e) { /* ignore */ }
+
 // Global flag for advanced search mode.
 window.advancedSearchEnabled = false;
 
@@ -987,6 +1848,19 @@ function getFileCheckboxes() {
   return Array.from(document.querySelectorAll('#fileList .file-checkbox'));
 }
 
+function getActiveSelectedFileNames() {
+  return Array.from(document.querySelectorAll('#fileList .file-checkbox:checked'))
+    .map(cb => cb.value);
+}
+
+function getActiveSelectedFileObjects() {
+  const selected = getActiveSelectedFileNames();
+  if (!selected.length) return [];
+  const selectedSet = new Set(selected);
+  return (Array.isArray(fileData) ? fileData : [])
+    .filter(f => selectedSet.has(escapeHTML(f.name)));
+}
+
 function clearFolderSelections() {
   getFolderCheckboxes().forEach(cb => {
     if (cb.checked) {
@@ -996,6 +1870,7 @@ function clearFolderSelections() {
   });
   window.selectedInlineFolder = null;
   window.selectedFolderCaps = null;
+  savePaneState(normalizePaneKey(window.activePane), { selectedFolderCaps: null });
 }
 
 function clearFileSelections() {
@@ -1015,6 +1890,7 @@ function getSelectedFolderPath() {
 async function refreshSelectedFolderCaps(folder) {
   if (!folder) {
     window.selectedFolderCaps = null;
+    savePaneState(normalizePaneKey(window.activePane), { selectedFolderCaps: null });
     updateFileActionButtons();
     return;
   }
@@ -1022,10 +1898,29 @@ async function refreshSelectedFolderCaps(folder) {
   try {
     const caps = await fetchFolderCaps(folder);
     window.selectedFolderCaps = caps || null;
+    savePaneState(normalizePaneKey(window.activePane), { selectedFolderCaps: window.selectedFolderCaps });
   } catch (e) {
     window.selectedFolderCaps = null;
+    savePaneState(normalizePaneKey(window.activePane), { selectedFolderCaps: null });
   }
   updateFileActionButtons();
+}
+
+function isTextEntryTarget(target) {
+  const tag = target?.tagName ? target.tagName.toLowerCase() : '';
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable;
+}
+
+function markPaneNeedsReloadForFolder(folder) {
+  if (!window.dualPaneEnabled || !window.__frPaneState || !folder) return;
+  const active = normalizePaneKey(window.activePane);
+  ['primary', 'secondary'].forEach(pane => {
+    if (pane === active) return;
+    const state = window.__frPaneState[pane];
+    if (state && state.currentFolder === folder) {
+      state.needsReload = true;
+    }
+  });
 }
 
 function handleFolderCheckboxChange(cb) {
@@ -1055,6 +1950,7 @@ function setCurrentFolderContext(folder) {
   window.currentFolder = folder;
   try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { /* ignore */ }
   updateBreadcrumbTitle(folder);
+  savePaneState(normalizePaneKey(window.activePane), { currentFolder: folder });
 }
 
 function clampRowHeight(v) {
@@ -1102,6 +1998,7 @@ window.galleryColumns = clampGalleryColumns(localStorage.getItem('galleryColumns
 
 // --- Folder stats cache (for isEmpty.php) ---
 const _folderStatsCache = new Map();
+const _folderSummaryCache = new Map();
 const MAX_CONCURRENT_FOLDER_STATS_REQS = 6;
 let _activeFolderStatsReqs = 0;
 const _folderStatsQueue = [];
@@ -1145,6 +2042,26 @@ function fetchFolderStats(folder) {
   return p;
 }
 
+function fetchFolderSummaryStats(folder) {
+  if (!folder) return Promise.resolve(null);
+
+  if (_folderSummaryCache.has(folder)) {
+    return _folderSummaryCache.get(folder);
+  }
+
+  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&deep=1&t=${Date.now()}`);
+  const p = _fetchJSONWithTimeout(url, 6000).then(data => {
+    if (data && data.__fr_err) {
+      _folderSummaryCache.delete(folder);
+      return null;
+    }
+    return data || null;
+  });
+
+  _folderSummaryCache.set(folder, p);
+  return p;
+}
+
 // --- Folder "peek" cache (first few child folders/files) ---
 const FOLDER_PEEK_MAX_ITEMS = 6;
 const _folderPeekCache = new Map();
@@ -1160,6 +2077,21 @@ window.addEventListener('folderStatsInvalidated', (e) => {
     if (!f) return;
     _folderStatsCache.delete(f);
     _folderPeekCache.delete(f);
+    _folderSummaryCache.delete(f);
+
+    try { refreshFolderIcon(f); } catch (e2) { /* ignore */ }
+
+    try {
+      const safe = CSS.escape(f);
+      const stripItem = document.querySelector(`#folderStripContainer .folder-item[data-folder="${safe}"]`);
+      if (stripItem) attachStripIconAsync(stripItem, f, 48);
+      document
+        .querySelectorAll(
+          `#fileList tr.folder-row[data-folder="${safe}"], ` +
+          `#fileListSecondary tr.folder-row[data-folder="${safe}"]`
+        )
+        .forEach(row => attachStripIconAsync(row, f, 28));
+    } catch (e3) { /* ignore */ }
   });
 });
 
@@ -1574,9 +2506,15 @@ fetchFolderPeek(folderPath).then(result => {
       return;
     }
 
-    const file = Array.isArray(fileData)
-      ? fileData.find(f => f.name === name)
-      : null;
+    const paneEl = row.closest('.file-list-pane');
+    const paneKey = paneEl && paneEl.classList.contains('secondary-pane') ? 'secondary' : 'primary';
+    const paneFiles = (window.__frPaneState &&
+      window.__frPaneState[paneKey] &&
+      Array.isArray(window.__frPaneState[paneKey].fileData))
+      ? window.__frPaneState[paneKey].fileData
+      : (Array.isArray(fileData) ? fileData : []);
+    const rawName = decodeHtmlEntities(name);
+    const file = paneFiles.find(f => f.name === rawName || escapeHTML(f.name) === name);
 
     // If we can't resolve a real file from fileData, also skip the preview
     if (!file) {
@@ -2061,11 +2999,14 @@ async function fetchFolderCaps(folder) {
 
 async function refreshCurrentFolderCaps(folder) {
   window.currentFolderCaps = null;
+  savePaneState(normalizePaneKey(window.activePane), { currentFolderCaps: null });
   try {
     const caps = await fetchFolderCaps(folder);
     window.currentFolderCaps = caps || null;
+    savePaneState(normalizePaneKey(window.activePane), { currentFolderCaps: window.currentFolderCaps });
   } catch (e) {
     window.currentFolderCaps = null;
+    savePaneState(normalizePaneKey(window.activePane), { currentFolderCaps: null });
   }
   updateEncryptedFolderBanner(folder);
   refreshEncryptedFolderIconsInList();
@@ -2401,16 +3342,99 @@ window.triggerNextNonZipDownload = triggerNextNonZipDownload;
 window.clearNonZipQueue          = clearNonZipQueue;
 
 
-/**
- * Build the folder summary HTML using the filtered file list.
- */
-function buildFolderSummary(filteredFiles) {
-  const totalFiles = filteredFiles.length;
-  const totalBytes = filteredFiles.reduce((sum, file) => {
-    return sum + parseSizeToBytes(file.size);
-  }, 0);
-  const sizeStr = formatSize(totalBytes);
-  return `<strong>${t('total_files')}:</strong> ${totalFiles} &nbsp;|&nbsp; <strong>${t('total_size')}:</strong> ${sizeStr}`;
+function getLocalSummaryStats() {
+  const files = Array.isArray(fileData) ? fileData.length : 0;
+  const bytes = Array.isArray(fileData)
+    ? fileData.reduce((sum, file) => {
+      const b = Number.isFinite(file.sizeBytes)
+        ? file.sizeBytes
+        : parseSizeToBytes(file.size || "");
+      return sum + (Number.isFinite(b) && b > 0 ? b : 0);
+    }, 0)
+    : 0;
+  const folders = Array.isArray(window.currentSubfolders)
+    ? window.currentSubfolders.length
+    : 0;
+  return { folders, files, bytes };
+}
+
+function buildFolderSummaryHTML(stats, fallback) {
+  const safeTitle = (key, fallbackText) => {
+    const val = t(key);
+    return val && val !== key ? val : fallbackText;
+  };
+  const fmtCount = (val) => Number.isFinite(val) ? val.toLocaleString() : "-";
+
+  const folders = Number.isFinite(stats?.folders) ? stats.folders : fallback?.folders;
+  const files = Number.isFinite(stats?.files) ? stats.files : fallback?.files;
+  const bytes = Number.isFinite(stats?.bytes) ? stats.bytes : fallback?.bytes;
+
+  const folderTitle = safeTitle("total_folders", "Total folders");
+  const fileTitle = safeTitle("total_files", "Total files");
+  const sizeTitle = safeTitle("total_size", "Total size");
+
+  const sizeStr = Number.isFinite(bytes) ? formatSize(bytes) : "-";
+
+  return `
+    <span class="fr-summary-item" title="${escapeHTML(folderTitle)}">
+      <span class="material-icons" aria-hidden="true">folder</span>
+      <span class="fr-summary-count">${fmtCount(folders)}</span>
+    </span>
+    <span class="fr-summary-sep" aria-hidden="true">&middot;</span>
+    <span class="fr-summary-item" title="${escapeHTML(fileTitle)}">
+      <span class="material-icons" aria-hidden="true">insert_drive_file</span>
+      <span class="fr-summary-count">${fmtCount(files)}</span>
+    </span>
+    <span class="fr-summary-sep" aria-hidden="true">&middot;</span>
+    <span class="fr-summary-item" title="${escapeHTML(sizeTitle)}">
+      <span class="material-icons" aria-hidden="true">storage</span>
+      <span class="fr-summary-count">${escapeHTML(sizeStr)}</span>
+    </span>
+  `.trim();
+}
+
+function refreshFileSummaryForPane(paneKey) {
+  const actionsContainer = document.getElementById("fileListActions");
+  if (!actionsContainer) return;
+
+  let summaryElem = document.getElementById("fileSummary");
+  if (!summaryElem) {
+    summaryElem = document.createElement("div");
+    summaryElem.id = "fileSummary";
+    summaryElem.className = "fr-summary-pill";
+    summaryElem.setAttribute("role", "status");
+    summaryElem.setAttribute("aria-live", "polite");
+    actionsContainer.appendChild(summaryElem);
+  }
+
+  const state = paneKey ? getPaneState(paneKey) : null;
+  if (!state || !state.hasLoaded) {
+    summaryElem.style.display = "none";
+    summaryElem.innerHTML = "";
+    summaryElem.dataset.folder = "";
+    summaryElem.dataset.truncated = "0";
+    summaryElem.removeAttribute("title");
+    return;
+  }
+
+  const folder = state.currentFolder || window.currentFolder || "root";
+  summaryElem.classList.add("fr-summary-pill");
+  summaryElem.style.display = "flex";
+  const fallbackStats = getLocalSummaryStats();
+  summaryElem.innerHTML = buildFolderSummaryHTML(null, fallbackStats);
+  summaryElem.dataset.folder = folder;
+  summaryElem.dataset.truncated = "0";
+
+  fetchFolderSummaryStats(folder).then(stats => {
+    if (!stats || summaryElem.dataset.folder !== folder) return;
+    summaryElem.innerHTML = buildFolderSummaryHTML(stats, fallbackStats);
+    summaryElem.dataset.truncated = stats.truncated ? "1" : "0";
+    if (stats.truncated) {
+      summaryElem.title = "Totals capped for very large folders.";
+    } else {
+      summaryElem.removeAttribute("title");
+    }
+  });
 }
 
 /**
@@ -2818,9 +3842,7 @@ async function navigateToSearchResult(folder, name) {
   const dest = decodeHtmlEntities(folder || 'root') || 'root';
   const targetName = decodeHtmlEntities(name || '');
   pendingSearchSelection = targetName ? { folder: dest, name: targetName } : null;
-  window.currentFolder = dest;
-  try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) { /* ignore */ }
-  updateBreadcrumbTitle(dest);
+  setCurrentFolderContext(dest);
 
   // Refresh tree + strip selections to match the jumped folder
   try {
@@ -3095,6 +4117,48 @@ function buildZoomControls(host) {
   host.appendChild(wrap);
 }
 
+function buildDualPaneToggle(host) {
+  const wrap = document.createElement("div");
+  wrap.className = "vo-control";
+
+  const row = document.createElement("label");
+  row.className = "vo-toggle-row";
+
+  const text = document.createElement("span");
+  text.className = "vo-toggle-text";
+  text.textContent = t("dual_pane_mode") || "Dual-pane mode";
+
+  const toggle = document.createElement("input");
+  toggle.type = "checkbox";
+  toggle.className = "vo-toggle-input";
+  toggle.id = "voDualPaneToggle";
+  toggle.checked = localStorage.getItem("dualPaneMode") === "true";
+  toggle.setAttribute("aria-label", text.textContent);
+
+  const applyDualPane = (enabled) => {
+    localStorage.setItem("dualPaneMode", enabled ? "true" : "false");
+    window.dualPaneEnabled = enabled;
+    if (typeof window.applyDualPaneMode === "function") {
+      window.applyDualPaneMode(enabled);
+    } else {
+      window.__frDualPanePending = enabled;
+    }
+    const panelToggle = document.getElementById("dualPaneMode");
+    if (panelToggle) {
+      panelToggle.checked = enabled;
+    }
+  };
+
+  toggle.addEventListener("change", () => {
+    applyDualPane(toggle.checked);
+  });
+
+  row.appendChild(text);
+  row.appendChild(toggle);
+  wrap.appendChild(row);
+  host.appendChild(wrap);
+}
+
 function positionPopover(pop, anchor) {
   if (!anchor) return;
   const rect = anchor.getBoundingClientRect();
@@ -3141,6 +4205,11 @@ function showViewOptionsPopover(triggerBtn) {
   pop.appendChild(sep);
   buildZoomControls(pop);
 
+  const sep2 = document.createElement("div");
+  sep2.className = "vo-separator";
+  pop.appendChild(sep2);
+  buildDualPaneToggle(pop);
+
   positionPopover(pop, triggerBtn);
   pop.style.display = "block";
 
@@ -3177,7 +4246,8 @@ export async function loadFileList(folderParam, options = {}) {
   
   await initOnlyOfficeCaps();
   hideHoverPreview();
-  const reqId = ++__fileListReqSeq; // latest call wins
+  const pane = normalizePaneKey(options.pane || window.activePane);
+  const reqId = ++__fileListReqSeq[pane]; // latest call wins
   const folderOnly =
     window.userFolderOnly === true ||
     localStorage.getItem("folderOnly") === "true";
@@ -3192,10 +4262,15 @@ export async function loadFileList(folderParam, options = {}) {
     try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { }
     updateBreadcrumbTitle(folder);
   }
+  savePaneState(pane, { currentFolder: folder });
 
   const fileListContainer = document.getElementById("fileList");
+  if (fileListContainer) {
+    fileListContainer.classList.remove("file-list-secondary-empty");
+  }
   const actionsContainer = document.getElementById("fileListActions");
   window.selectedFolderCaps = null;
+  savePaneState(pane, { selectedFolderCaps: null });
   refreshCurrentFolderCaps(folder);
 
   // 1) show loader (only this request is allowed to render)
@@ -3298,14 +4373,14 @@ export async function loadFileList(folderParam, options = {}) {
     }
 
     // If another loadFileList ran after this one, bail before touching the DOM
-    if (reqId !== __fileListReqSeq) return [];
+    if (reqId !== __fileListReqSeq[pane]) return [];
 
     // 3) clear loader
     fileListContainer.innerHTML = "";
 
     // 4) handle “no files” case
     if (!data.files || Object.keys(data.files).length === 0) {
-      if (reqId !== __fileListReqSeq) return [];
+      if (reqId !== __fileListReqSeq[pane]) return [];
       fileListContainer.innerHTML = `
           <div class="empty-state">
             ${t("no_files_found")}
@@ -3367,8 +4442,9 @@ export async function loadFileList(folderParam, options = {}) {
       return f;
     });
     fileData = data.files;
+    savePaneState(pane, { fileData: fileData, currentFolder: folder, hasLoaded: true });
 
-    if (reqId !== __fileListReqSeq) return [];
+    if (reqId !== __fileListReqSeq[pane]) return [];
 
     // 6) inject summary + slider
     if (actionsContainer) {
@@ -3377,15 +4453,32 @@ export async function loadFileList(folderParam, options = {}) {
       if (!summaryElem) {
         summaryElem = document.createElement("div");
         summaryElem.id = "fileSummary";
-        summaryElem.style.cssText = "float:right; margin:0 30px 0 auto; font-size:0.9em;";
+        summaryElem.className = "fr-summary-pill";
+        summaryElem.setAttribute("role", "status");
+        summaryElem.setAttribute("aria-live", "polite");
         actionsContainer.appendChild(summaryElem);
       }
-      summaryElem.style.display = "block";
-      summaryElem.innerHTML = buildFolderSummary(fileData);
+      summaryElem.classList.add("fr-summary-pill");
+      summaryElem.style.display = "flex";
+      const fallbackStats = getLocalSummaryStats();
+      summaryElem.innerHTML = buildFolderSummaryHTML(null, fallbackStats);
+      summaryElem.dataset.folder = folder;
+      summaryElem.dataset.truncated = "0";
+
+      fetchFolderSummaryStats(folder).then(stats => {
+        if (!stats || summaryElem.dataset.folder !== folder) return;
+        summaryElem.innerHTML = buildFolderSummaryHTML(stats, fallbackStats);
+        summaryElem.dataset.truncated = stats.truncated ? "1" : "0";
+        if (stats.truncated) {
+          summaryElem.title = "Totals capped for very large folders.";
+        } else {
+          summaryElem.removeAttribute("title");
+        }
+      });
     }
 
     // 7) render files
-    if (reqId !== __fileListReqSeq) return [];
+    if (reqId !== __fileListReqSeq[pane]) return [];
 
     if (window.viewMode === "gallery") {
       renderGalleryView(folder);
@@ -3409,7 +4502,7 @@ export async function loadFileList(folderParam, options = {}) {
       }
 
       const folderRaw = await safeJson(foldersRes).catch(() => []); // don't block file render on strip issues
-      if (reqId !== __fileListReqSeq) return data.files;
+      if (reqId !== __fileListReqSeq[pane]) return data.files;
 
       // --- build ONLY the *direct* children of current folder ---
       let subfolders = [];
@@ -3433,6 +4526,7 @@ export async function loadFileList(folderParam, options = {}) {
 
       // Expose for inline folder rows in table view
       window.currentSubfolders = subfolders;
+      savePaneState(pane, { currentSubfolders: subfolders });
 
       let strip = document.getElementById("folderStripContainer");
       if (!strip) {
@@ -3446,13 +4540,16 @@ export async function loadFileList(folderParam, options = {}) {
       renderFolderStripPaged(strip, subfolders);
 
       // Re-render table view once folders are known so they appear inline above files
-      if (window.viewMode === "table" && reqId === __fileListReqSeq) {
+      if (window.viewMode === "table" && reqId === __fileListReqSeq[pane]) {
         renderFileTable(folder);
       }
     } catch (e) {
       // ignore folder errors; rows already rendered
     }
 
+    setPaneHasContent(pane, true);
+    // Intentionally skip auto-restoring the inactive pane for lazy-load perf.
+    updateDualPaneTargetHint();
     return data.files;
 
   } catch (err) {
@@ -3467,7 +4564,7 @@ export async function loadFileList(folderParam, options = {}) {
     }
     return [];
   } finally {
-    if (reqId === __fileListReqSeq) {
+    if (reqId === __fileListReqSeq[pane]) {
       fileListContainer.style.visibility = "visible";
     }
   }
@@ -3748,11 +4845,7 @@ if (headerClass) {
       if (e.button !== 0) return;
       const dest = sf.full;
       if (!dest) return;
-    
-      window.currentFolder = dest;
-      try { localStorage.setItem("lastOpenedFolder", dest); } catch (e) { }
-    
-      updateBreadcrumbTitle(dest);
+      setCurrentFolderContext(dest);
     
       document.querySelectorAll(".folder-option.selected")
         .forEach(o => o.classList.remove("selected"));
@@ -3996,7 +5089,7 @@ function syncFolderIconSizeToRowHeight() {
     offsetY -= -2; 
   }
 
-  document.querySelectorAll('#fileList .folder-row-icon').forEach(iconSpan => {
+  document.querySelectorAll(':is(#fileList, #fileListSecondary) .folder-row-icon').forEach(iconSpan => {
     iconSpan.style.width    = boxSize + 'px';
     iconSpan.style.height   = boxSize + 'px';
     iconSpan.style.overflow = 'visible';
@@ -4304,6 +5397,7 @@ const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
   const bottomControlsHTML = buildBottomControls(itemsPerPageSetting);
 
   fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
+  updatePaneWidthClasses();
 
   (function rightAlignSizeColumn() {
     const table = fileListContent.querySelector("table.filr-table");
@@ -4329,8 +5423,8 @@ const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
 
   // ---- MOBILE FIX: show "Size" column for files (Name | Size | Actions) ----
   (function fixMobileFileSizeColumn() {
-    const isMobile = window.innerWidth <= 640;
-    if (!isMobile) return;
+    const mode = getPaneLayoutMode(fileListContent);
+    if (mode !== "narrow") return;
 
     const table = fileListContent.querySelector("table.filr-table");
     if (!table || !table.tHead || !table.tBodies.length) return;

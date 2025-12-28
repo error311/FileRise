@@ -208,8 +208,8 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
     : t("search_placeholder");
 
   return `
-    <div class="row align-items-center mb-3">
-      <div class="col-12 col-md-8 mb-2 mb-md-0">
+    <div class="row align-items-center mb-3 file-list-top-controls">
+      <div class="col-12 col-md-8 mb-2 mb-md-0 file-list-search-col">
         <div class="input-group">
           <!-- Advanced Search Toggle Button -->
           <div class="input-group-prepend">
@@ -227,8 +227,8 @@ export function buildSearchAndPaginationControls({ currentPage, totalPages, sear
           <input type="text" id="searchInput" class="form-control" placeholder="${placeholderText}" value="${safeSearchTerm}" aria-describedby="searchIcon">
         </div>
       </div>
-      <div class="col-12 col-md-4 text-left">
-        <div class="d-flex justify-content-center justify-content-md-start align-items-center">
+      <div class="col-12 col-md-4 text-left file-list-pagination-col">
+        <div class="d-flex justify-content-center justify-content-md-start align-items-center fr-page-controls">
           <button id="prevPageBtn" class="custom-prev-next-btn" ${currentPage === 1 ? "disabled" : ""}>${t("prev")}</button>
           <span class="page-indicator">${t("page")} ${currentPage} ${t("of")} ${totalPages || 1}</span>
           <button id="nextPageBtn" class="custom-prev-next-btn" ${currentPage === totalPages ? "disabled" : ""}>${t("next")}</button>

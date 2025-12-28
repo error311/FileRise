@@ -51,7 +51,7 @@ export async function openUserPanel() {
     color:      ${isDark ? '#e0e0e0' : '#000'};
     padding: 20px;
     max-width: 600px; width:90%;
-    overflow-y: auto; height: 525px; max-height: 525px;
+    overflow-y: auto; height: 555px; max-height: 555px;
     display: flex; flex-direction: column; gap: 16px;
     margin: 0;
     scrollbar-gutter: stable both-edges;
@@ -271,6 +271,28 @@ export async function openUserPanel() {
     inlineRow.appendChild(inlineLabel);
     dispFs.appendChild(inlineRow);
 
+    // 3) Dual pane mode
+    const dualCb = document.createElement('input');
+    dualCb.type = 'checkbox';
+    dualCb.id = 'dualPaneMode';
+    dualCb.className = 'form-check-input fr-toggle-input';
+
+    {
+      const storedDual = localStorage.getItem('dualPaneMode');
+      dualCb.checked = storedDual === 'true';
+    }
+
+    const dualRow = document.createElement('div');
+    dualRow.className = 'form-check fr-toggle';
+    dualRow.style.marginBottom = '6px';
+    const dualLabel = document.createElement('label');
+    dualLabel.className = 'form-check-label';
+    dualLabel.htmlFor = 'dualPaneMode';
+    dualLabel.textContent = t('dual_pane_mode') || 'Enable dual-pane mode';
+    dualRow.appendChild(dualCb);
+    dualRow.appendChild(dualLabel);
+    dispFs.appendChild(dualRow);
+
     content.appendChild(dispFs);
 
     // Handlers: toggle + refresh list
@@ -287,6 +309,17 @@ export async function openUserPanel() {
       localStorage.setItem('showInlineFolders', inlineCb.checked);
       if (typeof window.loadFileList === 'function') {
         window.loadFileList(window.currentFolder || 'root');
+      }
+    });
+
+    dualCb.addEventListener('change', () => {
+      const enabled = !!dualCb.checked;
+      localStorage.setItem('dualPaneMode', enabled ? 'true' : 'false');
+      window.dualPaneEnabled = enabled;
+      if (typeof window.applyDualPaneMode === 'function') {
+        window.applyDualPaneMode(enabled);
+      } else {
+        window.__frDualPanePending = enabled;
       }
     });
 
@@ -394,6 +427,7 @@ export async function openUserPanel() {
     // sync display toggles from localStorage
     const stripCb = modal.querySelector('#showFoldersInList');
     const inlineCb = modal.querySelector('#showInlineFolders');
+    const dualCb = modal.querySelector('#dualPaneMode');
     if (stripCb) {
       const storedStrip = localStorage.getItem('showFoldersInList');
       stripCb.checked = storedStrip === null ? false : storedStrip === 'true';
@@ -401,6 +435,10 @@ export async function openUserPanel() {
     if (inlineCb) {
       const storedInline = localStorage.getItem('showInlineFolders');
       inlineCb.checked = storedInline === null ? true : storedInline === 'true';
+    }
+    if (dualCb) {
+      const storedDual = localStorage.getItem('dualPaneMode');
+      dualCb.checked = storedDual === 'true';
     }
   }
 

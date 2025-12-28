@@ -49,6 +49,9 @@ const translations = {
     "current_tags": "Current Tags",
     "light_mode": "Light Mode",
     "dark_mode": "Dark Mode",
+    "dual_pane_mode": "Enable dual-pane mode",
+    "dual_pane_secondary_hint": "Select a folder to open here.",
+    "dual_pane_secondary_empty": "Select a folder to open in the right pane.",
     "upload_instruction": "Drop files/folders here or click 'Choose files'",
     "no_files_selected_default": "No files selected",
     "choose_files": "Choose files",
@@ -444,6 +447,9 @@ const translations = {
     "save_tag": "Guardar etiqueta",
     "light_mode": "Modo claro",
     "dark_mode": "Modo oscuro",
+    "dual_pane_mode": "Activar modo de doble panel",
+    "dual_pane_secondary_hint": "Selecciona una carpeta para abrirla aquí.",
+    "dual_pane_secondary_empty": "Selecciona una carpeta para abrirla en el panel derecho.",
     "upload_instruction": "Suelte archivos/carpetas aquí o haga clic en 'Elegir archivos'",
     "no_files_selected_default": "No se han seleccionado archivos",
     "choose_files": "Elegir archivos",
@@ -679,6 +685,9 @@ const translations = {
     "save_tag": "Enregistrer l'étiquette",
     "light_mode": "Mode clair",
     "dark_mode": "Mode sombre",
+    "dual_pane_mode": "Activer le mode double volet",
+    "dual_pane_secondary_hint": "Sélectionnez un dossier à ouvrir ici.",
+    "dual_pane_secondary_empty": "Sélectionnez un dossier à ouvrir dans le volet droit.",
     "upload_instruction": "Déposez des fichiers/dossiers ici ou cliquez sur 'Choisir des fichiers'",
     "no_files_selected_default": "Aucun fichier sélectionné",
     "choose_files": "Choisir des fichiers",
@@ -913,6 +922,9 @@ const translations = {
     "save_tag": "Tag speichern",
     "light_mode": "Heller Modus",
     "dark_mode": "Dunkler Modus",
+    "dual_pane_mode": "Zwei-Fenster-Modus aktivieren",
+    "dual_pane_secondary_hint": "Ordner auswählen, um ihn hier zu öffnen.",
+    "dual_pane_secondary_empty": "Ordner auswählen, um ihn im rechten Bereich zu öffnen.",
     "upload_instruction": "Ziehen Sie Dateien/Ordner hierher oder klicken Sie auf 'Dateien auswählen'",
     "no_files_selected_default": "Keine Dateien ausgewählt",
     "choose_files": "Dateien auswählen",
@@ -1158,6 +1170,9 @@ const translations = {
     "save_tag": "保存标签",
     "light_mode": "浅色模式",
     "dark_mode": "深色模式",
+    "dual_pane_mode": "启用双栏模式",
+    "dual_pane_secondary_hint": "选择一个文件夹在此打开。",
+    "dual_pane_secondary_empty": "选择一个文件夹在右侧窗格打开。",
     "upload_instruction": "将文件/文件夹拖到此处，或点击“选择文件”",
     "no_files_selected_default": "未选择文件",
     "choose_files": "选择文件",
@@ -1423,4 +1438,9 @@ export function applyTranslations() {
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
     el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
   });
+  try {
+    window.dispatchEvent(new CustomEvent('filerise:i18n-applied', {
+      detail: { locale: currentLocale }
+    }));
+  } catch (e) { /* ignore */ }
 }
