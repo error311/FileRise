@@ -11,6 +11,7 @@ declare(strict_types=1);
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="root"),
  *   @OA\Parameter(name="deep", in="query", required=false, @OA\Schema(type="integer"), example=1, description="When 1, return recursive totals."),
+ *   @OA\Parameter(name="depth", in="query", required=false, @OA\Schema(type="integer"), example=2, description="Max recursive depth when deep=1 (0 = unlimited)."),
  *   @OA\Response(response=200, description="Stats payload"),
  *   @OA\Response(response=401, description="Unauthorized")
  * )
@@ -40,5 +41,12 @@ $folder = str_replace('\\', '/', trim($folder));
 $folder = ($folder === '' || strcasecmp($folder, 'root') === 0) ? 'root' : trim($folder, '/');
 
 $deep = isset($_GET['deep']) && $_GET['deep'] !== '' && $_GET['deep'] !== '0';
+$depth = null;
+if (isset($_GET['depth']) && $_GET['depth'] !== '') {
+  $depthVal = filter_var($_GET['depth'], FILTER_VALIDATE_INT);
+  if ($depthVal !== false) {
+    $depth = (int)$depthVal;
+  }
+}
 
-echo json_encode(FolderController::stats($folder, $username, $perms, $deep), JSON_UNESCAPED_SLASHES);
+echo json_encode(FolderController::stats($folder, $username, $perms, $deep, $depth), JSON_UNESCAPED_SLASHES);

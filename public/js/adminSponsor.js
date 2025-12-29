@@ -29,7 +29,8 @@ const DEFAULT_SUPPORTERS = [
   'Blaž Pivk',
   'Rob Parker',
   'Aaron W.',
-  'C-Fu'
+  'C-Fu',
+  'peterchia'
 ];
 
 /**

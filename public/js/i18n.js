@@ -201,7 +201,7 @@ const translations = {
 
     // Admin Panel
     "header_settings": "Header Settings",
-    "header_footer_settings": "Header, Preview & Footer Settings",
+    "header_footer_settings": "Header, FileList & Footer Settings",
     "shared_max_upload_size_bytes_title": "Shared Max Upload Size",
     "shared_max_upload_size_bytes": "Shared Max Upload Size (bytes)",
     "max_bytes_shared_uploads_note": "Enter maximum bytes allowed for shared-folder uploads",

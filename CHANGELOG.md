@@ -1,5 +1,30 @@
 # Changelog
 
+## Changes 12/29/2025 (v2.12.1)
+
+`release(v2.12.1): folder summary depth + video thumbnails + dual-pane toggle fix`
+
+`Closes #79, #80, #81`
+
+**Added**  
+
+- **Admin Panel setting:** *Display → File list summary depth*  
+  Limits how deep recursive folder totals (files/folders/bytes) will traverse to keep the UI fast on huge trees.
+- Video thumbnails in Gallery view (best-effort frame capture with safe fallbacks for very large videos).
+- Folder stats API support for depth-limited recursion (`deep=1&depth=N`).
+
+**Changed**  
+
+- Recursive folder counting is now depth-aware and avoids unnecessary descendant probes when depth is capped.
+- Folder summary caching now keys by `(folder + depth)` and invalidates correctly after moves/changes.
+
+**Fixed**  
+
+- View Options dual-pane toggle now shows the active “blue” state correctly in dark mode.
+- Gallery video preview initialization improved (more reliable thumb generation / preview frame selection).
+
+---
+
 ## Changes 12/28/2025 (v2.12.0)
 
 `release(v2.12.0): dual-pane mode + keyboard shortcuts`

@@ -1462,6 +1462,7 @@ class AdminController
             ],
             'display'             => [
                 'hoverPreviewMaxImageMb' => 8,
+                'fileListSummaryDepth' => 2,
             ],
         ];
 
@@ -1741,11 +1742,16 @@ if (isset($data['oidc']['allowDemote'])) {
             if (!isset($merged['display']) || !is_array($merged['display'])) {
                 $merged['display'] = [
                     'hoverPreviewMaxImageMb' => 8,
+                    'fileListSummaryDepth' => 2,
                 ];
             }
             if (array_key_exists('hoverPreviewMaxImageMb', $data['display'])) {
                 $lim = filter_var($data['display']['hoverPreviewMaxImageMb'], FILTER_VALIDATE_INT);
                 $merged['display']['hoverPreviewMaxImageMb'] = max(1, min(50, $lim !== false ? $lim : 8));
+            }
+            if (array_key_exists('fileListSummaryDepth', $data['display'])) {
+                $lim = filter_var($data['display']['fileListSummaryDepth'], FILTER_VALIDATE_INT);
+                $merged['display']['fileListSummaryDepth'] = max(0, min(10, $lim !== false ? $lim : 2));
             }
         }
 

@@ -42,12 +42,23 @@ class FolderController
     }
 
     /** Stats for a folder (folders/files/bytes; deep totals are opt-in). */
-    public static function stats(string $folder, string $user, array $perms, bool $deep = false): array
+    public static function stats(string $folder, string $user, array $perms, bool $deep = false, ?int $maxDepth = null): array
     {
         // Normalize inside model; this is a thin action
-        return $deep
-            ? FolderModel::countVisibleDeep($folder, $user, $perms)
-            : FolderModel::countVisible($folder, $user, $perms);
+        if (!$deep) {
+            return FolderModel::countVisible($folder, $user, $perms);
+        }
+
+        if ($maxDepth !== null) {
+            $maxDepth = (int)$maxDepth;
+            if ($maxDepth <= 0) {
+                $maxDepth = null;
+            } else {
+                $maxDepth = min($maxDepth, 10);
+            }
+        }
+
+        return FolderModel::countVisibleDeep($folder, $user, $perms, 20000, $maxDepth);
     }
 
     /** Capabilities for UI buttons/menus (unchanged semantics; just centralized). */

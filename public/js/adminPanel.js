@@ -1104,6 +1104,7 @@ function captureInitialAdminConfig() {
     brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
     brandingFooterHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     hoverPreviewMaxImageMb: (document.getElementById("hoverPreviewMaxImageMb")?.value || "").trim(),
+    fileListSummaryDepth: (document.getElementById("fileListSummaryDepth")?.value || "").trim(),
 
     clamavScanUploads: !!document.getElementById("clamavScanUploads")?.checked,
     proSearchEnabled: !!document.getElementById("proSearchEnabled")?.checked,
@@ -1144,6 +1145,7 @@ function hasUnsavedChanges() {
     getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
     getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "") ||
     getVal("hoverPreviewMaxImageMb") !== (o.hoverPreviewMaxImageMb || "") ||
+    getVal("fileListSummaryDepth") !== (o.fileListSummaryDepth || "") ||
     getChk("clamavScanUploads") !== o.clamavScanUploads ||
     getChk("proSearchEnabled") !== o.proSearchEnabled ||
     getVal("proSearchLimit") !== o.proSearchLimit ||
@@ -2230,6 +2232,11 @@ export function openAdminPanel() {
         1,
         Math.min(50, parseInt(displayCfg.hoverPreviewMaxImageMb || 8, 10) || 8)
       );
+      const rawSummaryDepth = parseInt(displayCfg.fileListSummaryDepth, 10);
+      const fileListSummaryDepth = Math.max(
+        0,
+        Math.min(10, Number.isFinite(rawSummaryDepth) ? rawSummaryDepth : 2)
+      );
       const bg = dark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.3)";
       const inner = `
         background:${dark ? "#2c2c2c" : "#fff"};
@@ -2258,7 +2265,7 @@ export function openAdminPanel() {
             <form id="adminPanelForm">
             ${[
             { id: "userManagement", label: t("user_management") },
-            { id: "headerSettings", label: tf("header_footer_settings", "Header, Display & Footer settings") },
+            { id: "headerSettings", label: tf("header_footer_settings", "Header, File List & Footer settings") },
             { id: "loginOptions", label: t("login_webdav") + " (OIDC/TOTP)" },
             { id: "network", label: tf("firewall_proxy_settings", "Firewall and Proxy Settings") },
             { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
@@ -2506,6 +2513,27 @@ export function openAdminPanel() {
       max="50"
       step="1"
       value="${hoverPreviewMaxImageMb}"
+    />
+  </div>
+
+  <!-- Display: File list summary depth -->
+  <div class="form-group" style="margin-top:16px;">
+    <label for="fileListSummaryDepth">
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      ${tf("file_list_summary_depth", "File list summary depth")}
+  </div>
+    </label>
+    <small class="text-muted d-block mb-1">
+      ${tf("file_list_summary_depth_help", "Caps recursive folder totals. 0 = unlimited, 1 = children only, 2 = grandchildren, etc.")}
+    </small>
+    <input
+      type="number"
+      id="fileListSummaryDepth"
+      class="form-control"
+      min="0"
+      max="10"
+      step="1"
+      value="${fileListSummaryDepth}"
     />
   </div>
 
@@ -4072,6 +4100,15 @@ function handleSave() {
         Math.min(
           50,
           parseInt(document.getElementById("hoverPreviewMaxImageMb")?.value || "8", 10) || 8
+        )
+      ),
+      fileListSummaryDepth: Math.max(
+        0,
+        Math.min(
+          10,
+          Number.isFinite(parseInt(document.getElementById("fileListSummaryDepth")?.value || "2", 10))
+            ? parseInt(document.getElementById("fileListSummaryDepth")?.value || "2", 10)
+            : 2
         )
       ),
     },

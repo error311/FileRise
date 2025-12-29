@@ -144,7 +144,7 @@ class FolderModel
     return $result;
 }
 
-    public static function countVisibleDeep(string $folder, string $user, array $perms, int $maxScan = 20000): array
+    public static function countVisibleDeep(string $folder, string $user, array $perms, int $maxScan = 20000, ?int $maxDepth = null): array
     {
         $folder = ACL::normalizeFolder($folder);
 
@@ -153,6 +153,13 @@ class FolderModel
             || ACL::canReadOwn($user, $perms, $folder);
         if (!$canViewFolder) {
             return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
+        }
+
+        if ($maxDepth !== null) {
+            $maxDepth = (int)$maxDepth;
+            if ($maxDepth <= 0) {
+                $maxDepth = null;
+            }
         }
 
         $base = realpath((string)UPLOAD_DIR);
@@ -187,9 +194,9 @@ class FolderModel
         $scanned = 0;
         $truncated = false;
 
-        $stack = [[$dir, $relPrefix]];
+        $stack = [[$dir, $relPrefix, 0]];
         while ($stack) {
-            [$curAbs, $curRel] = array_pop($stack);
+            [$curAbs, $curRel, $depth] = array_pop($stack);
 
             $relForAcl = ($curRel === '' ? 'root' : $curRel);
             $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $relForAcl);
@@ -223,14 +230,28 @@ class FolderModel
                     }
 
                     $childRel = ($curRel === '' ? $name : $curRel . '/' . $name);
+                    $childDepth = $depth + 1;
+                    if ($maxDepth !== null && $childDepth > $maxDepth) {
+                        continue;
+                    }
                     $canViewChild = ACL::isAdmin($perms)
                         || ACL::canRead($user, $perms, $childRel)
                         || ACL::canReadOwn($user, $perms, $childRel);
                     if ($canViewChild) {
                         $folderCount++;
-                        $stack[] = [$abs, $childRel];
-                    } elseif (FS::hasReadableDescendant($base, $abs, $childRel, $user, $perms, 2)) {
-                        $stack[] = [$abs, $childRel];
+                        $stack[] = [$abs, $childRel, $childDepth];
+                    } else {
+                        $probeDepth = 2;
+                        if ($maxDepth !== null) {
+                            $remaining = $maxDepth - $childDepth;
+                            if ($remaining <= 0) {
+                                continue;
+                            }
+                            $probeDepth = min($probeDepth, $remaining);
+                        }
+                        if (FS::hasReadableDescendant($base, $abs, $childRel, $user, $perms, $probeDepth)) {
+                            $stack[] = [$abs, $childRel, $childDepth];
+                        }
                     }
                 } elseif (@is_file($abs)) {
                     if (@is_link($abs)) {

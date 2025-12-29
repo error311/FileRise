@@ -1351,6 +1351,10 @@ label{font-size: 0.9rem;}
   border-color:var(--fr-border-dark,#2c2d33);
   background-color:rgba(255,255,255,0.1);
 }
+.dark-mode #viewOptionsPopover .vo-toggle-input:checked{
+  background-color:var(--filr-accent-400,#0d6efd);
+  border-color:var(--filr-accent-400,#0d6efd);
+}
 .dark-mode #viewOptionsPopover .vo-toggle-input::before{
   box-shadow:0 1px 2px rgba(0,0,0,0.7);
 }

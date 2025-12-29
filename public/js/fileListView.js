@@ -452,6 +452,9 @@ const TEXT_PREVIEW_MAX_BYTES = 512 * 1024;
 const DEFAULT_HOVER_PREVIEW_MAX_MB = 8;
 const MIN_HOVER_PREVIEW_MAX_MB = 1;
 const MAX_HOVER_PREVIEW_MAX_MB = 50;
+const DEFAULT_FILE_LIST_SUMMARY_DEPTH = 2;
+const MIN_FILE_LIST_SUMMARY_DEPTH = 0;
+const MAX_FILE_LIST_SUMMARY_DEPTH = 10;
 const OFFICE_SNIPPET_EXTS = new Set([
   'doc', 'docx', 'docm', 'dotx',
   'xls', 'xlsx', 'xlsm', 'xltx',
@@ -466,6 +469,14 @@ function getMaxImagePreviewBytes() {
   const mb = Number.isFinite(raw) ? raw : DEFAULT_HOVER_PREVIEW_MAX_MB;
   const clamped = Math.max(MIN_HOVER_PREVIEW_MAX_MB, Math.min(MAX_HOVER_PREVIEW_MAX_MB, mb));
   return clamped * 1024 * 1024;
+}
+
+function getFileListSummaryDepth() {
+  const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
+  const display = (cfg && typeof cfg.display === 'object') ? cfg.display : {};
+  const raw = parseInt(display.fileListSummaryDepth, 10);
+  const depth = Number.isFinite(raw) ? raw : DEFAULT_FILE_LIST_SUMMARY_DEPTH;
+  return Math.max(MIN_FILE_LIST_SUMMARY_DEPTH, Math.min(MAX_FILE_LIST_SUMMARY_DEPTH, depth));
 }
 
 function getFileExt(name) {
@@ -2042,24 +2053,40 @@ function fetchFolderStats(folder) {
   return p;
 }
 
-function fetchFolderSummaryStats(folder) {
+function fetchFolderSummaryStats(folder, depthOverride) {
   if (!folder) return Promise.resolve(null);
 
-  if (_folderSummaryCache.has(folder)) {
-    return _folderSummaryCache.get(folder);
+  const depthSetting = Number.isFinite(depthOverride) ? depthOverride : getFileListSummaryDepth();
+  const depth = Math.max(MIN_FILE_LIST_SUMMARY_DEPTH, Math.min(MAX_FILE_LIST_SUMMARY_DEPTH, depthSetting));
+  const depthKey = depth > 0 ? String(depth) : 'u';
+  const cacheKey = `${folder}::${depthKey}`;
+
+  if (_folderSummaryCache.has(cacheKey)) {
+    return _folderSummaryCache.get(cacheKey);
   }
 
-  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&deep=1&t=${Date.now()}`);
+  const depthParam = depth > 0 ? `&depth=${depth}` : '';
+  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&deep=1${depthParam}&t=${Date.now()}`);
   const p = _fetchJSONWithTimeout(url, 6000).then(data => {
     if (data && data.__fr_err) {
-      _folderSummaryCache.delete(folder);
+      _folderSummaryCache.delete(cacheKey);
       return null;
     }
     return data || null;
   });
 
-  _folderSummaryCache.set(folder, p);
+  _folderSummaryCache.set(cacheKey, p);
   return p;
+}
+
+function clearFolderSummaryCache(folder) {
+  if (!folder) return;
+  const prefix = `${folder}::`;
+  for (const key of _folderSummaryCache.keys()) {
+    if (key === folder || key.startsWith(prefix)) {
+      _folderSummaryCache.delete(key);
+    }
+  }
 }
 
 // --- Folder "peek" cache (first few child folders/files) ---
@@ -2077,7 +2104,7 @@ window.addEventListener('folderStatsInvalidated', (e) => {
     if (!f) return;
     _folderStatsCache.delete(f);
     _folderPeekCache.delete(f);
-    _folderSummaryCache.delete(f);
+    clearFolderSummaryCache(f);
 
     try { refreshFolderIcon(f); } catch (e2) { /* ignore */ }
 
@@ -5820,6 +5847,7 @@ export function renderGalleryView(folder, container) {
   const startIdx = (currentPage - 1) * itemsPerPage;
   const pageFiles = filteredFiles.slice(startIdx, startIdx + itemsPerPage);
   const maxImagePreviewBytes = getMaxImagePreviewBytes();
+  const MAX_GALLERY_VIDEO_PREVIEW_BYTES = 1024 * 1024 * 1024; // 1 GiB (metadata only)
 
   pageFiles.forEach((file, idx) => {
     const idSafe = encodeURIComponent(file.name) + "-" + (startIdx + idx);
@@ -5864,7 +5892,39 @@ export function renderGalleryView(folder, container) {
             style="max-width:100%; max-height:${getMaxImageHeight()}px; display:block; margin:0 auto;">`;
       }
     } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(file.name)) {
-      thumbnail = `<span class="material-icons gallery-icon">movie</span>`;
+      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+      if (bytes != null && bytes > MAX_GALLERY_VIDEO_PREVIEW_BYTES) {
+        thumbnail = `<span class="material-icons gallery-icon">movie</span>`;
+      } else {
+        const maxHeight = getMaxImageHeight();
+        thumbnail = `
+          <div class="gallery-video-thumb" style="
+            position:relative;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            min-height:${maxHeight}px;
+            background:rgba(0,0,0,0.04);
+            border-radius:8px;
+          ">
+            <video
+              class="gallery-video"
+              src="${previewURL}"
+              muted
+              playsinline
+              preload="metadata"
+              style="max-width:100%; max-height:${maxHeight}px; display:block; border-radius:8px; pointer-events:none;"
+            ></video>
+            <span class="material-icons" style="
+              position:absolute;
+              font-size:32px;
+              color:rgba(255,255,255,0.9);
+              text-shadow:0 2px 6px rgba(0,0,0,0.5);
+              pointer-events:none;
+            ">play_circle</span>
+          </div>
+        `;
+      }
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
       thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
     } else {
@@ -6007,6 +6067,32 @@ export function renderGalleryView(folder, container) {
   fileListContent.querySelectorAll('.gallery-thumbnail').forEach(img => {
     const key = img.dataset.cacheKey;
     img.addEventListener('load', () => cacheImage(img, key));
+  });
+
+  // prime video thumbnails (reuse hover-preview style seek)
+  fileListContent.querySelectorAll('.gallery-video').forEach(video => {
+    const wrapper = video.closest('.gallery-video-thumb');
+    const fallback = () => {
+      if (!wrapper) return;
+      wrapper.innerHTML = `<span class="material-icons gallery-icon">movie</span>`;
+    };
+    const onMeta = () => {
+      try {
+        const dur = video.duration;
+        if (Number.isFinite(dur) && dur > 1) {
+          video.currentTime = Math.min(1, dur / 3);
+        }
+      } catch (e) {
+        // best effort only
+      }
+    };
+
+    video.addEventListener('loadedmetadata', onMeta, { once: true });
+    video.addEventListener('error', fallback, { once: true });
+
+    if (video.readyState >= 1) {
+      onMeta();
+    }
   });
 
   // preview clicks (dynamic import to avoid global dependency)
