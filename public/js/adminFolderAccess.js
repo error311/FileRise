@@ -117,7 +117,7 @@ let __allFoldersCache = null;
 async function getAllFolders(force = false) {
   if (!force && __allFoldersCache) return __allFoldersCache.slice();
 
-  const res = await fetch('/api/folder/getFolderList.php?ts=' + Date.now(), {
+  const res = await fetch('/api/folder/getFolderList.php?counts=0&ts=' + Date.now(), {
     credentials: 'include',
     cache: 'no-store',
     headers: { 'Cache-Control': 'no-store' }
@@ -940,7 +940,13 @@ export function openUserPermissionsModal(initialUser = null) {
         <span id="closeUserPermissionsModal" class="editor-close-btn">&times;</span>
         <h3>${tf("folder_access", "Folder Access")}</h3>
         <div class="muted" style="margin:-4px 0 10px;">
-          ${tf("grant_folders_help", "Grant per-folder capabilities to each user. View (all) shows all contents; View (own) shows only the user's uploads. Write is file-level ops (upload/edit/rename/copy/delete/extract). Create is file-only; subfolders require Manage/Ownership. Manage/Ownership enables folder actions (create/rename/move/delete, grant access) and implies View (all), Write, and Share. Share File auto-enables View (own); Share Folder requires Manage/Ownership + View (all).")}
+          <span class="grant-help-short">${tf("grant_folders_help_short", "Per-folder access. Create is file-only; subfolders need Manage/Ownership. Share Folder needs Manage + View (all).")}</span>
+          <button type="button" class="btn btn-link btn-sm p-0 grant-help-toggle" aria-expanded="false" style="margin-left:6px;">
+            ${tf("help_more", "More")}
+          </button>
+          <span class="grant-help-full" style="display:none;">
+            ${tf("grant_folders_help", "Grant per-folder capabilities to each user. View (all) shows all contents; View (own) shows only the user's uploads. Write is file-level ops (upload/edit/rename/copy/delete/extract). Create is file-only; subfolders require Manage/Ownership. Manage/Ownership enables folder actions (create/rename/move/delete, grant access) and implies View (all), Write, and Share. Share File auto-enables View (own); Share Folder requires Manage/Ownership + View (all).")}
+          </span>
         </div>
         <div id="userPermissionsList" style="max-height: 82vh; min-height: 420px; overflow-y: auto; margin-bottom: 15px;">
         </div>
@@ -982,6 +988,19 @@ export function openUserPermissionsModal(initialUser = null) {
         showToast(tf("error_updating_permissions", "Error updating permissions"), "error");
       }
     });
+    const helpToggle = userPermissionsModal.querySelector('.grant-help-toggle');
+    if (helpToggle) {
+      helpToggle.addEventListener('click', () => {
+        const expanded = helpToggle.getAttribute('aria-expanded') === 'true';
+        const next = !expanded;
+        const shortText = userPermissionsModal.querySelector('.grant-help-short');
+        const fullText = userPermissionsModal.querySelector('.grant-help-full');
+        if (shortText) shortText.style.display = next ? 'none' : 'inline';
+        if (fullText) fullText.style.display = next ? 'inline' : 'none';
+        helpToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+        helpToggle.textContent = next ? tf('help_less', 'Less') : tf('help_more', 'More');
+      });
+    }
   } else {
     userPermissionsModal.style.display = "flex";
   }

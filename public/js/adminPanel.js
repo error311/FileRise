@@ -1104,6 +1104,7 @@ function captureInitialAdminConfig() {
     brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
     brandingFooterHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     hoverPreviewMaxImageMb: (document.getElementById("hoverPreviewMaxImageMb")?.value || "").trim(),
+    hoverPreviewMaxVideoMb: (document.getElementById("hoverPreviewMaxVideoMb")?.value || "").trim(),
     fileListSummaryDepth: (document.getElementById("fileListSummaryDepth")?.value || "").trim(),
 
     clamavScanUploads: !!document.getElementById("clamavScanUploads")?.checked,
@@ -1145,6 +1146,7 @@ function hasUnsavedChanges() {
     getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
     getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "") ||
     getVal("hoverPreviewMaxImageMb") !== (o.hoverPreviewMaxImageMb || "") ||
+    getVal("hoverPreviewMaxVideoMb") !== (o.hoverPreviewMaxVideoMb || "") ||
     getVal("fileListSummaryDepth") !== (o.fileListSummaryDepth || "") ||
     getChk("clamavScanUploads") !== o.clamavScanUploads ||
     getChk("proSearchEnabled") !== o.proSearchEnabled ||
@@ -2232,6 +2234,10 @@ export function openAdminPanel() {
         1,
         Math.min(50, parseInt(displayCfg.hoverPreviewMaxImageMb || 8, 10) || 8)
       );
+      const hoverPreviewMaxVideoMb = Math.max(
+        1,
+        Math.min(2048, parseInt(displayCfg.hoverPreviewMaxVideoMb || 200, 10) || 200)
+      );
       const rawSummaryDepth = parseInt(displayCfg.fileListSummaryDepth, 10);
       const fileListSummaryDepth = Math.max(
         0,
@@ -2503,7 +2509,7 @@ export function openAdminPanel() {
   </div>
     </label>
     <small class="text-muted d-block mb-1">
-      ${tf("hover_preview_max_image_help", "Applies to hover previews and gallery thumbnails; larger values can increase bandwidth and memory use.")}
+      ${tf("hover_preview_max_image_help", "Applies to hover previews and gallery thumbnails. Default 8 MB; higher values increase bandwidth and memory use.")}
     </small>
     <input
       type="number"
@@ -2513,6 +2519,27 @@ export function openAdminPanel() {
       max="50"
       step="1"
       value="${hoverPreviewMaxImageMb}"
+    />
+  </div>
+
+  <!-- Display: Hover preview max video size -->
+  <div class="form-group" style="margin-top:16px;">
+    <label for="hoverPreviewMaxVideoMb">
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      ${tf("hover_preview_max_video_mb", "Hover preview max video size (MB)")}
+  </div>
+    </label>
+    <small class="text-muted d-block mb-1">
+      ${tf("hover_preview_max_video_help", "Applies to hover previews and gallery thumbnails. Default 200 MB; higher values can increase bandwidth on large videos.")}
+    </small>
+    <input
+      type="number"
+      id="hoverPreviewMaxVideoMb"
+      class="form-control"
+      min="1"
+      max="2048"
+      step="1"
+      value="${hoverPreviewMaxVideoMb}"
     />
   </div>
 
@@ -4100,6 +4127,13 @@ function handleSave() {
         Math.min(
           50,
           parseInt(document.getElementById("hoverPreviewMaxImageMb")?.value || "8", 10) || 8
+        )
+      ),
+      hoverPreviewMaxVideoMb: Math.max(
+        1,
+        Math.min(
+          2048,
+          parseInt(document.getElementById("hoverPreviewMaxVideoMb")?.value || "200", 10) || 200
         )
       ),
       fileListSummaryDepth: Math.max(

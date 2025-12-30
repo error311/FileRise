@@ -303,7 +303,7 @@ class FolderModel
         return rtrim($rp, DIRECTORY_SEPARATOR);
     }
 
-    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500): array
+    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500, bool $probe = true): array
     {
         $folder  = ACL::normalizeFolder($folder);
         $limit   = max(1, min(2000, $limit));
@@ -366,28 +366,32 @@ class FolderModel
             $locked  = !$canView;
     
             // ---- quick per-child stats (single-level scan, early exit) ----
-            $hasSubs  = false; // at least one subdirectory
-            $nonEmpty = false; // any direct entry (file or folder)
-            try {
-                $it = new \FilesystemIterator($full, \FilesystemIterator::SKIP_DOTS);
-                foreach ($it as $child) {
-                    $name = $child->getFilename();
-                    if (!$name) continue;
-                    if ($name[0] === '.') continue;
-                    if (!FS::isSafeSegment($name)) continue;
-                    if (in_array(strtolower($name), $SKIP, true)) continue;
+            $hasSubs  = null; // at least one subdirectory
+            $nonEmpty = null; // any direct entry (file or folder)
+            if ($probe) {
+                $hasSubs = false;
+                $nonEmpty = false;
+                try {
+                    $it = new \FilesystemIterator($full, \FilesystemIterator::SKIP_DOTS);
+                    foreach ($it as $child) {
+                        $name = $child->getFilename();
+                        if (!$name) continue;
+                        if ($name[0] === '.') continue;
+                        if (!FS::isSafeSegment($name)) continue;
+                        if (in_array(strtolower($name), $SKIP, true)) continue;
     
-                    $nonEmpty = true;
+                        $nonEmpty = true;
     
-                    $isDir = $child->isDir();
-                    if (!$isDir && $child->isLink()) {
-                        $linkReal = FS::safeReal($baseReal, $child->getPathname());
-                        $isDir = ($linkReal !== null && is_dir($linkReal));
+                        $isDir = $child->isDir();
+                        if (!$isDir && $child->isLink()) {
+                            $linkReal = FS::safeReal($baseReal, $child->getPathname());
+                            $isDir = ($linkReal !== null && is_dir($linkReal));
+                        }
+                        if ($isDir) { $hasSubs = true; break; } // early exit once we know there's a subfolder
                     }
-                    if ($isDir) { $hasSubs = true; break; } // early exit once we know there's a subfolder
+                } catch (\Throwable $e) {
+                    // keep defaults
                 }
-            } catch (\Throwable $e) {
-                // keep defaults
             }
             // ---------------------------------------------------------------
     
@@ -867,7 +871,7 @@ class FolderModel
      * Retrieves the list of folders (including "root") along with file count metadata.
      * (Ownership filtering is handled in the controller; this function remains unchanged.)
      */
-    public static function getFolderList($ignoredParent = null, ?string $username = null, array $perms = []): array
+    public static function getFolderList($ignoredParent = null, ?string $username = null, array $perms = [], bool $includeCounts = true): array
     {
         $baseDir = realpath(UPLOAD_DIR);
         if ($baseDir === false) {
@@ -878,8 +882,8 @@ class FolderModel
 
         // root
         $rootMetaFile   = self::getMetadataFilePath('root');
-        $rootFileCount  = 0;
-        if (file_exists($rootMetaFile)) {
+        $rootFileCount  = null;
+        if ($includeCounts && file_exists($rootMetaFile)) {
             $rootMetadata = json_decode(file_get_contents($rootMetaFile), true);
             $rootFileCount = is_array($rootMetadata) ? count($rootMetadata) : 0;
         }
@@ -893,8 +897,8 @@ class FolderModel
         $subfolders = is_dir($baseDir) ? self::getSubfolders($baseDir) : [];
         foreach ($subfolders as $folder) {
             $metaFile = self::getMetadataFilePath($folder);
-            $fileCount = 0;
-            if (file_exists($metaFile)) {
+            $fileCount = null;
+            if ($includeCounts && file_exists($metaFile)) {
                 $metadata = json_decode(file_get_contents($metaFile), true);
                 $fileCount = is_array($metadata) ? count($metadata) : 0;
             }

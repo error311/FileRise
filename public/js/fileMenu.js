@@ -8,7 +8,7 @@ import {
 } from './fileActions.js?v={{APP_QVER}}';
 import { previewFile, buildPreviewUrl, openShareModal } from './filePreview.js?v={{APP_QVER}}';
 import { editFile } from './fileEditor.js?v={{APP_QVER}}';
-import { canEditFile, fileData, downloadSelectedFilesIndividually } from './fileListView.js?v={{APP_QVER}}';
+import { canEditFile, fileData, downloadSelectedFilesIndividually, startInlineRenameFromContext } from './fileListView.js?v={{APP_QVER}}';
 import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
 import { escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 
@@ -122,6 +122,7 @@ function placeMenu(x, y) {
 export function hideFileContextMenu() {
   const m = qMenu();
   if (m) m.hidden = true;
+  window.__filr_ctx_row = null;
 }
 
 function currentSelection() {
@@ -178,6 +179,7 @@ export function fileListContextMenuHandler(e) {
 
   // Stash for click handlers
   window.__filr_ctx_state = state;
+  window.__filr_ctx_row = row || null;
 }
 
 // --- add near top ---
@@ -197,6 +199,7 @@ function menuClickDelegate(ev) {
   ev.stopPropagation();
 
   // CLOSE MENU FIRST so it can’t overlay the modal
+  const ctxRow = window.__filr_ctx_row || null;
   hideFileContextMenu();
 
   const action = btn.dataset.action;
@@ -228,7 +231,14 @@ function menuClickDelegate(ev) {
       break;
 
     case 'rename':
-      if (s.file) renameFile(s.file.name, folder);
+      if (s.file) {
+        const row = ctxRow;
+        if (row && typeof startInlineRenameFromContext === 'function') {
+          const started = startInlineRenameFromContext(s.file, row);
+          if (started) break;
+        }
+        renameFile(s.file.name, folder);
+      }
       break;
 
     case 'tag_file':

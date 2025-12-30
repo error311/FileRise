@@ -1,5 +1,44 @@
 # Changelog
 
+## Changes 12/30/2025 (v2.13.0)
+
+`release(v2.13.0): inline rename + video preview limits + folder tree perf (see #79)`
+
+**Added**  
+
+- **Inline rename**:
+  - File list inline rename (table view) + context-menu support
+  - Folder tree inline rename (tree context menu + Rename button)
+  - Keyboard shortcuts: **F2 rename**, plus **Ctrl/Cmd+Shift+N** (new folder)
+- **Admin Panel setting (Display):** Hover preview max video size (MB)
+  - Applies to hover previews + Gallery video thumbnails
+- Folder APIs:
+  - `GET /api/folder/getFolderList.php?counts=0` to skip metadata count reads (faster on large trees)
+  - `GET /api/folder/listChildren.php?probe=0` to skip per-child “has subfolders / non-empty” probing (faster)
+
+**Changed**  
+
+- Hover previews & Gallery video thumbs:
+  - Use the new video size limit setting
+  - Improved “no preview available” fallback when a frame can’t be decoded quickly
+- File streaming:
+  - Improved HTTP Range support (incl. suffix ranges like `bytes=-500`)
+  - Expanded safe inline rendering to allowlisted video/audio types when requested (`inline=1`)
+
+**Fixed**  
+
+- Context menus now position correctly using `clientX/clientY` (more reliable across layouts).
+- Blank folder icons are repaired after drag/drop moves and dual-pane refreshes.
+- Admin “Folder Access” modal help text is now collapsible (“More/Less”) for readability.
+
+**Performance**  
+
+- Reduced IO for large installs by:
+  - Avoiding folder count reads when not needed (`counts=0`)
+  - Avoiding directory iterator probes when not needed (`probe=0`)
+
+---
+
 ## Changes 12/29/2025 (v2.12.1)
 
 `release(v2.12.1): folder summary depth + video thumbnails + dual-pane toggle fix`

@@ -5,6 +5,7 @@ import {
   formatFolderName,
   fileData,
   downloadSelectedFilesIndividually,
+  startInlineRenameFromContext,
   MAX_NONZIP_MULTI_DOWNLOAD
 } from './fileListView.js?v={{APP_QVER}}';
 import { refreshFolderIcon, updateRecycleBinState } from './folderManager.js?v={{APP_QVER}}';
@@ -705,7 +706,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder
   if (window.userFolderOnly) {
     const username = localStorage.getItem("username") || "root";
     try {
-      const response = await fetch("/api/folder/getFolderList.php?restricted=1");
+      const response = await fetch("/api/folder/getFolderList.php?restricted=1&counts=0");
       let folders = await response.json();
       if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
         folders = folders.map(item => item.folder);
@@ -736,7 +737,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder
   }
 
   try {
-    const response = await fetch("/api/folder/getFolderList.php");
+    const response = await fetch("/api/folder/getFolderList.php?counts=0");
     let folders = await response.json();
     if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
       folders = folders.map(item => item.folder);
@@ -896,7 +897,20 @@ export function handleRenameSelected(e) {
     return;
   }
   const file = files[0];
-  renameFile(file.name, file.folder || window.currentFolder || "root");
+  const folder = file.folder || window.currentFolder || "root";
+
+  // Prefer inline rename in table view when we can resolve a row.
+  try {
+    if (window.viewMode === "table" && typeof startInlineRenameFromContext === "function") {
+      const checked = getActiveSelectedFileCheckboxes();
+      const row = checked.length ? checked[0].closest("tr") : null;
+      if (row && startInlineRenameFromContext(file, row)) {
+        return;
+      }
+    }
+  } catch (err) { /* ignore */ }
+
+  renameFile(file.name, folder);
 }
 
 export function handleShareSelected(e) {

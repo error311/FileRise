@@ -151,11 +151,15 @@ class AdminModel
         $hoverPreviewMaxImageMb = isset($displayCfg['hoverPreviewMaxImageMb'])
             ? (int)$displayCfg['hoverPreviewMaxImageMb']
             : 8;
+        $hoverPreviewMaxVideoMb = isset($displayCfg['hoverPreviewMaxVideoMb'])
+            ? (int)$displayCfg['hoverPreviewMaxVideoMb']
+            : 200;
         $fileListSummaryDepth = isset($displayCfg['fileListSummaryDepth'])
             ? (int)$displayCfg['fileListSummaryDepth']
             : 2;
         $public['display'] = [
             'hoverPreviewMaxImageMb' => max(1, min(50, $hoverPreviewMaxImageMb)),
+            'hoverPreviewMaxVideoMb' => max(1, min(2048, $hoverPreviewMaxVideoMb)),
             'fileListSummaryDepth' => max(0, min(10, $fileListSummaryDepth)),
         ];
 
@@ -447,6 +451,7 @@ class AdminModel
         if (!isset($configUpdate['display']) || !is_array($configUpdate['display'])) {
             $configUpdate['display'] = [
                 'hoverPreviewMaxImageMb' => 8,
+                'hoverPreviewMaxVideoMb' => 200,
                 'fileListSummaryDepth' => 2,
             ];
         } else {
@@ -454,6 +459,10 @@ class AdminModel
                 ? (int)$configUpdate['display']['hoverPreviewMaxImageMb']
                 : 8;
             $configUpdate['display']['hoverPreviewMaxImageMb'] = max(1, min(50, $hoverPreviewMaxImageMb));
+            $hoverPreviewMaxVideoMb = isset($configUpdate['display']['hoverPreviewMaxVideoMb'])
+                ? (int)$configUpdate['display']['hoverPreviewMaxVideoMb']
+                : 200;
+            $configUpdate['display']['hoverPreviewMaxVideoMb'] = max(1, min(2048, $hoverPreviewMaxVideoMb));
             $fileListSummaryDepth = isset($configUpdate['display']['fileListSummaryDepth'])
                 ? (int)$configUpdate['display']['fileListSummaryDepth']
                 : 2;
@@ -695,6 +704,7 @@ class AdminModel
             if (!isset($config['display']) || !is_array($config['display'])) {
                 $config['display'] = [
                     'hoverPreviewMaxImageMb' => 8,
+                    'hoverPreviewMaxVideoMb' => 200,
                     'fileListSummaryDepth' => 2,
                 ];
             } else {
@@ -702,6 +712,10 @@ class AdminModel
                     ? (int)$config['display']['hoverPreviewMaxImageMb']
                     : 8;
                 $config['display']['hoverPreviewMaxImageMb'] = max(1, min(50, $hoverPreviewMaxImageMb));
+                $hoverPreviewMaxVideoMb = isset($config['display']['hoverPreviewMaxVideoMb'])
+                    ? (int)$config['display']['hoverPreviewMaxVideoMb']
+                    : 200;
+                $config['display']['hoverPreviewMaxVideoMb'] = max(1, min(2048, $hoverPreviewMaxVideoMb));
                 $fileListSummaryDepth = isset($config['display']['fileListSummaryDepth'])
                     ? (int)$config['display']['fileListSummaryDepth']
                     : 2;
@@ -784,6 +798,7 @@ class AdminModel
             ],
             'display'               => [
                 'hoverPreviewMaxImageMb' => 8,
+                'hoverPreviewMaxVideoMb' => 200,
                 'fileListSummaryDepth' => 2,
             ],
             'branding'              => [

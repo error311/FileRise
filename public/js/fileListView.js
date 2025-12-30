@@ -19,7 +19,8 @@ import {
   openDownloadModal,
   handleCopySelected,
   handleMoveSelected,
-  handleDeleteSelected
+  handleDeleteSelected,
+  handleRenameSelected
 } from './fileActions.js?v={{APP_QVER}}';
 import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
 import {
@@ -29,10 +30,12 @@ import {
   showFolderManagerContextMenu,
   hideFolderManagerContextMenu,
   openRenameFolderModal,
+  renameFolderInline,
   openDeleteFolderModal,
   refreshFolderIcon,
   openColorFolderModal,
   openMoveFolderUI,
+  startInlineRenameInTree,
   startFolderCryptoJobFlow,
   folderSVG,
   expandTreePath,
@@ -343,7 +346,7 @@ function wireFolderStripItems(strip) {
           }
         }
       ];
-      showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+      showFolderManagerContextMenu(e.clientX, e.clientY, menuItems);
 
       // Defensive: some browsers/styles occasionally blank the SVG after a contextmenu.
       // If it happens, repaint just this icon.
@@ -452,6 +455,9 @@ const TEXT_PREVIEW_MAX_BYTES = 512 * 1024;
 const DEFAULT_HOVER_PREVIEW_MAX_MB = 8;
 const MIN_HOVER_PREVIEW_MAX_MB = 1;
 const MAX_HOVER_PREVIEW_MAX_MB = 50;
+const DEFAULT_HOVER_PREVIEW_MAX_VIDEO_MB = 200;
+const MIN_HOVER_PREVIEW_MAX_VIDEO_MB = 1;
+const MAX_HOVER_PREVIEW_MAX_VIDEO_MB = 2048;
 const DEFAULT_FILE_LIST_SUMMARY_DEPTH = 2;
 const MIN_FILE_LIST_SUMMARY_DEPTH = 0;
 const MAX_FILE_LIST_SUMMARY_DEPTH = 10;
@@ -468,6 +474,15 @@ function getMaxImagePreviewBytes() {
   const raw = parseInt(display.hoverPreviewMaxImageMb, 10);
   const mb = Number.isFinite(raw) ? raw : DEFAULT_HOVER_PREVIEW_MAX_MB;
   const clamped = Math.max(MIN_HOVER_PREVIEW_MAX_MB, Math.min(MAX_HOVER_PREVIEW_MAX_MB, mb));
+  return clamped * 1024 * 1024;
+}
+
+function getMaxVideoPreviewBytes() {
+  const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
+  const display = (cfg && typeof cfg.display === 'object') ? cfg.display : {};
+  const raw = parseInt(display.hoverPreviewMaxVideoMb, 10);
+  const mb = Number.isFinite(raw) ? raw : DEFAULT_HOVER_PREVIEW_MAX_VIDEO_MB;
+  const clamped = Math.max(MIN_HOVER_PREVIEW_MAX_VIDEO_MB, Math.min(MAX_HOVER_PREVIEW_MAX_VIDEO_MB, mb));
   return clamped * 1024 * 1024;
 }
 
@@ -671,6 +686,292 @@ function wireEllipsisContextMenu(fileListContent) {
         row.dispatchEvent(evt);
       });
     });
+}
+
+let inlineRenameState = null;
+
+function clearInlineRenameState({ restore = true } = {}) {
+  const state = inlineRenameState;
+  if (!state) return;
+
+  inlineRenameState = null;
+
+  try {
+    if (state.input && state.input.parentNode) {
+      state.input.parentNode.removeChild(state.input);
+    }
+  } catch (e) { /* ignore */ }
+
+  if (restore) {
+    if (state.type === 'file' && state.nameCell) {
+      state.nameCell.innerHTML = state.originalHtml;
+    } else if (state.type === 'folder' && state.nameSpan) {
+      state.nameSpan.style.display = '';
+      state.nameSpan.textContent = state.originalName;
+    }
+  }
+
+  if (state.row) {
+    state.row.classList.remove('inline-rename-active');
+    if (state.prevDraggable == null) {
+      state.row.removeAttribute('draggable');
+    } else {
+      state.row.setAttribute('draggable', state.prevDraggable);
+    }
+  }
+}
+
+function focusRenameInput(input, name, selectBase) {
+  try {
+    input.focus();
+    if (selectBase) {
+      const lastDot = String(name || '').lastIndexOf('.');
+      if (lastDot > 0) {
+        input.setSelectionRange(0, lastDot);
+      } else {
+        input.select();
+      }
+    } else {
+      input.select();
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function startInlineRenameForFileRow(row, file, folder) {
+  if (!row || !file) return false;
+  if (window.viewMode !== 'table') return false;
+
+  const nameCell = row.querySelector('.file-name-cell');
+  if (!nameCell) return false;
+
+  clearInlineRenameState();
+  hideHoverPreview();
+
+  const oldName = file.name || '';
+  const originalHtml = nameCell.innerHTML;
+
+  nameCell.textContent = '';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.className = 'inline-rename-input form-control';
+  input.setAttribute('aria-label', t('rename') || 'Rename');
+  input.style.width = '100%';
+  input.style.maxWidth = '100%';
+  input.style.fontSize = 'inherit';
+  input.style.padding = '2px 6px';
+  input.style.height = 'auto';
+  input.style.boxSizing = 'border-box';
+
+  nameCell.appendChild(input);
+
+  const state = {
+    type: 'file',
+    row,
+    input,
+    nameCell,
+    originalHtml,
+    oldName,
+    folder: folder || window.currentFolder || 'root',
+    submitting: false,
+    prevDraggable: row.getAttribute('draggable')
+  };
+  inlineRenameState = state;
+  row.setAttribute('draggable', 'false');
+  row.classList.add('inline-rename-active');
+
+  const commit = async () => {
+    if (!inlineRenameState || inlineRenameState !== state || state.submitting) return;
+    const newName = String(input.value || '').trim();
+    if (!newName || newName === oldName) {
+      clearInlineRenameState();
+      return;
+    }
+
+    state.submitting = true;
+    input.disabled = true;
+
+    try {
+      const res = await fetch(withBase('/api/file/renameFile.php'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.csrfToken
+        },
+        body: JSON.stringify({
+          folder: state.folder,
+          oldName: oldName,
+          newName: newName
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data && data.success) {
+        showToast('File renamed successfully!');
+        clearInlineRenameState({ restore: false });
+        loadFileList(state.folder);
+        return;
+      }
+      showToast('Error renaming file: ' + (data.error || 'Unknown error'));
+    } catch (err) {
+      console.error('Error renaming file:', err);
+      showToast('Error renaming file');
+    }
+
+    if (inlineRenameState === state) {
+      state.submitting = false;
+      input.disabled = false;
+      focusRenameInput(input, newName, true);
+    }
+  };
+
+  const cancel = () => {
+    clearInlineRenameState();
+  };
+
+  const stop = (e) => { e.stopPropagation(); };
+  input.addEventListener('mousedown', stop);
+  input.addEventListener('click', stop);
+  input.addEventListener('dragstart', stop);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      commit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancel();
+    }
+  });
+  input.addEventListener('blur', () => {
+    if (inlineRenameState === state && !state.submitting) {
+      commit();
+    }
+  });
+
+  requestAnimationFrame(() => {
+    focusRenameInput(input, oldName, true);
+  });
+
+  return true;
+}
+
+function startInlineRenameForFolderRow(row, folderPath) {
+  if (!row || !folderPath) return false;
+  if (window.viewMode !== 'table') return false;
+
+  const wrap = row.querySelector('.folder-row-inner');
+  const nameSpan = row.querySelector('.folder-row-name');
+  if (!wrap || !nameSpan) return false;
+
+  clearInlineRenameState();
+  hideHoverPreview();
+
+  const oldName = nameSpan.textContent || (String(folderPath).split('/').pop() || '');
+  const originalName = oldName;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.className = 'inline-rename-input form-control';
+  input.setAttribute('aria-label', t('rename_folder') || 'Rename folder');
+  input.style.width = '100%';
+  input.style.maxWidth = '100%';
+  input.style.fontSize = 'inherit';
+  input.style.padding = '2px 6px';
+  input.style.height = 'auto';
+  input.style.boxSizing = 'border-box';
+
+  const metaSpan = wrap.querySelector('.folder-row-meta');
+  nameSpan.style.display = 'none';
+  if (metaSpan) {
+    wrap.insertBefore(input, metaSpan);
+  } else {
+    wrap.appendChild(input);
+  }
+
+  const state = {
+    type: 'folder',
+    row,
+    input,
+    nameSpan,
+    originalName,
+    folderPath,
+    submitting: false,
+    prevDraggable: row.getAttribute('draggable')
+  };
+  inlineRenameState = state;
+  row.setAttribute('draggable', 'false');
+  row.classList.add('inline-rename-active');
+
+  const commit = async () => {
+    if (!inlineRenameState || inlineRenameState !== state || state.submitting) return;
+    const newName = String(input.value || '').trim();
+    if (!newName || newName === oldName) {
+      clearInlineRenameState();
+      return;
+    }
+
+    state.submitting = true;
+    input.disabled = true;
+
+    try {
+      const result = await renameFolderInline(folderPath, newName, { selectAfter: false });
+      if (result && result.success) {
+        clearInlineRenameState({ restore: false });
+        const reloadFolder = window.currentFolder || getParentFolder(folderPath);
+        loadFileList(reloadFolder);
+        return;
+      }
+    } catch (err) {
+      console.error('Error renaming folder:', err);
+    }
+
+    if (inlineRenameState === state) {
+      state.submitting = false;
+      input.disabled = false;
+      focusRenameInput(input, newName, false);
+    }
+  };
+
+  const cancel = () => {
+    clearInlineRenameState();
+  };
+
+  const stop = (e) => { e.stopPropagation(); };
+  input.addEventListener('mousedown', stop);
+  input.addEventListener('click', stop);
+  input.addEventListener('dragstart', stop);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      commit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancel();
+    }
+  });
+  input.addEventListener('blur', () => {
+    if (inlineRenameState === state && !state.submitting) {
+      commit();
+    }
+  });
+
+  requestAnimationFrame(() => {
+    focusRenameInput(input, oldName, false);
+  });
+
+  return true;
+}
+
+export function startInlineRenameFromContext(file, row) {
+  if (!file || !row) return false;
+  if (row.classList.contains('folder-row')) return false;
+  return startInlineRenameForFileRow(row, file, file.folder || window.currentFolder || 'root');
 }
 
 let hoverPreviewEl = null;
@@ -936,9 +1237,46 @@ window.addEventListener('resize', () => {
 window.addEventListener('keydown', async (e) => {
   if (window.__frIsModalOpen && window.__frIsModalOpen()) return;
   if (isTextEntryTarget(e.target)) return;
-  if (e.ctrlKey || e.altKey || e.metaKey) return;
 
   const key = e.key;
+
+  if (key === 'F2' && !(e.ctrlKey || e.altKey || e.metaKey)) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (inlineRenameState && inlineRenameState.input) {
+      try {
+        inlineRenameState.input.focus();
+        inlineRenameState.input.select();
+      } catch (e2) { /* ignore */ }
+      return;
+    }
+
+    const folderCb = document.querySelector('#fileList .folder-checkbox:checked');
+    if (folderCb) {
+      const folder = folderCb.dataset.folder || '';
+      const row = folderCb.closest('tr');
+      if (folder && row) {
+        startInlineRenameForFolderRow(row, folder);
+        return;
+      }
+    }
+
+    const fileCbs = document.querySelectorAll('#fileList .file-checkbox:checked');
+    if (fileCbs.length) {
+      handleRenameSelected(new Event('click'));
+      return;
+    }
+
+    const treeFolder = getSelectedTreeFolderPath() || window.currentFolder || 'root';
+    try {
+      await startInlineRenameInTree(treeFolder);
+    } catch (e2) { /* ignore */ }
+    return;
+  }
+
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+
   if (!['F3', 'F4', 'F5', 'F6', 'F7', 'F8'].includes(key)) return;
   e.preventDefault();
   e.stopPropagation();
@@ -989,6 +1327,41 @@ window.addEventListener('keydown', async (e) => {
 window.addEventListener('keydown', (e) => {
   if (window.__frIsModalOpen && window.__frIsModalOpen()) return;
   if (isTextEntryTarget(e.target)) return;
+
+  const isShortcut = (e.key === 'n' || e.key === 'N') && e.shiftKey && (e.ctrlKey || e.metaKey) && !e.altKey;
+  if (!isShortcut) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const folderCb = document.querySelector('#fileList .folder-checkbox:checked');
+  const targetFolder =
+    (folderCb && folderCb.dataset.folder) ||
+    getSelectedTreeFolderPath() ||
+    window.currentFolder ||
+    'root';
+
+  if (targetFolder) {
+    window.currentFolder = targetFolder;
+  }
+
+  const btn = document.getElementById('createFolderBtn');
+  if (btn && !btn.disabled) {
+    btn.click();
+    return;
+  }
+
+  const modal = document.getElementById('createFolderModal');
+  if (modal) {
+    modal.style.display = 'block';
+    const input = document.getElementById('newFolderName');
+    if (input) input.focus();
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (window.__frIsModalOpen && window.__frIsModalOpen()) return;
+  if (isTextEntryTarget(e.target)) return;
   if (e.ctrlKey || e.altKey || e.metaKey) return;
 
   const key = e.key;
@@ -1007,7 +1380,7 @@ window.addEventListener('keydown', (e) => {
   if (key === '?' || (key === '/' && e.shiftKey)) {
     e.preventDefault();
     e.stopPropagation();
-    showToast('Shortcuts: / search, ? help, Del delete, F3 preview, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete.', 6000);
+    showToast('Shortcuts: / search, ? help, Del delete, F2 rename, F3 preview, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete, Ctrl/Cmd+Shift+N new folder.', 6000);
     return;
   }
 
@@ -1898,6 +2271,14 @@ function getSelectedFolderPath() {
   return cb ? cb.dataset.folder || null : null;
 }
 
+function getSelectedTreeFolderPath() {
+  const tree = document.getElementById('folderTreeContainer');
+  const opt = tree ? tree.querySelector('.folder-option.selected') : document.querySelector('.folder-option.selected');
+  if (!opt) return null;
+  const folder = opt.getAttribute('data-folder') || '';
+  return folder || null;
+}
+
 async function refreshSelectedFolderCaps(folder) {
   if (!folder) {
     window.selectedFolderCaps = null;
@@ -2161,7 +2542,7 @@ async function fetchFolderPeek(folder) {
       let subfolderNames = [];
       try {
         const res2 = await fetch(
-          withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`),
+          withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0`),
           { credentials: "include" }
         );
         const raw2 = await safeJson(res2);
@@ -2604,9 +2985,30 @@ fetchFolderPeek(folderPath).then(result => {
     } else if (isVideo) {
       // --- NEW: lightweight video thumbnail ---
       const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
-      const MAX_VIDEO_PREVIEW_BYTES = 1 * 1024 * 1024 * 1024; // 1 GiB cap (just metadata anyway)
+      const maxVideoPreviewBytes = getMaxVideoPreviewBytes();
+      const fallbackMsg = t("no_preview_available") || "No preview available";
+      const isStillActive = () =>
+        hoverPreviewContext &&
+        hoverPreviewContext.type === "file" &&
+        hoverPreviewContext.file === file;
+      const renderVideoFallback = () => {
+        if (!isStillActive()) return;
+        thumbEl.innerHTML = `
+          <div style="
+            padding:6px 8px;
+            border-radius:6px;
+            font-size:0.8rem;
+            text-align:center;
+            background-color:rgba(15,23,42,0.92);
+            color:#e5e7eb;
+            max-width:100%;
+          ">
+            ${escapeHTML(fallbackMsg)}
+          </div>
+        `;
+      };
     
-      if (bytes == null || bytes <= MAX_VIDEO_PREVIEW_BYTES) {
+      if (bytes == null || bytes <= maxVideoPreviewBytes) {
         thumbEl.style.minHeight = "140px";
     
         const video = document.createElement("video");
@@ -2620,6 +3022,17 @@ fetchFolderPeek(folderPath).then(result => {
         video.style.display   = "block";
         video.style.borderRadius = "6px";
     
+        let hasFrame = false;
+        let frameTimer = null;
+        const markFrame = () => {
+          if (!isStillActive()) return;
+          hasFrame = true;
+          if (frameTimer) {
+            clearTimeout(frameTimer);
+            frameTimer = null;
+          }
+        };
+
         // Try to seek a tiny bit in so we don't get a black frame
         video.addEventListener("loadedmetadata", () => {
           try {
@@ -2631,24 +3044,22 @@ fetchFolderPeek(folderPath).then(result => {
             // best effort; ignore errors
           }
         });
+
+        // Confirm we actually have a frame to show
+        video.addEventListener("loadeddata", () => {
+          markFrame();
+        });
     
         // graceful fallback if the video can't load
         video.addEventListener("error", () => {
-          const msg = t("no_preview_available") || "No preview available";
-          thumbEl.innerHTML = `
-            <div style="
-              padding:6px 8px;
-              border-radius:6px;
-              font-size:0.8rem;
-              text-align:center;
-              background-color:rgba(15,23,42,0.92);
-              color:#e5e7eb;
-              max-width:100%;
-            ">
-              ${escapeHTML(msg)}
-            </div>
-          `;
+          renderVideoFallback();
         });
+
+        frameTimer = setTimeout(() => {
+          if (!hasFrame && isStillActive()) {
+            renderVideoFallback();
+          }
+        }, 2000);
     
         thumbEl.appendChild(video);
     
@@ -2660,7 +3071,7 @@ fetchFolderPeek(folderPath).then(result => {
         thumbEl.appendChild(overlay);
     
       } else {
-        // too big for preview → fall through to "No preview available"
+        renderVideoFallback();
       }
     }
 
@@ -2879,7 +3290,7 @@ export function repairBlankFolderIcons({ force = false } = {}) {
 
   // Inline folder rows
   try {
-    document.querySelectorAll('#fileList tr.folder-row[data-folder]').forEach(row => {
+    document.querySelectorAll('#fileList tr.folder-row[data-folder], #fileListSecondary tr.folder-row[data-folder]').forEach(row => {
       const folder = row.getAttribute('data-folder') || '';
       if (!folder) return;
       const iconSpan = row.querySelector('.folder-svg');
@@ -2887,6 +3298,45 @@ export function repairBlankFolderIcons({ force = false } = {}) {
       attachStripIconAsync(row, folder, 28, { preserveKind: true });
     });
   } catch (e) { /* best effort */ }
+}
+
+function forceRepaintInlineFolderIcons(listEl) {
+  if (!listEl) return;
+  try {
+    listEl.querySelectorAll('tr.folder-row[data-folder]').forEach(row => {
+      const folder = row.getAttribute('data-folder') || '';
+      if (!folder) return;
+      const iconSpan = row.querySelector('.folder-svg');
+      if (!iconSpan) return;
+      const kind = iconSpan.dataset.kind || 'empty';
+      iconSpan.innerHTML = folderSVG(kind, { encrypted: isEncryptedForFolderIcon(folder) });
+    });
+    syncFolderIconSizeToRowHeight();
+  } catch (e) { /* best effort */ }
+}
+
+function scheduleFolderIconRepair() {
+  try {
+    const kick = () => { try { repairBlankFolderIcons(); } catch (e) {} };
+    if (typeof queueMicrotask === 'function') queueMicrotask(kick);
+    setTimeout(kick, 80);
+    setTimeout(kick, 250);
+  } catch (e) { /* ignore */ }
+}
+
+function scheduleInactivePaneFolderIconRepair() {
+  if (!window.dualPaneEnabled) return;
+  try {
+    const kick = () => {
+      try {
+        const list = document.getElementById('fileListSecondary');
+        forceRepaintInlineFolderIcons(list);
+      } catch (e) { /* ignore */ }
+    };
+    if (typeof queueMicrotask === 'function') queueMicrotask(kick);
+    setTimeout(kick, 80);
+    setTimeout(kick, 250);
+  } catch (e) { /* ignore */ }
 }
 
 // Paint initial icon, then flip to "paper" if non-empty
@@ -2963,7 +3413,7 @@ function folderDepthScore(folder) {
 
 async function findBestAccessibleFolder({ lastOpenedFolder } = {}) {
   try {
-    const res = await fetch(withBase('/api/folder/getFolderList.php'), { credentials: 'include' });
+    const res = await fetch(withBase('/api/folder/getFolderList.php?counts=0'), { credentials: 'include' });
     const data = await safeJson(res);
     const names = Array.isArray(data)
       ? data.map(row => normalizeFolderPath(row?.folder || row)).filter(Boolean)
@@ -4270,7 +4720,7 @@ window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
 export async function loadFileList(folderParam, options = {}) {
-  
+  clearInlineRenameState({ restore: false });
   await initOnlyOfficeCaps();
   hideHoverPreview();
   const pane = normalizePaneKey(options.pane || window.activePane);
@@ -4312,7 +4762,7 @@ export async function loadFileList(folderParam, options = {}) {
       { credentials: 'include' }
     );
     let foldersPromise = fetch(
-      withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`),
+      withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0`),
       { credentials: 'include' }
     );
 
@@ -4350,7 +4800,7 @@ export async function loadFileList(folderParam, options = {}) {
           refreshCurrentFolderCaps(folder);
           // refresh folders promise for the new folder context
           foldersPromise = fetch(
-            withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}`),
+            withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0`),
             { credentials: 'include' }
           );
         }
@@ -4576,6 +5026,10 @@ export async function loadFileList(folderParam, options = {}) {
 
     setPaneHasContent(pane, true);
     // Intentionally skip auto-restoring the inactive pane for lazy-load perf.
+    if (window.dualPaneEnabled) {
+      scheduleFolderIconRepair();
+      scheduleInactivePaneFolderIconRepair();
+    }
     updateDualPaneTargetHint();
     return data.files;
 
@@ -4861,6 +5315,9 @@ if (headerClass) {
     // click → navigate, same as before
     tr.addEventListener("click", e => {
       hideHoverPreview();
+      if (tr.classList.contains('inline-rename-active') || e.target.closest(".inline-rename-input")) {
+        return;
+      }
       if (e.target.closest(".folder-checkbox")) {
         return;
       }
@@ -4930,12 +5387,12 @@ if (headerClass) {
           }
         },
         { label: t("move_folder"),   action: () => openMoveFolderUI(dest) },
-        { label: t("rename_folder"), action: () => { window.currentFolder = dest; openRenameFolderModal(); } },
+        { label: t("rename_folder"), action: () => startInlineRenameForFolderRow(tr, dest) },
         { label: t("color_folder"),  action: () => openColorFolderModal(dest) },
         { label: t("folder_share"),  action: () => openFolderShareModal(dest) },
         { label: t("delete_folder"), action: () => { window.currentFolder = dest; openDeleteFolderModal(); } }
       ];
-      showFolderManagerContextMenu(e.pageX, e.pageY, menuItems);
+      showFolderManagerContextMenu(e.clientX, e.clientY, menuItems);
 
       // Defensive: repaint icon if it was blanked by the contextmenu interaction.
       try {
@@ -5292,6 +5749,7 @@ async function openDefaultFileFromHover(file) {
 
 
 export async function renderFileTable(folder, container, subfolders) {
+  clearInlineRenameState({ restore: false });
   const fileListContent = container || document.getElementById("fileList");
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "50", 10);
@@ -5781,6 +6239,7 @@ function getMaxImageHeight() {
 }
 
 export function renderGalleryView(folder, container) {
+  clearInlineRenameState({ restore: false });
   const fileListContent = container || document.getElementById("fileList");
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   let filteredFiles = searchFiles(searchTerm);
@@ -5847,7 +6306,7 @@ export function renderGalleryView(folder, container) {
   const startIdx = (currentPage - 1) * itemsPerPage;
   const pageFiles = filteredFiles.slice(startIdx, startIdx + itemsPerPage);
   const maxImagePreviewBytes = getMaxImagePreviewBytes();
-  const MAX_GALLERY_VIDEO_PREVIEW_BYTES = 1024 * 1024 * 1024; // 1 GiB (metadata only)
+  const maxVideoPreviewBytes = getMaxVideoPreviewBytes();
 
   pageFiles.forEach((file, idx) => {
     const idSafe = encodeURIComponent(file.name) + "-" + (startIdx + idx);
@@ -5893,7 +6352,7 @@ export function renderGalleryView(folder, container) {
       }
     } else if (/\.(mp4|mkv|webm|mov|ogv)$/i.test(file.name)) {
       const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
-      if (bytes != null && bytes > MAX_GALLERY_VIDEO_PREVIEW_BYTES) {
+      if (bytes != null && bytes > maxVideoPreviewBytes) {
         thumbnail = `<span class="material-icons gallery-icon">movie</span>`;
       } else {
         const maxHeight = getMaxImageHeight();
@@ -6072,7 +6531,16 @@ export function renderGalleryView(folder, container) {
   // prime video thumbnails (reuse hover-preview style seek)
   fileListContent.querySelectorAll('.gallery-video').forEach(video => {
     const wrapper = video.closest('.gallery-video-thumb');
+    let hasFrame = false;
+    let frameTimer = null;
+    const cleanup = () => {
+      if (frameTimer) {
+        clearTimeout(frameTimer);
+        frameTimer = null;
+      }
+    };
     const fallback = () => {
+      cleanup();
       if (!wrapper) return;
       wrapper.innerHTML = `<span class="material-icons gallery-icon">movie</span>`;
     };
@@ -6086,12 +6554,24 @@ export function renderGalleryView(folder, container) {
         // best effort only
       }
     };
+    const onData = () => {
+      hasFrame = true;
+      cleanup();
+    };
 
     video.addEventListener('loadedmetadata', onMeta, { once: true });
+    video.addEventListener('loadeddata', onData, { once: true });
     video.addEventListener('error', fallback, { once: true });
+
+    frameTimer = setTimeout(() => {
+      if (!hasFrame) fallback();
+    }, 2000);
 
     if (video.readyState >= 1) {
       onMeta();
+    }
+    if (video.readyState >= 2) {
+      onData();
     }
   });
 

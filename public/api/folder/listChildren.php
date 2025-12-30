@@ -41,6 +41,12 @@ $folder = ($folder === '' || strcasecmp($folder, 'root') === 0) ? 'root' : trim(
 
 $limit  = max(1, min(2000, (int)($_GET['limit'] ?? 500)));
 $cursor = isset($_GET['cursor']) && $_GET['cursor'] !== '' ? (string)$_GET['cursor'] : null;
+$probeRaw = $_GET['probe'] ?? null;
+$probe = true;
+if ($probeRaw !== null) {
+  $pv = strtolower((string)$probeRaw);
+  if ($pv === '0' || $pv === 'false' || $pv === 'no') $probe = false;
+}
 
-$res = FolderController::listChildren($folder, $username, $perms, $cursor, $limit);
+$res = FolderController::listChildren($folder, $username, $perms, $cursor, $limit, $probe);
 echo json_encode($res, JSON_UNESCAPED_SLASHES);

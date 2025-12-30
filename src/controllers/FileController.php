@@ -1075,26 +1075,55 @@ class FileController
         header("Content-Type: {$mime}");
         header("Content-Disposition: {$disposition}; filename=\"" . basename($downloadName) . "\"");
 
-        // Handle HTTP Range header (single range)
+        // Handle HTTP Range header (single range + suffix range)
         $length = $size;
-        if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=\s*(\d*)-(\d*)/i', $_SERVER['HTTP_RANGE'], $m)) {
-            if ($m[1] !== '') {
-                $start = (int)$m[1];
+        $rangeHeader = $_SERVER['HTTP_RANGE'] ?? '';
+        if ($rangeHeader !== '' && preg_match('/bytes=\s*(\d*)-(\d*)/i', $rangeHeader, $m)) {
+            $rangeStart = $m[1];
+            $rangeEnd = $m[2];
+
+            if ($size <= 0) {
+                http_response_code(416);
+                header('Content-Range: bytes */0');
+                exit;
             }
-            if ($m[2] !== '') {
-                $end = (int)$m[2];
+
+            if ($rangeStart !== '' || $rangeEnd !== '') {
+                if ($rangeStart === '' && $rangeEnd !== '') {
+                    // suffix range: last N bytes
+                    $suffixLen = (int)$rangeEnd;
+                    if ($suffixLen <= 0) {
+                        http_response_code(416);
+                        header("Content-Range: bytes */{$size}");
+                        exit;
+                    }
+                    $start = max($size - $suffixLen, 0);
+                    $end = $size - 1;
+                } else {
+                    $start = (int)$rangeStart;
+                    $end = ($rangeEnd !== '') ? (int)$rangeEnd : ($size - 1);
+                }
+
+                if ($start < 0 || $start >= $size || $end < $start) {
+                    http_response_code(416);
+                    header("Content-Range: bytes */{$size}");
+                    exit;
+                }
+                if ($end >= $size) {
+                    $end = $size - 1;
+                }
+
+                $length = $end - $start + 1;
+
+                http_response_code(206);
+                header("Content-Range: bytes {$start}-{$end}/{$size}");
+                header("Content-Length: {$length}");
+            } else {
+                http_response_code(200);
+                if ($size > 0) {
+                    header("Content-Length: {$size}");
+                }
             }
-
-            // clamp to file size
-            if ($start < 0) $start = 0;
-            if ($end < $start) $end = $start;
-            if ($end >= $size) $end = $size - 1;
-
-            $length = $end - $start + 1;
-
-            http_response_code(206);
-            header("Content-Range: bytes {$start}-{$end}/{$size}");
-            header("Content-Length: {$length}");
         } else {
             // no range => full file
             http_response_code(200);
@@ -1299,6 +1328,8 @@ class FileController
 
         // Images we are OK to render inline
         $inlineImageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'];
+        $inlineVideoTypes = ['mp4', 'mkv', 'webm', 'mov', 'ogv'];
+        $inlineAudioTypes = ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'opus'];
 
         // Default mime if not provided
         if (empty($mimeType)) {
@@ -1311,8 +1342,21 @@ class FileController
             $mimeType = 'application/octet-stream';
             $inline   = false;
         } else {
-            // Inline is allowed only for the safe allowlist; ignore inline=1 for others
-            $inline = in_array($ext, $inlineImageTypes, true) && $inlineParam;
+            $inline = false;
+            if ($inlineParam) {
+                $mimeLower = strtolower((string)$mimeType);
+                $isVideoMime = (strpos($mimeLower, 'video/') === 0);
+                $isAudioMime = (strpos($mimeLower, 'audio/') === 0) || ($mimeLower === 'application/ogg');
+                $isOctet = ($mimeLower === 'application/octet-stream');
+
+                if (in_array($ext, $inlineImageTypes, true)) {
+                    $inline = true;
+                } elseif (in_array($ext, $inlineVideoTypes, true) && ($isVideoMime || $isOctet)) {
+                    $inline = true;
+                } elseif (in_array($ext, $inlineAudioTypes, true) && ($isAudioMime || $isOctet)) {
+                    $inline = true;
+                }
+            }
         }
 
         $portalMeta = null;

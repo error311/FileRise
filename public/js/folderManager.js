@@ -533,7 +533,7 @@ async function chooseInitialFolder(effectiveRoot, selectedFolder) {
 
   // 2b) Ground truth from folder list API (matches getFileList 403 behavior)
   try {
-    const res = await fetch('/api/folder/getFolderList.php', { credentials: 'include' });
+    const res = await fetch('/api/folder/getFolderList.php?counts=0', { credentials: 'include' });
     const data = await res.json().catch(() => []);
     const names = Array.isArray(data)
       ? Array.from(new Set(data.map(row => {
@@ -928,6 +928,7 @@ async function fetchChildrenOnce(folder) {
   if (_childCache.has(folder)) return _childCache.get(folder);
   const qs = new URLSearchParams({ folder });
   qs.set('limit', String(PAGE_LIMIT));
+  qs.set('probe', '0');
   const p = (async () => {
     const res = await fetch(`/api/folder/listChildren.php?${qs.toString()}`, { method: 'GET', credentials: 'include' });  
     const body = await safeJson(res);
@@ -960,6 +961,7 @@ async function loadMoreChildren(folder, ulEl, moreLi) {
   const qs = new URLSearchParams({ folder });
   if (cursor) qs.set('cursor', cursor);
   qs.set('limit', String(PAGE_LIMIT));
+  qs.set('probe', '0');
 
   const res = await fetch(`/api/folder/listChildren.php?${qs.toString()}`, { method: 'GET', credentials: 'include' });
   const body = await safeJson(res);
@@ -2437,7 +2439,7 @@ async function openFolderActionsMenu(folder, targetEl, clientX, clientY) {
       }
     },
     { label: t('move_folder'),   action: () => openMoveFolderUI(folder) },
-    { label: t('rename_folder'), action: () => openRenameFolderModal()  },
+    { label: t('rename_folder'), action: () => { startInlineRenameInTree(folder); } },
     ...(canColor ? [{ label: t('color_folder'), action: () => openColorFolderModal(folder) }] : []),
     ...(canEncrypt ? [{ label: 'Encrypt folder', icon: 'lock', action: () => startFolderCryptoJobFlow(folder, 'encrypt') }] : []),
     ...(canDecrypt ? [{ label: 'Decrypt folder', icon: 'lock_open', action: () => startFolderCryptoJobFlow(folder, 'decrypt') }] : []),
@@ -2904,6 +2906,249 @@ function bindFolderManagerContextMenu() {
 /* ----------------------
    Rename / Delete / Create hooks
 ----------------------*/
+export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
+  const selectedFolder = oldFolder || window.currentFolder || "root";
+  if (!selectedFolder || selectedFolder === "root") {
+    if (!opts.silent) showToast("Please select a valid folder to rename.");
+    return { success: false, error: "invalid_folder" };
+  }
+
+  const newNameBasename = String(newBaseName || "").trim();
+  const currentBase = selectedFolder.split("/").pop() || "";
+  if (!newNameBasename || newNameBasename === currentBase) {
+    if (!opts.silent) showToast("Please enter a valid new folder name.");
+    return { success: false, error: "invalid_name" };
+  }
+
+  const parentPath = getParentFolder(selectedFolder);
+  const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
+
+  try {
+    const res = await fetchWithCsrf("/api/folder/renameFolder.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ oldFolder: selectedFolder, newFolder: newFolderFull })
+    });
+    const data = await safeJson(res);
+    if (!data.success) {
+      const msg = data.error || "Could not rename folder";
+      if (!opts.silent) showToast("Error: " + msg);
+      return { success: false, error: msg };
+    }
+
+    if (!opts.silent) showToast("Folder renamed successfully!");
+
+    const oldPath = selectedFolder;
+    const newPath = newFolderFull;
+
+    // carry color on rename as well
+    await carryFolderColor(oldPath, newPath);
+
+    // migrate expansion state like move and keep parent open
+    migrateExpansionStateOnMove(oldPath, newPath, [parentPath]);
+
+    // refresh parent list incrementally (preserves other branches)
+    invalidateFolderCaches(parentPath);
+    clearPeekCache([parentPath, oldPath, newPath]);
+    const ul = getULForFolder(parentPath);
+    if (ul) { ul._renderedOnce = false; ul.innerHTML = ""; await ensureChildrenLoaded(parentPath, ul); }
+    if (parentPath === 'root') placeRecycleBinNode();
+
+    // restore any open nodes we had saved
+    await expandAndLoadSavedState();
+
+    // update currentFolder if we renamed the open folder or its descendants
+    let currentUpdated = false;
+    if (window.currentFolder === oldPath) {
+      window.currentFolder = newPath;
+      currentUpdated = true;
+    } else if (window.currentFolder && window.currentFolder.startsWith(oldPath + '/')) {
+      const suffix = window.currentFolder.slice(oldPath.length);
+      window.currentFolder = newPath + suffix;
+      currentUpdated = true;
+    }
+    if (currentUpdated) {
+      localStorage.setItem("lastOpenedFolder", window.currentFolder || newPath);
+    }
+
+    const selectAfter = opts.selectAfter !== false;
+    if (selectAfter) {
+      selectFolder(window.currentFolder || newPath);
+    } else {
+      try { syncFolderTreeSelection(window.currentFolder); } catch (e) { /* ignore */ }
+      refreshFolderIcon(parentPath);
+      refreshFolderIcon(newPath);
+    }
+
+    return { success: true, newPath };
+  } catch (err) {
+    console.error("Error renaming folder:", err);
+    if (!opts.silent) {
+      showToast("Error: " + (err && err.message ? err.message : "Could not rename folder"));
+    }
+    return { success: false, error: err && err.message ? err.message : "rename_failed" };
+  }
+}
+
+let inlineTreeRenameState = null;
+
+function clearInlineTreeRenameState({ restore = true } = {}) {
+  const state = inlineTreeRenameState;
+  if (!state) return;
+
+  inlineTreeRenameState = null;
+
+  try {
+    if (state.input && state.input.parentNode) {
+      state.input.parentNode.removeChild(state.input);
+    }
+  } catch (e) { /* ignore */ }
+
+  if (restore && state.labelEl) {
+    state.labelEl.style.display = '';
+    state.labelEl.textContent = state.originalName;
+  }
+
+  if (state.optEl) {
+    state.optEl.classList.remove('inline-rename-active');
+  }
+}
+
+function focusTreeRenameInput(input) {
+  try {
+    input.focus();
+    input.select();
+  } catch (e) { /* ignore */ }
+}
+
+export async function startInlineRenameInTree(folderPath, targetOpt) {
+  const selectedFolder = folderPath || window.currentFolder || 'root';
+  if (!selectedFolder || selectedFolder === 'root') {
+    showToast("Please select a valid folder to rename.");
+    return false;
+  }
+
+  clearInlineTreeRenameState();
+
+  let opt = targetOpt || null;
+  if (!opt) {
+    try {
+      opt = document.querySelector(`.folder-option[data-folder="${CSS.escape(selectedFolder)}"]`);
+    } catch (e) {
+      opt = null;
+    }
+  }
+
+  if (!opt) {
+    try {
+      await expandTreePathAsync(selectedFolder, { force: true, includeLeaf: true, persist: true });
+      opt = document.querySelector(`.folder-option[data-folder="${CSS.escape(selectedFolder)}"]`);
+    } catch (e) {
+      opt = null;
+    }
+  }
+
+  if (!opt) {
+    showToast("Please select a valid folder to rename.");
+    return false;
+  }
+
+  if (opt.classList.contains('locked')) {
+    showToast(t('no_access') || "You do not have access to this resource.");
+    return false;
+  }
+
+  const labelEl = opt.querySelector('.folder-label');
+  if (!labelEl) return false;
+
+  const oldName = labelEl.textContent || (String(selectedFolder).split('/').pop() || '');
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.className = 'inline-rename-input form-control';
+  input.setAttribute('aria-label', t('rename_folder') || 'Rename folder');
+  input.style.width = '100%';
+  input.style.maxWidth = '100%';
+  input.style.fontSize = 'inherit';
+  input.style.padding = '2px 6px';
+  input.style.height = 'auto';
+  input.style.boxSizing = 'border-box';
+
+  labelEl.style.display = 'none';
+  opt.insertBefore(input, labelEl);
+
+  const state = {
+    folderPath: selectedFolder,
+    input,
+    labelEl,
+    originalName: oldName,
+    optEl: opt,
+    submitting: false
+  };
+  inlineTreeRenameState = state;
+  opt.classList.add('inline-rename-active');
+
+  const commit = async () => {
+    if (!inlineTreeRenameState || inlineTreeRenameState !== state || state.submitting) return;
+    const newName = String(input.value || '').trim();
+    if (!newName || newName === oldName) {
+      clearInlineTreeRenameState();
+      return;
+    }
+
+    state.submitting = true;
+    input.disabled = true;
+
+    try {
+      const result = await renameFolderInline(selectedFolder, newName);
+      if (result && result.success) {
+        clearInlineTreeRenameState({ restore: false });
+        return;
+      }
+    } catch (e) {
+      console.error('Error renaming folder:', e);
+    }
+
+    if (inlineTreeRenameState === state) {
+      state.submitting = false;
+      input.disabled = false;
+      focusTreeRenameInput(input);
+    }
+  };
+
+  const cancel = () => {
+    clearInlineTreeRenameState();
+  };
+
+  const stop = (e) => { e.stopPropagation(); };
+  input.addEventListener('mousedown', stop);
+  input.addEventListener('click', stop);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      commit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancel();
+    }
+  });
+  input.addEventListener('blur', () => {
+    if (inlineTreeRenameState === state && !state.submitting) {
+      commit();
+    }
+  });
+
+  requestAnimationFrame(() => {
+    focusTreeRenameInput(input);
+  });
+
+  return true;
+}
+
 export function openRenameFolderModal() {
   detachFolderModalsToBody();
   const selectedFolder = window.currentFolder || "root";
@@ -3091,7 +3336,7 @@ export function openMoveFolderUI(sourceFolder) {
   if (sourceFolder && sourceFolder !== 'root') window.currentFolder = sourceFolder;
   if (targetSel) {
     targetSel.innerHTML = '';
-    fetch('/api/folder/getFolderList.php', { credentials: 'include' }).then(r => r.json()).then(list => {
+    fetch('/api/folder/getFolderList.php?counts=0', { credentials: 'include' }).then(r => r.json()).then(list => {
       if (Array.isArray(list) && list.length && typeof list[0] === 'object' && list[0].folder) list = list.map(it => it.folder);
       const rootOpt = document.createElement('option'); rootOpt.value = 'root'; rootOpt.textContent = '(Root)'; targetSel.appendChild(rootOpt);
       (list || []).filter(f => f && f !== 'trash' && f !== (window.currentFolder || '')).forEach(f => {
@@ -3249,7 +3494,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (renameBtn) renameBtn.addEventListener("click", () => {
     const cf = window.currentFolder || "root";
     if (!cf || cf === "root") { showToast("Please select a valid folder to rename."); return; }
-    openRenameFolderModal();
+    startInlineRenameInTree(cf);
   });
 
   const deleteBtn = document.getElementById("deleteFolderBtn");

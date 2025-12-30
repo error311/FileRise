@@ -36,9 +36,9 @@ class FolderController
         return $headers;
     }
 
-    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500): array
+    public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500, bool $probe = true): array
     {
-        return FolderModel::listChildren($folder, $user, $perms, $cursor, $limit);
+        return FolderModel::listChildren($folder, $user, $perms, $cursor, $limit, $probe);
     }
 
     /** Stats for a folder (folders/files/bytes; deep totals are opt-in). */
@@ -797,6 +797,13 @@ class FolderController
         header('Content-Type: application/json');
         self::requireAuth();
 
+        $countsRaw = $_GET['counts'] ?? null;
+        $includeCounts = true;
+        if ($countsRaw !== null) {
+            $cv = strtolower((string)$countsRaw);
+            if ($cv === '0' || $cv === 'false' || $cv === 'no') $includeCounts = false;
+        }
+
         // Optional "folder" filter (supports nested like "team/reports")
         $parent = $_GET['folder'] ?? null;
         if ($parent !== null && $parent !== '' && strcasecmp($parent, 'root') !== 0) {
@@ -821,7 +828,7 @@ class FolderController
         $isAdmin  = self::isAdmin($perms);
 
         // 1) Full list from model
-        $all = FolderModel::getFolderList(); // each row: ["folder","fileCount","metadataFile"]
+        $all = FolderModel::getFolderList(null, null, [], $includeCounts); // each row: ["folder","fileCount","metadataFile"]
         if (!is_array($all)) {
             echo json_encode([]);
             exit;

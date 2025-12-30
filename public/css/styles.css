@@ -803,6 +803,24 @@ body:not(.dark-mode) .material-icons.pauseResumeBtn:hover{background-color: rgba
 :is(#fileList, #fileListSecondary) table.filr-table tbody tr:focus-within > td{outline: none;}
 :is(#fileList, #fileListSecondary) table.filr-table tbody tr:focus-within > td:first-child,
 :is(#fileList, #fileListSecondary) table.filr-table tbody tr:focus-within > td:last-child{outline: 2px solid #8ab4f8; outline-offset: -2px;}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.inline-rename-active:focus-within > td{
+  border-radius: 0;
+}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.inline-rename-active:focus-within > td:first-child{
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.inline-rename-active:focus-within > td:last-child{
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.inline-rename-active:focus-within > td:first-child,
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.inline-rename-active:focus-within > td:last-child{
+  outline: none;
+}
+:is(#fileList, #fileListSecondary) table.filr-table tbody tr.inline-rename-active > td{
+  box-shadow: none !important;
+}
 #fileListTitle,
 #fileListTitleSecondary,
 .file-list-title{white-space: normal !important;

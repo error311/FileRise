@@ -1,6 +1,6 @@
 // fileDragDrop.js
 import { showToast } from './domUtils.js?v={{APP_QVER}}';
-import { loadFileList, cancelHoverPreview } from './fileListView.js?v={{APP_QVER}}';
+import { loadFileList, cancelHoverPreview, repairBlankFolderIcons } from './fileListView.js?v={{APP_QVER}}';
 import {
   getParentFolder,
   syncTreeAfterFolderMove,
@@ -30,6 +30,14 @@ function invalidateFolderStats(folders) {
     // best-effort only; never break the move on this
     console.warn('folderStatsInvalidated failed', e);
   }
+}
+function scheduleBlankFolderIconRepair() {
+  try {
+    const kick = () => { try { repairBlankFolderIcons({ force: true }); } catch (e) {} };
+    if (typeof queueMicrotask === 'function') queueMicrotask(kick);
+    setTimeout(kick, 80);
+    setTimeout(kick, 250);
+  } catch (e) { /* ignore */ }
 }
 function getNameFromAny(el) {
   const row = getRowEl(el);
@@ -248,6 +256,7 @@ export async function folderDropHandler(event) {
 
       // Let folderManager handle tree refresh + selection + file list reload
       await syncTreeAfterFolderMove(source, dstParent);
+      scheduleBlankFolderIconRepair();
 
     } catch (e) {
       console.error('Error moving folder:', e);
@@ -308,7 +317,7 @@ export async function folderDropHandler(event) {
       // keep stats fresh for source + dest
       invalidateFolderStats([sourceFolder, dropFolder]);
 
-      loadFileList(window.currentFolder || sourceFolder);
+      loadFileList(window.currentFolder || sourceFolder).finally(scheduleBlankFolderIconRepair);
     } else {
       const err = (data && (data.error || data.message)) || `HTTP ${res.status}`;
       showToast('Error moving file(s): ' + err);

@@ -30,7 +30,8 @@ const DEFAULT_SUPPORTERS = [
   'Rob Parker',
   'Aaron W.',
   'C-Fu',
-  'peterchia'
+  'peterchia',
+  'Edisto Pirates of SC'
 ];
 
 /**

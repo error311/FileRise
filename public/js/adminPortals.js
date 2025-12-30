@@ -227,7 +227,7 @@ const __portalSubmissionsCache = {};
 async function loadPortalFolderList() {
   if (__portalFolderListLoaded) return __portalFolderOptions;
   try {
-    const res = await fetch('/api/folder/getFolderList.php', { credentials: 'include' });
+    const res = await fetch('/api/folder/getFolderList.php?counts=0', { credentials: 'include' });
     const data = await res.json();
     let list = data;
 
