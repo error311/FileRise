@@ -1326,10 +1326,34 @@ class FileController
         $ext   = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
         $isSvg = ($ext === 'svg' || $ext === 'svgz');
 
-        // Images we are OK to render inline
-        $inlineImageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'];
-        $inlineVideoTypes = ['mp4', 'mkv', 'webm', 'mov', 'ogv'];
-        $inlineAudioTypes = ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'opus'];
+        // Inline-safe types with explicit MIME mapping (avoid nosniff + octet-stream issues)
+        $inlineImageMime = [
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'gif'  => 'image/gif',
+            'bmp'  => 'image/bmp',
+            'webp' => 'image/webp',
+            'ico'  => 'image/x-icon',
+        ];
+        $inlineVideoMime = [
+            'mp4'  => 'video/mp4',
+            'm4v'  => 'video/mp4',
+            'mkv'  => 'video/x-matroska',
+            'webm' => 'video/webm',
+            'mov'  => 'video/quicktime',
+            'ogv'  => 'video/ogg',
+        ];
+        $inlineAudioMime = [
+            'mp3'  => 'audio/mpeg',
+            'wav'  => 'audio/wav',
+            'm4a'  => 'audio/mp4',
+            'ogg'  => 'audio/ogg',
+            'flac' => 'audio/flac',
+            'aac'  => 'audio/aac',
+            'wma'  => 'audio/x-ms-wma',
+            'opus' => 'audio/opus',
+        ];
 
         // Default mime if not provided
         if (empty($mimeType)) {
@@ -1344,17 +1368,15 @@ class FileController
         } else {
             $inline = false;
             if ($inlineParam) {
-                $mimeLower = strtolower((string)$mimeType);
-                $isVideoMime = (strpos($mimeLower, 'video/') === 0);
-                $isAudioMime = (strpos($mimeLower, 'audio/') === 0) || ($mimeLower === 'application/ogg');
-                $isOctet = ($mimeLower === 'application/octet-stream');
-
-                if (in_array($ext, $inlineImageTypes, true)) {
+                if (isset($inlineImageMime[$ext])) {
                     $inline = true;
-                } elseif (in_array($ext, $inlineVideoTypes, true) && ($isVideoMime || $isOctet)) {
+                    $mimeType = $inlineImageMime[$ext];
+                } elseif (isset($inlineVideoMime[$ext])) {
                     $inline = true;
-                } elseif (in_array($ext, $inlineAudioTypes, true) && ($isAudioMime || $isOctet)) {
+                    $mimeType = $inlineVideoMime[$ext];
+                } elseif (isset($inlineAudioMime[$ext])) {
                     $inline = true;
+                    $mimeType = $inlineAudioMime[$ext];
                 }
             }
         }

@@ -1,5 +1,24 @@
 # Changelog
 
+## Changes 1/2/2025 (v2.13.1)
+
+`release(v2.13.1): harden Docker startup perms + explicit inline MIME mapping (see #79)`
+
+**Fixes**  
+
+- Prevent Docker container startup from exiting when `chown/chmod` are unsupported (exFAT/NTFS/CIFS/NFS root_squash, non-root runs). Startup now logs warnings and continues.
+- Add non-fatal permission writeability hints for `/var/www/{uploads,users,metadata,sessions}` to help diagnose mount/UID issues.
+
+**Improvements**  
+
+- Serve inline-safe images/audio/video with explicit MIME mapping to avoid `nosniff` + `application/octet-stream` preview issues (more reliable inline previews).
+
+**Docs**  
+
+- Add AI disclosure section to README.
+
+---
+
 ## Changes 12/30/2025 (v2.13.0)
 
 `release(v2.13.0): inline rename + video preview limits + folder tree perf (see #79)`

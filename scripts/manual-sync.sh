@@ -2,7 +2,7 @@
 # === Update FileRise to v2.3.2 (safe rsync, no composer on demo) ===
 set -Eeuo pipefail
 
-VER="v2.7.1"
+VER="v2.13.0"
 ASSET="FileRise-${VER}.zip"      # matches GitHub release asset name
 
 WEBROOT="/var/www"

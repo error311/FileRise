@@ -4,6 +4,29 @@ umask 002
 echo "🚀 Running start.sh..."
 
 # ──────────────────────────────────────────────────────────────
+# Helpers: NEVER crash the container just because chown/chmod isn't supported
+# (exFAT/NTFS/CIFS/NFS root_squash, or running as non-root, etc.)
+IS_ROOT=false
+if [ "$(id -u)" -eq 0 ]; then IS_ROOT=true; fi
+
+safe_chown() {
+  if [ "${IS_ROOT}" = "true" ]; then
+    chown "$@" 2>&1 || echo "[startup] chown failed (continuing): chown $*"
+  fi
+}
+
+safe_chmod() {
+  if [ "${IS_ROOT}" = "true" ]; then
+    chmod "$@" 2>&1 || echo "[startup] chmod failed (continuing): chmod $*"
+  fi
+}
+
+safe_truncate() {
+  # Truncate/create a file without killing the container if the FS is read-only, etc.
+  : > "$1" 2>&1 || echo "[startup] could not write: $1"
+}
+
+# ──────────────────────────────────────────────────────────────
 # 0) If NOT root, we can't remap/chown. Log a hint and skip those parts.
 #    If root, remap www-data to PUID/PGID and (optionally) chown data dirs.
 if [ "$(id -u)" -ne 0 ]; then
@@ -28,8 +51,8 @@ else
   # Optional: normalize ownership on data dirs (good for first run on existing shares)
   if [ "${CHOWN_ON_START:-true}" = "true" ]; then
     echo "[startup] Normalizing ownership on uploads/metadata..."
-    chown -R www-data:www-data /var/www/metadata /var/www/uploads || echo "[startup] chown failed (continuing)"
-    chmod -R u+rwX /var/www/metadata /var/www/uploads || echo "[startup] chmod failed (continuing)"
+    safe_chown -R www-data:www-data /var/www/metadata /var/www/uploads
+    safe_chmod -R u+rwX /var/www/metadata /var/www/uploads
   fi
 fi
 
@@ -62,23 +85,32 @@ fi
 
 # 2.1) Prepare metadata/log & sessions
 mkdir -p /var/www/metadata/log
-chown www-data:www-data /var/www/metadata/log
-chmod 775 /var/www/metadata/log
-: > /var/www/metadata/log/error.log
-: > /var/www/metadata/log/access.log
-chown www-data:www-data /var/www/metadata/log/*.log
+safe_chown www-data:www-data /var/www/metadata/log
+safe_chmod 775 /var/www/metadata/log
+safe_truncate /var/www/metadata/log/error.log
+safe_truncate /var/www/metadata/log/access.log
+safe_chown www-data:www-data /var/www/metadata/log/*.log
 
 mkdir -p /var/www/sessions
-chown www-data:www-data /var/www/sessions
-chmod 700 /var/www/sessions
+safe_chown www-data:www-data /var/www/sessions
+safe_chmod 700 /var/www/sessions
 
 # 2.2) Prepare dynamic dirs (uploads/users/metadata)
 for d in uploads users metadata; do
   tgt="/var/www/${d}"
   mkdir -p "${tgt}"
-  chown www-data:www-data "${tgt}"
-  chmod 775 "${tgt}"
+  safe_chown www-data:www-data "${tgt}"
+  safe_chmod 775 "${tgt}"
 done
+
+# 2.3) Optional: log quick permission hints (non-fatal)
+if [ "$(id -u)" -eq 0 ]; then
+  if command -v runuser >/dev/null 2>&1; then
+    for p in /var/www/uploads /var/www/users /var/www/metadata /var/www/sessions; do
+      runuser -u www-data -- test -w "$p" 2>/dev/null || echo "[startup] WARNING: www-data may not be able to write to $p"
+    done
+  fi
+fi
 
 # 3) Ensure PHP conf dir & set upload limits
 mkdir -p /etc/php/8.3/apache2/conf.d
@@ -97,7 +129,7 @@ if [ "${CLAMAV_AUTO_UPDATE:-true}" = "true" ]; then
       echo "[startup] Updating ClamAV signatures via freshclam..."
       # Suppress noisy "NotifyClamd" warnings – we don't run clamd in this container.
       freshclam >/dev/null 2>&1 \
-  || echo "[startup] freshclam failed; continuing with existing signatures (if any)."
+        || echo "[startup] freshclam failed; continuing with existing signatures (if any)."
     else
       echo "[startup] Not running as root; skipping freshclam (requires root)."
     fi
@@ -151,20 +183,20 @@ fi
 # 8) Initialize persistent files if absent
 if [ ! -f /var/www/users/users.txt ]; then
   echo "" > /var/www/users/users.txt
-  chown www-data:www-data /var/www/users/users.txt
-  chmod 664 /var/www/users/users.txt
+  safe_chown www-data:www-data /var/www/users/users.txt
+  safe_chmod 664 /var/www/users/users.txt
 fi
 
 if [ ! -f /var/www/metadata/createdTags.json ]; then
   echo "[]" > /var/www/metadata/createdTags.json
-  chown www-data:www-data /var/www/metadata/createdTags.json
-  chmod 664 /var/www/metadata/createdTags.json
+  safe_chown www-data:www-data /var/www/metadata/createdTags.json
+  safe_chmod 664 /var/www/metadata/createdTags.json
 fi
 
 # 8.5) Harden scan script perms (only if root)
 if [ -f /var/www/scripts/scan_uploads.php ] && [ "$(id -u)" -eq 0 ]; then
-  chown root:root /var/www/scripts/scan_uploads.php
-  chmod 0644 /var/www/scripts/scan_uploads.php
+  chown root:root /var/www/scripts/scan_uploads.php || true
+  chmod 0644 /var/www/scripts/scan_uploads.php || true
 fi
 
 # 9) One-shot scan when the container starts (opt-in via SCAN_ON_START)

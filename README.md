@@ -339,6 +339,12 @@ If FileRise saves you time or becomes your daily driver, a ⭐ on GitHub or spon
 
 ---
 
+## AI Disclosure
+
+FileRise is my project. I use AI like a tool for some tasks (e.g., translations/snippets), but the architecture, core code, and ongoing maintenance are mine.
+
+---
+
 ## License & third-party code
 
 FileRise Core is released under the **MIT License** – see `LICENSE`.
