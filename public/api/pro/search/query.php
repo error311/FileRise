@@ -11,6 +11,7 @@ declare(strict_types=1);
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="q", in="query", required=false, @OA\Schema(type="string"), description="Search query"),
  *   @OA\Parameter(name="limit", in="query", required=false, @OA\Schema(type="integer", minimum=1), example=50),
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string"), description="Source id or 'all'"),
  *   @OA\Parameter(name="force", in="query", required=false, @OA\Schema(type="boolean"), description="Admins only: force refresh"),
  *   @OA\Response(response=200, description="Search results"),
  *   @OA\Response(response=400, description="Invalid input"),
@@ -44,7 +45,7 @@ $perms = [
 @session_write_close();
 
 // Pro-only gate
-if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProSearch')) {
+if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProSearch') || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SEARCH)) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'FileRise Pro is not active.']);
     exit;
@@ -52,9 +53,10 @@ if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProSearch')) {
 
 $qRaw   = isset($_GET['q']) ? (string)$_GET['q'] : '';
 $limit  = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
+$sourceId = isset($_GET['sourceId']) ? (string)$_GET['sourceId'] : '';
 $force  = (!empty($_GET['force']) && ACL::isAdmin($perms));
 
-$result = ProSearch::query($qRaw, $limit, $username, $perms, $force);
+$result = ProSearch::query($qRaw, $limit, $username, $perms, $force, $sourceId);
 
 if (empty($result['ok'])) {
     $code = 400;

@@ -14,7 +14,8 @@
  *     @OA\JsonContent(
  *       required={"name"},
  *       @OA\Property(property="folder", type="string", example="root"),
- *       @OA\Property(property="name", type="string", example="large.zip")
+ *       @OA\Property(property="name", type="string", example="large.zip"),
+ *       @OA\Property(property="sourceId", type="string", example="local")
  *     )
  *   ),
  *   @OA\Response(response=200, description="Delete result"),
@@ -31,9 +32,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../../../config/config.php';
 require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
 require_once PROJECT_ROOT . '/src/models/FileModel.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 // Pro-only gate: make sure Pro is really active
-if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
+if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_DISK_USAGE)) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'FileRise Pro is not active on this instance.']);
     return;
@@ -66,7 +68,37 @@ try {
     $folder = $folder === '' ? 'root' : trim($folder, "/\\ ");
     $name   = (string)$body['name'];
 
-    $res = FileModel::deleteFilesPermanent($folder, [$name]);
+    $sourceId = isset($body['sourceId']) ? trim((string)$body['sourceId']) : '';
+    $prevSourceId = null;
+    if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+        if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid source id.']);
+            return;
+        }
+        $src = SourceContext::getSourceById($sourceId);
+        if (!$src || empty($src['enabled'])) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid source id.']);
+            return;
+        }
+        $type = strtolower((string)($src['type'] ?? 'local'));
+        if ($type !== 'local') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Storage explorer is only available for local sources.']);
+            return;
+        }
+        $prevSourceId = SourceContext::getActiveId();
+        SourceContext::setActiveId($sourceId, false, true);
+    }
+
+    try {
+        $res = FileModel::deleteFilesPermanent($folder, [$name]);
+    } finally {
+        if ($prevSourceId !== null) {
+            SourceContext::setActiveId($prevSourceId, false, true);
+        }
+    }
     if (!empty($res['error'])) {
         echo json_encode(['ok' => false, 'error' => $res['error']]);
     } else {

@@ -1,5 +1,136 @@
 # Changelog
 
+## Changes 1/11/2025 (V3.0.0)
+
+`release(v3.0.0): storage adapter seam + source-aware core (Sources-ready)`
+
+- Display file size for items thumbnail view (closes #85)
+- add StorageAdapterInterface + LocalFsAdapter and StorageFactory/StorageRegistry
+- introduce SourceContext (active source, per-source upload/meta/trash roots, read-only gating)
+- make core file/folder ops source-aware (uploads, downloads, shares, trash, portals, OnlyOffice)
+- add cross-source copy/move for files + folders with guardrails and audit logging
+- add source selector UI + visible-sources API and propagate sourceId through UI flows
+- add minimizable transfer progress UI and toast severity styling
+- add Pro API-level gating + bundle installer refactor + one-click Pro bundle download/install
+
+### v3.0.0 Highlights
+
+- **Storage adapter seam** landed in core, enabling FileRise to operate against different backends through a consistent interface.
+- Core is now **source-aware end-to-end** (UI + API + backend), so Pro “Sources” can plug in cleanly while Core remains local-first by default.
+- Major **performance improvements** for folder trees and listings (especially in remote/large-tree scenarios).
+- **Cross-source copy/move** works for both files and folders with explicit guardrails.
+- New UX polish: **transfer progress card** + **toast severity styling**.
+
+### Core architecture
+
+**Storage adapter layer**  
+
+- Added a formal adapter interface and default local implementation:
+  - `StorageAdapterInterface`
+  - `LocalFsAdapter`
+- Added adapter orchestration:
+  - `StorageFactory` to instantiate adapters for the active source
+  - `StorageRegistry` to cache/reuse adapter instances
+- Added source/session plumbing:
+  - `SourceContext` to resolve active source + per-source roots (upload/meta/trash) and carry read-only state
+  - `ReadOnlyAdapter` wrapper to enforce read-only sources at the adapter boundary
+
+**Outcome:** core file/folder operations no longer assume a single local filesystem root.
+
+### Sources support (core plumbing + UI/APIs)
+
+**UI**  
+
+- Added a **Sources selector manager** (`public/js/sourceManager.js`) and wired it into the main app bootstrap so the UI can:
+  - load visible sources
+  - persist/restore active selection
+  - notify the rest of the UI on source changes
+
+**APIs (core-side endpoints, Pro-gated at runtime)**  
+
+- Added/expanded source endpoints under `/api/pro/sources/`:
+  - `visible.php` (what the current user can see/select)
+  - `select.php` (set active source)
+  - `list.php`, `save.php`, `delete.php` (admin management)
+  - `test.php` (connection test action)
+
+**Source-aware request threading**  
+
+- Threaded `sourceId` through many UI and API flows so reads/writes execute under the correct adapter context (including inactive dual-pane reads).
+
+### File operations
+
+**Cross-source copy/move**  
+
+- Implemented **cross-source file copy/move** (adapter → adapter) with safe fallbacks.
+- Implemented **cross-source folder copy/move** (recursive) with explicit guardrails:
+  - `FR_XCOPY_MAX_FILES`
+  - `FR_XCOPY_MAX_BYTES`
+  - `FR_XCOPY_MAX_DEPTH`
+- Added safety rules:
+  - block writes when destination is read-only
+  - enforce scope/ACL/ownership rules consistently
+  - block operations in encrypted folders when not supported by the active backend
+
+**Transfers UX**  
+
+- Added a **global, minimizable transfer progress card** (`transferProgress.js`)
+  - percent + speed where size is known
+  - indeterminate progress where size is unknown
+  - hooks wired into copy/move modals + drag/drop flows
+
+### Uploads / Downloads / Streaming
+
+**Uploads**  
+
+- Upload pipeline is now adapter-aware and source-aware.
+- Enforces read-only sources and other capability limits server-side.
+- Remote backends can be staged and written via adapter `writeStream()` when applicable.
+
+**Downloads**  
+
+- Download streaming is adapter-aware (local vs remote) and supports Range behavior where possible:
+  - `Accept-Ranges`, `Content-Range`, 206/416 handling
+- Shared link flows were updated to resolve files within the correct source context.
+
+### Folder tree + listing performance
+
+**Reduced fan-out and expensive probes**  
+
+- Added/expanded **shallow listing paths** to avoid accidental deep scans for huge remote trees.
+- Introduced optimizations to reduce per-entry stat calls when list results already provide enough metadata.
+- Kept the “large tree” goal intact (no regressions intended for very large folder counts).
+
+### Search / Pro feature gating (core-side)
+
+**Search Everywhere integration**  
+
+- Updated core wiring so Search Everywhere can operate in a **source-aware** manner (including “All sources” behavior when enabled).
+
+**Pro gating by API level**  
+
+- Added/expanded **Pro API level** gating logic (`FR_PRO_API_LEVEL`) so features can be enabled/disabled safely without brittle version-string comparisons.
+
+**Admin + maintenance plumbing**  
+
+- Expanded admin plumbing around Pro state, license fields, and feature availability.
+- Added/updated Pro bundle management wiring (including download/install paths) to support smoother Pro updates without breaking offline installs.
+
+**UX polish**  
+
+- Toasts now support **severity/tone** (success / info / warning / error) and consistent styling.
+- Various UI flows updated to use the improved toast semantics.
+
+**Notes / behavioral considerations**  
+
+- This release introduces a major internal architecture shift (adapter seam + source context).
+- Many endpoints now accept `sourceId` (optional in most cases; defaults to the current/legacy local behavior).
+- Remote backends may have feature limitations compared to local FS (e.g., ZIP/encryption-at-rest behaviors depending on backend support).
+
+FileRise v3.0.0 is a major internal milestone: a new storage adapter seam + source-aware core that unlocks Pro “Sources” (multi-backend) while keeping Core local-first and fast. Expect continued iteration on adapter edge cases and remote performance tuning.
+
+---
+
 ## Changes 1/2/2025 (v2.13.1)
 
 `release(v2.13.1): harden Docker startup perms + explicit inline MIME mapping (see #79)`

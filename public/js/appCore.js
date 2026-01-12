@@ -9,6 +9,7 @@ import { initFileActions, openUploadModal } from './fileActions.js?v={{APP_QVER}
 import { initUpload } from './upload.js?v={{APP_QVER}}';
 import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
+import { initSourceSelector } from './sourceManager.js?v={{APP_QVER}}';
 
 window.__pendingDropData = null;
 
@@ -168,6 +169,7 @@ export function initializeApp() {
   loadHeaderOrder();
   initFileActions();
   initUpload();
+  initSourceSelector();
   loadFolderTree();
 
   // Only run trash/restore for admins

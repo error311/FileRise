@@ -11,6 +11,7 @@ import {
 import { refreshFolderIcon, updateRecycleBinState } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
+import { startTransferProgress, finishTransferProgress } from './transferProgress.js?v={{APP_QVER}}';
 
 function getActiveFileListRoot() {
   return document.getElementById("fileList") || document;
@@ -21,13 +22,169 @@ function getActiveSelectedFileCheckboxes() {
   return Array.from(root.querySelectorAll(".file-checkbox:checked"));
 }
 
-function getOtherPaneFolder() {
-  if (!window.dualPaneEnabled || !window.__frPaneState) return "";
-  const active = window.activePane === "secondary" ? "secondary" : "primary";
+function getTransferTotalsForNames(names) {
+  const list = Array.isArray(names) ? names : [];
+  const wanted = new Set(list.map(name => String(name || '')));
+  const files = Array.isArray(fileData) ? fileData : [];
+
+  let totalBytes = 0;
+  let matched = 0;
+  let unknown = 0;
+
+  files.forEach(file => {
+    if (!file || !file.name) return;
+    const raw = String(file.name);
+    const esc = escapeHTML(raw);
+    if (!wanted.has(raw) && !wanted.has(esc)) return;
+    matched += 1;
+    if (Number.isFinite(file.sizeBytes)) {
+      totalBytes += file.sizeBytes;
+    } else {
+      unknown += 1;
+    }
+  });
+
+  const missing = Math.max(0, list.length - matched);
+  if (missing) unknown += missing;
+
+  return {
+    totalBytes,
+    bytesKnown: unknown === 0 && totalBytes > 0,
+    itemCount: list.length
+  };
+}
+
+let __copyMoveSourcesCache = null;
+
+function getActivePaneKey() {
+  return window.activePane === "secondary" ? "secondary" : "primary";
+}
+
+function getPaneSourceIdForKey(paneKey) {
+  return window.__frPaneState?.[paneKey]?.sourceId || "";
+}
+
+function getActivePaneSourceId() {
+  return getPaneSourceIdForKey(getActivePaneKey());
+}
+
+function getOtherPaneTarget() {
+  if (!window.dualPaneEnabled || !window.__frPaneState) return { folder: "", sourceId: "" };
+  const active = getActivePaneKey();
   const other = active === "secondary" ? "primary" : "secondary";
-  const otherFolder = window.__frPaneState?.[other]?.currentFolder || "";
-  if (!otherFolder || otherFolder === (window.currentFolder || "")) return "";
-  return otherFolder;
+  const otherState = window.__frPaneState?.[other];
+  const otherFolder = otherState?.currentFolder || "";
+  const otherSourceId = otherState?.sourceId || "";
+  const currentFolder = window.currentFolder || "";
+  const currentSource = getActivePaneSourceId() || "";
+  if (!otherFolder) return { folder: "", sourceId: otherSourceId };
+  if (otherFolder === currentFolder && otherSourceId === currentSource) {
+    return { folder: "", sourceId: otherSourceId };
+  }
+  return { folder: otherFolder, sourceId: otherSourceId };
+}
+
+function getActiveSourceId() {
+  const paneSource = getActivePaneSourceId();
+  if (paneSource) return paneSource;
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return sel.value;
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return stored;
+  } catch (e) {}
+  return '';
+}
+
+function getSourceNameById(sourceId) {
+  const id = String(sourceId || '').trim();
+  if (!id) return '';
+  try {
+    if (typeof window.__frGetSourceNameById === 'function') {
+      return String(window.__frGetSourceNameById(id) || '');
+    }
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel) {
+    const opt = Array.from(sel.options).find(o => o.value === id);
+    if (opt) return String(opt.dataset?.sourceName || '');
+  }
+  return '';
+}
+
+function getRootLabel(sourceId = '') {
+  const id = sourceId || getActiveSourceId();
+  const name = getSourceNameById(id);
+  return name ? `(${name})` : '(Root)';
+}
+
+async function loadVisibleSources() {
+  if (__copyMoveSourcesCache) return __copyMoveSourcesCache;
+  try {
+    const res = await fetch(withBase('/api/pro/sources/visible.php'), {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data || data.ok !== true || !data.enabled) return null;
+    const list = Array.isArray(data.sources) ? data.sources : [];
+    __copyMoveSourcesCache = list;
+    return list;
+  } catch (e) {
+    return null;
+  }
+}
+
+function populateSourceSelect(selectEl, sources, activeId) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  sources.forEach(src => {
+    if (!src || typeof src !== 'object') return;
+    const id = String(src.id || '');
+    if (!id) return;
+    const name = String(src.name || id);
+    const type = String(src.type || '');
+    const ro = src.readOnly ? ` \uD83D\uDD12 ${t('read_only')}` : '';
+    const label = type ? `${name} (${type})${ro}` : `${name}${ro}`;
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = label;
+    if (src.readOnly) opt.disabled = true;
+    selectEl.appendChild(opt);
+  });
+  if (!selectEl.options.length) return;
+  const hasActive = Array.from(selectEl.options).some(opt => opt.value === activeId && !opt.disabled);
+  selectEl.value = hasActive ? activeId : selectEl.options[0].value;
+}
+
+async function initCopyMoveSourceSelect(kind, preferredFolder = '', preferredSourceId = '') {
+  const rowId = kind === 'move' ? 'moveFilesSourceRow' : 'copyFilesSourceRow';
+  const selectId = kind === 'move' ? 'moveTargetSource' : 'copyTargetSource';
+  const folderSelectId = kind === 'move' ? 'moveTargetFolder' : 'copyTargetFolder';
+  const row = document.getElementById(rowId);
+  const selectEl = document.getElementById(selectId);
+  const sources = await loadVisibleSources();
+  if (!sources || sources.length <= 1 || !row || !selectEl) {
+    if (row) row.style.display = 'none';
+    const active = getActiveSourceId();
+    await loadCopyMoveFolderListForModal(folderSelectId, preferredFolder, active);
+    return;
+  }
+
+  row.style.display = '';
+  const activeId = getActiveSourceId();
+  const preferredId = preferredSourceId || activeId;
+  populateSourceSelect(selectEl, sources, preferredId);
+  await loadCopyMoveFolderListForModal(folderSelectId, preferredFolder, selectEl.value || preferredId);
+
+  if (!selectEl.__wired) {
+    selectEl.__wired = true;
+    selectEl.addEventListener('change', async () => {
+      const srcId = selectEl.value || '';
+      await loadCopyMoveFolderListForModal(folderSelectId, preferredFolder, srcId);
+    });
+  }
 }
 
 function selectPreferredFolderOption(folderSelect, preferredFolder) {
@@ -37,13 +194,14 @@ function selectPreferredFolderOption(folderSelect, preferredFolder) {
   if (match) folderSelect.value = preferredFolder;
 }
 
-function markPaneNeedsReloadForFolder(folder) {
+function markPaneNeedsReloadForFolder(folder, sourceId = "") {
   if (!window.dualPaneEnabled || !window.__frPaneState || !folder) return;
   const active = window.activePane === "secondary" ? "secondary" : "primary";
   ["primary", "secondary"].forEach(pane => {
     if (pane === active) return;
     const state = window.__frPaneState[pane];
     if (state && state.currentFolder === folder) {
+      if (sourceId && state.sourceId && state.sourceId !== sourceId) return;
       state.needsReload = true;
     }
   });
@@ -54,7 +212,7 @@ export function handleDeleteSelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("no_files_selected");
+    showToast("no_files_selected", 'warning');
     return;
   }
   window.filesToDelete = Array.from(checkboxes).map(chk => chk.value);
@@ -168,13 +326,13 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showToast("Selected files deleted successfully!");
+            showToast("Selected files deleted successfully!", 'success');
             // deleteFiles.php moves items into Trash; update the recycle bin indicator immediately.
             updateRecycleBinState(true);
             loadFileList(window.currentFolder);
             refreshFolderIcon(window.currentFolder);
           } else {
-            showToast("Error: " + (data.error || "Could not delete files"));
+            showToast("Error: " + (data.error || "Could not delete files"), 'error');
           }
         })
         .catch(error => console.error("Error deleting files:", error))
@@ -193,7 +351,7 @@ export function handleDownloadMultiSelected(e) {
   }
   const files = getSelectedFileObjects();
   if (!files.length) {
-    showToast(t("no_files_selected") || "No files selected for download.");
+    showToast(t("no_files_selected") || "No files selected for download.", 'warning');
     return;
   }
 
@@ -204,7 +362,7 @@ export function handleDownloadMultiSelected(e) {
   // In encrypted folders, ZIP create is disabled. Allow plain downloads up to the limit only.
   if (inEncryptedFolder) {
     if (files.length > limit) {
-      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`);
+      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`, 'warning');
       return;
     }
     downloadSelectedFilesIndividually(files);
@@ -233,7 +391,7 @@ export function handleDownloadZipSelected(e) {
     const files = getSelectedFileObjects();
     const limit = getDownloadLimit();
     if (files.length > limit) {
-      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`);
+      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`, 'warning');
       return;
     }
     // If we got here via an old/hidden ZIP action, fall back to plain download.
@@ -243,7 +401,7 @@ export function handleDownloadZipSelected(e) {
 
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("No files selected for download.");
+    showToast("No files selected for download.", 'warning');
     return;
   }
   window.filesToDownload = Array.from(checkboxes).map(chk => chk.value);
@@ -259,7 +417,7 @@ export function handleCreateFileSelected(e) {
   const modal = document.getElementById('createFileModal');
   modal.style.display = 'block';
   setTimeout(() => {
-    const inp = document.getElementById('newFileCreateName');
+    const inp = document.getElementById('createFileNameInput');
     if (inp) inp.focus();
   }, 100);
 }
@@ -286,7 +444,7 @@ export async function handleCreateFile(e) {
   if (!input) return console.error('Create-file input missing');
   const name = input.value.trim();
   if (!name) {
-    showToast(t('newfile_placeholder'));  // or a more explicit error
+    showToast(t('newfile_placeholder'), 'warning');  // or a more explicit error
     return;
   }
 
@@ -304,11 +462,11 @@ export async function handleCreateFile(e) {
     });
     const js = await res.json();
     if (!js.success) throw new Error(js.error);
-    showToast(t('file_created'));
+    showToast(t('file_created'), 'success');
     loadFileList(folder);
     refreshFolderIcon(folder);
   } catch (err) {
-    showToast(err.message || t('error_creating_file'));
+    showToast(err.message || t('error_creating_file'), 'error');
   } finally {
     document.getElementById('createFileModal').style.display = 'none';
   }
@@ -317,8 +475,14 @@ export async function handleCreateFile(e) {
 document.addEventListener('DOMContentLoaded', () => {
   const cancel = document.getElementById('cancelCreateFile');
   const confirm = document.getElementById('confirmCreateFile');
-  if (cancel) cancel.addEventListener('click', () => document.getElementById('createFileModal').style.display = 'none');
-  if (confirm) confirm.addEventListener('click', handleCreateFile);
+  if (cancel && !cancel.__wiredCreateFile) {
+    cancel.__wiredCreateFile = true;
+    cancel.addEventListener('click', () => document.getElementById('createFileModal').style.display = 'none');
+  }
+  if (confirm && !confirm.__wiredCreateFile) {
+    confirm.__wiredCreateFile = true;
+    confirm.addEventListener('click', handleCreateFile);
+  }
 });
 
 export function openDownloadModal(fileName, folder) {
@@ -346,7 +510,7 @@ export function confirmSingleDownload() {
   const input = document.getElementById("downloadFileNameInput");
   const fileName = input.value.trim();
   if (!fileName) {
-    showToast("Please enter a name for the file.");
+    showToast("Please enter a name for the file.", 'warning');
     return;
   }
 
@@ -369,7 +533,7 @@ export function confirmSingleDownload() {
   document.body.removeChild(a);
 
   // 5) Notify the user
-  showToast("Download started. Check your browser’s download manager.");
+  showToast("Download started. Check your browser’s download manager.", 'info');
 }
 
 export function handleExtractZipSelected(e) {
@@ -379,14 +543,14 @@ export function handleExtractZipSelected(e) {
   }
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (!checkboxes.length) {
-    showToast("No files selected.");
+    showToast("No files selected.", 'warning');
     return;
   }
   const zipFiles = Array.from(checkboxes)
     .map(chk => chk.value)
     .filter(name => name.toLowerCase().endsWith(".zip"));
   if (!zipFiles.length) {
-    showToast("No zip files selected.");
+    showToast("No zip files selected.", 'warning');
     return;
   }
 
@@ -424,16 +588,16 @@ export function handleExtractZipSelected(e) {
         if (Array.isArray(data.extractedFiles) && data.extractedFiles.length) {
           msg = "Extracted: " + data.extractedFiles.join(", ");
         }
-        showToast(msg);
+        showToast(msg, 'success');
         loadFileList(window.currentFolder);
       } else {
-        showToast("Error extracting zip: " + (data.error || "Unknown error"));
+        showToast("Error extracting zip: " + (data.error || "Unknown error"), 'error');
       }
     })
     .catch(error => {
       modal.style.display = "none";
       console.error("Error extracting zip files:", error);
-      showToast("Error extracting zip files.");
+      showToast("Error extracting zip files.", 'error');
     });
 }
 
@@ -444,46 +608,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const confirmZipBtn = document.getElementById("confirmDownloadZip");
   const cancelCreate = document.getElementById('cancelCreateFile');
 
-  if (cancelCreate) {
+  if (cancelCreate && !cancelCreate.__wiredCreateFile) {
+    cancelCreate.__wiredCreateFile = true;
     cancelCreate.addEventListener('click', () => {
       document.getElementById('createFileModal').style.display = 'none';
     });
   }
 
   const confirmCreate = document.getElementById('confirmCreateFile');
+  if (confirmCreate && !confirmCreate.__wiredCreateFile) {
+    confirmCreate.__wiredCreateFile = true;
+    confirmCreate.addEventListener('click', handleCreateFile);
+  }
   if (confirmCreate) {
-    confirmCreate.addEventListener('click', async () => {
-      const name = document.getElementById('newFileCreateName').value.trim();
-      if (!name) {
-        showToast(t('please_enter_filename'));
-        return;
-      }
-      document.getElementById('createFileModal').style.display = 'none';
-      try {
-        const res = await fetch('/api/file/createFile.php', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': window.csrfToken
-          },
-          body: JSON.stringify({
-            folder: window.currentFolder || 'root',
-            filename: name
-          })
-        });
-        const js = await res.json();
-        if (!res.ok || !js.success) {
-          throw new Error(js.error || t('error_creating_file'));
-        }
-        showToast(t('file_created_successfully'));
-        loadFileList(window.currentFolder);
-        refreshFolderIcon(folder);
-      } catch (err) {
-        console.error(err);
-        showToast(err.message || t('error_creating_file'));
-      }
-    });
     attachEnterKeyListener('createFileModal', 'confirmCreateFile');
   }
 
@@ -500,7 +637,7 @@ document.addEventListener("DOMContentLoaded", () => {
     confirmZipBtn.addEventListener("click", async () => {
       // a) Validate ZIP filename
       let zipName = document.getElementById("zipFileNameInput").value.trim();
-      if (!zipName) { showToast("Please enter a name for the zip file."); return; }
+      if (!zipName) { showToast("Please enter a name for the zip file.", 'warning'); return; }
       if (!zipName.toLowerCase().endsWith(".zip")) zipName += ".zip";
 
       // b) Hide the name‐input modal, show the progress modal
@@ -690,15 +827,16 @@ export function handleCopySelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("No files selected for copying.", 5000);
+    showToast("No files selected for copying.", 5000, 'warning');
     return;
   }
   window.filesToCopy = Array.from(checkboxes).map(chk => chk.value);
   document.getElementById("copyFilesModal").style.display = "block";
-  loadCopyMoveFolderListForModal("copyTargetFolder", getOtherPaneFolder());
+  const target = getOtherPaneTarget();
+  initCopyMoveSourceSelect('copy', target.folder, target.sourceId);
 }
 
-export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder = "") {
+export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder = "", sourceId = "") {
   const folderSelect = document.getElementById(dropdownId);
   if (!folderSelect) return;
   folderSelect.innerHTML = "";
@@ -706,7 +844,10 @@ export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder
   if (window.userFolderOnly) {
     const username = localStorage.getItem("username") || "root";
     try {
-      const response = await fetch("/api/folder/getFolderList.php?restricted=1&counts=0");
+      const url = withBase("/api/folder/getFolderList.php")
+        + "?restricted=1&counts=0"
+        + (sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : "");
+      const response = await fetch(url);
       let folders = await response.json();
       if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
         folders = folders.map(item => item.folder);
@@ -737,7 +878,10 @@ export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder
   }
 
   try {
-    const response = await fetch("/api/folder/getFolderList.php?counts=0");
+    const url = withBase("/api/folder/getFolderList.php")
+      + "?counts=0"
+      + (sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : "");
+    const response = await fetch(url);
     let folders = await response.json();
     if (Array.isArray(folders) && folders.length && typeof folders[0] === "object" && folders[0].folder) {
       folders = folders.map(item => item.folder);
@@ -746,7 +890,7 @@ export async function loadCopyMoveFolderListForModal(dropdownId, preferredFolder
 
     const rootOption = document.createElement("option");
     rootOption.value = "root";
-    rootOption.textContent = "(Root)";
+    rootOption.textContent = getRootLabel(sourceId);
     folderSelect.appendChild(rootOption);
 
     if (Array.isArray(folders) && folders.length > 0) {
@@ -768,12 +912,13 @@ export function handleMoveSelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("No files selected for moving.");
+    showToast("No files selected for moving.", 'warning');
     return;
   }
   window.filesToMove = Array.from(checkboxes).map(chk => chk.value);
   document.getElementById("moveFilesModal").style.display = "block";
-  loadCopyMoveFolderListForModal("moveTargetFolder", getOtherPaneFolder());
+  const target = getOtherPaneTarget();
+  initCopyMoveSourceSelect('move', target.folder, target.sourceId);
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -790,13 +935,28 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmCopy.addEventListener("click", function () {
       const targetFolder = document.getElementById("copyTargetFolder").value;
       if (!targetFolder) {
-        showToast("Please select a target folder for copying.", 5000);
+        showToast("Please select a target folder for copying.", 5000, 'warning');
         return;
       }
-      if (targetFolder === window.currentFolder) {
-        showToast("Error: Cannot copy files to the same folder.");
+      const sourceId = getActiveSourceId();
+      const destSourceId = document.getElementById("copyTargetSource")?.value || sourceId;
+      if (targetFolder === window.currentFolder && sourceId === destSourceId) {
+        showToast("Error: Cannot copy files to the same folder.", 'error');
         return;
       }
+      const selection = Array.isArray(window.filesToCopy) ? window.filesToCopy : [];
+      const totals = getTransferTotalsForNames(selection);
+      const progress = startTransferProgress({
+        action: 'Copying',
+        itemCount: totals.itemCount,
+        itemLabel: totals.itemCount === 1 ? 'file' : 'files',
+        totalBytes: totals.totalBytes,
+        bytesKnown: totals.bytesKnown,
+        source: window.currentFolder || 'root',
+        destination: targetFolder
+      });
+      let ok = false;
+      let errMsg = '';
       fetch("/api/file/copyFiles.php", {
         method: "POST",
         credentials: "include",
@@ -807,22 +967,34 @@ document.addEventListener("DOMContentLoaded", function () {
         body: JSON.stringify({
           source: window.currentFolder,
           files: window.filesToCopy,
-          destination: targetFolder
+          destination: targetFolder,
+          sourceId,
+          destSourceId
         })
       })
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showToast("Selected files copied successfully!", 5000);
+            ok = true;
+            showToast("Selected files copied successfully!", 5000, 'success');
             loadFileList(window.currentFolder);
-            refreshFolderIcon(targetFolder);
-            markPaneNeedsReloadForFolder(targetFolder);
+            if (!destSourceId || destSourceId === sourceId) {
+              refreshFolderIcon(targetFolder);
+            }
+            markPaneNeedsReloadForFolder(targetFolder, destSourceId);
           } else {
-            showToast("Error: " + (data.error || "Could not copy files"), 5000);
+            ok = false;
+            errMsg = data.error || "Could not copy files";
+            showToast("Error: " + (data.error || "Could not copy files"), 5000, 'error');
           }
         })
-        .catch(error => console.error("Error copying files:", error))
+        .catch(error => {
+          ok = false;
+          errMsg = error && error.message ? error.message : "Could not copy files";
+          console.error("Error copying files:", error);
+        })
         .finally(() => {
+          finishTransferProgress(progress, { ok, error: errMsg });
           document.getElementById("copyFilesModal").style.display = "none";
           window.filesToCopy = [];
         });
@@ -844,13 +1016,28 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmMove.addEventListener("click", function () {
       const targetFolder = document.getElementById("moveTargetFolder").value;
       if (!targetFolder) {
-        showToast("Please select a target folder for moving.");
+        showToast("Please select a target folder for moving.", 'warning');
         return;
       }
-      if (targetFolder === window.currentFolder) {
-        showToast("Error: Cannot move files to the same folder.");
+      const sourceId = getActiveSourceId();
+      const destSourceId = document.getElementById("moveTargetSource")?.value || sourceId;
+      if (targetFolder === window.currentFolder && sourceId === destSourceId) {
+        showToast("Error: Cannot move files to the same folder.", 'error');
         return;
       }
+      const selection = Array.isArray(window.filesToMove) ? window.filesToMove : [];
+      const totals = getTransferTotalsForNames(selection);
+      const progress = startTransferProgress({
+        action: 'Moving',
+        itemCount: totals.itemCount,
+        itemLabel: totals.itemCount === 1 ? 'file' : 'files',
+        totalBytes: totals.totalBytes,
+        bytesKnown: totals.bytesKnown,
+        source: window.currentFolder || 'root',
+        destination: targetFolder
+      });
+      let ok = false;
+      let errMsg = '';
       fetch("/api/file/moveFiles.php", {
         method: "POST",
         credentials: "include",
@@ -861,24 +1048,38 @@ document.addEventListener("DOMContentLoaded", function () {
         body: JSON.stringify({
           source: window.currentFolder,
           files: window.filesToMove,
-          destination: targetFolder
+          destination: targetFolder,
+          sourceId,
+          destSourceId
         })
       })
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showToast("Selected files moved successfully!");
+            ok = true;
+            showToast("Selected files moved successfully!", 'success');
             loadFileList(window.currentFolder);
-            refreshFolderIcon(targetFolder);
-            refreshFolderIcon(window.currentFolder);
-            markPaneNeedsReloadForFolder(targetFolder);
-            markPaneNeedsReloadForFolder(window.currentFolder);
+            if (!destSourceId || destSourceId === sourceId) {
+              refreshFolderIcon(targetFolder);
+              refreshFolderIcon(window.currentFolder);
+            } else {
+              refreshFolderIcon(window.currentFolder);
+            }
+            markPaneNeedsReloadForFolder(targetFolder, destSourceId);
+            markPaneNeedsReloadForFolder(window.currentFolder, sourceId);
           } else {
-            showToast("Error: " + (data.error || "Could not move files"));
+            ok = false;
+            errMsg = data.error || "Could not move files";
+            showToast("Error: " + (data.error || "Could not move files"), 'error');
           }
         })
-        .catch(error => console.error("Error moving files:", error))
+        .catch(error => {
+          ok = false;
+          errMsg = error && error.message ? error.message : "Could not move files";
+          console.error("Error moving files:", error);
+        })
         .finally(() => {
+          finishTransferProgress(progress, { ok, error: errMsg });
           document.getElementById("moveFilesModal").style.display = "none";
           window.filesToMove = [];
         });
@@ -893,7 +1094,7 @@ export function handleRenameSelected(e) {
   }
   const files = getSelectedFileObjects();
   if (files.length !== 1) {
-    showToast(t("select_single_file") || "Select a single file to rename.");
+    showToast(t("select_single_file") || "Select a single file to rename.", 'warning');
     return;
   }
   const file = files[0];
@@ -920,7 +1121,7 @@ export function handleShareSelected(e) {
   }
   const files = getSelectedFileObjects();
   if (files.length !== 1) {
-    showToast(t("select_single_file") || "Select one file to share.");
+    showToast(t("select_single_file") || "Select one file to share.", 'warning');
     return;
   }
   const fileObj = files[0];
@@ -1014,15 +1215,15 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showToast("File renamed successfully!");
+            showToast("File renamed successfully!", 'success');
             loadFileList(folderUsed);
           } else {
-            showToast("Error renaming file: " + (data.error || "Unknown error"));
+            showToast("Error renaming file: " + (data.error || "Unknown error"), 'error');
           }
         })
         .catch(error => {
           console.error("Error renaming file:", error);
-          showToast("Error renaming file");
+          showToast("Error renaming file", 'error');
         })
         .finally(() => {
           document.getElementById("renameFileModal").style.display = "none";

@@ -39,6 +39,7 @@ RUN apt-get update && \
       apache2 \
       php php-json php-curl php-zip php-mbstring php-gd php-xml \
       ca-certificates curl git openssl \
+      smbclient \
       clamav clamav-freshclam \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 

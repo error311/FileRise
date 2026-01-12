@@ -9,6 +9,7 @@
  *   tags={"Admin"},
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="user", in="query", required=true, @OA\Schema(type="string"), example="johndoe"),
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string"), example="local"),
  *   @OA\Response(
  *     response=200,
  *     description="Grants map",
@@ -34,6 +35,22 @@ if (empty($_SESSION['authenticated']) || empty($_SESSION['isAdmin'])) {
   http_response_code(401);
   echo json_encode(['error' => 'Unauthorized']);
   exit;
+}
+
+$sourceId = trim((string)($_GET['sourceId'] ?? ''));
+if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+  if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid source id.']);
+    exit;
+  }
+  $info = SourceContext::getSourceById($sourceId);
+  if (!$info) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid source.']);
+    exit;
+  }
+  SourceContext::setActiveId($sourceId, false, true);
 }
 
 $user = trim((string)($_GET['user'] ?? ''));

@@ -9,6 +9,7 @@ import { openFolderShareModal } from './folderShareModal.js?v={{APP_QVER}}';
 import { fetchWithCsrf } from './auth.js?v={{APP_QVER}}';
 import { loadCsrfToken } from './appCore.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
+import { startTransferProgress, finishTransferProgress } from './transferProgress.js?v={{APP_QVER}}';
 
 
 function detachFolderModalsToBody() {
@@ -105,6 +106,195 @@ export function getParentFolder(folder) {
   return lastSlash === -1 ? "root" : folder.substring(0, lastSlash);
 }
 
+let __moveFolderSourcesCache = null;
+
+function getActiveSourceId() {
+  const paneKey = window.activePane === 'secondary' ? 'secondary' : 'primary';
+  const paneSource = window.__frPaneState?.[paneKey]?.sourceId || '';
+  if (paneSource) return paneSource;
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return sel.value;
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return stored;
+  } catch (e) {}
+  return '';
+}
+
+function getFolderTreeStateKey(sourceId = '') {
+  const id = String(sourceId || getActiveSourceId() || '').trim();
+  return id ? `folderTreeState.${id}` : 'folderTreeState';
+}
+
+function getLastOpenedFolderKey(sourceId = '') {
+  const id = String(sourceId || getActiveSourceId() || '').trim();
+  return id ? `lastOpenedFolder.${id}` : 'lastOpenedFolder';
+}
+
+function getLastOpenedFolder(sourceId = '') {
+  const key = getLastOpenedFolderKey(sourceId);
+  try {
+    const val = localStorage.getItem(key);
+    if (val) return val;
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
+function setLastOpenedFolder(folder, sourceId = '') {
+  const f = String(folder || '').trim();
+  if (!f) return;
+  const key = getLastOpenedFolderKey(sourceId);
+  try { localStorage.setItem(key, f); } catch (e) { /* ignore */ }
+  if (key !== 'lastOpenedFolder') {
+    try { localStorage.setItem('lastOpenedFolder', f); } catch (e) { /* ignore */ }
+  }
+}
+
+function getSourceNameById(sourceId) {
+  const id = String(sourceId || '').trim();
+  if (!id) return '';
+  try {
+    if (typeof window.__frGetSourceNameById === 'function') {
+      return String(window.__frGetSourceNameById(id) || '');
+    }
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
+function getSourceTypeById(sourceId) {
+  const id = String(sourceId || '').trim();
+  if (!id) return '';
+  try {
+    if (typeof window.__frGetSourceMetaById === 'function') {
+      const meta = window.__frGetSourceMetaById(id);
+      if (meta && typeof meta === 'object' && meta.type) return String(meta.type || '');
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (typeof window.__frGetSourceTypeById === 'function') {
+      return String(window.__frGetSourceTypeById(id) || '');
+    }
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel) {
+    const opt = Array.from(sel.options).find(o => o.value === id);
+    if (opt) return String(opt.dataset?.sourceType || '');
+  }
+  return '';
+}
+
+function isFtpSourceId(sourceId = '') {
+  const type = String(getSourceTypeById(sourceId || getActiveSourceId()) || '').toLowerCase();
+  return type === 'ftp';
+}
+
+function getRootLabel(sourceId = '') {
+  const id = sourceId || getActiveSourceId();
+  const name = getSourceNameById(id);
+  return name ? `(${name})` : '(Root)';
+}
+
+function getRootCrumbLabel(sourceId = '') {
+  const id = sourceId || getActiveSourceId();
+  const name = getSourceNameById(id);
+  return name || 'root';
+}
+
+async function loadVisibleSourcesForMove() {
+  if (__moveFolderSourcesCache) return __moveFolderSourcesCache;
+  try {
+    const res = await fetch(withBase('/api/pro/sources/visible.php'), {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data || data.ok !== true || !data.enabled) return null;
+    const list = Array.isArray(data.sources) ? data.sources : [];
+    __moveFolderSourcesCache = list;
+    return list;
+  } catch (e) {
+    return null;
+  }
+}
+
+function populateMoveSourceSelect(selectEl, sources, activeId) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  sources.forEach(src => {
+    if (!src || typeof src !== 'object') return;
+    const id = String(src.id || '');
+    if (!id) return;
+    const name = String(src.name || id);
+    const type = String(src.type || '');
+    const ro = src.readOnly ? ` \uD83D\uDD12 ${t('read_only')}` : '';
+    const label = type ? `${name} (${type})${ro}` : `${name}${ro}`;
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = label;
+    if (src.readOnly) opt.disabled = true;
+    selectEl.appendChild(opt);
+  });
+  if (!selectEl.options.length) return;
+  const hasActive = Array.from(selectEl.options).some(opt => opt.value === activeId && !opt.disabled);
+  selectEl.value = hasActive ? activeId : selectEl.options[0].value;
+}
+
+async function loadMoveFolderTargets(sourceFolder, sourceId) {
+  const targetSel = document.getElementById('moveFolderTarget');
+  if (!targetSel) return;
+  targetSel.innerHTML = '';
+  const activeId = getActiveSourceId();
+  const sameSource = (sourceId || activeId) === activeId;
+  const url = withBase('/api/folder/getFolderList.php')
+    + '?counts=0'
+    + (sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '');
+  try {
+    let list = await fetch(url, { credentials: 'include' }).then(r => r.json());
+    if (Array.isArray(list) && list.length && typeof list[0] === 'object' && list[0].folder) {
+      list = list.map(it => it.folder);
+    }
+    const rootOpt = document.createElement('option');
+    rootOpt.value = 'root';
+    rootOpt.textContent = getRootLabel(sourceId || activeId);
+    targetSel.appendChild(rootOpt);
+    (list || [])
+      .filter(f => f && f !== 'trash' && (!sameSource || f !== (sourceFolder || '')))
+      .forEach(f => {
+        const o = document.createElement('option');
+        o.value = f;
+        o.textContent = f;
+        targetSel.appendChild(o);
+      });
+  } catch (e) {
+    // ignore
+  }
+}
+
+async function initMoveFolderSourceSelect(sourceFolder) {
+  const row = document.getElementById('moveFolderSourceRow');
+  const selectEl = document.getElementById('moveFolderTargetSource');
+  const sources = await loadVisibleSourcesForMove();
+  const activeId = getActiveSourceId();
+
+  if (!sources || sources.length <= 1 || !row || !selectEl) {
+    if (row) row.style.display = 'none';
+    await loadMoveFolderTargets(sourceFolder, activeId);
+    return;
+  }
+
+  row.style.display = '';
+  populateMoveSourceSelect(selectEl, sources, activeId);
+  await loadMoveFolderTargets(sourceFolder, selectEl.value || activeId);
+
+  if (!selectEl.__wired) {
+    selectEl.__wired = true;
+    selectEl.addEventListener('change', async () => {
+      await loadMoveFolderTargets(sourceFolder, selectEl.value || '');
+    });
+  }
+}
+
 function normalizeItem(it) {
   if (it == null) return null;
   if (typeof it === 'string') return { name: it, locked: false, hasSubfolders: undefined, nonEmpty: undefined };
@@ -129,6 +319,14 @@ function normalizeItem(it) {
 if (!window._frPeekCache) window._frPeekCache = new Map();
 function peekHasFolders(folder) {
   try {
+    if (isFtpSourceId()) {
+      const cached = _childCache.get(folder);
+      if (cached && typeof cached === 'object') {
+        const items = cached.items || [];
+        return Promise.resolve(!!(Array.isArray(items) && items.length) || !!cached.nextCursor);
+      }
+      return Promise.resolve(true);
+    }
     const cache = window._frPeekCache;
     if (cache.has(folder)) return cache.get(folder);
     const p = (async () => {
@@ -154,11 +352,28 @@ try { window.peekHasFolders = peekHasFolders; } catch (e) {}
 // ---- end peekHasFolders ----
 
 function loadFolderTreeState() {
-  const state = localStorage.getItem("folderTreeState");
-  return state ? JSON.parse(state) : {};
+  const key = getFolderTreeStateKey();
+  try {
+    const state = localStorage.getItem(key);
+    if (state) return JSON.parse(state);
+  } catch (e) { /* ignore */ }
+
+  if (key !== 'folderTreeState') {
+    try {
+      const legacy = localStorage.getItem('folderTreeState');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        saveFolderTreeState(parsed);
+        return parsed;
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  return {};
 }
 function saveFolderTreeState(state) {
-  localStorage.setItem("folderTreeState", JSON.stringify(state));
+  const key = getFolderTreeStateKey();
+  localStorage.setItem(key, JSON.stringify(state));
 }
 
 /* ----------------------
@@ -184,7 +399,7 @@ const _capsInflight = window.__FR_CAPS_INFLIGHT || new Map();
 window.__FR_CAPS_CACHE = _capsCache;
 window.__FR_CAPS_INFLIGHT = _capsInflight;
 
-async function getFolderCapabilities(folder) {
+async function getFolderCapabilities(folder, sourceId = '') {
   if (!folder) return null;
 
   if (_capsCache.has(folder)) {
@@ -196,7 +411,9 @@ async function getFolderCapabilities(folder) {
 
   const p = (async () => {
     try {
-      const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`, { credentials: 'include' });
+      const activeSourceId = sourceId || getActiveSourceId();
+      const sourceParam = activeSourceId ? `&sourceId=${encodeURIComponent(activeSourceId)}` : '';
+      const res = await fetch(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}${sourceParam}`, { credentials: 'include' });
       if (!res.ok) return null;
       const caps = await res.json();
       _capsCache.set(folder, caps || null);
@@ -332,7 +549,7 @@ function renderBreadcrumbFragment(folderPath) {
   const rootSpan = document.createElement('span');
   rootSpan.className = 'breadcrumb-link';
   rootSpan.dataset.folder = 'root';
-  rootSpan.textContent = 'root';
+  rootSpan.textContent = getRootCrumbLabel();
   frag.appendChild(rootSpan);
 
   if (path === 'root') {
@@ -379,6 +596,11 @@ export function updateBreadcrumbTitle(folder) {
   titleEl.appendChild(document.createTextNode(")"));
   setupBreadcrumbDelegation();
   bindFolderManagerContextMenu();
+  try {
+    if (typeof window.__frRefreshSourceBadges === 'function') {
+      window.__frRefreshSourceBadges();
+    }
+  } catch (e) { /* ignore */ }
 }
 export function setupBreadcrumbDelegation() {
   const container = document.getElementById("fileListTitle");
@@ -434,7 +656,7 @@ async function checkUserFolderPermission() {
       window.userFolderOnly = isFolderOnly;
       localStorage.setItem("folderOnly", isFolderOnly ? "true" : "false");
       if (isFolderOnly && username) {
-        localStorage.setItem("lastOpenedFolder", username);
+        setLastOpenedFolder(username);
         window.currentFolder = username;
       }
       return isFolderOnly;
@@ -447,7 +669,7 @@ async function checkUserFolderPermission() {
       window.userFolderOnly = isFolderOnly;
       localStorage.setItem("folderOnly", isFolderOnly ? "true" : "false");
       if (isFolderOnly && username) {
-        localStorage.setItem("lastOpenedFolder", username);
+        setLastOpenedFolder(username);
         window.currentFolder = username;
       }
       return isFolderOnly;
@@ -468,7 +690,7 @@ async function checkUserFolderPermission() {
     window.userFolderOnly = isFolderOnly;
     localStorage.setItem("folderOnly", isFolderOnly ? "true" : "false");
     if (isFolderOnly && username) {
-      localStorage.setItem("lastOpenedFolder", username);
+      setLastOpenedFolder(username);
       window.currentFolder = username;
     }
     return isFolderOnly;
@@ -482,10 +704,14 @@ async function checkUserFolderPermission() {
 /* ----------------------
    Local state and caches
 ----------------------*/
-const _folderCountCache = new Map();   // folderPath -> {folders, files}
-const _inflightCounts   = new Map();   // folderPath -> Promise
+const _folderCountCache = new Map();   // cacheKey -> stats payload
+const _inflightCounts   = new Map();   // cacheKey -> Promise
 const _nonEmptyCache    = new Map();   // folderPath -> bool
 const _childCache       = new Map();   // folderPath -> {items, nextCursor}
+const _sharedFolderStatsCache = window.__FR_FOLDER_STATS_CACHE || new Map();
+const _sharedFolderStatsInflight = window.__FR_FOLDER_STATS_INFLIGHT || new Map();
+window.__FR_FOLDER_STATS_CACHE = _sharedFolderStatsCache;
+window.__FR_FOLDER_STATS_INFLIGHT = _sharedFolderStatsInflight;
 
 // --- Capability cache so we don't spam /capabilities.php
 const _capViewCache = new Map();
@@ -494,6 +720,20 @@ async function canViewFolderCached(folder) {
   const p = canViewFolder(folder).then(Boolean).catch(() => false);
   _capViewCache.set(folder, p);
   return p;
+}
+
+export function resetFolderTreeCaches() {
+  _folderCountCache.clear();
+  _inflightCounts.clear();
+  _nonEmptyCache.clear();
+  _childCache.clear();
+  _capViewCache.clear();
+  _capsCache.clear();
+  _capsInflight.clear();
+  try { clearPeekCache(); } catch (e) { /* ignore */ }
+  try { if (window._frPeekCache?.clear) window._frPeekCache.clear(); } catch (e) { /* ignore */ }
+  try { window.folderColorMap = {}; } catch (e) { /* ignore */ }
+  try { window.__FR_COLORS_PROMISE = null; } catch (e) { /* ignore */ }
 }
 
 // Returns true if `folder` has any *unlocked* descendant within maxDepth.
@@ -528,12 +768,14 @@ async function chooseInitialFolder(effectiveRoot, selectedFolder) {
   if (selectedFolder && await canViewFolderCached(selectedFolder)) return selectedFolder;
 
   // 2) sticky lastOpenedFolder
-  const last = localStorage.getItem("lastOpenedFolder");
+  const last = getLastOpenedFolder();
   if (last && await canViewFolderCached(last)) return last;
 
   // 2b) Ground truth from folder list API (matches getFileList 403 behavior)
   try {
-    const res = await fetch('/api/folder/getFolderList.php?counts=0', { credentials: 'include' });
+    const sourceId = getActiveSourceId();
+    const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
+    const res = await fetch(`/api/folder/getFolderList.php?counts=0${sourceParam}`, { credentials: 'include' });
     const data = await res.json().catch(() => []);
     const names = Array.isArray(data)
       ? Array.from(new Set(data.map(row => {
@@ -584,18 +826,23 @@ function fetchJSONWithTimeout(url, ms = 3000) {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), ms);
   return fetch(url, { credentials: 'include', signal: ctrl.signal })
-    .then(r => r.ok ? r.json() : { folders: 0, files: 0 })
-    .catch(() => ({ folders: 0, files: 0 }))
+    .then(r => r.ok ? r.json() : { folders: 0, files: 0, __fr_err: 1 })
+    .catch(() => ({ folders: 0, files: 0, __fr_err: 1 }))
     .finally(() => clearTimeout(tid));
 }
 const MAX_CONCURRENT_COUNT_REQS = 6;
 let _activeCountReqs = 0;
 const _countReqQueue = [];
-function _runCount(url) {
+function getCountTimeoutMs(sourceId = '') {
+  const type = String(getSourceTypeById(sourceId || getActiveSourceId()) || '').toLowerCase();
+  if (type && type !== 'local') return 6000;
+  return 2500;
+}
+function _runCount(url, timeoutMs) {
   return new Promise(resolve => {
     const start = () => {
       _activeCountReqs++;
-      fetchJSONWithTimeout(url, 2500)
+      fetchJSONWithTimeout(url, timeoutMs || 2500)
         .then(resolve)
         .finally(() => {
           _activeCountReqs--;
@@ -607,24 +854,69 @@ function _runCount(url) {
     else _countReqQueue.push(start);
   });
 }
+function scheduleFolderStatsWork(fn, timeoutMs = 700) {
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(() => { try { fn(); } catch (e) {} }, { timeout: timeoutMs });
+    return;
+  }
+  setTimeout(() => { try { fn(); } catch (e) {} }, 120);
+}
+function folderStatsCacheKey(folder, sourceId = '') {
+  const sid = sourceId ? String(sourceId) : '';
+  return sid ? `${sid}::${folder}` : folder;
+}
 async function fetchFolderCounts(folder) {
-  if (_folderCountCache.has(folder)) return _folderCountCache.get(folder);
-  if (_inflightCounts.has(folder)) return _inflightCounts.get(folder);
-  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`);
-  const p = _runCount(url).then(data => {
-    const result = { folders: Number(data?.folders || 0), files: Number(data?.files || 0) };
-    _folderCountCache.set(folder, result);
-    _inflightCounts.delete(folder);
-    return result;
+  const sourceId = getActiveSourceId();
+  const key = folderStatsCacheKey(folder, sourceId);
+  if (_folderCountCache.has(key)) return _folderCountCache.get(key);
+  if (_inflightCounts.has(key)) return _inflightCounts.get(key);
+  if (_sharedFolderStatsCache.has(key)) {
+    const cached = _sharedFolderStatsCache.get(key);
+    _folderCountCache.set(key, cached);
+    return cached;
+  }
+  if (_sharedFolderStatsInflight.has(key)) {
+    const inflight = _sharedFolderStatsInflight.get(key);
+    _inflightCounts.set(key, inflight);
+    inflight.finally(() => {
+      if (_inflightCounts.get(key) === inflight) _inflightCounts.delete(key);
+    });
+    return inflight;
+  }
+  const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
+  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}${sourceParam}&t=${Date.now()}`);
+  const timeoutMs = getCountTimeoutMs(sourceId);
+  const p = _runCount(url, timeoutMs).then(data => {
+    const payload = (data && !data.__fr_err) ? data : { folders: 0, files: 0 };
+    const stillLocal = _inflightCounts.get(key) === p;
+    const stillShared = _sharedFolderStatsInflight.get(key) === p;
+    if (stillLocal) _inflightCounts.delete(key);
+    if (stillShared) _sharedFolderStatsInflight.delete(key);
+    if (data && data.__fr_err) {
+      return { folders: 0, files: 0, __fr_err: 1 };
+    }
+    if (stillLocal) _folderCountCache.set(key, payload);
+    if (stillShared) _sharedFolderStatsCache.set(key, payload);
+    return payload;
+  }).catch(() => {
+    if (_inflightCounts.get(key) === p) _inflightCounts.delete(key);
+    if (_sharedFolderStatsInflight.get(key) === p) _sharedFolderStatsInflight.delete(key);
+    return { folders: 0, files: 0, __fr_err: 1 };
   });
-  _inflightCounts.set(folder, p);
+
+  _inflightCounts.set(key, p);
+  _sharedFolderStatsInflight.set(key, p);
   return p;
 }
 function invalidateFolderCaches(folder) {
   if (!folder) return;
-  _folderCountCache.delete(folder);
+  const sourceId = getActiveSourceId();
+  const key = folderStatsCacheKey(folder, sourceId);
+  _folderCountCache.delete(key);
   _nonEmptyCache.delete(folder);
-  _inflightCounts.delete(folder);
+  _inflightCounts.delete(key);
+  _sharedFolderStatsCache.delete(key);
+  _sharedFolderStatsInflight.delete(key);
   _childCache.delete(folder);
   _capsCache.delete(folder);
   _capsInflight.delete(folder);
@@ -742,18 +1034,24 @@ function ensureFolderIcon(folder) {
   if (!opt) return;
 
   setFolderIconForOption(opt, 'empty');
+  const kidsPromise = peekHasFolders(folder).catch(() => false);
+  kidsPromise.then(hasKids => {
+    try { updateToggleForOption(folder, !!hasKids); } catch (e) {}
+  });
 
-  Promise.all([
-    fetchFolderCounts(folder).catch(() => ({ folders: 0, files: 0 })),
-    peekHasFolders(folder).catch(() => false)
-  ]).then(([cnt, hasKids]) => {
-    const folders = Number(cnt?.folders || 0);
-    const files   = Number(cnt?.files || 0);
-    const hasAny  = (folders + files) > 0;
+  scheduleFolderStatsWork(() => {
+    Promise.all([
+      fetchFolderCounts(folder).catch(() => ({ folders: 0, files: 0 })),
+      kidsPromise
+    ]).then(([cnt, hasKids]) => {
+      const folders = Number(cnt?.folders || 0);
+      const files   = Number(cnt?.files || 0);
+      const hasAny  = (folders + files) > 0;
 
-    setFolderIconForOption(opt, hasAny ? 'paper' : 'empty');
-    updateToggleForOption(folder, !!hasKids || folders > 0);
-  }).catch(() => {});
+      setFolderIconForOption(opt, hasAny ? 'paper' : 'empty');
+      updateToggleForOption(folder, !!hasKids || folders > 0);
+    }).catch(() => {});
+  });
 }
 
 /* ----------------------
@@ -1075,17 +1373,24 @@ function primeChildToggles(ulEl) {
     if (f === 'recycle_bin') return;
     try { setFolderIconForOption(opt, 'empty'); } catch (e) {}
 
-    Promise.all([
-      fetchFolderCounts(f).catch(() => ({ folders: 0, files: 0 })),
-      peekHasFolders(f).catch(() => false)
-    ]).then(([cnt, hasKids]) => {
-      const folders = Number(cnt?.folders || 0);
-      const files   = Number(cnt?.files || 0);
-      const hasAny  = (folders + files) > 0;
+    const kidsPromise = peekHasFolders(f).catch(() => false);
+    kidsPromise.then(hasKids => {
+      try { updateToggleForOption(f, !!hasKids); } catch (e) {}
+    });
 
-      try { setFolderIconForOption(opt, hasAny ? 'paper' : 'empty'); } catch (e) {}
-      // IMPORTANT: chevron is true if EITHER we have subfolders (peek) OR counts say so
-      try { updateToggleForOption(f, !!hasKids || folders > 0); } catch (e) {}
+    scheduleFolderStatsWork(() => {
+      Promise.all([
+        fetchFolderCounts(f).catch(() => ({ folders: 0, files: 0 })),
+        kidsPromise
+      ]).then(([cnt, hasKids]) => {
+        const folders = Number(cnt?.folders || 0);
+        const files   = Number(cnt?.files || 0);
+        const hasAny  = (folders + files) > 0;
+
+        try { setFolderIconForOption(opt, hasAny ? 'paper' : 'empty'); } catch (e) {}
+        // IMPORTANT: chevron is true if EITHER we have subfolders (peek) OR counts say so
+        try { updateToggleForOption(f, !!hasKids || folders > 0); } catch (e) {}
+      });
     });
   });
 }
@@ -1205,9 +1510,9 @@ export function openColorFolderModal(folder) {
     e.preventDefault(); e.stopPropagation();
     try {
       await saveFolderColor(folder, ''); // clear
-      showToast(t('folder_color_cleared'));
+      showToast(t('folder_color_cleared'), 'success');
     } catch (err) {
-      showToast(err.message || 'Error');
+      showToast(err.message || 'Error', 'error');
     } finally {
       suppressNextToggle(300);
       setTimeout(() => expandTreePath(folder, { force: true }), 0);
@@ -1220,7 +1525,7 @@ export function openColorFolderModal(folder) {
     try {
       const hex = String(inputEl.value || '').trim();
       await saveFolderColor(folder, hex);
-      showToast(t('folder_color_saved'));
+      showToast(t('folder_color_saved'), 'success');
     } finally {
       suppressNextToggle(300);
       setTimeout(() => expandTreePath(folder, { force: true }), 0);
@@ -1849,7 +2154,7 @@ export async function syncTreeAfterFolderMove(sourceFolder, destination) {
     const suffix = window.currentFolder.slice(sourceFolder.length); // includes leading '/'
     window.currentFolder = newPath + suffix;
   }
-  localStorage.setItem('lastOpenedFolder', window.currentFolder || newPath);
+  setLastOpenedFolder(window.currentFolder || newPath);
 
   // refresh icons for parents
   refreshFolderIcon(srcParent);
@@ -1878,32 +2183,77 @@ function handleDropOnFolder(event, dropFolder) {
   if (dragData && dragData.dragType === 'folder' && dragData.folder) {
     const sourceFolder = String(dragData.folder || "").trim();
     if (!sourceFolder || sourceFolder === "root") return;
+    const sourceId = String(dragData.sourceId || dragData.sourceSourceId || '').trim();
+    const destSourceId = getActiveSourceId();
+    const crossSource = sourceId && destSourceId && sourceId !== destSourceId;
 
     // prevent moving into self/descendant
-    if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
-      showToast("Invalid destination.", 4000);
+    if (!crossSource && (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/"))) {
+      showToast("Invalid destination.", 4000, 'warning');
       return;
     }
+
+    const progress = startTransferProgress({
+      action: 'Moving',
+      itemCount: 1,
+      itemLabel: 'folder',
+      bytesKnown: false,
+      indeterminate: true,
+      source: sourceFolder,
+      destination: dropFolder
+    });
+    let ok = false;
+    let errMsg = '';
 
     fetchWithCsrf("/api/folder/moveFolder.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ source: sourceFolder, destination: dropFolder })
+      body: JSON.stringify({
+        source: sourceFolder,
+        destination: dropFolder,
+        sourceId,
+        destSourceId
+      })
     })
       .then(safeJson)
       .then(async (data) => {
         if (data && !data.error) {
-          showToast(`Folder moved to ${dropFolder}!`);
-          // reuse the shared tree-sync helper so icons, chevrons, selection, and file list all match
-          await syncTreeAfterFolderMove(sourceFolder, dropFolder);
+          ok = true;
+          showToast(`Folder moved to ${dropFolder}!`, 'success');
+          if (crossSource) {
+            try {
+              if (sourceFolder) {
+                const srcParent = getParentFolder(sourceFolder);
+                window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
+                  detail: { folders: [srcParent], sourceId }
+                }));
+              }
+              if (dropFolder) {
+                window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
+                  detail: { folders: [dropFolder], sourceId: destSourceId }
+                }));
+              }
+            } catch (e) { /* ignore */ }
+            loadFileList(dropFolder);
+          } else {
+            // reuse the shared tree-sync helper so icons, chevrons, selection, and file list all match
+            await syncTreeAfterFolderMove(sourceFolder, dropFolder);
+          }
         } else {
-          showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
+          ok = false;
+          errMsg = data && data.error ? data.error : 'Could not move folder';
+          showToast("Error: " + (data && data.error || "Could not move folder"), 5000, 'error');
         }
       })
       .catch(err => {
+        ok = false;
+        errMsg = err && err.message ? err.message : 'Could not move folder';
         console.error("Error moving folder:", err);
-        showToast("Error moving folder", 5000);
+        showToast("Error moving folder", 5000, 'error');
+      })
+      .finally(() => {
+        finishTransferProgress(progress, { ok, error: errMsg });
       });
 
     return;
@@ -1924,9 +2274,21 @@ function handleDropOnFolder(event, dropFolder) {
     const sourceFolder = String(plainSource || "").trim();
     if (!sourceFolder || sourceFolder === "root") return;
     if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
-      showToast("Invalid destination.", 4000);
+      showToast("Invalid destination.", 4000, 'warning');
       return;
     }
+
+    const progress = startTransferProgress({
+      action: 'Moving',
+      itemCount: 1,
+      itemLabel: 'folder',
+      bytesKnown: false,
+      indeterminate: true,
+      source: sourceFolder,
+      destination: dropFolder
+    });
+    let ok = false;
+    let errMsg = '';
 
     fetchWithCsrf("/api/folder/moveFolder.php", {
       method: "POST",
@@ -1937,15 +2299,23 @@ function handleDropOnFolder(event, dropFolder) {
       .then(safeJson)
       .then(async (data) => {
         if (data && !data.error) {
-          showToast(`Folder moved to ${dropFolder}!`);
+          ok = true;
+          showToast(`Folder moved to ${dropFolder}!`, 'success');
           await syncTreeAfterFolderMove(sourceFolder, dropFolder);
         } else {
-          showToast("Error: " + (data && data.error || "Could not move folder"), 5000);
+          ok = false;
+          errMsg = data && data.error ? data.error : 'Could not move folder';
+          showToast("Error: " + (data && data.error || "Could not move folder"), 5000, 'error');
         }
       })
       .catch(err => {
+        ok = false;
+        errMsg = err && err.message ? err.message : 'Could not move folder';
         console.error("Error moving folder:", err);
-        showToast("Error moving folder", 5000);
+        showToast("Error moving folder", 5000, 'error');
+      })
+      .finally(() => {
+        finishTransferProgress(progress, { ok, error: errMsg });
       });
 
     return;
@@ -1956,29 +2326,87 @@ function handleDropOnFolder(event, dropFolder) {
   const filesToMove = dragData && (dragData.files ? dragData.files : (dragData.fileName ? [dragData.fileName] : []));
   if (!filesToMove || filesToMove.length === 0) return;
 
+  const sourceId = String(dragData?.sourceId || dragData?.sourceSourceId || '').trim();
+  const destSourceId = getActiveSourceId();
+  const crossSource = sourceId && destSourceId && sourceId !== destSourceId;
+
+  const totals = {
+    totalBytes: Number.isFinite(dragData?.totalBytes) ? dragData.totalBytes : 0,
+    bytesKnown: dragData?.bytesKnown === true,
+    itemCount: filesToMove.length
+  };
+  const progress = startTransferProgress({
+    action: 'Moving',
+    itemCount: totals.itemCount,
+    itemLabel: totals.itemCount === 1 ? 'file' : 'files',
+    totalBytes: totals.totalBytes,
+    bytesKnown: totals.bytesKnown,
+    source: dragData.sourceFolder,
+    destination: dropFolder
+  });
+  let ok = false;
+  let errMsg = '';
+
   fetchWithCsrf("/api/file/moveFiles.php", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ source: dragData.sourceFolder, files: filesToMove, destination: dropFolder })
+    body: JSON.stringify({
+      source: dragData.sourceFolder,
+      files: filesToMove,
+      destination: dropFolder,
+      sourceId,
+      destSourceId
+    })
   }).then(safeJson).then(data => {
     if (data.success) {
-      showToast(`File(s) moved successfully to ${dropFolder}!`);
-      refreshFolderIcon(dragData.sourceFolder);
-      refreshFolderIcon(dropFolder);
+      ok = true;
+      showToast(`File(s) moved successfully to ${dropFolder}!`, 'success');
+      const activeSourceId = getActiveSourceId();
+      if (!sourceId || sourceId === activeSourceId) {
+        refreshFolderIcon(dragData.sourceFolder);
+      }
+      if (!destSourceId || destSourceId === activeSourceId) {
+        refreshFolderIcon(dropFolder);
+      }
       try {
-        const folders = [dragData.sourceFolder, dropFolder].filter(Boolean);
-        if (folders.length) {
-          window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
-            detail: { folders }
-          }));
+        if (crossSource) {
+          if (dragData.sourceFolder) {
+            window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
+              detail: { folders: [dragData.sourceFolder], sourceId }
+            }));
+          }
+          if (dropFolder) {
+            window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
+              detail: { folders: [dropFolder], sourceId: destSourceId }
+            }));
+          }
+        } else {
+          const folders = [dragData.sourceFolder, dropFolder].filter(Boolean);
+          if (folders.length) {
+            window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
+              detail: { folders, sourceId: sourceId || destSourceId }
+            }));
+          }
         }
       } catch (e) { /* ignore */ }
-      loadFileList(dragData.sourceFolder);
+      const reloadFolder = crossSource
+        ? (window.currentFolder || dropFolder || dragData.sourceFolder)
+        : dragData.sourceFolder;
+      loadFileList(reloadFolder);
     } else {
-      showToast("Error moving files: " + (data.error || "Unknown error"));
+      ok = false;
+      errMsg = data.error || "Unknown error";
+      showToast("Error moving files: " + (data.error || "Unknown error"), 'error');
     }
-  }).catch(() => showToast("Error moving files."));
+  }).catch(err => {
+    ok = false;
+    errMsg = err && err.message ? err.message : "Unknown error";
+    showToast("Error moving files.", 'error');
+  }).finally(() => {
+    finishTransferProgress(progress, { ok, error: errMsg });
+  });
+  return;
 }
 
 /* ----------------------
@@ -2046,7 +2474,7 @@ async function selectFolder(selected) {
   }
 
   if (!allowed) {
-    showToast(t('no_access') || "You do not have access to this resource.");
+    showToast(t('no_access') || "You do not have access to this resource.", 'error');
     return; // do NOT change currentFolder or lastOpenedFolder
   }
 
@@ -2072,11 +2500,23 @@ async function selectFolder(selected) {
 
   // Update state + UI
   window.currentFolder = selected;
-  localStorage.setItem("lastOpenedFolder", selected);
+  setLastOpenedFolder(selected);
   updateBreadcrumbTitle(selected);
   applyFolderCapabilities(selected);
   ensureFolderIcon(selected);
-  loadFileList(selected);
+  const skipCfg = window.__frSkipListReload || null;
+  const activeSourceId = getActiveSourceId();
+  const shouldSkip = !!(
+    skipCfg &&
+    skipCfg.folder === selected &&
+    (!skipCfg.sourceId || skipCfg.sourceId === activeSourceId)
+  );
+  if (skipCfg) {
+    window.__frSkipListReload = null;
+  }
+  if (!shouldSkip) {
+    loadFileList(selected);
+  }
 
   // Expand the selected node’s UL if present
   const ul = getULForFolder(selected);
@@ -2132,14 +2572,14 @@ export async function loadFolderTree(selectedFolder) {
     await checkUserFolderPermission();
     const username = localStorage.getItem("username") || "root";
     let effectiveRoot = "root";
-    let effectiveLabel = "(Root)";
+    let effectiveLabel = getRootLabel();
     if (window.userFolderOnly && username) {
       effectiveRoot = username;
-      effectiveLabel = `(Root)`;
-      localStorage.setItem("lastOpenedFolder", username);
+      effectiveLabel = getRootLabel();
+      setLastOpenedFolder(username);
       window.currentFolder = username;
     } else {
-      window.currentFolder = localStorage.getItem("lastOpenedFolder") || "root";
+      window.currentFolder = getLastOpenedFolder() || "root";
     }
 
     const container = document.getElementById("folderTreeContainer");
@@ -2187,13 +2627,19 @@ export async function loadFolderTree(selectedFolder) {
           ro.addEventListener('drop', (e) => handleDropOnFolder(e, effectiveRoot));
         }
         try { setFolderIconForOption(ro, 'empty'); } catch (e) {}
-        fetchFolderCounts(effectiveRoot).then(({ folders, files }) => {
-          const hasAny = (folders + files) > 0;
-          try { setFolderIconForOption(ro, hasAny ? 'paper' : 'empty'); } catch (e) {}
-          return peekHasFolders(effectiveRoot).then(hasKids => {
-            try { updateToggleForOption(effectiveRoot, !!hasKids || folders > 0); } catch (e) {}
-          });
-        }).catch(() => {});
+        const kidsPromise = peekHasFolders(effectiveRoot).catch(() => false);
+        kidsPromise.then(hasKids => {
+          try { updateToggleForOption(effectiveRoot, !!hasKids); } catch (e) {}
+        });
+        scheduleFolderStatsWork(() => {
+          fetchFolderCounts(effectiveRoot).then(({ folders, files }) => {
+            const hasAny = (folders + files) > 0;
+            try { setFolderIconForOption(ro, hasAny ? 'paper' : 'empty'); } catch (e) {}
+            return kidsPromise.then(hasKids => {
+              try { updateToggleForOption(effectiveRoot, !!hasKids || folders > 0); } catch (e) {}
+            });
+          }).catch(() => {});
+        });
       }
     }
 
@@ -2283,14 +2729,14 @@ if (!target) {
 await expandAncestors(target);
 
 // Persist and select
-localStorage.setItem("lastOpenedFolder", target);
+setLastOpenedFolder(target);
 selectFolder(target);
 // ---------------------------------------------------------------------------
     // --------------------------------------------
 
   } catch (err) {
     console.error("Error loading folder tree:", err);
-    if (err.status === 403) showToast("You don't have permission to view folders.");
+    if (err.status === 403) showToast("You don't have permission to view folders.", 'error');
   }
 }
 
@@ -2438,7 +2884,8 @@ async function openFolderActionsMenu(folder, targetEl, clientX, clientY) {
         if (input) input.focus();
       }
     },
-    { label: t('move_folder'),   action: () => openMoveFolderUI(folder) },
+    { label: t('move_folder'),   action: () => openMoveFolderUI(folder, 'move') },
+    { label: t('copy_folder'),   action: () => openMoveFolderUI(folder, 'copy') },
     { label: t('rename_folder'), action: () => { startInlineRenameInTree(folder); } },
     ...(canColor ? [{ label: t('color_folder'), action: () => openColorFolderModal(folder) }] : []),
     ...(canEncrypt ? [{ label: 'Encrypt folder', icon: 'lock', action: () => startFolderCryptoJobFlow(folder, 'encrypt') }] : []),
@@ -2479,7 +2926,7 @@ async function setFolderEncryption(folder, encrypted) {
 
     invalidateFolderCaches(folder);
     await applyFolderCapabilities(folder);
-    showToast(encrypted ? 'Folder encryption enabled.' : 'Folder encryption disabled.');
+    showToast(encrypted ? 'Folder encryption enabled.' : 'Folder encryption disabled.', 'success');
   } catch (e) {
     console.error('setFolderEncryption failed', e);
     showToast((e && e.message) ? e.message : 'Failed to update folder encryption.', 'error');
@@ -2734,9 +3181,9 @@ function finalizeCryptoJobUi({ folder, mode, jobId, ok, error }) {
   if (pill) pill.style.display = 'none';
 
   if (ok) {
-    showToast(mode === 'decrypt' ? 'Folder decryption completed.' : 'Folder encryption completed.');
+    showToast(mode === 'decrypt' ? 'Folder decryption completed.' : 'Folder encryption completed.', 'success');
   } else {
-    showToast(error ? (`Folder crypto failed: ${error}`) : 'Folder crypto failed.');
+    showToast(error ? (`Folder crypto failed: ${error}`) : 'Folder crypto failed.', 'error');
   }
 }
 
@@ -2746,7 +3193,7 @@ export async function startFolderCryptoJobFlow(folder, mode) {
     const planRes = await fetch(planUrl, { credentials: 'include' });
     const plan = await safeJson(planRes);
     if (!plan || plan.ok !== true) {
-      showToast((plan && (plan.error || plan.message)) || 'Failed to estimate folder encryption work.');
+      showToast((plan && (plan.error || plan.message)) || 'Failed to estimate folder encryption work.', 'error');
       return;
     }
 
@@ -2779,7 +3226,7 @@ export async function startFolderCryptoJobFlow(folder, mode) {
         start = { ok: true, jobId: body.job.id, folder, mode };
       } else {
         const msg = (body && (body.error || body.message)) || `HTTP ${startRes.status}`;
-        showToast(msg);
+        showToast(msg, 'error');
         return;
       }
     }
@@ -2800,7 +3247,7 @@ export async function startFolderCryptoJobFlow(folder, mode) {
     await startCryptoRunner(st);
   } catch (e) {
     console.error('startFolderCryptoJobFlow error', e);
-    showToast((e && e.message) ? e.message : 'Failed to start folder encryption.');
+    showToast((e && e.message) ? e.message : 'Failed to start folder encryption.', 'error');
   }
 }
 
@@ -2866,7 +3313,7 @@ async function folderManagerContextMenuHandler(e) {
           }
           const btn = document.getElementById('deleteAllBtn');
           if (btn) { btn.click(); return; }
-          showToast('Empty recycle bin action is not available.');
+          showToast('Empty recycle bin action is not available.', 'warning');
         }
       }
     ];
@@ -2909,14 +3356,14 @@ function bindFolderManagerContextMenu() {
 export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
   const selectedFolder = oldFolder || window.currentFolder || "root";
   if (!selectedFolder || selectedFolder === "root") {
-    if (!opts.silent) showToast("Please select a valid folder to rename.");
+    if (!opts.silent) showToast("Please select a valid folder to rename.", 'warning');
     return { success: false, error: "invalid_folder" };
   }
 
   const newNameBasename = String(newBaseName || "").trim();
   const currentBase = selectedFolder.split("/").pop() || "";
   if (!newNameBasename || newNameBasename === currentBase) {
-    if (!opts.silent) showToast("Please enter a valid new folder name.");
+    if (!opts.silent) showToast("Please enter a valid new folder name.", 'warning');
     return { success: false, error: "invalid_name" };
   }
 
@@ -2933,11 +3380,11 @@ export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
     const data = await safeJson(res);
     if (!data.success) {
       const msg = data.error || "Could not rename folder";
-      if (!opts.silent) showToast("Error: " + msg);
+      if (!opts.silent) showToast("Error: " + msg, 'error');
       return { success: false, error: msg };
     }
 
-    if (!opts.silent) showToast("Folder renamed successfully!");
+    if (!opts.silent) showToast("Folder renamed successfully!", 'success');
 
     const oldPath = selectedFolder;
     const newPath = newFolderFull;
@@ -2969,7 +3416,7 @@ export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
       currentUpdated = true;
     }
     if (currentUpdated) {
-      localStorage.setItem("lastOpenedFolder", window.currentFolder || newPath);
+      setLastOpenedFolder(window.currentFolder || newPath);
     }
 
     const selectAfter = opts.selectAfter !== false;
@@ -2985,7 +3432,7 @@ export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
   } catch (err) {
     console.error("Error renaming folder:", err);
     if (!opts.silent) {
-      showToast("Error: " + (err && err.message ? err.message : "Could not rename folder"));
+      showToast("Error: " + (err && err.message ? err.message : "Could not rename folder"), 'error');
     }
     return { success: false, error: err && err.message ? err.message : "rename_failed" };
   }
@@ -3025,7 +3472,7 @@ function focusTreeRenameInput(input) {
 export async function startInlineRenameInTree(folderPath, targetOpt) {
   const selectedFolder = folderPath || window.currentFolder || 'root';
   if (!selectedFolder || selectedFolder === 'root') {
-    showToast("Please select a valid folder to rename.");
+    showToast("Please select a valid folder to rename.", 'warning');
     return false;
   }
 
@@ -3050,12 +3497,12 @@ export async function startInlineRenameInTree(folderPath, targetOpt) {
   }
 
   if (!opt) {
-    showToast("Please select a valid folder to rename.");
+    showToast("Please select a valid folder to rename.", 'warning');
     return false;
   }
 
   if (opt.classList.contains('locked')) {
-    showToast(t('no_access') || "You do not have access to this resource.");
+    showToast(t('no_access') || "You do not have access to this resource.", 'error');
     return false;
   }
 
@@ -3152,7 +3599,7 @@ export async function startInlineRenameInTree(folderPath, targetOpt) {
 export function openRenameFolderModal() {
   detachFolderModalsToBody();
   const selectedFolder = window.currentFolder || "root";
-  if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to rename."); return; }
+  if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to rename.", 'warning'); return; }
   const parts = selectedFolder.split("/");
   const input = document.getElementById("newRenameFolderName");
   const modal = document.getElementById("renameFolderModal");
@@ -3177,7 +3624,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
   if (!input) return;
   const newNameBasename = input.value.trim();
   if (!newNameBasename || newNameBasename === selectedFolder.split("/").pop()) {
-    showToast("Please enter a valid new folder name."); return;
+    showToast("Please enter a valid new folder name.", 'warning'); return;
   }
   const parentPath = getParentFolder(selectedFolder);
   const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
@@ -3186,10 +3633,10 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
     body: JSON.stringify({ oldFolder: window.currentFolder, newFolder: newFolderFull })
   }).then(safeJson).then(async data => {
     if (data.success) {
-      showToast("Folder renamed successfully!");
+      showToast("Folder renamed successfully!", 'success');
       const oldPath = selectedFolder;
       window.currentFolder = newFolderFull;
-      localStorage.setItem("lastOpenedFolder", newFolderFull);
+      setLastOpenedFolder(newFolderFull);
 
       // carry color on rename as well
       await carryFolderColor(oldPath, newFolderFull);
@@ -3211,7 +3658,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
       // re-select the renamed node
       selectFolder(newFolderFull);
     } else {
-      showToast("Error: " + (data.error || "Could not rename folder"));
+      showToast("Error: " + (data.error || "Could not rename folder"), 'error');
     }
   }).catch(err => console.error("Error renaming folder:", err)).finally(() => {
     const modal = document.getElementById("renameFolderModal");
@@ -3224,7 +3671,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
 export function openDeleteFolderModal() {
   detachFolderModalsToBody();
   const selectedFolder = window.currentFolder || "root";
-  if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to delete."); return; }
+  if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to delete.", 'warning'); return; }
   const msgEl = document.getElementById("deleteFolderMessage");
   const modal = document.getElementById("deleteFolderModal");
   if (!msgEl || !modal) return;
@@ -3245,10 +3692,10 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
     body: JSON.stringify({ folder: selectedFolder })
   }).then(safeJson).then(async data => {
     if (data.success) {
-      showToast("Folder deleted successfully!");
+      showToast("Folder deleted successfully!", 'success');
       const parent = getParentFolder(selectedFolder);
       window.currentFolder = parent;
-      localStorage.setItem("lastOpenedFolder", parent);
+      setLastOpenedFolder(parent);
       invalidateFolderCaches(parent);
       clearPeekCache([parent, selectedFolder]);
       const ul = getULForFolder(parent);
@@ -3256,7 +3703,7 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
       if (parent === 'root') placeRecycleBinNode();
       selectFolder(parent);
     } else {
-      showToast("Error: " + (data.error || "Could not delete folder"));
+      showToast("Error: " + (data.error || "Could not delete folder"), 'error');
     }
   }).catch(err => console.error("Error deleting folder:", err)).finally(() => {
     const modal = document.getElementById("deleteFolderModal");
@@ -3284,18 +3731,18 @@ const submitCreate = document.getElementById("submitCreateFolder");
 if (submitCreate) submitCreate.addEventListener("click", async () => {
   const input = document.getElementById("newFolderName");
   const folderInput = input ? input.value.trim() : "";
-  if (!folderInput) return showToast("Please enter a folder name.");
+  if (!folderInput) return showToast("Please enter a folder name.", 'warning');
   const selectedFolder = window.currentFolder || "root";
   const parent = selectedFolder === "root" ? "" : selectedFolder;
 
-  try { await loadCsrfToken(); } catch (e) { return showToast("Could not refresh CSRF token. Please reload."); }
+  try { await loadCsrfToken(); } catch (e) { return showToast("Could not refresh CSRF token. Please reload.", 'error'); }
 
   fetchWithCsrf("/api/folder/createFolder.php", {
     method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
     body: JSON.stringify({ folderName: folderInput, parent })
   }).then(safeJson).then(async data => {
     if (!data.success) throw new Error(data.error || "Server rejected the request");
-    showToast("Folder created!");
+    showToast("Folder created!", 'success');
     const parentFolder = parent || 'root';
     const parentUL = getULForFolder(parentFolder);
     const full = parent ? `${parent}/${folderInput}` : folderInput;
@@ -3315,10 +3762,10 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
     }
 
     window.currentFolder = full;
-    localStorage.setItem("lastOpenedFolder", full);
+    setLastOpenedFolder(full);
     selectFolder(full);
 
-  }).catch(e => showToast("Error creating folder: " + e.message)).finally(() => {
+  }).catch(e => showToast("Error creating folder: " + e.message, 'error')).finally(() => {
     const modal = document.getElementById("createFolderModal");
     const input2 = document.getElementById("newFolderName");
     if (modal) modal.style.display = "none";
@@ -3329,21 +3776,20 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
 /* ----------------------
    Move (modal) + Color carry + State migration as well
 ----------------------*/
-export function openMoveFolderUI(sourceFolder) {
+export function openMoveFolderUI(sourceFolder, mode = 'move') {
   detachFolderModalsToBody();
   const modal = document.getElementById('moveFolderModal');
-  const targetSel = document.getElementById('moveFolderTarget');
   if (sourceFolder && sourceFolder !== 'root') window.currentFolder = sourceFolder;
-  if (targetSel) {
-    targetSel.innerHTML = '';
-    fetch('/api/folder/getFolderList.php?counts=0', { credentials: 'include' }).then(r => r.json()).then(list => {
-      if (Array.isArray(list) && list.length && typeof list[0] === 'object' && list[0].folder) list = list.map(it => it.folder);
-      const rootOpt = document.createElement('option'); rootOpt.value = 'root'; rootOpt.textContent = '(Root)'; targetSel.appendChild(rootOpt);
-      (list || []).filter(f => f && f !== 'trash' && f !== (window.currentFolder || '')).forEach(f => {
-        const o = document.createElement('option'); o.value = f; o.textContent = f; targetSel.appendChild(o);
-      });
-    }).catch(() => {});
+  if (modal) {
+    modal.dataset.mode = (mode === 'copy') ? 'copy' : 'move';
+    const titleEl = modal.querySelector('h4');
+    const msgEl = modal.querySelector('p');
+    const confirmBtn = document.getElementById('confirmMoveFolder');
+    if (titleEl) titleEl.textContent = (mode === 'copy') ? t('copy_folder_title') : t('move_folder_title');
+    if (msgEl) msgEl.textContent = (mode === 'copy') ? t('copy_folder_message') : t('move_folder_message');
+    if (confirmBtn) confirmBtn.textContent = (mode === 'copy') ? t('copy') : t('move');
   }
+  initMoveFolderSourceSelect(sourceFolder);
   if (modal) modal.style.display = 'block';
 }
 
@@ -3356,8 +3802,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (moveBtn) moveBtn.addEventListener('click', () => {
     const cf = window.currentFolder || 'root';
-    if (!cf || cf === 'root') { showToast('Select a non-root folder to move.'); return; }
-    openMoveFolderUI(cf);
+    if (!cf || cf === 'root') { showToast('Select a non-root folder to move.', 'warning'); return; }
+    openMoveFolderUI(cf, 'move');
   });
   if (cancelBtn) cancelBtn.addEventListener('click', () => { if (modal) modal.style.display = 'none'; });
 
@@ -3365,70 +3811,135 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!targetSel) return;
     const destination = targetSel.value;
     const source = window.currentFolder;
+    const mode = (modal && modal.dataset && modal.dataset.mode === 'copy') ? 'copy' : 'move';
+    const sourceId = getActiveSourceId();
+    const destSourceId = document.getElementById('moveFolderTargetSource')?.value || sourceId;
 
-    if (!destination) { showToast('Pick a destination'); return; }
-    if (destination === source || (destination + '/').startsWith(source + '/')) {
-      showToast('Invalid destination'); return;
+    if (!destination) { showToast('Pick a destination', 'warning'); return; }
+    const sameSource = sourceId === destSourceId;
+    if (sameSource && (destination === source || (destination + '/').startsWith(source + '/'))) {
+      showToast('Invalid destination', 'warning'); return;
     }
 
     // snapshot expansion before move
     const preState = loadFolderTreeState();
+    const progress = startTransferProgress({
+      action: mode === 'copy' ? 'Copying' : 'Moving',
+      itemCount: 1,
+      itemLabel: 'folder',
+      bytesKnown: false,
+      indeterminate: true,
+      source,
+      destination
+    });
+    let ok = false;
+    let errMsg = '';
 
     try {
       const res = await fetch('/api/folder/moveFolder.php', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken },
-        body: JSON.stringify({ source, destination })
+        body: JSON.stringify({ source, destination, sourceId, destSourceId, mode })
       });
       const data = await safeJson(res);
       if (res.ok && data && !data.error) {
+        ok = true;
         const base = source.split('/').pop();
         const newPath = (destination === 'root' ? '' : destination + '/') + base;
 
-        // carry color
-        await carryFolderColor(source, newPath);
-
-        // migrate expansion
-        migrateExpansionStateOnMove(source, newPath, [destination, getParentFolder(destination)]);
-
-        // refresh parents
-        const srcParent = getParentFolder(source);
-        const dstParent = destination;
-        invalidateFolderCaches(srcParent); invalidateFolderCaches(dstParent);
-        clearPeekCache([srcParent, dstParent, source, newPath]);
-
-        const srcUl = getULForFolder(srcParent); const dstUl = getULForFolder(dstParent);
-        updateToggleForOption(srcParent, !!srcUl && !!srcUl.querySelector(':scope > li.folder-item'));
-        if (srcUl) { srcUl._renderedOnce = false; srcUl.innerHTML = ""; await ensureChildrenLoaded(srcParent, srcUl); }
-        if (dstUl) { dstUl._renderedOnce = false; dstUl.innerHTML = ""; await ensureChildrenLoaded(dstParent, dstUl); }
-        if (srcParent === 'root' || dstParent === 'root') placeRecycleBinNode();
-
-        updateToggleForOption(dstParent, true);
-        ensureFolderIcon(dstParent);
-        const _srcUlLive = getULForFolder(srcParent);
-        updateToggleForOption(srcParent, !!(_srcUlLive && _srcUlLive.querySelector(':scope > li.folder-item')));
-
-        // re-apply expansions
-        await expandAndLoadSavedState();
-
-        // update currentFolder
-        if (window.currentFolder === source) {
-          window.currentFolder = newPath;
-        } else if (window.currentFolder && window.currentFolder.startsWith(source + '/')) {
-          const suffix = window.currentFolder.slice(source.length);
-          window.currentFolder = newPath + suffix;
+        if (mode === 'copy') {
+          if (sameSource) {
+            const dstParent = destination;
+            invalidateFolderCaches(dstParent);
+            clearPeekCache([dstParent, newPath]);
+            const dstUl = getULForFolder(dstParent);
+            if (dstUl) { dstUl._renderedOnce = false; dstUl.innerHTML = ""; await ensureChildrenLoaded(dstParent, dstUl); }
+            updateToggleForOption(dstParent, true);
+            ensureFolderIcon(dstParent);
+            refreshFolderIcon(dstParent);
+            if (dstParent === 'root') placeRecycleBinNode();
+          }
+          if (modal) modal.style.display = 'none';
+          showToast('Folder copied', 'success');
+          selectFolder(window.currentFolder || source);
+          return;
         }
-        localStorage.setItem("lastOpenedFolder", window.currentFolder || newPath);
+
+        if (sameSource) {
+          // carry color
+          await carryFolderColor(source, newPath);
+
+          // migrate expansion
+          migrateExpansionStateOnMove(source, newPath, [destination, getParentFolder(destination)]);
+
+          // refresh parents
+          const srcParent = getParentFolder(source);
+          const dstParent = destination;
+          invalidateFolderCaches(srcParent); invalidateFolderCaches(dstParent);
+          clearPeekCache([srcParent, dstParent, source, newPath]);
+
+          const srcUl = getULForFolder(srcParent); const dstUl = getULForFolder(dstParent);
+          updateToggleForOption(srcParent, !!srcUl && !!srcUl.querySelector(':scope > li.folder-item'));
+          if (srcUl) { srcUl._renderedOnce = false; srcUl.innerHTML = ""; await ensureChildrenLoaded(srcParent, srcUl); }
+          if (dstUl) { dstUl._renderedOnce = false; dstUl.innerHTML = ""; await ensureChildrenLoaded(dstParent, dstUl); }
+          if (srcParent === 'root' || dstParent === 'root') placeRecycleBinNode();
+
+          updateToggleForOption(dstParent, true);
+          ensureFolderIcon(dstParent);
+          const _srcUlLive = getULForFolder(srcParent);
+          updateToggleForOption(srcParent, !!(_srcUlLive && _srcUlLive.querySelector(':scope > li.folder-item')));
+
+          // re-apply expansions
+          await expandAndLoadSavedState();
+
+          // update currentFolder
+          if (window.currentFolder === source) {
+            window.currentFolder = newPath;
+          } else if (window.currentFolder && window.currentFolder.startsWith(source + '/')) {
+            const suffix = window.currentFolder.slice(source.length);
+            window.currentFolder = newPath + suffix;
+          }
+          setLastOpenedFolder(window.currentFolder || newPath);
+
+          if (modal) modal.style.display = 'none';
+          refreshFolderIcon(srcParent); refreshFolderIcon(dstParent);
+          showToast('Folder moved', 'success');
+          selectFolder(window.currentFolder || newPath);
+          return;
+        }
+
+        // cross-source move: remove from current tree, stay on parent
+        const srcParent = getParentFolder(source);
+        invalidateFolderCaches(srcParent);
+        clearPeekCache([srcParent, source]);
+        const srcUl = getULForFolder(srcParent);
+        if (srcUl) { srcUl._renderedOnce = false; srcUl.innerHTML = ""; await ensureChildrenLoaded(srcParent, srcUl); }
+        updateToggleForOption(srcParent, !!(srcUl && srcUl.querySelector(':scope > li.folder-item')));
+        refreshFolderIcon(srcParent);
+        if (srcParent === 'root') placeRecycleBinNode();
+
+        if (window.currentFolder === source || window.currentFolder.startsWith(source + '/')) {
+          window.currentFolder = srcParent;
+          setLastOpenedFolder(srcParent);
+        }
 
         if (modal) modal.style.display = 'none';
-        refreshFolderIcon(srcParent); refreshFolderIcon(dstParent);
-        showToast('Folder moved');
-        selectFolder(window.currentFolder || newPath);
+        showToast('Folder moved', 'success');
+        selectFolder(window.currentFolder || srcParent);
 
       } else {
-        showToast('Error: ' + (data && data.error || 'Move failed'));
+        ok = false;
+        errMsg = data && data.error ? data.error : 'Move failed';
+        showToast('Error: ' + (data && data.error || 'Move failed'), 'error');
       }
-    } catch (e) { console.error(e); showToast('Move failed'); }
+    } catch (e) {
+      ok = false;
+      errMsg = e && e.message ? e.message : 'Move failed';
+      console.error(e);
+      showToast('Move failed', 'error');
+    } finally {
+      finishTransferProgress(progress, { ok, error: errMsg });
+    }
   });
 });
 
@@ -3493,14 +4004,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const renameBtn = document.getElementById("renameFolderBtn");
   if (renameBtn) renameBtn.addEventListener("click", () => {
     const cf = window.currentFolder || "root";
-    if (!cf || cf === "root") { showToast("Please select a valid folder to rename."); return; }
+    if (!cf || cf === "root") { showToast("Please select a valid folder to rename.", 'warning'); return; }
     startInlineRenameInTree(cf);
   });
 
   const deleteBtn = document.getElementById("deleteFolderBtn");
   if (deleteBtn) deleteBtn.addEventListener("click", () => {
     const cf = window.currentFolder || "root";
-    if (!cf || cf === "root") { showToast("Please select a valid folder to delete."); return; }
+    if (!cf || cf === "root") { showToast("Please select a valid folder to delete.", 'warning'); return; }
     openDeleteFolderModal();
   });
 });
@@ -3523,7 +4034,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (shareFolderBtn) {
     shareFolderBtn.addEventListener("click", () => {
       const selectedFolder = window.currentFolder || "root";
-      if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to share."); return; }
+      if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to share.", 'warning'); return; }
       openFolderShareModal(selectedFolder);
     });
   }
@@ -3531,7 +4042,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (colorFolderBtn) {
     colorFolderBtn.addEventListener("click", () => {
       const selectedFolder = window.currentFolder || "root";
-      if (!selectedFolder || selectedFolder === "root") { showToast(t('please_select_valid_folder') || "Please select a valid folder."); return; }
+      if (!selectedFolder || selectedFolder === "root") { showToast(t('please_select_valid_folder') || "Please select a valid folder.", 'warning'); return; }
       openColorFolderModal(selectedFolder);
     });
   }

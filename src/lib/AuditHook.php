@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 final class AuditHook
 {
@@ -15,6 +16,20 @@ final class AuditHook
         if ($action === '') return;
 
         $fields['source'] = self::normalizeSource($fields['source'] ?? self::detectSource());
+        if (class_exists('SourceContext')) {
+            if (!array_key_exists('storageId', $fields)) {
+                $fields['storageId'] = SourceContext::getActiveId();
+            }
+            if (!array_key_exists('storageName', $fields)) {
+                $src = SourceContext::getActiveSource();
+                $name = is_array($src) ? (string)($src['name'] ?? '') : '';
+                if ($name !== '') {
+                    $fields['storageName'] = $name;
+                } elseif (!empty($fields['storageId'])) {
+                    $fields['storageName'] = (string)$fields['storageId'];
+                }
+            }
+        }
         $fields['ip'] = $fields['ip'] ?? self::clientIp();
         $fields['ua'] = $fields['ua'] ?? self::userAgent();
 

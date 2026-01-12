@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class ACL
 {
     private static $cache = null;
     private static $path  = null;
+    private static $metaRoot = null;
     private static $memo  = [];
 
     private const BUCKETS = [
@@ -30,13 +32,31 @@ class ACL
 
     private static function path(): string
     {
-        if (!self::$path) self::$path = rtrim(META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'folder_acl.json';
+        $metaRoot = class_exists('SourceContext') ? SourceContext::metaRoot() : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        if (!self::$path || self::$metaRoot !== $metaRoot) {
+            self::$metaRoot = $metaRoot;
+            self::$path = self::pathForMetaRoot($metaRoot);
+            self::$cache = null;
+            self::resetMemo();
+        }
         return self::$path;
+    }
+
+    private static function pathForMetaRoot(string $metaRoot): string
+    {
+        return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'folder_acl.json';
     }
 
     private static function resetMemo(): void
     {
         self::$memo = [];
+    }
+
+    private static function memoScope(): string
+    {
+        // Keep memo/cache aligned with the active source context.
+        $path = self::path();
+        return $path !== '' ? $path : (self::$metaRoot ?? '');
     }
 
     public static function normalizeFolder(string $f): string
@@ -49,7 +69,62 @@ class ACL
     public static function purgeUser(string $user): bool
     {
         $user = (string)$user;
-        $acl  = self::$cache ?? self::loadFresh();
+
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled() && class_exists('ProSources')) {
+            $cfg = ProSources::getConfig();
+            $sources = isset($cfg['sources']) && is_array($cfg['sources']) ? $cfg['sources'] : [];
+            $changedAny = false;
+            foreach ($sources as $src) {
+                $id = (string)($src['id'] ?? '');
+                $metaRoot = SourceContext::metaRootForId($id);
+                $path = self::pathForMetaRoot($metaRoot);
+                if (self::purgeUserAtPath($user, $path)) {
+                    $changedAny = true;
+                }
+            }
+            self::$cache = null;
+            self::$path = null;
+            self::resetMemo();
+            return $changedAny;
+        }
+
+        return self::purgeUserAtPath($user, self::path());
+    }
+
+    private static function purgeUserAtPath(string $user, string $path): bool
+    {
+        $user = (string)$user;
+        $acl = null;
+        if (is_file($path)) {
+            $acl = json_decode((string)@file_get_contents($path), true);
+        }
+        if (!is_array($acl)) {
+            @mkdir(dirname($path), 0755, true);
+            $acl = [
+                'folders' => [
+                    'root' => [
+                        'owners'  => ['admin'],
+                        'read'    => ['admin'],
+                        'write'   => ['admin'],
+                        'share'   => ['admin'],
+                        'read_own' => [],
+                        'inherit' => [],
+                        'explicit' => [],
+                        'create'       => [],
+                        'upload'       => [],
+                        'edit'         => [],
+                        'rename'       => [],
+                        'copy'         => [],
+                        'move'         => [],
+                        'delete'       => [],
+                        'extract'      => [],
+                        'share_file'   => [],
+                        'share_folder' => [],
+                    ],
+                ],
+                'groups' => [],
+            ];
+        }
         $changed = false;
         foreach ($acl['folders'] as $folder => &$rec) {
             foreach (self::BUCKETS as $k) {
@@ -68,7 +143,21 @@ class ACL
             }
         }
         unset($rec);
-        return $changed ? self::save($acl) : true;
+
+        if ($changed) {
+            @file_put_contents($path, json_encode($acl, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+            @chmod($path, 0664);
+        }
+        return $changed;
+    }
+
+    public static function userHasAnyAccess(string $user, array $perms, string $folder = 'root'): bool
+    {
+        if (self::isAdmin($perms)) return true;
+        if (self::canReadOwn($user, $perms, $folder)) return true;
+        if (self::normalizeFolder($folder) !== 'root') return false;
+        // Fall back to any explicit grants within this source when root isn't readable.
+        return self::userHasAnyExplicitAccess($user);
     }
     public static function ownsFolderOrAncestor(string $user, array $perms, string $folder): bool
     {
@@ -614,6 +703,69 @@ class ACL
         return false;
     }
 
+    private static function userHasAnyExplicitAccess(string $user): bool
+    {
+        $user = (string)$user;
+        if ($user === '') return false;
+
+        $memoKey = self::memoScope() . '|__any__|' . strtolower($user);
+        if (array_key_exists($memoKey, self::$memo)) {
+            return self::$memo[$memoKey];
+        }
+
+        $acl = self::$cache ?? self::loadFresh();
+        $folders = $acl['folders'] ?? [];
+        if (is_array($folders)) {
+            foreach ($folders as $folder => $rec) {
+                if (!is_array($rec)) continue;
+                if (self::hasAnyExplicitEntry($user, (string)$folder)) {
+                    return self::$memo[$memoKey] = true;
+                }
+            }
+        }
+
+        if (self::userHasAnyGroupGrant($user)) {
+            return self::$memo[$memoKey] = true;
+        }
+
+        return self::$memo[$memoKey] = false;
+    }
+
+    private static function userHasAnyGroupGrant(string $user): bool
+    {
+        if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) return false;
+        $user = (string)$user;
+        if ($user === '') return false;
+
+        $groups = self::loadGroupData();
+        if (!$groups) return false;
+
+        foreach ($groups as $g) {
+            if (!is_array($g)) continue;
+            $members = $g['members'] ?? [];
+            $isMember = false;
+            if (is_array($members)) {
+                foreach ($members as $m) {
+                    if (strcasecmp((string)$m, $user) === 0) {
+                        $isMember = true;
+                        break;
+                    }
+                }
+            }
+            if (!$isMember) continue;
+
+            $grantsMap = isset($g['grants']) && is_array($g['grants']) ? $g['grants'] : [];
+            foreach ($grantsMap as $folder => $grants) {
+                if (!is_array($grants)) continue;
+                if (self::groupGrantsExplicit($grants)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public static function ensureFolderRecord(string $folder, string $owner = 'admin'): void
     {
         $folder = self::normalizeFolder($folder);
@@ -662,7 +814,7 @@ class ACL
         $folder = self::normalizeFolder($folder);
         $capKey = ($cap === 'owner') ? 'owners' : $cap;
 
-        $memoKey = strtolower((string)$user) . '|' . $folder . '|' . $capKey;
+        $memoKey = self::memoScope() . '|' . strtolower((string)$user) . '|' . $folder . '|' . $capKey;
         if (array_key_exists($memoKey, self::$memo)) {
             return self::$memo[$memoKey];
         }

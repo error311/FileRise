@@ -16,6 +16,7 @@ final class PortalController
      *   'label'              => string,
      *   'folder'             => string,
      *   'clientEmail'        => string,
+     *   'sourceId'           => string,
      *   'uploadOnly'         => bool,   // stored flag (legacy name)
      *   'allowDownload'      => bool,   // stored flag
      *   'expiresAt'          => string,
@@ -68,6 +69,32 @@ final class PortalController
         }
 
         $p = $portals[$slug];
+
+        $sourceId = trim((string)($p['sourceId'] ?? ''));
+        $sourcesEnabled = class_exists('SourceContext') && SourceContext::sourcesEnabled();
+        if ($sourcesEnabled) {
+            if ($sourceId === '') {
+                // Legacy portals default to Local when sources are enabled.
+                $sourceId = 'local';
+            } elseif (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+                throw new RuntimeException('Portal misconfigured: invalid source id.');
+            } else {
+                $src = SourceContext::getSourceById($sourceId);
+                if (!$src) {
+                    throw new RuntimeException('Portal misconfigured: invalid source.');
+                }
+                $permsCheck = [
+                    'role'    => $_SESSION['role']    ?? null,
+                    'admin'   => $_SESSION['admin']   ?? null,
+                    'isAdmin' => $_SESSION['isAdmin'] ?? null,
+                ];
+                if (empty($src['enabled']) && !ACL::isAdmin($permsCheck)) {
+                    throw new RuntimeException('Source is disabled.');
+                }
+            }
+        } else {
+            $sourceId = '';
+        }
 
         // ─────────────────────────────────────────────
         // Normalize upload/download flags (old + new)
@@ -200,20 +227,37 @@ final class PortalController
             'isAdmin' => $_SESSION['isAdmin'] ?? null,
         ];
 
-        if ($user !== '') {
-            // Upload: must also pass folder-level ACL
-            if ($canUpload && !ACL::canUpload($user, $perms, $folder)) {
-                $canUpload = false;
+        $withSourceContext = function (callable $fn) use ($sourceId, $perms) {
+            if ($sourceId === '' || !class_exists('SourceContext') || !SourceContext::sourcesEnabled()) {
+                return $fn();
             }
+            $prev = SourceContext::getActiveId();
+            $allowDisabled = ACL::isAdmin($perms);
+            SourceContext::setActiveId($sourceId, false, $allowDisabled);
+            try {
+                return $fn();
+            } finally {
+                SourceContext::setActiveId($prev, false);
+            }
+        };
 
-            // Download: require read or read_own
-            if (
-                $canDownload
-                && !ACL::canRead($user, $perms, $folder)
-                && !ACL::canReadOwn($user, $perms, $folder)
-            ) {
-                $canDownload = false;
-            }
+        if ($user !== '') {
+            [$canUpload, $canDownload] = $withSourceContext(function () use ($user, $perms, $folder, $canUpload, $canDownload) {
+                // Upload: must also pass folder-level ACL
+                if ($canUpload && !ACL::canUpload($user, $perms, $folder)) {
+                    $canUpload = false;
+                }
+
+                // Download: require read or read_own
+                if (
+                    $canDownload
+                    && !ACL::canRead($user, $perms, $folder)
+                    && !ACL::canReadOwn($user, $perms, $folder)
+                ) {
+                    $canDownload = false;
+                }
+                return [$canUpload, $canDownload];
+            });
         }
 
         return [
@@ -221,6 +265,7 @@ final class PortalController
             'label'              => $label,
             'folder'             => $folder,
             'clientEmail'        => $clientEmail,
+            'sourceId'           => $sourceId,
             // Store flags as-is so old code / JSON stay compatible
             'uploadOnly'         => (bool)$rawUploadOnly,
             'allowDownload'      => $hasAllowDownload

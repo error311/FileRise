@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once __DIR__ . '/../../src/lib/ACL.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class FolderMeta
 {
     private static function path(): string {
-        return rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'folder_colors.json';
+        $base = class_exists('SourceContext')
+            ? rtrim(SourceContext::metaRoot(), '/\\')
+            : rtrim((string)META_DIR, '/\\');
+        return $base . DIRECTORY_SEPARATOR . 'folder_colors.json';
     }
 
     public static function normalizeFolder(string $folder): string {

@@ -10,6 +10,7 @@ declare(strict_types=1);
  *   tags={"Folders"},
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="folder", in="query", required=false, @OA\Schema(type="string"), example="root"),
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string"), example="local"),
  *   @OA\Parameter(name="deep", in="query", required=false, @OA\Schema(type="integer"), example=1, description="When 1, return recursive totals."),
  *   @OA\Parameter(name="depth", in="query", required=false, @OA\Schema(type="integer"), example=2, description="Max recursive depth when deep=1 (0 = unlimited)."),
  *   @OA\Response(response=200, description="Stats payload"),
@@ -35,6 +36,28 @@ $perms = [
   'readOnly'    => $_SESSION['readOnly']    ?? null,
 ];
 @session_write_close();
+
+$sourceId = trim((string)($_GET['sourceId'] ?? ''));
+if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+  if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid source id.']);
+    exit;
+  }
+  $info = SourceContext::getSourceById($sourceId);
+  if (!$info) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid source.']);
+    exit;
+  }
+  $allowDisabled = !empty($perms['admin']) || !empty($perms['isAdmin']) || ($perms['role'] ?? '') === 'admin' || ($perms['role'] ?? '') === '1';
+  if (!$allowDisabled && empty($info['enabled'])) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Source is disabled.']);
+    exit;
+  }
+  SourceContext::setActiveId($sourceId, false, $allowDisabled);
+}
 
 $folder = isset($_GET['folder']) ? (string)$_GET['folder'] : 'root';
 $folder = str_replace('\\', '/', trim($folder));

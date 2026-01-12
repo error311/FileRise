@@ -17,6 +17,7 @@
  *           type="object",
  *           required={"user","grants"},
  *           @OA\Property(property="user", type="string", example="johndoe"),
+ *           @OA\Property(property="sourceId", type="string", example="local"),
  *           @OA\Property(
  *             property="grants",
  *             type="object",
@@ -26,6 +27,7 @@
  *         @OA\Schema(
  *           type="object",
  *           required={"changes"},
+ *           @OA\Property(property="sourceId", type="string", example="local"),
  *           @OA\Property(
  *             property="changes",
  *             type="array",
@@ -72,6 +74,25 @@ if (empty($_SESSION['csrf_token']) || $csrf !== $_SESSION['csrf_token']) {
 
 $raw = file_get_contents('php://input');
 $in  = json_decode((string)$raw, true);
+
+$sourceId = '';
+if (is_array($in) && isset($in['sourceId'])) {
+  $sourceId = trim((string)$in['sourceId']);
+}
+if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+  if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid source id.']);
+    exit;
+  }
+  $info = SourceContext::getSourceById($sourceId);
+  if (!$info) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid source.']);
+    exit;
+  }
+  SourceContext::setActiveId($sourceId, false, true);
+}
 
 try {
   $ctrl = new AclAdminController();

@@ -128,7 +128,7 @@ function showToast(msgKeyOrText, type) {
     }
   } catch (e) { }
 
-  return originalShowToast(msg);
+  return originalShowToast(msg, type);
 }
 
 window.showToast = showToast;
@@ -478,8 +478,12 @@ function checkAuthentication(showLoginToast = true) {
         const overlay = document.getElementById('loadingOverlay');
         if (overlay) overlay.remove();
 
-        // show the wrapper (so the login form can be visible)
-        document.querySelector('.main-wrapper').style.display = '';
+        // keep app shell hidden during setup
+        const wrap = document.querySelector('.main-wrapper');
+        if (wrap) {
+          wrap.setAttribute('hidden', '');
+          wrap.style.display = 'none';
+        }
         document.getElementById('loginForm').style.display = 'none';
         window.setupMode = true;
         if (showLoginToast) showToast("Setup mode: No users found. Please add an admin user.");

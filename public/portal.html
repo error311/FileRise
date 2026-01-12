@@ -140,11 +140,19 @@
       position: fixed;
       right: 16px;
       bottom: 16px;
-      background: rgba(0, 0, 0, 0.85);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
+      background: #ffffff;
+      color: #0f172a;
+      padding: 10px 12px 10px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.12);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.18);
       font-size: 0.9rem;
+      line-height: 1.4;
+      max-width: min(360px, calc(100vw - 32px));
+      max-height: min(40vh, 260px);
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      white-space: pre-line;
       opacity: 0;
       transform: translateY(8px);
       pointer-events: none;
@@ -152,9 +160,31 @@
       z-index: 4000;
       display: none;
     }
+    #customToast::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--toast-accent, #0b5ed7);
+      border-radius: 12px 0 0 12px;
+    }
+    #customToast[data-tone="success"] { --toast-accent: #16a34a; }
+    #customToast[data-tone="warning"] { --toast-accent: #f59e0b; }
+    #customToast[data-tone="error"] { --toast-accent: #dc2626; }
+    #customToast[data-tone="info"] { --toast-accent: #0b5ed7; }
     #customToast.show {
       opacity: 1;
       transform: translateY(0);
+    }
+    @media (prefers-color-scheme: dark) {
+      #customToast {
+        background: rgba(17,24,39,0.96);
+        color: #f8fafc;
+        border: 1px solid rgba(255,255,255,0.14);
+        box-shadow: 0 16px 32px rgba(0,0,0,0.45);
+      }
     }
   
     /* (Optional) keep old row style around if anything else uses it */
@@ -275,11 +305,19 @@
       position: fixed;
       right: 16px;
       bottom: 16px;
-      background: rgba(0, 0, 0, 0.85);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
+      background: #ffffff;
+      color: #0f172a;
+      padding: 10px 12px 10px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.12);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.18);
       font-size: 0.9rem;
+      line-height: 1.4;
+      max-width: min(360px, calc(100vw - 32px));
+      max-height: min(40vh, 260px);
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      white-space: pre-line;
       opacity: 0;
       transform: translateY(8px);
       pointer-events: none;
@@ -287,9 +325,31 @@
       z-index: 4000;
       display: none;
     }
+    #customToast::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--toast-accent, #0b5ed7);
+      border-radius: 12px 0 0 12px;
+    }
+    #customToast[data-tone="success"] { --toast-accent: #16a34a; }
+    #customToast[data-tone="warning"] { --toast-accent: #f59e0b; }
+    #customToast[data-tone="error"] { --toast-accent: #dc2626; }
+    #customToast[data-tone="info"] { --toast-accent: #0b5ed7; }
     #customToast.show {
       opacity: 1;
       transform: translateY(0);
+    }
+    @media (prefers-color-scheme: dark) {
+      #customToast {
+        background: rgba(17,24,39,0.96);
+        color: #f8fafc;
+        border: 1px solid rgba(255,255,255,0.14);
+        box-shadow: 0 16px 32px rgba(0,0,0,0.45);
+      }
     }
   </style>
 </head>

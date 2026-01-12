@@ -13,6 +13,7 @@ declare(strict_types=1);
  *   @OA\Parameter(name="user", in="query", required=false, @OA\Schema(type="string")),
  *   @OA\Parameter(name="action", in="query", required=false, @OA\Schema(type="string")),
  *   @OA\Parameter(name="source", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="storage", in="query", required=false, @OA\Schema(type="string")),
  *   @OA\Parameter(name="from", in="query", required=false, @OA\Schema(type="string"), description="ISO timestamp or epoch"),
  *   @OA\Parameter(name="to", in="query", required=false, @OA\Schema(type="string")),
  *   @OA\Parameter(name="limit", in="query", required=false, @OA\Schema(type="integer", minimum=1, maximum=500), example=200),
@@ -47,7 +48,7 @@ $perms = [
 ];
 @session_write_close();
 
-if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProAudit')) {
+if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProAudit') || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_AUDIT)) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'pro_required']);
     exit;
@@ -94,6 +95,7 @@ $filters = [
     'user'   => isset($_GET['user']) ? (string)$_GET['user'] : '',
     'action' => isset($_GET['action']) ? (string)$_GET['action'] : '',
     'source' => isset($_GET['source']) ? (string)$_GET['source'] : '',
+    'storage'=> isset($_GET['storage']) ? (string)$_GET['storage'] : '',
     'folder' => $folder,
     'from'   => isset($_GET['from']) ? (string)$_GET['from'] : '',
     'to'     => isset($_GET['to']) ? (string)$_GET['to'] : '',

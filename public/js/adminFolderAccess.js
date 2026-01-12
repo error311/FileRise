@@ -11,6 +11,81 @@ const tf = (key, fallback) => {
 function qs(scope, sel) { return (scope || document).querySelector(sel); }
 function qsa(scope, sel) { return Array.from((scope || document).querySelectorAll(sel)); }
 
+let __aclSourcesCache = null;
+let __aclSourceId = '';
+
+function getFolderAccessSourceId() {
+  const sel = document.getElementById('folderAccessSourceSelect');
+  const id = sel && sel.value ? String(sel.value) : '';
+  return id || __aclSourceId || '';
+}
+
+async function loadFolderAccessSources() {
+  if (__aclSourcesCache) return __aclSourcesCache;
+  if (typeof window !== 'undefined' && window.__FR_IS_PRO === false) {
+    return null;
+  }
+  try {
+    const res = await fetch('/api/pro/sources/list.php', { credentials: 'include' });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data || data.ok !== true || !data.enabled) return null;
+    __aclSourcesCache = data;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+function populateFolderAccessSourceSelect(selectEl, sources, activeId) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  sources.forEach(src => {
+    if (!src || typeof src !== 'object') return;
+    const id = String(src.id || '');
+    if (!id) return;
+    const name = String(src.name || id);
+    const type = String(src.type || '');
+    const disabled = src.enabled === false;
+    const ro = src.readOnly ? ` (${tf('read_only', 'Read-only')})` : '';
+    const dis = disabled ? ' (disabled)' : '';
+    const label = type ? `${name} (${type})${ro}${dis}` : `${name}${ro}${dis}`;
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = label;
+    selectEl.appendChild(opt);
+  });
+  if (!selectEl.options.length) return;
+  const hasActive = Array.from(selectEl.options).some(opt => opt.value === activeId);
+  selectEl.value = hasActive ? activeId : selectEl.options[0].value;
+}
+
+async function initFolderAccessSourceSelector() {
+  const row = document.getElementById('folderAccessSourceRow');
+  const selectEl = document.getElementById('folderAccessSourceSelect');
+  if (!row || !selectEl) return;
+
+  const data = await loadFolderAccessSources();
+  if (!data || !Array.isArray(data.sources) || data.sources.length <= 1) {
+    row.style.display = 'none';
+    __aclSourceId = (data && data.activeId) ? String(data.activeId) : '';
+    return;
+  }
+
+  row.style.display = '';
+  populateFolderAccessSourceSelect(selectEl, data.sources, data.activeId || '');
+  __aclSourceId = selectEl.value || '';
+
+  if (!selectEl.__wired) {
+    selectEl.__wired = true;
+    selectEl.addEventListener('change', () => {
+      __aclSourceId = selectEl.value || '';
+      __allFoldersCache = new Map();
+      loadUserPermissionsList();
+    });
+  }
+}
+
 function escapeFolderSelectorValue(folder) {
   const value = String(folder ?? '');
   if (window.CSS && typeof CSS.escape === 'function') {
@@ -112,12 +187,15 @@ function buildFullGrantsForAllFolders(folders) {
   return folders.reduce((acc, f) => { acc[f] = { ...allTrue }; return acc; }, {});
 }
 
-let __allFoldersCache = null;
+let __allFoldersCache = new Map();
 
-async function getAllFolders(force = false) {
-  if (!force && __allFoldersCache) return __allFoldersCache.slice();
+async function getAllFolders(force = false, sourceId = "") {
+  const key = sourceId || getFolderAccessSourceId() || '';
+  if (!force && __allFoldersCache.has(key)) return __allFoldersCache.get(key).slice();
 
-  const res = await fetch('/api/folder/getFolderList.php?counts=0&ts=' + Date.now(), {
+  const url = '/api/folder/getFolderList.php?counts=0&ts=' + Date.now()
+    + (key ? `&sourceId=${encodeURIComponent(key)}` : '');
+  const res = await fetch(url, {
     credentials: 'include',
     cache: 'no-store',
     headers: { 'Cache-Control': 'no-store' }
@@ -132,12 +210,15 @@ async function getAllFolders(force = false) {
     .filter(f => f && !hidden.has(f.toLowerCase()))
     .sort((a, b) => (a === 'root' ? -1 : b === 'root' ? 1 : a.localeCompare(b)));
 
-  __allFoldersCache = cleaned;
+  __allFoldersCache.set(key, cleaned);
   return cleaned.slice();
 }
 
-async function getUserGrants(username) {
-  const res = await fetch(`/api/admin/acl/getGrants.php?user=${encodeURIComponent(username)}`, {
+async function getUserGrants(username, sourceId = "") {
+  const key = sourceId || getFolderAccessSourceId() || '';
+  const url = `/api/admin/acl/getGrants.php?user=${encodeURIComponent(username)}`
+    + (key ? `&sourceId=${encodeURIComponent(key)}` : '');
+  const res = await fetch(url, {
     credentials: 'include'
   });
   const data = await safeJson(res).catch(() => ({}));
@@ -939,6 +1020,10 @@ export function openUserPermissionsModal(initialUser = null) {
       <div class="modal-content" style="${modalContentStyles}">
         <span id="closeUserPermissionsModal" class="editor-close-btn">&times;</span>
         <h3>${tf("folder_access", "Folder Access")}</h3>
+        <div class="modal-source-row" id="folderAccessSourceRow" style="display:none;">
+          <label for="folderAccessSourceSelect">${tf("storage_source", "Source")}</label>
+          <select id="folderAccessSourceSelect" class="form-control form-control-sm"></select>
+        </div>
         <div class="muted" style="margin:-4px 0 10px;">
           <span class="grant-help-short">${tf("grant_folders_help_short", "Per-folder access. Create is file-only; subfolders need Manage/Ownership. Share Folder needs Manage + View (all).")}</span>
           <button type="button" class="btn btn-link btn-sm p-0 grant-help-toggle" aria-expanded="false" style="margin-left:6px;">
@@ -977,8 +1062,9 @@ export function openUserPermissionsModal(initialUser = null) {
       });
       try {
         if (changes.length === 0) { showToast(tf("nothing_to_save", "Nothing to save")); return; }
+        const sourceId = getFolderAccessSourceId();
         await sendRequest("/api/admin/acl/saveGrants.php", "POST",
-          { changes },
+          { changes, sourceId },
           { "X-CSRF-Token": window.csrfToken || "" }
         );
         showToast(tf("user_permissions_updated_successfully", "User permissions updated successfully"));
@@ -1005,7 +1091,9 @@ export function openUserPermissionsModal(initialUser = null) {
     userPermissionsModal.style.display = "flex";
   }
 
-  loadUserPermissionsList();
+  initFolderAccessSourceSelector().finally(() => {
+    loadUserPermissionsList();
+  });
 }
 
 export async function openUserGroupsModal() {
@@ -1081,6 +1169,7 @@ async function loadUserPermissionsList() {
   const listContainer = document.getElementById("userPermissionsList");
   if (!listContainer) return;
   listContainer.innerHTML = `<p>${t("loading")}…</p>`;
+  const sourceId = getFolderAccessSourceId();
 
   try {
     const [usersRes, groupsMap] = await Promise.all([
@@ -1098,7 +1187,7 @@ async function loadUserPermissionsList() {
 
     __groupsCache = groups || {};
 
-    const folders = await getAllFolders(true);
+    const folders = await getAllFolders(true, sourceId);
     const orderedFolders = ["root", ...folders.filter(f => f !== "root")];
 
     const userGroupMap = {};
@@ -1258,7 +1347,7 @@ async function loadUserPermissionsList() {
       async function ensureLoaded() {
         if (grantsBox.dataset.loaded === "1") return;
         try {
-          const baseGrants = await getUserGrants(username);
+          const baseGrants = await getUserGrants(username, sourceId);
           const grants = isAdmin
             ? { __isAdmin: true, ...buildFullGrantsForAllFolders(orderedFolders), ...(baseGrants || {}) }
             : baseGrants;
@@ -1670,7 +1759,8 @@ async function openGroupAclEditor(groupName) {
   modal.dataset.groupName = groupName;
   modal.style.display = 'flex';
 
-  const folders = await getAllFolders(true);
+  const sourceId = getFolderAccessSourceId();
+  const folders = await getAllFolders(true, sourceId);
   const grants = (__groupsCache[groupName] && __groupsCache[groupName].grants) || {};
 
   if (body) {
@@ -1695,7 +1785,7 @@ function saveGroupAclFromUI() {
   const box = body.querySelector('.folder-grants-box');
   if (!box) return;
 
-  const grants = collectGrantsFrom(box);
+  const grants = collectGrantsFrom(box, box.__grantsFallback || {});
   if (!__groupsCache[groupName]) {
     __groupsCache[groupName] = { name: groupName, label: groupName, members: [], grants: {} };
   }

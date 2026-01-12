@@ -3,8 +3,8 @@
 /**
  * @OA\Post(
  *   path="/api/folder/moveFolder.php",
- *   summary="Move a folder",
- *   description="Moves a folder into a destination folder.",
+ *   summary="Move or copy a folder",
+ *   description="Moves (default) or copies a folder into a destination folder.",
  *   operationId="moveFolder",
  *   tags={"Folders"},
  *   security={{"cookieAuth": {}}},
@@ -14,7 +14,10 @@
  *     @OA\JsonContent(
  *       required={"source","destination"},
  *       @OA\Property(property="source", type="string", example="team/q1"),
- *       @OA\Property(property="destination", type="string", example="archive")
+ *       @OA\Property(property="destination", type="string", example="archive"),
+ *       @OA\Property(property="mode", type="string", example="move"),
+ *       @OA\Property(property="sourceId", type="string", example="local"),
+ *       @OA\Property(property="destSourceId", type="string", example="s3-main")
  *     )
  *   ),
  *   @OA\Response(response=200, description="Move result (model-defined JSON)"),

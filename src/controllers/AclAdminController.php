@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/FolderModel.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class AclAdminController
 {
@@ -27,7 +28,10 @@ class AclAdminController
         }
 
         if (empty($folders)) {
-            $aclPath = rtrim(META_DIR, "/\\") . DIRECTORY_SEPARATOR . 'folder_acl.json';
+            $metaRoot = class_exists('SourceContext')
+                ? SourceContext::metaRoot()
+                : rtrim((string)META_DIR, "/\\") . DIRECTORY_SEPARATOR;
+            $aclPath = rtrim($metaRoot, "/\\") . DIRECTORY_SEPARATOR . 'folder_acl.json';
             if (is_file($aclPath)) {
                 $data = json_decode((string)@file_get_contents($aclPath), true);
                 if (is_array($data['folders'] ?? null)) {

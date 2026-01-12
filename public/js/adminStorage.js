@@ -58,6 +58,151 @@ function getDefaultScanHint(isPro) {
       );
 }
 
+function isCurrentSourceLocal() {
+  if (!sourcesEnabled) return true;
+  const t = String(currentSourceType || '').toLowerCase();
+  return t === '' || t === 'local';
+}
+
+function getStoredSourceId() {
+  try {
+    return localStorage.getItem('fr_active_source') || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function pickActiveSourceId(sources, activeId) {
+  const active = String(activeId || '').trim();
+  if (active) return active;
+  const stored = getStoredSourceId();
+  if (stored) return stored;
+  return sources[0]?.id || sources[0]?.key || sources[0]?.name || '';
+}
+
+function setCurrentSourceFromId(id) {
+  currentSourceId = String(id || '').trim();
+  currentSourceName = '';
+  currentSourceType = '';
+  if (!currentSourceId) return;
+  const match = sourcesList.find(src => String(src.id || '') === currentSourceId);
+  if (match && typeof match === 'object') {
+    currentSourceName = String(match.name || currentSourceId);
+    currentSourceType = String(match.type || '');
+  } else {
+    currentSourceName = currentSourceId;
+  }
+}
+
+function buildSourceLabel(src) {
+  if (!src || typeof src !== 'object') return '';
+  const id = String(src.id || src.key || src.name || '').trim();
+  if (!id) return '';
+  const name = String(src.name || id);
+  const type = String(src.type || '');
+  const ro = src.readOnly ? ` [${tf('read_only', 'Read only')}]` : '';
+  return type ? `${name} (${type})${ro}` : `${name}${ro}`;
+}
+
+function syncSourceControls() {
+  const isLocal = isCurrentSourceLocal();
+  const rescanBtn = document.getElementById('adminStorageRescan');
+  const deleteBtn = document.getElementById('adminStorageDeleteSnapshot');
+  const hintEl = document.getElementById('adminStorageScanHint');
+  if (rescanBtn) rescanBtn.disabled = !isLocal;
+  if (deleteBtn) deleteBtn.disabled = !isLocal;
+  if (hintEl) {
+    hintEl.textContent = isLocal
+      ? (defaultScanHint || getDefaultScanHint(isProGlobal))
+      : tf('storage_source_unsupported_hint', 'Disk usage scans are only available for local sources.');
+  }
+}
+
+async function initStorageSources() {
+  if (sourcesInitPromise) return sourcesInitPromise;
+  sourcesInitPromise = (async () => {
+    sourcesEnabled = false;
+    sourcesList = [];
+    setCurrentSourceFromId('');
+
+    if (!isProGlobal) {
+      syncSourceControls();
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/pro/sources/visible.php', {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await res.json().catch(() => null);
+      if (data && data.ok && data.enabled && Array.isArray(data.sources) && data.sources.length) {
+        sourcesEnabled = true;
+        sourcesList = data.sources;
+        const nextId = pickActiveSourceId(sourcesList, data.activeId || '');
+        setCurrentSourceFromId(nextId);
+      }
+    } catch (e) {
+      sourcesEnabled = false;
+      sourcesList = [];
+      setCurrentSourceFromId('');
+    }
+
+    renderSourceSelector();
+    syncSourceControls();
+  })();
+  return sourcesInitPromise;
+}
+
+function renderSourceSelector() {
+  const wrap = document.getElementById('adminStorageSourceWrap');
+  const select = document.getElementById('adminStorageSourceSelect');
+  if (!wrap || !select) return;
+
+  if (!sourcesEnabled || sourcesList.length <= 1) {
+    wrap.style.display = 'none';
+    select.innerHTML = '';
+    return;
+  }
+
+  select.innerHTML = '';
+  sourcesList.forEach(src => {
+    const id = String(src.id || src.key || src.name || '').trim();
+    if (!id) return;
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = buildSourceLabel(src) || id;
+    select.appendChild(opt);
+  });
+
+  if (select.options.length) {
+    select.value = currentSourceId || select.options[0].value;
+    setCurrentSourceFromId(select.value);
+  }
+
+  wrap.style.display = '';
+
+  if (!select.dataset.wired) {
+    select.dataset.wired = '1';
+    select.addEventListener('change', async () => {
+      const nextId = select.value || '';
+      if (!nextId || nextId === currentSourceId) return;
+      setCurrentSourceFromId(nextId);
+      try { localStorage.setItem('fr_active_source', nextId); } catch (e) { /* ignore */ }
+      syncSourceControls();
+      currentFolderKey = 'root';
+      await refreshStorageSummary();
+      if (isProGlobal) {
+        if (currentExplorerTab === 'folders') {
+          loadFolderChildren('root');
+        } else {
+          loadTopFiles();
+        }
+      }
+    });
+  }
+}
+
 let confirmModalEl = null;
 let showAllTopFolders = false;
 
@@ -153,6 +298,12 @@ let currentFolderKey = 'root';
 let currentExplorerTab = 'folders'; // "folders" | "topFiles"
 let folderMinSizeBytes = 0;
 let topFilesMinSizeBytes = 0;
+let sourcesEnabled = false;
+let currentSourceId = '';
+let currentSourceName = '';
+let currentSourceType = '';
+let sourcesList = [];
+let sourcesInitPromise = null;
 
 // ---------- Scan status ----------
 
@@ -261,6 +412,10 @@ function renderBaseLayout(container, { isPro }) {
             </small>
           </div>
           <div class="text-end">
+            <div id="adminStorageSourceWrap" class="mb-1" style="display:none; min-width:220px;">
+              <label class="form-label form-label-sm mb-0">${tf('storage_source_label', 'Source')}</label>
+              <select id="adminStorageSourceSelect" class="form-select form-select-sm"></select>
+            </div>
             <div class="btn-group" role="group">
               <button
                 type="button"
@@ -366,12 +521,20 @@ function renderBaseLayout(container, { isPro }) {
 
 // ---------- Summary / volumes ----------
 
+function getSourceQueryParam() {
+  return currentSourceId ? `&sourceId=${encodeURIComponent(currentSourceId)}` : '';
+}
+
+function getSourcePayload() {
+  return currentSourceId ? { sourceId: currentSourceId } : null;
+}
+
 /**
  * Fetch summary JSON only (no UI changes) – used for polling after rescan.
  */
 async function fetchSummaryRaw() {
   try {
-    const res = await fetch('/api/admin/diskUsageSummary.php?topFolders=20&topFiles=0', {
+    const res = await fetch(`/api/admin/diskUsageSummary.php?topFolders=20&topFiles=0${getSourceQueryParam()}`, {
       credentials: 'include',
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-store' }
@@ -388,6 +551,19 @@ async function refreshStorageSummary() {
   const summaryEl = document.getElementById('adminStorageSummary');
   if (!summaryEl) return;
 
+  if (!isCurrentSourceLocal()) {
+    const label = currentSourceName
+      ? `${currentSourceName}${currentSourceType ? ` (${currentSourceType})` : ''}`
+      : (currentSourceId || tf('storage_selected_source', 'selected source'));
+    summaryEl.innerHTML = `
+      <div class="alert alert-warning mb-2" style="border-radius: var(--menu-radius);">
+        ${tf('storage_source_unsupported', 'Storage explorer is only available for local sources.')}
+        ${label ? `<div class="small mt-1">${tf('storage_selected_source', 'Selected source')}: ${escapeHtml(label)}</div>` : ''}
+      </div>
+    `;
+    return;
+  }
+
   summaryEl.innerHTML = `<div class="text-muted">${tf('loading', 'Loading...')}</div>`;
 
   const data = await fetchSummaryRaw();
@@ -400,6 +576,22 @@ async function refreshStorageSummary() {
   }
 
   if (!data || !data.ok) {
+    if (data && data.error === 'unsupported_source') {
+      summaryEl.innerHTML = `
+        <div class="alert alert-warning mb-2" style="border-radius: var(--menu-radius);">
+          ${tf('storage_source_unsupported', 'Storage explorer is only available for local sources.')}
+        </div>
+      `;
+      return;
+    }
+    if (data && data.error === 'invalid_source') {
+      summaryEl.innerHTML = `
+        <div class="alert alert-danger mb-2" style="border-radius: var(--menu-radius);">
+          ${tf('storage_source_invalid', 'Invalid source selected for disk usage.')}
+        </div>
+      `;
+      return;
+    }
     const reason = data && data.message
       ? String(data.message)
       : data && data.error
@@ -414,7 +606,9 @@ async function refreshStorageSummary() {
       : '';
 
     if (data && data.error === 'no_snapshot') {
-      const cmd = 'php src/cli/disk_usage_scan.php';
+      const cmd = currentSourceId
+        ? `php src/cli/disk_usage_scan.php ${currentSourceId}`
+        : 'php src/cli/disk_usage_scan.php';
       summaryEl.innerHTML = `
         <div class="alert alert-warning mb-2" style="border-radius: var(--menu-radius);">
           ${tf(
@@ -424,7 +618,7 @@ async function refreshStorageSummary() {
           ${pathHtml}
         </div>
         <pre class="small bg-light p-2 rounded border" style="user-select:text; white-space:pre-wrap;">
-${cmd}
+${escapeHtml(cmd)}
         </pre>
         ${tailHtml}
       `;
@@ -545,11 +739,14 @@ const displayTopFolders = (isProGlobal && showAllTopFolders)
         else if (kind === 'meta') label = tf('storage_kind_meta', 'Metadata');
         else label = kind || 'Root';
 
-        if (!labelParts.includes(label)) {
-          labelParts.push(label);
+        const safeLabel = escapeHtml(label);
+        const safePath = escapeHtml(r.path || '');
+
+        if (!labelParts.includes(safeLabel)) {
+          labelParts.push(safeLabel);
         }
 
-        return `<span class="me-2">${label}: <code>${r.path || ''}</code></span>`;
+        return `<span class="me-2">${safeLabel}: <code>${safePath}</code></span>`;
       }).join(' ');
 
       const volumeTitle = labelParts.length
@@ -617,7 +814,7 @@ const displayTopFolders = (isProGlobal && showAllTopFolders)
           ${
             uploadRoot
               ? `<div class="small text-muted mt-1">
-                   ${tf('storage_root_path', 'Upload root')}: <code>${uploadRoot}</code>
+                   ${tf('storage_root_path', 'Upload root')}: <code>${escapeHtml(uploadRoot)}</code>
                  </div>`
               : ''
           }
@@ -843,6 +1040,10 @@ function wireRescan(/* isPro */) {
   btn.dataset.wired = '1';
 
   btn.addEventListener('click', async () => {
+    if (!isCurrentSourceLocal()) {
+      showToast(tf('storage_source_unsupported', 'Storage explorer is only available for local sources.'));
+      return;
+    }
     const initialGenerated = lastGeneratedAt || 0;
 
     btn.disabled = true;
@@ -853,7 +1054,7 @@ function wireRescan(/* isPro */) {
     `;
 
     try {
-      const payload = await sendRequest('/api/admin/diskUsageTriggerScan.php', 'POST', null, {
+      const payload = await sendRequest('/api/admin/diskUsageTriggerScan.php', 'POST', getSourcePayload(), {
         'X-CSRF-Token': getCsrfToken()
       });
 
@@ -911,7 +1112,7 @@ function wireRescan(/* isPro */) {
       `;
 
       try {
-        const resp = await sendRequest('/api/admin/diskUsageDeleteSnapshot.php', 'POST', null, {
+        const resp = await sendRequest('/api/admin/diskUsageDeleteSnapshot.php', 'POST', getSourcePayload(), {
           'X-CSRF-Token': getCsrfToken()
         });
         if (!resp || resp.ok !== true) {
@@ -1189,11 +1390,27 @@ async function loadFolderChildren(folderKey) {
     </div>
   `;
 
+  if (!isCurrentSourceLocal()) {
+    inner.innerHTML = `<div class="text-warning small">
+      ${tf('storage_source_unsupported', 'Storage explorer is only available for local sources.')}
+    </div>`;
+    setBreadcrumb('root');
+    return;
+  }
+
+  if (!isCurrentSourceLocal()) {
+    inner.innerHTML = `<div class="text-warning small">
+      ${tf('storage_source_unsupported', 'Storage explorer is only available for local sources.')}
+    </div>`;
+    setBreadcrumb('root');
+    return;
+  }
+
   setBreadcrumb(currentFolderKey);
 
   let data;
   try {
-    const url = `/api/pro/diskUsageChildren.php?folder=${encodeURIComponent(currentFolderKey)}`;
+    const url = `/api/pro/diskUsageChildren.php?folder=${encodeURIComponent(currentFolderKey)}${getSourceQueryParam()}`;
     const res = await fetch(url, {
       credentials: 'include',
       cache: 'no-store',
@@ -1210,6 +1427,18 @@ async function loadFolderChildren(folderKey) {
   }
 
   if (!data || !data.ok) {
+    if (data && data.error === 'unsupported_source') {
+      inner.innerHTML = `<div class="text-warning small">
+        ${tf('storage_source_unsupported', 'Storage explorer is only available for local sources.')}
+      </div>`;
+      return;
+    }
+    if (data && data.error === 'invalid_source') {
+      inner.innerHTML = `<div class="text-danger small">
+        ${tf('storage_source_invalid', 'Invalid source selected for disk usage.')}
+      </div>`;
+      return;
+    }
     if (data && data.error === 'no_snapshot') {
       inner.innerHTML = `<div class="text-warning small">
         ${tf('storage_no_snapshot','No disk usage snapshot found. Run the disk usage scan first.')}
@@ -1597,7 +1826,7 @@ async function loadFolderChildren(folderKey) {
   
     let data;
     try {
-      const url = `/api/pro/diskUsageTopFiles.php?limit=200`;
+      const url = `/api/pro/diskUsageTopFiles.php?limit=200${getSourceQueryParam()}`;
       const res = await fetch(url, {
         credentials: 'include',
         cache: 'no-store',
@@ -1614,6 +1843,18 @@ async function loadFolderChildren(folderKey) {
     }
   
     if (!data || !data.ok) {
+      if (data && data.error === 'unsupported_source') {
+        inner.innerHTML = `<div class="text-warning small">
+          ${tf('storage_source_unsupported', 'Storage explorer is only available for local sources.')}
+        </div>`;
+        return;
+      }
+      if (data && data.error === 'invalid_source') {
+        inner.innerHTML = `<div class="text-danger small">
+          ${tf('storage_source_invalid', 'Invalid source selected for disk usage.')}
+        </div>`;
+        return;
+      }
       if (data && data.error === 'no_snapshot') {
         inner.innerHTML = `<div class="text-warning small">
           ${tf('storage_no_snapshot','No disk usage snapshot found. Run the disk usage scan first.')}
@@ -1769,11 +2010,14 @@ async function loadFolderChildren(folderKey) {
 
 // ---------- Delete helpers (Pro delete-from-inspector) ----------
 
-async function deleteFileFromInspectorPermanent(folderKey, name, rowEl) {
+  async function deleteFileFromInspectorPermanent(folderKey, name, rowEl) {
     const payload = {
       folder: folderKey || 'root',
       name
     };
+    if (currentSourceId) {
+      payload.sourceId = currentSourceId;
+    }
   
     try {
       const resp = await sendRequest('/api/pro/diskUsageDeleteFilePermanent.php', 'POST', payload, {
@@ -1805,6 +2049,9 @@ async function deleteFileFromInspectorPermanent(folderKey, name, rowEl) {
 
   async function deleteFolderFromInspector(folderKey, rowEl, { deep = false } = {}) {
     const payload = { folder: folderKey };
+    if (currentSourceId) {
+      payload.sourceId = currentSourceId;
+    }
   
     const url = deep
       ? '/api/pro/diskUsageDeleteFolderRecursive.php'
@@ -1871,19 +2118,23 @@ export function initAdminStorageSection({ isPro, modalEl }) {
       currentExplorerTab = 'folders';
       folderMinSizeBytes = 0;
       topFilesMinSizeBytes = 0;
-      // initial load of folders view
-      switchExplorerTab('folders');
     }
   } else if (isProGlobal) {
     // Re-open admin panel: make sure explorer still has data
     if (!document.getElementById('adminStorageExplorerInner')) {
       renderProExplorerSkeleton();
-      switchExplorerTab(currentExplorerTab || 'folders');
     }
   }
 
-  // Always refresh summary when admin panel opens
-  refreshStorageSummary();
   wireRescan(isProGlobal);
   setScanStatus(false);
+
+  if (isProGlobal) {
+    initStorageSources().then(() => {
+      refreshStorageSummary();
+      switchExplorerTab(currentExplorerTab || 'folders');
+    });
+  } else {
+    refreshStorageSummary();
+  }
 }

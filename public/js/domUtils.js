@@ -179,13 +179,38 @@ export function updateFileActionButtons() {
   }
 }
 
-export function showToast(message, duration = 3000) {
+export function showToast(message, durationOrTone = 3000, maybeTone) {
   const toast = document.getElementById("customToast");
   if (!toast) {
     console.error("Toast element not found");
     return;
   }
-  toast.textContent = message;
+  const text = (message == null) ? "" : String(message);
+  let tone = "";
+  let timeoutMs = 3000;
+
+  if (typeof durationOrTone === "number") {
+    timeoutMs = durationOrTone;
+  } else if (typeof durationOrTone === "string") {
+    tone = durationOrTone;
+  }
+
+  if (typeof maybeTone === "string") {
+    tone = maybeTone;
+  } else if (typeof maybeTone === "number" && typeof durationOrTone === "string") {
+    timeoutMs = maybeTone;
+  }
+
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    timeoutMs = 3000;
+  }
+  if (tone) {
+    toast.dataset.tone = tone;
+  } else {
+    toast.removeAttribute("data-tone");
+  }
+  toast.textContent = text;
+  toast.title = text.length > 160 ? text : "";
   toast.style.display = "block";
   // Force reflow for transition effect.
   void toast.offsetWidth;
@@ -195,7 +220,7 @@ export function showToast(message, duration = 3000) {
     setTimeout(() => {
       toast.style.display = "none";
     }, 500);
-  }, duration);
+  }, timeoutMs);
 }
 
 // --- DOM Building Functions for File Table ---

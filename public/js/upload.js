@@ -7,6 +7,22 @@ import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
 
+const UPLOAD_URL = withBase('/api/upload/upload.php');
+const RESUMABLE_TARGET = UPLOAD_URL;
+
+function getActiveUploadSourceId() {
+  const paneKey = window.activePane === 'secondary' ? 'secondary' : 'primary';
+  const paneSource = window.__frPaneState?.[paneKey]?.sourceId || '';
+  if (paneSource) return paneSource;
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return sel.value;
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return stored;
+  } catch (e) {}
+  return '';
+}
+
 // --- ClamAV scanning UI helpers ----------------------------------------
 
 function isVirusScanLikelyEnabled() {
@@ -514,6 +530,10 @@ function removeChunkFolderRepeatedly(identifier, csrfToken, maxAttempts = 3, int
     // Prefix with "resumable_" to match your PHP regex.
     params.append('folder', 'resumable_' + identifier);
     params.append('csrf_token', csrfToken);
+    const sourceId = getActiveUploadSourceId();
+    if (sourceId) {
+      params.append('sourceId', sourceId);
+    }
     fetch(withBase('/api/upload/removeChunks.php'), {
       method: 'POST',
       credentials: 'include',
@@ -640,13 +660,13 @@ function createFileEntry(file) {
   // Preview element
   const preview = document.createElement("div");
   preview.className = "file-preview";
-  displayFilePreview(file, preview);
+  displayFilePreview(file.file || file, preview);
   li.appendChild(preview);
 
   // File name display
   const nameDiv = document.createElement("div");
   nameDiv.classList.add("upload-file-name");
-  nameDiv.textContent = file.name || file.fileName || "Unnamed File";
+  nameDiv.textContent = file.name || file.fileName || file.file?.name || "Unnamed File";
   li.appendChild(nameDiv);
 
   // Progress bar container
@@ -695,7 +715,7 @@ function processFiles(filesInput) {
       const previewContainer = document.getElementById("filePreviewContainer");
       if (previewContainer) {
         previewContainer.innerHTML = "";
-        displayFilePreview(files[0], previewContainer);
+        displayFilePreview(files[0].file || files[0], previewContainer);
       }
     } else {
       fileInfoContainer.innerHTML = `<span id="fileInfoDefault">No files selected</span>`;
@@ -811,17 +831,22 @@ async function initResumableUpload() {
   // Construct the instance once
   if (!resumableInstance) {
     resumableInstance = new ResumableCtor({
-      target: withBase("/api/upload/upload.php"),
+      target: RESUMABLE_TARGET,
       chunkSize: 1.5 * 1024 * 1024,
       simultaneousUploads: 3,
       forceChunkSize: true,
-      testChunks: true,
+      testChunks: false,
       withCredentials: true,
       headers: { 'X-CSRF-Token': window.csrfToken },
-      query: () => ({
-        folder: window.currentFolder || "root",
-        upload_token: window.csrfToken
-      })
+      query: () => {
+        const q = {
+          folder: window.currentFolder || "root",
+          upload_token: window.csrfToken
+        };
+        const sourceId = getActiveUploadSourceId();
+        if (sourceId) q.sourceId = sourceId;
+        return q;
+      }
     });
   }
 
@@ -829,8 +854,15 @@ async function initResumableUpload() {
   function updateResumableQuery() {
     if (!resumableInstance) return;
     resumableInstance.opts.headers['X-CSRF-Token'] = window.csrfToken;
+    if (typeof resumableInstance.opts.query === 'function') return;
     resumableInstance.opts.query.folder = window.currentFolder || 'root';
     resumableInstance.opts.query.upload_token = window.csrfToken;
+    const sourceId = getActiveUploadSourceId();
+    if (sourceId) {
+      resumableInstance.opts.query.sourceId = sourceId;
+    } else {
+      delete resumableInstance.opts.query.sourceId;
+    }
   }
 
 
@@ -1019,7 +1051,7 @@ async function initResumableUpload() {
     } catch (e) {
       // message wasn't JSON, ignore
     }
-    showToast(msgText);
+    showToast(msgText, 'error');
     // Treat errored file as no longer resumable (for now) and clear its hint
     showResumableDraftBanner();
   });
@@ -1056,7 +1088,7 @@ async function initResumableUpload() {
         setUploadButtonVisible(false); 
       }, 5000);
     } else {
-      showToast("Some files failed to upload. Please check the list.");
+      showToast("Some files failed to upload. Please check the list.", 'warning');
     }
     // In all cases, once Resumable has finished its batch, hide the ClamAV notice.
     hideVirusScanNotice();
@@ -1117,10 +1149,29 @@ function submitFiles(allFiles) {
 
   allFiles.forEach(file => {
     const formData = new FormData();
-    formData.append("file[]", file);
+    const uploadFile = file.file || file;
+    if (!(uploadFile instanceof Blob)) {
+      const li = progressElements[file.uploadIndex];
+      if (li && li.progressBar) {
+        li.progressBar.innerText = "Error";
+      }
+      try {
+        showToast("Could not read the selected file.", 6000, 'error');
+      } catch (e) {}
+      uploadResults[file.uploadIndex] = false;
+      allSucceeded = false;
+      finishedCount++;
+      return;
+    }
+    const uploadName = uploadFile.name || file.name || file.fileName || "upload.bin";
+    formData.append("file[]", uploadFile, uploadName);
     formData.append("folder", folderToUse);
     // Append CSRF token as "upload_token"
     formData.append("upload_token", window.csrfToken);
+    const sourceId = getActiveUploadSourceId();
+    if (sourceId) {
+      formData.append("sourceId", sourceId);
+    }
     const relativePath = file.webkitRelativePath || file.customRelativePath || "";
     if (relativePath.trim() !== "") {
       formData.append("relativePath", relativePath);
@@ -1160,7 +1211,7 @@ function submitFiles(allFiles) {
         console.warn("CSRF expired during upload, retrying chunk", file.uploadIndex);
         // 1) update global token + header
         window.csrfToken = jsonResponse.csrf_token;
-        xhr.open("POST", withBase("/api/upload/upload.php"), true);
+        xhr.open("POST", UPLOAD_URL, true);
         xhr.withCredentials = true;
         xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
         // 2) re-send the same formData
@@ -1191,7 +1242,7 @@ function submitFiles(allFiles) {
               ? String(jsonResponse.error || jsonResponse.message)
               : `Upload failed (HTTP ${xhr.status || 0}).`;
           console.error("Upload failed:", xhr.status, jsonResponse || xhr.responseText);
-          showToast(msg, 7000);
+          showToast(msg, 7000, 'error');
         } catch (e) {
           // ignore toast failures
         }
@@ -1229,7 +1280,7 @@ function submitFiles(allFiles) {
         li.progressBar.innerText = "Error";
       }
       try {
-        showToast("Upload failed due to a network error.", 6000);
+        showToast("Upload failed due to a network error.", 6000, 'error');
       } catch (e) {}
       uploadResults[file.uploadIndex] = false;
       allSucceeded = false;
@@ -1248,7 +1299,7 @@ function submitFiles(allFiles) {
         li.progressBar.innerText = "Aborted";
       }
       try {
-        showToast("Upload was aborted.", 5000);
+        showToast("Upload was aborted.", 5000, 'warning');
       } catch (e) {}
       uploadResults[file.uploadIndex] = false;
       allSucceeded = false;
@@ -1258,7 +1309,7 @@ function submitFiles(allFiles) {
       }
     });
 
-    xhr.open("POST", withBase("/api/upload/upload.php"), true);
+    xhr.open("POST", UPLOAD_URL, true);
     xhr.withCredentials = true;
     xhr.setRequestHeader("X-CSRF-Token", window.csrfToken);
     xhr.send(formData);
@@ -1320,16 +1371,16 @@ function submitFiles(allFiles) {
 
         if (!overallSuccess) {
           const failed = allFiles.length - succeeded;
-          showToast(`${failed} file(s) failed, ${succeeded} succeeded. Please check the list.`);
+          showToast(`${failed} file(s) failed, ${succeeded} succeeded. Please check the list.`, 'warning');
         } else {
-          showToast(`${succeeded} file(s) succeeded. Please check the list.`);
+          showToast(`${succeeded} file(s) succeeded. Please check the list.`, 'success');
         }
         const anyItems = !!document.querySelector('li.upload-progress-item');
         setUploadButtonVisible(anyItems);
       })
       .catch(error => {
         console.error("Error fetching file list:", error);
-        showToast("Some files may have failed to upload. Please check the list.");
+        showToast("Some files may have failed to upload. Please check the list.", 'warning');
       })
       .finally(() => {
         // Folder list refresh + hide any ClamAV scan notice
@@ -1416,7 +1467,7 @@ function initUpload() {
           : (fileInput ? Array.from(fileInput.files || []) : []);
 
       if (!files || !files.length) {
-        showToast("No files selected.");
+        showToast("No files selected.", 'warning');
         return;
       }
 
@@ -1424,25 +1475,37 @@ function initUpload() {
         // If ClamAV scanning is enabled, show a small non-blocking notice
       showVirusScanNotice();
 
-      const hasResumableFiles =
-        useResumable &&
-        resumableInstance &&
-        Array.isArray(resumableInstance.files) &&
-        resumableInstance.files.length > 0;
+      const hasResumablePayload = Array.isArray(files) && files.some(f => {
+        if (!f || typeof f !== 'object') return false;
+        if (f.file instanceof Blob) return true; // Resumable file wrapper
+        return false;
+      });
+      const shouldUseResumable = useResumable && resumableInstance && hasResumablePayload;
 
-      if (hasResumableFiles) {
+      if (shouldUseResumable) {
         if (!_resumableReady) await initResumableUpload();
         if (resumableInstance) {
-          resumableInstance.opts.query.folder = window.currentFolder || "root";
-          resumableInstance.opts.query.upload_token = window.csrfToken;
           resumableInstance.opts.headers['X-CSRF-Token'] = window.csrfToken;
+          if (typeof resumableInstance.opts.query !== 'function') {
+            resumableInstance.opts.query.folder = window.currentFolder || "root";
+            resumableInstance.opts.query.upload_token = window.csrfToken;
+            const sourceId = getActiveUploadSourceId();
+            if (sourceId) {
+              resumableInstance.opts.query.sourceId = sourceId;
+            } else {
+              delete resumableInstance.opts.query.sourceId;
+            }
+          }
 
           resumableInstance.upload();
-          showToast("Resumable upload started...");
+          showToast("Resumable upload started...", 'info');
         } else {
           submitFiles(files);
         }
       } else {
+        if (resumableInstance) {
+          resumableInstance.cancel();
+        }
         submitFiles(files);
       }
     });

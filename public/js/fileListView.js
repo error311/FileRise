@@ -40,6 +40,8 @@ import {
   folderSVG,
   expandTreePath,
   expandTreePathAsync,
+  loadFolderTree,
+  resetFolderTreeCaches,
   syncFolderTreeSelection,
   syncTreeAfterFolderMove
 } from './folderManager.js?v={{APP_QVER}}';
@@ -49,6 +51,7 @@ import {
   folderDragLeaveHandler,
   folderDropHandler
 } from './fileDragDrop.js?v={{APP_QVER}}';
+import { startTransferProgress, finishTransferProgress } from './transferProgress.js?v={{APP_QVER}}';
 
 export let fileData = [];
 export let sortOrder = { column: "modified", ascending: false };
@@ -59,6 +62,10 @@ let searchEverywhereCard = null;
 let searchEverywhereResultsEl = null;
 let searchEverywhereInputEl = null;
 let searchEverywhereLimitEl = null;
+let searchEverywhereSourceEl = null;
+let searchEverywhereStatusEl = null;
+let searchEverywhereListEl = null;
+let searchEverywhereRunId = 0;
 let pendingSearchSelection = null;
 
 try {
@@ -269,8 +276,9 @@ export async function initOnlyOfficeCaps() {
   return window.__FR_OO_PROMISE;
 }
 
-function wireFolderStripItems(strip) {
+function wireFolderStripItems(strip, sourceId = '') {
   if (!strip) return;
+  const paneSourceId = sourceId || getActivePaneSourceId();
 
   // Click / DnD / context menu
   strip.querySelectorAll(".folder-item").forEach(el => {
@@ -354,7 +362,7 @@ function wireFolderStripItems(strip) {
         queueMicrotask(() => {
           const iconSpan = el.querySelector('.folder-svg');
           if (iconSpan && String(iconSpan.innerHTML || '').trim() === '') {
-            attachStripIconAsync(el, dest, 48);
+            attachStripIconAsync(el, dest, 48, { sourceId: paneSourceId });
           }
         });
       } catch (e2) { /* ignore */ }
@@ -367,11 +375,11 @@ function wireFolderStripItems(strip) {
   // Folder icons
   strip.querySelectorAll(".folder-item").forEach(el => {
     const full = el.getAttribute('data-folder');
-    if (full) attachStripIconAsync(el, full, 48);
+    if (full) attachStripIconAsync(el, full, 48, { sourceId: paneSourceId });
   });
 }
 
-function renderFolderStripPaged(strip, subfolders) {
+function renderFolderStripPaged(strip, subfolders, sourceId = '') {
   if (!strip) return;
 
   if (!window.showFoldersInList || !subfolders.length) {
@@ -388,7 +396,12 @@ function renderFolderStripPaged(strip, subfolders) {
     const endIdx = Math.min(page * pageSize, total);
     const visible = subfolders.slice(0, endIdx);
 
-    let html = visible.map(sf => `
+    const badgeText = formatSourceBadgeText(getSourceMetaById(sourceId));
+    const badgeHtml = badgeText
+      ? `<div class="folder-strip-badge fr-source-badge" title="Source: ${escapeHTML(badgeText)}">${escapeHTML(badgeText)}</div>`
+      : '';
+
+    let html = badgeHtml + visible.map(sf => `
       <div class="folder-item"
            data-folder="${sf.full}"
            draggable="true">
@@ -411,7 +424,7 @@ function renderFolderStripPaged(strip, subfolders) {
     strip.innerHTML = html;
 
     applyFolderStripLayout(strip);
-    wireFolderStripItems(strip);
+    wireFolderStripItems(strip, sourceId);
 
     const loadMoreBtn = strip.querySelector(".folder-strip-load-more");
     if (loadMoreBtn) {
@@ -808,15 +821,15 @@ function startInlineRenameForFileRow(row, file, folder) {
       });
       const data = await res.json().catch(() => ({}));
       if (data && data.success) {
-        showToast('File renamed successfully!');
+        showToast('File renamed successfully!', 'success');
         clearInlineRenameState({ restore: false });
         loadFileList(state.folder);
         return;
       }
-      showToast('Error renaming file: ' + (data.error || 'Unknown error'));
+      showToast('Error renaming file: ' + (data.error || 'Unknown error'), 'error');
     } catch (err) {
       console.error('Error renaming file:', err);
-      showToast('Error renaming file');
+      showToast('Error renaming file', 'error');
     }
 
     if (inlineRenameState === state) {
@@ -1190,11 +1203,11 @@ function parentFolderOf(path) {
   return parts.join('/');
 }
 
-function invalidateFolderStats(folders) {
+function invalidateFolderStats(folders, sourceId = '') {
   try {
     const arr = Array.isArray(folders) ? folders : [folders];
     window.dispatchEvent(new CustomEvent('folderStatsInvalidated', {
-      detail: { folders: arr }
+      detail: { folders: arr, sourceId }
     }));
   } catch (e) {
     // best effort only
@@ -1293,11 +1306,12 @@ window.addEventListener('keydown', async (e) => {
 
   const files = getActiveSelectedFileObjects();
   if (!files.length) {
-    showToast(t('no_files_selected') || 'No files selected.');
+    showToast(t('no_files_selected') || 'No files selected.', 'warning');
     return;
   }
   const file = files[0];
   const folder = file.folder || window.currentFolder || 'root';
+  const sourceId = String(file.sourceId || '').trim() || getActivePaneSourceId();
 
   if (key === 'F3') {
     try {
@@ -1312,12 +1326,12 @@ window.addEventListener('keydown', async (e) => {
 
   if (key === 'F4') {
     if (!canEditFile(file.name) || !file.editable) {
-      showToast(t('file_not_editable') || 'File is not editable.');
+      showToast(t('file_not_editable') || 'File is not editable.', 'warning');
       return;
     }
     try {
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(file.name, folder);
+      m.editFile(file.name, folder, sourceId);
     } catch (err) {
       console.error('Failed to open editor', err);
     }
@@ -1380,7 +1394,7 @@ window.addEventListener('keydown', (e) => {
   if (key === '?' || (key === '/' && e.shiftKey)) {
     e.preventDefault();
     e.stopPropagation();
-    showToast('Shortcuts: / search, ? help, Del delete, F2 rename, F3 preview, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete, Ctrl/Cmd+Shift+N new folder.', 6000);
+    showToast('Shortcuts: / search, ? help, Del delete, F2 rename, F3 preview, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete, Ctrl/Cmd+Shift+N new folder.', 6000, 'info');
     return;
   }
 
@@ -1411,11 +1425,12 @@ window.addEventListener('folderColorChanged', (e) => {
   // 3) Repaint any inline folder rows in the file table
   try {
     const safeFolder = CSS.escape(folder);
+    const activeSourceId = getActivePaneSourceId();
     document
       .querySelectorAll(`#fileList tr.folder-row[data-folder="${safeFolder}"]`)
       .forEach(row => {
         // reuse the same helper we used when injecting inline rows
-        attachStripIconAsync(row, folder, 28);
+        attachStripIconAsync(row, folder, 28, { sourceId: activeSourceId });
       });
   } catch (e) {
     // CSS.escape might not exist on very old browsers; fail silently
@@ -1443,18 +1458,190 @@ window.itemsPerPage = parseInt(
 window.currentPage = window.currentPage || 1;
 window.viewMode = localStorage.getItem("viewMode") || "table";
 window.currentSubfolders = window.currentSubfolders || [];
+window.currentSubfoldersSourceId = window.currentSubfoldersSourceId || '';
+window.currentSubfoldersFolder = window.currentSubfoldersFolder || '';
 
 const PANE_FOLDER_STORAGE_KEYS = {
   primary: 'frPaneFolderPrimary',
   secondary: 'frPaneFolderSecondary'
+};
+const PANE_SOURCE_STORAGE_KEYS = {
+  primary: 'frPaneSourcePrimary',
+  secondary: 'frPaneSourceSecondary'
 };
 
 function normalizePaneKey(pane) {
   return pane === 'secondary' ? 'secondary' : 'primary';
 }
 
-function readStoredPaneFolder(pane) {
+function getGlobalActiveSourceId() {
+  try {
+    if (typeof window.__frGetActiveSourceId === 'function') {
+      return window.__frGetActiveSourceId() || '';
+    }
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return sel.value;
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return stored;
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
+function getSourceNameById(sourceId) {
+  const id = String(sourceId || '').trim();
+  if (!id) return '';
+  try {
+    if (typeof window.__frGetSourceNameById === 'function') {
+      return String(window.__frGetSourceNameById(id) || '');
+    }
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel) {
+    const opt = Array.from(sel.options).find(o => o.value === id);
+    if (opt) return String(opt.dataset?.sourceName || '');
+  }
+  return '';
+}
+
+function getSourceTypeById(sourceId) {
+  const id = String(sourceId || '').trim();
+  if (!id) return '';
+  try {
+    if (typeof window.__frGetSourceMetaById === 'function') {
+      const meta = window.__frGetSourceMetaById(id);
+      if (meta && typeof meta === 'object' && meta.type) return String(meta.type || '');
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (typeof window.__frGetSourceTypeById === 'function') {
+      return String(window.__frGetSourceTypeById(id) || '');
+    }
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel) {
+    const opt = Array.from(sel.options).find(o => o.value === id);
+    if (opt) return String(opt.dataset?.sourceType || '');
+  }
+  return '';
+}
+
+function isFtpSource(sourceId = '') {
+  const type = String(getSourceTypeById(sourceId || getGlobalActiveSourceId()) || '').toLowerCase();
+  return type === 'ftp';
+}
+
+function getSourceMetaById(sourceId) {
+  return {
+    name: getSourceNameById(sourceId),
+    type: getSourceTypeById(sourceId)
+  };
+}
+
+function getRootLabel(sourceId = '') {
+  const id = sourceId || getGlobalActiveSourceId();
+  const name = getSourceNameById(id);
+  return name ? `(${name})` : '(Root)';
+}
+
+function getRootCrumbLabel(sourceId = '') {
+  const id = sourceId || getGlobalActiveSourceId();
+  const name = getSourceNameById(id);
+  return name || 'root';
+}
+
+function getLastOpenedFolderKey(sourceId = '') {
+  const id = String(sourceId || '').trim();
+  return id ? `lastOpenedFolder.${id}` : 'lastOpenedFolder';
+}
+
+function getLastOpenedFolder(sourceId = '') {
+  const key = getLastOpenedFolderKey(sourceId);
+  try {
+    const val = String(localStorage.getItem(key) || '').trim();
+    return val;
+  } catch (e) {
+    return '';
+  }
+}
+
+function setLastOpenedFolder(folder, sourceId = '') {
+  if (!folder) return;
+  const key = getLastOpenedFolderKey(sourceId);
+  try {
+    localStorage.setItem(key, folder);
+    if (key !== 'lastOpenedFolder') {
+      localStorage.setItem('lastOpenedFolder', folder);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function formatSourceTypeLabel(type) {
+  const t = String(type || '').trim();
+  if (!t) return '';
+  if (t.toLowerCase() === 'local') return 'Local';
+  if (t.length <= 5) return t.toUpperCase();
+  return t;
+}
+
+function formatSourceBadgeText(meta) {
+  const name = String(meta?.name || '').trim();
+  const typeLabel = formatSourceTypeLabel(meta?.type || '');
+  if (typeLabel && name) {
+    if (typeLabel.toLowerCase() === name.toLowerCase()) return name;
+    return `${typeLabel}: ${name}`;
+  }
+  return name || typeLabel;
+}
+
+function setSourceBadge(titleEl, sourceId) {
+  if (!titleEl) return;
+  const meta = getSourceMetaById(sourceId);
+  const label = formatSourceBadgeText(meta);
+  const existing = titleEl.querySelector('.fr-source-badge');
+  if (!label) {
+    if (existing) existing.remove();
+    return;
+  }
+  const badge = existing || document.createElement('span');
+  if (!existing) {
+    badge.className = 'fr-source-badge fr-source-badge--title';
+    titleEl.appendChild(badge);
+  }
+  if (existing) {
+    badge.classList.add('fr-source-badge', 'fr-source-badge--title');
+  }
+  badge.textContent = label;
+  badge.title = `Source: ${label}`;
+}
+
+function refreshSourceBadges() {
+  ensurePaneState();
+  const active = normalizePaneKey(window.activePane);
+  const other = active === 'secondary' ? 'primary' : 'secondary';
+  setSourceBadge(document.getElementById('fileListTitle'), getPaneSourceId(active));
+  setSourceBadge(document.getElementById('fileListTitleSecondary'), getPaneSourceId(other));
+}
+
+try { window.__frRefreshSourceBadges = refreshSourceBadges; } catch (e) { /* ignore */ }
+
+function readStoredPaneFolder(pane, sourceId = '') {
   const key = PANE_FOLDER_STORAGE_KEYS[normalizePaneKey(pane)];
+  if (!key) return "";
+  const scopedKey = sourceId ? `${key}.${sourceId}` : key;
+  try {
+    if (sourceId) {
+      return String(localStorage.getItem(scopedKey) || '').trim();
+    }
+    return String(localStorage.getItem(scopedKey) || '').trim();
+  } catch (e) {
+    return "";
+  }
+}
+
+function readStoredPaneSource(pane) {
+  const key = PANE_SOURCE_STORAGE_KEYS[normalizePaneKey(pane)];
   if (!key) return "";
   try {
     return String(localStorage.getItem(key) || '').trim();
@@ -1463,12 +1650,50 @@ function readStoredPaneFolder(pane) {
   }
 }
 
-function persistPaneFolder(pane, folder) {
+function persistPaneFolder(pane, folder, sourceId = '') {
   const key = PANE_FOLDER_STORAGE_KEYS[normalizePaneKey(pane)];
   if (!key || !folder) return;
+  const scopedKey = sourceId ? `${key}.${sourceId}` : key;
   try {
-    localStorage.setItem(key, folder);
+    localStorage.setItem(scopedKey, folder);
   } catch (e) { /* ignore */ }
+}
+
+function persistPaneSource(pane, sourceId) {
+  const key = PANE_SOURCE_STORAGE_KEYS[normalizePaneKey(pane)];
+  if (!key) return;
+  try {
+    if (!sourceId) {
+      localStorage.removeItem(key);
+      return;
+    }
+    localStorage.setItem(key, sourceId);
+  } catch (e) { /* ignore */ }
+}
+
+function getPaneSourceId(pane) {
+  try {
+    const state = getPaneState(pane);
+    if (state && state.sourceId) return state.sourceId;
+  } catch (e) { /* ignore */ }
+  const stored = readStoredPaneSource(pane);
+  if (stored) return stored;
+  return getGlobalActiveSourceId();
+}
+
+function getActivePaneSourceId() {
+  return getPaneSourceId(normalizePaneKey(window.activePane));
+}
+
+function getPaneKeyForElement(el) {
+  const pane = el && el.closest ? el.closest('.file-list-pane') : null;
+  if (pane && pane.classList.contains('secondary-pane')) return 'secondary';
+  if (pane && pane.classList.contains('primary-pane')) return 'primary';
+  return normalizePaneKey(window.activePane);
+}
+
+function getPaneSourceIdForElement(el) {
+  return getPaneSourceId(getPaneKeyForElement(el));
 }
 
 (function seedLastOpenedFolderFromPaneStorage() {
@@ -1476,23 +1701,29 @@ function persistPaneFolder(pane, folder) {
     const dualEnabled = localStorage.getItem('dualPaneMode') === 'true';
     if (!dualEnabled) return;
     const active = normalizePaneKey(localStorage.getItem('activePane'));
-    const folder = readStoredPaneFolder(active);
-    if (folder) localStorage.setItem('lastOpenedFolder', folder);
+    const sourceId = readStoredPaneSource(active) || getGlobalActiveSourceId();
+    const folder = readStoredPaneFolder(active, sourceId);
+    if (folder) setLastOpenedFolder(folder, sourceId);
   } catch (e) { /* ignore */ }
 })();
 
 function ensurePaneState() {
   if (window.__frPaneState) return;
-  const storedPrimary = readStoredPaneFolder('primary');
-  const storedSecondary = readStoredPaneFolder('secondary');
+  const storedPrimarySource = readStoredPaneSource('primary');
+  const storedSecondarySource = readStoredPaneSource('secondary');
+  const activeSource = getGlobalActiveSourceId();
+  const primarySourceId = storedPrimarySource || activeSource;
+  const secondarySourceId = storedSecondarySource || primarySourceId || activeSource;
+  const storedPrimary = readStoredPaneFolder('primary', primarySourceId);
+  const storedSecondary = readStoredPaneFolder('secondary', secondarySourceId);
   const initialFolder =
     storedPrimary ||
-    window.currentFolder ||
-    localStorage.getItem("lastOpenedFolder") ||
-    "root";
+    getLastOpenedFolder(primarySourceId) ||
+    (primarySourceId ? "root" : (window.currentFolder || "root"));
   window.__frPaneState = {
     primary: {
       currentFolder: initialFolder,
+      sourceId: primarySourceId,
       currentSubfolders: Array.isArray(window.currentSubfolders) ? window.currentSubfolders : [],
       currentPage: window.currentPage || 1,
       currentSearchTerm: window.currentSearchTerm || "",
@@ -1504,6 +1735,7 @@ function ensurePaneState() {
     },
     secondary: {
       currentFolder: storedSecondary || null,
+      sourceId: secondarySourceId,
       currentSubfolders: [],
       currentPage: 1,
       currentSearchTerm: "",
@@ -1525,14 +1757,21 @@ function savePaneState(pane, patch) {
   const state = getPaneState(pane);
   Object.assign(state, patch || {});
   if (patch && Object.prototype.hasOwnProperty.call(patch, 'currentFolder')) {
-    persistPaneFolder(pane, state.currentFolder);
+    const sourceId = state.sourceId || getPaneSourceId(pane);
+    persistPaneFolder(pane, state.currentFolder, sourceId);
+  }
+  if (patch && Object.prototype.hasOwnProperty.call(patch, 'sourceId')) {
+    persistPaneSource(pane, state.sourceId || '');
   }
 }
 
 function syncPaneStateFromGlobals(pane) {
   savePaneState(pane, {
     currentFolder: window.currentFolder || "root",
+    sourceId: getGlobalActiveSourceId(),
     currentSubfolders: Array.isArray(window.currentSubfolders) ? window.currentSubfolders : [],
+    currentSubfoldersSourceId: String(window.currentSubfoldersSourceId || ''),
+    currentSubfoldersFolder: String(window.currentSubfoldersFolder || ''),
     currentPage: window.currentPage || 1,
     currentSearchTerm: window.currentSearchTerm || "",
     currentFolderCaps: window.currentFolderCaps || null,
@@ -1545,11 +1784,39 @@ function syncGlobalsFromPaneState(pane) {
   const state = getPaneState(pane);
   window.currentFolder = state.currentFolder || "root";
   window.currentSubfolders = Array.isArray(state.currentSubfolders) ? state.currentSubfolders : [];
+  window.currentSubfoldersSourceId = String(state.currentSubfoldersSourceId || '');
+  window.currentSubfoldersFolder = String(state.currentSubfoldersFolder || '');
   window.currentPage = state.currentPage || 1;
   window.currentSearchTerm = state.currentSearchTerm || "";
   window.currentFolderCaps = state.currentFolderCaps || null;
   window.selectedFolderCaps = state.selectedFolderCaps || null;
   fileData = Array.isArray(state.fileData) ? state.fileData : [];
+}
+
+let __frTreeSourceId = null;
+
+function syncActiveSourceToPane(paneKey, sourceId) {
+  const targetId = sourceId || getPaneSourceId(paneKey);
+  const currentId = getGlobalActiveSourceId();
+  if (!targetId || targetId === currentId) return Promise.resolve(false);
+
+  if (typeof window.__frApplyActiveSource === 'function') {
+    return window.__frApplyActiveSource(targetId, { skipEvent: true, origin: 'pane' });
+  }
+
+  const sel = document.getElementById('sourceSelector');
+  if (sel) sel.value = targetId;
+  try { localStorage.setItem('fr_active_source', targetId); } catch (e) { /* ignore */ }
+  return Promise.resolve(true);
+}
+
+function refreshTreeForSource(folder, sourceId) {
+  const nextId = sourceId || getGlobalActiveSourceId();
+  if (!nextId) return;
+  if (__frTreeSourceId === nextId) return;
+  __frTreeSourceId = nextId;
+  try { resetFolderTreeCaches(); } catch (e) { /* ignore */ }
+  try { loadFolderTree(folder); } catch (e) { /* ignore */ }
 }
 
 function setPaneHasContent(pane, hasContent) {
@@ -1636,8 +1903,9 @@ function updateDualPaneTargetHint() {
     hint.style.display = 'none';
     return;
   }
+  const otherSourceId = window.__frPaneState?.[other]?.sourceId || '';
   const sideLabel = other === 'secondary' ? 'Right' : 'Left';
-  const folderLabel = otherFolder === 'root' ? '(Root)' : otherFolder;
+  const folderLabel = otherFolder === 'root' ? getRootLabel(otherSourceId) : otherFolder;
   hint.textContent = `Target: ${sideLabel} -> ${folderLabel}`;
   hint.title = `Copy/move target is the ${sideLabel.toLowerCase()} pane folder.`;
   hint.style.display = 'inline-flex';
@@ -1686,13 +1954,17 @@ function updateInactivePanePlaceholder(inactiveKey) {
   };
 
   const state = getPaneState(inactiveKey);
+  const paneSourceId = (state && typeof state.sourceId === 'string')
+    ? state.sourceId.trim()
+    : '';
+  const labelSourceId = paneSourceId || readStoredPaneSource(inactiveKey);
   let folder = (state && typeof state.currentFolder === 'string')
     ? state.currentFolder.trim()
     : '';
   if (!folder) {
-    folder = readStoredPaneFolder(inactiveKey);
+    folder = readStoredPaneFolder(inactiveKey, labelSourceId);
   }
-  const label = folder === 'root' ? 'root' : folder;
+  const label = folder === 'root' ? getRootCrumbLabel(labelSourceId) : folder;
 
   const ensured = ensurePlaceholderElements();
 
@@ -1715,12 +1987,13 @@ function updateInactivePanePlaceholder(inactiveKey) {
     if (titleEl && titleEl.dataset.baseText) titleEl.textContent = titleEl.dataset.baseText;
     if (hintEl && hintEl.dataset.baseText) hintEl.textContent = hintEl.dataset.baseText;
     if (emptyEl && emptyEl.dataset.baseText) emptyEl.textContent = emptyEl.dataset.baseText;
+    refreshSourceBadges();
     return;
   }
 
   if (titleEl) {
     const prefix = t('files_in') || 'Files in';
-    titleEl.textContent = `${prefix} (${formatBreadcrumbText(folder)})`;
+    titleEl.textContent = `${prefix} (${formatBreadcrumbText(folder, labelSourceId)})`;
   }
   if (hintEl) {
     hintEl.textContent = `${hintEl.dataset.baseText} (${label})`;
@@ -1728,6 +2001,7 @@ function updateInactivePanePlaceholder(inactiveKey) {
   if (emptyEl) {
     emptyEl.textContent = `${emptyEl.dataset.baseText} (${label})`;
   }
+  refreshSourceBadges();
 }
 
 function resetInactivePaneBaseText() {
@@ -1750,31 +2024,42 @@ function resetInactivePaneBaseText() {
   }
 }
 
-function formatBreadcrumbText(folder) {
+function formatBreadcrumbText(folder, sourceId = '') {
   const path = (typeof folder === 'string' && folder.length) ? folder : 'root';
-  if (path === 'root') return 'root';
+  const rootLabel = getRootCrumbLabel(sourceId);
+  if (path === 'root') return rootLabel;
   const parts = path.split('/').filter(Boolean);
-  return ['root', ...parts].join(' › ');
+  return [rootLabel, ...parts].join(' › ');
 }
 
 function resolvePaneFolderForTitle(paneKey, { fallbackToCurrent = false } = {}) {
   if (!paneKey) return '';
   let folder = '';
+  let sourceId = '';
   try {
     const state = getPaneState(paneKey);
     folder = (state && typeof state.currentFolder === 'string')
       ? state.currentFolder.trim()
+      : '';
+    sourceId = (state && typeof state.sourceId === 'string')
+      ? state.sourceId.trim()
       : '';
   } catch (e) {
     folder = '';
   }
 
   if (!folder) {
-    folder = readStoredPaneFolder(paneKey);
+    const id = sourceId || getPaneSourceId(paneKey);
+    folder = readStoredPaneFolder(paneKey, id);
   }
 
   if (!folder && fallbackToCurrent) {
-    folder = window.currentFolder || localStorage.getItem('lastOpenedFolder') || 'root';
+    const id = sourceId || getPaneSourceId(paneKey);
+    if (id) {
+      folder = getLastOpenedFolder(id) || 'root';
+    } else {
+      folder = window.currentFolder || getLastOpenedFolder(id) || 'root';
+    }
   }
 
   return folder || '';
@@ -1796,6 +2081,7 @@ function refreshPaneTitlesFromState() {
     updateInactivePanePlaceholder(other);
     updateDualPaneTargetHint();
   }
+  refreshSourceBadges();
 }
 
 // Default folder display settings from localStorage
@@ -1843,6 +2129,32 @@ function setActivePane(pane, opts) {
   }
 
   window.activePane = next;
+  const state = getPaneState(next);
+  const paneSourceId = getPaneSourceId(next);
+  const globalSourceId = getGlobalActiveSourceId();
+  if (__frTreeSourceId === null) {
+    __frTreeSourceId = globalSourceId || paneSourceId || null;
+  }
+  if (!state.currentFolder) {
+    const fallbackFolder = readStoredPaneFolder(next, paneSourceId) || getLastOpenedFolder(paneSourceId) || 'root';
+    savePaneState(next, { currentFolder: fallbackFolder });
+    state.currentFolder = fallbackFolder;
+  }
+  if (paneSourceId && paneSourceId !== globalSourceId) {
+    syncActiveSourceToPane(next, paneSourceId).then(ok => {
+      if (ok) {
+        const targetFolder = state.currentFolder || window.currentFolder || 'root';
+        const treeWillReload = __frTreeSourceId !== paneSourceId;
+        if (treeWillReload && state.hasLoaded && !state.needsReload) {
+          window.__frSkipListReload = {
+            folder: targetFolder,
+            sourceId: paneSourceId
+          };
+        }
+        refreshTreeForSource(targetFolder, paneSourceId);
+      }
+    }).catch(() => {});
+  }
 
   const activeContainer = document.getElementById('fileListContainer');
   const inactiveContainer = document.getElementById('fileListContainerSecondary');
@@ -1865,7 +2177,6 @@ function setActivePane(pane, opts) {
   }
 
   syncGlobalsFromPaneState(next);
-  const state = getPaneState(next);
   if (state.currentFolder) {
     updateBreadcrumbTitle(state.currentFolder);
     try { syncFolderTreeSelection(state.currentFolder); } catch (e) { /* ignore */ }
@@ -1892,6 +2203,9 @@ function setActivePane(pane, opts) {
   updatePaneWidthClasses();
   updateDualPaneTargetHint();
   updateInactivePanePlaceholder(next === 'secondary' ? 'primary' : 'secondary');
+  refreshSourceBadges();
+  scheduleFolderIconRepair({ force: true, skipStats: true });
+  scheduleInactivePaneFolderIconRepair();
 
   if (!opts || !opts.skipStore) {
     try { localStorage.setItem('activePane', next); } catch (e) { /* ignore */ }
@@ -1943,6 +2257,39 @@ try {
   });
 } catch (e) { /* ignore */ }
 
+try {
+  window.addEventListener('filerise:source-change', (e) => {
+    const id = e?.detail?.id ? String(e.detail.id) : '';
+    if (!id) return;
+    ensurePaneState();
+    const activeKey = normalizePaneKey(window.activePane);
+    const state = getPaneState(activeKey);
+    if (!state) return;
+    const prev = state.sourceId || '';
+    if (prev === id) {
+      const folder = state.currentFolder || window.currentFolder || 'root';
+      refreshTreeForSource(folder, id);
+      return;
+    }
+    savePaneState(activeKey, {
+      sourceId: id,
+      currentFolderCaps: null,
+      selectedFolderCaps: null
+    });
+    const storedFolder = readStoredPaneFolder(activeKey, id) || getLastOpenedFolder(id) || 'root';
+    savePaneState(activeKey, { currentFolder: storedFolder });
+    const folder = storedFolder || state.currentFolder || 'root';
+    const treeContainer = document.getElementById('folderTreeContainer');
+    const treeWillReload = !!treeContainer && __frTreeSourceId !== id;
+    refreshTreeForSource(folder, id);
+    // Avoid double-loading: refreshTreeForSource triggers loadFolderTree → selectFolder → loadFileList.
+    if (!treeContainer || !treeWillReload) {
+      loadFileList(folder, { pane: activeKey }).catch(() => {});
+    }
+    refreshSourceBadges();
+  });
+} catch (e) { /* ignore */ }
+
 // Activate pane on click
 document.addEventListener('click', (e) => {
   const pane = e.target && e.target.closest
@@ -1975,7 +2322,8 @@ async function maybeRestoreInactivePane(activePaneKey) {
   const active = normalizePaneKey(activePaneKey || window.activePane);
   const other = active === 'secondary' ? 'primary' : 'secondary';
   const state = window.__frPaneState?.[other];
-  const otherFolder = (state && state.currentFolder) || readStoredPaneFolder(other);
+  const otherSourceId = (state && state.sourceId) || readStoredPaneSource(other) || '';
+  const otherFolder = (state && state.currentFolder) || readStoredPaneFolder(other, otherSourceId);
 
   if (!otherFolder || (state && state.hasLoaded)) return;
 
@@ -1994,7 +2342,7 @@ async function maybeRestoreInactivePane(activePaneKey) {
   }
 }
 
-function pruneMovedFolderFromInactivePane(sourceFolder, sourceParent) {
+function pruneMovedFolderFromInactivePane(sourceFolder, sourceParent, sourceId = '') {
   if (!window.dualPaneEnabled || !sourceFolder || !window.__frPaneState) return;
 
   const inactiveKey = normalizePaneKey(window.activePane) === 'secondary'
@@ -2002,6 +2350,7 @@ function pruneMovedFolderFromInactivePane(sourceFolder, sourceParent) {
     : 'secondary';
   const state = window.__frPaneState[inactiveKey];
   if (!state || state.currentFolder !== sourceParent) return;
+  if (sourceId && state.sourceId && state.sourceId !== sourceId) return;
 
   if (Array.isArray(state.currentSubfolders)) {
     state.currentSubfolders = state.currentSubfolders.filter(sf => sf.full !== sourceFolder);
@@ -2024,7 +2373,7 @@ function getPaneListForKey(paneKey) {
   return pane.querySelector('#fileList, #fileListSecondary') || pane;
 }
 
-function pruneMovedFilesFromInactivePane(sourceFolder, movedFiles) {
+function pruneMovedFilesFromInactivePane(sourceFolder, movedFiles, sourceId = '') {
   if (!window.dualPaneEnabled || !sourceFolder || !window.__frPaneState) return;
 
   const names = Array.isArray(movedFiles)
@@ -2052,6 +2401,7 @@ function pruneMovedFilesFromInactivePane(sourceFolder, movedFiles) {
   ['primary', 'secondary'].forEach(paneKey => {
     const state = window.__frPaneState[paneKey];
     if (!state || state.currentFolder !== sourceFolder) return;
+    if (sourceId && state.sourceId && state.sourceId !== sourceId) return;
 
     if (Array.isArray(state.fileData)) {
       state.fileData = state.fileData.filter(f => f && !nameSet.has(f.name));
@@ -2077,7 +2427,8 @@ async function paneDropHandler(e) {
   e.currentTarget.classList.remove('fr-pane-drop-target');
 
   const paneKey = e.currentTarget.classList.contains('secondary-pane') ? 'secondary' : 'primary';
-  const targetFolder = getPaneState(paneKey)?.currentFolder || '';
+  const paneState = getPaneState(paneKey);
+  const targetFolder = paneState?.currentFolder || '';
   if (!targetFolder) return;
 
   let dragData = null;
@@ -2089,6 +2440,10 @@ async function paneDropHandler(e) {
   }
 
   if (!dragData) return;
+
+  const sourceId = String(dragData.sourceId || dragData.sourceSourceId || '').trim();
+  const destSourceId = getPaneSourceId(paneKey) || getGlobalActiveSourceId();
+  const crossSource = sourceId && destSourceId && sourceId !== destSourceId;
 
   const scheduleRepair = () => {
     try {
@@ -2102,8 +2457,8 @@ async function paneDropHandler(e) {
   if (dragData.dragType === 'folder' && dragData.folder) {
     const sourceFolder = String(dragData.folder || '').trim();
     if (!sourceFolder || sourceFolder === 'root') return;
-    if (targetFolder === sourceFolder || targetFolder.startsWith(sourceFolder + '/')) {
-      showToast('Invalid destination.');
+    if (!crossSource && (targetFolder === sourceFolder || targetFolder.startsWith(sourceFolder + '/'))) {
+      showToast('Invalid destination.', 'warning');
       return;
     }
 
@@ -2112,6 +2467,17 @@ async function paneDropHandler(e) {
     }
 
     const sourceParent = dragData.sourceFolder || parentFolderOf(sourceFolder);
+    const progress = startTransferProgress({
+      action: 'Moving',
+      itemCount: 1,
+      itemLabel: 'folder',
+      bytesKnown: false,
+      indeterminate: true,
+      source: sourceFolder,
+      destination: targetFolder
+    });
+    let ok = false;
+    let errMsg = '';
 
     try {
       const res = await fetch('/api/folder/moveFolder.php', {
@@ -2123,23 +2489,39 @@ async function paneDropHandler(e) {
         },
         body: JSON.stringify({
           source: sourceFolder,
-          destination: targetFolder
+          destination: targetFolder,
+          sourceId,
+          destSourceId
         })
       });
       const data = await res.json().catch(() => ({}));
       if (data && !data.error) {
-        showToast(`Folder moved to ${targetFolder}!`);
-        invalidateFolderStats([sourceParent, targetFolder]);
-        await syncTreeAfterFolderMove(sourceFolder, targetFolder);
-        markPaneNeedsReloadForFolder(sourceParent);
-        pruneMovedFolderFromInactivePane(sourceFolder, sourceParent);
-        scheduleRepair();
+        ok = true;
+        showToast(`Folder moved to ${targetFolder}!`, 'success');
+        if (crossSource) {
+          if (sourceParent) invalidateFolderStats([sourceParent], sourceId);
+          invalidateFolderStats([targetFolder], destSourceId);
+          loadFileList(targetFolder, { pane: paneKey }).finally(scheduleRepair);
+        } else {
+          const statSourceId = sourceId || destSourceId;
+          invalidateFolderStats([sourceParent, targetFolder], statSourceId);
+          await syncTreeAfterFolderMove(sourceFolder, targetFolder);
+          scheduleRepair();
+        }
+        markPaneNeedsReloadForFolder(sourceParent, sourceId);
+        pruneMovedFolderFromInactivePane(sourceFolder, sourceParent, sourceId);
       } else {
-        showToast(`Error: ${data && data.error || 'Could not move folder'}`);
+        ok = false;
+        errMsg = data && data.error ? data.error : 'Could not move folder';
+        showToast(`Error: ${data && data.error || 'Could not move folder'}`, 'error');
       }
     } catch (err) {
+      ok = false;
+      errMsg = err && err.message ? err.message : 'Could not move folder';
       console.error('Error moving folder:', err);
-      showToast('Error moving folder.');
+      showToast('Error moving folder.', 'error');
+    } finally {
+      finishTransferProgress(progress, { ok, error: errMsg });
     }
     return;
   }
@@ -2148,14 +2530,31 @@ async function paneDropHandler(e) {
   if (!files.length) return;
 
   const sourceFolder = dragData.sourceFolder || window.currentFolder || 'root';
-  if (targetFolder === sourceFolder) {
-    showToast('Already in target folder.');
+  if (!crossSource && targetFolder === sourceFolder) {
+    showToast('Already in target folder.', 'info');
     return;
   }
 
   if (normalizePaneKey(window.activePane) !== paneKey) {
     setActivePane(paneKey);
   }
+
+  const totals = {
+    totalBytes: Number.isFinite(dragData.totalBytes) ? dragData.totalBytes : 0,
+    bytesKnown: dragData.bytesKnown === true,
+    itemCount: files.length
+  };
+  const progress = startTransferProgress({
+    action: 'Moving',
+    itemCount: totals.itemCount,
+    itemLabel: totals.itemCount === 1 ? 'file' : 'files',
+    totalBytes: totals.totalBytes,
+    bytesKnown: totals.bytesKnown,
+    source: sourceFolder,
+    destination: targetFolder
+  });
+  let ok = false;
+  let errMsg = '';
 
   try {
     const res = await fetch('/api/file/moveFiles.php', {
@@ -2168,24 +2567,40 @@ async function paneDropHandler(e) {
       body: JSON.stringify({
         source: sourceFolder,
         files,
-        destination: targetFolder
+        destination: targetFolder,
+        sourceId,
+        destSourceId
       })
     });
     const data = await res.json().catch(() => ({}));
     if (data.success) {
-      showToast(`File(s) moved successfully to ${targetFolder}!`);
-      invalidateFolderStats([sourceFolder, targetFolder]);
-      loadFileList(targetFolder).finally(scheduleRepair);
-      refreshFolderIcon(targetFolder);
-      refreshFolderIcon(sourceFolder);
-      markPaneNeedsReloadForFolder(sourceFolder);
-      pruneMovedFilesFromInactivePane(sourceFolder, files);
+      ok = true;
+      showToast(`File(s) moved successfully to ${targetFolder}!`, 'success');
+      if (crossSource) {
+        invalidateFolderStats([sourceFolder], sourceId);
+        invalidateFolderStats([targetFolder], destSourceId);
+      } else {
+        const statSourceId = sourceId || destSourceId;
+        invalidateFolderStats([sourceFolder, targetFolder], statSourceId);
+      }
+      loadFileList(targetFolder, { pane: paneKey }).finally(scheduleRepair);
+      const activeSourceId = getGlobalActiveSourceId();
+      if (!destSourceId || destSourceId === activeSourceId) refreshFolderIcon(targetFolder);
+      if (!sourceId || sourceId === activeSourceId) refreshFolderIcon(sourceFolder);
+      markPaneNeedsReloadForFolder(sourceFolder, sourceId);
+      pruneMovedFilesFromInactivePane(sourceFolder, files, sourceId);
     } else {
-      showToast(`Error moving files: ${data.error || 'Unknown error'}`);
+      ok = false;
+      errMsg = data.error || 'Unknown error';
+      showToast(`Error moving files: ${data.error || 'Unknown error'}`, 'error');
     }
   } catch (err) {
+    ok = false;
+    errMsg = err && err.message ? err.message : 'Unknown error';
     console.error('Error moving files:', err);
-    showToast('Error moving files.');
+    showToast('Error moving files.', 'error');
+  } finally {
+    finishTransferProgress(progress, { ok, error: errMsg });
   }
 }
 
@@ -2286,14 +2701,16 @@ async function refreshSelectedFolderCaps(folder) {
     updateFileActionButtons();
     return;
   }
+  const pane = normalizePaneKey(window.activePane);
+  const sourceId = getPaneSourceId(pane);
   window.selectedFolderCaps = null;
   try {
-    const caps = await fetchFolderCaps(folder);
+    const caps = await fetchFolderCaps(folder, sourceId);
     window.selectedFolderCaps = caps || null;
-    savePaneState(normalizePaneKey(window.activePane), { selectedFolderCaps: window.selectedFolderCaps });
+    savePaneState(pane, { selectedFolderCaps: window.selectedFolderCaps });
   } catch (e) {
     window.selectedFolderCaps = null;
-    savePaneState(normalizePaneKey(window.activePane), { selectedFolderCaps: null });
+    savePaneState(pane, { selectedFolderCaps: null });
   }
   updateFileActionButtons();
 }
@@ -2303,13 +2720,14 @@ function isTextEntryTarget(target) {
   return tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable;
 }
 
-function markPaneNeedsReloadForFolder(folder) {
+function markPaneNeedsReloadForFolder(folder, sourceId = '') {
   if (!window.dualPaneEnabled || !window.__frPaneState || !folder) return;
   const active = normalizePaneKey(window.activePane);
   ['primary', 'secondary'].forEach(pane => {
     if (pane === active) return;
     const state = window.__frPaneState[pane];
     if (state && state.currentFolder === folder) {
+      if (sourceId && state.sourceId && state.sourceId !== sourceId) return;
       state.needsReload = true;
     }
   });
@@ -2340,7 +2758,7 @@ function handleFolderCheckboxChange(cb) {
 function setCurrentFolderContext(folder) {
   if (!folder) return;
   window.currentFolder = folder;
-  try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { /* ignore */ }
+  setLastOpenedFolder(folder, getActivePaneSourceId());
   updateBreadcrumbTitle(folder);
   savePaneState(normalizePaneKey(window.activePane), { currentFolder: folder });
 }
@@ -2389,17 +2807,32 @@ applyRowHeight(localStorage.getItem('rowHeight') || '44');
 window.galleryColumns = clampGalleryColumns(localStorage.getItem('galleryColumns') || window.galleryColumns || 3);
 
 // --- Folder stats cache (for isEmpty.php) ---
-const _folderStatsCache = new Map();
-const _folderSummaryCache = new Map();
+const _folderStatsCache = window.__FR_FOLDER_STATS_CACHE || new Map();
+const _folderStatsInflight = window.__FR_FOLDER_STATS_INFLIGHT || new Map();
+const _folderSummaryCache = window.__FR_FOLDER_SUMMARY_CACHE || new Map();
+window.__FR_FOLDER_STATS_CACHE = _folderStatsCache;
+window.__FR_FOLDER_STATS_INFLIGHT = _folderStatsInflight;
+window.__FR_FOLDER_SUMMARY_CACHE = _folderSummaryCache;
 const MAX_CONCURRENT_FOLDER_STATS_REQS = 6;
 let _activeFolderStatsReqs = 0;
 const _folderStatsQueue = [];
 
-function _runFolderStats(url) {
+function folderCacheKey(folder, sourceId) {
+  const sid = sourceId ? String(sourceId) : '';
+  return sid ? `${sid}::${folder}` : folder;
+}
+
+function getFolderStatsTimeout(sourceId = '') {
+  const type = String(getSourceTypeById(sourceId || getGlobalActiveSourceId()) || '').toLowerCase();
+  if (type && type !== 'local') return 6000;
+  return 2500;
+}
+
+function _runFolderStats(url, timeoutMs) {
   return new Promise(resolve => {
     const start = () => {
       _activeFolderStatsReqs++;
-      _fetchJSONWithTimeout(url, 2500)
+      _fetchJSONWithTimeout(url, timeoutMs || 2500)
         .then(resolve)
         .finally(() => {
           _activeFolderStatsReqs--;
@@ -2413,41 +2846,64 @@ function _runFolderStats(url) {
   });
 }
 
-function fetchFolderStats(folder) {
+function fetchFolderStats(folder, sourceId = '') {
   if (!folder) return Promise.resolve(null);
 
-  if (_folderStatsCache.has(folder)) {
-    return _folderStatsCache.get(folder);
+  const key = folderCacheKey(folder, sourceId);
+  if (_folderStatsCache.has(key)) {
+    return Promise.resolve(_folderStatsCache.get(key));
+  }
+  if (_folderStatsInflight.has(key)) {
+    return _folderStatsInflight.get(key);
   }
 
-  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&t=${Date.now()}`);
-  const p = _runFolderStats(url).then(data => {
+  const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
+  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}${sourceParam}&t=${Date.now()}`);
+  const timeoutMs = getFolderStatsTimeout(sourceId);
+  const p = _runFolderStats(url, timeoutMs).then(data => {
+    const payload = (data && !data.__fr_err) ? data : { folders: 0, files: 0 };
+    const stillInflight = _folderStatsInflight.get(key) === p;
+    if (stillInflight) {
+      _folderStatsInflight.delete(key);
+    }
     // If this was a transient network/server failure, don't poison the cache.
     if (data && data.__fr_err) {
-      _folderStatsCache.delete(folder);
-      return { folders: 0, files: 0 };
+      return payload;
     }
-    return data || { folders: 0, files: 0 };
+    if (stillInflight) {
+      _folderStatsCache.set(key, payload);
+    }
+    return payload;
+  }).catch(() => {
+    if (_folderStatsInflight.get(key) === p) {
+      _folderStatsInflight.delete(key);
+    }
+    return { folders: 0, files: 0 };
   });
 
-  _folderStatsCache.set(folder, p);
+  _folderStatsInflight.set(key, p);
   return p;
 }
 
-function fetchFolderSummaryStats(folder, depthOverride) {
+function fetchFolderSummaryStats(folder, depthOverride, sourceId = '') {
   if (!folder) return Promise.resolve(null);
+  if (isFtpSource(sourceId)) {
+    return Promise.resolve(null);
+  }
 
   const depthSetting = Number.isFinite(depthOverride) ? depthOverride : getFileListSummaryDepth();
   const depth = Math.max(MIN_FILE_LIST_SUMMARY_DEPTH, Math.min(MAX_FILE_LIST_SUMMARY_DEPTH, depthSetting));
   const depthKey = depth > 0 ? String(depth) : 'u';
-  const cacheKey = `${folder}::${depthKey}`;
+  const baseKey = folderCacheKey(folder, sourceId);
+  const cacheKey = `${baseKey}::${depthKey}`;
 
   if (_folderSummaryCache.has(cacheKey)) {
     return _folderSummaryCache.get(cacheKey);
   }
 
   const depthParam = depth > 0 ? `&depth=${depth}` : '';
-  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&deep=1${depthParam}&t=${Date.now()}`);
+  const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
+  const url = withBase(`/api/folder/isEmpty.php?folder=${encodeURIComponent(folder)}&deep=1${depthParam}${sourceParam}&t=${Date.now()}`);
   const p = _fetchJSONWithTimeout(url, 6000).then(data => {
     if (data && data.__fr_err) {
       _folderSummaryCache.delete(cacheKey);
@@ -2460,9 +2916,9 @@ function fetchFolderSummaryStats(folder, depthOverride) {
   return p;
 }
 
-function clearFolderSummaryCache(folder) {
+function clearFolderSummaryCache(folder, sourceId = '') {
   if (!folder) return;
-  const prefix = `${folder}::`;
+  const prefix = `${folderCacheKey(folder, sourceId)}::`;
   for (const key of _folderSummaryCache.keys()) {
     if (key === folder || key.startsWith(prefix)) {
       _folderSummaryCache.delete(key);
@@ -2480,25 +2936,31 @@ window.addEventListener('folderStatsInvalidated', (e) => {
   let folders = detail.folders || detail.folder || null;
   if (!folders) return;
   if (!Array.isArray(folders)) folders = [folders];
+  const sourceId = detail.sourceId ? String(detail.sourceId) : '';
+  const activeSourceId = getGlobalActiveSourceId();
 
   folders.forEach(f => {
     if (!f) return;
-    _folderStatsCache.delete(f);
-    _folderPeekCache.delete(f);
-    clearFolderSummaryCache(f);
+    const key = folderCacheKey(f, sourceId);
+    _folderStatsCache.delete(key);
+    _folderStatsInflight.delete(key);
+    _folderPeekCache.delete(key);
+    clearFolderSummaryCache(f, sourceId);
 
-    try { refreshFolderIcon(f); } catch (e2) { /* ignore */ }
+    if (!sourceId || sourceId === activeSourceId) {
+      try { refreshFolderIcon(f); } catch (e2) { /* ignore */ }
+    }
 
     try {
       const safe = CSS.escape(f);
       const stripItem = document.querySelector(`#folderStripContainer .folder-item[data-folder="${safe}"]`);
-      if (stripItem) attachStripIconAsync(stripItem, f, 48);
+      if (stripItem) attachStripIconAsync(stripItem, f, 48, { sourceId });
       document
         .querySelectorAll(
           `#fileList tr.folder-row[data-folder="${safe}"], ` +
           `#fileListSecondary tr.folder-row[data-folder="${safe}"]`
         )
-        .forEach(row => attachStripIconAsync(row, f, 28));
+        .forEach(row => attachStripIconAsync(row, f, 28, { sourceId }));
     } catch (e3) { /* ignore */ }
   });
 });
@@ -2509,20 +2971,23 @@ window.addEventListener('folderStatsInvalidated', (e) => {
  *
  * Returns: { items: Array<{type,name}>, truncated: boolean }
  */
-async function fetchFolderPeek(folder) {
+async function fetchFolderPeek(folder, sourceId = '') {
   if (!folder) return null;
+  if (isFtpSource(sourceId)) return null;
 
-  if (_folderPeekCache.has(folder)) {
-    return _folderPeekCache.get(folder);
+  const key = folderCacheKey(folder, sourceId);
+  if (_folderPeekCache.has(key)) {
+    return _folderPeekCache.get(key);
   }
 
+  const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
   const p = (async () => {
     try {
       // 1) Files in this folder
       let files = [];
       try {
         const res = await fetch(
-          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`),
+          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0${sourceParam}&t=${Date.now()}`),
           { credentials: "include" }
         );
         const raw = await safeJson(res);
@@ -2542,7 +3007,7 @@ async function fetchFolderPeek(folder) {
       let subfolderNames = [];
       try {
         const res2 = await fetch(
-          withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0`),
+          withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0${sourceParam}`),
           { credentials: "include" }
         );
         const raw2 = await safeJson(res2);
@@ -2594,7 +3059,7 @@ async function fetchFolderPeek(folder) {
     }
   })();
 
-  _folderPeekCache.set(folder, p);
+  _folderPeekCache.set(key, p);
   return p;
 }
 
@@ -2753,7 +3218,7 @@ thumbEl.style.minHeight = "0";
     propsEl.innerHTML = props.join("");
 
     // --- Owner + "Your access" (from capabilities) --------------------
-    fetchFolderCaps(folderPath).then(caps => {
+    fetchFolderCaps(folderPath, getActivePaneSourceId()).then(caps => {
       if (!caps || !document.body.contains(el)) return;
       if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
 
@@ -2798,7 +3263,7 @@ thumbEl.style.minHeight = "0";
     // ------------------------------------------------------------------
 
     // --- Meta: counts + size + created/modified -----------------------
-    fetchFolderStats(folderPath).then(stats => {
+    fetchFolderStats(folderPath, getActivePaneSourceId()).then(stats => {
       if (!stats || !document.body.contains(el)) return;
       if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
 
@@ -2850,7 +3315,7 @@ thumbEl.style.minHeight = "0";
     // ------------------------------------------------------------------
 
     // Left side: peek inside folder (first few children)
-fetchFolderPeek(folderPath).then(result => {
+fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
   if (!document.body.contains(el)) return;
   if (!hoverPreviewContext || hoverPreviewContext.folder !== folderPath) return;
 
@@ -2951,6 +3416,7 @@ fetchFolderPeek(folderPath).then(result => {
     const folder = file.folder || window.currentFolder || "root";
     const url    = apiFileUrl(folder, file.name, true);
     const canTextPreview = canEditFile(file.name);
+    const isOfficeSnippet = OFFICE_SNIPPET_EXTS.has(ext);
 
     // Left: image / video preview OR text snippet OR "No preview"
     if (isImage) {
@@ -3170,7 +3636,7 @@ fetchFolderPeek(folderPath).then(result => {
     propsEl.innerHTML = props.join("");
 
         // Text snippet (left) for smaller text/code files
-        if (canTextPreview) {
+        if (canTextPreview || isOfficeSnippet) {
           fillFileSnippet(file, snippetEl);
         } else if (!isImage && !isVideo) {
           // Non-image, non-video, non-text → explicit "No preview"
@@ -3248,6 +3714,41 @@ function _hslToHex(h, s, l) {
 function _lighten(hex, amt = 14) { const { h, s, l } = _hexToHsl(hex); return _hslToHex(h, s, Math.min(100, l + amt)); }
 function _darken(hex, amt = 22) { const { h, s, l } = _hexToHsl(hex); return _hslToHex(h, s, Math.max(0, l - amt)); }
 
+let _folderIconRenderSeq = 0;
+
+function _isHexColor(value) {
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim());
+}
+
+function _resolveFolderColors(hostEl, fullPath) {
+  const frontVar = String(hostEl?.style?.getPropertyValue('--filr-folder-front') || '').trim();
+  const backVar = String(hostEl?.style?.getPropertyValue('--filr-folder-back') || '').trim();
+  const strokeVar = String(hostEl?.style?.getPropertyValue('--filr-folder-stroke') || '').trim();
+  const baseHex = _isHexColor(frontVar)
+    ? frontVar
+    : ((window.folderColorMap && window.folderColorMap[fullPath]) || '#f6b84e');
+
+  return {
+    front: _isHexColor(frontVar) ? frontVar : baseHex,
+    back: _isHexColor(backVar) ? backVar : _lighten(baseHex, 14),
+    stroke: _isHexColor(strokeVar) ? strokeVar : _darken(baseHex, 22)
+  };
+}
+
+function _applyFolderColors(hostEl, fullPath) {
+  if (!hostEl) return;
+  const { front, back, stroke } = _resolveFolderColors(hostEl, fullPath);
+  hostEl.style.setProperty('--filr-folder-front', front);
+  hostEl.style.setProperty('--filr-folder-back', back);
+  hostEl.style.setProperty('--filr-folder-stroke', stroke);
+}
+
+function _stampFolderIcon(iconSpan) {
+  if (!iconSpan) return '';
+  const seq = String(++_folderIconRenderSeq);
+  iconSpan.dataset.renderSeq = seq;
+  return seq;
+}
 
 // tiny fetch helper with timeout for folder counts
 function _fetchJSONWithTimeout(url, ms = 2500) {
@@ -3261,7 +3762,7 @@ function _fetchJSONWithTimeout(url, ms = 2500) {
 
 // Defensive: some browsers occasionally blank out inline SVGs elsewhere when a context menu opens.
 // This only repaints *blank* strip/inline-folder icons (no re-render churn when nothing is wrong).
-export function repairBlankFolderIcons({ force = false } = {}) {
+export function repairBlankFolderIcons({ force = false, skipStats = false } = {}) {
   const isBroken = (el) => {
     if (!el) return true;
     const html = String(el.innerHTML || '').trim();
@@ -3271,6 +3772,8 @@ export function repairBlankFolderIcons({ force = false } = {}) {
     // If the SVG exists but is missing expected parts, treat it as broken.
     // (Some Safari/WebKit glitches leave an empty <svg> shell.)
     if (!svg.querySelector('.folder-front') && !svg.querySelector('.folder-back')) return true;
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return true;
     return false;
   };
 
@@ -3278,12 +3781,13 @@ export function repairBlankFolderIcons({ force = false } = {}) {
   try {
     const strip = document.getElementById('folderStripContainer');
     if (strip) {
+      const sourceId = getActivePaneSourceId();
       strip.querySelectorAll('.folder-item[data-folder]').forEach(item => {
         const folder = item.getAttribute('data-folder') || '';
         if (!folder) return;
         const iconSpan = item.querySelector('.folder-svg');
         if (!force && !isBroken(iconSpan)) return;
-        attachStripIconAsync(item, folder, 48, { preserveKind: true });
+        attachStripIconAsync(item, folder, 48, { preserveKind: true, sourceId, skipStats });
       });
     }
   } catch (e) { /* best effort */ }
@@ -3295,7 +3799,8 @@ export function repairBlankFolderIcons({ force = false } = {}) {
       if (!folder) return;
       const iconSpan = row.querySelector('.folder-svg');
       if (!force && !isBroken(iconSpan)) return;
-      attachStripIconAsync(row, folder, 28, { preserveKind: true });
+      const sourceId = getPaneSourceIdForElement(row);
+      attachStripIconAsync(row, folder, 28, { preserveKind: true, sourceId, skipStats });
     });
   } catch (e) { /* best effort */ }
 }
@@ -3308,19 +3813,30 @@ function forceRepaintInlineFolderIcons(listEl) {
       if (!folder) return;
       const iconSpan = row.querySelector('.folder-svg');
       if (!iconSpan) return;
+      _stampFolderIcon(iconSpan);
+      _applyFolderColors(row, folder);
       const kind = iconSpan.dataset.kind || 'empty';
+      iconSpan.dataset.kind = kind;
       iconSpan.innerHTML = folderSVG(kind, { encrypted: isEncryptedForFolderIcon(folder) });
     });
     syncFolderIconSizeToRowHeight();
   } catch (e) { /* best effort */ }
 }
 
-function scheduleFolderIconRepair() {
+function scheduleFolderIconRepair(opts = {}) {
   try {
-    const kick = () => { try { repairBlankFolderIcons(); } catch (e) {} };
+    const { force = false, skipStats = false } = opts || {};
+    const kick = () => { try { repairBlankFolderIcons({ force, skipStats }); } catch (e) {} };
     if (typeof queueMicrotask === 'function') queueMicrotask(kick);
     setTimeout(kick, 80);
     setTimeout(kick, 250);
+    if (force) {
+      setTimeout(kick, 800);
+      const gentle = () => { try { repairBlankFolderIcons({ force: false, skipStats: true }); } catch (e) {} };
+      setTimeout(gentle, 600);
+      setTimeout(gentle, 1200);
+      setTimeout(gentle, 2000);
+    }
   } catch (e) { /* ignore */ }
 }
 
@@ -3340,18 +3856,12 @@ function scheduleInactivePaneFolderIconRepair() {
 }
 
 // Paint initial icon, then flip to "paper" if non-empty
-function attachStripIconAsync(hostEl, fullPath, size = 28, { preserveKind = false } = {}) {
-  const hex = (window.folderColorMap && window.folderColorMap[fullPath]) || '#f6b84e';
-  const front = hex;
-  const back = _lighten(hex, 14);
-  const stroke = _darken(hex, 22);
-
-  hostEl.style.setProperty('--filr-folder-front', front);
-  hostEl.style.setProperty('--filr-folder-back', back);
-  hostEl.style.setProperty('--filr-folder-stroke', stroke);
+function attachStripIconAsync(hostEl, fullPath, size = 28, { preserveKind = false, sourceId = '', skipStats = false } = {}) {
+  _applyFolderColors(hostEl, fullPath);
 
   const iconSpan = hostEl.querySelector('.folder-svg');
   if (!iconSpan) return;
+  const renderSeq = _stampFolderIcon(iconSpan);
 
   const encrypted = isEncryptedForFolderIcon(fullPath);
 
@@ -3364,8 +3874,13 @@ function attachStripIconAsync(hostEl, fullPath, size = 28, { preserveKind = fals
   // make sure this brand-new SVG is sized correctly
   try { syncFolderIconSizeToRowHeight(); } catch (e) {}
 
-  fetchFolderStats(fullPath)
+  if (skipStats) return;
+
+  const resolvedSource = sourceId || getActivePaneSourceId();
+  fetchFolderStats(fullPath, resolvedSource)
   .then(stats => {
+    if (!iconSpan.isConnected) return;
+    if (iconSpan.dataset.renderSeq && iconSpan.dataset.renderSeq !== renderSeq) return;
     if (!stats) return;
     const folders = Number.isFinite(stats.folders) ? stats.folders : 0;
     const files   = Number.isFinite(stats.files)   ? stats.files   : 0;
@@ -3411,9 +3926,10 @@ function folderDepthScore(folder) {
   return folder.split("/").filter(Boolean).length;
 }
 
-async function findBestAccessibleFolder({ lastOpenedFolder } = {}) {
+async function findBestAccessibleFolder({ lastOpenedFolder, sourceId = '' } = {}) {
   try {
-    const res = await fetch(withBase('/api/folder/getFolderList.php?counts=0'), { credentials: 'include' });
+    const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
+    const res = await fetch(withBase(`/api/folder/getFolderList.php?counts=0${sourceParam}`), { credentials: 'include' });
     const data = await safeJson(res);
     const names = Array.isArray(data)
       ? data.map(row => normalizeFolderPath(row?.folder || row)).filter(Boolean)
@@ -3440,50 +3956,54 @@ const _folderCapsInflight = window.__FR_CAPS_INFLIGHT || new Map();
 window.__FR_CAPS_CACHE = _folderCapsCache;
 window.__FR_CAPS_INFLIGHT = _folderCapsInflight;
 
-async function fetchFolderCaps(folder) {
+async function fetchFolderCaps(folder, sourceId = '') {
   if (!folder) return null;
-  if (_folderCapsCache.has(folder)) {
-    return _folderCapsCache.get(folder);
+  const key = folderCacheKey(folder, sourceId);
+  if (_folderCapsCache.has(key)) {
+    return _folderCapsCache.get(key);
   }
-  if (_folderCapsInflight.has(folder)) {
-    return _folderCapsInflight.get(folder);
+  if (_folderCapsInflight.has(key)) {
+    return _folderCapsInflight.get(key);
   }
 
       const p = (async () => {
     try {
+      const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
       const res  = await fetch(
-        withBase(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}`),
+        withBase(`/api/folder/capabilities.php?folder=${encodeURIComponent(folder)}${sourceParam}`),
         { credentials: 'include' }
       );
       const data = await safeJson(res);
-      _folderCapsCache.set(folder, data || null);
+      _folderCapsCache.set(key, data || null);
 
       if (data && (data.owner || data.user)) {
-        _folderOwnerCache.set(folder, data.owner || data.user || "");
+        _folderOwnerCache.set(key, data.owner || data.user || "");
       }
       return data || null;
     } catch (e) {
-      _folderCapsCache.set(folder, null);
+      _folderCapsCache.set(key, null);
       return null;
     } finally {
-      _folderCapsInflight.delete(folder);
+      _folderCapsInflight.delete(key);
     }
   })();
 
-  _folderCapsInflight.set(folder, p);
+  _folderCapsInflight.set(key, p);
   return p;
 }
 
-async function refreshCurrentFolderCaps(folder) {
+async function refreshCurrentFolderCaps(folder, sourceId = '', paneKey = '') {
+  const pane = paneKey ? normalizePaneKey(paneKey) : normalizePaneKey(window.activePane);
+  const resolvedSource = sourceId || getPaneSourceId(pane);
   window.currentFolderCaps = null;
-  savePaneState(normalizePaneKey(window.activePane), { currentFolderCaps: null });
+  savePaneState(pane, { currentFolderCaps: null });
   try {
-    const caps = await fetchFolderCaps(folder);
+    const caps = await fetchFolderCaps(folder, resolvedSource);
     window.currentFolderCaps = caps || null;
-    savePaneState(normalizePaneKey(window.activePane), { currentFolderCaps: window.currentFolderCaps });
+    savePaneState(pane, { currentFolderCaps: window.currentFolderCaps });
   } catch (e) {
     window.currentFolderCaps = null;
-    savePaneState(normalizePaneKey(window.activePane), { currentFolderCaps: null });
+    savePaneState(pane, { currentFolderCaps: null });
   }
   updateEncryptedFolderBanner(folder);
   refreshEncryptedFolderIconsInList();
@@ -3494,19 +4014,20 @@ async function refreshCurrentFolderCaps(folder) {
 // --- Folder owner cache + helper ----------------------
 const _folderOwnerCache = new Map();
 
-async function fetchFolderOwner(folder) {
+async function fetchFolderOwner(folder, sourceId = '') {
   if (!folder) return "";
-  if (_folderOwnerCache.has(folder)) {
-    return _folderOwnerCache.get(folder);
+  const key = folderCacheKey(folder, sourceId);
+  if (_folderOwnerCache.has(key)) {
+    return _folderOwnerCache.get(key);
   }
 
   try {
-    const data = await fetchFolderCaps(folder);
+    const data = await fetchFolderCaps(folder, sourceId);
     const owner = data && (data.owner || data.user || "");
-    _folderOwnerCache.set(folder, owner || "");
+    _folderOwnerCache.set(key, owner || "");
     return owner || "";
   } catch (e) {
-    _folderOwnerCache.set(folder, "");
+    _folderOwnerCache.set(key, "");
     return "";
   }
 }
@@ -3895,6 +4416,7 @@ function refreshFileSummaryForPane(paneKey) {
   }
 
   const folder = state.currentFolder || window.currentFolder || "root";
+  const sourceId = state.sourceId || getActivePaneSourceId();
   summaryElem.classList.add("fr-summary-pill");
   summaryElem.style.display = "flex";
   const fallbackStats = getLocalSummaryStats();
@@ -3902,7 +4424,7 @@ function refreshFileSummaryForPane(paneKey) {
   summaryElem.dataset.folder = folder;
   summaryElem.dataset.truncated = "0";
 
-  fetchFolderSummaryStats(folder).then(stats => {
+  fetchFolderSummaryStats(folder, undefined, sourceId).then(stats => {
     if (!stats || summaryElem.dataset.folder !== folder) return;
     summaryElem.innerHTML = buildFolderSummaryHTML(stats, fallbackStats);
     summaryElem.dataset.truncated = stats.truncated ? "1" : "0";
@@ -4097,6 +4619,83 @@ function ensureSearchEverywhereButton() {
   return searchEverywhereBtn;
 }
 
+function getSearchEverywhereSources() {
+  const sources = [];
+  const select = document.getElementById('sourceSelector');
+  if (select && select.options && select.options.length) {
+    Array.from(select.options).forEach(opt => {
+      const id = String(opt.value || '').trim();
+      if (!id) return;
+      const name = String(opt.dataset?.sourceName || opt.textContent || id);
+      const type = String(opt.dataset?.sourceType || '');
+      const readOnly = opt.dataset?.sourceReadOnly === '1' || opt.disabled;
+      sources.push({ id, name, type, readOnly });
+    });
+    return sources;
+  }
+
+  try {
+    const metaMap = window.__FR_SOURCE_META_MAP;
+    if (metaMap && typeof metaMap === 'object') {
+      Object.keys(metaMap).forEach(id => {
+        const meta = metaMap[id] || {};
+        sources.push({ id, name: meta.name || id, type: meta.type || '', readOnly: !!meta.readOnly });
+      });
+    }
+  } catch (e) { /* ignore */ }
+
+  return sources;
+}
+
+function populateSearchEverywhereSources() {
+  if (!searchEverywhereSourceEl) return;
+  const sources = getSearchEverywhereSources();
+  const wrap = searchEverywhereSourceEl.closest('.search-everywhere-source-wrap');
+  searchEverywhereSourceEl.innerHTML = '';
+
+  const multiple = sources.length > 1;
+  if (multiple) {
+    const opt = document.createElement('option');
+    opt.value = 'all';
+    opt.textContent = t('search_everywhere_source_all') || 'All sources';
+    searchEverywhereSourceEl.appendChild(opt);
+  }
+
+  sources.forEach(src => {
+    const id = String(src.id || '').trim();
+    if (!id) return;
+    const opt = document.createElement('option');
+    opt.value = id;
+    const label = formatSourceBadgeText(src) || id;
+    const lockMark = src.readOnly ? ` \uD83D\uDD12 ${t('read_only') || 'Read-only'}` : '';
+    opt.textContent = `${label}${lockMark}`;
+    searchEverywhereSourceEl.appendChild(opt);
+  });
+
+  if (wrap) {
+    wrap.style.display = (multiple || sources.length > 0) ? '' : 'none';
+  }
+  searchEverywhereSourceEl.disabled = sources.length <= 1;
+
+  const prev = searchEverywhereSourceEl.getAttribute('data-prev') || '';
+  const hasPrev = Array.from(searchEverywhereSourceEl.options).some(opt => opt.value === prev);
+  if (hasPrev) {
+    searchEverywhereSourceEl.value = prev;
+  } else if (multiple) {
+    searchEverywhereSourceEl.value = 'all';
+  } else if (searchEverywhereSourceEl.options.length) {
+    searchEverywhereSourceEl.value = searchEverywhereSourceEl.options[0].value;
+  }
+  searchEverywhereSourceEl.setAttribute('data-prev', searchEverywhereSourceEl.value || '');
+
+  if (!searchEverywhereSourceEl.__wired) {
+    searchEverywhereSourceEl.__wired = true;
+    searchEverywhereSourceEl.addEventListener('change', () => {
+      searchEverywhereSourceEl.setAttribute('data-prev', searchEverywhereSourceEl.value || '');
+    });
+  }
+}
+
 function ensureSearchEverywhereModal() {
   if (searchEverywhereModal) return searchEverywhereModal;
 
@@ -4139,7 +4738,11 @@ function ensureSearchEverywhereModal() {
     <div class="form-group" style="margin-bottom:8px;">
       <input type="text" id="searchEverywhereInput" class="form-control" placeholder="${t("search_everywhere_placeholder") || "Type to search across all folders"}" autocomplete="off" />
     </div>
-    <div class="d-flex align-items-center" style="gap:8px; margin-bottom:10px;">
+    <div class="d-flex align-items-center" style="gap:8px; margin-bottom:10px; flex-wrap: wrap;">
+      <div class="search-everywhere-source-wrap" style="display:flex; align-items:center; gap:6px;">
+        <label for="searchEverywhereSource" class="mb-0" style="font-size:12px;">${t("search_everywhere_source_label") || "Source"}</label>
+        <select id="searchEverywhereSource" class="form-control" style="max-width:220px;"></select>
+      </div>
       <label for="searchEverywhereLimit" class="mb-0" style="font-size:12px;">${t("search_everywhere_limit") || "Result limit"}</label>
       <input type="number" id="searchEverywhereLimit" class="form-control" style="max-width:100px;" min="1" max="200" />
       <button type="button" class="btn btn-primary btn-sm" id="searchEverywhereRun">${t("search_everywhere_run") || "Search"}</button>
@@ -4163,6 +4766,8 @@ function ensureSearchEverywhereModal() {
   searchEverywhereResultsEl = card.querySelector("#searchEverywhereResults");
   searchEverywhereInputEl = card.querySelector("#searchEverywhereInput");
   searchEverywhereLimitEl = card.querySelector("#searchEverywhereLimit");
+  searchEverywhereSourceEl = card.querySelector("#searchEverywhereSource");
+  populateSearchEverywhereSources();
 
   const runBtn = card.querySelector("#searchEverywhereRun");
   runBtn?.addEventListener("click", () => {
@@ -4206,7 +4811,7 @@ function applySearchEverywhereTheme() {
     searchEverywhereResultsEl.style.background = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)";
   }
 
-  const inputs = searchEverywhereModal.querySelectorAll("#searchEverywhereInput, #searchEverywhereLimit");
+  const inputs = searchEverywhereModal.querySelectorAll("#searchEverywhereInput, #searchEverywhereLimit, #searchEverywhereSource");
   inputs.forEach((inp) => {
     if (isDark) {
       inp.style.background = "#1f1f1f";
@@ -4232,6 +4837,7 @@ function openSearchEverywhereModal() {
   if (searchEverywhereLimitEl) {
     searchEverywhereLimitEl.value = String(limit);
   }
+  populateSearchEverywhereSources();
   applySearchEverywhereTheme();
   searchEverywhereModal.style.display = "flex";
   requestAnimationFrame(() => {
@@ -4245,10 +4851,51 @@ function closeSearchEverywhereModal() {
   }
 }
 
+function ensureSearchEverywhereResultBlocks() {
+  if (!searchEverywhereResultsEl) {
+    searchEverywhereStatusEl = null;
+    searchEverywhereListEl = null;
+    return { statusEl: null, listEl: null };
+  }
+
+  let statusEl = searchEverywhereResultsEl.querySelector("#searchEverywhereStatus");
+  let listEl = searchEverywhereResultsEl.querySelector("#searchEverywhereList");
+  if (!statusEl || !listEl) {
+    searchEverywhereResultsEl.innerHTML = `
+      <div id="searchEverywhereStatus" class="text-muted" style="font-size:12px; margin-bottom:6px;"></div>
+      <div id="searchEverywhereList"></div>
+    `;
+    statusEl = searchEverywhereResultsEl.querySelector("#searchEverywhereStatus");
+    listEl = searchEverywhereResultsEl.querySelector("#searchEverywhereList");
+  }
+
+  searchEverywhereStatusEl = statusEl;
+  searchEverywhereListEl = listEl;
+  return { statusEl, listEl };
+}
+
+function sortSearchEverywhereItems(items) {
+  const list = Array.isArray(items) ? items.slice() : [];
+  list.sort((a, b) => {
+    const saRaw = Number(a?.score);
+    const sbRaw = Number(b?.score);
+    const sa = Number.isFinite(saRaw) ? saRaw : 999;
+    const sb = Number.isFinite(sbRaw) ? sbRaw : 999;
+    if (sa === sb) {
+      const pa = `${String(a?.sourceId || '')}::${String(a?.path || '')}`;
+      const pb = `${String(b?.sourceId || '')}::${String(b?.path || '')}`;
+      return pa.localeCompare(pb, undefined, { sensitivity: "base", numeric: true });
+    }
+    return sa - sb;
+  });
+  return list;
+}
+
 function renderSearchEverywhereResults(items) {
   if (!searchEverywhereResultsEl) return;
+  const listEl = searchEverywhereResultsEl.querySelector("#searchEverywhereList") || searchEverywhereResultsEl;
   if (!Array.isArray(items) || !items.length) {
-    searchEverywhereResultsEl.innerHTML = `<div class="text-muted" style="font-size:12px;">${t("search_everywhere_no_results") || "No results"}</div>`;
+    listEl.innerHTML = `<div class="text-muted" style="font-size:12px;">${t("search_everywhere_no_results") || "No results"}</div>`;
     return;
   }
 
@@ -4256,68 +4903,241 @@ function renderSearchEverywhereResults(items) {
     const icon = item.type === 'folder' ? 'folder' : 'insert_drive_file';
     const name = escapeHTML(item.name || '');
     const path = escapeHTML(item.path || '');
-    const meta = escapeHTML(item.uploader ? `Uploaded by ${item.uploader}` : '');
+    const sourceId = String(item.sourceId || '').trim();
+    const sourceMeta = {
+      name: String(item.sourceName || ''),
+      type: String(item.sourceType || '')
+    };
+    let sourceLabel = formatSourceBadgeText(sourceMeta);
+    if (!sourceLabel && sourceId) {
+      sourceLabel = formatSourceBadgeText(getSourceMetaById(sourceId));
+    }
+    const sourceText = sourceLabel ? escapeHTML(sourceLabel) : '';
+    const uploaderText = item.uploader ? escapeHTML(`Uploaded by ${item.uploader}`) : '';
+    const metaLine = [path, sourceText, uploaderText].filter(Boolean).join(' • ');
     return `
-      <div class="d-flex align-items-center search-everywhere-row" data-path="${path}" data-folder="${escapeHTML(item.folder || '')}" data-name="${escapeHTML(item.name || '')}" data-type="${item.type}" style="padding:6px 4px; border-bottom:1px solid rgba(0,0,0,0.05); cursor:pointer;">
+      <div class="d-flex align-items-center search-everywhere-row" data-path="${path}" data-folder="${escapeHTML(item.folder || '')}" data-name="${escapeHTML(item.name || '')}" data-type="${item.type}" data-source-id="${escapeHTML(sourceId)}" style="padding:6px 4px; border-bottom:1px solid rgba(0,0,0,0.05); cursor:pointer;">
         <i class="material-icons" aria-hidden="true" style="margin-right:8px;">${icon}</i>
         <div style="flex:1; min-width:0;">
           <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
-          <div class="text-muted" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${path}</div>
-          ${meta ? `<div class="text-muted" style="font-size:12px;">${meta}</div>` : ''}
+          ${metaLine ? `<div class="text-muted" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${metaLine}</div>` : ''}
         </div>
       </div>
     `;
   }).join("");
 
-  searchEverywhereResultsEl.innerHTML = rows;
-  searchEverywhereResultsEl.querySelectorAll('.search-everywhere-row').forEach((row) => {
+  listEl.innerHTML = rows;
+  listEl.querySelectorAll('.search-everywhere-row').forEach((row) => {
     row.addEventListener('click', () => {
       const folder = row.getAttribute('data-folder') || 'root';
       const name = row.getAttribute('data-name') || '';
-      navigateToSearchResult(folder, name);
+      const sourceId = row.getAttribute('data-source-id') || '';
+      navigateToSearchResult(folder, name, sourceId);
     });
   });
 }
 
+async function runSearchEverywhereAcrossSources(term, limit, sources, runId) {
+  const uniqSources = [];
+  const seen = new Set();
+  sources.forEach((src) => {
+    const id = String(src?.id || '').trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    uniqSources.push({
+      id,
+      name: String(src?.name || id),
+      type: String(src?.type || ''),
+    });
+  });
+
+  if (!uniqSources.length) {
+    renderSearchEverywhereResults([]);
+    if (searchEverywhereStatusEl) searchEverywhereStatusEl.textContent = '';
+    return;
+  }
+
+  const perSourceLimit = Math.min(limit, 50);
+  const statusById = {};
+  const labelById = {};
+  uniqSources.forEach((src) => {
+    statusById[src.id] = 'pending';
+    labelById[src.id] = formatSourceBadgeText(src) || src.name || src.id;
+  });
+
+  const resultsMap = new Map();
+  const reindexedSources = new Set();
+
+  const updateStatus = () => {
+    if (!searchEverywhereStatusEl) return;
+    const ids = Object.keys(statusById);
+    if (!ids.length) {
+      searchEverywhereStatusEl.textContent = '';
+      return;
+    }
+    const doneCount = ids.filter(id => statusById[id] !== 'pending').length;
+    const pendingLabels = ids.filter(id => statusById[id] === 'pending').map(id => labelById[id]).filter(Boolean);
+    const failedLabels = ids.filter(id => statusById[id] === 'error').map(id => labelById[id]).filter(Boolean);
+
+    if (doneCount >= ids.length && pendingLabels.length === 0) {
+      if (failedLabels.length) {
+        searchEverywhereStatusEl.textContent = `Failed: ${failedLabels.join(', ')}`;
+      } else {
+        searchEverywhereStatusEl.textContent = '';
+      }
+      return;
+    }
+
+    let text = `${t("loading") || "Loading..."} (${doneCount}/${ids.length})`;
+    if (pendingLabels.length) {
+      text += ` - Waiting on: ${pendingLabels.join(', ')}`;
+    }
+    if (failedLabels.length) {
+      text += ` - Failed: ${failedLabels.join(', ')}`;
+    }
+    searchEverywhereStatusEl.textContent = text;
+  };
+
+  updateStatus();
+
+  const fetchOne = async (src) => {
+    const sourceParam = `&sourceId=${encodeURIComponent(src.id)}`;
+    try {
+      const res = await fetch(withBase(`/api/pro/search/query.php?q=${encodeURIComponent(term)}&limit=${perSourceLimit}${sourceParam}`), {
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      if (runId !== searchEverywhereRunId) return;
+      statusById[src.id] = 'done';
+      if (data.reindexed) reindexedSources.add(src.id);
+      const items = Array.isArray(data.items) ? data.items : [];
+      items.forEach((item) => {
+        const sourceKey = String(item?.sourceId || src.id || '');
+        const pathKey = String(item?.path || item?.folder || item?.name || '');
+        const key = `${sourceKey}::${pathKey}`;
+        if (!item?.sourceId) item.sourceId = sourceKey;
+        resultsMap.set(key, item);
+      });
+      const sorted = sortSearchEverywhereItems(Array.from(resultsMap.values()));
+      renderSearchEverywhereResults(sorted.slice(0, limit));
+    } catch (e) {
+      if (runId !== searchEverywhereRunId) return;
+      statusById[src.id] = 'error';
+    } finally {
+      if (runId !== searchEverywhereRunId) return;
+      updateStatus();
+    }
+  };
+
+  await Promise.allSettled(uniqSources.map(src => fetchOne(src)));
+
+  if (runId !== searchEverywhereRunId) return;
+  if (!resultsMap.size) {
+    renderSearchEverywhereResults([]);
+  }
+  updateStatus();
+  if (reindexedSources.size) {
+    showToast(t("search_everywhere_reindexed") || "Index refreshed.", 'success');
+  }
+}
+
 async function runSearchEverywhere(term) {
   if (!term || !term.trim()) {
-    showToast(t("enter_search_term") || "Enter a search term.");
+    showToast(t("enter_search_term") || "Enter a search term.", 'warning');
     return;
   }
   ensureSearchEverywhereModal();
-  if (searchEverywhereResultsEl) {
-    searchEverywhereResultsEl.innerHTML = `<div class="text-muted" style="font-size:12px;">${t("loading") || "Loading..."} </div>`;
+  const runId = ++searchEverywhereRunId;
+  const { statusEl, listEl } = ensureSearchEverywhereResultBlocks();
+  if (statusEl) {
+    statusEl.textContent = `${t("loading") || "Loading..."}`;
+  }
+  if (listEl) {
+    listEl.innerHTML = '';
   }
 
   const limitVal = searchEverywhereLimitEl ? Number(searchEverywhereLimitEl.value || 50) : 50;
   const limit = Math.max(1, Math.min(200, limitVal || 50));
+  let sourceId = searchEverywhereSourceEl ? String(searchEverywhereSourceEl.value || '').trim() : '';
+  if (sourceId === 'all') {
+    const sources = getSearchEverywhereSources();
+    if (sources.length > 1) {
+      await runSearchEverywhereAcrossSources(term, limit, sources, runId);
+      return;
+    }
+    if (sources.length === 1) {
+      sourceId = String(sources[0]?.id || '').trim();
+    }
+  }
+  const sourceParam = sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : '';
 
   try {
-    const res = await fetch(withBase(`/api/pro/search/query.php?q=${encodeURIComponent(term)}&limit=${limit}`), {
+    const res = await fetch(withBase(`/api/pro/search/query.php?q=${encodeURIComponent(term)}&limit=${limit}${sourceParam}`), {
       credentials: 'include',
     });
     const data = await res.json();
+    if (runId !== searchEverywhereRunId) return;
     if (!res.ok || !data.ok) {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
     renderSearchEverywhereResults(data.items || []);
+    if (statusEl) statusEl.textContent = '';
     if (data.reindexed) {
-      showToast(t("search_everywhere_reindexed") || "Index refreshed.");
+      showToast(t("search_everywhere_reindexed") || "Index refreshed.", 'success');
     }
   } catch (e) {
+    if (runId !== searchEverywhereRunId) return;
     console.error('Search everywhere error', e);
     if (searchEverywhereResultsEl) {
       searchEverywhereResultsEl.innerHTML = `<div class="text-danger" style="font-size:12px;">${t("search_everywhere_error") || "Search failed."}</div>`;
     }
-    showToast(t("search_everywhere_error") || "Search failed.");
+    if (statusEl) statusEl.textContent = '';
+    showToast(t("search_everywhere_error") || "Search failed.", 'error');
   }
 }
 
-async function navigateToSearchResult(folder, name) {
+async function navigateToSearchResult(folder, name, sourceId) {
   if (!folder) return;
   closeSearchEverywhereModal();
   const dest = decodeHtmlEntities(folder || 'root') || 'root';
   const targetName = decodeHtmlEntities(name || '');
+  const targetSourceId = String(sourceId || '').trim();
+  const activeSourceId = getGlobalActiveSourceId();
+
+  if (targetSourceId && targetSourceId !== activeSourceId) {
+    let applied = false;
+    if (typeof window.__frApplyActiveSource === 'function') {
+      try {
+        applied = await window.__frApplyActiveSource(targetSourceId, { skipEvent: true, origin: 'search' });
+      } catch (e) { /* ignore */ }
+    }
+    if (!applied) {
+      const sel = document.getElementById('sourceSelector');
+      if (sel) sel.value = targetSourceId;
+      try { localStorage.setItem('fr_active_source', targetSourceId); } catch (e) { /* ignore */ }
+    }
+
+    savePaneState(normalizePaneKey(window.activePane), {
+      sourceId: targetSourceId,
+      currentFolderCaps: null,
+      selectedFolderCaps: null
+    });
+    refreshSourceBadges();
+    try { resetFolderTreeCaches(); } catch (e) { /* ignore */ }
+    __frTreeSourceId = targetSourceId;
+
+    pendingSearchSelection = targetName ? { folder: dest, name: targetName } : null;
+    try { await loadFolderTree(dest); } catch (e) { /* ignore */ }
+
+    setTimeout(() => maybeHighlightSearchedFile(dest), 80);
+    setTimeout(() => maybeHighlightSearchedFile(dest), 220);
+    setTimeout(() => maybeHighlightSearchedFile(dest), 500);
+    return;
+  }
+
   pendingSearchSelection = targetName ? { folder: dest, name: targetName } : null;
   setCurrentFolderContext(dest);
 
@@ -4360,7 +5180,7 @@ async function navigateToSearchResult(folder, name) {
   const selectedOrToast = () => {
     const folder = getSelectedFolderPath();
     if (!folder) {
-      showToast(t("select_folder") || "Select a folder first.");
+      showToast(t("select_folder") || "Select a folder first.", 'warning');
       return null;
     }
     return folder;
@@ -4708,8 +5528,8 @@ function bindViewOptionsButton() {
   });
 }
 
-export function formatFolderName(folder) {
-  if (folder === "root") return "(Root)";
+export function formatFolderName(folder, sourceId = '') {
+  if (folder === "root") return getRootLabel(sourceId);
   return folder
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, char => char.toUpperCase());
@@ -4729,17 +5549,47 @@ export async function loadFileList(folderParam, options = {}) {
     window.userFolderOnly === true ||
     localStorage.getItem("folderOnly") === "true";
   const username = (localStorage.getItem("username") || "").trim();
-  const lastOpenedFolder = (localStorage.getItem("lastOpenedFolder") || "").trim();
+  const paneSourceId = getPaneSourceId(pane);
+  const paneState = getPaneState(pane);
+  const paneFolder = (paneState && paneState.sourceId === paneSourceId && typeof paneState.currentFolder === 'string')
+    ? paneState.currentFolder.trim()
+    : readStoredPaneFolder(pane, paneSourceId);
+  const lastOpenedFolder = getLastOpenedFolder(paneSourceId);
   const { skipFallback } = options || {};
+  const sourceParam = paneSourceId ? `&sourceId=${encodeURIComponent(paneSourceId)}` : '';
+  const isFtp = isFtpSource(paneSourceId);
 
-  let folder = folderParam || window.currentFolder || lastOpenedFolder || "root";
+  let folder = folderParam || paneFolder || lastOpenedFolder || (paneSourceId ? "root" : (window.currentFolder || "root"));
+  const isActivePane = pane === normalizePaneKey(window.activePane);
+  if (isActivePane && folder) {
+    window.currentFolder = folder;
+    updateBreadcrumbTitle(folder);
+  }
   if (folderOnly && (!folder || folder === "root") && username) {
     folder = username;
     window.currentFolder = folder;
-    try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { }
+    setLastOpenedFolder(folder, paneSourceId);
     updateBreadcrumbTitle(folder);
   }
   savePaneState(pane, { currentFolder: folder });
+  const subfoldersMatch =
+    String(window.currentSubfoldersSourceId || '') === String(paneSourceId || '') &&
+    String(window.currentSubfoldersFolder || '') === String(folder || '');
+  if (!subfoldersMatch) {
+    window.currentSubfolders = [];
+    window.currentSubfoldersSourceId = String(paneSourceId || '');
+    window.currentSubfoldersFolder = String(folder || '');
+    savePaneState(pane, {
+      currentSubfolders: [],
+      currentSubfoldersSourceId: window.currentSubfoldersSourceId,
+      currentSubfoldersFolder: window.currentSubfoldersFolder
+    });
+    const strip = document.getElementById('folderStripContainer');
+    if (strip) {
+      strip.innerHTML = '';
+      strip.style.display = 'none';
+    }
+  }
 
   const fileListContainer = document.getElementById("fileList");
   if (fileListContainer) {
@@ -4748,7 +5598,7 @@ export async function loadFileList(folderParam, options = {}) {
   const actionsContainer = document.getElementById("fileListActions");
   window.selectedFolderCaps = null;
   savePaneState(pane, { selectedFolderCaps: null });
-  refreshCurrentFolderCaps(folder);
+  refreshCurrentFolderCaps(folder, paneSourceId, pane);
 
   // 1) show loader (only this request is allowed to render)
   fileListContainer.style.visibility = "hidden";
@@ -4758,13 +5608,16 @@ export async function loadFileList(folderParam, options = {}) {
     // Kick off both in parallel, but render as soon as FILES are ready
     const recursiveParam = folderOnly ? 0 : 1;
     const filesPromise = fetch(
-      withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=${recursiveParam}&t=${Date.now()}`),
+      withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=${recursiveParam}${sourceParam}&t=${Date.now()}`),
       { credentials: 'include' }
     );
-    let foldersPromise = fetch(
-      withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0`),
-      { credentials: 'include' }
-    );
+    let foldersPromise = null;
+    if (!isFtp) {
+      foldersPromise = fetch(
+        withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0${sourceParam}`),
+        { credentials: 'include' }
+      );
+    }
 
     // ----- FILES FIRST -----
     let filesRes = await filesPromise;
@@ -4776,7 +5629,7 @@ export async function loadFileList(folderParam, options = {}) {
     if (filesRes.status === 403 && folder !== "root") {
       try {
         filesRes = await fetch(
-          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0&t=${Date.now()}`),
+          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(folder)}&recursive=0${sourceParam}&t=${Date.now()}`),
           { credentials: "include" }
         );
       } catch (e) { /* ignore and fall through */ }
@@ -4784,7 +5637,7 @@ export async function loadFileList(folderParam, options = {}) {
     if (filesRes.status === 403 && username && folder !== username) {
       try {
         const alt = await fetch(
-          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(username)}&recursive=0&t=${Date.now()}`),
+          withBase(`/api/file/getFileList.php?folder=${encodeURIComponent(username)}&recursive=0${sourceParam}&t=${Date.now()}`),
           { credentials: "include" }
         );
         if (alt.ok) {
@@ -4792,17 +5645,19 @@ export async function loadFileList(folderParam, options = {}) {
           filesRes = alt;
           folder = username;
           window.currentFolder = folder;
-          try { localStorage.setItem("lastOpenedFolder", folder); } catch (e) { }
+          setLastOpenedFolder(folder, paneSourceId);
           updateBreadcrumbTitle(folder);
           // remember that this is a folder-only session
           window.userFolderOnly = true;
           try { localStorage.setItem("folderOnly", "true"); } catch (e) { }
-          refreshCurrentFolderCaps(folder);
+          refreshCurrentFolderCaps(folder, paneSourceId, pane);
           // refresh folders promise for the new folder context
-          foldersPromise = fetch(
-            withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0`),
-            { credentials: 'include' }
-          );
+          if (!isFtp) {
+            foldersPromise = fetch(
+              withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0${sourceParam}`),
+              { credentials: 'include' }
+            );
+          }
         }
       } catch (e) { /* ignore; will fall back to the normal 403 handling */ }
     }
@@ -4814,7 +5669,7 @@ export async function loadFileList(folderParam, options = {}) {
     }
     if (filesRes.status === 403) {
       if (!skipFallback) {
-        const fallback = await findBestAccessibleFolder({ lastOpenedFolder });
+        const fallback = await findBestAccessibleFolder({ lastOpenedFolder, sourceId: paneSourceId });
         if (fallback && fallback !== folder) {
           setCurrentFolderContext(fallback);
           return await loadFileList(fallback, { skipFallback: true });
@@ -4942,7 +5797,7 @@ export async function loadFileList(folderParam, options = {}) {
       summaryElem.dataset.folder = folder;
       summaryElem.dataset.truncated = "0";
 
-      fetchFolderSummaryStats(folder).then(stats => {
+      fetchFolderSummaryStats(folder, undefined, paneSourceId).then(stats => {
         if (!stats || summaryElem.dataset.folder !== folder) return;
         summaryElem.innerHTML = buildFolderSummaryHTML(stats, fallbackStats);
         summaryElem.dataset.truncated = stats.truncated ? "1" : "0";
@@ -4970,55 +5825,80 @@ export async function loadFileList(folderParam, options = {}) {
 
     // ----- FOLDERS NEXT (populate strip when ready; doesn't block rows) -----
     try {
-      const foldersRes = await foldersPromise;
-      // If folders API forbids, just skip the strip; keep file rows rendered
-      if (foldersRes.status === 403) {
-        const strip = document.getElementById("folderStripContainer");
-        if (strip) strip.style.display = "none";
-        return data.files;
+      if (!foldersPromise && isFtp) {
+        const shouldFetchFolders = window.showFoldersInList !== false || window.showInlineFolders !== false;
+        if (shouldFetchFolders) {
+          foldersPromise = new Promise(resolve => {
+            setTimeout(() => {
+              resolve(fetch(
+                withBase(`/api/folder/getFolderList.php?folder=${encodeURIComponent(folder)}&counts=0${sourceParam}`),
+                { credentials: 'include' }
+              ));
+            }, 600);
+          });
+        }
       }
 
-      const folderRaw = await safeJson(foldersRes).catch(() => []); // don't block file render on strip issues
-      if (reqId !== __fileListReqSeq[pane]) return data.files;
+      if (foldersPromise) {
+        const foldersRes = await foldersPromise;
+        // If folders API forbids, just skip the strip; keep file rows rendered
+        if (foldersRes.status === 403) {
+          const strip = document.getElementById("folderStripContainer");
+          if (strip) strip.style.display = "none";
+          return data.files;
+        }
 
-      // --- build ONLY the *direct* children of current folder ---
-      let subfolders = [];
-      const hidden = new Set(["profile_pics", "trash"]);
-      if (Array.isArray(folderRaw)) {
-        const allPaths = folderRaw.map(item => item.folder ?? item);
-        const depth = folder === "root" ? 1 : folder.split("/").length + 1;
-        subfolders = allPaths
-          .filter(p => {
-            if (folder === "root") return p.indexOf("/") === -1;
-            if (!p.startsWith(folder + "/")) return false;
-            return p.split("/").length === depth;
-          })
-          .map(p => ({ name: p.split("/").pop(), full: p }));
-      }
+        const folderRaw = await safeJson(foldersRes).catch(() => []); // don't block file render on strip issues
+        if (reqId !== __fileListReqSeq[pane]) return data.files;
 
-      subfolders = subfolders.filter(sf => {
-        const lower = (sf.name || "").toLowerCase();
-        return !hidden.has(lower) && !lower.startsWith("resumable_");
-      });
+        // --- build ONLY the *direct* children of current folder ---
+        let subfolders = [];
+        const hidden = new Set(["profile_pics", "trash"]);
+        if (folder === "root") {
+          hidden.add("root");
+        }
+        if (Array.isArray(folderRaw)) {
+          const allPaths = folderRaw.map(item => item.folder ?? item);
+          const depth = folder === "root" ? 1 : folder.split("/").length + 1;
+          subfolders = allPaths
+            .filter(p => {
+              if (folder === "root") return p.indexOf("/") === -1;
+              if (!p.startsWith(folder + "/")) return false;
+              return p.split("/").length === depth;
+            })
+            .map(p => ({ name: p.split("/").pop(), full: p }));
+        }
 
-      // Expose for inline folder rows in table view
-      window.currentSubfolders = subfolders;
-      savePaneState(pane, { currentSubfolders: subfolders });
+        subfolders = subfolders.filter(sf => {
+          const lower = (sf.name || "").toLowerCase();
+          return !hidden.has(lower) && !lower.startsWith("resumable_");
+        });
 
-      let strip = document.getElementById("folderStripContainer");
-      if (!strip) {
-        strip = document.createElement("div");
-        strip.id = "folderStripContainer";
-        strip.className = "folder-strip-container";
-        actionsContainer.parentNode.insertBefore(strip, actionsContainer);
-      }
+        // Expose for inline folder rows in table view
+        window.currentSubfolders = subfolders;
+        window.currentSubfoldersSourceId = String(paneSourceId || '');
+        window.currentSubfoldersFolder = String(folder || '');
+        savePaneState(pane, {
+          currentSubfolders: subfolders,
+          currentSubfoldersSourceId: window.currentSubfoldersSourceId,
+          currentSubfoldersFolder: window.currentSubfoldersFolder
+        });
 
-      // NEW: paged + responsive strip
-      renderFolderStripPaged(strip, subfolders);
+        let strip = document.getElementById("folderStripContainer");
+        if (!strip) {
+          strip = document.createElement("div");
+          strip.id = "folderStripContainer";
+          strip.className = "folder-strip-container";
+          actionsContainer.parentNode.insertBefore(strip, actionsContainer);
+        }
 
-      // Re-render table view once folders are known so they appear inline above files
-      if (window.viewMode === "table" && reqId === __fileListReqSeq[pane]) {
-        renderFileTable(folder);
+        // NEW: paged + responsive strip
+        renderFolderStripPaged(strip, subfolders, paneSourceId);
+
+        // Re-render table view once folders are known so they appear inline above files
+        if (window.viewMode === "table" && reqId === __fileListReqSeq[pane]) {
+          renderFileTable(folder);
+        }
       }
     } catch (e) {
       // ignore folder errors; rows already rendered
@@ -5129,11 +6009,13 @@ function folderRowDragStartHandler(event, fullPath) {
   if (!fullPath) return;
 
   const srcParent = parentFolderOf(fullPath);
+  const paneSourceId = getPaneSourceIdForElement(event.currentTarget) || getActivePaneSourceId();
 
   const payload = {
     dragType: 'folder',
     folder: fullPath,
-    sourceFolder: srcParent
+    sourceFolder: srcParent,
+    sourceId: paneSourceId
   };
 
   event.dataTransfer.effectAllowed = 'move';
@@ -5368,6 +6250,8 @@ if (headerClass) {
           tr.classList.remove("folder-row-droptarget");
         });
   
+    const rowSourceId = getActivePaneSourceId();
+
     tr.addEventListener("contextmenu", e => {
       e.preventDefault();
       e.stopPropagation();
@@ -5399,7 +6283,7 @@ if (headerClass) {
         queueMicrotask(() => {
           const iconSpan = tr.querySelector('.folder-svg');
           if (iconSpan && String(iconSpan.innerHTML || '').trim() === '') {
-            attachStripIconAsync(tr, dest, 28);
+            attachStripIconAsync(tr, dest, 28, { sourceId: rowSourceId });
           }
         });
       } catch (e2) { /* ignore */ }
@@ -5409,7 +6293,7 @@ if (headerClass) {
     tbody.insertBefore(tr, firstDataRow || null);
   
    // ----- ICON: color + alignment (size is driven by row height) -----
-attachStripIconAsync(tr, sf.full);
+attachStripIconAsync(tr, sf.full, 28, { sourceId: rowSourceId });
 const iconSpan = tr.querySelector(".folder-row-icon");
 if (iconSpan) {
   iconSpan.style.display = "inline-flex";
@@ -5425,7 +6309,7 @@ if (iconSpan) {
     const createdCellIndex = (createdIdx >= 0 && createdIdx < tr.cells.length) ? createdIdx : -1;
     const modifiedCellIndex = (modifiedIdx >= 0 && modifiedIdx < tr.cells.length) ? modifiedIdx : -1;
   
-    fetchFolderStats(sf.full).then(stats => {
+    fetchFolderStats(sf.full, rowSourceId).then(stats => {
       if (!stats) return;
   
       const foldersCount = Number.isFinite(stats.folders) ? stats.folders : 0;
@@ -5500,7 +6384,7 @@ if (iconSpan) {
   
     // OWNER + action permissions
     if (uploaderIdx >= 0 || actionsIdx >= 0) {
-      fetchFolderCaps(sf.full).then(caps => {
+      fetchFolderCaps(sf.full, rowSourceId).then(caps => {
         if (!caps || !document.body.contains(tr)) return;
   
         if (uploaderIdx >= 0 && uploaderIdx < tr.cells.length) {
@@ -5592,6 +6476,7 @@ async function sortSubfoldersForCurrentOrder(subfolders) {
   const base = Array.isArray(subfolders) ? [...subfolders] : [];
   if (!base.length) return base;
 
+  const sourceId = getActivePaneSourceId();
   const col = sortOrder?.column || "uploaded";
   const ascending = sortOrder?.ascending !== false;
   const dir = ascending ? 1 : -1;
@@ -5611,7 +6496,7 @@ async function sortSubfoldersForCurrentOrder(subfolders) {
   // Size sort – use folder stats (bytes)
   if (col === "size" || col === "filesize") {
     const statsList = await Promise.all(
-      base.map(sf => fetchFolderStats(sf.full).catch(() => null))
+      base.map(sf => fetchFolderStats(sf.full, sourceId).catch(() => null))
     );
 
     const decorated = base.map((sf, idx) => {
@@ -5655,7 +6540,7 @@ async function sortSubfoldersForCurrentOrder(subfolders) {
   // NEW: Created / Uploaded sort – use earliest_uploaded from stats
   if (col === "uploaded" || col === "created") {
     const statsList = await Promise.all(
-      base.map(sf => fetchFolderStats(sf.full).catch(() => null))
+      base.map(sf => fetchFolderStats(sf.full, sourceId).catch(() => null))
     );
 
     const decorated = base.map((sf, idx) => {
@@ -5688,7 +6573,7 @@ async function sortSubfoldersForCurrentOrder(subfolders) {
   // NEW: Modified sort – use latest_mtime from stats
   if (col === "modified") {
     const statsList = await Promise.all(
-      base.map(sf => fetchFolderStats(sf.full).catch(() => null))
+      base.map(sf => fetchFolderStats(sf.full, sourceId).catch(() => null))
     );
 
     const decorated = base.map((sf, idx) => {
@@ -5728,11 +6613,12 @@ async function sortSubfoldersForCurrentOrder(subfolders) {
 async function openDefaultFileFromHover(file) {
   if (!file) return;
   const folder = file.folder || window.currentFolder || "root";
+  const sourceId = String(file.sourceId || '').trim() || getActivePaneSourceId();
 
   try {
     if (canEditFile(file.name) && file.editable) {
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(file.name, folder);
+      m.editFile(file.name, folder, sourceId);
     } else {
       const url = apiFileUrl(folder, file.name, true);
       const m = await import('./filePreview.js?v={{APP_QVER}}');
@@ -5767,9 +6653,13 @@ export async function renderFileTable(folder, container, subfolders) {
   }
 
   // Inline folders: sort once (Explorer-style A→Z)
-  const allSubfolders = Array.isArray(window.currentSubfolders)
-  ? window.currentSubfolders
-  : [];
+  const subfoldersSourceId = String(window.currentSubfoldersSourceId || '');
+  const subfoldersFolder = String(window.currentSubfoldersFolder || '');
+  const paneSourceId = String(getPaneSourceIdForElement(fileListContent) || getActivePaneSourceId() || '');
+  const subfoldersMatch = subfoldersSourceId === paneSourceId && subfoldersFolder === String(folder || '');
+  const allSubfolders = (subfoldersMatch && Array.isArray(window.currentSubfolders))
+    ? window.currentSubfolders
+    : [];
 
 // NEW: sort folders according to current sort order (name / size)
 const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
@@ -6140,7 +7030,7 @@ wireSelectAll(fileListContent);
     btn.addEventListener("click", async e => {
       e.stopPropagation();
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(btn.dataset.editName, btn.dataset.editFolder);
+      m.editFile(btn.dataset.editName, btn.dataset.editFolder, paneSourceId);
     });
   });
 
@@ -6407,6 +7297,14 @@ export function renderGalleryView(folder, container) {
       tagBadgesHTML += `</div>`;
     }
 
+    const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+    const sizeLabel = bytes != null ? formatSize(bytes) : "";
+    const sizeHTML = sizeLabel
+      ? `<span class="gallery-file-size" style="display:block; font-size:0.8rem; opacity:0.75; font-variant-numeric:tabular-nums;">
+          ${escapeHTML(sizeLabel)}
+        </span>`
+      : "";
+
     // card with checkbox, preview, info, buttons
     galleryHTML += `
         <div class="gallery-card"
@@ -6431,6 +7329,7 @@ export function renderGalleryView(folder, container) {
                   style="display:block; white-space:normal; overflow-wrap:break-word;">
               ${escapeHTML(file.name)}
             </span>
+            ${sizeHTML}
             ${tagBadgesHTML}
   
             <div class="btn-group btn-group-sm btn-group-hover" role="group" aria-label="File actions" style="margin-top:5px;">
@@ -6591,12 +7490,14 @@ export function renderGalleryView(folder, container) {
     });
   });
 
+  const paneSourceId = String(getPaneSourceIdForElement(fileListContent) || getActivePaneSourceId() || '');
+
   // edit clicks
   fileListContent.querySelectorAll(".edit-btn").forEach(btn => {
     btn.addEventListener("click", async e => {
       e.stopPropagation();
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(btn.dataset.editName, btn.dataset.editFolder);
+      m.editFile(btn.dataset.editName, btn.dataset.editFolder, paneSourceId);
     });
   });
 

@@ -46,9 +46,9 @@ Drag & drop uploads, OnlyOffice integration, and **optional folder-level encrypt
 
 Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
-![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v2.9.0.png)
+![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v3.0.0.png)
 
-https://github.com/user-attachments/assets/87b06f1a-1400-4df1-bf1d-aaae88fcdfbd
+https://raw.githubusercontent.com/error311/FileRise/master/resources/FileRisePro-Sources.gif
 
 > 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
 > Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open-source (MIT).

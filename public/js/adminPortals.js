@@ -215,8 +215,11 @@ async function saveAllPortals(portals) {
 
 let __portalsCache = {};
 // Shared folder list for portal folder picker (reuses getFolderList.php like folderManager.js)
-let __portalFolderListLoaded = false;
-let __portalFolderOptions = [];
+let __portalFolderListLoaded = {};
+let __portalFolderOptions = {};
+let __portalSourcesLoaded = false;
+let __portalSources = [];
+let __portalSourcesById = {};
 
 // Remember a newly-created portal to focus its folder field
 let __portalSlugToFocus = null;
@@ -224,10 +227,83 @@ let __portalSlugToFocus = null;
 // Cache portal submissions per slug for CSV export
 const __portalSubmissionsCache = {};
 
-async function loadPortalFolderList() {
-  if (__portalFolderListLoaded) return __portalFolderOptions;
+function normalizePortalSourceId(id) {
+  return String(id || '').trim();
+}
+
+function getPortalSourceFallbackId() {
+  if (__portalSourcesById.local) return 'local';
+  return __portalSources.length ? __portalSources[0].id : '';
+}
+
+function getDefaultPortalSourceId() {
   try {
-    const res = await fetch('/api/folder/getFolderList.php?counts=0', { credentials: 'include' });
+    const stored = localStorage.getItem('fr_active_source') || '';
+    if (stored && __portalSourcesById[stored]) return stored;
+  } catch (e) { /* ignore */ }
+  return getPortalSourceFallbackId();
+}
+
+async function loadPortalSources() {
+  if (__portalSourcesLoaded) return __portalSources;
+  __portalSourcesLoaded = true;
+
+  let sources = [];
+  try {
+    const res = await fetch('/api/pro/sources/list.php', {
+      credentials: 'include'
+    });
+    const data = await safeJson(res);
+    if (data && data.ok && Array.isArray(data.sources)) {
+      sources = data.sources;
+    }
+  } catch (e) {
+    sources = [];
+  }
+
+  if (!Array.isArray(sources) || !sources.length) {
+    sources = [{ id: 'local', name: 'Local', type: 'local', enabled: true }];
+  }
+
+  const normalized = [];
+  sources.forEach(src => {
+    if (!src || !src.id) return;
+    const id = String(src.id || '').trim();
+    if (!id) return;
+    normalized.push({
+      id,
+      name: String(src.name || src.id || '').trim() || id,
+      type: String(src.type || '').trim(),
+      enabled: src.enabled !== false
+    });
+  });
+
+  if (!normalized.find(s => s.id === 'local')) {
+    normalized.unshift({ id: 'local', name: 'Local', type: 'local', enabled: true });
+  }
+
+  __portalSources = normalized;
+  __portalSourcesById = {};
+  normalized.forEach(src => { __portalSourcesById[src.id] = src; });
+
+  return __portalSources;
+}
+
+function renderPortalSourceOptions(selectedId) {
+  const active = normalizePortalSourceId(selectedId) || getPortalSourceFallbackId();
+  return __portalSources.map(src => {
+    const label = src.name || src.id;
+    const disabledTag = src.enabled ? '' : ' (disabled)';
+    return `<option value="${src.id}"${src.id === active ? ' selected' : ''}>${label}${disabledTag}</option>`;
+  }).join('');
+}
+
+async function loadPortalFolderList(sourceId = '') {
+  const sourceKey = normalizePortalSourceId(sourceId) || getPortalSourceFallbackId();
+  if (__portalFolderListLoaded[sourceKey]) return __portalFolderOptions[sourceKey] || [];
+  try {
+    const sourceParam = sourceKey ? `&sourceId=${encodeURIComponent(sourceKey)}` : '';
+    const res = await fetch(`/api/folder/getFolderList.php?counts=0${sourceParam}`, { credentials: 'include' });
     const data = await res.json();
     let list = data;
 
@@ -236,17 +312,17 @@ async function loadPortalFolderList() {
       list = list.map(it => it.folder);
     }
 
-    __portalFolderOptions = (list || [])
+    __portalFolderOptions[sourceKey] = (list || [])
       .filter(Boolean)
       .filter(f => f !== 'trash' && f !== 'profile_pics');
 
-    __portalFolderListLoaded = true;
+    __portalFolderListLoaded[sourceKey] = true;
   } catch (e) {
     console.error('Error loading portal folder list', e);
-    __portalFolderOptions = [];
-    __portalFolderListLoaded = true;
+    __portalFolderOptions[sourceKey] = [];
+    __portalFolderListLoaded[sourceKey] = true;
   }
-  return __portalFolderOptions;
+  return __portalFolderOptions[sourceKey];
 }
 
 // ─────────────────────────────────────────
@@ -397,6 +473,7 @@ async function loadClientPortalsList(useCacheOnly) {
   }
 
   try {
+    await loadPortalSources();
     let portals;
     if (useCacheOnly && __portalsCache && Object.keys(__portalsCache).length) {
       portals = __portalsCache;
@@ -420,6 +497,8 @@ async function loadClientPortalsList(useCacheOnly) {
       const p = __portalsCache[slug] || {};
       const label = p.label || slug;
       const folder = p.folder || '';
+      const sourceId = normalizePortalSourceId(p.sourceId) || getPortalSourceFallbackId();
+      const sourceOptions = renderPortalSourceOptions(sourceId);
       const clientEmail = p.clientEmail || '';
       const uploadOnly = !!p.uploadOnly;
 
@@ -516,7 +595,15 @@ async function loadClientPortalsList(useCacheOnly) {
               </label>
             </div>
 
-            <div class="portal-meta-row">
+            <div class="portal-meta-row portal-source-row">
+              <label>
+                Source:
+                <select class="form-control form-control-sm portal-source-select"
+                        data-portal-field="sourceId"
+                        style="display:inline-block; width:180px; margin-left:4px;">
+                  ${sourceOptions}
+                </select>
+              </label>
               <div class="portal-folder-row">
 <label>
   Folder<span class="text-danger">*</span>:
@@ -979,6 +1066,7 @@ function addEmptyPortalRow() {
   __portalsCache[slug] = {
     label: 'New client portal',
     folder: '',
+    sourceId: getDefaultPortalSourceId(),
     clientEmail: '',
     uploadOnly: true,
     allowDownload: false,
@@ -1001,6 +1089,7 @@ function attachPortalFolderPickers() {
     body.querySelectorAll('.portal-card').forEach(card => {
       const input = card.querySelector('[data-portal-field="folder"]');
       const browseBtn = card.querySelector('.portal-folder-browse-btn');
+      const sourceSelect = card.querySelector('[data-portal-field="sourceId"]');
       if (!input) return;
   
       if (input.dataset._portalFolderPickerBound === '1') return;
@@ -1009,13 +1098,17 @@ function attachPortalFolderPickers() {
       // Preferred path: if you ever add a central folder picker, use it:
       const useNativePicker = typeof window.FileRiseFolderPicker === 'function';
   
+      const getSourceId = () => normalizePortalSourceId(sourceSelect ? sourceSelect.value : '') || getPortalSourceFallbackId();
+
       const openPicker = async () => {
+        const sourceId = getSourceId();
         if (useNativePicker) {
           try {
             const folder = await window.FileRiseFolderPicker({
               current: input.value || '',
               mode: 'select-folder',
-              source: 'client-portals'
+              source: 'client-portals',
+              sourceId
             });
             if (folder) input.value = folder;
             return;
@@ -1028,13 +1121,15 @@ function attachPortalFolderPickers() {
   
         // Fallback: datalist built from /api/folder/getFolderList.php
         try {
-          let datalist = document.getElementById('portalFolderList');
+          const safeSourceId = (sourceId || 'local').replace(/[^A-Za-z0-9_-]/g, '') || 'local';
+          const datalistId = 'portalFolderList-' + safeSourceId;
+          let datalist = document.getElementById(datalistId);
           if (!datalist) {
             datalist = document.createElement('datalist');
-            datalist.id = 'portalFolderList';
+            datalist.id = datalistId;
             document.body.appendChild(datalist);
   
-            const folders = await loadPortalFolderList();
+            const folders = await loadPortalFolderList(sourceId);
             datalist.innerHTML = '';
             folders.forEach(f => {
               const opt = document.createElement('option');
@@ -1043,7 +1138,7 @@ function attachPortalFolderPickers() {
             });
           }
   
-          input.setAttribute('list', 'portalFolderList');
+          input.setAttribute('list', datalistId);
           input.focus();
           input.select();
         } catch (e) {
@@ -1052,6 +1147,14 @@ function attachPortalFolderPickers() {
           input.select();
         }
       };
+
+      if (sourceSelect && !sourceSelect.__frPortalSourceBound) {
+        sourceSelect.__frPortalSourceBound = true;
+        sourceSelect.addEventListener('change', () => {
+          input.removeAttribute('list');
+          input.dataset.portalSourceId = sourceSelect.value || '';
+        });
+      }
   
       // Clicking or focusing the input prepares the list
       input.addEventListener('focus', openPicker);
@@ -1581,6 +1684,7 @@ async function saveClientPortalsFromUI() {
 
     const label = getVal('[data-portal-field="label"]').trim();
     const folder = getVal('[data-portal-field="folder"]').trim();
+    const sourceId = normalizePortalSourceId(getVal('[data-portal-field="sourceId"]')) || getPortalSourceFallbackId();
     const clientEmail = getVal('[data-portal-field="clientEmail"]').trim();
     const expiresAt = getVal('[data-portal-field="expiresAt"]').trim();
     const title = getVal('[data-portal-field="title"]').trim();
@@ -1670,6 +1774,7 @@ async function saveClientPortalsFromUI() {
     portals[slug] = {
       label,
       folder,
+      sourceId,
       clientEmail,
       uploadOnly,
       allowDownload,

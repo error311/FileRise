@@ -6,16 +6,49 @@ require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/FS.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
+require_once PROJECT_ROOT . '/src/lib/StorageRegistry.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/models/FileModel.php';
 
 class FolderModel
 {
+    private static function storage(): StorageAdapterInterface
+    {
+        return StorageRegistry::getAdapter();
+    }
+
+    private static function uploadRoot(): string
+    {
+        if (class_exists('SourceContext')) {
+            return SourceContext::uploadRoot();
+        }
+        return rtrim((string)UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    private static function metaRoot(): string
+    {
+        if (class_exists('SourceContext')) {
+            SourceContext::ensureMetaDir();
+            return SourceContext::metaRoot();
+        }
+        return rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    private static function folderOwnersPath(): string
+    {
+        return self::metaRoot() . 'folder_owners.json';
+    }
     /* ============================================================
      * Ownership mapping helpers (stored in META_DIR/folder_owners.json)
      * ============================================================ */
 
      public static function countVisible(string $folder, string $user, array $perms): array
 {
+    $storage = self::storage();
     $folder = ACL::normalizeFolder($folder);
+    if (!$storage->isLocal()) {
+        return self::countVisibleRemote($folder, $user, $perms);
+    }
 
     // If the user can't view this folder at all, short-circuit (admin/read/read_own)
     $canViewFolder = ACL::isAdmin($perms)
@@ -29,7 +62,7 @@ class FolderModel
     $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $folder);
     // if !$hasFullRead but $canViewFolder is true, they’re effectively "view own" only
 
-    $base = realpath((string)UPLOAD_DIR);
+    $base = realpath(self::uploadRoot());
     if ($base === false) {
         return ['folders' => 0, 'files' => 0, 'bytes' => 0];
     }
@@ -146,7 +179,11 @@ class FolderModel
 
     public static function countVisibleDeep(string $folder, string $user, array $perms, int $maxScan = 20000, ?int $maxDepth = null): array
     {
+        $storage = self::storage();
         $folder = ACL::normalizeFolder($folder);
+        if (!$storage->isLocal()) {
+            return self::countVisibleDeepRemote($folder, $user, $perms, $maxScan, $maxDepth);
+        }
 
         $canViewFolder = ACL::isAdmin($perms)
             || ACL::canRead($user, $perms, $folder)
@@ -162,7 +199,7 @@ class FolderModel
             }
         }
 
-        $base = realpath((string)UPLOAD_DIR);
+        $base = realpath(self::uploadRoot());
         if ($base === false) {
             return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
         }
@@ -283,6 +320,211 @@ class FolderModel
         ];
     }
 
+    private static function countVisibleRemote(string $folder, string $user, array $perms): array
+    {
+        $storage = self::storage();
+
+        $canViewFolder = ACL::isAdmin($perms)
+            || ACL::canRead($user, $perms, $folder)
+            || ACL::canReadOwn($user, $perms, $folder);
+        if (!$canViewFolder) {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+        }
+
+        $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $folder);
+
+        $base = rtrim(self::uploadRoot(), "/\\");
+        if ($base === '') {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+        }
+
+        $dirPath = ($folder === 'root')
+            ? $base
+            : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+
+        $entries = $storage->list($dirPath);
+        if (!$entries) {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0];
+        }
+
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP();
+
+        $folderCount = 0;
+        $fileCount = 0;
+        $totalBytes = 0;
+        $earliestUploaded = null;
+        $latestMtime = null;
+
+        foreach ($entries as $name) {
+            if ($name === '.' || $name === '..' || $name === '') continue;
+            if ($name[0] === '.') continue;
+            if (in_array($name, $IGNORE, true)) continue;
+            if (!FS::isSafeSegment($name)) continue;
+            if (in_array(strtolower($name), $SKIP, true)) continue;
+
+            $full = $dirPath . DIRECTORY_SEPARATOR . $name;
+            $stat = $storage->stat($full);
+            if (!$stat) continue;
+
+            $type = $stat['type'] ?? '';
+            if ($type === 'dir') {
+                $childRel = ($folder === 'root') ? $name : $folder . '/' . $name;
+                if (
+                    ACL::isAdmin($perms)
+                    || ACL::canRead($user, $perms, $childRel)
+                    || ACL::canReadOwn($user, $perms, $childRel)
+                ) {
+                    $folderCount++;
+                }
+                continue;
+            }
+
+            if ($type !== 'file') continue;
+            if (!$hasFullRead) continue;
+
+            $fileCount++;
+            $sz = $stat['size'] ?? 0;
+            if (is_int($sz) && $sz > 0) {
+                $totalBytes += $sz;
+            }
+            $mt = $stat['mtime'] ?? 0;
+            if (is_int($mt) && $mt > 0) {
+                if ($earliestUploaded === null || $mt < $earliestUploaded) {
+                    $earliestUploaded = $mt;
+                }
+                if ($latestMtime === null || $mt > $latestMtime) {
+                    $latestMtime = $mt;
+                }
+            }
+        }
+
+        $result = [
+            'folders' => $folderCount,
+            'files'   => $fileCount,
+            'bytes'   => $totalBytes,
+        ];
+
+        if ($earliestUploaded !== null) {
+            $result['earliest_uploaded'] = date(DATE_TIME_FORMAT, $earliestUploaded);
+        }
+        if ($latestMtime !== null) {
+            $result['latest_mtime'] = date(DATE_TIME_FORMAT, $latestMtime);
+        }
+
+        return $result;
+    }
+
+    private static function countVisibleDeepRemote(string $folder, string $user, array $perms, int $maxScan = 20000, ?int $maxDepth = null): array
+    {
+        $storage = self::storage();
+
+        $canViewFolder = ACL::isAdmin($perms)
+            || ACL::canRead($user, $perms, $folder)
+            || ACL::canReadOwn($user, $perms, $folder);
+        if (!$canViewFolder) {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
+        }
+
+        if ($maxDepth !== null) {
+            $maxDepth = (int)$maxDepth;
+            if ($maxDepth <= 0) {
+                $maxDepth = null;
+            }
+        }
+
+        $base = rtrim(self::uploadRoot(), "/\\");
+        if ($base === '') {
+            return ['folders' => 0, 'files' => 0, 'bytes' => 0, 'truncated' => false];
+        }
+
+        $dirPath = ($folder === 'root')
+            ? $base
+            : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+        $startRel = ($folder === 'root') ? '' : $folder;
+
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP();
+
+        $folderCount = 0;
+        $fileCount = 0;
+        $totalBytes = 0;
+        $scanned = 0;
+        $truncated = false;
+
+        $stack = [[$dirPath, $startRel, 0]];
+        while ($stack) {
+            [$curAbs, $curRel, $depth] = array_pop($stack);
+            $relForAcl = ($curRel === '' ? 'root' : $curRel);
+            $hasFullRead = ACL::isAdmin($perms) || ACL::canRead($user, $perms, $relForAcl);
+
+            $entries = $storage->list($curAbs);
+            if (!$entries) continue;
+
+            foreach ($entries as $name) {
+                if (++$scanned > $maxScan) {
+                    $truncated = true;
+                    break 2;
+                }
+
+                if ($name === '.' || $name === '..' || $name === '') continue;
+                if ($name[0] === '.') continue;
+                if (in_array($name, $IGNORE, true)) continue;
+                if (!FS::isSafeSegment($name)) continue;
+                if (in_array(strtolower($name), $SKIP, true)) continue;
+
+                $full = $curAbs . DIRECTORY_SEPARATOR . $name;
+                $stat = $storage->stat($full);
+                if (!$stat) continue;
+
+                $type = $stat['type'] ?? '';
+                if ($type === 'dir') {
+                    $childRel = ($curRel === '') ? $name : $curRel . '/' . $name;
+                    $childDepth = $depth + 1;
+                    if ($maxDepth !== null && $childDepth > $maxDepth) {
+                        continue;
+                    }
+                    $canViewChild = ACL::isAdmin($perms)
+                        || ACL::canRead($user, $perms, $childRel)
+                        || ACL::canReadOwn($user, $perms, $childRel);
+                    if ($canViewChild) {
+                        $folderCount++;
+                        $stack[] = [$full, $childRel, $childDepth];
+                    } else {
+                        $probeDepth = 2;
+                        if ($maxDepth !== null) {
+                            $remaining = $maxDepth - $childDepth;
+                            if ($remaining <= 0) {
+                                continue;
+                            }
+                            $probeDepth = min($probeDepth, $remaining);
+                        }
+                        if (self::hasReadableDescendantRemote($storage, $childRel, $user, $perms, $probeDepth)) {
+                            $stack[] = [$full, $childRel, $childDepth];
+                        }
+                    }
+                    continue;
+                }
+
+                if ($type !== 'file') continue;
+                if (!$hasFullRead) continue;
+
+                $fileCount++;
+                $sz = $stat['size'] ?? 0;
+                if (is_int($sz) && $sz > 0) {
+                    $totalBytes += $sz;
+                }
+            }
+        }
+
+        return [
+            'folders' => $folderCount,
+            'files' => $fileCount,
+            'bytes' => $totalBytes,
+            'truncated' => $truncated,
+        ];
+    }
+
     /* Helpers (private) */
     private static function isSafeSegment(string $name): bool
     {
@@ -305,6 +547,11 @@ class FolderModel
 
     public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500, bool $probe = true): array
     {
+        $storage = self::storage();
+        if (!$storage->isLocal()) {
+            return self::listChildrenRemote($folder, $user, $perms, $cursor, $limit, $probe);
+        }
+
         $folder  = ACL::normalizeFolder($folder);
         $limit   = max(1, min(2000, $limit));
         $cursor  = ($cursor !== null && $cursor !== '') ? $cursor : null;
@@ -316,7 +563,7 @@ class FolderModel
             $parentEncrypted = false;
         }
     
-        $baseReal = realpath((string)UPLOAD_DIR);
+        $baseReal = realpath(self::uploadRoot());
         if ($baseReal === false) return ['items' => [], 'nextCursor' => null];
     
         // Resolve target directory
@@ -444,10 +691,139 @@ class FolderModel
         return ['items' => $page, 'nextCursor' => $nextCursor];
     }
 
+    private static function listChildrenRemote(string $folder, string $user, array $perms, ?string $cursor, int $limit, bool $probe): array
+    {
+        $storage = self::storage();
+        $folder  = ACL::normalizeFolder($folder);
+        $limit   = max(1, min(2000, $limit));
+        $cursor  = ($cursor !== null && $cursor !== '') ? $cursor : null;
+
+        $parentEncrypted = false;
+        try {
+            $parentEncrypted = FolderCrypto::isEncryptedOrAncestor($folder);
+        } catch (\Throwable $e) {
+            $parentEncrypted = false;
+        }
+
+        $base = rtrim(self::uploadRoot(), "/\\");
+        $dirPath = ($folder === 'root')
+            ? $base
+            : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP();
+
+        $entries = $storage->list($dirPath);
+        if (!$entries) return ['items' => [], 'nextCursor' => null];
+
+        $rows = [];
+        foreach ($entries as $item) {
+            if ($item === '.' || $item === '..') continue;
+            if ($item === '' || $item[0] === '.') continue;
+            if (in_array($item, $IGNORE, true)) continue;
+            if (!FS::isSafeSegment($item)) continue;
+
+            $lower = strtolower($item);
+            if (in_array($lower, $SKIP, true)) continue;
+
+            $full = $dirPath . DIRECTORY_SEPARATOR . $item;
+            $stat = $storage->stat($full);
+            if (!$stat || ($stat['type'] ?? '') !== 'dir') continue;
+
+            $rel = ($folder === 'root') ? $item : $folder . '/' . $item;
+            $canView = ACL::canRead($user, $perms, $rel) || ACL::canReadOwn($user, $perms, $rel);
+            $locked  = !$canView;
+
+            if ($locked) {
+                if (self::hasReadableDescendantRemote($storage, $rel, $user, $perms, 2)) {
+                    $rows[] = [
+                        'name'   => $item,
+                        'locked' => true,
+                    ];
+                }
+            } else {
+                $encrypted = $parentEncrypted;
+                if (!$encrypted) {
+                    try {
+                        $encrypted = FolderCrypto::isEncryptedOrAncestor($rel);
+                    } catch (\Throwable $e) {
+                        $encrypted = false;
+                    }
+                }
+                $rows[] = [
+                    'name'      => $item,
+                    'locked'    => false,
+                    'encrypted' => $encrypted,
+                ];
+            }
+        }
+
+        usort($rows, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
+        $start = 0;
+        if ($cursor !== null) {
+            $n = count($rows);
+            for ($i = 0; $i < $n; $i++) {
+                if (strnatcasecmp($rows[$i]['name'], $cursor) > 0) { $start = $i; break; }
+                $start = $i + 1;
+            }
+        }
+        $page = array_slice($rows, $start, $limit);
+        $nextCursor = null;
+        if ($start + count($page) < count($rows)) {
+            $last = $page[count($page)-1];
+            $nextCursor = $last['name'];
+        }
+
+        return ['items' => $page, 'nextCursor' => $nextCursor];
+    }
+
+    private static function hasReadableDescendantRemote(
+        StorageAdapterInterface $storage,
+        string $folder,
+        string $user,
+        array $perms,
+        int $maxDepth
+    ): bool {
+        if ($maxDepth <= 0) return false;
+
+        $base = rtrim(self::uploadRoot(), "/\\");
+        $dirPath = ($folder === 'root')
+            ? $base
+            : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+
+        $entries = $storage->list($dirPath);
+        if (!$entries) return false;
+
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP();
+
+        foreach ($entries as $item) {
+            if ($item === '.' || $item === '..') continue;
+            if ($item === '' || $item[0] === '.') continue;
+            if (in_array($item, $IGNORE, true)) continue;
+            if (!FS::isSafeSegment($item)) continue;
+            if (in_array(strtolower($item), $SKIP, true)) continue;
+
+            $full = $dirPath . DIRECTORY_SEPARATOR . $item;
+            $stat = $storage->stat($full);
+            if (!$stat || ($stat['type'] ?? '') !== 'dir') continue;
+
+            $childRel = ($folder === 'root') ? $item : $folder . '/' . $item;
+            if (ACL::canRead($user, $perms, $childRel) || ACL::canReadOwn($user, $perms, $childRel)) {
+                return true;
+            }
+            if ($maxDepth > 1 && self::hasReadableDescendantRemote($storage, $childRel, $user, $perms, $maxDepth - 1)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** Load the folder → owner map. */
     public static function getFolderOwners(): array
     {
-        $f = FOLDER_OWNERS_FILE;
+        $f = self::folderOwnersPath();
         if (!file_exists($f)) return [];
         $json = json_decode(@file_get_contents($f), true);
         return is_array($json) ? $json : [];
@@ -456,7 +832,8 @@ class FolderModel
     /** Persist the folder → owner map. */
     public static function saveFolderOwners(array $map): bool
     {
-        return (bool) @file_put_contents(FOLDER_OWNERS_FILE, json_encode($map, JSON_PRETTY_PRINT), LOCK_EX);
+        $path = self::folderOwnersPath();
+        return (bool) @file_put_contents($path, json_encode($map, JSON_PRETTY_PRINT), LOCK_EX);
     }
 
     /** Set (or replace) the owner for a specific folder (relative path or 'root'). */
@@ -543,8 +920,10 @@ class FolderModel
         $folder   = trim($folder) ?: 'root';
         $relative = 'root';
 
-        $base = realpath(UPLOAD_DIR);
-        if ($base === false) {
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
+        $base = $isLocal ? realpath(self::uploadRoot()) : rtrim(self::uploadRoot(), '/\\');
+        if ($base === false || $base === '') {
             return [null, 'root', "Uploads directory not configured correctly."];
         }
 
@@ -565,9 +944,11 @@ class FolderModel
             $dir      = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
         }
 
-        if (!is_dir($dir)) {
+        $dirStat = $isLocal ? null : $storage->stat($dir);
+        $dirExists = $isLocal ? is_dir($dir) : ($dirStat !== null && ($dirStat['type'] ?? '') === 'dir');
+        if (!$dirExists) {
             if ($create) {
-                if (!mkdir($dir, 0775, true)) {
+                if (!$storage->mkdir($dir, 0775, true)) {
                     return [null, $relative, "Failed to create folder."];
                 }
             } else {
@@ -575,21 +956,374 @@ class FolderModel
             }
         }
 
-        $real = realpath($dir);
-        if ($real === false || strpos($real, $base) !== 0) {
-            return [null, $relative, "Invalid folder path."];
+        if ($isLocal) {
+            $real = realpath($dir);
+            if ($real === false || strpos($real, $base) !== 0) {
+                return [null, $relative, "Invalid folder path."];
+            }
+            return [$real, $relative, null];
         }
 
-        return [$real, $relative, null];
+        return [$dir, $relative, null];
+    }
+
+    private static function resolveFolderPathForAdapter(StorageAdapterInterface $storage, string $root, string $folder, bool $create = false): array
+    {
+        $folder   = trim($folder) ?: 'root';
+        $relative = 'root';
+
+        $isLocal = $storage->isLocal();
+        $base = $isLocal ? realpath($root) : rtrim($root, '/\\');
+        if ($base === false || $base === '') {
+            return [null, 'root', "Uploads directory not configured correctly."];
+        }
+
+        if (strtolower($folder) === 'root') {
+            $dir = $base;
+        } else {
+            $parts = array_filter(explode('/', trim($folder, "/\\ ")), fn($p) => $p !== '');
+            if (empty($parts)) {
+                return [null, 'root', "Invalid folder name."];
+            }
+            foreach ($parts as $seg) {
+                if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+                    return [null, 'root', "Invalid folder name."];
+                }
+            }
+            $relative = implode('/', $parts);
+            $dir      = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+        }
+
+        $dirStat = $isLocal ? null : $storage->stat($dir);
+        $dirExists = $isLocal ? is_dir($dir) : ($dirStat !== null && ($dirStat['type'] ?? '') === 'dir');
+        if (!$dirExists) {
+            if ($create) {
+                if (!$storage->mkdir($dir, 0775, true)) {
+                    return [null, $relative, "Failed to create folder."];
+                }
+            } else {
+                return [null, $relative, "Folder does not exist."];
+            }
+        }
+
+        if ($isLocal) {
+            $real = realpath($dir);
+            if ($real === false || strpos($real, $base) !== 0) {
+                return [null, $relative, "Invalid folder path."];
+            }
+            return [$real, $relative, null];
+        }
+
+        return [$dir, $relative, null];
+    }
+
+    private static function crossSourceLimit(string $envKey, int $default): int
+    {
+        $val = getenv($envKey);
+        if ($val === false || trim((string)$val) === '') {
+            return $default;
+        }
+        if (!is_numeric($val)) {
+            return $default;
+        }
+        $int = (int)$val;
+        return $int > 0 ? $int : $default;
+    }
+
+    private static function getCopyTreeLimits(): array
+    {
+        $maxFiles = self::crossSourceLimit('FR_XCOPY_MAX_FILES', 5000);
+        $maxBytes = self::crossSourceLimit('FR_XCOPY_MAX_BYTES', 5 * 1024 * 1024 * 1024);
+        $maxDepth = self::crossSourceLimit('FR_XCOPY_MAX_DEPTH', 15);
+        return [$maxFiles, $maxBytes, $maxDepth];
+    }
+
+    private static function scanFolderTreeForCopy(
+        StorageAdapterInterface $storage,
+        string $baseAbs,
+        int $maxFiles,
+        int $maxBytes,
+        int $maxDepth
+    ): array {
+        $queue = [
+            ['abs' => $baseAbs, 'rel' => '', 'depth' => 0],
+        ];
+        $folders = [''];
+        $filesByFolder = [];
+        $errors = [];
+        $fileCount = 0;
+        $totalBytes = 0;
+
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP();
+
+        while ($queue) {
+            $node = array_shift($queue);
+            if (!is_array($node)) {
+                continue;
+            }
+            $depth = (int)($node['depth'] ?? 0);
+            if ($depth > $maxDepth) {
+                return ['error' => 'Folder copy exceeds depth limit.'];
+            }
+            $abs = (string)($node['abs'] ?? '');
+            if ($abs === '') {
+                continue;
+            }
+            $rel = (string)($node['rel'] ?? '');
+
+            $entries = $storage->list($abs);
+            if (!$entries) {
+                continue;
+            }
+
+            foreach ($entries as $name) {
+                if ($name === '.' || $name === '..') continue;
+                if ($name === '' || $name[0] === '.') continue;
+                if (in_array($name, $IGNORE, true)) continue;
+                if (!FS::isSafeSegment($name)) continue;
+
+                $lower = strtolower($name);
+                if (in_array($lower, $SKIP, true)) continue;
+
+                $childAbs = $abs . DIRECTORY_SEPARATOR . $name;
+                $stat = $storage->stat($childAbs);
+                if (!$stat) {
+                    continue;
+                }
+                $type = (string)($stat['type'] ?? '');
+                if ($type === 'dir') {
+                    $childRel = ($rel === '') ? $name : ($rel . '/' . $name);
+                    $folders[] = $childRel;
+                    $queue[] = [
+                        'abs' => $childAbs,
+                        'rel' => $childRel,
+                        'depth' => $depth + 1,
+                    ];
+                    continue;
+                }
+                if ($type !== 'file') {
+                    continue;
+                }
+
+                if (!preg_match(REGEX_FILE_NAME, $name)) {
+                    $errors[] = "{$name} has an invalid name.";
+                    continue;
+                }
+
+                if (!isset($filesByFolder[$rel])) {
+                    $filesByFolder[$rel] = [];
+                }
+                $filesByFolder[$rel][] = $name;
+                $fileCount++;
+
+                $size = isset($stat['size']) ? (int)$stat['size'] : 0;
+                if ($size > 0) {
+                    $totalBytes += $size;
+                }
+                if ($fileCount > $maxFiles) {
+                    return ['error' => 'Folder copy exceeds file limit.', 'errors' => $errors];
+                }
+                if ($totalBytes > $maxBytes) {
+                    return ['error' => 'Folder copy exceeds size limit.', 'errors' => $errors];
+                }
+            }
+        }
+
+        return [
+            'folders' => $folders,
+            'files' => $filesByFolder,
+            'errors' => $errors,
+            'fileCount' => $fileCount,
+            'totalBytes' => $totalBytes,
+        ];
+    }
+
+    private static function ensureDestinationFolders(
+        StorageAdapterInterface $storage,
+        string $baseAbs,
+        array $folders
+    ): ?string {
+        foreach ($folders as $rel) {
+            if (!is_string($rel) || $rel === '') {
+                continue;
+            }
+            $destAbs = $baseAbs . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+            if (!$storage->mkdir($destAbs, 0775, true)) {
+                return "Failed to create destination folder: {$rel}.";
+            }
+        }
+        return null;
+    }
+
+    private static function copyFolderTreeInternal(
+        StorageAdapterInterface $srcStorage,
+        StorageAdapterInterface $dstStorage,
+        string $srcRoot,
+        string $dstRoot,
+        string $sourceFolder,
+        string $targetFolder,
+        callable $copyFilesFn
+    ): array {
+        $sourceFolder = trim((string)$sourceFolder, "/\\ ");
+        $targetFolder = trim((string)$targetFolder, "/\\ ");
+        if ($sourceFolder === '' || strtolower($sourceFolder) === 'root') {
+            return ['error' => 'Invalid source folder.'];
+        }
+        if ($targetFolder === '' || strtolower($targetFolder) === 'root') {
+            return ['error' => 'Invalid destination folder.'];
+        }
+
+        [$srcAbs, , $err] = self::resolveFolderPathForAdapter($srcStorage, $srcRoot, $sourceFolder, false);
+        if ($err) {
+            return ['error' => $err];
+        }
+
+        $normalizedTarget = str_replace('\\', '/', $targetFolder);
+        $targetName = basename($normalizedTarget);
+        if ($targetName === '' || !preg_match(REGEX_FOLDER_NAME, $targetName)) {
+            return ['error' => 'Invalid destination folder name.'];
+        }
+        $parentKey = dirname($normalizedTarget);
+        if ($parentKey === '.' || $parentKey === '') {
+            $parentKey = 'root';
+        } else {
+            $parentKey = trim($parentKey, '/');
+            if ($parentKey === '') {
+                $parentKey = 'root';
+            }
+        }
+
+        [$dstParentAbs, , $err] = self::resolveFolderPathForAdapter($dstStorage, $dstRoot, $parentKey, false);
+        if ($err) {
+            return ['error' => $err];
+        }
+
+        $targetAbs = rtrim($dstParentAbs, "/\\") . DIRECTORY_SEPARATOR . $targetName;
+        if ($dstStorage->stat($targetAbs) !== null) {
+            return ['error' => 'Destination folder already exists.'];
+        }
+        if (!$dstStorage->mkdir($targetAbs, 0775, true)) {
+            return ['error' => 'Failed to create destination folder.'];
+        }
+
+        [$maxFiles, $maxBytes, $maxDepth] = self::getCopyTreeLimits();
+        $scan = self::scanFolderTreeForCopy($srcStorage, $srcAbs, $maxFiles, $maxBytes, $maxDepth);
+        if (isset($scan['error'])) {
+            return ['error' => $scan['error']];
+        }
+
+        $folders = $scan['folders'] ?? [''];
+        $fileMap = $scan['files'] ?? [];
+        $errors  = $scan['errors'] ?? [];
+
+        $mkdirErr = self::ensureDestinationFolders($dstStorage, $targetAbs, $folders);
+        if ($mkdirErr !== null) {
+            $errors[] = $mkdirErr;
+        }
+
+        foreach ($fileMap as $rel => $names) {
+            if (!is_array($names) || empty($names)) {
+                continue;
+            }
+            $srcKey = ($rel === '') ? $sourceFolder : ($sourceFolder . '/' . $rel);
+            $dstKey = ($rel === '') ? $targetFolder : ($targetFolder . '/' . $rel);
+            $result = $copyFilesFn($srcKey, $dstKey, $names);
+            if (is_array($result) && isset($result['error'])) {
+                $errors[] = $result['error'];
+            }
+        }
+
+        if (!empty($errors)) {
+            return ['error' => implode('; ', $errors), 'target' => $targetFolder];
+        }
+
+        return ['success' => true, 'target' => $targetFolder];
+    }
+
+    public static function copyFolderSameSource(string $sourceFolder, string $targetFolder): array
+    {
+        $storage = self::storage();
+        $root = self::uploadRoot();
+        return self::copyFolderTreeInternal(
+            $storage,
+            $storage,
+            $root,
+            $root,
+            $sourceFolder,
+            $targetFolder,
+            static function (string $srcKey, string $dstKey, array $files): array {
+                return FileModel::copyFiles($srcKey, $dstKey, $files);
+            }
+        );
+    }
+
+    public static function copyFolderAcrossSources(
+        string $sourceId,
+        string $destinationId,
+        string $sourceFolder,
+        string $targetFolder
+    ): array {
+        $srcStorage = StorageRegistry::getAdapter($sourceId);
+        $dstStorage = StorageRegistry::getAdapter($destinationId);
+
+        $srcRoot = class_exists('SourceContext')
+            ? SourceContext::uploadRootForId($sourceId)
+            : rtrim((string)UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
+        $dstRoot = class_exists('SourceContext')
+            ? SourceContext::uploadRootForId($destinationId)
+            : rtrim((string)UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
+
+        return self::copyFolderTreeInternal(
+            $srcStorage,
+            $dstStorage,
+            $srcRoot,
+            $dstRoot,
+            $sourceFolder,
+            $targetFolder,
+            static function (string $srcKey, string $dstKey, array $files) use ($sourceId, $destinationId): array {
+                return FileModel::copyFilesAcrossSources($sourceId, $destinationId, $srcKey, $dstKey, $files);
+            }
+        );
+    }
+
+    public static function moveFolderAcrossSources(
+        string $sourceId,
+        string $destinationId,
+        string $sourceFolder,
+        string $targetFolder
+    ): array {
+        $result = self::copyFolderAcrossSources($sourceId, $destinationId, $sourceFolder, $targetFolder);
+        if (!empty($result['error'])) {
+            return $result;
+        }
+
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $prev = SourceContext::getActiveId();
+            SourceContext::setActiveId($sourceId, false, true);
+            try {
+                $del = self::deleteFolderRecursiveAdmin($sourceFolder);
+            } finally {
+                SourceContext::setActiveId($prev, false);
+            }
+        } else {
+            $del = self::deleteFolderRecursiveAdmin($sourceFolder);
+        }
+
+        if (!empty($del['error'])) {
+            return ['error' => 'Failed to remove source folder after copy: ' . $del['error'], 'target' => $targetFolder];
+        }
+
+        return $result;
     }
 
     /** Build metadata file path for a given (relative) folder. */
     private static function getMetadataFilePath(string $folder): string
     {
         if (strtolower($folder) === 'root' || trim($folder) === '') {
-            return META_DIR . "root_metadata.json";
+            return self::metaRoot() . "root_metadata.json";
         }
-        return META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+        return self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
     }
 
     /**
@@ -629,17 +1363,27 @@ class FolderModel
         $newKey = ($parent === 'root') ? $folderName : ($parent . '/' . $folderName);
 
         // -------- Compose filesystem paths --------
-        $base = rtrim((string)UPLOAD_DIR, "/\\");
+        $base = rtrim(self::uploadRoot(), "/\\");
         $parentRel = ($parent === 'root') ? '' : str_replace('/', DIRECTORY_SEPARATOR, $parent);
         $parentAbs = $parentRel ? ($base . DIRECTORY_SEPARATOR . $parentRel) : $base;
         $newAbs = $parentAbs . DIRECTORY_SEPARATOR . $folderName;
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
 
         // -------- Exists / sanity checks --------
-        if (!is_dir($parentAbs))   return ['success' => false, 'error' => 'Parent folder does not exist'];
-        if (is_dir($newAbs))       return ['success' => false, 'error' => 'Folder already exists'];
+        $parentStat = $isLocal ? null : $storage->stat($parentAbs);
+        $parentExists = $isLocal
+            ? is_dir($parentAbs)
+            : ($parentStat !== null && ($parentStat['type'] ?? '') === 'dir');
+        if (!$parentExists) {
+            return ['success' => false, 'error' => 'Parent folder does not exist'];
+        }
+        if ($storage->stat($newAbs) !== null) {
+            return ['success' => false, 'error' => 'Folder already exists'];
+        }
 
         // -------- Create directory --------
-        if (!@mkdir($newAbs, 0775, true)) {
+        if (!$storage->mkdir($newAbs, 0775, true)) {
             $err = error_get_last();
             return ['success' => false, 'error' => 'Failed to create folder' . (!empty($err['message']) ? (': ' . $err['message']) : '')];
         }
@@ -661,7 +1405,7 @@ class FolderModel
             }
         } catch (Throwable $e) {
             // Roll back FS if ACL seeding fails
-            @rmdir($newAbs);
+            $storage->delete($newAbs);
             return ['success' => false, 'error' => 'Failed to seed ACL: ' . $e->getMessage()];
         }
 
@@ -673,6 +1417,11 @@ class FolderModel
 {
     if (strtolower($folder) === 'root') {
         return ['error' => 'Cannot delete root folder.'];
+    }
+
+    $storage = self::storage();
+    if (!$storage->isLocal()) {
+        return self::deleteFolderRecursiveAdminRemote($folder);
     }
 
     [$real, $relative, $err] = self::resolveFolderPath($folder, false);
@@ -709,7 +1458,7 @@ class FolderModel
     $relative = trim($relative, "/\\ ");
     if ($relative !== '' && $relative !== 'root') {
         $prefix = str_replace(['/', '\\', ' '], '-', $relative);
-        $globPat = META_DIR . $prefix . '*_metadata.json';
+        $globPat = self::metaRoot() . $prefix . '*_metadata.json';
         $metaFiles = glob($globPat) ?: [];
         foreach ($metaFiles as $mf) {
             @unlink($mf);
@@ -734,6 +1483,75 @@ class FolderModel
     return ['success' => 'Folder and all contents deleted.'];
 }
 
+    private static function deleteFolderRecursiveAdminRemote(string $folder): array
+    {
+        [$real, $relative, $err] = self::resolveFolderPath($folder, false);
+        if ($err) return ['error' => $err];
+
+        $storage = self::storage();
+        $errors = [];
+        $dirs = [];
+        $stack = [$real];
+
+        while ($stack) {
+            $cur = array_pop($stack);
+            $dirs[] = $cur;
+
+            $entries = $storage->list($cur);
+            if (!$entries) continue;
+
+            foreach ($entries as $name) {
+                if ($name === '.' || $name === '..' || $name === '') {
+                    continue;
+                }
+                $child = $cur . DIRECTORY_SEPARATOR . $name;
+                $stat = $storage->stat($child);
+                $type = ($stat !== null && isset($stat['type'])) ? $stat['type'] : 'file';
+                if ($type === 'dir') {
+                    $stack[] = $child;
+                } else {
+                    if (!$storage->delete($child)) {
+                        $errors[] = "Failed to delete file: {$child}";
+                    }
+                }
+            }
+        }
+
+        foreach (array_reverse($dirs) as $dirPath) {
+            if (!$storage->delete($dirPath)) {
+                $errors[] = "Failed to delete directory: {$dirPath}";
+            }
+        }
+
+        // Remove metadata JSONs for this subtree
+        $relative = trim($relative, "/\\ ");
+        if ($relative !== '' && $relative !== 'root') {
+            $prefix = str_replace(['/', '\\', ' '], '-', $relative);
+            $globPat = self::metaRoot() . $prefix . '*_metadata.json';
+            $metaFiles = glob($globPat) ?: [];
+            foreach ($metaFiles as $mf) {
+                @unlink($mf);
+            }
+        }
+
+        // Remove ownership mappings for the subtree.
+        self::removeOwnerForTree($relative);
+        // Remove ACL entries for the subtree (best-effort).
+        try {
+            ACL::deleteTree($relative);
+        } catch (\Throwable $e) { /* ignore */ }
+        // Remove folder encryption markers for the subtree (best-effort).
+        try {
+            FolderCrypto::removeSubtree($relative);
+        } catch (\Throwable $e) { /* ignore */ }
+
+        if ($errors) {
+            return ['error' => implode('; ', $errors)];
+        }
+
+        return ['success' => 'Folder and all contents deleted.'];
+    }
+
 
     /**
      * Deletes a folder if it is empty and removes its corresponding metadata.
@@ -747,14 +1565,22 @@ class FolderModel
 
         [$real, $relative, $err] = self::resolveFolderPath($folder, false);
         if ($err) return ["error" => $err];
+        $storage = self::storage();
 
         // Prevent deletion if not empty.
-        $items = array_diff(@scandir($real) ?: [], array('.', '..'));
+        if ($storage->isLocal()) {
+            $items = array_diff(@scandir($real) ?: [], array('.', '..'));
+        } else {
+            $items = array_values(array_filter(
+                $storage->list($real),
+                static fn($n) => $n !== '.' && $n !== '..' && $n !== ''
+            ));
+        }
         if (count($items) > 0) {
             return ["error" => "Folder is not empty."];
         }
 
-        if (!@rmdir($real)) {
+        if (!$storage->delete($real)) {
             return ["error" => "Failed to delete folder."];
         }
 
@@ -801,8 +1627,10 @@ class FolderModel
         [$oldReal, $oldRel, $err] = self::resolveFolderPath($oldFolder, false);
         if ($err) return ["error" => $err];
 
-        $base = realpath(UPLOAD_DIR);
-        if ($base === false) return ["error" => "Uploads directory not configured correctly."];
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
+        $base = $isLocal ? realpath(self::uploadRoot()) : rtrim(self::uploadRoot(), '/\\');
+        if ($base === false || $base === '') return ["error" => "Uploads directory not configured correctly."];
 
         $newParts = array_filter(explode('/', $newFolder), fn($p) => $p !== '');
         $newRel   = implode('/', $newParts);
@@ -810,27 +1638,36 @@ class FolderModel
 
         // Parent of new path must exist
         $newParent = dirname($newPath);
-        if (!is_dir($newParent) || strpos(realpath($newParent), $base) !== 0) {
-            return ["error" => "Invalid folder path."];
+        if ($isLocal) {
+            if (!is_dir($newParent) || strpos(realpath($newParent), $base) !== 0) {
+                return ["error" => "Invalid folder path."];
+            }
+            if (file_exists($newPath)) {
+                return ["error" => "New folder name already exists."];
+            }
+        } else {
+            $parentStat = $storage->stat($newParent);
+            if ($parentStat === null || ($parentStat['type'] ?? '') !== 'dir') {
+                return ["error" => "Invalid folder path."];
+            }
+            if ($storage->stat($newPath) !== null) {
+                return ["error" => "New folder name already exists."];
+            }
         }
-        if (file_exists($newPath)) {
-            return ["error" => "New folder name already exists."];
-        }
-
-        if (!@rename($oldReal, $newPath)) {
+        if (!$storage->move($oldReal, $newPath)) {
             return ["error" => "Failed to rename folder."];
         }
 
         // Update metadata filenames (prefix-rename)
         $oldPrefix = str_replace(['/', '\\', ' '], '-', $oldRel);
         $newPrefix = str_replace(['/', '\\', ' '], '-', $newRel);
-        $globPat   = META_DIR . $oldPrefix . '*_metadata.json';
+        $globPat   = self::metaRoot() . $oldPrefix . '*_metadata.json';
         $metadataFiles = glob($globPat) ?: [];
 
         foreach ($metadataFiles as $oldMetaFile) {
             $baseName   = basename($oldMetaFile);
             $newBase    = preg_replace('/^' . preg_quote($oldPrefix, '/') . '/', $newPrefix, $baseName);
-            $newMeta    = META_DIR . $newBase;
+            $newMeta    = self::metaRoot() . $newBase;
             @rename($oldMetaFile, $newMeta);
         }
 
@@ -871,9 +1708,14 @@ class FolderModel
      * Retrieves the list of folders (including "root") along with file count metadata.
      * (Ownership filtering is handled in the controller; this function remains unchanged.)
      */
-    public static function getFolderList($ignoredParent = null, ?string $username = null, array $perms = [], bool $includeCounts = true): array
+    public static function getFolderList($parent = null, ?string $username = null, array $perms = [], bool $includeCounts = true): array
     {
-        $baseDir = realpath(UPLOAD_DIR);
+        $storage = self::storage();
+        if (!$storage->isLocal()) {
+            return self::getFolderListRemote($parent, $username, $perms, $includeCounts);
+        }
+
+        $baseDir = realpath(self::uploadRoot());
         if ($baseDir === false) {
             return []; // or ["error" => "..."]
         }
@@ -918,15 +1760,200 @@ class FolderModel
         return $folderInfoList;
     }
 
+    private static function getFolderListRemote(?string $parent, ?string $username, array $perms, bool $includeCounts): array
+    {
+        $storage = self::storage();
+        $base = rtrim(self::uploadRoot(), "/\\");
+
+        $folderInfoList = [];
+        $rootMetaFile   = self::getMetadataFilePath('root');
+        $rootFileCount  = null;
+        if ($includeCounts && file_exists($rootMetaFile)) {
+            $rootMetadata = json_decode(file_get_contents($rootMetaFile), true);
+            $rootFileCount = is_array($rootMetadata) ? count($rootMetadata) : 0;
+        }
+        $folderInfoList[] = [
+            "folder"       => "root",
+            "fileCount"    => $rootFileCount,
+            "metadataFile" => basename($rootMetaFile)
+        ];
+
+        if ($parent !== null && !$includeCounts) {
+            $folderInfoList = self::getFolderListRemoteShallow($parent, $includeCounts);
+            if ($username !== null) {
+                $folderInfoList = array_values(array_filter(
+                    $folderInfoList,
+                    fn($row) => ACL::canRead($username, $perms, $row['folder'])
+                ));
+            }
+            return $folderInfoList;
+        }
+
+        $maxFolders = 20000;
+        $scanned = 0;
+        $queue = [['root', $base]];
+
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP();
+
+        while ($queue && $scanned < $maxFolders) {
+            [$rel, $abs] = array_shift($queue);
+            $entries = $storage->list($abs);
+            if (!$entries) continue;
+
+            foreach ($entries as $name) {
+                if ($name === '.' || $name === '..') continue;
+                if ($name === '' || $name[0] === '.') continue;
+                if (in_array($name, $IGNORE, true)) continue;
+                if (!FS::isSafeSegment($name)) continue;
+                if (in_array(strtolower($name), $SKIP, true)) continue;
+
+                $childAbs = $abs . DIRECTORY_SEPARATOR . $name;
+                $stat = $storage->stat($childAbs);
+                if (!$stat || ($stat['type'] ?? '') !== 'dir') continue;
+
+                $childRel = ($rel === 'root') ? $name : ($rel . '/' . $name);
+
+                $metaFile = self::getMetadataFilePath($childRel);
+                $fileCount = null;
+                if ($includeCounts && file_exists($metaFile)) {
+                    $metadata = json_decode(file_get_contents($metaFile), true);
+                    $fileCount = is_array($metadata) ? count($metadata) : 0;
+                }
+
+                $folderInfoList[] = [
+                    "folder"       => $childRel,
+                    "fileCount"    => $fileCount,
+                    "metadataFile" => basename($metaFile)
+                ];
+
+                $queue[] = [$childRel, $childAbs];
+                $scanned++;
+                if ($scanned >= $maxFolders) break;
+            }
+        }
+
+        if ($username !== null) {
+            $folderInfoList = array_values(array_filter(
+                $folderInfoList,
+                fn($row) => ACL::canRead($username, $perms, $row['folder'])
+            ));
+        }
+
+        return $folderInfoList;
+    }
+
+    private static function getFolderListRemoteShallow(string $parent, bool $includeCounts): array
+    {
+        $storage = self::storage();
+        $base = rtrim(self::uploadRoot(), "/\\");
+        $parentRel = (strcasecmp($parent, 'root') === 0 || $parent === '')
+            ? 'root'
+            : trim($parent, "/\\");
+        $parentAbs = ($parentRel === 'root') ? $base : ($base . DIRECTORY_SEPARATOR . $parentRel);
+
+        $folderInfoList = [];
+        $metaTarget = ($parentRel === 'root') ? 'root' : $parentRel;
+        $rootMetaFile = self::getMetadataFilePath($metaTarget);
+        $rootFileCount = null;
+        if ($includeCounts && file_exists($rootMetaFile)) {
+            $rootMetadata = json_decode(file_get_contents($rootMetaFile), true);
+            $rootFileCount = is_array($rootMetadata) ? count($rootMetadata) : 0;
+        }
+        $folderInfoList[] = [
+            "folder"       => $metaTarget,
+            "fileCount"    => $rootFileCount,
+            "metadataFile" => basename($rootMetaFile)
+        ];
+
+        $entries = $storage->list($parentAbs);
+        if (!$entries) {
+            return $folderInfoList;
+        }
+
+        $IGNORE = FS::IGNORE();
+        $SKIP   = FS::SKIP();
+
+        foreach ($entries as $name) {
+            if ($name === '.' || $name === '..') continue;
+            if ($name === '' || $name[0] === '.') continue;
+            if (in_array($name, $IGNORE, true)) continue;
+            if (!FS::isSafeSegment($name)) continue;
+            if (in_array(strtolower($name), $SKIP, true)) continue;
+
+            $childAbs = $parentAbs . DIRECTORY_SEPARATOR . $name;
+            $stat = $storage->stat($childAbs);
+            if (!$stat || ($stat['type'] ?? '') !== 'dir') continue;
+
+            $childRel = ($parentRel === 'root') ? $name : ($parentRel . '/' . $name);
+            $metaFile = self::getMetadataFilePath($childRel);
+            $fileCount = null;
+            if ($includeCounts && file_exists($metaFile)) {
+                $metadata = json_decode(file_get_contents($metaFile), true);
+                $fileCount = is_array($metadata) ? count($metadata) : 0;
+            }
+
+            $folderInfoList[] = [
+                "folder"       => $childRel,
+                "fileCount"    => $fileCount,
+                "metadataFile" => basename($metaFile)
+            ];
+        }
+
+        return $folderInfoList;
+    }
+
+    private static function findShareFolderRecord(string $token): ?array
+    {
+        $token = (string)$token;
+        $readRecord = function (string $path, string $token): ?array {
+            if (!is_file($path)) {
+                return null;
+            }
+            $shareLinks = json_decode((string)@file_get_contents($path), true);
+            if (!is_array($shareLinks) || !isset($shareLinks[$token])) {
+                return null;
+            }
+            return $shareLinks[$token];
+        };
+
+        $currentId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
+        $shareFile = self::metaRoot() . "share_folder_links.json";
+        $record = $readRecord($shareFile, $token);
+        if ($record) {
+            return $record;
+        }
+
+        if (!class_exists('SourceContext') || !SourceContext::sourcesEnabled()) {
+            return null;
+        }
+
+        $sources = SourceContext::listAllSources();
+        foreach ($sources as $src) {
+            if (isset($src['enabled']) && !$src['enabled']) {
+                continue;
+            }
+            $id = (string)($src['id'] ?? '');
+            if ($id === '' || $id === $currentId) {
+                continue;
+            }
+            $path = SourceContext::metaRootForId($id) . "share_folder_links.json";
+            $record = $readRecord($path, $token);
+            if ($record) {
+                SourceContext::setActiveId($id, false);
+                return $record;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Retrieves the share folder record for a given token.
      */
     public static function getShareFolderRecord(string $token): ?array
     {
-        $shareFile = META_DIR . "share_folder_links.json";
-        if (!file_exists($shareFile)) return null;
-        $shareLinks = json_decode(file_get_contents($shareFile), true);
-        return (is_array($shareLinks) && isset($shareLinks[$token])) ? $shareLinks[$token] : null;
+        return self::findShareFolderRecord($token);
     }
 
     /**
@@ -934,14 +1961,10 @@ class FolderModel
      */
     public static function getSharedFolderData(string $token, ?string $providedPass, int $page = 1, int $itemsPerPage = 10): array
     {
-        $shareFile = META_DIR . "share_folder_links.json";
-        if (!file_exists($shareFile)) return ["error" => "Share link not found."];
-
-        $shareLinks = json_decode(file_get_contents($shareFile), true);
-        if (!is_array($shareLinks) || !isset($shareLinks[$token])) {
+        $record = self::findShareFolderRecord($token);
+        if (!$record) {
             return ["error" => "Share link not found."];
         }
-        $record = $shareLinks[$token];
 
         if (time() > ($record['expires'] ?? 0)) {
             return ["error" => "This share link has expired."];
@@ -963,21 +1986,34 @@ class FolderModel
             }
         } catch (\Throwable $e) { /* ignore */ }
 
+        $storage = self::storage();
+
         // Resolve shared folder
         [$realFolderPath, $relative, $err] = self::resolveFolderPath($folder === '' ? 'root' : $folder, false);
-        if ($err || !is_dir($realFolderPath)) {
+        if ($err) {
+            return ["error" => "Shared folder not found."];
+        }
+        $dirStat = $storage->stat($realFolderPath);
+        if ($dirStat === null || ($dirStat['type'] ?? '') !== 'dir') {
             return ["error" => "Shared folder not found."];
         }
 
         // List files (safe names only; skip hidden)
-        $all = @scandir($realFolderPath) ?: [];
+        $all = $storage->list($realFolderPath);
         $allFiles = [];
+        $fileSizes = [];
         foreach ($all as $it) {
             if ($it === '.' || $it === '..') continue;
-            if ($it[0] === '.') continue;
+            if ($it === '' || $it[0] === '.') continue;
             if (!preg_match(REGEX_FILE_NAME, $it)) continue;
-            if (is_file($realFolderPath . DIRECTORY_SEPARATOR . $it)) {
-                $allFiles[] = $it;
+            $fullPath = $realFolderPath . DIRECTORY_SEPARATOR . $it;
+            $stat = $storage->stat($fullPath);
+            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+                continue;
+            }
+            $allFiles[] = $it;
+            if (array_key_exists('size', $stat)) {
+                $fileSizes[$it] = (int)$stat['size'];
             }
         }
         sort($allFiles, SORT_NATURAL | SORT_FLAG_CASE);
@@ -987,12 +2023,19 @@ class FolderModel
         $currentPage = min(max(1, $page), $totalPages);
         $startIndex  = ($currentPage - 1) * $itemsPerPage;
         $filesOnPage = array_slice($allFiles, $startIndex, $itemsPerPage);
+        $fileSizesOnPage = [];
+        foreach ($filesOnPage as $name) {
+            if (array_key_exists($name, $fileSizes)) {
+                $fileSizesOnPage[$name] = $fileSizes[$name];
+            }
+        }
 
         return [
             "record"        => $record,
             "folder"        => $relative,
             "realFolderPath" => $realFolderPath,
             "files"         => $filesOnPage,
+            "fileSizes"     => $fileSizesOnPage,
             "currentPage"   => $currentPage,
             "totalPages"    => $totalPages
         ];
@@ -1023,7 +2066,7 @@ class FolderModel
         $expires       = time() + max(1, $expirationSeconds);
         $hashedPassword = $password !== "" ? password_hash($password, PASSWORD_DEFAULT) : "";
 
-        $shareFile = META_DIR . "share_folder_links.json";
+        $shareFile = self::metaRoot() . "share_folder_links.json";
         $links = file_exists($shareFile)
             ? (json_decode(file_get_contents($shareFile), true) ?? [])
             : [];
@@ -1068,14 +2111,10 @@ class FolderModel
      */
     public static function getSharedFileInfo(string $token, string $file): array
     {
-        $shareFile = META_DIR . "share_folder_links.json";
-        if (!file_exists($shareFile)) return ["error" => "Share link not found."];
-
-        $shareLinks = json_decode(file_get_contents($shareFile), true);
-        if (!is_array($shareLinks) || !isset($shareLinks[$token])) {
+        $record = self::findShareFolderRecord($token);
+        if (!$record) {
             return ["error" => "Share link not found."];
         }
-        $record = $shareLinks[$token];
 
         if (time() > ($record['expires'] ?? 0)) {
             return ["error" => "This share link has expired."];
@@ -1090,8 +2129,13 @@ class FolderModel
             }
         } catch (\Throwable $e) { /* ignore */ }
 
+        $storage = self::storage();
         [$realFolderPath,, $err] = self::resolveFolderPath((string)$record['folder'], false);
-        if ($err || !is_dir($realFolderPath)) {
+        if ($err) {
+            return ["error" => "Shared folder not found."];
+        }
+        $dirStat = $storage->stat($realFolderPath);
+        if ($dirStat === null || ($dirStat['type'] ?? '') !== 'dir') {
             return ["error" => "Shared folder not found."];
         }
 
@@ -1101,24 +2145,79 @@ class FolderModel
         }
 
         $full = $realFolderPath . DIRECTORY_SEPARATOR . $file;
-        $real = realpath($full);
-        if ($real === false || strpos($real, $realFolderPath) !== 0 || !is_file($real)) {
-            return ["error" => "File not found."];
+        if ($storage->isLocal()) {
+            $real = realpath($full);
+            if ($real === false || strpos($real, $realFolderPath) !== 0 || !is_file($real)) {
+                return ["error" => "File not found."];
+            }
+
+            // Never allow shared downloads of encrypted-at-rest files (v1).
+            try {
+                if (CryptoAtRest::isEncryptedFile($real)) {
+                    return ["error" => "This file is not available for shared download (encrypted)."];
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+
+            $mime = function_exists('mime_content_type') ? mime_content_type($real) : 'application/octet-stream';
+            return [
+                "filePath"     => $real,
+                "mimeType"     => $mime,
+                "downloadName" => basename($real),
+                "folder"       => $folderKey,
+                "file"         => $file,
+                "isLocal"      => true,
+            ];
         }
 
-        // Never allow shared downloads of encrypted-at-rest files (v1).
-        try {
-            if (CryptoAtRest::isEncryptedFile($real)) {
-                return ["error" => "This file is not available for shared download (encrypted)."];
+        $stat = $storage->stat($full);
+        if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+            $probe = $storage->openReadStream($full, 1, 0);
+            if ($probe === false) {
+                return ["error" => "File not found."];
             }
-        } catch (\Throwable $e) { /* ignore */ }
+            if (is_resource($probe)) {
+                @fclose($probe);
+            } elseif (is_object($probe) && method_exists($probe, 'close')) {
+                $probe->close();
+            }
+            $stat = [
+                'type' => 'file',
+                'size' => 0,
+                'sizeUnknown' => true,
+            ];
+        }
 
-        $mime = function_exists('mime_content_type') ? mime_content_type($real) : 'application/octet-stream';
+        $downloadName = $file;
+        $downloadExt = $stat['downloadExt'] ?? '';
+        if (is_string($downloadExt)) {
+            $downloadExt = ltrim($downloadExt, '.');
+            if ($downloadExt !== '') {
+                $suffix = '.' . strtolower($downloadExt);
+                if (!str_ends_with(strtolower($downloadName), $suffix)) {
+                    $downloadName .= '.' . $downloadExt;
+                }
+            }
+        }
+
+        $mimeType = $stat['downloadMime'] ?? $stat['mime'] ?? 'application/octet-stream';
+        if (!$mimeType || !is_string($mimeType)) {
+            $mimeType = 'application/octet-stream';
+        }
+
+        $ext = strtolower(pathinfo($downloadName, PATHINFO_EXTENSION));
+        if ($ext === 'svg') {
+            $mimeType = 'image/svg+xml';
+        }
+
         return [
-            "realFilePath" => $real,
-            "mimeType" => $mime,
-            "folder" => $folderKey,
-            "file" => $file,
+            "filePath"     => $full,
+            "mimeType"     => $mimeType,
+            "downloadName" => $downloadName,
+            "folder"       => $folderKey,
+            "file"         => $file,
+            "isLocal"      => false,
+            "size"         => (int)($stat['size'] ?? 0),
+            "sizeUnknown"  => !empty($stat['sizeUnknown']),
         ];
     }
 
@@ -1152,15 +2251,14 @@ class FolderModel
             'md'
         ];
 
-        $shareFile = META_DIR . "share_folder_links.json";
-        if (!file_exists($shareFile)) {
-            return ["error" => "Share record not found."];
-        }
-        $shareLinks = json_decode(file_get_contents($shareFile), true);
-        if (!is_array($shareLinks) || !isset($shareLinks[$token])) {
+        $record = self::findShareFolderRecord($token);
+        if (!$record) {
             return ["error" => "Invalid share token."];
         }
-        $record = $shareLinks[$token];
+
+        if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+            return ["error" => "Source is read-only."];
+        }
 
         if (time() > ($record['expires'] ?? 0)) {
             return ["error" => "This share link has expired."];
@@ -1192,6 +2290,8 @@ class FolderModel
             return ["error" => "File type not allowed."];
         }
 
+        $storage = self::storage();
+
         // Resolve target folder
         [$targetDir, $relative, $err] = self::resolveFolderPath((string)$record['folder'], true);
         if ($err) return ["error" => $err];
@@ -1201,8 +2301,25 @@ class FolderModel
         $newFilename = uniqid('', true) . "_" . $safeBase;
         $targetPath = $targetDir . DIRECTORY_SEPARATOR . $newFilename;
 
-        if (!move_uploaded_file($fileUpload['tmp_name'], $targetPath)) {
-            return ["error" => "Failed to move the uploaded file."];
+        if ($storage->isLocal()) {
+            if (!move_uploaded_file($fileUpload['tmp_name'], $targetPath)) {
+                return ["error" => "Failed to move the uploaded file."];
+            }
+        } else {
+            $tmpPath = (string)($fileUpload['tmp_name'] ?? '');
+            $stream = @fopen($tmpPath, 'rb');
+            if ($stream === false) {
+                return ["error" => "Failed to read the uploaded file."];
+            }
+            $length = isset($fileUpload['size']) ? (int)$fileUpload['size'] : null;
+            $mimeType = isset($fileUpload['type']) && is_string($fileUpload['type']) ? $fileUpload['type'] : null;
+            $written = $storage->writeStream($targetPath, $stream, $length, $mimeType);
+            if (is_resource($stream)) {
+                @fclose($stream);
+            }
+            if (!$written) {
+                return ["error" => "Failed to save the uploaded file."];
+            }
         }
 
         // Update metadata (uploaded + modified + uploader)
@@ -1226,7 +2343,7 @@ class FolderModel
 
     public static function getAllShareFolderLinks(): array
     {
-        $shareFile = META_DIR . "share_folder_links.json";
+        $shareFile = self::metaRoot() . "share_folder_links.json";
         if (!file_exists($shareFile)) return [];
         $links = json_decode(file_get_contents($shareFile), true);
         return is_array($links) ? $links : [];
@@ -1234,7 +2351,7 @@ class FolderModel
 
     public static function deleteShareFolderLink(string $token): bool
     {
-        $shareFile = META_DIR . "share_folder_links.json";
+        $shareFile = self::metaRoot() . "share_folder_links.json";
         if (!file_exists($shareFile)) return false;
 
         $links = json_decode(file_get_contents($shareFile), true);

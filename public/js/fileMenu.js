@@ -227,7 +227,11 @@ function menuClickDelegate(ev) {
       break;
 
     case 'edit':
-      if (s.file && s.canEdit) editFile(s.file.name, folder);
+      if (s.file && s.canEdit) {
+        const sourceId = String(s.file.sourceId || '').trim()
+          || (window.__frGetActiveSourceId ? String(window.__frGetActiveSourceId() || '').trim() : '');
+        editFile(s.file.name, folder, sourceId);
+      }
       break;
 
     case 'rename':

@@ -10,9 +10,15 @@ require __DIR__ . '/../../config/config.php';
 require __DIR__ . '/../../src/models/DiskUsageModel.php';
 
 $start = microtime(true);
+$sourceId = $argv[1] ?? '';
+$sourceId = is_string($sourceId) ? trim($sourceId) : '';
+if ($sourceId !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+    fwrite(STDERR, "Invalid source id.\n");
+    exit(1);
+}
 
 try {
-    $snapshot = DiskUsageModel::buildSnapshot();
+    $snapshot = DiskUsageModel::buildSnapshot($sourceId);
     $elapsed  = microtime(true) - $start;
 
     $bytes = (int)($snapshot['root_bytes'] ?? 0);
@@ -27,9 +33,11 @@ try {
         return sprintf('%.2f %s', $val, $units[$i]);
     };
 
+    $label = $sourceId !== '' ? (" (source: " . $sourceId . ")") : '';
     $msg = sprintf(
-        "Disk usage snapshot written to %s\nScanned %d files, total %s in %.2f seconds.\n",
-        DiskUsageModel::snapshotPath(),
+        "Disk usage snapshot written to %s%s\nScanned %d files, total %s in %.2f seconds.\n",
+        DiskUsageModel::snapshotPath($sourceId),
+        $label,
         $files,
         $human($bytes),
         $elapsed

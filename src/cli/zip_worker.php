@@ -4,12 +4,26 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../config/config.php';
 require __DIR__ . '/../../src/models/FileModel.php';
+require __DIR__ . '/../../src/lib/SourceContext.php';
 
 $token = $argv[1] ?? '';
 $token = preg_replace('/[^a-f0-9]/','',$token);
 if ($token === '') { fwrite(STDERR, "No token\n"); exit(1); }
 
-$root    = rtrim((string)META_DIR, '/\\') . '/ziptmp';
+$sourceId = $argv[2] ?? '';
+$sourceId = preg_replace('/[^A-Za-z0-9_-]/', '', (string)$sourceId);
+if ($sourceId !== '' && class_exists('SourceContext')) {
+    SourceContext::setActiveId($sourceId, false);
+}
+
+$metaRoot = class_exists('SourceContext')
+    ? SourceContext::metaRoot()
+    : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+$uploadRoot = class_exists('SourceContext')
+    ? SourceContext::uploadRoot()
+    : (string)UPLOAD_DIR;
+
+$root    = rtrim($metaRoot, '/\\') . '/ziptmp';
 $tokDir  = $root . '/.tokens';
 $logDir  = $root . '/.logs';
 @mkdir($tokDir, 0775, true);
@@ -58,7 +72,7 @@ try {
     $names  = (array)($job['files'] ?? []);
 
     // Resolve folder path similarly to createZipArchive
-    $baseDir = realpath(UPLOAD_DIR);
+    $baseDir = realpath($uploadRoot);
     if ($baseDir === false) {
         throw new RuntimeException('Uploads directory not configured correctly.');
     }
@@ -72,7 +86,7 @@ try {
                 throw new RuntimeException('Invalid folder name.');
             }
         }
-        $folderPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+        $folderPath = rtrim($uploadRoot, '/\\') . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
         $folderPathReal = realpath($folderPath);
         if ($folderPathReal === false || strpos($folderPathReal, $baseDir) !== 0) {
             throw new RuntimeException('Folder not found.');

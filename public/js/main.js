@@ -14,7 +14,7 @@ try { patchFetchForBasePath(); } catch (e) {}
   window.__REAL_TOAST__ = window.__REAL_TOAST__ || null; // set later once domUtils is loaded
   window.__FR_TOAST_FILTER__ = window.__FR_TOAST_FILTER__ || null; // filter hook (auth.js)
 
-  window.showToast = function (msgOrKey, duration) {
+  window.showToast = function (msgOrKey, durationOrTone, maybeTone) {
     // Let auth.js (or anyone) rewrite/suppress messages centrally.
     try {
       if (typeof window.__FR_TOAST_FILTER__ === 'function') {
@@ -25,15 +25,15 @@ try { patchFetchForBasePath(); } catch (e) {}
     } catch (e) { }
 
     if (typeof window.__REAL_TOAST__ === 'function') {
-      return window.__REAL_TOAST__(msgOrKey, duration);
+      return window.__REAL_TOAST__(msgOrKey, durationOrTone, maybeTone);
     }
-    window.__FR_TOAST_Q.push([msgOrKey, duration]);
+    window.__FR_TOAST_Q.push([msgOrKey, durationOrTone, maybeTone]);
   };
 
   // Optional: generic event bridge
   window.addEventListener('filerise:toast', (e) => {
-    const { message, duration } = (e && e.detail) || {};
-    if (message) window.showToast(message, duration);
+    const { message, duration, tone } = (e && e.detail) || {};
+    if (message) window.showToast(message, duration, tone);
   });
 })();
 
@@ -44,7 +44,7 @@ async function ensureToastReady() {
     const real = dom.showToast || ((m, d) => console.log('TOAST:', m, d));
 
     // (Optional) “false-negative to success” normalizer
-    const normalized = function (msg, dur) {
+    const normalized = function (msg, dur, tone) {
       try {
         const m = (msg || '').toString().toLowerCase();
         if (/does not exist|already exist|not found/.test(m) && window.__FR_LAST_OK) {
@@ -52,7 +52,7 @@ async function ensureToastReady() {
           return real('Done.', dur);
         }
       } catch (e) { }
-      return real(msg, dur);
+      return real(msg, dur, tone);
     };
 
     window.__REAL_TOAST__ = normalized;
@@ -60,7 +60,7 @@ async function ensureToastReady() {
     // Flush anything that queued before domUtils was ready
     const q = window.__FR_TOAST_Q || [];
     window.__FR_TOAST_Q = [];
-    q.forEach(([m, d]) => window.__REAL_TOAST__(m, d));
+    q.forEach(([m, d, t]) => window.__REAL_TOAST__(m, d, t));
   } catch (e) {
     window.__REAL_TOAST__ = (m, d) => console.log('TOAST:', m, d);
   }
@@ -533,6 +533,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
         '/api/folder/getFolderList.php',
         '/api/folder/listChildren.php',
         '/api/file/getFileList.php',
+        '/api/file/getTrashItems.php',
         '/api/siteConfig.php',
         '/api/onlyoffice/status.php'
       ].some(p => urlPath.startsWith(p));
@@ -609,7 +610,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
   // Gentle toast normalizer (compatible with showToast(message, duration))
   const origToast = window.showToast;
   if (typeof origToast === 'function' && !origToast.__frWrapped) {
-    const wrapped = function (msg, maybeDuration) {
+    const wrapped = function (msg, maybeDuration, maybeTone) {
       try {
         const m = (msg || '').toString().toLowerCase();
         const looksWrong =
@@ -622,8 +623,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
           return origToast('Done.', dur);
         }
       } catch (e) { }
-      const dur = (typeof maybeDuration === 'number') ? maybeDuration : undefined;
-      return origToast(msg, dur);
+      return origToast(msg, maybeDuration, maybeTone);
     };
     wrapped.__frWrapped = true;
     window.showToast = wrapped;
@@ -791,9 +791,11 @@ function bindDarkMode() {
           const proMeta = (cfg && cfg.pro && typeof cfg.pro === 'object') ? cfg.pro : {};
           window.__FR_IS_PRO = !!proMeta.active;
           window.__FR_PRO_VERSION = proMeta.version || '';
+          window.__FR_PRO_API_LEVEL = Number(proMeta.apiLevel || 0);
         } catch (e) {
           window.__FR_IS_PRO = false;
           window.__FR_PRO_VERSION = '';
+          window.__FR_PRO_API_LEVEL = 0;
         }
         try {
           const ps = (cfg && cfg.proSearch && typeof cfg.proSearch === 'object') ? cfg.proSearch : {};
@@ -1411,7 +1413,7 @@ function bindDarkMode() {
   // ---------- SETUP MODE (no flicker) ----------
   async function bootSetupWizard() {
     const overlay = document.getElementById('loadingOverlay'); if (overlay) overlay.remove();
-    const wrap = document.querySelector('.main-wrapper'); if (wrap) wrap.style.display = '';
+    const wrap = document.querySelector('.main-wrapper'); if (wrap) hideEl(wrap);
     const login = document.getElementById('loginForm'); if (login) login.style.display = 'none';
     const hb = document.querySelector('.header-buttons'); if (hb) hb.style.visibility = 'hidden';
     (document.getElementById('mainOperations') || {}).style && (document.getElementById('mainOperations').style.display = 'none');
@@ -1577,8 +1579,8 @@ function bindDarkMode() {
     const { authed, setup, raw: authRaw } = await checkAuth();
 
     if (setup) {
-      // Setup wizard runs inside app shell
-      unhide(wrap);
+      // Setup wizard runs without the app shell
+      hideEl(wrap);
       hideEl(login);
       await bootSetupWizard();
       await revealAppAndHideOverlay();

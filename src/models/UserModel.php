@@ -2,6 +2,7 @@
 // src/models/userModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class userModel
 {
@@ -310,7 +311,10 @@ class userModel
         ACL::purgeUser($usernameToRemove);
     } else {
         // Fallback inline purge if you haven't added ACL::purgeUser yet:
-        $aclPath = rtrim(META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'folder_acl.json';
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $aclPath = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'folder_acl.json';
         $acl = is_file($aclPath) ? json_decode((string)file_get_contents($aclPath), true) : [];
         if (!is_array($acl)) $acl = ['folders' => [], 'groups' => []];
         $buckets = ['owners','read','write','share','read_own'];

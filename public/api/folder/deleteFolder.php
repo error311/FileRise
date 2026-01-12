@@ -14,7 +14,8 @@
  *     required=true,
  *     @OA\JsonContent(
  *       required={"folder"},
- *       @OA\Property(property="folder", type="string", example="userA/reports")
+ *       @OA\Property(property="folder", type="string", example="userA/reports"),
+ *       @OA\Property(property="sourceId", type="string", example="local")
  *     )
  *   ),
  *   @OA\Response(response=200, description="Deletion result (model-defined JSON)"),

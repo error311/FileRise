@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/src/lib/FS.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 /**
  * DiskUsageModel
@@ -30,12 +31,95 @@ class DiskUsageModel
     /** Maximum number of per-file records to keep (for Top N view). */
     private const TOP_FILE_LIMIT = 1000;
 
+    private static function normalizeSourceId($sourceId): string
+    {
+        $raw = trim((string)$sourceId);
+        if ($raw === '') return '';
+        if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $raw)) {
+            return '';
+        }
+        return $raw;
+    }
+
+    /**
+     * Resolve the source context for disk usage scans.
+     *
+     * @return array{ok:bool, error?:string, message?:string, sourceId?:string, uploadRoot?:string, metaRoot?:string, source?:array}
+     */
+    public static function resolveSourceContext(?string $sourceId): array
+    {
+        $raw = trim((string)$sourceId);
+        if ($raw === '') {
+            return [
+                'ok' => true,
+                'sourceId' => '',
+                'uploadRoot' => (string)UPLOAD_DIR,
+                'metaRoot' => (string)META_DIR,
+                'source' => null,
+            ];
+        }
+
+        $id = self::normalizeSourceId($raw);
+        if ($id === '') {
+            return [
+                'ok' => false,
+                'error' => 'invalid_source',
+                'message' => 'Invalid source id.',
+            ];
+        }
+
+        if (!class_exists('SourceContext') || !SourceContext::sourcesEnabled()) {
+            return [
+                'ok' => false,
+                'error' => 'invalid_source',
+                'message' => 'Sources are not enabled on this instance.',
+            ];
+        }
+
+        $src = SourceContext::getSourceById($id);
+        if (!$src || empty($src['enabled'])) {
+            return [
+                'ok' => false,
+                'error' => 'invalid_source',
+                'message' => 'Invalid source id.',
+            ];
+        }
+
+        $type = strtolower((string)($src['type'] ?? 'local'));
+        if ($type !== 'local') {
+            return [
+                'ok' => false,
+                'error' => 'unsupported_source',
+                'message' => 'Disk usage snapshots are only supported for local sources.',
+            ];
+        }
+
+        $uploadRoot = (string)SourceContext::uploadRootForId($id);
+        if ($uploadRoot === '') {
+            $uploadRoot = (string)UPLOAD_DIR;
+        }
+        $metaRoot = (string)SourceContext::metaRootForId($id);
+        if ($metaRoot === '') {
+            $metaRoot = (string)META_DIR;
+        }
+
+        return [
+            'ok' => true,
+            'sourceId' => $id,
+            'uploadRoot' => $uploadRoot,
+            'metaRoot' => $metaRoot,
+            'source' => $src,
+        ];
+    }
+
     /**
      * Location of the background scan log file.
      */
-    public static function scanLogPath(): string
+    public static function scanLogPath(string $sourceId = ''): string
     {
-        $meta   = rtrim((string)META_DIR, '/\\');
+        $ctx = self::resolveSourceContext($sourceId);
+        $metaRoot = $ctx['ok'] ? (string)($ctx['metaRoot'] ?? META_DIR) : (string)META_DIR;
+        $meta   = rtrim($metaRoot, '/\\');
         $logDir = $meta . DIRECTORY_SEPARATOR . 'logs';
         if (!is_dir($logDir)) {
             @mkdir($logDir, 0775, true);
@@ -48,9 +132,9 @@ class DiskUsageModel
      *
      * @return array|null
      */
-    public static function readScanLogTail(int $maxBytes = 4000): ?array
+    public static function readScanLogTail(int $maxBytes = 4000, string $sourceId = ''): ?array
     {
-        $path = self::scanLogPath();
+        $path = self::scanLogPath($sourceId);
         if (!is_file($path) || !is_readable($path)) {
             return null;
         }
@@ -85,9 +169,9 @@ class DiskUsageModel
     /**
      * Delete the on-disk snapshot JSON, if present.
      */
-    public static function deleteSnapshot(): bool
+    public static function deleteSnapshot(string $sourceId = ''): bool
     {
-        $path = self::snapshotPath();
+        $path = self::snapshotPath($sourceId);
         if (!is_file($path)) {
             return false;
         }
@@ -97,9 +181,11 @@ class DiskUsageModel
     /**
      * Absolute path to the snapshot JSON file.
      */
-    public static function snapshotPath(): string
+    public static function snapshotPath(string $sourceId = ''): string
     {
-        $meta = rtrim((string)META_DIR, '/\\');
+        $ctx = self::resolveSourceContext($sourceId);
+        $metaRoot = $ctx['ok'] ? (string)($ctx['metaRoot'] ?? META_DIR) : (string)META_DIR;
+        $meta = rtrim($metaRoot, '/\\');
         return $meta . DIRECTORY_SEPARATOR . self::SNAPSHOT_BASENAME;
     }
 
@@ -110,13 +196,22 @@ class DiskUsageModel
      *
      * @throws RuntimeException on configuration or IO errors.
      */
-    public static function buildSnapshot(): array
+    public static function buildSnapshot(string $sourceId = ''): array
     {
         $start = microtime(true);
 
-        $root = realpath(UPLOAD_DIR);
+        $ctx = self::resolveSourceContext($sourceId);
+        if (empty($ctx['ok'])) {
+            throw new RuntimeException($ctx['message'] ?? 'Invalid source for disk usage scan.');
+        }
+
+        $rootPath = (string)($ctx['uploadRoot'] ?? UPLOAD_DIR);
+        $root = realpath($rootPath);
         if ($root === false || !is_dir($root)) {
-            throw new RuntimeException('Uploads directory is not configured correctly.');
+            $msg = ($sourceId !== '')
+                ? 'Source upload root is not configured correctly.'
+                : 'Uploads directory is not configured correctly.';
+            throw new RuntimeException($msg);
         }
         $root = rtrim($root, DIRECTORY_SEPARATOR);
 
@@ -379,7 +474,7 @@ class DiskUsageModel
             'files'        => $files,
         ];
 
-        $path = self::snapshotPath();
+        $path = self::snapshotPath($sourceId);
         $dir  = dirname($path);
         if (!is_dir($dir)) {
             @mkdir($dir, 0775, true);
@@ -400,9 +495,9 @@ class DiskUsageModel
     /**
      * Load the snapshot from disk, or return null if missing or invalid.
      */
-    public static function loadSnapshot(): ?array
+    public static function loadSnapshot(string $sourceId = ''): ?array
     {
-        $path = self::snapshotPath();
+        $path = self::snapshotPath($sourceId);
         if (!is_file($path)) {
             return null;
         }
@@ -427,9 +522,22 @@ class DiskUsageModel
      * @param int $maxTopFilesPreview  Optional number of top files to include as preview.
      * @return array
      */
-    public static function getSummary(int $maxTopFolders = 5, int $maxTopFilesPreview = 0): array
+    public static function getSummary(int $maxTopFolders = 5, int $maxTopFilesPreview = 0, string $sourceId = ''): array
     {
-        $snapshot = self::loadSnapshot();
+        $ctx = self::resolveSourceContext($sourceId);
+        if (empty($ctx['ok'])) {
+            return [
+                'ok'          => false,
+                'error'       => $ctx['error'] ?? 'invalid_source',
+                'message'     => $ctx['message'] ?? 'Invalid source.',
+                'generatedAt' => null,
+            ];
+        }
+
+        $uploadRootPath = (string)($ctx['uploadRoot'] ?? UPLOAD_DIR);
+        $metaRootPath = (string)($ctx['metaRoot'] ?? META_DIR);
+
+        $snapshot = self::loadSnapshot($sourceId);
         if ($snapshot === null) {
             return [
                 'ok'          => false,
@@ -444,16 +552,18 @@ class DiskUsageModel
 
         // --- Build "volumes" across core FileRise dirs (UPLOAD/USERS/META) ---
         $volumeRoots = [
-            'uploads' => defined('UPLOAD_DIR') ? (string)UPLOAD_DIR : null,
-            'users'   => defined('USERS_DIR')  ? (string)USERS_DIR  : null,
-            'meta'    => defined('META_DIR')   ? (string)META_DIR   : null,
+            'uploads' => $uploadRootPath,
+            'meta'    => $metaRootPath,
         ];
+        if ($sourceId === '' && defined('USERS_DIR')) {
+            $volumeRoots['users'] = (string)USERS_DIR;
+        }
 
         $volumesMap = [];
         $uploadReal = null;
 
-        if (defined('UPLOAD_DIR')) {
-            $tmp = realpath(UPLOAD_DIR);
+        if ($uploadRootPath !== '') {
+            $tmp = realpath($uploadRootPath);
             if ($tmp !== false && is_dir($tmp)) {
                 $uploadReal = $tmp;
             }
@@ -606,11 +716,20 @@ class DiskUsageModel
      * @param string $folderKey
      * @return array
      */
-    public static function getChildren(string $folderKey): array
+    public static function getChildren(string $folderKey, string $sourceId = ''): array
     {
         $folderKey = ($folderKey === '' || $folderKey === '/') ? 'root' : $folderKey;
 
-        $snapshot = self::loadSnapshot();
+        $ctx = self::resolveSourceContext($sourceId);
+        if (empty($ctx['ok'])) {
+            return [
+                'ok' => false,
+                'error' => $ctx['error'] ?? 'invalid_source',
+                'message' => $ctx['message'] ?? 'Invalid source.',
+            ];
+        }
+
+        $snapshot = self::loadSnapshot($sourceId);
         if ($snapshot === null) {
             return [
                 'ok'    => false,
@@ -705,9 +824,18 @@ class DiskUsageModel
      * @param int $limit
      * @return array
      */
-    public static function getTopFiles(int $limit = 100): array
+    public static function getTopFiles(int $limit = 100, string $sourceId = ''): array
     {
-        $snapshot = self::loadSnapshot();
+        $ctx = self::resolveSourceContext($sourceId);
+        if (empty($ctx['ok'])) {
+            return [
+                'ok' => false,
+                'error' => $ctx['error'] ?? 'invalid_source',
+                'message' => $ctx['message'] ?? 'Invalid source.',
+            ];
+        }
+
+        $snapshot = self::loadSnapshot($sourceId);
         if ($snapshot === null) {
             return [
                 'ok'    => false,

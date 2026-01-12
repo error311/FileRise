@@ -14,6 +14,12 @@ function portalFolder() {
   return portal.folder || portal.targetFolder || portal.path || 'root';
 }
 
+function portalSourceId() {
+  if (!portal) return '';
+  const raw = portal.sourceId || portal.source || '';
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
 function portalCanUpload() {
   if (!portal) return false;
 
@@ -106,13 +112,13 @@ function applyUploadRateLimit(desiredCount) {
   }
 
   if (state.count >= maxPerDay) {
-    showToast('Daily upload limit reached for this portal.');
+    showToast('Daily upload limit reached for this portal.', 'warning');
     return 0;
   }
 
   const remaining = maxPerDay - state.count;
   if (desiredCount > remaining) {
-    showToast('You can only upload ' + remaining + ' more file(s) today for this portal.');
+    showToast('You can only upload ' + remaining + ' more file(s) today for this portal.', 'warning');
     return remaining;
   }
 
@@ -234,23 +240,53 @@ async function submitPortalForm(slug, formData) {
 }
 
 // ----------------- Toast -----------------
-function showToast(message) {
+function showToast(message, durationOrTone = 2500, maybeTone) {
   const toast = document.getElementById('customToast');
   if (!toast) {
     console.warn('Toast:', message);
     return;
   }
-  toast.textContent = message;
+  const text = (message == null) ? '' : String(message);
+  let tone = '';
+  let timeoutMs = 2500;
+
+  if (typeof durationOrTone === 'number') {
+    timeoutMs = durationOrTone;
+  } else if (typeof durationOrTone === 'string') {
+    tone = durationOrTone;
+  }
+
+  if (typeof maybeTone === 'string') {
+    tone = maybeTone;
+  } else if (typeof maybeTone === 'number' && typeof durationOrTone === 'string') {
+    timeoutMs = maybeTone;
+  }
+
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    timeoutMs = 2500;
+  }
+  if (tone) {
+    toast.dataset.tone = tone;
+  } else {
+    toast.removeAttribute('data-tone');
+  }
+
+  toast.textContent = text;
+  toast.title = text.length > 160 ? text : '';
   toast.style.display = 'block';
   // Force reflow
   void toast.offsetWidth;
   toast.classList.add('show');
-  setTimeout(() => {
+
+  if (toast.__hideTimer) clearTimeout(toast.__hideTimer);
+  if (toast.__hideCleanupTimer) clearTimeout(toast.__hideCleanupTimer);
+
+  toast.__hideTimer = setTimeout(() => {
     toast.classList.remove('show');
-    setTimeout(() => {
+    toast.__hideCleanupTimer = setTimeout(() => {
       toast.style.display = 'none';
     }, 200);
-  }, 2500);
+  }, timeoutMs);
 }
 
 // ----------------- Fetch wrapper -----------------
@@ -410,7 +446,7 @@ function setupPortalForm(slug) {
     if (visible.notes     && req.notes     && !notes)     missing.push(labels.notes     || 'Notes');
 
     if (missing.length) {
-      showToast('Please fill in: ' + missing.join(', ') + '.');
+      showToast('Please fill in: ' + missing.join(', ') + '.', 'warning');
       return;
     }
 
@@ -420,7 +456,7 @@ function setupPortalForm(slug) {
       const hasNameField  = visible.name;
       const hasEmailField = visible.email;
       if ((hasNameField || hasEmailField) && !name && !email) {
-        showToast('Please provide at least a name or email.');
+        showToast('Please provide at least a name or email.', 'warning');
         return;
       }
     }
@@ -431,10 +467,10 @@ function setupPortalForm(slug) {
       sessionStorage.setItem(key, '1');
       if (formSection) formSection.style.display = 'none';
       if (uploadSection) uploadSection.style.opacity = '1';
-      showToast('Thank you. You can now upload files.');
+      showToast('Thank you. You can now upload files.', 'success');
     } catch (e) {
       console.error(e);
-      showToast('Error saving your info. Please try again.');
+      showToast('Error saving your info. Please try again.', 'error');
     }
   };
 }
@@ -513,7 +549,7 @@ async function fetchPortal(slug) {
   } catch (e) {
     console.error(e);
     setStatus('This portal could not be found or is no longer available.', true);
-    showToast('Portal not found or expired.');
+    showToast('Portal not found or expired.', 'error');
     return null;
   }
 }
@@ -678,7 +714,9 @@ async function loadPortalFiles() {
 
   try {
     const folder = portalFolder();
-    const data = await sendRequest('/api/file/getFileList.php?folder=' + encodeURIComponent(folder), 'GET');
+    const sourceId = portalSourceId();
+    const sourceParam = sourceId ? '&sourceId=' + encodeURIComponent(sourceId) : '';
+    const data = await sendRequest('/api/file/getFileList.php?folder=' + encodeURIComponent(folder) + sourceParam, 'GET');
     if (!data || data.error) {
       const msg = (data && data.error) ? data.error : 'Error loading files.';
       listEl.innerHTML = '<div class="text-danger" style="padding:4px 0;">' + msg + '</div>';
@@ -746,7 +784,8 @@ async function loadPortalFiles() {
           '&file=' + encodeURIComponent(fname) +
           '&inline=1&t=' + Date.now() +
           '&source=portal' +
-          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '')
+          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
+          sourceParam
         );
 
         const img = document.createElement('img');
@@ -775,7 +814,8 @@ async function loadPortalFiles() {
           encodeURIComponent(folder) +
           '&file=' + encodeURIComponent(fname) +
           '&source=portal' +
-          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '')
+          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
+          sourceParam
         );
         a.textContent = 'Download';
         a.className = 'portal-file-card-download';
@@ -808,13 +848,13 @@ async function uploadFiles(fileList) {
   if (!portal || !fileList || !fileList.length) return;
 
   if (!portalCanUpload()) {
-    showToast('Uploads are disabled for this portal.');
+    showToast('Uploads are disabled for this portal.', 'warning');
     setStatus('Uploads are disabled for this portal.', true);
     return;
   }
 
   if (portal.requireForm && !portalFormDone) {
-    showToast('Please fill in your details before uploading.');
+    showToast('Please fill in your details before uploading.', 'warning');
     return;
   }
 
@@ -838,7 +878,8 @@ async function uploadFiles(fileList) {
           tooBigNames.length +
           ' file(s) over ' +
           portal.uploadMaxSizeMb +
-          ' MB.'
+          ' MB.',
+        'warning'
       );
     }
   }
@@ -862,7 +903,8 @@ async function uploadFiles(fileList) {
         'Skipped ' +
           skipped.length +
           ' file(s) not matching allowed types: ' +
-          allowedExts.join(', ')
+          allowedExts.join(', '),
+        'warning'
       );
     }
   }
@@ -885,6 +927,7 @@ async function uploadFiles(fileList) {
 
   const folder = portalFolder();
   const portalSlug = getPortalSlug();
+  const sourceId = portalSourceId();
 
   setStatus('Uploading ' + files.length + ' file(s)…');
   let successCount = 0;
@@ -899,6 +942,9 @@ async function uploadFiles(fileList) {
     form.append('file[]', file);
     form.append('folder', folder);
     form.append('source', 'portal');
+    if (sourceId) {
+      form.append('sourceId', sourceId);
+    }
     if (portalSlug) {
       form.append('portal', portalSlug);
     }
@@ -952,13 +998,13 @@ async function uploadFiles(fileList) {
 
   if (successCount && !failureCount) {
     setStatus('Uploaded ' + successCount + ' file(s).');
-    showToast('Upload complete.');
+    showToast('Upload complete.', 'success');
   } else if (successCount && failureCount) {
     setStatus('Uploaded ' + successCount + ' file(s), ' + failureCount + ' failed.', true);
-    showToast('Some files failed to upload.');
+    showToast('Some files failed to upload.', 'warning');
   } else {
     setStatus('Upload failed.', true);
-    showToast('Upload failed.');
+    showToast('Upload failed.', 'error');
   }
 
   // Bump local daily counter by successful uploads
@@ -1093,7 +1139,7 @@ async function initPortal() {
   const slug = getPortalSlugFromUrl();
   if (!slug) {
     setStatus('Missing portal slug.', true);
-    showToast('Portal slug missing in URL.');
+    showToast('Portal slug missing in URL.', 'error');
     return;
   }
 
@@ -1124,6 +1170,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initPortal().catch(err => {
     console.error(err);
     setStatus('Unexpected error initializing portal.', true);
-    showToast('Unexpected error loading portal.');
+    showToast('Unexpected error loading portal.', 'error');
   });
 });

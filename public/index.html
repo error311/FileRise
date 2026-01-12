@@ -75,6 +75,7 @@
                 <div class="restore-modal__titles">
                   <h4 data-i18n-key="recycle_bin">Recycle Bin</h4>
                   <p data-i18n-key="restore_delete_hint">Restore or permanently delete trashed items.</p>
+                  <p id="restoreModalSourceHint" class="restore-modal__source" hidden></p>
                 </div>
                 <button id="closeRestoreModal" class="restore-close-btn" aria-label="Close">
                   <span class="material-icons">close</span>
@@ -204,7 +205,11 @@
                     <span data-i18n-key="folder_navigation">Folder Navigation &amp; Management</span>
                   </div>
                   <div class="card-body custom-folder-card-body">
-                    <div class="form-group d-flex align-items-top" style="padding-top:0; margin-bottom:0;">
+                    <div class="form-group d-flex align-items-top" style="padding-top:0; margin-bottom:0; flex-direction:column;">
+                      <div id="sourceSelectorWrap" class="source-selector" hidden>
+                        <label for="sourceSelector" data-i18n-key="storage_source">Source</label>
+                        <select id="sourceSelector" class="form-control" aria-label="Source"></select>
+                      </div>
                       <div id="folderTreeContainer"></div>
                     </div>
                     <div class="folder-actions">
@@ -234,6 +239,10 @@
                           <h4 data-i18n-key="move_folder_title">Move Folder</h4>
                           <p data-i18n-key="move_folder_message">Select a destination folder to move the current folder
                             into:</p>
+                          <div class="modal-source-row" id="moveFolderSourceRow" style="display:none;">
+                            <label for="moveFolderTargetSource" data-i18n-key="storage_source">Source</label>
+                            <select id="moveFolderTargetSource" class="form-control modal-input"></select>
+                          </div>
                           <select id="moveFolderTarget" class="form-control modal-input"></select>
                           <div class="modal-footer" style="margin-top:15px; text-align:right;">
                             <button id="cancelMoveFolder" class="btn btn-secondary"
@@ -392,6 +401,10 @@
                 <h4 data-i18n-key="copy_files_title">Copy Selected Files</h4>
                 <p id="copyFilesMessage" data-i18n-key="copy_files_message">Select a target folder for copying the
                   selected files:</p>
+                <div class="modal-source-row" id="copyFilesSourceRow" style="display:none;">
+                  <label for="copyTargetSource" data-i18n-key="storage_source">Source</label>
+                  <select id="copyTargetSource" class="form-control modal-input"></select>
+                </div>
                 <select id="copyTargetFolder" class="form-control modal-input"></select>
                 <div class="modal-footer">
                   <button id="cancelCopyFiles" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
@@ -404,6 +417,10 @@
                 <h4 data-i18n-key="move_files_title">Move Selected Files</h4>
                 <p id="moveFilesMessage" data-i18n-key="move_files_message">Select a target folder for moving the
                   selected files:</p>
+                <div class="modal-source-row" id="moveFilesSourceRow" style="display:none;">
+                  <label for="moveTargetSource" data-i18n-key="storage_source">Source</label>
+                  <select id="moveTargetSource" class="form-control modal-input"></select>
+                </div>
                 <select id="moveTargetFolder" class="form-control modal-input"></select>
                 <div class="modal-footer">
                   <button id="cancelMoveFiles" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>

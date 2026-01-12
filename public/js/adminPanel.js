@@ -25,7 +25,20 @@ export {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.4.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.5.0';
+const PRO_API_LEVELS = {
+  diskUsage: 2,
+  search: 3,
+  audit: 4,
+  sources: 5
+};
+const PRO_API_MIN_VERSION_LABELS = {
+  diskUsage: '1.2.0',
+  search: '1.3.0',
+  audit: '1.4.0',
+  sources: '1.5.0'
+};
+const CORE_REQUIRED_PRO_API_LEVEL = Math.max(...Object.values(PRO_API_LEVELS));
 
 function compareSemver(a, b) {
   const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
@@ -229,7 +242,7 @@ function normalizeLogoPath(raw) {
   return pic;
 }
 
-function getAdminTitle(isPro, proVersion) {
+function getAdminTitle(isPro, proVersion, updatesExpired = false) {
   const corePill = `
     <span class="badge badge-pill badge-secondary admin-core-badge">
       Core ${version}
@@ -270,16 +283,29 @@ function getAdminTitle(isPro, proVersion) {
   `;
 
   const updateHint = hasUpdate
-    ? `
+    ? (updatesExpired
+        ? `
+      <a
+        href="https://filerise.net/pro/renew.php"
+        target="_blank"
+        rel="noopener noreferrer"
+        id="proUpdatePill"
+        class="badge badge-pill badge-warning admin-pro-badge"
+        style="cursor:pointer; text-decoration:none; margin-left:4px;">
+        Renew to unlock new Pro features
+      </a>
+    `
+        : `
       <a
         href="https://filerise.net/pro/update.php"
         target="_blank"
         rel="noopener noreferrer"
+        id="proUpdatePill"
         class="badge badge-pill badge-warning admin-pro-badge"
         style="cursor:pointer; text-decoration:none; margin-left:4px;">
         Pro update available
       </a>
-    `
+    `)
     : '';
 
   return `
@@ -984,6 +1010,1199 @@ function initVirusLogSection({ isPro }) {
   })();
 }
 
+function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSourcesApiOk }) {
+  const container = document.getElementById('sourcesContent');
+  if (!container || container.__initialized) return;
+  container.__initialized = true;
+
+  if (!isPro) {
+    const isDark = document.body.classList.contains('dark-mode');
+    const overlayBg = isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.92)';
+    const overlayText = isDark ? '#f8fafc' : '#111827';
+    const overlaySubtext = isDark ? 'rgba(226, 232, 240, 0.9)' : '#4b5563';
+    const overlayBorder = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)';
+    const overlayShadow = isDark ? '0 10px 28px rgba(0,0,0,0.5)' : '0 10px 24px rgba(0,0,0,0.18)';
+    const title = tf('sources_pro_locked_title', 'Sources are a Pro feature');
+    const body = tf(
+      'sources_pro_locked_body',
+      'Connect remote storage and manage it like local — switch sources, move/copy between them, and keep separate trash per source. Upgrade to FileRise Pro to add S3, SFTP, FTP, WebDAV, SMB, Local and Google Drive sources.'
+    );
+    const help = tf('sources_help', 'Sources are separate roots; users only see sources they can access.');
+    const adapterHint = tf(
+      'sources_adapter_hint',
+      'Adapters: local, S3, SFTP, FTP, WebDAV, SMB, Google Drive.'
+    );
+
+    container.innerHTML = `
+      <div class="card" style="border-radius: var(--menu-radius); overflow:hidden; position:relative;">
+        <div class="card-header py-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <strong>
+                ${escapeHTML(tf('sources', 'Sources'))}
+                <span class="badge bg-warning text-dark ms-1 align-middle">Pro</span>
+              </strong>
+              <div class="small text-muted">${escapeHTML(help)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <div style="filter:blur(3px);opacity:0.5;pointer-events:none;">
+            <div class="sources-admin">
+              <div class="form-group" style="margin-bottom:8px;">
+                <div class="form-check fr-toggle">
+                  <input type="checkbox" class="form-check-input fr-toggle-input" />
+                  <label class="form-check-label">${escapeHTML(tf('sources_enabled', 'Enable sources'))}</label>
+                </div>
+                <small class="text-muted d-block mt-1">${escapeHTML(help)}</small>
+              </div>
+
+              <div class="sources-toolbar">
+                <button type="button" class="btn btn-sm btn-primary">
+                  ${escapeHTML(tf('source_add', 'Add Source'))}
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary">
+                  ${escapeHTML(tf('refresh', 'Refresh'))}
+                </button>
+              </div>
+
+              <div class="table-responsive" style="margin-top:6px;">
+                <table class="table table-sm mb-0">
+                  <thead class="thead-light">
+                    <tr>
+                      <th>${escapeHTML(tf('source_name', 'Source Name'))}</th>
+                      <th>${escapeHTML(tf('source_type', 'Type'))}</th>
+                      <th>${escapeHTML(tf('status', 'Status'))}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Local</td><td>local</td><td>${escapeHTML(tf('enabled', 'Enabled'))}</td></tr>
+                    <tr><td>Archive</td><td>s3</td><td>${escapeHTML(tf('disabled', 'Disabled'))}</td></tr>
+                    <tr><td>Media</td><td>smb</td><td>${escapeHTML(tf('enabled', 'Enabled'))}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="text-muted small" style="margin-top:6px;">
+                ${escapeHTML(adapterHint)}
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="d-flex flex-column align-items-center justify-content-center text-center"
+            style="position:absolute; inset:0; padding:16px;">
+            <div style="background:${overlayBg}; color:${overlayText}; border:${overlayBorder}; box-shadow:${overlayShadow}; padding:10px 12px; border-radius:10px; max-width:520px;">
+              <div class="mb-1">
+                <span class="badge bg-warning text-dark me-1">Pro</span>
+                <span class="fw-semibold">${escapeHTML(title)}</span>
+              </div>
+              <div class="small mb-2" style="color:${overlaySubtext};">
+                ${escapeHTML(body)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  if (!proSourcesApiOk) {
+    const msg = tf(
+      'sources_pro_bundle_outdated',
+      `Please upgrade to FileRise Pro v${PRO_API_MIN_VERSION_LABELS.sources}+ to use Sources.`
+    );
+    container.innerHTML = `<div class="text-muted">${escapeHTML(msg)}</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="sources-admin">
+      <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-check fr-toggle">
+          <input type="checkbox" class="form-check-input fr-toggle-input" id="sourcesEnabledToggle" />
+          <label class="form-check-label" for="sourcesEnabledToggle">
+            ${tf('sources_enabled', 'Enable sources')}
+          </label>
+        </div>
+        <small class="text-muted d-block mt-1">
+          ${tf('sources_help', 'Sources are separate roots; users only see sources they can access.')}
+        </small>
+      </div>
+
+      <div class="sources-toolbar">
+        <button type="button" id="sourceAddBtn" class="btn btn-sm btn-primary">
+          ${tf('source_add', 'Add Source')}
+        </button>
+        <button type="button" id="sourceRefreshBtn" class="btn btn-sm btn-secondary">
+          ${tf('refresh', 'Refresh')}
+        </button>
+      </div>
+
+      <div id="sourcesStatus" class="text-muted small" style="margin-bottom:6px;"></div>
+      <div id="sourcesList" class="sources-list"></div>
+
+      <hr class="admin-divider">
+
+      <div id="sourcesForm" class="sources-form">
+        <div class="admin-subsection-title" id="sourceFormTitle">${tf('source_add', 'Add Source')}</div>
+        <div class="sources-form-grid">
+          <div class="form-group">
+            <label for="sourceId">${tf('source_id', 'Source ID')}:</label>
+            <input type="text" id="sourceId" class="form-control" placeholder="local-main" />
+          </div>
+          <div class="form-group">
+            <label for="sourceName">${tf('source_name', 'Source Name')}:</label>
+            <input type="text" id="sourceName" class="form-control" placeholder="Local" />
+          </div>
+          <div class="form-group">
+            <label for="sourceType">${tf('source_type', 'Type')}:</label>
+            <select id="sourceType" class="form-control">
+              <option value="local">local</option>
+              <option value="s3">s3</option>
+              <option value="sftp">sftp</option>
+              <option value="ftp">ftp</option>
+              <option value="webdav">webdav</option>
+              <option value="smb">smb</option>
+              <option value="gdrive">gdrive</option>
+            </select>
+          </div>
+          <div class="form-group sources-form-inline">
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceEnabled" />
+              <label class="form-check-label" for="sourceEnabled">
+                ${tf('source_enabled', 'Enabled')}
+              </label>
+            </div>
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceReadOnly" />
+              <label class="form-check-label" for="sourceReadOnly">
+                ${t('read_only')}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="local">
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_local', 'Use an absolute server path. Leave blank to use the default uploads root. Ensure the web user can read/write this path; FileRise does not chown extra mounts.')}">!</button>
+          </div>
+          <div class="form-group">
+            <label for="sourceLocalPath">${tf('source_local_path', 'Local path')}:</label>
+            <input type="text" id="sourceLocalPath" class="form-control" placeholder="/var/www/uploads/" />
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="s3" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_s3', 'Bucket is required. Region is optional (defaults to us-east-1). Endpoint and path-style are for S3-compatible providers. Prefix is optional.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceS3Bucket">${tf('source_s3_bucket', 'S3 bucket')}:</label>
+              <input type="text" id="sourceS3Bucket" class="form-control" placeholder="my-bucket" />
+            </div>
+            <div class="form-group">
+              <label for="sourceS3Region">${tf('source_s3_region', 'S3 region (optional)')}:</label>
+              <input type="text" id="sourceS3Region" class="form-control" placeholder="us-east-1" />
+            </div>
+            <div class="form-group">
+              <label for="sourceS3Endpoint">${tf('source_s3_endpoint', 'S3 endpoint')}:</label>
+              <input type="text" id="sourceS3Endpoint" class="form-control" placeholder="https://s3.amazonaws.com" />
+            </div>
+            <div class="form-group">
+              <label for="sourceS3Prefix">${tf('source_s3_prefix', 'S3 prefix')}:</label>
+              <input type="text" id="sourceS3Prefix" class="form-control" placeholder="optional/prefix" />
+            </div>
+            <div class="form-group">
+              <label for="sourceS3AccessKey">${tf('source_s3_access_key', 'S3 access key')}:</label>
+              <input type="text" id="sourceS3AccessKey" class="form-control" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="sourceS3SecretKey">${tf('source_s3_secret_key', 'S3 secret key')}:</label>
+              <input type="password" id="sourceS3SecretKey" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceS3SessionToken">${tf('source_s3_session_token', 'S3 session token')}:</label>
+              <input type="text" id="sourceS3SessionToken" class="form-control" autocomplete="off" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:6px;">
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceS3PathStyle" />
+              <label class="form-check-label" for="sourceS3PathStyle">
+                ${tf('source_s3_path_style', 'Force path-style addressing')}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="sftp" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_sftp', 'Host and username are required. Use a password or private key. Root is optional; blank uses the login directory.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceSftpHost">${tf('source_sftp_host', 'SFTP host')}:</label>
+              <input type="text" id="sourceSftpHost" class="form-control" placeholder="sftp.example.com" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSftpPort">${tf('source_sftp_port', 'SFTP port')}:</label>
+              <input type="number" id="sourceSftpPort" class="form-control" placeholder="22" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSftpUsername">${tf('source_sftp_username', 'SFTP username')}:</label>
+              <input type="text" id="sourceSftpUsername" class="form-control" placeholder="username" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSftpPassword">${tf('source_sftp_password', 'SFTP password')}:</label>
+              <input type="password" id="sourceSftpPassword" class="form-control" autocomplete="new-password" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="sourceSftpPrivateKey">${tf('source_sftp_private_key', 'SFTP private key')}:</label>
+            <textarea id="sourceSftpPrivateKey" class="form-control" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="sourceSftpPrivateKeyPassphrase">${tf('source_sftp_private_key_passphrase', 'SFTP key passphrase')}:</label>
+            <input type="password" id="sourceSftpPrivateKeyPassphrase" class="form-control" autocomplete="new-password" />
+          </div>
+          <div class="form-group">
+            <label for="sourceSftpRoot">${tf('source_sftp_root', 'SFTP root path')}:</label>
+            <input type="text" id="sourceSftpRoot" class="form-control" placeholder="/home/user/files" />
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="ftp" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_ftp', 'Host and username are required. Passive mode is recommended. Root is optional; blank uses the login directory.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceFtpHost">${tf('source_ftp_host', 'FTP host')}:</label>
+              <input type="text" id="sourceFtpHost" class="form-control" placeholder="ftp.example.com" />
+            </div>
+            <div class="form-group">
+              <label for="sourceFtpPort">${tf('source_ftp_port', 'FTP port')}:</label>
+              <input type="number" id="sourceFtpPort" class="form-control" placeholder="21" />
+            </div>
+            <div class="form-group">
+              <label for="sourceFtpUsername">${tf('source_ftp_username', 'FTP username')}:</label>
+              <input type="text" id="sourceFtpUsername" class="form-control" placeholder="username" />
+            </div>
+            <div class="form-group">
+              <label for="sourceFtpPassword">${tf('source_ftp_password', 'FTP password')}:</label>
+              <input type="password" id="sourceFtpPassword" class="form-control" autocomplete="new-password" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:6px;">
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceFtpSsl" />
+              <label class="form-check-label" for="sourceFtpSsl">
+                ${tf('source_ftp_ssl', 'Use FTPS (SSL)')}
+              </label>
+            </div>
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceFtpPassive" />
+              <label class="form-check-label" for="sourceFtpPassive">
+                ${tf('source_ftp_passive', 'Passive mode')}
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="sourceFtpRoot">${tf('source_ftp_root', 'FTP root path')}:</label>
+            <input type="text" id="sourceFtpRoot" class="form-control" placeholder="/uploads" />
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="webdav" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_webdav', 'Base URL and username are required. Root is optional; blank uses the server root. Do not embed credentials in the URL. Disable TLS verification only for self-signed certs.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceWebdavUrl">${tf('source_webdav_url', 'WebDAV base URL')}:</label>
+              <input type="text" id="sourceWebdavUrl" class="form-control" placeholder="https://example.com/remote.php/dav/files/user" />
+            </div>
+            <div class="form-group">
+              <label for="sourceWebdavUsername">${tf('source_webdav_username', 'WebDAV username')}:</label>
+              <input type="text" id="sourceWebdavUsername" class="form-control" placeholder="username" />
+            </div>
+            <div class="form-group">
+              <label for="sourceWebdavPassword">${tf('source_webdav_password', 'WebDAV password')}:</label>
+              <input type="password" id="sourceWebdavPassword" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceWebdavRoot">${tf('source_webdav_root', 'WebDAV root path')}:</label>
+              <input type="text" id="sourceWebdavRoot" class="form-control" placeholder="optional/path" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:6px;">
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceWebdavVerifyTls" />
+              <label class="form-check-label" for="sourceWebdavVerifyTls">
+                ${tf('source_webdav_verify_tls', 'Verify TLS certificate')}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="smb" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_smb', 'Host, share, and username are required. Domain and root are optional. Leave SMB version on Auto unless your server requires a specific version.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceSmbHost">${tf('source_smb_host', 'SMB host')}:</label>
+              <input type="text" id="sourceSmbHost" class="form-control" placeholder="server.local" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSmbShare">${tf('source_smb_share', 'SMB share')}:</label>
+              <input type="text" id="sourceSmbShare" class="form-control" placeholder="share" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSmbUsername">${tf('source_smb_username', 'SMB username')}:</label>
+              <input type="text" id="sourceSmbUsername" class="form-control" placeholder="username" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSmbPassword">${tf('source_smb_password', 'SMB password')}:</label>
+              <input type="password" id="sourceSmbPassword" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSmbDomain">${tf('source_smb_domain', 'SMB domain (optional)')}:</label>
+              <input type="text" id="sourceSmbDomain" class="form-control" placeholder="WORKGROUP" />
+            </div>
+            <div class="form-group">
+              <label for="sourceSmbVersion">${tf('source_smb_version', 'SMB version')}:</label>
+              <select id="sourceSmbVersion" class="form-control">
+                <option value="">Auto</option>
+                <option value="SMB3">SMB3</option>
+                <option value="SMB2">SMB2</option>
+                <option value="SMB1">SMB1</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="sourceSmbRoot">${tf('source_smb_root', 'SMB root path')}:</label>
+              <input type="text" id="sourceSmbRoot" class="form-control" placeholder="optional/path" />
+            </div>
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="gdrive" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_gdrive', 'Create an OAuth client in Google Cloud. Get a refresh token with scope https://www.googleapis.com/auth/drive. RootId: drive.google.com/drive/folders/ID or blank for root. DriveId: set for shared drives. Native Docs/Sheets exports not supported yet.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceGDriveClientId">${tf('source_gdrive_client_id', 'Google client ID')}:</label>
+              <input type="text" id="sourceGDriveClientId" class="form-control" placeholder="...apps.googleusercontent.com" />
+            </div>
+            <div class="form-group">
+              <label for="sourceGDriveClientSecret">${tf('source_gdrive_client_secret', 'Google client secret')}:</label>
+              <input type="password" id="sourceGDriveClientSecret" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceGDriveRefreshToken">${tf('source_gdrive_refresh_token', 'Google refresh token')}:</label>
+              <input type="password" id="sourceGDriveRefreshToken" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceGDriveRootId">${tf('source_gdrive_root_id', 'Root folder ID')}:</label>
+              <input type="text" id="sourceGDriveRootId" class="form-control" placeholder="root" />
+            </div>
+            <div class="form-group">
+              <label for="sourceGDriveDriveId">${tf('source_gdrive_drive_id', 'Shared drive ID (optional)')}:</label>
+              <input type="text" id="sourceGDriveDriveId" class="form-control" placeholder="" />
+            </div>
+          </div>
+        </div>
+
+        <div class="sources-form-actions">
+          <button type="button" id="sourceSaveBtn" class="btn btn-sm btn-primary">
+            ${tf('source_save', 'Save Source')}
+          </button>
+          <button type="button" id="sourceResetBtn" class="btn btn-sm btn-secondary">
+            ${t('cancel')}
+          </button>
+        </div>
+        <div class="text-muted small" style="margin-top:6px;">
+          ${tf('source_secret_note', 'Secrets are never shown after saving. Leave blank to keep existing values.')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const statusEl = container.querySelector('#sourcesStatus');
+  const listEl = container.querySelector('#sourcesList');
+  const enabledToggle = container.querySelector('#sourcesEnabledToggle');
+  const addBtn = container.querySelector('#sourceAddBtn');
+  const refreshBtn = container.querySelector('#sourceRefreshBtn');
+  const formTitleEl = container.querySelector('#sourceFormTitle');
+  const saveBtn = container.querySelector('#sourceSaveBtn');
+  const resetBtn = container.querySelector('#sourceResetBtn');
+  const sourceIdEl = container.querySelector('#sourceId');
+  const sourceNameEl = container.querySelector('#sourceName');
+  const sourceTypeEl = container.querySelector('#sourceType');
+  const sourceEnabledEl = container.querySelector('#sourceEnabled');
+  const sourceReadOnlyEl = container.querySelector('#sourceReadOnly');
+  const localPathEl = container.querySelector('#sourceLocalPath');
+  const s3BucketEl = container.querySelector('#sourceS3Bucket');
+  const s3RegionEl = container.querySelector('#sourceS3Region');
+  const s3EndpointEl = container.querySelector('#sourceS3Endpoint');
+  const s3PrefixEl = container.querySelector('#sourceS3Prefix');
+  const s3AccessKeyEl = container.querySelector('#sourceS3AccessKey');
+  const s3SecretKeyEl = container.querySelector('#sourceS3SecretKey');
+  const s3SessionTokenEl = container.querySelector('#sourceS3SessionToken');
+  const s3PathStyleEl = container.querySelector('#sourceS3PathStyle');
+  const sftpHostEl = container.querySelector('#sourceSftpHost');
+  const sftpPortEl = container.querySelector('#sourceSftpPort');
+  const sftpUsernameEl = container.querySelector('#sourceSftpUsername');
+  const sftpPasswordEl = container.querySelector('#sourceSftpPassword');
+  const sftpPrivateKeyEl = container.querySelector('#sourceSftpPrivateKey');
+  const sftpPrivateKeyPassEl = container.querySelector('#sourceSftpPrivateKeyPassphrase');
+  const sftpRootEl = container.querySelector('#sourceSftpRoot');
+  const ftpHostEl = container.querySelector('#sourceFtpHost');
+  const ftpPortEl = container.querySelector('#sourceFtpPort');
+  const ftpUsernameEl = container.querySelector('#sourceFtpUsername');
+  const ftpPasswordEl = container.querySelector('#sourceFtpPassword');
+  const ftpSslEl = container.querySelector('#sourceFtpSsl');
+  const ftpPassiveEl = container.querySelector('#sourceFtpPassive');
+  const ftpRootEl = container.querySelector('#sourceFtpRoot');
+  const webdavUrlEl = container.querySelector('#sourceWebdavUrl');
+  const webdavUsernameEl = container.querySelector('#sourceWebdavUsername');
+  const webdavPasswordEl = container.querySelector('#sourceWebdavPassword');
+  const webdavRootEl = container.querySelector('#sourceWebdavRoot');
+  const webdavVerifyTlsEl = container.querySelector('#sourceWebdavVerifyTls');
+  const smbHostEl = container.querySelector('#sourceSmbHost');
+  const smbShareEl = container.querySelector('#sourceSmbShare');
+  const smbUsernameEl = container.querySelector('#sourceSmbUsername');
+  const smbPasswordEl = container.querySelector('#sourceSmbPassword');
+  const smbDomainEl = container.querySelector('#sourceSmbDomain');
+  const smbVersionEl = container.querySelector('#sourceSmbVersion');
+  const smbRootEl = container.querySelector('#sourceSmbRoot');
+  const gdriveClientIdEl = container.querySelector('#sourceGDriveClientId');
+  const gdriveClientSecretEl = container.querySelector('#sourceGDriveClientSecret');
+  const gdriveRefreshTokenEl = container.querySelector('#sourceGDriveRefreshToken');
+  const gdriveRootIdEl = container.querySelector('#sourceGDriveRootId');
+  const gdriveDriveIdEl = container.querySelector('#sourceGDriveDriveId');
+  const typeBlocks = Array.from(container.querySelectorAll('.sources-type-block'));
+
+  let editingId = '';
+  let state = {
+    enabled: !!sourcesEnabled,
+    sources: Array.isArray(sourcesCfg.sources) ? sourcesCfg.sources : [],
+    activeId: sourcesCfg.activeId || sourcesCfg.active || sourcesCfg.selected || sourcesCfg.current || '',
+    testStatus: {}
+  };
+
+  const esc = (val) => escapeHTML(val == null ? '' : String(val));
+  const getCsrf = () =>
+    document.querySelector('meta[name="csrf-token"]')?.content ||
+    window.csrfToken ||
+    '';
+
+  const setStatus = (msg, tone = 'muted') => {
+    if (!statusEl) return;
+    statusEl.className = `text-${tone} small`;
+    statusEl.textContent = msg || '';
+  };
+
+  const setSavingState = (saving, message) => {
+    if (saveBtn) {
+      saveBtn.disabled = !!saving;
+    }
+    if (saving && message) {
+      setStatus(message);
+    }
+  };
+
+  const refreshSourceSelectorSafe = async (origin) => {
+    try {
+      if (typeof window.__frRefreshSourceSelector === 'function') {
+        await window.__frRefreshSourceSelector({ origin });
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const normalizeTestState = (value) =>
+    (value === 'testing' || value === 'ok' || value === 'error') ? value : 'idle';
+
+  const truncateTestMessage = (msg, max = 80) => {
+    const clean = String(msg || '').replace(/\s+/g, ' ').trim();
+    if (clean.length <= max) return clean;
+    return clean.slice(0, max) + '...';
+  };
+
+  const testStatusLabel = (state, message) => {
+    if (state === 'testing') return tf('source_test_running', 'Testing...');
+    if (state === 'ok') return tf('source_test_ok', 'Connected');
+    if (state === 'error') {
+      const base = tf('source_test_failed', 'Failed');
+      const detail = message ? truncateTestMessage(message, 60) : '';
+      return detail ? `${base}: ${detail}` : base;
+    }
+    return tf('source_test_idle', 'Not tested');
+  };
+
+  const getTestStatus = (id) => {
+    const entry = (state.testStatus && state.testStatus[id]) ? state.testStatus[id] : {};
+    return {
+      state: normalizeTestState(entry.state),
+      message: entry.message ? String(entry.message) : ''
+    };
+  };
+
+  const setTestStatus = (id, next) => {
+    if (!id) return;
+    const current = (state.testStatus && state.testStatus[id]) ? state.testStatus[id] : {};
+    state.testStatus[id] = { ...current, ...next };
+    renderList();
+  };
+
+  const pruneTestStatus = () => {
+    if (!state.testStatus) return;
+    const ids = new Set((state.sources || []).map(src => String(src.id || '')));
+    Object.keys(state.testStatus).forEach(id => {
+      if (!ids.has(id)) {
+        delete state.testStatus[id];
+      }
+    });
+  };
+
+  const setType = (type) => {
+    const t = (type || 'local').toLowerCase();
+    sourceTypeEl.value = t;
+    typeBlocks.forEach(block => {
+      block.hidden = block.getAttribute('data-type') !== t;
+    });
+  };
+
+  const resetSecrets = () => {
+    [
+      s3AccessKeyEl,
+      s3SecretKeyEl,
+      s3SessionTokenEl,
+      sftpPasswordEl,
+      sftpPrivateKeyEl,
+      sftpPrivateKeyPassEl,
+      ftpPasswordEl,
+      webdavPasswordEl,
+      smbPasswordEl,
+      gdriveClientSecretEl,
+      gdriveRefreshTokenEl,
+    ].forEach(el => {
+      if (!el) return;
+      el.value = '';
+      el.placeholder = '';
+    });
+  };
+
+  const resetForm = () => {
+    editingId = '';
+    formTitleEl.textContent = tf('source_add', 'Add Source');
+    if (sourceIdEl) {
+      sourceIdEl.disabled = false;
+      sourceIdEl.value = '';
+    }
+    if (sourceNameEl) sourceNameEl.value = '';
+    if (sourceEnabledEl) sourceEnabledEl.checked = true;
+    if (sourceReadOnlyEl) sourceReadOnlyEl.checked = false;
+    if (localPathEl) localPathEl.value = '';
+    if (s3BucketEl) s3BucketEl.value = '';
+    if (s3RegionEl) s3RegionEl.value = '';
+    if (s3EndpointEl) s3EndpointEl.value = '';
+    if (s3PrefixEl) s3PrefixEl.value = '';
+    if (s3PathStyleEl) s3PathStyleEl.checked = false;
+    if (sftpHostEl) sftpHostEl.value = '';
+    if (sftpPortEl) sftpPortEl.value = '';
+    if (sftpUsernameEl) sftpUsernameEl.value = '';
+    if (sftpRootEl) sftpRootEl.value = '';
+    if (ftpHostEl) ftpHostEl.value = '';
+    if (ftpPortEl) ftpPortEl.value = '';
+    if (ftpUsernameEl) ftpUsernameEl.value = '';
+    if (ftpSslEl) ftpSslEl.checked = false;
+    if (ftpPassiveEl) ftpPassiveEl.checked = true;
+    if (ftpRootEl) ftpRootEl.value = '';
+    if (webdavUrlEl) webdavUrlEl.value = '';
+    if (webdavUsernameEl) webdavUsernameEl.value = '';
+    if (webdavRootEl) webdavRootEl.value = '';
+    if (webdavVerifyTlsEl) webdavVerifyTlsEl.checked = true;
+    if (smbHostEl) smbHostEl.value = '';
+    if (smbShareEl) smbShareEl.value = '';
+    if (smbUsernameEl) smbUsernameEl.value = '';
+    if (smbDomainEl) smbDomainEl.value = '';
+    if (smbVersionEl) smbVersionEl.value = '';
+    if (smbRootEl) smbRootEl.value = '';
+    if (gdriveClientIdEl) gdriveClientIdEl.value = '';
+    if (gdriveRootIdEl) gdriveRootIdEl.value = '';
+    if (gdriveDriveIdEl) gdriveDriveIdEl.value = '';
+    resetSecrets();
+    setType('local');
+    if (listEl) renderList();
+  };
+
+  const applySecretPlaceholders = (src) => {
+    const cfg = (src && src.config) ? src.config : {};
+    const setSaved = (el, has) => {
+      if (!el) return;
+      el.value = '';
+      el.placeholder = has ? '•••••• (saved)' : '';
+    };
+    setSaved(s3AccessKeyEl, !!cfg.hasAccessKey);
+    setSaved(s3SecretKeyEl, !!cfg.hasSecretKey);
+    setSaved(s3SessionTokenEl, !!cfg.hasSessionToken);
+    setSaved(sftpPasswordEl, !!cfg.hasPassword);
+    setSaved(sftpPrivateKeyEl, !!cfg.hasPrivateKey);
+    setSaved(sftpPrivateKeyPassEl, !!cfg.hasPrivateKeyPassphrase);
+    setSaved(ftpPasswordEl, !!cfg.hasPassword);
+    setSaved(webdavPasswordEl, !!cfg.hasPassword);
+    setSaved(smbPasswordEl, !!cfg.hasPassword);
+    setSaved(gdriveClientSecretEl, !!cfg.hasClientSecret);
+    setSaved(gdriveRefreshTokenEl, !!cfg.hasRefreshToken);
+  };
+
+  const fillForm = (src) => {
+    if (!src || typeof src !== 'object') return;
+    editingId = String(src.id || '');
+    formTitleEl.textContent = tf('source_edit', 'Edit Source');
+    if (sourceIdEl) {
+      sourceIdEl.value = src.id || '';
+      sourceIdEl.disabled = true;
+    }
+    if (sourceNameEl) sourceNameEl.value = src.name || '';
+    if (sourceEnabledEl) sourceEnabledEl.checked = src.enabled !== false;
+    if (sourceReadOnlyEl) sourceReadOnlyEl.checked = !!src.readOnly;
+    const type = (src.type || 'local').toLowerCase();
+    setType(type);
+    const cfg = src.config || {};
+    if (localPathEl) localPathEl.value = cfg.path || cfg.root || '';
+    if (s3BucketEl) s3BucketEl.value = cfg.bucket || '';
+    if (s3RegionEl) s3RegionEl.value = cfg.region || '';
+    if (s3EndpointEl) s3EndpointEl.value = cfg.endpoint || '';
+    if (s3PrefixEl) s3PrefixEl.value = cfg.prefix || '';
+    if (s3PathStyleEl) s3PathStyleEl.checked = !!cfg.pathStyle;
+    if (sftpHostEl) sftpHostEl.value = cfg.host || '';
+    if (sftpPortEl) sftpPortEl.value = cfg.port || '';
+    if (sftpUsernameEl) sftpUsernameEl.value = cfg.username || '';
+    if (sftpRootEl) sftpRootEl.value = cfg.root || cfg.path || '';
+    if (ftpHostEl) ftpHostEl.value = cfg.host || '';
+    if (ftpPortEl) ftpPortEl.value = cfg.port || '';
+    if (ftpUsernameEl) ftpUsernameEl.value = cfg.username || '';
+    if (ftpSslEl) ftpSslEl.checked = !!cfg.ssl;
+    if (ftpPassiveEl) {
+      const passive = (typeof cfg.passive === 'undefined') ? true : !!cfg.passive;
+      ftpPassiveEl.checked = passive;
+    }
+    if (ftpRootEl) ftpRootEl.value = cfg.root || cfg.path || '';
+    if (webdavUrlEl) webdavUrlEl.value = cfg.baseUrl || cfg.url || '';
+    if (webdavUsernameEl) webdavUsernameEl.value = cfg.username || '';
+    if (webdavRootEl) webdavRootEl.value = cfg.root || cfg.path || '';
+    if (webdavVerifyTlsEl) {
+      webdavVerifyTlsEl.checked = (typeof cfg.verifyTls === 'undefined') ? true : !!cfg.verifyTls;
+    }
+    if (smbHostEl) smbHostEl.value = cfg.host || '';
+    if (smbShareEl) smbShareEl.value = cfg.share || '';
+    if (smbUsernameEl) smbUsernameEl.value = cfg.username || '';
+    if (smbDomainEl) smbDomainEl.value = cfg.domain || '';
+    if (smbVersionEl) smbVersionEl.value = cfg.version || '';
+    if (smbRootEl) smbRootEl.value = cfg.root || cfg.path || '';
+    if (gdriveClientIdEl) gdriveClientIdEl.value = cfg.clientId || '';
+    if (gdriveRootIdEl) gdriveRootIdEl.value = cfg.rootId || '';
+    if (gdriveDriveIdEl) gdriveDriveIdEl.value = cfg.driveId || '';
+    applySecretPlaceholders(src);
+    if (listEl) renderList();
+  };
+
+  const renderList = () => {
+    const rows = Array.isArray(state.sources) ? state.sources : [];
+    if (!rows.length) {
+      listEl.innerHTML = `<div class="text-muted">${tf('source_list_empty', 'No sources configured yet.')}</div>`;
+      return;
+    }
+    const selectedId = editingId ? String(editingId) : '';
+    const activeRowId = (selectedId && rows.some(src => String(src.id || '') === selectedId))
+      ? selectedId
+      : '';
+
+    const header = `
+      <div class="sources-row sources-header">
+        <div>${tf('source_name', 'Source Name')}</div>
+        <div>${tf('source_type', 'Type')}</div>
+        <div>${tf('source_id', 'Source ID')}</div>
+        <div class="sources-header-actions">${tf('actions', 'Actions')}</div>
+      </div>
+    `;
+
+    const body = rows.map((src, idx) => {
+      const id = String(src.id || '');
+      const name = String(src.name || id || '');
+      const type = String(src.type || '');
+      const enabledText = (src.enabled === false) ? tf('disabled', 'Disabled') : tf('enabled', 'Enabled');
+      const flags = [
+        enabledText,
+        (src.readOnly ? t('read_only') : '')
+      ].filter(Boolean);
+      const badges = flags.map(flag => `<span class="sources-badge">${esc(flag)}</span>`).join('');
+      const badgeWrap = badges ? `<span class="sources-badges">${badges}</span>` : '';
+      const testState = getTestStatus(id);
+      const statusText = testStatusLabel(testState.state, testState.message);
+      const statusClass = `sources-test-status status-${testState.state}`;
+      const statusTitle = testState.message ? ` title="${esc(testState.message)}"` : '';
+      const testDisabled = (testState.state === 'testing') ? 'disabled' : '';
+      const rowClass = [
+        'sources-row',
+        'sources-row-data',
+        (idx % 2 === 1) ? 'is-alt' : '',
+        (activeRowId && id === activeRowId) ? 'is-active' : ''
+      ].filter(Boolean).join(' ');
+      const readOnlyLabel = tf('read_only', 'Read-only');
+      const lockIcon = src.readOnly
+        ? `<span class="material-icons sources-lock-icon" title="${esc(readOnlyLabel)}" aria-hidden="true">lock</span>`
+        : '';
+      const testLabel = tf('source_test', 'Test');
+
+      return `
+        <div class="${rowClass}" data-id="${esc(id)}">
+          <div class="sources-cell sources-name"><span class="sources-name-text">${esc(name)}</span>${lockIcon}${badgeWrap}</div>
+          <div class="sources-cell">${esc(type)}</div>
+          <div class="sources-cell"><code>${esc(id)}</code></div>
+          <div class="sources-actions">
+            <span class="${statusClass}"${statusTitle}>${esc(statusText)}</span>
+            <button type="button" class="btn btn-sm btn-secondary sources-icon-btn" data-action="test" data-id="${esc(id)}" ${testDisabled} title="${esc(testLabel)}" aria-label="${esc(testLabel)}">
+              <span class="material-icons" aria-hidden="true">science</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" data-action="edit" data-id="${esc(id)}">
+              ${tf('source_edit', 'Edit')}
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" data-action="delete" data-id="${esc(id)}">
+              ${tf('source_delete', 'Delete')}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    listEl.innerHTML = `<div class="sources-grid">${header}${body}</div>`;
+  };
+
+  const loadSources = async () => {
+    if (!isPro || !proSourcesApiOk || window.__FR_IS_PRO === false) {
+      return;
+    }
+    setStatus(tf('loading', 'Loading...'));
+    listEl.innerHTML = `<div class="text-muted">${tf('loading', 'Loading...')}</div>`;
+    let data = null;
+    try {
+      const res = await fetch(withBase('/api/pro/sources/list.php'), {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      });
+      data = await safeJson(res);
+    } catch (e) {
+      console.warn('Sources list failed', e);
+      setStatus(e?.message || tf('error', 'Error'), 'danger');
+    }
+
+    if (data && data.ok === true) {
+      state.enabled = !!data.enabled;
+      state.sources = Array.isArray(data.sources) ? data.sources : [];
+      state.activeId = data.activeId || '';
+      setStatus('');
+    } else if (!state.sources.length) {
+      state.sources = Array.isArray(sourcesCfg.sources) ? sourcesCfg.sources : [];
+    }
+
+    if (enabledToggle) enabledToggle.checked = !!state.enabled;
+    pruneTestStatus();
+    renderList();
+  };
+
+  const runSourceTest = async (src) => {
+    const id = String(src.id || '');
+    if (!id) return null;
+    const current = getTestStatus(id);
+    if (current.state === 'testing') {
+      return null;
+    }
+    setTestStatus(id, { state: 'testing', message: '' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      const res = await fetch(withBase('/api/pro/sources/test.php'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrf(),
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ id }),
+        signal: controller.signal,
+      });
+      const data = await safeJson(res);
+      const msg = data && data.message ? String(data.message) : '';
+      setTestStatus(id, { state: 'ok', message: msg });
+      return true;
+    } catch (err) {
+      const timedOut = err && err.name === 'AbortError';
+      const msg = timedOut
+        ? tf('source_test_timeout', 'Test timed out.')
+        : (err?.message || tf('source_test_error', 'Test failed'));
+      setTestStatus(id, { state: 'error', message: msg });
+      showToast(msg, 5000);
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  if (enabledToggle) {
+    enabledToggle.checked = !!state.enabled;
+    enabledToggle.addEventListener('change', async () => {
+      const next = !!enabledToggle.checked;
+      try {
+        const res = await fetch(withBase('/api/pro/sources/save.php'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCsrf(),
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ enabled: next }),
+        });
+        const data = await safeJson(res);
+        if (!data || data.ok !== true) {
+          throw new Error(data?.error || 'Failed to save sources setting.');
+        }
+        state.enabled = next;
+        setStatus(tf('settings_updated_successfully', 'Settings updated successfully.'));
+        await refreshSourceSelectorSafe('admin-sources-toggle');
+      } catch (e) {
+        console.warn('Sources enabled save failed', e);
+        enabledToggle.checked = !next;
+        setStatus(e?.message || tf('error_updating_settings', 'Error updating settings'), 'danger');
+      }
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', loadSources);
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      resetForm();
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => resetForm());
+  }
+
+  if (sourceTypeEl) {
+    sourceTypeEl.addEventListener('change', () => setType(sourceTypeEl.value));
+  }
+
+  if (listEl) {
+    listEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-id') || '';
+      const action = btn.getAttribute('data-action') || '';
+      const src = (state.sources || []).find(s => String(s.id || '') === id);
+      if (!src) return;
+
+      if (action === 'edit') {
+        fillForm(src);
+        return;
+      }
+
+      if (action === 'test') {
+        runSourceTest(src);
+        return;
+      }
+
+      if (action === 'delete') {
+        const ok = window.confirm(
+          `Delete source "${src.name || src.id}"? This does not remove any stored files.`
+        );
+        if (!ok) return;
+        (async () => {
+          try {
+            const res = await fetch(withBase('/api/pro/sources/delete.php'), {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCsrf(),
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({ id: src.id }),
+            });
+            const data = await safeJson(res);
+            if (!data || data.ok !== true) {
+              throw new Error(data?.error || 'Failed to delete source.');
+            }
+            resetForm();
+            await loadSources();
+            await refreshSourceSelectorSafe('admin-sources-delete');
+          } catch (err) {
+            showToast(err?.message || tf('error', 'Error'), 'error');
+          }
+        })();
+      }
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const id = (sourceIdEl?.value || '').trim();
+      const name = (sourceNameEl?.value || '').trim();
+      const type = (sourceTypeEl?.value || '').trim().toLowerCase();
+      const enabled = !!sourceEnabledEl?.checked;
+      const readOnly = !!sourceReadOnlyEl?.checked;
+
+      if (!id || !name || !type) {
+        showToast('Source ID, name, and type are required.', 'error');
+        return;
+      }
+
+      const config = {};
+        if (type === 'local') {
+          const path = (localPathEl?.value || '').trim();
+          if (path) {
+            config.path = path;
+          }
+        } else if (type === 's3') {
+        const bucket = (s3BucketEl?.value || '').trim();
+        if (!bucket) {
+          showToast('S3 bucket is required.', 'error');
+          return;
+        }
+        config.bucket = bucket;
+        const region = (s3RegionEl?.value || '').trim();
+        const endpoint = (s3EndpointEl?.value || '').trim();
+        const prefix = (s3PrefixEl?.value || '').trim();
+        const accessKey = (s3AccessKeyEl?.value || '').trim();
+        const secretKey = (s3SecretKeyEl?.value || '').trim();
+        const sessionToken = (s3SessionTokenEl?.value || '').trim();
+        if (region) config.region = region;
+        if (endpoint) config.endpoint = endpoint;
+        if (prefix) config.prefix = prefix;
+        if (accessKey) config.accessKey = accessKey;
+        if (secretKey) config.secretKey = secretKey;
+        if (sessionToken) config.sessionToken = sessionToken;
+        config.pathStyle = !!s3PathStyleEl?.checked;
+      } else if (type === 'sftp') {
+        const host = (sftpHostEl?.value || '').trim();
+        const username = (sftpUsernameEl?.value || '').trim();
+        const password = (sftpPasswordEl?.value || '').trim();
+        const privateKey = (sftpPrivateKeyEl?.value || '').trim();
+        const privateKeyPassphrase = (sftpPrivateKeyPassEl?.value || '').trim();
+        if (!host || !username) {
+          showToast('SFTP host and username are required.', 'error');
+          return;
+        }
+        if (!password && !privateKey && !editingId) {
+          showToast('SFTP requires a password or private key.', 'error');
+          return;
+        }
+        config.host = host;
+        config.username = username;
+        const port = parseInt(sftpPortEl?.value || '', 10);
+        if (Number.isFinite(port) && port > 0) {
+          config.port = port;
+        }
+        const root = (sftpRootEl?.value || '').trim();
+        if (root) config.root = root;
+        if (password) config.password = password;
+        if (privateKey) config.privateKey = privateKey;
+        if (privateKeyPassphrase) config.privateKeyPassphrase = privateKeyPassphrase;
+      } else if (type === 'ftp') {
+        const host = (ftpHostEl?.value || '').trim();
+        const username = (ftpUsernameEl?.value || '').trim();
+        const password = (ftpPasswordEl?.value || '').trim();
+        if (!host || !username) {
+          showToast('FTP host and username are required.', 'error');
+          return;
+        }
+        config.host = host;
+        config.username = username;
+        const port = parseInt(ftpPortEl?.value || '', 10);
+        if (Number.isFinite(port) && port > 0) {
+          config.port = port;
+        }
+        const root = (ftpRootEl?.value || '').trim();
+        if (root) config.root = root;
+        if (password) config.password = password;
+        config.ssl = !!ftpSslEl?.checked;
+        config.passive = (ftpPassiveEl?.checked !== false);
+      } else if (type === 'webdav') {
+        const baseUrl = (webdavUrlEl?.value || '').trim();
+        const username = (webdavUsernameEl?.value || '').trim();
+        const password = (webdavPasswordEl?.value || '').trim();
+        const root = (webdavRootEl?.value || '').trim();
+        const verifyTls = (webdavVerifyTlsEl?.checked !== false);
+        if (!baseUrl || !username) {
+          showToast('WebDAV base URL and username are required.', 'error');
+          return;
+        }
+        if (!password && !editingId) {
+          showToast('WebDAV password is required.', 'error');
+          return;
+        }
+        config.baseUrl = baseUrl;
+        config.username = username;
+        if (password) config.password = password;
+        if (root) config.root = root;
+        config.verifyTls = !!verifyTls;
+      } else if (type === 'smb') {
+        const host = (smbHostEl?.value || '').trim();
+        const share = (smbShareEl?.value || '').trim();
+        const username = (smbUsernameEl?.value || '').trim();
+        const password = (smbPasswordEl?.value || '').trim();
+        const domain = (smbDomainEl?.value || '').trim();
+        const version = (smbVersionEl?.value || '').trim();
+        const root = (smbRootEl?.value || '').trim();
+        if (!host || !share || !username) {
+          showToast('SMB host, share, and username are required.', 'error');
+          return;
+        }
+        if (!password && !editingId) {
+          showToast('SMB password is required.', 'error');
+          return;
+        }
+        config.host = host;
+        config.share = share;
+        config.username = username;
+        if (password) config.password = password;
+        if (domain) config.domain = domain;
+        if (version) config.version = version;
+        if (root) config.root = root;
+      } else if (type === 'gdrive') {
+        const clientId = (gdriveClientIdEl?.value || '').trim();
+        const clientSecret = (gdriveClientSecretEl?.value || '').trim();
+        const refreshToken = (gdriveRefreshTokenEl?.value || '').trim();
+        const rootId = (gdriveRootIdEl?.value || '').trim();
+        const driveId = (gdriveDriveIdEl?.value || '').trim();
+        if (!clientId) {
+          showToast('Google client ID is required.', 'error');
+          return;
+        }
+        if ((!clientSecret || !refreshToken) && !editingId) {
+          showToast('Google Drive requires a client secret and refresh token.', 'error');
+          return;
+        }
+        config.clientId = clientId;
+        if (clientSecret) config.clientSecret = clientSecret;
+        if (refreshToken) config.refreshToken = refreshToken;
+        if (rootId) config.rootId = rootId;
+        if (driveId) config.driveId = driveId;
+      }
+
+      const payload = {
+        source: { id, name, type, enabled, readOnly, config }
+      };
+
+      const existingIdx = (state.sources || []).findIndex(s => String(s.id || '') === id);
+      const isNewSource = existingIdx === -1;
+      const optimisticEnabled = isNewSource
+        ? false
+        : ((state.sources[existingIdx]?.enabled) !== false);
+      const optimisticSource = { id, name, type, enabled: optimisticEnabled, readOnly };
+
+      if (isNewSource) {
+        state.sources = [...(state.sources || []), optimisticSource];
+      } else if (existingIdx >= 0) {
+        state.sources[existingIdx] = { ...state.sources[existingIdx], ...optimisticSource };
+      }
+      if (isNewSource || existingIdx >= 0) {
+        setTestStatus(id, { state: 'testing', message: tf('saving_source_short', 'Saving...') });
+      }
+
+      setSavingState(true, tf('saving_source', 'Saving source... this may take a moment.'));
+      showToast(tf('saving_source_toast', 'Saving source...'), 2000);
+
+      try {
+        const res = await fetch(withBase('/api/pro/sources/save.php'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCsrf(),
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+        const data = await safeJson(res);
+        if (!data || data.ok !== true) {
+          throw new Error(data?.error || 'Failed to save source.');
+        }
+        await loadSources();
+
+        if (data?.autoTested) {
+          if (data.autoTestOk) {
+            setTestStatus(id, { state: 'ok', message: '' });
+          } else {
+            const errMsg = data.autoTestError || tf('source_test_error', 'Test failed');
+            setTestStatus(id, { state: 'error', message: errMsg });
+            const disabledNote = data.autoDisabled ? ' Source left disabled.' : '';
+            showToast(`Source test failed: ${errMsg}.${disabledNote}`, 5000);
+          }
+        } else if (enabled) {
+          const testOk = await runSourceTest({ id });
+          if (testOk === false) {
+            const disablePayload = { source: { id, name, type, enabled: false, readOnly, config } };
+            try {
+              const disableRes = await fetch(withBase('/api/pro/sources/save.php'), {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRF-Token': getCsrf(),
+                  'Accept': 'application/json',
+                },
+                body: JSON.stringify(disablePayload),
+              });
+              const disableData = await safeJson(disableRes);
+              if (!disableData || disableData.ok !== true) {
+                throw new Error(disableData?.error || 'Failed to disable source after test failure.');
+              }
+              showToast('Source test failed. Source left disabled.', 'error');
+              await loadSources();
+            } catch (disableErr) {
+              showToast(disableErr?.message || 'Source test failed and could not disable source.', 'error');
+            }
+          }
+        } else {
+          setTestStatus(id, { state: 'idle', message: '' });
+        }
+
+        await refreshSourceSelectorSafe('admin-sources-save');
+        resetForm();
+      } catch (err) {
+        if (isNewSource) {
+          state.sources = (state.sources || []).filter(s => String(s.id || '') !== id);
+          if (state.testStatus) {
+            delete state.testStatus[id];
+          }
+          renderList();
+        } else {
+          setTestStatus(id, { state: 'error', message: err?.message || tf('error', 'Error') });
+        }
+        setStatus(err?.message || tf('error', 'Error'), 'danger');
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      } finally {
+        setSavingState(false);
+      }
+    });
+  }
+
+  resetForm();
+  loadSources();
+}
+
 function onShareFolderToggle(row, checked) {
   const manage = qs(row, 'input[data-cap="manage"]');
   const viewAll = qs(row, 'input[data-cap="view"]');
@@ -1179,6 +2398,64 @@ function showCustomConfirmModal(message) {
   });
 }
 
+function showProUpdateChoiceModal({ hasAuto }) {
+  return new Promise(resolve => {
+    let modal = document.getElementById("proUpdateChoiceModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "proUpdateChoiceModal";
+      modal.className = "modal";
+      modal.style.zIndex = "4000";
+      modal.style.display = "none";
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width:520px;">
+          <div id="proUpdateChoiceTitle" style="font-weight:600; margin-bottom:6px;"></div>
+          <div id="proUpdateChoiceMessage" style="white-space:pre-wrap; margin-bottom:10px;"></div>
+          <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="proUpdateChoiceAutoBtn" class="btn btn-primary">Download + install</button>
+            <button id="proUpdateChoiceManualBtn" class="btn btn-secondary">Manual download</button>
+            <button id="proUpdateChoiceCancelBtn" class="btn btn-outline-secondary">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    const titleEl = document.getElementById("proUpdateChoiceTitle");
+    const msgEl = document.getElementById("proUpdateChoiceMessage");
+    const autoBtn = document.getElementById("proUpdateChoiceAutoBtn");
+    const manualBtn = document.getElementById("proUpdateChoiceManualBtn");
+    const cancelBtn = document.getElementById("proUpdateChoiceCancelBtn");
+
+    if (!titleEl || !msgEl || !autoBtn || !manualBtn || !cancelBtn) {
+      resolve(null);
+      return;
+    }
+
+    titleEl.textContent = "Pro update available";
+    msgEl.textContent = hasAuto
+      ? "Choose how you'd like to get the latest Pro bundle."
+      : "Save a license key to enable one-click download. You can still download manually.";
+
+    autoBtn.disabled = !hasAuto;
+    modal.style.display = "block";
+
+    const cleanup = () => {
+      modal.style.display = "none";
+      autoBtn.removeEventListener("click", onAuto);
+      manualBtn.removeEventListener("click", onManual);
+      cancelBtn.removeEventListener("click", onCancel);
+    };
+    const onAuto = () => { cleanup(); resolve("auto"); };
+    const onManual = () => { cleanup(); resolve("manual"); };
+    const onCancel = () => { cleanup(); resolve(null); };
+
+    autoBtn.addEventListener("click", onAuto);
+    manualBtn.addEventListener("click", onManual);
+    cancelBtn.addEventListener("click", onCancel);
+  });
+}
+
 function showTypedConfirmModal({ title, message, confirmText, placeholder }) {
   return new Promise(resolve => {
     let modal = document.getElementById("typedConfirmModal");
@@ -1250,11 +2527,14 @@ function toggleSection(id) {
   }
 }
 
-export function initProBundleInstaller() {
+export function initProBundleInstaller(options = {}) {
   try {
     const fileInput = document.getElementById('proBundleFile');
     const btn = document.getElementById('btnInstallProBundle');
+    const dlBtn = document.getElementById('btnDownloadProBundle');
     const statusEl = document.getElementById('proBundleStatus');
+    const updatesExpired = !!options.updatesExpired;
+    const updatesUntilLabel = options.updatesUntil ? String(options.updatesUntil) : '';
 
     if (!fileInput || !btn || !statusEl) return;
 
@@ -1275,6 +2555,16 @@ export function initProBundleInstaller() {
         statusEl.textContent = 'Bundle must be named like "FileRisePro_v1.0.0.zip".';
         statusEl.className = 'small text-danger';
         return;
+      }
+
+      if (updatesExpired) {
+        const when = updatesUntilLabel ? ` on ${updatesUntilLabel}` : '';
+        const ok = await showCustomConfirmModal(
+          `Updates expired${when}. Installing a newer Pro bundle will deactivate Pro. Continue only if this bundle is eligible for your license.`
+        );
+        if (!ok) {
+          return;
+        }
       }
 
       const formData = new FormData();
@@ -1349,6 +2639,69 @@ export function initProBundleInstaller() {
         statusEl.className = 'small text-danger';
       }
     });
+
+    if (dlBtn && !dlBtn.__wired) {
+      dlBtn.__wired = true;
+      dlBtn.addEventListener('click', async () => {
+        if (updatesExpired) {
+          const when = updatesUntilLabel ? ` on ${updatesUntilLabel}` : '';
+          statusEl.textContent = `Updates expired${when}. Renew to download newer Pro bundles.`;
+          statusEl.className = 'small text-warning';
+          return;
+        }
+        const ok = await showCustomConfirmModal(
+          "Download and install the latest Pro bundle from filerise.net? This will overwrite the current Pro files."
+        );
+        if (!ok) return;
+
+        dlBtn.disabled = true;
+        statusEl.textContent = 'Downloading and installing latest Pro bundle...';
+        statusEl.className = 'small text-muted';
+
+        try {
+          const resp = await fetch('/api/admin/downloadProBundle.php', {
+            method: 'POST',
+            headers: {
+              'X-CSRF-Token': window.csrfToken || ''
+            },
+            credentials: 'include'
+          });
+
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch (_) {
+            data = null;
+          }
+
+          if (!resp.ok || !data || !data.success) {
+            const msg = data && (data.error || data.message)
+              ? (data.error || data.message)
+              : `HTTP ${resp.status}`;
+            statusEl.textContent = 'Download/install failed: ' + msg;
+            statusEl.className = 'small text-danger';
+            return;
+          }
+
+          const finalVersion = data.proVersion ? String(data.proVersion) : '';
+          const versionText = finalVersion ? ` (version ${finalVersion})` : '';
+          statusEl.textContent = 'Pro bundle installed' + versionText + '. Reloading...';
+          statusEl.className = 'small text-success';
+
+          if (typeof loadAdminConfigFunc === 'function') {
+            loadAdminConfigFunc();
+          }
+          setTimeout(() => {
+            window.location.reload();
+          }, 800);
+        } catch (e) {
+          statusEl.textContent = 'Download/install failed: ' + (e && e.message ? e.message : String(e));
+          statusEl.className = 'small text-danger';
+        } finally {
+          dlBtn.disabled = false;
+        }
+      });
+    }
   } catch (e) {
     console.warn('Failed to init Pro bundle installer', e);
   }
@@ -2069,6 +3422,7 @@ function loadShareLinksSection() {
     fetchMeta("share_links.json")
   ])
     .then(([folders, files]) => {
+      const esc = (val) => escapeHTML(val == null ? "" : String(val));
       const hasAny = Object.keys(folders).length || Object.keys(files).length;
       if (!hasAny) {
         container.innerHTML = `<p>${t("no_shared_links_available")}</p>`;
@@ -2078,12 +3432,19 @@ function loadShareLinksSection() {
       let html = `<h5>${t("folder_shares")}</h5><ul>`;
       Object.entries(folders).forEach(([token, o]) => {
         const lock = o.password ? "🔒 " : "";
+        const tokenValue = o.token || token;
+        const sourceLabel = o.sourceName || o.sourceId || "";
+        const sourceHtml = sourceLabel && sourceLabel.toLowerCase() !== "local"
+          ? ` <small class="text-muted">[${esc(sourceLabel)}]</small>`
+          : "";
+        const folderLabel = esc(o.folder || "root");
         html += `
           <li>
-            ${lock}<strong>${o.folder}</strong>
+            ${lock}<strong>${folderLabel}</strong>${sourceHtml}
             <small>(${new Date(o.expires * 1000).toLocaleString()})</small>
             <button type="button"
-                    data-key="${token}"
+                    data-key="${esc(tokenValue)}"
+                    data-source-id="${esc(o.sourceId || "")}"
                     data-type="folder"
                     class="btn btn-sm btn-link delete-share">🗑️</button>
           </li>`;
@@ -2092,12 +3453,21 @@ function loadShareLinksSection() {
       html += `</ul><h5 style="margin-top:1em;">${t("file_shares")}</h5><ul>`;
       Object.entries(files).forEach(([token, o]) => {
         const lock = o.password ? "🔒 " : "";
+        const tokenValue = o.token || token;
+        const sourceLabel = o.sourceName || o.sourceId || "";
+        const sourceHtml = sourceLabel && sourceLabel.toLowerCase() !== "local"
+          ? ` <small class="text-muted">[${esc(sourceLabel)}]</small>`
+          : "";
+        const folderLabel = esc(o.folder || "root");
+        const fileLabel = esc(o.file || "");
+        const pathLabel = fileLabel ? `${folderLabel}/${fileLabel}` : folderLabel;
         html += `
           <li>
-            ${lock}<strong>${o.folder}/${o.file}</strong>
+            ${lock}<strong>${pathLabel}</strong>${sourceHtml}
             <small>(${new Date(o.expires * 1000).toLocaleString()})</small>
             <button type="button"
-                    data-key="${token}"
+                    data-key="${esc(tokenValue)}"
+                    data-source-id="${esc(o.sourceId || "")}"
                     data-type="file"
                     class="btn btn-sm btn-link delete-share">🗑️</button>
           </li>`;
@@ -2110,6 +3480,7 @@ function loadShareLinksSection() {
         btn.addEventListener("click", evt => {
           evt.preventDefault();
           const token = btn.dataset.key;
+          const sourceId = btn.dataset.sourceId || "";
           const isFolder = btn.dataset.type === "folder";
           const endpoint = isFolder
             ? "/api/folder/deleteShareFolderLink.php"
@@ -2119,6 +3490,9 @@ function loadShareLinksSection() {
             (document.querySelector('meta[name="csrf-token"]')?.content || window.csrfToken || "");
 
           const body = new URLSearchParams({ token });
+          if (sourceId) {
+            body.set("sourceId", sourceId);
+          }
 
           fetch(endpoint, {
             method: "POST",
@@ -2186,13 +3560,17 @@ export function openAdminPanel() {
       const proType = proInfo.type || '';
       const proEmail = proInfo.email || '';
       const proVersion = proInfo.version || 'not installed';
-      const proMinVersion = '1.3.0';
-      const proVersionOk = isPro && compareSemver(proVersion, proMinVersion) >= 0;
+      const proApiLevel = Number(proInfo.apiLevel || 0);
+      const proBuildEpoch = Number(proInfo.buildEpoch || 0);
+      const proSearchApiOk = isPro && proApiLevel >= PRO_API_LEVELS.search;
+      const proAuditApiOk = isPro && proApiLevel >= PRO_API_LEVELS.audit;
+      const proSourcesApiOk = isPro && proApiLevel >= PRO_API_LEVELS.sources;
       const proSearchOptOut = !!(config.proSearch && config.proSearch.optOut);
       const proLicense = proInfo.license || '';
       // New: richer license metadata from FR_PRO_INFO / backend
       const proPlan = proInfo.plan || '';            // e.g. "early_supporter_1x", "personal_yearly"
-      const proExpiresAt = proInfo.expiresAt || '';  // ISO timestamp string or ""
+      const proUpdatesUntil = proInfo.updatesUntil || proInfo.expiresAt || '';  // ISO timestamp string or ""
+      const proInstanceId = proInfo.instanceId || '';
       const proMaxMajor = (
         typeof proInfo.maxMajor === 'number'
           ? proInfo.maxMajor
@@ -2201,11 +3579,21 @@ export function openAdminPanel() {
       const proSearchCfg = (config.proSearch && typeof config.proSearch === 'object')
         ? config.proSearch
         : {};
+      const updatesExpired = (() => {
+        if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
+          return false;
+        }
+        if (!proUpdatesUntil) {
+          return false;
+        }
+        const ts = Date.parse(proUpdatesUntil);
+        return Number.isFinite(ts) && ts < Date.now();
+      })();
       const proSearchExplicitDisabled = Object.prototype.hasOwnProperty.call(proSearchCfg, 'enabled') && !proSearchCfg.enabled;
       const proSearchOptOutEffective = proSearchOptOut || proSearchExplicitDisabled;
-      let proSearchEnabled = (isPro && proVersionOk) && !!proSearchCfg.enabled;
-      // Auto-enable for Pro v1.3.0+ unless the user explicitly opted out/disabled or env locked
-      if (isPro && proVersionOk && !proSearchOptOutEffective) {
+      let proSearchEnabled = proSearchApiOk && !!proSearchCfg.enabled;
+      // Auto-enable when Pro API level supports Search Everywhere unless explicitly opted out/disabled or env locked
+      if (proSearchApiOk && !proSearchOptOutEffective) {
         proSearchEnabled = true;
       }
       const proSearchDefaultLimit = Math.max(
@@ -2216,7 +3604,7 @@ export function openAdminPanel() {
       const proAuditCfg = (config.proAudit && typeof config.proAudit === 'object')
         ? config.proAudit
         : {};
-      const proAuditAvailable = !!proAuditCfg.available;
+      const proAuditAvailable = !!proAuditCfg.available && proAuditApiOk;
       const proAuditEnabled = (isPro && proAuditAvailable) ? !!proAuditCfg.enabled : false;
       const proAuditLevelRaw = (typeof proAuditCfg.level === 'string') ? proAuditCfg.level : 'verbose';
       const proAuditLevel = (proAuditLevelRaw === 'standard' || proAuditLevelRaw === 'verbose')
@@ -2224,6 +3612,11 @@ export function openAdminPanel() {
         : 'verbose';
       const proAuditMaxFileMb = Math.max(10, parseInt(proAuditCfg.maxFileMb || 200, 10) || 200);
       const proAuditMaxFiles = Math.max(1, Math.min(10, parseInt(proAuditCfg.maxFiles || 10, 10) || 10));
+      const sourcesCfg = (config.storageSources && typeof config.storageSources === 'object')
+        ? config.storageSources
+        : {};
+      const sourcesEnabled = !!sourcesCfg.enabled;
+      const showSourcesSection = true;
       const brandingCfg = config.branding || {};
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
@@ -2267,22 +3660,33 @@ export function openAdminPanel() {
         mdl.innerHTML = `
           <div class="modal-content" style="${inner}">
             <div class="editor-close-btn" id="closeAdminPanel">&times;</div>
-            <h3>${getAdminTitle(isPro, proVersion)}</h3>
+            <h3>${getAdminTitle(isPro, proVersion, updatesExpired)}</h3>
             <form id="adminPanelForm">
-            ${[
-            { id: "userManagement", label: t("user_management") },
-            { id: "headerSettings", label: tf("header_footer_settings", "Header, File List & Footer settings") },
-            { id: "loginOptions", label: t("login_webdav") + " (OIDC/TOTP)" },
-            { id: "network", label: tf("firewall_proxy_settings", "Firewall and Proxy Settings") },
-            { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
-            { id: "onlyoffice", label: "ONLYOFFICE" },
-            { id: "upload", label: tf("antivirus_settings", "Antivirus") },
-            { id: "shareLinks", label: t("manage_shared_links_size") },
-            { id: "storage", label: "Storage / Disk Usage" },
-            { id: "proFeatures", label: "Pro Features" },
-            { id: "pro", label: "FileRise Pro" },
-            { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Thanks / Sponsor / Donations") : "Thanks / Sponsor / Donations") }
-          ].map(sec => `
+            ${(() => {
+              const sections = [
+                { id: "userManagement", label: t("user_management") },
+                { id: "headerSettings", label: tf("header_footer_settings", "Header, File List & Footer settings") },
+                { id: "loginOptions", label: t("login_webdav") + " (OIDC/TOTP)" },
+                { id: "network", label: tf("firewall_proxy_settings", "Firewall and Proxy Settings") },
+                { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
+                { id: "onlyoffice", label: "ONLYOFFICE" },
+                { id: "upload", label: tf("antivirus_settings", "Antivirus") },
+                { id: "shareLinks", label: t("manage_shared_links_size") },
+                { id: "storage", label: "Storage / Disk Usage" }
+              ];
+              if (showSourcesSection) {
+                const sourcesLabel = !isPro
+                  ? `<span style="display:inline-flex; align-items:center; gap:6px;">${tf("sources", "Sources")}<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span></span>`
+                  : tf("sources", "Sources");
+                sections.push({ id: "sources", label: sourcesLabel });
+              }
+              sections.push(
+                { id: "proFeatures", label: "Pro Features" },
+                { id: "pro", label: "FileRise Pro" },
+                { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Thanks / Sponsor / Donations") : "Thanks / Sponsor / Donations") }
+              );
+              return sections;
+            })().map(sec => `
               <div id="${sec.id}Header" class="section-header collapsed">
                 ${sec.label} <i class="material-icons">expand_more</i>
               </div>
@@ -2311,10 +3715,11 @@ export function openAdminPanel() {
           "upload",
           "shareLinks",
           "storage",
+          showSourcesSection ? "sources" : null,
           "proFeatures",
           "pro",
           "sponsor"
-        ].forEach(id => {
+        ].filter(Boolean).forEach(id => {
           const headerEl = document.getElementById(id + "Header");
           if (!headerEl || headerEl.__wired) return;
           headerEl.__wired = true;
@@ -2369,6 +3774,16 @@ export function openAdminPanel() {
     Use “Folder Access” for per-folder ACLs. User Groups and Client Portals are available in FileRise Pro.
   </small>
 `;
+
+        if (showSourcesSection) {
+          initSourcesSection({
+            modalEl: mdl,
+            sourcesEnabled,
+            sourcesCfg,
+            isPro,
+            proSourcesApiOk
+          });
+        }
 
         // Wiring for the 4 buttons
         const userHubBtn = document.getElementById("adminOpenUserHub");
@@ -3166,6 +4581,19 @@ ${t("shared_max_upload_size_bytes")}
           const hasCurrent = !!norm(currentVersionRaw);
           const hasLatest = !!norm(latestVersionRaw);
           const hasUpdate = hasCurrent && hasLatest && norm(currentVersionRaw) !== norm(latestVersionRaw);
+          const hasSavedLicense = !!(proLicense && String(proLicense).trim().startsWith('FRP1.'));
+          const showRenewLinks = isPro || hasSavedLicense;
+          const showInstallOptions = isPro || hasSavedLicense;
+          const showUpdateBadge = hasUpdate && !updatesExpired;
+          const autoUpdateAllowed = hasSavedLicense && !updatesExpired;
+          const autoUpdateBlockedMessage = hasSavedLicense
+            ? 'Updates expired. Renew to download newer Pro bundles.'
+            : 'Save a license key to enable automatic download.';
+          const updatesExpiredNotice = updatesExpired && proUpdatesUntil
+            ? `<div class="small text-warning" style="margin-top:6px; margin-bottom:8px;">
+                Updates expired on ${escapeHTML(proUpdatesUntil)}. Downloading or installing a newer Pro bundle will deactivate Pro. Renew to update.
+              </div>`
+            : '';
 
           // Friendly description of plan + lifetime/expiry
           let planLabel = '';
@@ -3182,16 +4610,18 @@ ${t("shared_max_upload_size_bytes")}
             }
           }
 
-          let expiryLabel = '';
+          let updatesLabel = '';
           if (proPlan === 'early_supporter_1x' || (!proPlan && isPro)) {
-            // Early supporters: we treat as lifetime for that major – do NOT show an expiry date
-            expiryLabel = 'Lifetime license (no expiry)';
-          } else if (proExpiresAt) {
-            expiryLabel = `Valid until ${proExpiresAt}`;
+            const mj = proMaxMajor || 1;
+            updatesLabel = `Updates: lifetime for FileRise Pro ${mj}.x`;
+          } else if (proUpdatesUntil) {
+            updatesLabel = updatesExpired
+              ? `Updates expired on ${proUpdatesUntil} (Pro stays active)`
+              : `Updates until ${proUpdatesUntil}`;
           }
 
           const proMetaHtml =
-            isPro && (proType || proEmail || proVersion || planLabel || expiryLabel)
+            isPro && (proType || proEmail || proVersion || planLabel || updatesLabel)
               ? `
                  <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
                    <div>
@@ -3203,9 +4633,9 @@ ${t("shared_max_upload_size_bytes")}
                    <div>
                      Plan: ${planLabel}
                    </div>` : ''}
-                   ${expiryLabel ? `
+                   ${updatesLabel ? `
                    <div>
-                     ${expiryLabel}
+                     ${updatesLabel}
                    </div>` : ''}
                    ${hasCurrent ? `
                    <div>
@@ -3218,6 +4648,29 @@ ${t("shared_max_upload_size_bytes")}
                  </div>
                `
               : '';
+
+          const needsCompatWarning = isPro
+            && proApiLevel > 0
+            && proApiLevel < CORE_REQUIRED_PRO_API_LEVEL;
+          const compatHtml = needsCompatWarning
+            ? `
+                <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#b45309;">
+                  <div><strong>Compatibility warning:</strong> Core features require Pro API level ${CORE_REQUIRED_PRO_API_LEVEL} (v${PRO_API_MIN_VERSION_LABELS.sources}+). Installed Pro API level: ${proApiLevel}. Those features will stay disabled until you update the Pro bundle.</div>
+                  ${updatesExpired ? `<div>Updates expired on ${escapeHTML(proUpdatesUntil)}. Renew to download newer Pro bundles.</div>` : ''}
+                </div>
+              `
+            : '';
+
+          const instanceHtml = proInstanceId
+            ? `
+                <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
+                  <div class="d-flex align-items-center flex-wrap" style="gap:6px;">
+                    <span>Instance ID (required for yearly updates plans): <code>${proInstanceId}</code></span>
+                    <button type="button" class="btn btn-link btn-sm p-0" id="proCopyInstanceIdBtn">Copy</button>
+                  </div>
+                </div>
+              `
+            : '';
 
           proContent.innerHTML = `
     <div class="card pro-card" style="padding:12px; border:1px solid #ddd; border-radius:12px; max-width:720px; margin:8px auto;">
@@ -3237,28 +4690,11 @@ ${t("shared_max_upload_size_bytes")}
               : 'You are running the free edition. Enter a license key to activate FileRise Pro.'}
         </div>
         ${proMetaHtml}
+        ${compatHtml}
+        ${instanceHtml}
       </div>
 
-      ${isPro ? `
-        <div style="margin-top:8px;">
-          <a
-            href="https://filerise.net/pro/update.php"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-sm btn-pro-admin d-inline-flex align-items-center"
-          >
-            <span>Download latest Pro bundle</span>
-            ${hasUpdate ? `
-              <span class="badge badge-light" style="margin-left:6px;">
-                Update available
-              </span>` : ''}
-          </a>
-          <small class="text-muted d-block" style="margin-top:4px;">
-            Opens filerise.net in a new tab where you can enter your Pro license
-            to download the latest FileRise Pro ZIP.
-          </small>
-        </div>
-      ` : `
+      ${!isPro ? `
         <div style="margin-top:8px;">
           <a
             href="https://filerise.net/pro/checkout.php"
@@ -3270,9 +4706,10 @@ ${t("shared_max_upload_size_bytes")}
           </a>
           <small class="text-muted d-block" style="margin-top:4px;">
             Opens filerise.net in a new tab so you can purchase a FileRise Pro license.
+            You will need your Instance ID during checkout.
           </small>
         </div>
-      `}
+      ` : ''}
 
       <div class="form-group" style="margin-top:10px;">
         <div class="d-flex justify-content-between align-items-center mb-1">
@@ -3313,12 +4750,42 @@ ${t("shared_max_upload_size_bytes")}
         Save license
       </button>
 
+      ${showRenewLinks ? `
+      <div style="margin-top:10px;">
+        <div class="d-flex flex-wrap align-items-center" style="gap:8px;">
+          <a
+            href="https://filerise.net/pro/renew.php"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-sm btn-secondary">
+            Renew yearly updates
+          </a>
+          <a
+            href="https://filerise.net/pro/instances.php"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-sm btn-secondary">
+            Manage instance IDs
+          </a>
+        </div>
+        <small class="text-muted d-block" style="margin-top:4px;">
+          Renewals extend updates for yearly plans. Instance IDs apply to Business yearly updates.
+        </small>
+      </div>
+      ` : ''}
+
+      ${showInstallOptions ? `
       <div class="mt-3 border-top pt-3" style="margin-top:14px;">
         <h6 class="mb-1">Install / update Pro bundle</h6>
-        <p class="text-muted small mb-2">
-          Upload the <code>.zip</code> bundle you downloaded from <a href="https://filerise.net" target="_blank" rel="noopener noreferrer">filerise.net</a>.
-          This runs locally on your server and never contacts an external update service.
-        </p>
+        <div class="text-muted small" style="margin-bottom:8px;">
+          Choose a method. Manual uploads never contact external services.
+        </div>
+        ${updatesExpiredNotice}
+
+        <div class="text-muted small" style="font-weight:600;">Manual upload</div>
+        <div class="text-muted small" style="margin-bottom:6px;">
+          Download the ZIP from <a href="https://filerise.net/pro/update.php" target="_blank" rel="noopener noreferrer">filerise.net</a> and upload it here.
+        </div>
         <div class="d-flex flex-wrap align-items-center gap-2" style="margin-top:4px;">
           <input type="file"
                  id="proBundleFile"
@@ -3330,13 +4797,58 @@ ${t("shared_max_upload_size_bytes")}
             Install Pro bundle
           </button>
         </div>
+
+        <div class="text-muted small" style="font-weight:600; margin-top:10px;">One-click download</div>
+        <div class="text-muted small" style="margin-bottom:6px;">
+          Uses your saved license key and requires outbound access to filerise.net.
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2" style="margin-top:4px;">
+          <button type="button"
+                  id="btnDownloadProBundle"
+                  class="btn btn-sm btn-secondary"
+                  ${autoUpdateAllowed ? '' : 'disabled'}>
+            Download + install latest
+          </button>
+          ${showUpdateBadge ? `
+            <span class="badge badge-light">Update available</span>
+          ` : ''}
+        </div>
         <div id="proBundleStatus" class="small mt-2"></div>
       </div>
+      ` : `
+      <div class="mt-3 border-top pt-3" style="margin-top:14px;">
+        <h6 class="mb-1">Install / update Pro bundle</h6>
+        <div class="text-muted small">
+          Save a license key to unlock manual upload and one-click install options.
+        </div>
+      </div>
+      `}
     </div>
   `;
 
+          const updatePill = document.getElementById('proUpdatePill');
+          if (updatePill && !updatePill.__wired && !updatesExpired) {
+            updatePill.__wired = true;
+            updatePill.addEventListener('click', async (e) => {
+              e.preventDefault();
+              const choice = await showProUpdateChoiceModal({ hasAuto: autoUpdateAllowed });
+              if (choice === 'manual') {
+                window.open('https://filerise.net/pro/update.php', '_blank', 'noopener');
+                return;
+              }
+              if (choice === 'auto') {
+                const dlBtn = document.getElementById('btnDownloadProBundle');
+                if (dlBtn && !dlBtn.disabled) {
+                  dlBtn.click();
+                } else {
+                  showToast(autoUpdateBlockedMessage, 'error');
+                }
+              }
+            });
+          }
+
           // Wire up local Pro bundle installer (upload .zip into core)
-          initProBundleInstaller();
+          initProBundleInstaller({ updatesExpired, updatesUntil: proUpdatesUntil });
 
           // Pre-fill textarea with saved license if present
           const licenseTextarea = document.getElementById('proLicenseInput');
@@ -3406,14 +4918,44 @@ ${t("shared_max_upload_size_bytes")}
             });
           }
 
-          // Save license handler (unchanged)
+          const proCopyInstanceBtn = document.getElementById('proCopyInstanceIdBtn');
+          if (proCopyInstanceBtn && proInstanceId) {
+            proCopyInstanceBtn.addEventListener('click', async () => {
+              try {
+                if (navigator.clipboard && window.isSecureContext) {
+                  await navigator.clipboard.writeText(proInstanceId);
+                } else {
+                  const ta = document.createElement('textarea');
+                  ta.value = proInstanceId;
+                  ta.style.position = 'fixed';
+                  ta.style.left = '-9999px';
+                  document.body.appendChild(ta);
+                  ta.select();
+                  document.execCommand('copy');
+                  ta.remove();
+                }
+                showToast('Instance ID copied to clipboard.');
+              } catch (e) {
+                showToast('Could not copy Instance ID. Please copy it manually.');
+              }
+            });
+          }
+
+          // Save license handler
           const proSaveBtn = document.getElementById('proSaveLicenseBtn');
           if (proSaveBtn) {
             proSaveBtn.addEventListener('click', async () => {
               const ta = document.getElementById('proLicenseInput');
               const license = (ta && ta.value.trim()) || '';
+              const statusEl = document.getElementById('proBundleStatus');
+              const setStatus = (msg, tone = 'muted') => {
+                if (!statusEl) return;
+                statusEl.textContent = msg || '';
+                statusEl.className = `small text-${tone}`;
+              };
 
               try {
+                proSaveBtn.disabled = true;
                 const res = await fetch('/api/admin/setLicense.php', {
                   method: 'POST',
                   credentials: 'include',
@@ -3434,11 +4976,64 @@ ${t("shared_max_upload_size_bytes")}
                   return;
                 }
 
-                showToast('License saved. Reloading…');
+                showToast('License saved.');
+
+                if (!isPro) {
+                  const ok = await showCustomConfirmModal(
+                    'Download and install the latest Pro bundle now?'
+                  );
+                  if (ok) {
+                    setStatus('Downloading and installing latest Pro bundle...', 'muted');
+                    try {
+                      const resp = await fetch('/api/admin/downloadProBundle.php', {
+                        method: 'POST',
+                        headers: {
+                          'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.content || '')
+                        },
+                        credentials: 'include'
+                      });
+
+                      let dlData = null;
+                      try {
+                        dlData = await resp.json();
+                      } catch (_) {
+                        dlData = null;
+                      }
+
+                      if (!resp.ok || !dlData || !dlData.success) {
+                        const msg = dlData && (dlData.error || dlData.message)
+                          ? (dlData.error || dlData.message)
+                          : `HTTP ${resp.status}`;
+                        setStatus('Download/install failed: ' + msg, 'danger');
+                        showToast('Download/install failed: ' + msg, 'error');
+                        return;
+                      }
+
+                      const finalVersion = dlData.proVersion ? String(dlData.proVersion) : '';
+                      const versionText = finalVersion ? ` (version ${finalVersion})` : '';
+                      setStatus('Pro bundle installed' + versionText + '. Reloading...', 'success');
+                      showToast('Pro bundle installed' + versionText + '. Reloading...');
+                      if (typeof loadAdminConfigFunc === 'function') {
+                        loadAdminConfigFunc();
+                      }
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 800);
+                      return;
+                    } catch (e) {
+                      setStatus('Download/install failed.', 'danger');
+                      showToast('Download/install failed.', 'error');
+                      return;
+                    }
+                  }
+                }
+
                 window.location.reload();
               } catch (e) {
                 console.error(e);
                 showToast('Error saving license');
+              } finally {
+                proSaveBtn.disabled = false;
               }
             });
           }
@@ -3451,16 +5046,16 @@ ${t("shared_max_upload_size_bytes")}
         const proFeaturesHeaderEl = document.getElementById('proFeaturesHeader');
         if (proFeaturesHeaderEl) {
           const iconHtml = '<i class="material-icons">expand_more</i>';
-          const pill = (!isPro || !proVersionOk || !proAuditAvailable)
+          const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
             ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin-left:6px;">Pro</span>'
             : '';
           proFeaturesHeaderEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features ${pill}</span> ${iconHtml}`;
         }
         if (proFeaturesContainer) {
-          const proSearchBlockedReason = !isPro ? 'pro' : (!proVersionOk ? 'version' : null);
+          const proSearchBlockedReason = !isPro ? 'pro' : (!proSearchApiOk ? 'api' : null);
           const needsUpgradeText = (!isPro)
             ? 'Requires an active FileRise Pro license.'
-            : (!proVersionOk ? `Requires FileRise Pro v${proMinVersion}+.` : '');
+            : (!proSearchApiOk ? `Requires FileRise Pro v${PRO_API_MIN_VERSION_LABELS.search}+.` : '');
           const proSearchHtml = `
             <div class="card" style="border:1px solid ${dark ? '#3a3a3a' : '#eaeaea'}; border-radius:10px; padding:12px; background:${dark ? '#1f1f1f' : '#fdfdfd'}; position:relative; margin-bottom:10px;">
               <div class="d-flex align-items-center" style="gap:8px; margin-bottom:6px;">
@@ -3494,11 +5089,11 @@ ${t("shared_max_upload_size_bytes")}
                        ${(proSearchBlockedReason || !proSearchEnabled || proSearchLocked) ? 'disabled' : ''} />
                 <small class="text-muted">Used when launching Search Everywhere; per-request limit is still capped at 200.</small>
               </div>
-              ${(!isPro || !proVersionOk) ? `
+              ${(!isPro || !proSearchApiOk) ? `
                 <div class="alert alert-warning" style="margin-top:8px; font-size:0.9rem; padding:8px 10px; border-radius:8px;">
                   ${!isPro
                     ? 'This feature is part of FileRise Pro. Purchase or activate a license to enable it.'
-                    : ('Please upgrade your FileRise Pro bundle to v' + proMinVersion + ' or newer to use Search Everywhere.')}
+                    : ('Please upgrade your FileRise Pro bundle to v' + PRO_API_MIN_VERSION_LABELS.search + ' or newer to use Search Everywhere.')}
                 </div>
               ` : ''}
             </div>
@@ -3507,7 +5102,7 @@ ${t("shared_max_upload_size_bytes")}
           const auditBlockedReason = !isPro ? 'pro' : (!proAuditAvailable ? 'upgrade' : null);
           const auditHelpText = (!isPro)
             ? 'Requires an active FileRise Pro license.'
-            : (!proAuditAvailable ? 'Upgrade FileRise Pro to enable Audit Logs.' : '');
+            : (!proAuditAvailable ? `Upgrade FileRise Pro to v${PRO_API_MIN_VERSION_LABELS.audit}+ to enable Audit Logs.` : '');
           const auditHtml = `
             <div class="card" style="border:1px solid ${dark ? '#3a3a3a' : '#eaeaea'}; border-radius:10px; padding:12px; background:${dark ? '#1f1f1f' : '#fdfdfd'}; position:relative; margin-bottom:10px;">
               <div class="d-flex align-items-center" style="gap:8px; margin-bottom:6px;">
@@ -3563,13 +5158,14 @@ ${t("shared_max_upload_size_bytes")}
 
               <div style="display:flex; gap:8px; align-items:center; margin:6px 0 8px;">
                 <button type="button" id="auditFiltersToggle" class="btn btn-light btn-sm">Show filters</button>
-                <div class="text-muted" style="font-size:12px;">User / action / source / folder / dates</div>
+                <div class="text-muted" style="font-size:12px;">User / action / source / storage / folder / dates</div>
               </div>
 
               <div id="auditFiltersWrap" style="display:none; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
                 <input id="auditFilterUser" class="form-control" style="min-width:140px;" placeholder="User" />
                 <input id="auditFilterAction" class="form-control" style="min-width:140px;" placeholder="Action" />
                 <input id="auditFilterSource" class="form-control" style="min-width:120px;" placeholder="Source" />
+                <input id="auditFilterStorage" class="form-control" style="min-width:140px;" placeholder="Storage" />
                 <input id="auditFilterFolder" class="form-control" style="min-width:160px;" placeholder="Folder" />
                 <input id="auditFilterFrom" class="form-control" style="min-width:140px;" type="date" />
                 <input id="auditFilterTo" class="form-control" style="min-width:140px;" type="date" />
@@ -3591,6 +5187,7 @@ ${t("shared_max_upload_size_bytes")}
                       <th>User</th>
                       <th>Action</th>
                       <th>Source</th>
+                      <th>Storage</th>
                       <th>Folder</th>
                       <th>Path</th>
                       <th>From</th>
@@ -3611,7 +5208,7 @@ ${t("shared_max_upload_size_bytes")}
           const proSearchLimit = document.getElementById('proSearchLimit');
           const syncProSearchLimit = () => {
             if (!proSearchLimit || !proSearchToggle) return;
-            const locked = proSearchToggle.dataset.locked === '1' || !isPro || !proVersionOk;
+            const locked = proSearchToggle.dataset.locked === '1' || !isPro || !proSearchApiOk;
             const enabled = !!proSearchToggle.checked;
             proSearchLimit.disabled = locked || !enabled;
           };
@@ -3671,6 +5268,7 @@ ${t("shared_max_upload_size_bytes")}
             add('user', (document.getElementById('auditFilterUser')?.value || '').trim());
             add('action', (document.getElementById('auditFilterAction')?.value || '').trim());
             add('source', (document.getElementById('auditFilterSource')?.value || '').trim());
+            add('storage', (document.getElementById('auditFilterStorage')?.value || '').trim());
             add('folder', (document.getElementById('auditFilterFolder')?.value || '').trim());
             add('from', (document.getElementById('auditFilterFrom')?.value || '').trim());
             add('to', (document.getElementById('auditFilterTo')?.value || '').trim());
@@ -3685,7 +5283,7 @@ ${t("shared_max_upload_size_bytes")}
             if (!rows || !rows.length) {
               const tr = document.createElement('tr');
               const td = document.createElement('td');
-              td.colSpan = 11;
+              td.colSpan = 12;
               td.className = 'text-muted';
               td.textContent = 'No audit entries found for this filter.';
               tr.appendChild(td);
@@ -3695,11 +5293,18 @@ ${t("shared_max_upload_size_bytes")}
 
             rows.forEach(row => {
               const tr = document.createElement('tr');
+              const storageName = row.storageName || '';
+              const storageId = row.storageId || '';
+              let storageLabel = storageName || storageId || '';
+              if (storageName && storageId && storageName !== storageId) {
+                storageLabel = `${storageName} (${storageId})`;
+              }
               const cols = [
                 row.ts || '',
                 row.user || '',
                 row.action || '',
                 row.source || '',
+                storageLabel,
                 row.folder || '',
                 row.path || '',
                 row.from || '',
@@ -3712,14 +5317,14 @@ ${t("shared_max_upload_size_bytes")}
               cols.forEach((val, idx) => {
                 const td = document.createElement('td');
                 let text = val;
-                if (idx === 10 && val && typeof val === 'object') {
+                if (idx === 11 && val && typeof val === 'object') {
                   try { text = JSON.stringify(val); } catch (e) { text = ''; }
                 }
-                if (idx === 9 && typeof text === 'string' && text.length > 30) {
+                if (idx === 10 && typeof text === 'string' && text.length > 30) {
                   td.title = text;
                   text = text.slice(0, 30) + '...';
                 }
-                if (idx === 10 && typeof text === 'string' && text.length > 160) {
+                if (idx === 11 && typeof text === 'string' && text.length > 160) {
                   td.title = text;
                   text = text.slice(0, 160) + '...';
                 }
@@ -4017,7 +5622,7 @@ ${t("shared_max_upload_size_bytes")}
         const pfHeader = document.getElementById('proFeaturesHeader');
         if (pfHeader) {
           const iconHtml = '<i class="material-icons">expand_more</i>';
-          const pill = (!isPro || !proVersionOk || !proAuditAvailable)
+          const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
             ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin-left:6px;">Pro</span>'
             : '';
           pfHeader.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features ${pill}</span> ${iconHtml}`;
@@ -4037,7 +5642,7 @@ ${t("shared_max_upload_size_bytes")}
         }
         const syncPs = () => {
           if (!psToggle || !psLimit) return;
-          const locked = psToggle.dataset.locked === "1" || !isPro || !proVersionOk;
+          const locked = psToggle.dataset.locked === "1" || !isPro || !proSearchApiOk;
           psLimit.disabled = locked || !psToggle.checked;
         };
         if (psToggle && !psToggle.__wired) {

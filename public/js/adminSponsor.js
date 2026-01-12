@@ -31,7 +31,9 @@ const DEFAULT_SUPPORTERS = [
   'Aaron W.',
   'C-Fu',
   'peterchia',
-  'Edisto Pirates of SC'
+  'Edisto Pirates of SC',
+  '@jubnl',
+  'Juozaitis S'
 ];
 
 /**
@@ -110,7 +112,7 @@ export function initAdminSponsorSection(opts = {}) {
         ${chips}
       </div>
       <div class="text-muted" style="margin-top:10px; font-size:12px;">
-        ${tfLocal("sponsor_thanks_anonymous", "...and the 60+ who wanted to stay anonymous")}
+        ${tfLocal("sponsor_thanks_anonymous", "...and the 80+ who wanted to stay anonymous")}
       </div>
     </div>
 

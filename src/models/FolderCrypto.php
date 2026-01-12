@@ -3,6 +3,7 @@
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 /**
  * Folder encryption metadata (no DB).
@@ -17,10 +18,13 @@ class FolderCrypto
 
     private static ?array $cache = null;
     private static int $cacheMtime = 0;
+    private static ?string $cachePath = null;
 
     private static function filePath(): string
     {
-        $dir = rtrim((string)META_DIR, "/\\");
+        $dir = class_exists('SourceContext')
+            ? rtrim(SourceContext::metaRoot(), "/\\")
+            : rtrim((string)META_DIR, "/\\");
         return $dir . DIRECTORY_SEPARATOR . self::FILE_NAME;
     }
 
@@ -56,6 +60,11 @@ class FolderCrypto
     public static function load(): array
     {
         $path = self::filePath();
+        if (self::$cachePath !== $path) {
+            self::$cache = null;
+            self::$cacheMtime = 0;
+            self::$cachePath = $path;
+        }
         $mt = is_file($path) ? (int)@filemtime($path) : 0;
         if (self::$cache !== null && self::$cacheMtime === $mt) {
             return self::$cache;
@@ -68,8 +77,10 @@ class FolderCrypto
 
     private static function write(array $doc): bool
     {
-        if (!is_dir(META_DIR)) {
-            @mkdir(META_DIR, 0775, true);
+        $path = self::filePath();
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
         }
 
         $json = json_encode($doc, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -77,12 +88,12 @@ class FolderCrypto
             return false;
         }
 
-        $path = self::filePath();
         $ok = @file_put_contents($path, $json, LOCK_EX) !== false;
         if ($ok) {
             @chmod($path, 0664);
             self::$cache = $doc;
             self::$cacheMtime = is_file($path) ? (int)@filemtime($path) : 0;
+            self::$cachePath = $path;
         }
         return $ok;
     }

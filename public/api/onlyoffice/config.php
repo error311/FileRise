@@ -6,6 +6,7 @@
  *   tags={"ONLYOFFICE"},
  *   @OA\Parameter(name="folder", in="query", @OA\Schema(type="string")),
  *   @OA\Parameter(name="file",   in="query", @OA\Schema(type="string")),
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string")),
  *   @OA\Response(response=200, description="Editor config"),
  *   @OA\Response(response=403, description="Forbidden"),
  *   @OA\Response(response=404, description="Disabled / Not found")

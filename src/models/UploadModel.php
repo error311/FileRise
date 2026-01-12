@@ -7,14 +7,32 @@ require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 require_once PROJECT_ROOT . '/src/lib/AuditHook.php';
+require_once PROJECT_ROOT . '/src/lib/StorageRegistry.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class UploadModel
 {
     /**
      * Log file for virus detections (JSONL; one JSON record per line).
      */
-    private const VIRUS_LOG_FILE       = META_DIR . 'virus_detections.log';
     private const VIRUS_LOG_MAX_BYTES  = 5242880; // 5 MB soft rotation
+
+    private static function uploadRoot(): string
+    {
+        if (class_exists('SourceContext')) {
+            return SourceContext::uploadRoot();
+        }
+        return rtrim((string)UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    private static function metaRoot(): string
+    {
+        if (class_exists('SourceContext')) {
+            SourceContext::ensureMetaDir();
+            return SourceContext::metaRoot();
+        }
+        return rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+    }
 
     private static function sanitizeFolder(string $folder): string
     {
@@ -121,8 +139,26 @@ class UploadModel
         return self::scanFileIfEnabled($tmp, $context);
     }
 
+    private static function adapterErrorDetail(StorageAdapterInterface $storage): string
+    {
+        if (method_exists($storage, 'getLastError')) {
+            $detail = trim((string)$storage->getLastError());
+            if ($detail !== '') {
+                $detail = preg_replace('/(\\w+:\\/\\/)([^\\s@]+@)/i', '$1', $detail) ?? $detail;
+                if (strlen($detail) > 240) {
+                    $detail = substr($detail, 0, 240) . '...';
+                }
+                return $detail;
+            }
+        }
+        return '';
+    }
+
     public static function handleUpload(array $post, array $files): array
     {
+        $storage = StorageRegistry::getAdapter();
+        $isLocal = $storage->isLocal();
+
         // --- GET resumable test (make folder handling consistent) ---
         if (
             (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET')
@@ -132,9 +168,9 @@ class UploadModel
             $resumableIdentifier = $post['resumableIdentifier'] ?? '';
             $folderSan           = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
 
-            $baseUploadDir = UPLOAD_DIR;
+            $baseUploadDir = self::uploadRoot();
             if ($folderSan !== '') {
-                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+                $baseUploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
                     . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
             }
 
@@ -161,9 +197,9 @@ class UploadModel
                 return ['error' => 'No files received'];
             }
 
-            $baseUploadDir = UPLOAD_DIR;
+            $baseUploadDir = self::uploadRoot();
             if ($folderSan !== '') {
-                $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
+                $baseUploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
                     . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
             }
             if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
@@ -229,32 +265,64 @@ class UploadModel
                 return $scanResult; // e.g. "Upload blocked: virus detected in file."
             }
 
-            // Encrypt at rest if folder is marked encrypted
-            try {
-                if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
-                    if (!CryptoAtRest::isAvailable()) {
-                        throw new \RuntimeException('Upload failed: encryption at rest is not supported on this server (libsodium secretstream missing).');
+            if (!$isLocal) {
+                try {
+                    if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
+                        @unlink($targetPath);
+                        self::rrmdir($tempDir);
+                        return ['error' => 'Encrypted folders are not supported for remote storage.'];
                     }
-                    if (!CryptoAtRest::masterKeyIsConfigured()) {
-                        throw new \RuntimeException('Upload failed: destination folder is encrypted but the encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).');
+                } catch (\Throwable $e) { /* ignore */ }
+            }
+
+            // Encrypt at rest if folder is marked encrypted (local storage only)
+            if ($isLocal) {
+                try {
+                    if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
+                        if (!CryptoAtRest::isAvailable()) {
+                            throw new \RuntimeException('Upload failed: encryption at rest is not supported on this server (libsodium secretstream missing).');
+                        }
+                        if (!CryptoAtRest::masterKeyIsConfigured()) {
+                            throw new \RuntimeException('Upload failed: destination folder is encrypted but the encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).');
+                        }
+                        CryptoAtRest::encryptFileInPlace($targetPath);
                     }
-                    CryptoAtRest::encryptFileInPlace($targetPath);
+                } catch (\Throwable $e) {
+                    error_log('Upload encryption failed: ' . $e->getMessage());
+                    @unlink($targetPath);
+                    self::rrmdir($tempDir);
+                    $msg = $e->getMessage();
+                    if (!is_string($msg) || trim($msg) === '') {
+                        $msg = 'Upload failed: could not encrypt file at rest.';
+                    }
+                    return ['error' => $msg];
                 }
-            } catch (\Throwable $e) {
-                error_log('Upload encryption failed: ' . $e->getMessage());
+            }
+
+            if (!$isLocal) {
+                $mimeType = function_exists('mime_content_type') ? mime_content_type($targetPath) : null;
+                $size = @filesize($targetPath);
+                $stream = @fopen($targetPath, 'rb');
+                if ($stream === false) {
+                    @unlink($targetPath);
+                    self::rrmdir($tempDir);
+                    return ['error' => 'Failed to open file for remote upload.'];
+                }
+                $ok = $storage->writeStream($targetPath, $stream, ($size === false ? null : (int)$size), $mimeType ?: null);
+                @fclose($stream);
+                if (!$ok) {
+                    $detail = self::adapterErrorDetail($storage);
+                    @unlink($targetPath);
+                    self::rrmdir($tempDir);
+                    return ['error' => $detail !== '' ? ('Failed to upload to remote storage: ' . $detail) : 'Failed to upload to remote storage.'];
+                }
                 @unlink($targetPath);
-                self::rrmdir($tempDir);
-                $msg = $e->getMessage();
-                if (!is_string($msg) || trim($msg) === '') {
-                    $msg = 'Upload failed: could not encrypt file at rest.';
-                }
-                return ['error' => $msg];
             }
 
             // Metadata
             $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
             $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
-            $metadataFile     = META_DIR . $metadataFileName;
+            $metadataFile     = self::metaRoot() . $metadataFileName;
             $uploadedDate     = date(DATE_TIME_FORMAT);
             $uploader         = $_SESSION['username'] ?? 'Unknown';
             $collection       = file_exists($metadataFile)
@@ -285,149 +353,258 @@ class UploadModel
         }
 
         // --- NON-CHUNKED (drag-and-drop / folder uploads) ---
-        $folderSan = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+        $createdDirs = [];
+        try {
+            $folderSan = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
 
-        $baseUploadDir = UPLOAD_DIR;
-        if ($folderSan !== '') {
-            $baseUploadDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
-                . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
-        }
-        if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
-            return ['error' => 'Failed to create upload directory'];
-        }
-
-        $safeFileNamePattern = REGEX_FILE_NAME;
-        $metadataCollection  = [];
-        $metadataChanged     = [];
-
-        foreach ($files['file']['name'] as $index => $fileName) {
-            if (($files['file']['error'][$index] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-                return ['error' => 'Error uploading file'];
+            $baseUploadDir = self::uploadRoot();
+            if ($folderSan !== '') {
+                $baseUploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
+                    . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
+            }
+            if (!self::ensureDir($baseUploadDir, $createdDirs)) {
+                return ['error' => 'Failed to create upload directory'];
             }
 
-            $safeFileName = trim(urldecode(basename($fileName)));
-            if (!preg_match($safeFileNamePattern, $safeFileName)) {
-                return ['error' => 'Invalid file name: ' . $fileName];
+            $safeFileNamePattern = REGEX_FILE_NAME;
+            $metadataCollection  = [];
+            $metadataChanged     = [];
+
+            if (empty($files['file']) || empty($files['file']['name'])) {
+                return ['error' => 'No files received'];
+            }
+            if (!is_array($files['file']['name'])) {
+                $files['file']['name'] = [$files['file']['name']];
+                $files['file']['tmp_name'] = [$files['file']['tmp_name'] ?? ''];
+                $files['file']['error'] = [$files['file']['error'] ?? UPLOAD_ERR_OK];
             }
 
-            $relativePath = '';
-            if (isset($post['relativePath'])) {
-                $relativePath = is_array($post['relativePath'])
-                    ? ($post['relativePath'][$index] ?? '')
-                    : $post['relativePath'];
-            }
-
-            $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR;
-            if (!empty($relativePath)) {
-                $subDir = dirname($relativePath);
-                if ($subDir !== '.' && $subDir !== '') {
-                    $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
-                        . str_replace('/', DIRECTORY_SEPARATOR, $subDir) . DIRECTORY_SEPARATOR;
+            foreach ($files['file']['name'] as $index => $fileName) {
+                if (($files['file']['error'][$index] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                    return ['error' => 'Error uploading file'];
                 }
-                $safeFileName = basename($relativePath);
-            }
 
-            if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0775, true)) {
-                return ['error' => 'Failed to create subfolder: ' . $uploadDir];
-            }
+                $safeFileName = trim(urldecode(basename($fileName)));
+                if (!preg_match($safeFileNamePattern, $safeFileName)) {
+                    return ['error' => 'Invalid file name: ' . $fileName];
+                }
 
-            $targetPath = $uploadDir . $safeFileName;
-            if (!move_uploaded_file($files['file']['tmp_name'][$index], $targetPath)) {
-                return ['error' => 'Error uploading file'];
-            }
+                $relativePath = '';
+                if (isset($post['relativePath'])) {
+                    $relativePath = is_array($post['relativePath'])
+                        ? ($post['relativePath'][$index] ?? '')
+                        : $post['relativePath'];
+                }
 
-            // Compute logical folder for logging: relative to UPLOAD_DIR
-            $folderForLog = 'root';
-            $rootDir      = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
-            if (strpos($targetPath, $rootDir) === 0) {
-                $rel = substr($targetPath, strlen($rootDir));
-                $rel = str_replace(DIRECTORY_SEPARATOR, '/', $rel);
-                $slashPos = strrpos($rel, '/');
-                if ($slashPos !== false) {
-                    $folderRel = substr($rel, 0, $slashPos);
-                    if ($folderRel !== '') {
-                        $folderForLog = $folderRel;
+                $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR;
+                if (!empty($relativePath)) {
+                    $subDir = dirname($relativePath);
+                    if ($subDir !== '.' && $subDir !== '') {
+                        $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
+                            . str_replace('/', DIRECTORY_SEPARATOR, $subDir) . DIRECTORY_SEPARATOR;
+                    }
+                    $safeFileName = basename($relativePath);
+                }
+
+                if (!self::ensureDir($uploadDir, $createdDirs)) {
+                    return ['error' => 'Failed to create subfolder: ' . $uploadDir];
+                }
+
+                $targetPath = $uploadDir . $safeFileName;
+                if (!move_uploaded_file($files['file']['tmp_name'][$index], $targetPath)) {
+                    return ['error' => 'Error uploading file'];
+                }
+
+                // Compute logical folder for logging: relative to UPLOAD_DIR
+                $folderForLog = 'root';
+                $rootDir      = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR;
+                if (strpos($targetPath, $rootDir) === 0) {
+                    $rel = substr($targetPath, strlen($rootDir));
+                    $rel = str_replace(DIRECTORY_SEPARATOR, '/', $rel);
+                    $slashPos = strrpos($rel, '/');
+                    if ($slashPos !== false) {
+                        $folderRel = substr($rel, 0, $slashPos);
+                        if ($folderRel !== '') {
+                            $folderForLog = $folderRel;
+                        }
+                    }
+                } elseif ($folderSan !== '') {
+                    // Fallback: if above fails, use sanitized folder
+                    $folderForLog = $folderSan;
+                }
+
+                // Optional: virus scan this file
+                $scanResult = self::scanFileIfEnabled($targetPath, [
+                    'folder' => $folderForLog,
+                    'file'   => $safeFileName,
+                    'source' => 'normal', // core non-resumable upload
+                ]);
+
+                if (is_array($scanResult) && isset($scanResult['error'])) {
+                    // scanFileIfEnabled already unlinks the file on failure/infection
+                    return $scanResult;
+                }
+
+                if (!$isLocal) {
+                    try {
+                        if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
+                            @unlink($targetPath);
+                            return ['error' => 'Encrypted folders are not supported for remote storage.'];
+                        }
+                    } catch (\Throwable $e) { /* ignore */ }
+                }
+
+                // Encrypt at rest if destination folder is encrypted (local storage only)
+                if ($isLocal) {
+                    try {
+                        if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
+                            if (!CryptoAtRest::isAvailable()) {
+                                throw new \RuntimeException('Upload failed: encryption at rest is not supported on this server (libsodium secretstream missing).');
+                            }
+                            if (!CryptoAtRest::masterKeyIsConfigured()) {
+                                throw new \RuntimeException('Upload failed: destination folder is encrypted but the encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).');
+                            }
+                            CryptoAtRest::encryptFileInPlace($targetPath);
+                        }
+                    } catch (\Throwable $e) {
+                        error_log('Upload encryption failed: ' . $e->getMessage());
+                        @unlink($targetPath);
+                        $msg = $e->getMessage();
+                        if (!is_string($msg) || trim($msg) === '') {
+                            $msg = 'Upload failed: could not encrypt file at rest.';
+                        }
+                        return ['error' => $msg];
                     }
                 }
-            } elseif ($folderSan !== '') {
-                // Fallback: if above fails, use sanitized folder
-                $folderForLog = $folderSan;
-            }
 
-            // Optional: virus scan this file
-            $scanResult = self::scanFileIfEnabled($targetPath, [
-                'folder' => $folderForLog,
-                'file'   => $safeFileName,
-                'source' => 'normal', // core non-resumable upload
-            ]);
-
-            if (is_array($scanResult) && isset($scanResult['error'])) {
-                // scanFileIfEnabled already unlinks the file on failure/infection
-                return $scanResult;
-            }
-
-            // Encrypt at rest if destination folder is encrypted
-            try {
-                if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
-                    if (!CryptoAtRest::isAvailable()) {
-                        throw new \RuntimeException('Upload failed: encryption at rest is not supported on this server (libsodium secretstream missing).');
+                if (!$isLocal) {
+                    $mimeType = function_exists('mime_content_type') ? mime_content_type($targetPath) : null;
+                    $size = @filesize($targetPath);
+                    $stream = @fopen($targetPath, 'rb');
+                    if ($stream === false) {
+                        @unlink($targetPath);
+                        return ['error' => 'Failed to open file for remote upload.'];
                     }
-                    if (!CryptoAtRest::masterKeyIsConfigured()) {
-                        throw new \RuntimeException('Upload failed: destination folder is encrypted but the encryption master key is not configured (Admin → Encryption at rest, or FR_ENCRYPTION_MASTER_KEY).');
+                    $ok = $storage->writeStream($targetPath, $stream, ($size === false ? null : (int)$size), $mimeType ?: null);
+                    @fclose($stream);
+                    if (!$ok) {
+                        $detail = self::adapterErrorDetail($storage);
+                        @unlink($targetPath);
+                        return ['error' => $detail !== '' ? ('Failed to upload to remote storage: ' . $detail) : 'Failed to upload to remote storage.'];
                     }
-                    CryptoAtRest::encryptFileInPlace($targetPath);
+                    @unlink($targetPath);
                 }
-            } catch (\Throwable $e) {
-                error_log('Upload encryption failed: ' . $e->getMessage());
-                @unlink($targetPath);
-                $msg = $e->getMessage();
-                if (!is_string($msg) || trim($msg) === '') {
-                    $msg = 'Upload failed: could not encrypt file at rest.';
+
+                $uploader = $_SESSION['username'] ?? 'Unknown';
+                AuditHook::log('file.upload', [
+                    'user'   => $uploader,
+                    'folder' => $folderForLog,
+                    'path'   => ($folderForLog === 'root') ? $safeFileName : ($folderForLog . '/' . $safeFileName),
+                    'meta'   => self::portalMetaFromRequest(),
+                ]);
+
+                $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
+                $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
+                $metadataFile     = self::metaRoot() . $metadataFileName;
+
+                if (!isset($metadataCollection[$metadataKey])) {
+                    $metadataCollection[$metadataKey] = file_exists($metadataFile)
+                        ? json_decode(file_get_contents($metadataFile), true)
+                        : [];
+                    if (!is_array($metadataCollection[$metadataKey])) {
+                        $metadataCollection[$metadataKey] = [];
+                    }
+                    $metadataChanged[$metadataKey] = false;
                 }
-                return ['error' => $msg];
+
+                if (!isset($metadataCollection[$metadataKey][$safeFileName])) {
+                    $uploadedDate = date(DATE_TIME_FORMAT);
+                    $metadataCollection[$metadataKey][$safeFileName] = [
+                        'uploaded' => $uploadedDate,
+                        'uploader' => $uploader,
+                    ];
+                    $metadataChanged[$metadataKey] = true;
+                }
             }
 
-            $uploader = $_SESSION['username'] ?? 'Unknown';
-            AuditHook::log('file.upload', [
-                'user'   => $uploader,
-                'folder' => $folderForLog,
-                'path'   => ($folderForLog === 'root') ? $safeFileName : ($folderForLog . '/' . $safeFileName),
-                'meta'   => self::portalMetaFromRequest(),
-            ]);
-
-            $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
-            $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
-            $metadataFile     = META_DIR . $metadataFileName;
-
-            if (!isset($metadataCollection[$metadataKey])) {
-                $metadataCollection[$metadataKey] = file_exists($metadataFile)
-                    ? json_decode(file_get_contents($metadataFile), true)
-                    : [];
-                if (!is_array($metadataCollection[$metadataKey])) {
-                    $metadataCollection[$metadataKey] = [];
+            foreach ($metadataCollection as $folderKey => $data) {
+                if (!empty($metadataChanged[$folderKey])) {
+                    $metadataFileName = str_replace(['/', '\\', ' '], '-', $folderKey) . '_metadata.json';
+                    $metadataFile     = self::metaRoot() . $metadataFileName;
+                    file_put_contents($metadataFile, json_encode($data, JSON_PRETTY_PRINT));
                 }
-                $metadataChanged[$metadataKey] = false;
             }
 
-            if (!isset($metadataCollection[$metadataKey][$safeFileName])) {
-                $uploadedDate = date(DATE_TIME_FORMAT);
-                $metadataCollection[$metadataKey][$safeFileName] = [
-                    'uploaded' => $uploadedDate,
-                    'uploader' => $uploader,
-                ];
-                $metadataChanged[$metadataKey] = true;
+            return ['success' => 'Files uploaded successfully'];
+        } finally {
+            if (!$isLocal) {
+                self::cleanupCreatedDirs($createdDirs, self::uploadRoot());
+            }
+        }
+    }
+
+    private static function ensureDir(string $path, array &$createdDirs): bool
+    {
+        $path = rtrim($path, "/\\");
+        if ($path === '') {
+            return false;
+        }
+        if (is_dir($path)) {
+            return true;
+        }
+
+        $stack = [];
+        $cur = $path;
+        while ($cur !== '' && !is_dir($cur)) {
+            $stack[] = $cur;
+            $parent = dirname($cur);
+            if ($parent === $cur) {
+                break;
+            }
+            $cur = $parent;
+        }
+
+        for ($i = count($stack) - 1; $i >= 0; $i--) {
+            $dir = $stack[$i];
+            if (!is_dir($dir)) {
+                if (!@mkdir($dir, 0775)) {
+                    if (!is_dir($dir)) {
+                        return false;
+                    }
+                } else {
+                    $createdDirs[] = $dir;
+                }
             }
         }
 
-        foreach ($metadataCollection as $folderKey => $data) {
-            if (!empty($metadataChanged[$folderKey])) {
-                $metadataFileName = str_replace(['/', '\\', ' '], '-', $folderKey) . '_metadata.json';
-                $metadataFile     = META_DIR . $metadataFileName;
-                file_put_contents($metadataFile, json_encode($data, JSON_PRETTY_PRINT));
-            }
+        return is_dir($path);
+    }
+
+    private static function cleanupCreatedDirs(array $createdDirs, string $root): void
+    {
+        if (empty($createdDirs)) {
+            return;
         }
 
-        return ['success' => 'Files uploaded successfully'];
+        $rootNorm = rtrim(str_replace('\\', '/', $root), '/') . '/';
+        $unique = array_values(array_unique($createdDirs));
+        usort($unique, static function ($a, $b) {
+            return strlen((string)$b) <=> strlen((string)$a);
+        });
+
+        foreach ($unique as $dir) {
+            if (!is_string($dir) || $dir === '') {
+                continue;
+            }
+            $dirNorm = rtrim(str_replace('\\', '/', $dir), '/') . '/';
+            if ($dirNorm === $rootNorm) {
+                continue;
+            }
+            if ($rootNorm !== '' && strpos($dirNorm, $rootNorm) !== 0) {
+                continue;
+            }
+            @rmdir($dir);
+        }
     }
 
     /**
@@ -527,7 +704,7 @@ class UploadModel
             return ['error' => 'Invalid folder name'];
         }
 
-        $tempDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
+        $tempDir = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR . $folder;
         if (!is_dir($tempDir)) {
             return ['success' => true, 'message' => 'Temporary folder already removed.'];
         }
@@ -558,8 +735,9 @@ class UploadModel
         int $exitCode
     ): void {
         try {
-            if (!is_dir(META_DIR)) {
-                @mkdir(META_DIR, 0775, true);
+            $baseMeta = rtrim(self::metaRoot(), '/\\') . DIRECTORY_SEPARATOR;
+            if (!is_dir($baseMeta)) {
+                @mkdir($baseMeta, 0775, true);
             }
 
             $user   = $context['user']   ?? ($_SESSION['username'] ?? 'Unknown');
@@ -571,8 +749,8 @@ class UploadModel
             $folder   = $context['folder'] ?? null;
 
             if ($folder === null) {
-                // Best-effort: derive folder relative to UPLOAD_DIR
-                $rootDir = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+                // Best-effort: derive folder relative to upload root
+                $rootDir = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR;
                 if (strpos($path, $rootDir) === 0) {
                     $rel     = substr($path, strlen($rootDir));
                     $rel     = str_replace(DIRECTORY_SEPARATOR, '/', $rel);
@@ -603,7 +781,6 @@ class UploadModel
             }
 
             // *** Canonical base path: matches virusLog.php ***
-            $baseMeta = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
             $logFile  = $baseMeta . 'virus_detections.log';
 
             // Soft rotation

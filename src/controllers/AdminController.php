@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class AdminController
 {
@@ -70,6 +71,36 @@ class AdminController
             }
         }
         return $out;
+    }
+
+    /** Get or create a stable instance ID (32 hex chars). */
+    private static function getInstanceId(): string
+    {
+        if (!defined('META_DIR')) {
+            return '';
+        }
+        $dir = rtrim((string)META_DIR, "/\\");
+        if ($dir === '') {
+            return '';
+        }
+        $path = $dir . DIRECTORY_SEPARATOR . 'instance_id.txt';
+        $id = '';
+        if (is_file($path)) {
+            $id = trim((string)@file_get_contents($path));
+        }
+        if ($id !== '' && preg_match('/^[a-f0-9]{32}$/i', $id)) {
+            return strtolower($id);
+        }
+        try {
+            $id = bin2hex(random_bytes(16));
+        } catch (\Throwable $e) {
+            return '';
+        }
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        @file_put_contents($path, $id, LOCK_EX);
+        return $id;
     }
 
     /** Enforce CSRF using X-CSRF-Token header (or csrfToken param as fallback). */
@@ -161,22 +192,30 @@ class AdminController
             $clamLockedByEnv = false;
         }
 
-        $proType    = $proPayload['type']  ?? null;
-        $proEmail   = $proPayload['email'] ?? null;
-        $proVersion = defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : null;
-        $proPlan      = $proPayload['plan']      ?? null;
-        $proExpiresAt = $proPayload['expiresAt'] ?? null;
-        $proMaxMajor  = $proPayload['maxMajor']  ?? null;
+        $proType         = $proPayload['type']  ?? null;
+        $proEmail        = $proPayload['email'] ?? null;
+        $proVersion      = defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : null;
+        $proApiLevel     = defined('FR_PRO_API_LEVEL') ? (int)FR_PRO_API_LEVEL : 0;
+        $proBuildEpoch   = defined('FR_PRO_BUNDLE_BUILD_EPOCH') ? (int)FR_PRO_BUNDLE_BUILD_EPOCH : 0;
+        $proPlan         = $proPayload['plan']      ?? null;
+        $proExpiresAt    = $proPayload['expiresAt'] ?? null;
+        $proUpdatesUntil = $proPayload['updatesUntil'] ?? null;
+        $proMaxMajor     = $proPayload['maxMajor']  ?? null;
+        $instanceId      = self::getInstanceId();
 
         $proInfo = [
             'active'   => (bool)$proActive,
             'type'     => $proType ?: '',
             'email'    => $proEmail ?: '',
             'version'  => $proVersion ?: '',
+            'apiLevel' => $proApiLevel,
+            'buildEpoch' => $proBuildEpoch,
             'license'  => $licenseString ?: '',
-            'plan'     => $proPlan ?: '',
-            'expiresAt'=> $proExpiresAt ?: '',
-            'maxMajor' => $proMaxMajor,
+            'plan'        => $proPlan ?: '',
+            'expiresAt'   => $proExpiresAt ?: '',
+            'updatesUntil'=> $proUpdatesUntil ?: '',
+            'maxMajor'    => $proMaxMajor,
+            'instanceId'  => $instanceId ?: '',
         ];
 
         $public = AdminModel::buildPublicSubset($config);
@@ -185,6 +224,7 @@ class AdminController
         $public['pro'] = [
             'active'  => (bool)$proActive,
             'version' => $proVersion ?: '',
+            'apiLevel' => $proApiLevel,
         ];
 
         $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
@@ -545,7 +585,10 @@ class AdminController
             return;
         }
 
-        $logFile = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'virus_detections.log';
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $logFile = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'virus_detections.log';
         $limit   = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 200;
 
         $entries = [];
@@ -812,6 +855,21 @@ class AdminController
 
             $label  = trim((string)($info['label'] ?? $slug));
             $folder = trim((string)($info['folder'] ?? ''));
+            $sourceId = trim((string)($info['sourceId'] ?? ''));
+
+            if ($sourceId !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+                throw new InvalidArgumentException(
+                    'Invalid source id for portal: ' . ($label !== '' ? $label : ($slug !== '' ? $slug : '(unnamed portal)'))
+                );
+            }
+            if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                $src = SourceContext::getSourceById($sourceId);
+                if (!$src) {
+                    throw new InvalidArgumentException(
+                        'Invalid source for portal: ' . ($label !== '' ? $label : ($slug !== '' ? $slug : '(unnamed portal)'))
+                    );
+                }
+            }
 
             // Require both slug and folder; collect invalid ones so the UI can warn.
             if ($slug === '' || $folder === '') {
@@ -897,6 +955,7 @@ class AdminController
             $data['portals'][$slug] = [
                 'label'              => $label,
                 'folder'             => $folder,
+                'sourceId'           => $sourceId,
                 'clientEmail'        => $clientEmail,
                 'uploadOnly'         => $uploadOnly,
                 'allowDownload'      => $allowDownload,
@@ -1106,94 +1165,39 @@ class AdminController
         ];
     }
 
-    public function installProBundle(): void
+    private function installProBundleFromZip(string $zipPath, string $origName = '', ?string $workDir = null): array
     {
-        header('Content-Type: application/json; charset=utf-8');
+        $declaredVersion = null;
+        $basename = '';
+        $zip = null;
+        $zipOpened = false;
+
+        $cleanup = function () use ($zipPath, $workDir): void {
+            if ($zipPath !== '' && @is_file($zipPath)) {
+                @unlink($zipPath);
+            }
+            if ($workDir) {
+                @rmdir($workDir);
+            }
+        };
 
         try {
-            // Guard rails: method + auth + CSRF
-            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
-                http_response_code(405);
-                echo json_encode(['success' => false, 'error' => 'Method not allowed']);
-                return;
+            if (!@is_file($zipPath)) {
+                throw new RuntimeException('ZIP bundle not found.', 400);
             }
 
-            self::requireAuth();
-            self::requireAdmin();
-            self::requireCsrf();
-
-            // Ensure ZipArchive is available
-            if (!class_exists('\\ZipArchive')) {
-                http_response_code(500);
-                echo json_encode(['success' => false, 'error' => 'ZipArchive extension is required on the server.']);
-                return;
-            }
-
-            // Basic upload validation
-            if (empty($_FILES['bundle']) || !is_array($_FILES['bundle'])) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Missing uploaded bundle (field "bundle").']);
-                return;
-            }
-
-            $f = $_FILES['bundle'];
-
-            if (!empty($f['error']) && $f['error'] !== UPLOAD_ERR_OK) {
-                $msg = 'Upload error.';
-                switch ($f['error']) {
-                    case UPLOAD_ERR_INI_SIZE:
-                    case UPLOAD_ERR_FORM_SIZE:
-                        $msg = 'Uploaded file exceeds size limit.';
-                        break;
-                    case UPLOAD_ERR_PARTIAL:
-                        $msg = 'Uploaded file was only partially received.';
-                        break;
-                    case UPLOAD_ERR_NO_FILE:
-                        $msg = 'No file was uploaded.';
-                        break;
-                    default:
-                        $msg = 'Upload failed with error code ' . (int)$f['error'];
-                        break;
-                }
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => $msg]);
-                return;
-            }
-
-            $tmpName = $f['tmp_name'] ?? '';
-            if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Invalid uploaded file.']);
-                return;
-            }
-
-            // Guard against unexpectedly large bundles (e.g., >100MB)
-            $size = isset($f['size']) ? (int)$f['size'] : 0;
-            if ($size <= 0 || $size > 100 * 1024 * 1024) {
-                http_response_code(413);
-                echo json_encode(['success' => false, 'error' => 'Bundle size is invalid or too large (max 100MB).']);
-                return;
-            }
-
-            // Optional: require .zip extension by name (best-effort)
-            $origName = (string)($f['name'] ?? '');
             if ($origName !== '' && !preg_match('/\.zip$/i', $origName)) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Bundle must be a .zip file.']);
-                return;
+                throw new RuntimeException('Bundle must be a .zip file.', 400);
             }
 
-            // NEW: normalize to basename so C:\fakepath\FileRisePro-v1.2.1.zip works.
-            $basename = $origName;
-            if ($basename !== '') {
-                // Normalize slashes and then take basename
-                $basename = str_replace('\\', '/', $basename);
+            if ($origName !== '') {
+                // Normalize to basename so C:\fakepath\FileRisePro-v1.2.1.zip works.
+                $basename = str_replace('\\', '/', $origName);
                 $basename = basename($basename);
             }
 
             // Try to parse the bundle version from the *basename*
             // Supports: FileRisePro-v1.2.3.zip or FileRisePro_1.2.3.zip (case-insensitive)
-            $declaredVersion = null;
             if (
                 $basename !== '' &&
                 preg_match(
@@ -1205,38 +1209,18 @@ class AdminController
                 $declaredVersion = 'v' . $m[1];
             }
 
-            // Prepare temp working dir
-            $tempRoot = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR);
-            $workDir  = $tempRoot . DIRECTORY_SEPARATOR . 'filerise_pro_' . bin2hex(random_bytes(8));
-            if (!@mkdir($workDir, 0700, true)) {
-                http_response_code(500);
-                echo json_encode(['success' => false, 'error' => 'Failed to prepare temp dir.']);
-                return;
-            }
-
-            $zipPath = $workDir . DIRECTORY_SEPARATOR . 'bundle.zip';
-            if (!@move_uploaded_file($tmpName, $zipPath)) {
-                http_response_code(500);
-                echo json_encode(['success' => false, 'error' => 'Failed to move uploaded bundle.']);
-                return;
-            }
-
             $zip = new \ZipArchive();
             if ($zip->open($zipPath) !== true) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Failed to open ZIP bundle.']);
-                return;
+                throw new RuntimeException('Failed to open ZIP bundle.', 400);
             }
+            $zipOpened = true;
 
             $installed = [
                 'src'    => [],
                 'docs'   => [],
             ];
 
-            $projectRoot = rtrim(PROJECT_ROOT, DIRECTORY_SEPARATOR);
-
             // Where Pro bundle code lives (defaults to USERS_DIR . '/pro')
-            $projectRoot = rtrim(PROJECT_ROOT, DIRECTORY_SEPARATOR);
             $bundleRoot = defined('FR_PRO_BUNDLE_DIR')
                 ? rtrim(FR_PRO_BUNDLE_DIR, DIRECTORY_SEPARATOR)
                 : (rtrim(USERS_DIR, "/\\") . DIRECTORY_SEPARATOR . 'pro');
@@ -1311,24 +1295,18 @@ class AdminController
                 $dir = dirname($targetPath);
                 if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
                     fclose($stream);
-                    http_response_code(500);
-                    echo json_encode(['success' => false, 'error' => 'Failed to create destination directory for ' . $name]);
-                    return;
+                    throw new RuntimeException('Failed to create destination directory for ' . $name, 500);
                 }
 
                 $data = stream_get_contents($stream);
                 fclose($stream);
                 if ($data === false) {
-                    http_response_code(500);
-                    echo json_encode(['success' => false, 'error' => 'Failed to read data for ' . $name]);
-                    return;
+                    throw new RuntimeException('Failed to read data for ' . $name, 500);
                 }
 
                 // Always overwrite target file on install/upgrade
                 if (@file_put_contents($targetPath, $data) === false) {
-                    http_response_code(500);
-                    echo json_encode(['success' => false, 'error' => 'Failed to write ' . $name]);
-                    return;
+                    throw new RuntimeException('Failed to write ' . $name, 500);
                 }
 
                 @chmod($targetPath, 0644);
@@ -1341,12 +1319,11 @@ class AdminController
             }
 
             $zip->close();
+            $zipOpened = false;
 
-            // Best-effort cleanup; ignore failures
-            @unlink($zipPath);
-            @rmdir($workDir);
+            $cleanup();
 
-            // NEW: ensure OPcache picks up new Pro bundle code immediately
+            // Ensure OPcache picks up new Pro bundle code immediately
             if (function_exists('opcache_invalidate')) {
                 foreach ($installed['src'] as $pathInfo) {
                     // strip " (overwritten)" suffix if present
@@ -1369,19 +1346,303 @@ class AdminController
                 ? (FR_PRO_INFO['payload'] ?? null)
                 : null;
 
-            echo json_encode([
-                'success'    => true,
-                'message'    => 'Pro bundle installed.',
-                'installed'  => $installed,
-                'proActive'  => (bool)$proActive,
-                'proVersion' => $reportedVersion,
-                'proPayload' => $proPayload,
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return [
+                'status' => 200,
+                'body'   => [
+                    'success'    => true,
+                    'message'    => 'Pro bundle installed.',
+                    'installed'  => $installed,
+                    'proActive'  => (bool)$proActive,
+                    'proVersion' => $reportedVersion,
+                    'proPayload' => $proPayload,
+                ],
+            ];
+        } catch (\Throwable $e) {
+            if ($zipOpened && $zip instanceof \ZipArchive) {
+                $zip->close();
+            }
+            $cleanup();
+            $code = (int)$e->getCode();
+            $status = ($code >= 400 && $code < 600) ? $code : 500;
+            return [
+                'status' => $status,
+                'body'   => [
+                    'success' => false,
+                    'error'   => $e->getMessage(),
+                ],
+            ];
+        }
+    }
+
+    public function installProBundle(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            // Guard rails: method + auth + CSRF
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+                http_response_code(405);
+                echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+                return;
+            }
+
+            self::requireAuth();
+            self::requireAdmin();
+            self::requireCsrf();
+
+            // Ensure ZipArchive is available
+            if (!class_exists('\\ZipArchive')) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'ZipArchive extension is required on the server.']);
+                return;
+            }
+
+            // Basic upload validation
+            if (empty($_FILES['bundle']) || !is_array($_FILES['bundle'])) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Missing uploaded bundle (field "bundle").']);
+                return;
+            }
+
+            $f = $_FILES['bundle'];
+
+            if (!empty($f['error']) && $f['error'] !== UPLOAD_ERR_OK) {
+                $msg = 'Upload error.';
+                switch ($f['error']) {
+                    case UPLOAD_ERR_INI_SIZE:
+                    case UPLOAD_ERR_FORM_SIZE:
+                        $msg = 'Uploaded file exceeds size limit.';
+                        break;
+                    case UPLOAD_ERR_PARTIAL:
+                        $msg = 'Uploaded file was only partially received.';
+                        break;
+                    case UPLOAD_ERR_NO_FILE:
+                        $msg = 'No file was uploaded.';
+                        break;
+                    default:
+                        $msg = 'Upload failed with error code ' . (int)$f['error'];
+                        break;
+                }
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => $msg]);
+                return;
+            }
+
+            $tmpName = $f['tmp_name'] ?? '';
+            if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Invalid uploaded file.']);
+                return;
+            }
+
+            // Guard against unexpectedly large bundles (e.g., >100MB)
+            $size = isset($f['size']) ? (int)$f['size'] : 0;
+            if ($size <= 0 || $size > 100 * 1024 * 1024) {
+                http_response_code(413);
+                echo json_encode(['success' => false, 'error' => 'Bundle size is invalid or too large (max 100MB).']);
+                return;
+            }
+
+            // Prepare temp working dir
+            $tempRoot = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR);
+            $workDir  = $tempRoot . DIRECTORY_SEPARATOR . 'filerise_pro_' . bin2hex(random_bytes(8));
+            if (!@mkdir($workDir, 0700, true)) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to prepare temp dir.']);
+                return;
+            }
+
+            $zipPath = $workDir . DIRECTORY_SEPARATOR . 'bundle.zip';
+            if (!@move_uploaded_file($tmpName, $zipPath)) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to move uploaded bundle.']);
+                return;
+            }
+            $origName = (string)($f['name'] ?? '');
+            $result = $this->installProBundleFromZip($zipPath, $origName, $workDir);
+            http_response_code($result['status']);
+            echo json_encode($result['body'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         } catch (\Throwable $e) {
             http_response_code(500);
             echo json_encode([
                 'success' => false,
                 'error'   => 'Exception during bundle install: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    public function downloadProBundle(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+                http_response_code(405);
+                echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+                return;
+            }
+
+            self::requireAuth();
+            self::requireAdmin();
+            self::requireCsrf();
+
+            $licenseRaw = '';
+            if (defined('FR_PRO_LICENSE') && FR_PRO_LICENSE !== '') {
+                $licenseRaw = trim((string)FR_PRO_LICENSE);
+            }
+            if ($licenseRaw === '' && defined('PRO_LICENSE_FILE') && PRO_LICENSE_FILE && @is_file(PRO_LICENSE_FILE)) {
+                $json = @file_get_contents(PRO_LICENSE_FILE);
+                if ($json !== false) {
+                    $decoded = json_decode($json, true);
+                    if (is_array($decoded) && !empty($decoded['license'])) {
+                        $licenseRaw = trim((string)$decoded['license']);
+                    }
+                }
+            }
+            if ($licenseRaw === '' && defined('FR_PRO_LICENSE_FILE') && FR_PRO_LICENSE_FILE !== '' && @is_file(FR_PRO_LICENSE_FILE)) {
+                $licenseRaw = trim((string)file_get_contents(FR_PRO_LICENSE_FILE));
+            }
+
+            if ($licenseRaw === '') {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'No Pro license found. Save a license first.']);
+                return;
+            }
+
+            if (!class_exists('\\ZipArchive')) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'ZipArchive extension is required on the server.']);
+                return;
+            }
+
+            $tempRoot = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR);
+            $workDir  = $tempRoot . DIRECTORY_SEPARATOR . 'filerise_pro_dl_' . bin2hex(random_bytes(8));
+            if (!@mkdir($workDir, 0700, true)) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to prepare temp dir.']);
+                return;
+            }
+
+            $zipPath = $workDir . DIRECTORY_SEPARATOR . 'bundle.zip';
+            $remoteUrl = 'https://filerise.net/pro/download_bundle.php';
+            $origName = '';
+
+            $downloadOk = false;
+            $httpCode = null;
+            $contentType = '';
+            $headers = [];
+
+            if (function_exists('curl_init')) {
+                $fp = @fopen($zipPath, 'wb');
+                if (!$fp) {
+                    @rmdir($workDir);
+                    http_response_code(500);
+                    echo json_encode(['success' => false, 'error' => 'Failed to open temp file.']);
+                    return;
+                }
+
+                $ch = curl_init($remoteUrl);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(['license' => $licenseRaw]));
+                curl_setopt($ch, CURLOPT_FILE, $fp);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+                curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($ch, $header) use (&$headers): int {
+                    $len = strlen($header);
+                    $parts = explode(':', $header, 2);
+                    if (count($parts) === 2) {
+                        $key = strtolower(trim($parts[0]));
+                        $value = trim($parts[1]);
+                        if ($key !== '') {
+                            $headers[$key] = $value;
+                        }
+                    }
+                    return $len;
+                });
+
+                $ok = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $contentType = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+                curl_close($ch);
+                fclose($fp);
+
+                $downloadOk = ($ok !== false && $httpCode === 200);
+            } else {
+                $context = stream_context_create([
+                    'http' => [
+                        'method'  => 'POST',
+                        'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
+                        'content' => http_build_query(['license' => $licenseRaw]),
+                        'timeout' => 120,
+                    ],
+                ]);
+                $data = @file_get_contents($remoteUrl, false, $context);
+                $downloadOk = ($data !== false);
+                if (isset($http_response_header) && is_array($http_response_header)) {
+                    foreach ($http_response_header as $line) {
+                        if (preg_match('/^HTTP\/\S+\s+(\d{3})/', $line, $m)) {
+                            $httpCode = (int)$m[1];
+                        } elseif (strpos($line, ':') !== false) {
+                            [$k, $v] = explode(':', $line, 2);
+                            $headers[strtolower(trim($k))] = trim($v);
+                        }
+                    }
+                }
+                if ($downloadOk) {
+                    @file_put_contents($zipPath, $data);
+                }
+                $downloadOk = ($downloadOk && $httpCode === 200);
+            }
+
+            if (isset($headers['content-disposition']) &&
+                preg_match('/filename="?([^\";]+)"?/i', $headers['content-disposition'], $m)) {
+                $origName = $m[1];
+            }
+
+            if (!$downloadOk) {
+                $msg = '';
+                if (is_file($zipPath)) {
+                    $snippet = @file_get_contents($zipPath, false, null, 0, 2048);
+                    if ($snippet !== false) {
+                        $msg = trim($snippet);
+                    }
+                }
+                @unlink($zipPath);
+                @rmdir($workDir);
+                $label = $httpCode ? "HTTP {$httpCode}" : 'Download failed';
+                http_response_code(502);
+                echo json_encode([
+                    'success' => false,
+                    'error'   => $msg !== '' ? $msg : $label,
+                ]);
+                return;
+            }
+
+            $size = @filesize($zipPath);
+            if (!is_int($size) || $size <= 0) {
+                @unlink($zipPath);
+                @rmdir($workDir);
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Downloaded bundle is empty.']);
+                return;
+            }
+            if ($size > 100 * 1024 * 1024) {
+                @unlink($zipPath);
+                @rmdir($workDir);
+                http_response_code(413);
+                echo json_encode(['success' => false, 'error' => 'Downloaded bundle is too large (max 100MB).']);
+                return;
+            }
+
+            $result = $this->installProBundleFromZip($zipPath, $origName, $workDir);
+            http_response_code($result['status']);
+            echo json_encode($result['body'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error'   => 'Exception during bundle download: ' . $e->getMessage(),
             ]);
         }
     }

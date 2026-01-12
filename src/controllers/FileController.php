@@ -9,6 +9,8 @@ require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/AuditHook.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
+require_once PROJECT_ROOT . '/src/lib/StorageRegistry.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class FileController
 {
@@ -38,10 +40,13 @@ class FileController
     private function getMetadataPath(string $folder): string
     {
         $folder = trim($folder);
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
         if ($folder === '' || strtolower($folder) === 'root') {
-            return META_DIR . 'root_metadata.json';
+            return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'root_metadata.json';
         }
-        return META_DIR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+        return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
     }
 
     private function loadFolderMetadata(string $folder): array
@@ -72,6 +77,54 @@ class FileController
         } catch (\Throwable $e) { /* ignore */
         }
         return [];
+    }
+
+    private function normalizeSourceId($id): string
+    {
+        $id = trim((string)$id);
+        if ($id === '' || !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
+            return '';
+        }
+        return $id;
+    }
+
+    private function withSourceContext(string $sourceId, callable $fn, bool $allowDisabled = false)
+    {
+        if (!class_exists('SourceContext') || $sourceId === '') {
+            return $fn();
+        }
+        $prev = SourceContext::getActiveId();
+        SourceContext::setActiveId($sourceId, false, $allowDisabled);
+        try {
+            return $fn();
+        } finally {
+            SourceContext::setActiveId($prev, false);
+        }
+    }
+
+    private function crossSourceEncryptedError(string $sourceId, string $sourceFolder, string $destSourceId, string $destFolder): ?string
+    {
+        if (!class_exists('SourceContext')) {
+            return null;
+        }
+        $srcEncrypted = (bool)$this->withSourceContext($sourceId, function () use ($sourceFolder) {
+            try {
+                return FolderCrypto::isEncryptedOrAncestor($sourceFolder);
+            } catch (\Throwable $e) {
+                return false;
+            }
+        });
+        $dstEncrypted = (bool)$this->withSourceContext($destSourceId, function () use ($destFolder) {
+            try {
+                return FolderCrypto::isEncryptedOrAncestor($destFolder);
+            } catch (\Throwable $e) {
+                return false;
+            }
+        });
+        if ($srcEncrypted || $dstEncrypted) {
+            return "Encrypted folders are not supported for cross-source operations.";
+        }
+        return null;
     }
 
     private static function folderOfPath(string $path): string
@@ -236,7 +289,7 @@ class FileController
         return $ok ? null : "Forbidden: folder scope violation.";
     }
 
-    private function spawnZipWorker(string $token, string $tokFile, string $logDir): array
+    private function spawnZipWorker(string $token, string $tokFile, string $logDir, string $sourceId = ''): array
     {
         $worker = realpath(PROJECT_ROOT . '/src/cli/zip_worker.php');
         if (!$worker || !is_file($worker)) {
@@ -267,13 +320,17 @@ class FileController
         $logFile = $logDir . DIRECTORY_SEPARATOR . 'WORKER-' . $token . '.log';
 
         // Ensure TMPDIR is on the same FS as the final zip; actually apply it to the child process.
-        $tmpDir = rtrim((string)META_DIR, '/\\') . '/ziptmp';
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $tmpDir = rtrim($metaRoot, '/\\') . '/ziptmp';
         @mkdir($tmpDir, 0775, true);
 
         // Build one sh -c string so env + nohup + echo $! are in the same shell
         $cmdStr =
             'export TMPDIR=' . escapeshellarg($tmpDir) . ' ; ' .
             'nohup ' . escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' ' . escapeshellarg($token) .
+            ($sourceId !== '' ? (' ' . escapeshellarg($sourceId)) : '') .
             ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
 
         $pid = @shell_exec('/bin/sh -c ' . escapeshellarg($cmdStr));
@@ -595,6 +652,127 @@ class FileController
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
 
+            $rawSourceId = $data['sourceId'] ?? '';
+            $rawDestId = $data['destSourceId'] ?? '';
+            $sourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+                ? $this->normalizeSourceId($rawSourceId !== '' ? $rawSourceId : SourceContext::getActiveId())
+                : '';
+            $destSourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+                ? $this->normalizeSourceId($rawDestId !== '' ? $rawDestId : $sourceId)
+                : '';
+
+            if (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === '')) {
+                $this->_jsonOut(["error" => "Invalid source id."], 400);
+                return;
+            }
+
+            $crossSource = ($sourceId !== '' && $destSourceId !== '' && $sourceId !== $destSourceId);
+            if ($crossSource) {
+                $sourceInfo = SourceContext::getSourceById($sourceId);
+                $destInfo = SourceContext::getSourceById($destSourceId);
+                if (!$sourceInfo || !$destInfo) {
+                    $this->_jsonOut(["error" => "Invalid source."], 400);
+                    return;
+                }
+                if (!$this->isAdmin($userPermissions)) {
+                    if (empty($sourceInfo['enabled']) || empty($destInfo['enabled'])) {
+                        $this->_jsonOut(["error" => "Source is disabled."], 403);
+                        return;
+                    }
+                }
+                if (!empty($destInfo['readOnly'])) {
+                    $this->_jsonOut(["error" => "Destination source is read-only."], 403);
+                    return;
+                }
+
+                // --- Permission gates: source ---------------------------------
+                $srcErr = $this->withSourceContext($sourceId, function () use ($username, $userPermissions, $sourceFolder, $files) {
+                    $hasSourceView = ACL::canReadOwn($username, $userPermissions, $sourceFolder)
+                        || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions);
+                    if (!$hasSourceView) {
+                        return "Forbidden: no read access to source";
+                    }
+
+                    $needSrcScope = ACL::canRead($username, $userPermissions, $sourceFolder) ? 'read' : 'read_own';
+                    $sv = $this->enforceFolderScope($sourceFolder, $username, $userPermissions, $needSrcScope);
+                    if ($sv) {
+                        return $sv;
+                    }
+
+                    $ignoreOwnership = $this->isAdmin($userPermissions)
+                        || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+                    if (
+                        !$ignoreOwnership
+                        && !ACL::canRead($username, $userPermissions, $sourceFolder)
+                        && ACL::hasGrant($username, $sourceFolder, 'read_own')
+                    ) {
+                        $ownErr = $this->enforceScopeAndOwnership($sourceFolder, $files, $username, $userPermissions);
+                        if ($ownErr) {
+                            return $ownErr;
+                        }
+                    }
+                    return null;
+                });
+                if ($srcErr) {
+                    $this->_jsonOut(["error" => $srcErr], 403);
+                    return;
+                }
+
+                // --- Permission gates: destination -----------------------------
+                $dstErr = $this->withSourceContext($destSourceId, function () use ($username, $userPermissions, $destinationFolder) {
+                    $hasDestCreate = ACL::canCreate($username, $userPermissions, $destinationFolder)
+                        || $this->ownsFolderOrAncestor($destinationFolder, $username, $userPermissions);
+                    if (!$hasDestCreate) {
+                        return "Forbidden: no write access to destination";
+                    }
+                    $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions, 'create');
+                    if ($dv) {
+                        return $dv;
+                    }
+                    return null;
+                });
+                if ($dstErr) {
+                    $this->_jsonOut(["error" => $dstErr], 403);
+                    return;
+                }
+
+                $encErr = $this->crossSourceEncryptedError($sourceId, $sourceFolder, $destSourceId, $destinationFolder);
+                if ($encErr) {
+                    $this->_jsonOut(["error" => $encErr], 400);
+                    return;
+                }
+
+                if (!empty($userPermissions['readOnly'])) {
+                    $this->_jsonOut(["error" => "Account is read-only."], 403);
+                    return;
+                }
+                if (!empty($userPermissions['disableUpload'])) {
+                    $this->_jsonOut(["error" => "Uploads are disabled for your account."], 403);
+                    return;
+                }
+
+                $result = FileModel::copyFilesAcrossSources($sourceId, $destSourceId, $sourceFolder, $destinationFolder, $files);
+                if (isset($result['success'])) {
+                    foreach ($files as $name) {
+                        $from = ($sourceFolder === 'root') ? $name : ($sourceFolder . '/' . $name);
+                        $to   = ($destinationFolder === 'root') ? $name : ($destinationFolder . '/' . $name);
+                        AuditHook::log('file.copy', [
+                            'user'   => $username,
+                            'folder' => $destinationFolder,
+                            'from'   => $from,
+                            'to'     => $to,
+                        ]);
+                    }
+                }
+                $this->_jsonOut($result);
+                return;
+            }
+
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
+
             // --- Permission gates (granular) ------------------------------------
             // Source: own-only view is enough to copy (we'll enforce ownership below if no full read)
             $hasSourceView = ACL::canReadOwn($username, $userPermissions, $sourceFolder)
@@ -644,6 +822,10 @@ class FileController
             }
 
             // Account flags: copy writes new objects into destination
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
             if (!empty($userPermissions['readOnly'])) {
                 $this->_jsonOut(["error" => "Account is read-only."], 403);
                 return;
@@ -789,6 +971,135 @@ class FileController
             $username         = $_SESSION['username'] ?? '';
             $userPermissions  = $this->loadPerms($username);
 
+            $rawSourceId = $data['sourceId'] ?? '';
+            $rawDestId = $data['destSourceId'] ?? '';
+            $sourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+                ? $this->normalizeSourceId($rawSourceId !== '' ? $rawSourceId : SourceContext::getActiveId())
+                : '';
+            $destSourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+                ? $this->normalizeSourceId($rawDestId !== '' ? $rawDestId : $sourceId)
+                : '';
+
+            if (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === '')) {
+                $this->_jsonOut(["error" => "Invalid source id."], 400);
+                return;
+            }
+
+            $crossSource = ($sourceId !== '' && $destSourceId !== '' && $sourceId !== $destSourceId);
+            if ($crossSource) {
+                $sourceInfo = SourceContext::getSourceById($sourceId);
+                $destInfo = SourceContext::getSourceById($destSourceId);
+                if (!$sourceInfo || !$destInfo) {
+                    $this->_jsonOut(["error" => "Invalid source."], 400);
+                    return;
+                }
+                if (!$this->isAdmin($userPermissions)) {
+                    if (empty($sourceInfo['enabled']) || empty($destInfo['enabled'])) {
+                        $this->_jsonOut(["error" => "Source is disabled."], 403);
+                        return;
+                    }
+                }
+                if (!empty($sourceInfo['readOnly'])) {
+                    $this->_jsonOut(["error" => "Source is read-only."], 403);
+                    return;
+                }
+                if (!empty($destInfo['readOnly'])) {
+                    $this->_jsonOut(["error" => "Destination source is read-only."], 403);
+                    return;
+                }
+
+                $srcErr = $this->withSourceContext($sourceId, function () use ($username, $userPermissions, $sourceFolder, $files) {
+                    $hasSourceView = ACL::canReadOwn($username, $userPermissions, $sourceFolder)
+                        || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions);
+                    if (!$hasSourceView) {
+                        return "Forbidden: no read access to source";
+                    }
+
+                    $hasSourceDelete = ACL::canDelete($username, $userPermissions, $sourceFolder)
+                        || $this->ownsFolderOrAncestor($sourceFolder, $username, $userPermissions);
+                    if (!$hasSourceDelete) {
+                        return "Forbidden: no delete permission on source";
+                    }
+
+                    $sv = $this->enforceFolderScope($sourceFolder, $username, $userPermissions, 'delete');
+                    if ($sv) {
+                        return $sv;
+                    }
+
+                    $ignoreOwnership = $this->isAdmin($userPermissions)
+                        || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+                    if (
+                        !$ignoreOwnership
+                        && !ACL::canRead($username, $userPermissions, $sourceFolder)
+                        && ACL::hasGrant($username, $sourceFolder, 'read_own')
+                    ) {
+                        $ownErr = $this->enforceScopeAndOwnership($sourceFolder, $files, $username, $userPermissions);
+                        if ($ownErr) {
+                            return $ownErr;
+                        }
+                    }
+
+                    return null;
+                });
+                if ($srcErr) {
+                    $this->_jsonOut(["error" => $srcErr], 403);
+                    return;
+                }
+
+                $dstErr = $this->withSourceContext($destSourceId, function () use ($username, $userPermissions, $destinationFolder) {
+                    $hasDestMove = ACL::canMove($username, $userPermissions, $destinationFolder)
+                        || $this->ownsFolderOrAncestor($destinationFolder, $username, $userPermissions);
+                    if (!$hasDestMove) {
+                        return "Forbidden: no move permission on destination";
+                    }
+                    $dv = $this->enforceFolderScope($destinationFolder, $username, $userPermissions, 'move');
+                    if ($dv) {
+                        return $dv;
+                    }
+                    return null;
+                });
+                if ($dstErr) {
+                    $this->_jsonOut(["error" => $dstErr], 403);
+                    return;
+                }
+
+                $encErr = $this->crossSourceEncryptedError($sourceId, $sourceFolder, $destSourceId, $destinationFolder);
+                if ($encErr) {
+                    $this->_jsonOut(["error" => $encErr], 400);
+                    return;
+                }
+
+                if (!empty($userPermissions['readOnly'])) {
+                    $this->_jsonOut(["error" => "Account is read-only."], 403);
+                    return;
+                }
+                if (!empty($userPermissions['disableUpload'])) {
+                    $this->_jsonOut(["error" => "Uploads are disabled for your account."], 403);
+                    return;
+                }
+
+                $result = FileModel::moveFilesAcrossSources($sourceId, $destSourceId, $sourceFolder, $destinationFolder, $files);
+                if (isset($result['success'])) {
+                    foreach ($files as $name) {
+                        $from = ($sourceFolder === 'root') ? $name : ($sourceFolder . '/' . $name);
+                        $to   = ($destinationFolder === 'root') ? $name : ($destinationFolder . '/' . $name);
+                        AuditHook::log('file.move', [
+                            'user'   => $username,
+                            'folder' => $destinationFolder,
+                            'from'   => $from,
+                            'to'     => $to,
+                        ]);
+                    }
+                }
+                $this->_jsonOut($result);
+                return;
+            }
+
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
+
             // --- Permission gates (granular) ------------------------------------
             // Must be able to at least SEE the source and DELETE there
             $hasSourceView = ACL::canReadOwn($username, $userPermissions, $sourceFolder)
@@ -894,6 +1205,11 @@ class FileController
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
 
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
+
             // Need granular rename (or ancestor-owner)
             if (!(ACL::canRename($username, $userPermissions, $folder))) {
                 $this->_jsonOut(["error" => "Forbidden: no rename rights"], 403);
@@ -968,6 +1284,11 @@ class FileController
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
 
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
+
             // Need write (or ancestor-owner)
             if (!(ACL::canEdit($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
                 $this->_jsonOut(["error" => "Forbidden: no full write access"], 403);
@@ -982,10 +1303,11 @@ class FileController
             }
 
             // If overwriting, enforce ownership for non-admins (unless folder owner)
-            $baseDir = rtrim(UPLOAD_DIR, '/\\');
+            $storage = StorageRegistry::getAdapter();
+            $baseDir = rtrim((class_exists('SourceContext') ? SourceContext::uploadRoot() : (string)UPLOAD_DIR), '/\\');
             $dir = ($folder === 'root') ? $baseDir : $baseDir . DIRECTORY_SEPARATOR . $folder;
             $path = $dir . DIRECTORY_SEPARATOR . $fileName;
-            if (is_file($path)) {
+            if ($storage->stat($path) !== null) {
                 $ignoreOwnership = $this->isAdmin($userPermissions)
                     || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false))
                     || ACL::isOwner($username, $userPermissions, $folder)
@@ -1166,6 +1488,214 @@ class FileController
         exit;
     }
 
+    private function readStreamChunk($stream, int $length)
+    {
+        if (is_resource($stream)) {
+            return fread($stream, $length);
+        }
+        if (is_object($stream) && method_exists($stream, 'read')) {
+            return $stream->read($length);
+        }
+        if (is_object($stream) && method_exists($stream, 'getContents')) {
+            return $stream->getContents();
+        }
+        return false;
+    }
+
+    private function closeStream($stream): void
+    {
+        if (is_resource($stream)) {
+            fclose($stream);
+            return;
+        }
+        if (is_object($stream) && method_exists($stream, 'close')) {
+            $stream->close();
+        }
+    }
+
+    private function streamAdapterWithRange(
+        StorageAdapterInterface $storage,
+        string $path,
+        string $downloadName,
+        string $mimeType,
+        bool $inline
+    ): void {
+        $stat = $storage->stat($path);
+        if (!$stat || ($stat['type'] ?? '') !== 'file') {
+            if (!$stat || ($stat['type'] ?? '') === '') {
+                $probe = $storage->openReadStream($path, 1, 0);
+                if ($probe === false) {
+                    http_response_code(404);
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['error' => 'File not found']);
+                    exit;
+                }
+                $this->closeStream($probe);
+                $stat = [
+                    'type' => 'file',
+                    'size' => 0,
+                    'sizeUnknown' => true,
+                ];
+            } else {
+                http_response_code(404);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['error' => 'File not found']);
+                exit;
+            }
+        }
+
+        $size = (int)($stat['size'] ?? 0);
+        $sizeUnknown = !empty($stat['sizeUnknown']);
+        $start = 0;
+        $end   = $size > 0 ? $size - 1 : 0;
+
+        if ($size < 0) {
+            $size = 0;
+            $end  = 0;
+        }
+
+        // Close session + disable output buffering for streaming
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+        if (function_exists('apache_setenv')) {
+            @apache_setenv('no-gzip', '1');
+        }
+        @ini_set('zlib.output_compression', '0');
+        @ini_set('output_buffering', 'off');
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        $disposition = $inline ? 'inline' : 'attachment';
+        $mime = $mimeType ?: 'application/octet-stream';
+
+        header('X-Content-Type-Options: nosniff');
+        header('Accept-Ranges: ' . ($sizeUnknown ? 'none' : 'bytes'));
+        header("Content-Type: {$mime}");
+        header("Content-Disposition: {$disposition}; filename=\"" . basename($downloadName) . "\"");
+
+        if ($sizeUnknown) {
+            http_response_code(200);
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+                exit;
+            }
+
+            $stream = $storage->openReadStream($path, null, 0);
+            if ($stream === false) {
+                http_response_code(500);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['error' => 'Unable to open file stream.']);
+                exit;
+            }
+
+            $chunkSize = 8192;
+            while (true) {
+                $buffer = $this->readStreamChunk($stream, $chunkSize);
+                if ($buffer === false || $buffer === '') {
+                    break;
+                }
+                echo $buffer;
+                flush();
+
+                if (connection_aborted()) {
+                    break;
+                }
+            }
+
+            $this->closeStream($stream);
+            exit;
+        }
+
+        $length = $size;
+        $rangeHeader = $_SERVER['HTTP_RANGE'] ?? '';
+        if ($rangeHeader !== '' && preg_match('/bytes=\\s*(\\d*)-(\\d*)/i', $rangeHeader, $m)) {
+            $rangeStart = $m[1];
+            $rangeEnd = $m[2];
+
+            if ($size <= 0) {
+                http_response_code(416);
+                header('Content-Range: bytes */0');
+                exit;
+            }
+
+            if ($rangeStart !== '' || $rangeEnd !== '') {
+                if ($rangeStart === '' && $rangeEnd !== '') {
+                    $suffixLen = (int)$rangeEnd;
+                    if ($suffixLen <= 0) {
+                        http_response_code(416);
+                        header("Content-Range: bytes */{$size}");
+                        exit;
+                    }
+                    $start = max($size - $suffixLen, 0);
+                    $end = $size - 1;
+                } else {
+                    $start = (int)$rangeStart;
+                    $end = ($rangeEnd !== '') ? (int)$rangeEnd : ($size - 1);
+                }
+
+                if ($start < 0 || $start >= $size || $end < $start) {
+                    http_response_code(416);
+                    header("Content-Range: bytes */{$size}");
+                    exit;
+                }
+                if ($end >= $size) {
+                    $end = $size - 1;
+                }
+
+                $length = $end - $start + 1;
+
+                http_response_code(206);
+                header("Content-Range: bytes {$start}-{$end}/{$size}");
+                header("Content-Length: {$length}");
+            } else {
+                http_response_code(200);
+                if ($size > 0) {
+                    header("Content-Length: {$size}");
+                }
+            }
+        } else {
+            http_response_code(200);
+            if ($size > 0) {
+                header("Content-Length: {$size}");
+            }
+        }
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+            exit;
+        }
+
+        $streamLength = ($length > 0) ? $length : null;
+        $stream = $storage->openReadStream($path, $streamLength, $start);
+        if ($stream === false) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Unable to open file stream.']);
+            exit;
+        }
+
+        $bytesToSend = $length;
+        $chunkSize = 8192;
+
+        while ($bytesToSend > 0) {
+            $readSize = ($bytesToSend > $chunkSize) ? $chunkSize : $bytesToSend;
+            $buffer = $this->readStreamChunk($stream, $readSize);
+            if ($buffer === false || $buffer === '') {
+                break;
+            }
+            echo $buffer;
+            flush();
+            $bytesToSend -= strlen($buffer);
+
+            if (connection_aborted()) {
+                break;
+            }
+        }
+
+        $this->closeStream($stream);
+        exit;
+    }
+
     /**
      * Stream an encrypted-at-rest file by decrypting it on the fly (no Range support).
      *
@@ -1284,6 +1814,39 @@ class FileController
         $username = $_SESSION['username'] ?? '';
         $perms    = $this->loadPerms($username);
 
+        $sourceId = '';
+        $allowDisabled = false;
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $rawSourceId = trim((string)($_GET['sourceId'] ?? ''));
+            if ($rawSourceId !== '') {
+                $sourceId = $this->normalizeSourceId($rawSourceId);
+                if ($sourceId === '') {
+                    http_response_code(400);
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(["error" => "Invalid source id."]);
+                    exit;
+                }
+                $info = SourceContext::getSourceById($sourceId);
+                if (!$info) {
+                    http_response_code(400);
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(["error" => "Invalid source."]);
+                    exit;
+                }
+                $allowDisabled = $this->isAdmin($perms);
+                if (!$allowDisabled && empty($info['enabled'])) {
+                    http_response_code(403);
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(["error" => "Source is disabled."]);
+                    exit;
+                }
+            }
+        }
+
+        $runner = function () use ($file, $folder, $inlineParam, $username, $perms) {
+            $storage = StorageRegistry::getAdapter();
+            $isLocal = $storage->isLocal();
+
         $ignoreOwnership = $this->isAdmin($perms)
             || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
 
@@ -1322,6 +1885,7 @@ class FileController
 
         $realFilePath = $downloadInfo['filePath'];
         $mimeType     = $downloadInfo['mimeType'];
+        $downloadName = $downloadInfo['downloadName'] ?? basename($realFilePath);
 
         $ext   = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
         $isSvg = ($ext === 'svg' || $ext === 'svgz');
@@ -1399,6 +1963,10 @@ class FileController
             ]);
         }
 
+        if (!$isLocal) {
+            $this->streamAdapterWithRange($storage, $realFilePath, $downloadName, $mimeType, $inline);
+        }
+
         // Encrypted-at-rest files: decrypt on download (no Range)
         $isEncryptedFile = false;
         try {
@@ -1413,6 +1981,15 @@ class FileController
 
         // Stream with proper Range support for video/audio seeking
         $this->streamFileWithRange($realFilePath, basename($realFilePath), $mimeType, $inline);
+        };
+
+        if ($sourceId !== '') {
+            $this->withSourceContext($sourceId, $runner, $allowDisabled);
+            return;
+        }
+
+        $runner();
+        return;
     }
 
     public function zipStatus()
@@ -1432,7 +2009,10 @@ class FileController
             return;
         }
 
-        $tokFile = rtrim((string)META_DIR, '/\\') . '/ziptmp/.tokens/' . $token . '.json';
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $tokFile = rtrim($metaRoot, '/\\') . '/ziptmp/.tokens/' . $token . '.json';
         if (!is_file($tokFile)) {
             http_response_code(404);
             header('Content-Type: application/json');
@@ -1493,7 +2073,10 @@ class FileController
             return;
         }
 
-        $tokFile = rtrim((string)META_DIR, '/\\') . '/ziptmp/.tokens/' . $token . '.json';
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $tokFile = rtrim($metaRoot, '/\\') . '/ziptmp/.tokens/' . $token . '.json';
         if (!is_file($tokFile)) {
             http_response_code(404);
             echo "Not found";
@@ -1509,7 +2092,7 @@ class FileController
         }
         $zip = (string)($job['zipPath'] ?? '');
         $zipReal = realpath($zip);
-        $root = realpath(rtrim((string)META_DIR, '/\\') . '/ziptmp');
+        $root = realpath(rtrim($metaRoot, '/\\') . '/ziptmp');
         if (!$zipReal || !$root || strpos($zipReal, $root) !== 0 || !is_file($zipReal)) {
             http_response_code(404);
             echo "Not found";
@@ -1561,6 +2144,12 @@ class FileController
                 return;
             }
 
+            $storage = StorageRegistry::getAdapter();
+            if (!$storage->isLocal()) {
+                $this->_jsonOut(["error" => "ZIP operations are not supported for remote storage."], 400);
+                return;
+            }
+
             $data = $this->_readJsonBody();
             if (!is_array($data) || !isset($data['folder'], $data['files']) || !is_array($data['files'])) {
                 $this->_jsonOut(["error" => "Invalid input."], 400);
@@ -1576,6 +2165,7 @@ class FileController
 
             $username = $_SESSION['username'] ?? '';
             $perms    = $this->loadPerms($username);
+            $sourceId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
 
             // Optional zip gate by account flag
             if (!$this->isAdmin($perms) && !empty($perms['disableZip'])) {
@@ -1609,7 +2199,10 @@ class FileController
                 }
             }
 
-            $root   = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+            $metaRoot = class_exists('SourceContext')
+                ? SourceContext::metaRoot()
+                : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+            $root   = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
             $tokDir = $root . DIRECTORY_SEPARATOR . '.tokens';
             $logDir = $root . DIRECTORY_SEPARATOR . '.logs';
             if (!is_dir($tokDir)) @mkdir($tokDir, 0700, true);
@@ -1665,6 +2258,7 @@ class FileController
                 'user'       => $username,
                 'folder'     => $folder,
                 'files'      => array_values($files),
+                'sourceId'   => $sourceId,
                 'status'     => 'queued',
                 'ctime'      => time(),
                 'startedAt'  => null,
@@ -1678,7 +2272,7 @@ class FileController
             }
 
             // Robust spawn (detect php CLI, log, record PID)
-            $spawn = $this->spawnZipWorker($token, $tokFile, $logDir);
+            $spawn = $this->spawnZipWorker($token, $tokFile, $logDir, $sourceId);
             if (!$spawn['ok']) {
                 $job['status'] = 'error';
                 $job['error']  = 'Spawn failed: ' . $spawn['error'];
@@ -1707,6 +2301,12 @@ class FileController
             if (!$this->_checkCsrf()) return;
             if (!$this->_requireAuth()) return;
 
+            $storage = StorageRegistry::getAdapter();
+            if (!$storage->isLocal()) {
+                $this->_jsonOut(["error" => "ZIP operations are not supported for remote storage."], 400);
+                return;
+            }
+
             $data = $this->_readJsonBody();
             if (!is_array($data) || !isset($data['folder'], $data['files']) || !is_array($data['files'])) {
                 $this->_jsonOut(["error" => "Invalid input."], 400);
@@ -1721,6 +2321,11 @@ class FileController
 
             $username = $_SESSION['username'] ?? '';
             $perms    = $this->loadPerms($username);
+
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
 
             // must be able to write into target folder (or be ancestor-owner)
             if (!(ACL::canExtract($username, $perms, $folder) || $this->ownsFolderOrAncestor($folder, $username, $perms))) {
@@ -1757,6 +2362,8 @@ class FileController
     public function snippet(): void
     {
         header('Content-Type: application/json; charset=utf-8');
+
+        $storage = StorageRegistry::getAdapter();
 
         // Session -> snapshot user + perms -> release lock
         if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -1817,6 +2424,58 @@ class FileController
         }
 
         $fullPath = $info['filePath'] ?? null;
+        if (!$storage->isLocal()) {
+            if (!$fullPath || !$storage->stat($fullPath)) {
+                http_response_code(404);
+                echo json_encode(['error' => 'File not found or not readable.']);
+                return;
+            }
+
+            $maxChars  = 1200;
+            $truncated = false;
+            $snippet   = '';
+
+            $ext = strtolower(pathinfo((string)$fullPath, PATHINFO_EXTENSION));
+            $textExts = [
+                'txt',
+                'text',
+                'md',
+                'markdown',
+                'log',
+                'csv',
+                'tsv',
+                'tab',
+                'json',
+                'yml',
+                'yaml',
+                'xml',
+                'ini',
+                'cfg',
+                'conf',
+                'config',
+                'html',
+                'htm',
+                'css',
+                'js',
+                'ts',
+                'php',
+            ];
+
+            if (in_array($ext, $textExts, true)) {
+                $raw = $storage->read((string)$fullPath, 64 * 1024, 0);
+                if ($raw !== false) {
+                    $text = $this->normalizeSnippetText($raw);
+                    $snippet = $this->mbSubstrSafe($text, $maxChars, $truncated);
+                }
+            }
+
+            echo json_encode([
+                'snippet'   => trim($snippet),
+                'truncated' => $truncated,
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
         if (!$fullPath || !is_file($fullPath) || !is_readable($fullPath)) {
             http_response_code(404);
             echo json_encode(['error' => 'File not found or not readable.']);
@@ -1972,14 +2631,94 @@ class FileController
             }
         } catch (\Throwable $e) { /* ignore */ }
 
-        $filePath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $storage = StorageRegistry::getAdapter();
+        if (!$storage->isLocal()) {
+            $folderKey = ($folder === '' || strtolower($folder) === 'root') ? 'root' : $folder;
+            $info = FileModel::getDownloadInfo($folderKey, $file);
+            if (!is_array($info) || !empty($info['error'] ?? null)) {
+                http_response_code(404);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "File not found."]);
+                exit;
+            }
+
+            $realFilePath = (string)$info['filePath'];
+            $mimeType = (string)$info['mimeType'];
+            $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
+
+            // Clear any buffered output so headers + binary stream are clean
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+
+            header('X-Content-Type-Options: nosniff');
+            header("Content-Security-Policy: sandbox; default-src 'none'; base-uri 'none'; form-action 'none'");
+
+            header_remove('Content-Type');
+            header_remove('Content-Disposition');
+
+            $downloadName = (string)($info['downloadName'] ?? basename($realFilePath));
+            $downloadName = str_replace(["\r", "\n"], '', $downloadName);
+            $downloadNameStar = rawurlencode($downloadName);
+
+            $rasterMime = [
+                'jpg'  => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png'  => 'image/png',
+                'gif'  => 'image/gif',
+                'bmp'  => 'image/bmp',
+                'webp' => 'image/webp',
+                'ico'  => 'image/x-icon',
+            ];
+
+            $inline = false;
+            if ($ext === 'svg' || $ext === 'svgz' || $mimeType === 'image/svg+xml') {
+                $mimeType = 'application/octet-stream';
+                $inline = false;
+            } elseif (isset($rasterMime[$ext])) {
+                $mimeType = $rasterMime[$ext];
+                $inline = true;
+            }
+
+            if ($inline) {
+                header('Content-Type: ' . $mimeType);
+                header("Content-Disposition: inline; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+            } else {
+                header('Content-Type: ' . ($mimeType ?: 'application/octet-stream'));
+                header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+            }
+
+            header("Cache-Control: no-store, no-cache, must-revalidate");
+            header("Pragma: no-cache");
+
+            $stat = $storage->stat($realFilePath);
+            $size = (int)($stat['size'] ?? 0);
+            if ($size > 0) {
+                header('Content-Length: ' . $size);
+            }
+
+            AuditHook::log('file.download', [
+                'user'   => 'share:' . $token,
+                'source' => 'share',
+                'folder' => $folderKey,
+                'path'   => ($folderKey === 'root') ? $file : ($folderKey . '/' . $file),
+                'meta'   => [
+                    'token' => $token,
+                ],
+            ]);
+
+            $this->streamAdapterWithRange($storage, $realFilePath, $downloadName, $mimeType, $inline);
+        }
+
+        $uploadRoot = class_exists('SourceContext') ? SourceContext::uploadRoot() : (string)UPLOAD_DIR;
+        $filePath = rtrim($uploadRoot, '/\\') . DIRECTORY_SEPARATOR;
         if (!empty($folder) && strtolower($folder) !== 'root') {
             $filePath .= $folder . DIRECTORY_SEPARATOR;
         }
         $filePath .= $file;
 
         $realFilePath  = realpath($filePath);
-        $uploadDirReal = realpath(UPLOAD_DIR);
+        $uploadDirReal = realpath($uploadRoot);
 
         if ($realFilePath === false || $uploadDirReal === false || strpos($realFilePath, $uploadDirReal) !== 0) {
             http_response_code(404);
@@ -2192,6 +2931,14 @@ class FileController
                 $this->_jsonOut(['error' => 'Admin only'], 403);
                 return;
             }
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                @session_write_close();
+            }
 
             $trashItems = FileModel::getTrashItems();
             $this->_jsonOut($trashItems);
@@ -2212,6 +2959,10 @@ class FileController
             $perms = $this->loadPerms($_SESSION['username'] ?? '');
             if (!$this->isAdmin($perms)) {
                 $this->_jsonOut(['error' => 'Admin only'], 403);
+                return;
+            }
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
                 return;
             }
 
@@ -2250,13 +3001,11 @@ class FileController
 
             $filesToDelete = [];
             if (!empty($data['deleteAll'])) {
-                $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
-                $shareFile = $trashDir . "trash.json";
-                if (file_exists($shareFile)) {
-                    $tmp = json_decode(file_get_contents($shareFile), true);
-                    if (is_array($tmp)) {
-                        foreach ($tmp as $item) {
-                            if (!empty($item['trashName'])) $filesToDelete[] = $item['trashName'];
+                $trashItems = FileModel::getTrashItems();
+                if (is_array($trashItems)) {
+                    foreach ($trashItems as $item) {
+                        if (!empty($item['trashName'])) {
+                            $filesToDelete[] = $item['trashName'];
                         }
                     }
                 }
@@ -2377,106 +3126,147 @@ class FileController
                 return;
             }
 
-            if (!is_dir(META_DIR)) @mkdir(META_DIR, 0775, true);
-            if (!is_dir(UPLOAD_DIR)) {
-                http_response_code(500);
-                echo json_encode(['error' => 'Uploads directory not found.']);
-                return;
+            $username = $_SESSION['username'] ?? '';
+            $perms    = $this->loadPerms($username);
+
+            $sourceId = '';
+            $allowDisabled = false;
+            if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                $rawSourceId = trim((string)($_GET['sourceId'] ?? ''));
+                if ($rawSourceId !== '') {
+                    $sourceId = $this->normalizeSourceId($rawSourceId);
+                    if ($sourceId === '') {
+                        http_response_code(400);
+                        echo json_encode(['error' => 'Invalid source id.']);
+                        return;
+                    }
+                    $info = SourceContext::getSourceById($sourceId);
+                    if (!$info) {
+                        http_response_code(400);
+                        echo json_encode(['error' => 'Invalid source.']);
+                        return;
+                    }
+                    $allowDisabled = $this->isAdmin($perms);
+                    if (!$allowDisabled && empty($info['enabled'])) {
+                        http_response_code(403);
+                        echo json_encode(['error' => 'Source is disabled.']);
+                        return;
+                    }
+                }
             }
 
-            // --- inputs ---
-            $folder = isset($_GET['folder']) ? trim((string)$_GET['folder']) : 'root';
+            $runner = function () use ($username, $perms) {
+                $metaRoot = class_exists('SourceContext')
+                    ? SourceContext::metaRoot()
+                    : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+                if (!is_dir($metaRoot)) @mkdir($metaRoot, 0775, true);
 
-            // Validate folder path: allow "root" or nested segments that each match REGEX_FOLDER_NAME
-            if ($folder !== 'root') {
-                $parts = array_filter(explode('/', trim($folder, "/\\ ")));
-                if (empty($parts)) {
-                    http_response_code(400);
-                    echo json_encode(['error' => 'Invalid folder name.']);
+                $storage = StorageRegistry::getAdapter();
+                $uploadRoot = class_exists('SourceContext') ? SourceContext::uploadRoot() : (string)UPLOAD_DIR;
+                if ($storage->isLocal() && !is_dir($uploadRoot)) {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Uploads directory not found.']);
                     return;
                 }
-                foreach ($parts as $seg) {
-                    if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+
+                // --- inputs ---
+                $folder = isset($_GET['folder']) ? trim((string)$_GET['folder']) : 'root';
+
+                // Validate folder path: allow "root" or nested segments that each match REGEX_FOLDER_NAME
+                if ($folder !== 'root') {
+                    $parts = array_filter(explode('/', trim($folder, "/\\ ")));
+                    if (empty($parts)) {
                         http_response_code(400);
                         echo json_encode(['error' => 'Invalid folder name.']);
                         return;
                     }
-                }
-                $folder = implode('/', $parts);
-            }
-
-            // ---- Folder-level view checks (full vs own-only) ----
-            $username = $_SESSION['username'] ?? '';
-            $perms    = $this->loadPerms($username);
-
-            // Full view if read OR ancestor owner
-            $fullView     = ACL::canRead($username, $perms, $folder) || $this->ownsFolderOrAncestor($folder, $username, $perms);
-            $ownOnlyGrant = ACL::hasGrant($username, $folder, 'read_own');
-
-            // Special-case: keep Root visible but inert if user lacks any visibility there.
-            if ($folder === 'root' && !$fullView && !$ownOnlyGrant) {
-                echo json_encode([
-                    'success' => true,
-                    'folder'  => 'root',
-                    'files'   => [],
-                    // Optional hint the UI can use to show a soft message / disable actions:
-                    'uiHints' => [
-                        'noAccessRoot' => true,
-                        'message'      => "You don't have access to Root. Select a folder you have access to."
-                    ],
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                return;
-            }
-
-            // Non-root: still enforce 403 if no visibility
-            if ($folder !== 'root' && !$fullView && !$ownOnlyGrant) {
-                http_response_code(403);
-                echo json_encode(['error' => 'Forbidden: no view access to this folder.']);
-                return;
-            }
-
-            // Fetch the list
-            $result = FileModel::getFileList($folder);
-            if ($result === false || $result === null) {
-                http_response_code(500);
-                echo json_encode(['error' => 'File model failed.']);
-                return;
-            }
-            if (!is_array($result)) {
-                throw new RuntimeException('FileModel::getFileList returned a non-array.');
-            }
-            if (isset($result['error'])) {
-                http_response_code(400);
-                echo json_encode($result);
-                return;
-            }
-
-            // ---- Apply own-only filter if user does NOT have full view ----
-            if (!$fullView && $ownOnlyGrant && isset($result['files'])) {
-                $files = $result['files'];
-
-                // If files keyed by filename (assoc array)
-                if (is_array($files) && array_keys($files) !== range(0, count($files) - 1)) {
-                    $filtered = [];
-                    foreach ($files as $name => $meta) {
-                        if (isset($meta['uploader']) && strcasecmp((string)$meta['uploader'], $username) === 0) {
-                            $filtered[$name] = $meta;
+                    foreach ($parts as $seg) {
+                        if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+                            http_response_code(400);
+                            echo json_encode(['error' => 'Invalid folder name.']);
+                            return;
                         }
                     }
-                    $result['files'] = $filtered;
+                    $folder = implode('/', $parts);
                 }
-                // If files is a numeric array of metadata items
-                else if (is_array($files)) {
-                    $result['files'] = array_values(array_filter(
-                        $files,
-                        function ($f) use ($username) {
-                            return isset($f['uploader']) && strcasecmp((string)$f['uploader'], $username) === 0;
-                        }
-                    ));
-                }
-            }
 
-            echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                // ---- Folder-level view checks (full vs own-only) ----
+                // Full view if read OR ancestor owner
+                $fullView     = ACL::canRead($username, $perms, $folder) || $this->ownsFolderOrAncestor($folder, $username, $perms);
+                $ownOnlyGrant = ACL::hasGrant($username, $folder, 'read_own');
+
+                // Special-case: keep Root visible but inert if user lacks any visibility there.
+                if ($folder === 'root' && !$fullView && !$ownOnlyGrant) {
+                    echo json_encode([
+                        'success' => true,
+                        'folder'  => 'root',
+                        'files'   => [],
+                        // Optional hint the UI can use to show a soft message / disable actions:
+                        'uiHints' => [
+                            'noAccessRoot' => true,
+                            'message'      => "You don't have access to Root. Select a folder you have access to."
+                        ],
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    return;
+                }
+
+                // Non-root: still enforce 403 if no visibility
+                if ($folder !== 'root' && !$fullView && !$ownOnlyGrant) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Forbidden: no view access to this folder.']);
+                    return;
+                }
+
+                // Fetch the list
+                $result = FileModel::getFileList($folder);
+                if ($result === false || $result === null) {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'File model failed.']);
+                    return;
+                }
+                if (!is_array($result)) {
+                    throw new RuntimeException('FileModel::getFileList returned a non-array.');
+                }
+                if (isset($result['error'])) {
+                    http_response_code(400);
+                    echo json_encode($result);
+                    return;
+                }
+
+                // ---- Apply own-only filter if user does NOT have full view ----
+                if (!$fullView && $ownOnlyGrant && isset($result['files'])) {
+                    $files = $result['files'];
+
+                    // If files keyed by filename (assoc array)
+                    if (is_array($files) && array_keys($files) !== range(0, count($files) - 1)) {
+                        $filtered = [];
+                        foreach ($files as $name => $meta) {
+                            if (isset($meta['uploader']) && strcasecmp((string)$meta['uploader'], $username) === 0) {
+                                $filtered[$name] = $meta;
+                            }
+                        }
+                        $result['files'] = $filtered;
+                    }
+                    // If files is a numeric array of metadata items
+                    else if (is_array($files)) {
+                        $result['files'] = array_values(array_filter(
+                            $files,
+                            function ($f) use ($username) {
+                                return isset($f['uploader']) && strcasecmp((string)$f['uploader'], $username) === 0;
+                            }
+                        ));
+                    }
+                }
+
+                echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            };
+
+            if ($sourceId !== '') {
+                $this->withSourceContext($sourceId, $runner, $allowDisabled);
+            } else {
+                $runner();
+            }
+            return;
         } catch (Throwable $e) {
             error_log('FileController::getFileList error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             http_response_code(500);
@@ -2496,7 +3286,10 @@ class FileController
     public function getAllShareLinks(): void
     {
         header('Content-Type: application/json');
-        $shareFile = META_DIR . 'share_links.json';
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $shareFile = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'share_links.json';
         $links     = file_exists($shareFile)
             ? json_decode(file_get_contents($shareFile), true) ?? []
             : [];
@@ -2524,7 +3317,24 @@ class FileController
             return;
         }
 
-        $deleted = FileModel::deleteShareLink($token);
+        $deleted = null;
+        $sourceId = $this->normalizeSourceId($_POST['sourceId'] ?? '');
+        if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $perms = $this->loadPerms($_SESSION['username'] ?? '');
+            if ($this->isAdmin($perms)) {
+                $info = SourceContext::getSourceById($sourceId);
+                if (!$info) {
+                    echo json_encode(['success' => false, 'error' => 'Invalid source id']);
+                    return;
+                }
+                $deleted = $this->withSourceContext($sourceId, function () use ($token) {
+                    return FileModel::deleteShareLink($token);
+                }, true);
+            }
+        }
+        if ($deleted === null) {
+            $deleted = FileModel::deleteShareLink($token);
+        }
         if ($deleted) {
             $username = $_SESSION['username'] ?? 'Unknown';
             AuditHook::log('share.link.delete', [
@@ -2558,6 +3368,11 @@ class FileController
 
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
+
+            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                $this->_jsonOut(["error" => "Source is read-only."], 403);
+                return;
+            }
 
             // Need write (or ancestor-owner)
             if (!(ACL::canCreate($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {

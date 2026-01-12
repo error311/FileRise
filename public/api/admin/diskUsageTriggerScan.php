@@ -8,6 +8,12 @@
  *   operationId="adminDiskUsageTriggerScan",
  *   tags={"Admin"},
  *   security={{"cookieAuth": {}}},
+ *   @OA\RequestBody(
+ *     required=false,
+ *     @OA\JsonContent(
+ *       @OA\Property(property="sourceId", type="string", example="local")
+ *     )
+ *   ),
  *   @OA\Response(response=200, description="Scan started"),
  *   @OA\Response(response=403, description="Forbidden"),
  *   @OA\Response(response=500, description="Server error")
@@ -55,6 +61,28 @@ if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
 */
 
 try {
+    $raw = file_get_contents('php://input');
+    $body = json_decode($raw, true);
+    $sourceId = '';
+    if (is_array($body) && isset($body['sourceId'])) {
+        $sourceId = trim((string)$body['sourceId']);
+    } elseif (isset($_GET['sourceId'])) {
+        $sourceId = trim((string)$_GET['sourceId']);
+    }
+
+    if ($sourceId !== '') {
+        $ctx = DiskUsageModel::resolveSourceContext($sourceId);
+        if (empty($ctx['ok'])) {
+            http_response_code(400);
+            echo json_encode([
+                'ok'    => false,
+                'error' => $ctx['error'] ?? 'invalid_source',
+                'message' => $ctx['message'] ?? 'Invalid source.',
+            ]);
+            return;
+        }
+    }
+
     $worker = realpath(PROJECT_ROOT . '/src/cli/disk_usage_scan.php');
     if (!$worker || !is_file($worker)) {
         throw new RuntimeException('disk_usage_scan.php not found.');
@@ -85,11 +113,12 @@ try {
         throw new RuntimeException('No working php CLI found.');
     }
 
-    $logFile = DiskUsageModel::scanLogPath();
+    $logFile = DiskUsageModel::scanLogPath($sourceId);
 
     // nohup php disk_usage_scan.php >> log 2>&1 & echo $!
     $cmdStr =
         'nohup ' . escapeshellcmd($php) . ' ' . escapeshellarg($worker) .
+        ($sourceId !== '' ? (' ' . escapeshellarg($sourceId)) : '') .
         ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
 
     $pid = @shell_exec('/bin/sh -c ' . escapeshellarg($cmdStr));
@@ -101,6 +130,7 @@ try {
         $rc = 1;
         @exec(
             escapeshellcmd($php) . ' ' . escapeshellarg($worker) .
+            ($sourceId !== '' ? (' ' . escapeshellarg($sourceId)) : '') .
             ' >> ' . escapeshellarg($logFile) . ' 2>&1',
             $out,
             $rc
@@ -120,6 +150,7 @@ try {
         'message' => 'Disk usage scan started in the background.',
         'logFile' => $logFile,
         'logMtime'=> is_file($logFile) ? (int)@filemtime($logFile) : null,
+        'sourceId' => $sourceId !== '' ? $sourceId : null,
     ], JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);

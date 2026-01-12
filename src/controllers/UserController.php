@@ -965,21 +965,19 @@ public function adminChangeUserPassword()
                 $hasActive = array_key_exists('active', $proBlock);
                 $cachedProActive = !empty($proBlock['active']);
                 $cachedProVerRaw = isset($proBlock['version']) ? (string)$proBlock['version'] : '';
-                $cachedProVerNorm = trim(ltrim($cachedProVerRaw, "vV"));
+                $hasApiLevel = array_key_exists('apiLevel', $proBlock);
+                $cachedProApiLevel = $hasApiLevel ? (int)$proBlock['apiLevel'] : 0;
                 $cachedEnabled = !empty($data['proSearch']['enabled']);
                 $cachedExplicitDisabled = array_key_exists('enabled', $data['proSearch']) && !$data['proSearch']['enabled'];
 
                 // Current runtime Pro state (can differ from cached values after an upgrade/activation)
                 $currentProActive = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE;
                 $currentProVerRaw = defined('FR_PRO_BUNDLE_VERSION') ? (string)FR_PRO_BUNDLE_VERSION : '';
-                $currentProVerNorm = trim(ltrim($currentProVerRaw, "vV"));
-                $runtimeProOk = $currentProActive
-                    && $currentProVerNorm !== ''
-                    && version_compare($currentProVerNorm, '1.3.0', '>=');
-                // If runtime version is missing, fall back to cached version when Pro shows active
-                $cachedProOk = $cachedProActive
-                    && $cachedProVerNorm !== ''
-                    && version_compare($cachedProVerNorm, '1.3.0', '>=');
+                $currentProApiLevel = defined('FR_PRO_API_LEVEL') ? (int)FR_PRO_API_LEVEL : 0;
+                $searchApiRequired = defined('FR_PRO_API_REQUIRE_SEARCH') ? (int)FR_PRO_API_REQUIRE_SEARCH : 3;
+                $runtimeProOk = $currentProActive && $currentProApiLevel >= $searchApiRequired;
+                // If runtime API level is missing, fall back to cached values when Pro shows active
+                $cachedProOk = $cachedProActive && $cachedProApiLevel >= $searchApiRequired;
                 $currentProOk = $runtimeProOk || $cachedProOk;
 
                 $shouldRegenerate = false;
@@ -987,15 +985,23 @@ public function adminChangeUserPassword()
                 if (!$hasActive) {
                     $shouldRegenerate = true;
                 }
+                // Missing pro.apiLevel flag in cache
+                if (!$hasApiLevel) {
+                    $shouldRegenerate = true;
+                }
                 // Pro activation state changed since cache was written
                 if ($currentProActive !== $cachedProActive) {
                     $shouldRegenerate = true;
                 }
-                // Pro version changed (e.g., upgrade to 1.3.0+)
-                if ($currentProActive && $currentProVerNorm !== '' && $cachedProVerNorm !== $currentProVerNorm) {
+                // Pro version changed (keep UI hints in sync)
+                if ($currentProActive && $currentProVerRaw !== '' && $cachedProVerRaw !== $currentProVerRaw) {
                     $shouldRegenerate = true;
                 }
-                // Auto-enable after Pro 1.3.0+ upgrade if cache still shows disabled
+                // Pro API level changed (feature gating)
+                if ($currentProActive && $currentProApiLevel !== $cachedProApiLevel) {
+                    $shouldRegenerate = true;
+                }
+                // Auto-enable after API-level upgrade if cache still shows disabled
                 if ($currentProOk && !$cachedEnabled && !$cachedExplicitDisabled) {
                     $shouldRegenerate = true;
                 }
@@ -1017,7 +1023,7 @@ public function adminChangeUserPassword()
 
         $public = AdminModel::buildPublicSubset($cfg);
 
-        // Ensure Search Everywhere auto-enables in siteConfig after installing/updating Pro 1.3.0+
+        // Ensure Search Everywhere auto-enables in siteConfig after Pro API-level upgrades
         $envProSearchRaw = getenv('FR_PRO_SEARCH_ENABLED');
         $proSearchLocked = ($envProSearchRaw !== false && $envProSearchRaw !== '');
         $proSearchOptOut = !empty($cfg['proSearch']['optOut']);
@@ -1025,10 +1031,10 @@ public function adminChangeUserPassword()
             && is_array($cfg['proSearch'])
             && array_key_exists('enabled', $cfg['proSearch'])
             && !$cfg['proSearch']['enabled'];
-        $proVersionRaw = $cfg['pro']['version'] ?? ($cfg['proVersion'] ?? (defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : ''));
-        $proVersionNorm = trim(ltrim((string)$proVersionRaw, "vV"));
-        $proVersionOk = $proVersionNorm !== '' && version_compare($proVersionNorm, '1.3.0', '>=');
-        if ((defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) && $proVersionOk && !$proSearchLocked && !$proSearchOptOut && !$proSearchExplicitDisabled) {
+        $proApiLevel = defined('FR_PRO_API_LEVEL') ? (int)FR_PRO_API_LEVEL : 0;
+        $proSearchApiOk = (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE)
+            && $proApiLevel >= (defined('FR_PRO_API_REQUIRE_SEARCH') ? (int)FR_PRO_API_REQUIRE_SEARCH : 3);
+        if ($proSearchApiOk && !$proSearchLocked && !$proSearchOptOut && !$proSearchExplicitDisabled) {
             $public['proSearch']['enabled'] = true;
         }
 

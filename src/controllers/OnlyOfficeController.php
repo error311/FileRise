@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
+require_once PROJECT_ROOT . '/src/lib/StorageRegistry.php';
+require_once PROJECT_ROOT . '/src/models/FileModel.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class OnlyOfficeController
 {
@@ -142,6 +145,116 @@ private function ooLog(string $level, string $msg): void
         return rtrim(strtr(base64_encode($s), '+/','-_'), '=');
     }
 
+    private function normalizeSourceId($id): string
+    {
+        $id = trim((string)$id);
+        if ($id === '' || !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
+            return '';
+        }
+        return $id;
+    }
+
+    /**
+     * @return array{0:string,1:?string} [sourceId, error]
+     */
+    private function resolveSourceId(string $raw, bool $allowDisabled = false): array
+    {
+        $sourceId = $this->normalizeSourceId($raw);
+        if ($sourceId === '') {
+            if (trim($raw) !== '') {
+                return ['', 'Invalid source id.'];
+            }
+            return ['', null];
+        }
+        if (!class_exists('SourceContext') || !SourceContext::sourcesEnabled()) {
+            return ['', 'Invalid source.'];
+        }
+        $src = SourceContext::getSourceById($sourceId);
+        if (!$src) {
+            return ['', 'Invalid source.'];
+        }
+        if (empty($src['enabled']) && !$allowDisabled) {
+            return ['', 'Invalid source.'];
+        }
+        return [$sourceId, null];
+    }
+
+    private function withSourceContext(string $sourceId, callable $fn, bool $allowDisabled = false)
+    {
+        if (!class_exists('SourceContext') || $sourceId === '') {
+            return $fn();
+        }
+        $prev = SourceContext::getActiveId();
+        SourceContext::setActiveId($sourceId, false, $allowDisabled);
+        try {
+            return $fn();
+        } finally {
+            SourceContext::setActiveId($prev, false);
+        }
+    }
+
+    private function readStreamChunk($stream, int $length)
+    {
+        if (is_resource($stream)) {
+            return fread($stream, $length);
+        }
+        if (is_object($stream) && method_exists($stream, 'read')) {
+            return $stream->read($length);
+        }
+        if (is_object($stream) && method_exists($stream, 'getContents')) {
+            return $stream->getContents();
+        }
+        return false;
+    }
+
+    private function closeStream($stream): void
+    {
+        if (is_resource($stream)) {
+            fclose($stream);
+            return;
+        }
+        if (is_object($stream) && method_exists($stream, 'close')) {
+            $stream->close();
+        }
+    }
+
+    private function resolveLegacyLocalFile(string $folder, string $file): ?array
+    {
+        if (!defined('UPLOAD_DIR')) {
+            return null;
+        }
+        $base = rtrim((string)UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
+        $baseReal = realpath($base);
+        if ($baseReal === false || $baseReal === '') {
+            return null;
+        }
+        $rel = ($folder === 'root') ? '' : (trim($folder, "/\\ ") . DIRECTORY_SEPARATOR);
+        $abs = realpath($base . $rel . $file);
+        if (!$abs || !is_file($abs)) {
+            return null;
+        }
+        if (strpos($abs, $baseReal) !== 0) {
+            return null;
+        }
+        $mime = function_exists('mime_content_type') ? mime_content_type($abs) : null;
+        if (!$mime || !is_string($mime)) {
+            $mime = 'application/octet-stream';
+        }
+        $ext = strtolower(pathinfo($abs, PATHINFO_EXTENSION));
+        if ($ext === 'svg') {
+            $mime = 'image/svg+xml';
+        }
+        $size = (int)@filesize($abs);
+        $mtime = (int)@filemtime($abs);
+        return [
+            'filePath' => $abs,
+            'mimeType' => $mime,
+            'downloadName' => basename($file),
+            'size' => $size,
+            'mtime' => $mtime,
+        ];
+    }
+
     /** GET /api/onlyoffice/status.php */
     public function status(): void
 {
@@ -191,36 +304,105 @@ public function config(): void
     $file   = basename((string)($_GET['file'] ?? ''));
     if ($file === '') { http_response_code(400); echo '{"error":"Bad request"}'; return; }
 
+    $sourceIdRaw = (string)($_GET['sourceId'] ?? '');
+    $sourceId = '';
+    if ($sourceIdRaw !== '') {
+        [$sourceId, $sourceErr] = $this->resolveSourceId($sourceIdRaw, $isAdmin);
+        if ($sourceErr !== null) {
+            http_response_code(400);
+            echo json_encode(['error' => $sourceErr]);
+            return;
+        }
+    } elseif (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+        [$sourceId, $sourceErr] = $this->resolveSourceId(SourceContext::getActiveId(), $isAdmin);
+        if ($sourceErr !== null) {
+            http_response_code(400);
+            echo json_encode(['error' => $sourceErr]);
+            return;
+        }
+    }
+
     if (!\ACL::canRead($user, $perms, $folder)) { http_response_code(403); echo '{"error":"Forbidden"}'; return; }
     $canEdit = \ACL::canEdit($user, $perms, $folder);
 
-    $base = rtrim(UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
-    $rel  = ($folder === 'root') ? '' : ($folder . '/');
-    $abs  = realpath($base . $rel . $file);
-    if (!$abs || !is_file($abs)) { http_response_code(404); echo '{"error":"Not found"}'; return; }
-    if (strpos($abs, realpath($base)) !== 0) { http_response_code(400); echo '{"error":"Invalid path"}'; return; }
+    $downloadCtx = $this->withSourceContext($sourceId, function () use ($folder, $file) {
+        $info = FileModel::getDownloadInfo($folder, $file);
+        if (isset($info['error'])) {
+            return $info;
+        }
+        $storage = StorageRegistry::getAdapter();
+        $stat = $storage->stat($info['filePath']);
+        return [
+            'info' => $info,
+            'stat' => $stat,
+        ];
+    }, $isAdmin);
+
+    if (isset($downloadCtx['error'])) {
+        $fallback = null;
+        if ($sourceId === 'local') {
+            $fallback = $this->resolveLegacyLocalFile($folder, $file);
+        }
+        if ($fallback) {
+            $downloadInfo = $fallback;
+            $stat = [
+                'mtime' => (int)($fallback['mtime'] ?? 0),
+                'size' => (int)($fallback['size'] ?? 0),
+            ];
+        } else {
+            $err = $downloadCtx['error'];
+            $code = in_array($err, ['File not found.', 'Access forbidden.'], true) ? 404 : 400;
+            http_response_code($code);
+            echo json_encode(['error' => ($code === 404 ? 'Not found' : $err)]);
+            return;
+        }
+    } else {
+        $downloadInfo = $downloadCtx['info'];
+        $stat = $downloadCtx['stat'] ?? null;
+    }
 
     // IMPORTANT: use the internal/fast origin for DocServer fetch + callback
     $fileOriginForDocs = rtrim($this->effectiveFileOriginForDocs(), '/');
 
     $exp  = time() + 10*60;
-    $data = json_encode(['f'=>$folder,'n'=>$file,'u'=>$user,'adm'=>$isAdmin,'exp'=>$exp], JSON_UNESCAPED_SLASHES);
+    $payload = ['f'=>$folder,'n'=>$file,'u'=>$user,'adm'=>$isAdmin,'exp'=>$exp];
+    if ($sourceId !== '') {
+        $payload['sid'] = $sourceId;
+    }
+    $data = json_encode($payload, JSON_UNESCAPED_SLASHES);
     $sig  = hash_hmac('sha256', $data, $secret, true);
     $tok  = $this->b64uEnc($data) . '.' . $this->b64uEnc($sig);
     $fileUrl = $fileOriginForDocs . '/api/onlyoffice/signed-download.php?tok=' . rawurlencode($tok);
 
     $cbExp = time() + 10*60;
-    $cbSig = hash_hmac('sha256', $folder.'|'.$file.'|'.$cbExp, $secret);
+    $cbSigBase = ($sourceId !== '')
+        ? ($folder.'|'.$file.'|'.$sourceId.'|'.$cbExp)
+        : ($folder.'|'.$file.'|'.$cbExp);
+    $cbSig = hash_hmac('sha256', $cbSigBase, $secret);
     $callbackUrl = $fileOriginForDocs . '/api/onlyoffice/callback.php'
       . '?folder=' . rawurlencode($folder)
       . '&file='   . rawurlencode($file)
       . '&exp='    . $cbExp
       . '&sig='    . $cbSig;
+    if ($sourceId !== '') {
+        $callbackUrl .= '&sourceId=' . rawurlencode($sourceId);
+    }
 
     $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION) ?: 'docx');
     $docType = in_array($ext, ['xls','xlsx','ods','csv'], true) ? 'cell'
             : (in_array($ext, ['ppt','pptx','odp'], true) ? 'slide' : 'word');
-    $key = substr(sha1($abs . '|' . (string)filemtime($abs)), 0, 20);
+    $filePath = $downloadInfo['filePath'] ?? '';
+    $mtime = 0;
+    if (is_array($stat) && isset($stat['mtime'])) {
+        $mtime = (int)$stat['mtime'];
+    } elseif ($filePath && is_string($filePath) && is_file($filePath)) {
+        $mtime = (int)@filemtime($filePath);
+    }
+    $keySeed = $filePath . '|' . (string)$mtime;
+    if ($sourceId !== '') {
+        $keySeed .= '|' . $sourceId;
+    }
+    $key = substr(sha1($keySeed), 0, 20);
 
     $docsApiJs  = $docsOrigin . '/web-apps/apps/api/documents/api.js';
 
@@ -268,17 +450,26 @@ public function config(): void
     $secret = $this->effectiveSecret();
     if ($secret === '') { http_response_code(500); $this->ooLog('error', 'missing secret'); echo '{"error":6}'; return; }
 
-    $folderRaw = (string)($_GET['folder'] ?? 'root');
-    $fileRaw   = (string)($_GET['file']   ?? '');
-    $exp       = (int)($_GET['exp']       ?? 0);
-    $sig       = (string)($_GET['sig']    ?? '');
-    $calc      = hash_hmac('sha256', "$folderRaw|$fileRaw|$exp", $secret);
+    $folderRaw   = (string)($_GET['folder'] ?? 'root');
+    $fileRaw     = (string)($_GET['file']   ?? '');
+    $exp         = (int)($_GET['exp']       ?? 0);
+    $sig         = (string)($_GET['sig']    ?? '');
+    $sourceIdRaw = (string)($_GET['sourceId'] ?? ($_GET['sid'] ?? ''));
+    $sourceId    = $this->normalizeSourceId($sourceIdRaw);
+    if ($sourceIdRaw !== '' && $sourceId === '') {
+        $this->ooLog('error', "invalid source id in callback");
+        echo '{"error":6}'; return;
+    }
+    $calcBase = ($sourceId !== '')
+        ? "$folderRaw|$fileRaw|$sourceId|$exp"
+        : "$folderRaw|$fileRaw|$exp";
+    $calc      = hash_hmac('sha256', $calcBase, $secret);
 
     // Debug-only preflight (no secrets; show short sigs)
     if ($this->ooDebug()) {
         $this->ooLog('debug', sprintf(
-            "PRE f='%s' n='%s' exp=%d sig[8]=%s calc[8]=%s",
-            $folderRaw, $fileRaw, $exp, substr($sig, 0, 8), substr($calc, 0, 8)
+            "PRE f='%s' n='%s' sid='%s' exp=%d sig[8]=%s calc[8]=%s",
+            $folderRaw, $fileRaw, $sourceId, $exp, substr($sig, 0, 8), substr($calc, 0, 8)
         ));
     }
 
@@ -286,6 +477,13 @@ public function config(): void
     $file   = basename($fileRaw);
     if (!$exp || time() > $exp) { $this->ooLog('error', "expired exp for $folder/$file"); echo '{"error":6}'; return; }
     if (!hash_equals($calc, $sig)) { $this->ooLog('error', "sig mismatch for $folder/$file"); echo '{"error":6}'; return; }
+    if ($sourceId !== '') {
+        [$sourceId, $sourceErr] = $this->resolveSourceId($sourceId, true);
+        if ($sourceErr !== null) {
+            $this->ooLog('error', "invalid source for callback: $sourceId");
+            echo '{"error":6}'; return;
+        }
+    }
 
     $raw  = file_get_contents('php://input') ?: '';
     if ($this->ooDebug()) {
@@ -299,11 +497,6 @@ public function config(): void
     $actorIsAdmin = (defined('DEFAULT_ADMIN_USER') && $actor !== '' && strcasecmp($actor, (string)DEFAULT_ADMIN_USER) === 0)
                  || (strcasecmp($actor, 'admin') === 0);
     $perms = $actorIsAdmin ? ['admin'=>true] : [];
-
-    $base = rtrim(UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
-    $rel  = ($folder === 'root') ? '' : ($folder . '/');
-    $dir  = realpath($base . $rel) ?: ($base . $rel);
-    if (strpos($dir, realpath($base)) !== 0) { $this->ooLog('error', 'path escape'); echo '{"error":6}'; return; }
 
     // Save-on statuses: 2/6/7
     if (in_array($status, [2,6,7], true)) {
@@ -340,11 +533,40 @@ public function config(): void
             if ($data === false) { $this->ooLog('error', "stream get failed url=$saveUrl"); echo '{"error":6}'; return; }
         }
 
-        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
-        $dest = rtrim($dir, "/\\") . DIRECTORY_SEPARATOR . $file;
-        if (@file_put_contents($dest, $data) === false) { $this->ooLog('error', "write failed: $dest"); echo '{"error":6}'; return; }
-
-        @touch($dest);
+        $saveResult = $this->withSourceContext($sourceId, function () use ($folder, $file, $data, $sourceId) {
+            $info = FileModel::getDownloadInfo($folder, $file);
+            if (isset($info['error'])) {
+                if ($sourceId === 'local') {
+                    $fallback = $this->resolveLegacyLocalFile($folder, $file);
+                    if ($fallback) {
+                        if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                            return ['error' => 'read only'];
+                        }
+                        $dest = $fallback['filePath'];
+                        if (@file_put_contents($dest, $data) === false) {
+                            return ['error' => 'write failed'];
+                        }
+                        @touch($dest);
+                        return ['path' => $dest];
+                    }
+                }
+                return ['error' => $info['error']];
+            }
+            $storage = StorageRegistry::getAdapter();
+            $dest = $info['filePath'];
+            if (!$storage->write($dest, $data)) {
+                return ['error' => 'write failed'];
+            }
+            if ($storage->isLocal()) {
+                @touch($dest);
+            }
+            return ['path' => $dest];
+        }, true);
+        if (isset($saveResult['error'])) {
+            $this->ooLog('error', "write failed: " . $saveResult['error']);
+            echo '{"error":6}'; return;
+        }
+        $dest = (string)($saveResult['path'] ?? '');
 
         // Success: debug only
         if ($this->ooDebug()) {
@@ -387,27 +609,132 @@ public function config(): void
     if ($folder === '' || $folder === 'root') $folder = 'root';
     $file   = basename((string)$payload['n']);
 
-    $base = rtrim(UPLOAD_DIR, "/\\") . DIRECTORY_SEPARATOR;
-    $rel  = ($folder === 'root') ? '' : ($folder . '/');
-    $abs  = realpath($base . $rel . $file);
-    if (!$abs || !is_file($abs)) { http_response_code(404); return; }
-    if (strpos($abs, realpath($base)) !== 0) { http_response_code(400); return; }
-
-    // Common headers
-    $mime = mime_content_type($abs) ?: 'application/octet-stream';
-    $len  = filesize($abs);
-    header('Content-Type: '.$mime);
-    header('Content-Length: '.$len);
-    header('Content-Disposition: inline; filename="' . rawurlencode($file) . '"');
-    header('Accept-Ranges: none'); // OO doesn’t require ranges; avoids partial edge-cases
-
-    // ---- Key change: for HEAD, do NOT read the file ----
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
-        // send headers only; no body
-        return;
+    $sourceIdRaw = (string)($payload['sid'] ?? ($payload['sourceId'] ?? ''));
+    $sourceId = '';
+    if ($sourceIdRaw !== '') {
+        [$sourceId, $sourceErr] = $this->resolveSourceId($sourceIdRaw, true);
+        if ($sourceErr !== null) {
+            http_response_code(400);
+            return;
+        }
     }
 
-    // GET → stream the file
-    readfile($abs);
+    $this->withSourceContext($sourceId, function () use ($folder, $file, $sourceId) {
+        $downloadInfo = FileModel::getDownloadInfo($folder, $file);
+        $useLegacyLocal = false;
+        if (isset($downloadInfo['error'])) {
+            if ($sourceId === 'local') {
+                $fallback = $this->resolveLegacyLocalFile($folder, $file);
+                if ($fallback) {
+                    $downloadInfo = $fallback;
+                    $useLegacyLocal = true;
+                } else {
+                    $err = $downloadInfo['error'];
+                    $code = in_array($err, ['File not found.', 'Access forbidden.'], true) ? 404 : 400;
+                    http_response_code($code);
+                    return;
+                }
+            } else {
+                $err = $downloadInfo['error'];
+                $code = in_array($err, ['File not found.', 'Access forbidden.'], true) ? 404 : 400;
+                http_response_code($code);
+                return;
+            }
+        }
+
+        $path = $downloadInfo['filePath'];
+        $mime = $downloadInfo['mimeType'] ?? 'application/octet-stream';
+        $downloadName = $downloadInfo['downloadName'] ?? $file;
+        if ($useLegacyLocal) {
+            $size = (int)($downloadInfo['size'] ?? 0);
+            header('Content-Type: ' . $mime);
+            header('Content-Disposition: inline; filename="' . rawurlencode($downloadName) . '"');
+            header('Accept-Ranges: none');
+            if ($size > 0) {
+                header('Content-Length: ' . $size);
+            }
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+                http_response_code(200);
+                return;
+            }
+            $fh = @fopen($path, 'rb');
+            if ($fh === false) {
+                http_response_code(404);
+                return;
+            }
+            $chunkSize = 8192;
+            while (!feof($fh)) {
+                $buffer = fread($fh, $chunkSize);
+                if ($buffer === false || $buffer === '') {
+                    break;
+                }
+                echo $buffer;
+                flush();
+                if (connection_aborted()) {
+                    break;
+                }
+            }
+            fclose($fh);
+            return;
+        }
+
+        $storage = StorageRegistry::getAdapter();
+
+        $stat = $storage->stat($path);
+        if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+            if ($stat === null || ($stat['type'] ?? '') === '') {
+                $probe = $storage->openReadStream($path, 1, 0);
+                if ($probe === false) {
+                    http_response_code(404);
+                    return;
+                }
+                $this->closeStream($probe);
+                $stat = [
+                    'type' => 'file',
+                    'size' => 0,
+                    'sizeUnknown' => true,
+                ];
+            } else {
+                http_response_code(404);
+                return;
+            }
+        }
+
+        $size = (int)($stat['size'] ?? 0);
+        $sizeUnknown = !empty($stat['sizeUnknown']);
+
+        header('Content-Type: ' . $mime);
+        header('Content-Disposition: inline; filename="' . rawurlencode($downloadName) . '"');
+        header('Accept-Ranges: none'); // OO doesn’t require ranges; avoids partial edge-cases
+        if (!$sizeUnknown && $size > 0) {
+            header('Content-Length: ' . $size);
+        }
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+            http_response_code(200);
+            return;
+        }
+
+        $stream = $storage->openReadStream($path, null, 0);
+        if ($stream === false) {
+            http_response_code(404);
+            return;
+        }
+
+        $chunkSize = 8192;
+        while (true) {
+            $buffer = $this->readStreamChunk($stream, $chunkSize);
+            if ($buffer === false || $buffer === '') {
+                break;
+            }
+            echo $buffer;
+            flush();
+            if (connection_aborted()) {
+                break;
+            }
+        }
+
+        $this->closeStream($stream);
+    }, true);
 }
 }

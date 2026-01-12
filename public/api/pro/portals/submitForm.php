@@ -115,6 +115,7 @@ try {
         'slug'        => $slug,
         'portalLabel' => $portal['label'] ?? '',
         'folder'      => $portal['folder'] ?? '',
+        'sourceId'    => $portal['sourceId'] ?? '',
         'form'        => [
             'name'      => $name,
             'email'     => $email,

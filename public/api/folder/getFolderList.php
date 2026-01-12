@@ -15,6 +15,11 @@
  *     description="Parent folder to include and descend (default all); use 'root' for top-level",
  *     @OA\Schema(type="string"), example="root"
  *   ),
+ *   @OA\Parameter(
+ *     name="sourceId", in="query", required=false,
+ *     description="Optional source id (admin can target disabled sources)",
+ *     @OA\Schema(type="string"), example="local"
+ *   ),
  *   @OA\Response(
  *     response=200,
  *     description="List of folders",

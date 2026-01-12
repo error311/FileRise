@@ -4,6 +4,7 @@
  *   path="/api/onlyoffice/callback.php",
  *   summary="ONLYOFFICE save callback",
  *   tags={"ONLYOFFICE"},
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string")),
  *   @OA\Response(response=200, description="OK / error JSON")
  * )
  */

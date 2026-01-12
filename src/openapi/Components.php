@@ -64,6 +64,40 @@ use OpenApi\Annotations as OA;
  *   ),
  *
  *   @OA\Schema(
+ *     schema="ShareLinkEntry",
+ *     type="object",
+ *     @OA\Property(property="folder", type="string", example="root"),
+ *     @OA\Property(property="file", type="string", example="invoice.pdf"),
+ *     @OA\Property(property="expires", type="integer", format="int64", example=1735689600),
+ *     @OA\Property(property="password", type="string", nullable=true, example="***"),
+ *     @OA\Property(property="token", type="string", example="0123456789abcdef0123456789abcdef"),
+ *     @OA\Property(property="sourceId", type="string", example="local"),
+ *     @OA\Property(property="sourceName", type="string", example="Local")
+ *   ),
+ *   @OA\Schema(
+ *     schema="ShareLinksMap",
+ *     type="object",
+ *     additionalProperties=@OA\AdditionalProperties(ref="#/components/schemas/ShareLinkEntry")
+ *   ),
+ *
+ *   @OA\Schema(
+ *     schema="ShareFolderLinkEntry",
+ *     type="object",
+ *     @OA\Property(property="folder", type="string", example="shared/reports"),
+ *     @OA\Property(property="expires", type="integer", format="int64", example=1735689600),
+ *     @OA\Property(property="password", type="string", nullable=true, example="***"),
+ *     @OA\Property(property="allowUpload", type="integer", example=1),
+ *     @OA\Property(property="token", type="string", example="0123456789abcdef0123456789abcdef"),
+ *     @OA\Property(property="sourceId", type="string", example="local"),
+ *     @OA\Property(property="sourceName", type="string", example="Local")
+ *   ),
+ *   @OA\Schema(
+ *     schema="ShareFolderLinksMap",
+ *     type="object",
+ *     additionalProperties=@OA\AdditionalProperties(ref="#/components/schemas/ShareFolderLinkEntry")
+ *   ),
+ *
+ *   @OA\Schema(
  *     schema="LoginOptionsPublic",
  *     type="object",
  *     @OA\Property(property="disableFormLogin", type="boolean"),

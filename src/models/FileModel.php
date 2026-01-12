@@ -5,9 +5,68 @@ require_once PROJECT_ROOT . '/config/config.php';
 require_once __DIR__ . '/../../src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
+require_once PROJECT_ROOT . '/src/lib/StorageRegistry.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class FileModel
 {
+    private const EMPTY_DOCX_BASE64 = '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';
+    private const EMPTY_XLSX_BASE64 = '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';
+
+    private static function storage(): StorageAdapterInterface
+    {
+        return StorageRegistry::getAdapter();
+    }
+
+    private static function uploadRoot(): string
+    {
+        if (class_exists('SourceContext')) {
+            return SourceContext::uploadRoot();
+        }
+        return rtrim((string)UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    private static function metaRoot(): string
+    {
+        if (class_exists('SourceContext')) {
+            SourceContext::ensureMetaDir();
+            return SourceContext::metaRoot();
+        }
+        return rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+    }
+
+    private static function metaRootForId(string $sourceId): string
+    {
+        if (class_exists('SourceContext')) {
+            $root = SourceContext::metaRootForId($sourceId);
+            if (!is_dir($root)) {
+                @mkdir($root, 0775, true);
+            }
+            return $root;
+        }
+        $root = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        if (!is_dir($root)) {
+            @mkdir($root, 0775, true);
+        }
+        return $root;
+    }
+
+    private static function getMetadataFilePathForRoot(string $metaRoot, string $folder): string
+    {
+        $metaRoot = rtrim($metaRoot, "/\\") . DIRECTORY_SEPARATOR;
+        if (strtolower($folder) === 'root' || trim($folder) === '') {
+            return $metaRoot . "root_metadata.json";
+        }
+        return $metaRoot . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+    }
+
+    private static function trashRoot(): string
+    {
+        if (class_exists('SourceContext')) {
+            return SourceContext::trashRoot();
+        }
+        return rtrim((string)TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
+    }
 
     /**
      * Resolve a logical folder key (e.g. "root", "invoices/2025") to a
@@ -26,24 +85,94 @@ class FileModel
             return [null, "Invalid folder name."];
         }
 
-        $base = realpath(UPLOAD_DIR);
-        if ($base === false) {
+        $storage = self::storage();
+        if (!$storage->isLocal()) {
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                    return ['success' => false, 'error' => 'Encrypted folders are not supported for remote storage.', 'code' => 400];
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+        $isLocal = $storage->isLocal();
+
+        $root = self::uploadRoot();
+        $base = $isLocal ? realpath($root) : rtrim($root, '/\\');
+        if ($base === false || $base === '') {
             return [null, "Server misconfiguration."];
+        }
+
+        if (!$isLocal && strpos($folder, '..') !== false) {
+            return [null, "Invalid folder name."];
         }
 
         $dir = (strtolower($folder) === 'root')
             ? $base
             : $base . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
 
-        if ($create && !is_dir($dir) && !mkdir($dir, 0775, true)) {
-            return [null, "Cannot create destination folder"];
+        if ($create) {
+            $st = $storage->stat($dir);
+            if ($st === null || $st['type'] !== 'dir') {
+                if (!$storage->mkdir($dir, 0775, true)) {
+                    return [null, "Cannot create destination folder"];
+                }
+            }
         }
 
-        $real = realpath($dir);
-        if ($real === false || strpos($real, $base) !== 0) {
-            return [null, "Invalid folder path."];
+        if ($isLocal) {
+            $real = realpath($dir);
+            if ($real === false || strpos($real, $base) !== 0) {
+                return [null, "Invalid folder path."];
+            }
+            return [$real, null];
         }
-        return [$real, null];
+
+        return [$dir, null];
+    }
+
+    private static function resolveFolderPathForAdapter(
+        StorageAdapterInterface $storage,
+        string $root,
+        string $folder,
+        bool $create = true
+    ): array {
+        $folder = trim($folder) ?: 'root';
+
+        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            return [null, "Invalid folder name."];
+        }
+
+        $isLocal = $storage->isLocal();
+        $base = $isLocal ? realpath($root) : rtrim($root, '/\\');
+        if ($base === false || $base === '') {
+            return [null, "Server misconfiguration."];
+        }
+
+        if (!$isLocal && strpos($folder, '..') !== false) {
+            return [null, "Invalid folder name."];
+        }
+
+        $dir = (strtolower($folder) === 'root')
+            ? $base
+            : $base . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
+
+        if ($create) {
+            $st = $storage->stat($dir);
+            if ($st === null || $st['type'] !== 'dir') {
+                if (!$storage->mkdir($dir, 0775, true)) {
+                    return [null, "Cannot create destination folder"];
+                }
+            }
+        }
+
+        if ($isLocal) {
+            $real = realpath($dir);
+            if ($real === false || strpos($real, $base) !== 0) {
+                return [null, "Invalid folder path."];
+            }
+            return [$real, null];
+        }
+
+        return [$dir, null];
     }
 
     /**
@@ -57,6 +186,8 @@ class FileModel
     public static function copyFiles($sourceFolder, $destinationFolder, $files)
     {
         $errors = [];
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
 
         list($sourceDir, $err) = self::resolveFolderPath($sourceFolder, false);
         if ($err) return ["error" => $err];
@@ -71,6 +202,15 @@ class FileModel
             $destEncrypted = FolderCrypto::isEncryptedOrAncestor((string)$destinationFolder);
         } catch (\Throwable $e) {
             $destEncrypted = false;
+        }
+        $srcEncrypted = false;
+        try {
+            $srcEncrypted = FolderCrypto::isEncryptedOrAncestor((string)$sourceFolder);
+        } catch (\Throwable $e) {
+            $srcEncrypted = false;
+        }
+        if (!$isLocal && ($srcEncrypted || $destEncrypted)) {
+            return ["error" => "Encrypted folders are not supported for remote storage."];
         }
 
         // Metadata paths
@@ -97,34 +237,41 @@ class FileModel
             $destPath = $destDir . $basename;
 
             clearstatcache();
-            if (!file_exists($srcPath)) {
+            if ($storage->stat($srcPath) === null) {
                 $errors[] = "$originalName does not exist in source.";
                 continue;
             }
 
             // Avoid overwrite: pick unique name
-            if (file_exists($destPath)) {
+            if ($storage->stat($destPath) !== null) {
                 $basename = self::getUniqueFileName($destDir, $basename);
                 $destPath = $destDir . $basename;
             }
 
-            try {
-                $srcIsEncryptedFile = CryptoAtRest::isEncryptedFile($srcPath);
-                if ($srcIsEncryptedFile && !$destEncrypted) {
-                    CryptoAtRest::decryptFileToPath($srcPath, $destPath);
-                } else {
-                    if (!copy($srcPath, $destPath)) {
-                        $errors[] = "Failed to copy $basename.";
-                        continue;
+            if ($isLocal) {
+                try {
+                    $srcIsEncryptedFile = CryptoAtRest::isEncryptedFile($srcPath);
+                    if ($srcIsEncryptedFile && !$destEncrypted) {
+                        CryptoAtRest::decryptFileToPath($srcPath, $destPath);
+                    } else {
+                        if (!$storage->copy($srcPath, $destPath)) {
+                            $errors[] = "Failed to copy $basename.";
+                            continue;
+                        }
+                        if (!$srcIsEncryptedFile && $destEncrypted) {
+                            CryptoAtRest::encryptFileInPlace($destPath);
+                        }
                     }
-                    if (!$srcIsEncryptedFile && $destEncrypted) {
-                        CryptoAtRest::encryptFileInPlace($destPath);
-                    }
+                } catch (\Throwable $e) {
+                    $storage->delete($destPath);
+                    $errors[] = "Failed to copy {$basename}: " . $e->getMessage();
+                    continue;
                 }
-            } catch (\Throwable $e) {
-                @unlink($destPath);
-                $errors[] = "Failed to copy {$basename}: " . $e->getMessage();
-                continue;
+            } else {
+                if (!$storage->copy($srcPath, $destPath)) {
+                    $errors[] = "Failed to copy $basename.";
+                    continue;
+                }
             }
 
             // Carry over non-ownership fields (e.g., tags), but stamp new ownership/timestamps
@@ -158,10 +305,7 @@ class FileModel
      */
     private static function getMetadataFilePath($folder)
     {
-        if (strtolower($folder) === 'root' || trim($folder) === '') {
-            return META_DIR . "root_metadata.json";
-        }
-        return META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+        return self::getMetadataFilePathForRoot(self::metaRoot(), (string)$folder);
     }
 
     /**
@@ -173,9 +317,14 @@ class FileModel
      */
     private static function getUniqueFileName($destDir, $fileName)
     {
+        return self::getUniqueFileNameForAdapter(self::storage(), $destDir, $fileName);
+    }
+
+    private static function getUniqueFileNameForAdapter(StorageAdapterInterface $storage, string $destDir, string $fileName): string
+    {
         $fullPath = $destDir . $fileName;
         clearstatcache(true, $fullPath);
-        if (!file_exists($fullPath)) {
+        if ($storage->stat($fullPath) === null) {
             return $fileName;
         }
         $basename = pathinfo($fileName, PATHINFO_FILENAME);
@@ -186,8 +335,405 @@ class FileModel
             $newFullPath = $destDir . $newName;
             clearstatcache(true, $newFullPath);
             $counter++;
-        } while (file_exists($destDir . $newName));
+        } while ($storage->stat($destDir . $newName) !== null);
         return $newName;
+    }
+
+    private static function adapterErrorDetail(StorageAdapterInterface $storage): string
+    {
+        if (method_exists($storage, 'getLastError')) {
+            $detail = trim((string)$storage->getLastError());
+            if ($detail !== '') {
+                return $detail;
+            }
+        }
+        return '';
+    }
+
+    private static function ensureSeekableStream($stream, ?int $length = null): array
+    {
+        if (!is_resource($stream)) {
+            return [$stream, $length];
+        }
+
+        $meta = @stream_get_meta_data($stream);
+        $seekable = is_array($meta) && !empty($meta['seekable']);
+        if ($seekable) {
+            @rewind($stream);
+            return [$stream, $length];
+        }
+
+        $tmp = @tmpfile();
+        if ($tmp === false) {
+            return [$stream, $length];
+        }
+
+        $bytes = @stream_copy_to_stream($stream, $tmp);
+        if ($bytes === false) {
+            @fclose($tmp);
+            return [$stream, $length];
+        }
+
+        @fclose($stream);
+        @rewind($tmp);
+        if ($length === null) {
+            $length = (int)$bytes;
+        }
+
+        return [$tmp, $length];
+    }
+
+    private static function tempTransferDir(): string
+    {
+        $base = rtrim((string)META_DIR, '/\\');
+        if ($base === '') {
+            return sys_get_temp_dir();
+        }
+        $dir = $base . DIRECTORY_SEPARATOR . 'transfer_tmp';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        return is_dir($dir) ? $dir : sys_get_temp_dir();
+    }
+
+    private static function bufferSourceToTempStream(StorageAdapterInterface $srcStorage, string $srcPath): array
+    {
+        $tmpPath = @tempnam(self::tempTransferDir(), 'frxfer_');
+        if ($tmpPath === false || $tmpPath === '') {
+            return [false, null, ''];
+        }
+
+        $tmp = @fopen($tmpPath, 'w+b');
+        if ($tmp === false) {
+            @unlink($tmpPath);
+            return [false, null, ''];
+        }
+
+        $bytes = 0;
+        $stream = $srcStorage->openReadStream($srcPath);
+        if (is_resource($stream)) {
+            $copied = @stream_copy_to_stream($stream, $tmp);
+            @fclose($stream);
+            if ($copied === false) {
+                @fclose($tmp);
+                @unlink($tmpPath);
+                return [false, null, ''];
+            }
+            $bytes = (int)$copied;
+        } elseif (is_object($stream) && method_exists($stream, 'read')) {
+            while (true) {
+                $chunk = $stream->read(8192);
+                if ($chunk === false || $chunk === '') break;
+                $written = @fwrite($tmp, $chunk);
+                if ($written === false) {
+                    if (method_exists($stream, 'close')) {
+                        $stream->close();
+                    }
+                    @fclose($tmp);
+                    @unlink($tmpPath);
+                    return [false, null, ''];
+                }
+                $bytes += $written;
+            }
+            if (method_exists($stream, 'close')) {
+                $stream->close();
+            }
+        } else {
+            @fclose($tmp);
+            @unlink($tmpPath);
+            return [false, null, ''];
+        }
+
+        @rewind($tmp);
+        return [$tmp, $bytes > 0 ? $bytes : null, $tmpPath];
+    }
+
+    public static function copyFilesAcrossSources(string $sourceId, string $destinationId, string $sourceFolder, string $destinationFolder, array $files): array
+    {
+        $errors = [];
+        $srcStorage = StorageRegistry::getAdapter($sourceId);
+        $dstStorage = StorageRegistry::getAdapter($destinationId);
+
+        $srcRoot = class_exists('SourceContext') ? SourceContext::uploadRootForId($sourceId) : rtrim((string)UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $dstRoot = class_exists('SourceContext') ? SourceContext::uploadRootForId($destinationId) : rtrim((string)UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+
+        [$sourceDir, $err] = self::resolveFolderPathForAdapter($srcStorage, $srcRoot, $sourceFolder, false);
+        if ($err) return ["error" => $err];
+        [$destDir, $err] = self::resolveFolderPathForAdapter($dstStorage, $dstRoot, $destinationFolder, true);
+        if ($err) return ["error" => $err];
+
+        $sourceDir .= DIRECTORY_SEPARATOR;
+        $destDir   .= DIRECTORY_SEPARATOR;
+
+        $srcMetaRoot  = self::metaRootForId($sourceId);
+        $destMetaRoot = self::metaRootForId($destinationId);
+
+        $srcMetaFile  = self::getMetadataFilePathForRoot($srcMetaRoot, $sourceFolder);
+        $destMetaFile = self::getMetadataFilePathForRoot($destMetaRoot, $destinationFolder);
+
+        $srcMetadata  = is_file($srcMetaFile) ? (json_decode((string)file_get_contents($srcMetaFile), true) ?: []) : [];
+        $destMetadata = is_file($destMetaFile) ? (json_decode((string)file_get_contents($destMetaFile), true) ?: []) : [];
+
+        $safeFileNamePattern = REGEX_FILE_NAME;
+        $actor = $_SESSION['username'] ?? 'Unknown';
+        $now   = date(DATE_TIME_FORMAT);
+
+        foreach ($files as $fileName) {
+            $originalName = basename(trim((string)$fileName));
+            $basename = $originalName;
+
+            if (!preg_match($safeFileNamePattern, $basename)) {
+                $errors[] = "$basename has an invalid name.";
+                continue;
+            }
+
+            $srcPath  = $sourceDir . $originalName;
+            $destPath = $destDir . $basename;
+
+            clearstatcache();
+            $stat = $srcStorage->stat($srcPath);
+            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+                $errors[] = "$originalName does not exist in source.";
+                continue;
+            }
+
+            if ($dstStorage->stat($destPath) !== null) {
+                $basename = self::getUniqueFileNameForAdapter($dstStorage, $destDir, $basename);
+                $destPath = $destDir . $basename;
+            }
+
+            $stream = $srcStorage->openReadStream($srcPath);
+            $written = false;
+            $length = isset($stat['size']) ? (int)$stat['size'] : null;
+            $mime = isset($stat['mime']) ? (string)$stat['mime'] : null;
+
+            if ($stream && is_resource($stream)) {
+                [$stream, $length] = self::ensureSeekableStream($stream, $length);
+                $written = $dstStorage->writeStream($destPath, $stream, $length, $mime);
+                if (is_resource($stream)) {
+                    @fclose($stream);
+                }
+            } else {
+                $data = $srcStorage->read($srcPath);
+                if ($data !== false) {
+                    $written = $dstStorage->write($destPath, $data, LOCK_EX);
+                }
+            }
+
+            if (!$written) {
+                $detail = self::adapterErrorDetail($dstStorage);
+                if ($detail !== '' && stripos($detail, 'rewind') !== false) {
+                    $retryStream = $srcStorage->openReadStream($srcPath);
+                    if (is_resource($retryStream)) {
+                        [$retryStream, $length] = self::ensureSeekableStream($retryStream, $length);
+                        $written = $dstStorage->writeStream($destPath, $retryStream, $length, $mime);
+                        if (is_resource($retryStream)) {
+                            @fclose($retryStream);
+                        }
+                    }
+
+                    if (!$written) {
+                        $maxInlineBytes = 32 * 1024 * 1024;
+                        if ($length !== null && $length <= $maxInlineBytes) {
+                            $data = $srcStorage->read($srcPath);
+                            if ($data !== false) {
+                                $written = $dstStorage->write($destPath, $data, LOCK_EX);
+                            }
+                        }
+                    }
+
+                    if (!$written) {
+                        $maxBufferBytes = 128 * 1024 * 1024;
+                        if ($length !== null && $length <= $maxBufferBytes) {
+                            [$tmp, $bufLen, $tmpPath] = self::bufferSourceToTempStream($srcStorage, $srcPath);
+                            if ($tmp) {
+                                $written = $dstStorage->writeStream($destPath, $tmp, $bufLen, $mime);
+                                if (is_resource($tmp)) {
+                                    @fclose($tmp);
+                                }
+                                if ($tmpPath !== '') {
+                                    @unlink($tmpPath);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!$written) {
+                $detail = self::adapterErrorDetail($dstStorage);
+                $errors[] = $detail !== ''
+                    ? "Failed to copy $basename: $detail"
+                    : "Failed to copy $basename.";
+                $dstStorage->delete($destPath);
+                continue;
+            }
+
+            $tags = [];
+            if (isset($srcMetadata[$originalName]['tags']) && is_array($srcMetadata[$originalName]['tags'])) {
+                $tags = $srcMetadata[$originalName]['tags'];
+            }
+
+            $destMetadata[$basename] = [
+                'uploaded' => $now,
+                'modified' => $now,
+                'uploader' => $actor,
+                'tags'     => $tags
+            ];
+        }
+
+        if (@file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
+            $errors[] = "Failed to update destination metadata.";
+        }
+
+        return empty($errors)
+            ? ["success" => "Files copied successfully"]
+            : ["error" => implode("; ", $errors)];
+    }
+
+    public static function moveFilesAcrossSources(string $sourceId, string $destinationId, string $sourceFolder, string $destinationFolder, array $files): array
+    {
+        $errors = [];
+        $srcStorage = StorageRegistry::getAdapter($sourceId);
+        $dstStorage = StorageRegistry::getAdapter($destinationId);
+
+        $srcRoot = class_exists('SourceContext') ? SourceContext::uploadRootForId($sourceId) : rtrim((string)UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $dstRoot = class_exists('SourceContext') ? SourceContext::uploadRootForId($destinationId) : rtrim((string)UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR;
+
+        [$sourceDir, $err] = self::resolveFolderPathForAdapter($srcStorage, $srcRoot, $sourceFolder, false);
+        if ($err) return ["error" => $err];
+        [$destDir, $err] = self::resolveFolderPathForAdapter($dstStorage, $dstRoot, $destinationFolder, true);
+        if ($err) return ["error" => $err];
+
+        $sourceDir .= DIRECTORY_SEPARATOR;
+        $destDir   .= DIRECTORY_SEPARATOR;
+
+        $srcMetaRoot  = self::metaRootForId($sourceId);
+        $destMetaRoot = self::metaRootForId($destinationId);
+
+        $srcMetaFile  = self::getMetadataFilePathForRoot($srcMetaRoot, $sourceFolder);
+        $destMetaFile = self::getMetadataFilePathForRoot($destMetaRoot, $destinationFolder);
+
+        $srcMetadata  = is_file($srcMetaFile) ? (json_decode((string)file_get_contents($srcMetaFile), true) ?: []) : [];
+        $destMetadata = is_file($destMetaFile) ? (json_decode((string)file_get_contents($destMetaFile), true) ?: []) : [];
+
+        $movedFiles = [];
+        $safeFileNamePattern = REGEX_FILE_NAME;
+
+        foreach ($files as $fileName) {
+            $originalName = basename(trim((string)$fileName));
+            $basename = $originalName;
+
+            if (!preg_match($safeFileNamePattern, $basename)) {
+                $errors[] = "$basename has invalid characters.";
+                continue;
+            }
+
+            $srcPath = $sourceDir . $originalName;
+            $destPath = $destDir . $basename;
+
+            clearstatcache();
+            $stat = $srcStorage->stat($srcPath);
+            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+                $errors[] = "$originalName does not exist in source.";
+                continue;
+            }
+
+            if ($dstStorage->stat($destPath) !== null) {
+                $basename = self::getUniqueFileNameForAdapter($dstStorage, $destDir, $basename);
+                $destPath = $destDir . $basename;
+            }
+
+            $stream = $srcStorage->openReadStream($srcPath);
+            $written = false;
+            $length = isset($stat['size']) ? (int)$stat['size'] : null;
+            $mime = isset($stat['mime']) ? (string)$stat['mime'] : null;
+
+            if ($stream && is_resource($stream)) {
+                [$stream, $length] = self::ensureSeekableStream($stream, $length);
+                $written = $dstStorage->writeStream($destPath, $stream, $length, $mime);
+                if (is_resource($stream)) {
+                    @fclose($stream);
+                }
+            } else {
+                $data = $srcStorage->read($srcPath);
+                if ($data !== false) {
+                    $written = $dstStorage->write($destPath, $data, LOCK_EX);
+                }
+            }
+
+            if (!$written) {
+                $detail = self::adapterErrorDetail($dstStorage);
+                if ($detail !== '' && stripos($detail, 'rewind') !== false) {
+                    $retryStream = $srcStorage->openReadStream($srcPath);
+                    if (is_resource($retryStream)) {
+                        [$retryStream, $length] = self::ensureSeekableStream($retryStream, $length);
+                        $written = $dstStorage->writeStream($destPath, $retryStream, $length, $mime);
+                        if (is_resource($retryStream)) {
+                            @fclose($retryStream);
+                        }
+                    }
+
+                    if (!$written) {
+                        $maxInlineBytes = 32 * 1024 * 1024;
+                        if ($length !== null && $length <= $maxInlineBytes) {
+                            $data = $srcStorage->read($srcPath);
+                            if ($data !== false) {
+                                $written = $dstStorage->write($destPath, $data, LOCK_EX);
+                            }
+                        }
+                    }
+
+                    if (!$written) {
+                        $maxBufferBytes = 128 * 1024 * 1024;
+                        if ($length !== null && $length <= $maxBufferBytes) {
+                            [$tmp, $bufLen, $tmpPath] = self::bufferSourceToTempStream($srcStorage, $srcPath);
+                            if ($tmp) {
+                                $written = $dstStorage->writeStream($destPath, $tmp, $bufLen, $mime);
+                                if (is_resource($tmp)) {
+                                    @fclose($tmp);
+                                }
+                                if ($tmpPath !== '') {
+                                    @unlink($tmpPath);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!$written) {
+                $detail = self::adapterErrorDetail($dstStorage);
+                $errors[] = $detail !== ''
+                    ? "Failed to move $basename: $detail"
+                    : "Failed to move $basename.";
+                $dstStorage->delete($destPath);
+                continue;
+            }
+
+            if (!$srcStorage->delete($srcPath)) {
+                $errors[] = "Failed to remove source file {$basename}.";
+            }
+
+            $movedFiles[] = $originalName;
+            if (isset($srcMetadata[$originalName])) {
+                $destMetadata[$basename] = $srcMetadata[$originalName];
+                unset($srcMetadata[$originalName]);
+            }
+        }
+
+        if (@file_put_contents($srcMetaFile, json_encode($srcMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
+            $errors[] = "Failed to update source metadata.";
+        }
+        if (@file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
+            $errors[] = "Failed to update destination metadata.";
+        }
+
+        if (empty($errors)) {
+            return ["success" => "Files moved successfully"];
+        }
+
+        return ["error" => implode("; ", $errors)];
     }
 
     /**
@@ -201,20 +747,24 @@ class FileModel
     public static function deleteFiles($folder, $files)
     {
         $errors = [];
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
 
         list($uploadDir, $err) = self::resolveFolderPath($folder, false);
         if ($err) return ["error" => $err];
         $uploadDir .= DIRECTORY_SEPARATOR;
 
         // Setup the Trash folder and metadata.
-        $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
-        if (!file_exists($trashDir)) {
-            mkdir($trashDir, 0755, true);
+        $trashDir = rtrim(self::trashRoot(), '/\\') . DIRECTORY_SEPARATOR;
+        if ($storage->stat($trashDir) === null) {
+            $storage->mkdir($trashDir, 0755, true);
         }
         $trashMetadataFile = $trashDir . "trash.json";
-        $trashData = file_exists($trashMetadataFile)
-            ? json_decode(file_get_contents($trashMetadataFile), true)
-            : [];
+        $trashData = [];
+        $trashJson = $storage->read($trashMetadataFile);
+        if ($trashJson !== false) {
+            $trashData = json_decode($trashJson, true);
+        }
         if (!is_array($trashData)) {
             $trashData = [];
         }
@@ -228,7 +778,8 @@ class FileModel
             $folderMetadata = [];
         }
 
-        $movedFiles = [];
+        $movedToTrash = [];
+        $deletedPermanent = [];
         $safeFileNamePattern = REGEX_FILE_NAME;
 
         foreach ($files as $fileName) {
@@ -243,11 +794,25 @@ class FileModel
             $filePath = $uploadDir . $basename;
 
             // Check if file exists.
-            if (file_exists($filePath)) {
+            if ($storage->stat($filePath) !== null) {
                 // Unique trash name (timestamp + random)
                 $trashFileName = $basename . '_' . time() . '_' . bin2hex(random_bytes(4));
-                if (rename($filePath, $trashDir . $trashFileName)) {
-                    $movedFiles[] = $basename;
+                $trashTarget = $trashDir . $trashFileName;
+                $moved = $storage->move($filePath, $trashTarget);
+                if (!$moved) {
+                    // Fallback for backends that don't support MOVE across collections.
+                    $copied = $storage->copy($filePath, $trashTarget);
+                    if ($copied) {
+                        if ($storage->delete($filePath)) {
+                            $moved = true;
+                        } else {
+                            // Best-effort cleanup to avoid leaving a duplicate in trash.
+                            $storage->delete($trashTarget);
+                        }
+                    }
+                }
+                if ($moved) {
+                    $movedToTrash[] = $basename;
                     // Record trash metadata for possible restoration.
                     $trashData[] = [
                         'type'           => 'file',
@@ -260,23 +825,28 @@ class FileModel
                         'deletedBy'      => $_SESSION['username'] ?? "Unknown"
                     ];
                 } else {
-                    $errors[] = "Failed to move $basename to Trash.";
+                    if (!$isLocal && $storage->delete($filePath)) {
+                        $deletedPermanent[] = $basename;
+                    } else {
+                        $errors[] = "Failed to move $basename to Trash.";
+                    }
                     continue;
                 }
             } else {
                 // If file does not exist, consider it already removed.
-                $movedFiles[] = $basename;
+                $deletedPermanent[] = $basename;
             }
         }
 
         // Save updated trash metadata.
-        file_put_contents($trashMetadataFile, json_encode($trashData, JSON_PRETTY_PRINT), LOCK_EX);
+        $storage->write($trashMetadataFile, json_encode($trashData, JSON_PRETTY_PRINT), LOCK_EX);
 
         // Remove deleted file entries from folder metadata.
         if (file_exists($metadataFile)) {
             $metadata = json_decode(file_get_contents($metadataFile), true);
             if (is_array($metadata)) {
-                foreach ($movedFiles as $delFile) {
+                $removedFiles = array_merge($movedToTrash, $deletedPermanent);
+                foreach ($removedFiles as $delFile) {
                     if (isset($metadata[$delFile])) {
                         unset($metadata[$delFile]);
                     }
@@ -286,9 +856,24 @@ class FileModel
         }
 
         if (empty($errors)) {
-            return ["success" => "Files moved to Trash: " . implode(", ", $movedFiles)];
+            $parts = [];
+            if (!empty($movedToTrash)) {
+                $parts[] = "Files moved to Trash: " . implode(", ", $movedToTrash);
+            }
+            if (!empty($deletedPermanent)) {
+                $parts[] = "Deleted permanently: " . implode(", ", $deletedPermanent);
+            }
+            return ["success" => trim(implode(" ", $parts))];
         } else {
-            return ["error" => implode("; ", $errors) . ". Files moved to Trash: " . implode(", ", $movedFiles)];
+            $suffixParts = [];
+            if (!empty($movedToTrash)) {
+                $suffixParts[] = "Files moved to Trash: " . implode(", ", $movedToTrash);
+            }
+            if (!empty($deletedPermanent)) {
+                $suffixParts[] = "Deleted permanently: " . implode(", ", $deletedPermanent);
+            }
+            $suffix = $suffixParts ? " " . implode(" ", $suffixParts) : "";
+            return ["error" => implode("; ", $errors) . "." . $suffix];
         }
     }
 
@@ -303,6 +888,8 @@ class FileModel
     public static function moveFiles($sourceFolder, $destinationFolder, $files)
     {
         $errors = [];
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
 
         list($sourceDir, $err) = self::resolveFolderPath($sourceFolder, false);
         if ($err) return ["error" => $err];
@@ -331,6 +918,15 @@ class FileModel
         } catch (\Throwable $e) {
             $destEncrypted = false;
         }
+        $srcEncrypted = false;
+        try {
+            $srcEncrypted = FolderCrypto::isEncryptedOrAncestor((string)$sourceFolder);
+        } catch (\Throwable $e) {
+            $srcEncrypted = false;
+        }
+        if (!$isLocal && ($srcEncrypted || $destEncrypted)) {
+            return ["error" => "Encrypted folders are not supported for remote storage."];
+        }
 
         $movedFiles = [];
         $safeFileNamePattern = REGEX_FILE_NAME;
@@ -350,49 +946,56 @@ class FileModel
             $destPath = $destDir . $basename;
 
             clearstatcache();
-            if (!file_exists($srcPath)) {
+            if ($storage->stat($srcPath) === null) {
                 $errors[] = "$originalName does not exist in source.";
                 continue;
             }
 
             // If a file with the same name exists in destination, generate a unique name.
-            if (file_exists($destPath)) {
+            if ($storage->stat($destPath) !== null) {
                 $uniqueName = self::getUniqueFileName($destDir, $basename);
                 $basename = $uniqueName;
                 $destPath = $destDir . $uniqueName;
             }
 
-            $srcIsEncryptedFile = false;
-            try {
-                $srcIsEncryptedFile = CryptoAtRest::isEncryptedFile($srcPath);
-            } catch (\Throwable $e) {
+            if ($isLocal) {
                 $srcIsEncryptedFile = false;
-            }
+                try {
+                    $srcIsEncryptedFile = CryptoAtRest::isEncryptedFile($srcPath);
+                } catch (\Throwable $e) {
+                    $srcIsEncryptedFile = false;
+                }
 
-            try {
-                if ($srcIsEncryptedFile && !$destEncrypted) {
-                    // decrypt while moving, then remove the encrypted source
-                    CryptoAtRest::decryptFileToPath($srcPath, $destPath);
-                    @unlink($srcPath);
-                } else {
-                    if (!rename($srcPath, $destPath)) {
-                        $errors[] = "Failed to move $basename.";
-                        continue;
-                    }
-                    if (!$srcIsEncryptedFile && $destEncrypted) {
-                        try {
-                            CryptoAtRest::encryptFileInPlace($destPath);
-                        } catch (\Throwable $e) {
-                            // best-effort rollback
-                            @rename($destPath, $srcPath);
-                            throw $e;
+                try {
+                    if ($srcIsEncryptedFile && !$destEncrypted) {
+                        // decrypt while moving, then remove the encrypted source
+                        CryptoAtRest::decryptFileToPath($srcPath, $destPath);
+                        $storage->delete($srcPath);
+                    } else {
+                        if (!$storage->move($srcPath, $destPath)) {
+                            $errors[] = "Failed to move $basename.";
+                            continue;
+                        }
+                        if (!$srcIsEncryptedFile && $destEncrypted) {
+                            try {
+                                CryptoAtRest::encryptFileInPlace($destPath);
+                            } catch (\Throwable $e) {
+                                // best-effort rollback
+                                $storage->move($destPath, $srcPath);
+                                throw $e;
+                            }
                         }
                     }
+                } catch (\Throwable $e) {
+                    $storage->delete($destPath);
+                    $errors[] = "Failed to move {$basename}: " . $e->getMessage();
+                    continue;
                 }
-            } catch (\Throwable $e) {
-                @unlink($destPath);
-                $errors[] = "Failed to move {$basename}: " . $e->getMessage();
-                continue;
+            } else {
+                if (!$storage->move($srcPath, $destPath)) {
+                    $errors[] = "Failed to move $basename.";
+                    continue;
+                }
             }
 
             $movedFiles[] = $originalName;
@@ -428,6 +1031,7 @@ class FileModel
      */
     public static function renameFile($folder, $oldName, $newName)
     {
+        $storage = self::storage();
         list($directory, $err) = self::resolveFolderPath($folder, false);
         if ($err) return ["error" => $err];
         $directory .= DIRECTORY_SEPARATOR;
@@ -445,21 +1049,21 @@ class FileModel
         $newPath = $directory . $newName;
 
         // Helper: Generate a unique file name if the new name already exists.
-        if (file_exists($newPath)) {
+        if ($storage->stat($newPath) !== null) {
             $newName = self::getUniqueFileName($directory, $newName);
             $newPath = $directory . $newName;
         }
 
         // Check that the old file exists.
-        if (!file_exists($oldPath)) {
+        if ($storage->stat($oldPath) === null) {
             return ["error" => "File does not exist"];
         }
 
         // Perform the rename.
-        if (rename($oldPath, $newPath)) {
+        if ($storage->move($oldPath, $newPath)) {
             // Update the metadata file.
             $metadataKey = ($folder === 'root') ? "root" : $folder;
-            $metadataFile = META_DIR . str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
+            $metadataFile = self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
 
             if (file_exists($metadataFile)) {
                 $metadata = json_decode(file_get_contents($metadataFile), true);
@@ -496,52 +1100,79 @@ class FileModel
             return ["error" => "Invalid file name"];
         }
 
-        $baseDirReal = realpath(UPLOAD_DIR);
-        if ($baseDirReal === false) {
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
+        $root = self::uploadRoot();
+        $baseDirReal = $isLocal ? realpath($root) : rtrim($root, '/\\');
+        if ($baseDirReal === false || $baseDirReal === '') {
             return ["error" => "Server misconfiguration"];
         }
 
+        $root = self::uploadRoot();
+
+        if (!$isLocal) {
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                    return ["error" => "Encrypted folders are not supported for remote storage."];
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+
         $targetDir = (strtolower($folder) === 'root')
-            ? rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR
-            : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
+            ? rtrim($root, '/\\') . DIRECTORY_SEPARATOR
+            : rtrim($root, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
 
         // Ensure directory exists *before* realpath + containment check
-        if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
-            return ["error" => "Failed to create destination folder"];
+        $dirStat = $storage->stat($targetDir);
+        if ($dirStat === null || $dirStat['type'] !== 'dir') {
+            if (!$storage->mkdir($targetDir, 0775, true)) {
+                return ["error" => "Failed to create destination folder"];
+            }
         }
 
-        $targetDirReal = realpath($targetDir);
-        if ($targetDirReal === false || strpos($targetDirReal, $baseDirReal) !== 0) {
-            return ["error" => "Invalid folder path"];
+        if ($isLocal) {
+            $targetDirReal = realpath($targetDir);
+            if ($targetDirReal === false || strpos($targetDirReal, $baseDirReal) !== 0) {
+                return ["error" => "Invalid folder path"];
+            }
+            $filePath = $targetDirReal . DIRECTORY_SEPARATOR . $fileName;
+        } else {
+            $filePath = rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . $fileName;
         }
-
-        $filePath = $targetDirReal . DIRECTORY_SEPARATOR . $fileName;
 
         if (is_resource($content)) {
-            $out = fopen($filePath, 'wb');
-            if ($out === false) return ["error" => "Unable to open file for writing"];
-            stream_copy_to_stream($content, $out);
-            fclose($out);
+            if ($isLocal) {
+                $out = fopen($filePath, 'wb');
+                if ($out === false) return ["error" => "Unable to open file for writing"];
+                stream_copy_to_stream($content, $out);
+                fclose($out);
+            } else {
+                if (!$storage->writeStream($filePath, $content, null, null)) {
+                    return ["error" => "Error saving file"];
+                }
+            }
         } else {
-            if (file_put_contents($filePath, (string)$content, LOCK_EX) === false) {
+            if (!$storage->write($filePath, (string)$content, LOCK_EX)) {
                 return ["error" => "Error saving file"];
             }
         }
 
-        // Encrypt at rest if folder is marked encrypted
-        try {
-            if (FolderCrypto::isEncryptedOrAncestor($folder)) {
-                CryptoAtRest::encryptFileInPlace($filePath);
+        // Encrypt at rest if folder is marked encrypted (local storage only)
+        if ($isLocal) {
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                    CryptoAtRest::encryptFileInPlace($filePath);
+                }
+            } catch (\Throwable $e) {
+                $storage->delete($filePath);
+                return ["error" => "Error encrypting file at rest: " . $e->getMessage()];
             }
-        } catch (\Throwable $e) {
-            @unlink($filePath);
-            return ["error" => "Error encrypting file at rest: " . $e->getMessage()];
         }
 
         // Metadata
         $metadataKey      = strtolower($folder) === "root" ? "root" : $folder;
         $metadataFileName = str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
-        $metadataFilePath = META_DIR . $metadataFileName;
+        $metadataFilePath = self::metaRoot() . $metadataFileName;
 
         $metadata = file_exists($metadataFilePath) ? (json_decode(file_get_contents($metadataFilePath), true) ?: []) : [];
 
@@ -576,14 +1207,82 @@ class FileModel
      */
     public static function getDownloadInfo($folder, $file)
     {
+        $storage = self::storage();
+        $isLocal = $storage->isLocal();
+        $root = self::uploadRoot();
+
         // Validate file name using REGEX_FILE_NAME.
         $file = basename(trim($file));
         if (!preg_match(REGEX_FILE_NAME, $file)) {
             return ["error" => "Invalid file name."];
         }
 
+        if (!$isLocal) {
+            // Remote adapter path resolution (no realpath).
+            if (strtolower($folder) !== 'root' && trim($folder) !== '') {
+                if (strpos($folder, '..') !== false) {
+                    return ["error" => "Invalid folder name."];
+                }
+                $parts = explode('/', trim((string)$folder, "/\\ "));
+                foreach ($parts as $part) {
+                    if ($part === '' || !preg_match(REGEX_FOLDER_NAME, $part)) {
+                        return ["error" => "Invalid folder name."];
+                    }
+                }
+                $directory = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
+            } else {
+                $directory = rtrim($root, '/\\');
+            }
+
+            $filePath = $directory . DIRECTORY_SEPARATOR . $file;
+            $stat = $storage->stat($filePath);
+            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+                $probe = $storage->openReadStream($filePath, 1, 0);
+                if ($probe === false) {
+                    return ["error" => "File not found."];
+                }
+                if (is_resource($probe)) {
+                    @fclose($probe);
+                } elseif (is_object($probe) && method_exists($probe, 'close')) {
+                    $probe->close();
+                }
+                $stat = [
+                    'type' => 'file',
+                    'size' => 0,
+                ];
+            }
+
+            $downloadName = $file;
+            $downloadExt = $stat['downloadExt'] ?? '';
+            if (is_string($downloadExt)) {
+                $downloadExt = ltrim($downloadExt, '.');
+                if ($downloadExt !== '') {
+                    $suffix = '.' . strtolower($downloadExt);
+                    if (!str_ends_with(strtolower($downloadName), $suffix)) {
+                        $downloadName .= '.' . $downloadExt;
+                    }
+                }
+            }
+
+            $mimeType = $stat['downloadMime'] ?? $stat['mime'] ?? 'application/octet-stream';
+            if (!$mimeType || !is_string($mimeType)) {
+                $mimeType = 'application/octet-stream';
+            }
+
+            $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            if ($ext === 'svg') {
+                $mimeType = 'image/svg+xml';
+            }
+
+            return [
+                "filePath" => $filePath,
+                "mimeType" => $mimeType,
+                "downloadName" => $downloadName
+            ];
+        }
+
         // Determine the real upload directory.
-        $uploadDirReal = realpath(UPLOAD_DIR);
+        $uploadDirReal = realpath($root);
         if ($uploadDirReal === false) {
             return ["error" => "Server misconfiguration."];
         }
@@ -596,7 +1295,7 @@ class FileModel
             if (strpos($folder, '..') !== false) {
                 return ["error" => "Invalid folder name."];
             }
-            $directoryPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
+            $directoryPath = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
             $directory = realpath($directoryPath);
             if ($directory === false || strpos($directory, $uploadDirReal) !== 0) {
                 return ["error" => "Invalid folder path."];
@@ -637,6 +1336,7 @@ class FileModel
     {
         $errors  = [];
         $deleted = [];
+        $storage = self::storage();
 
         list($uploadDir, $err) = self::resolveFolderPath($folder, false);
         if ($err) return ['error' => $err];
@@ -660,8 +1360,8 @@ class FileModel
 
             $filePath = $uploadDir . $basename;
 
-            if (file_exists($filePath)) {
-                if (!@unlink($filePath)) {
+            if ($storage->stat($filePath) !== null) {
+                if (!$storage->delete($filePath)) {
                     $errors[] = "Failed to delete {$basename}.";
                     continue;
                 }
@@ -711,7 +1411,7 @@ class FileModel
         } catch (\Throwable $e) { /* ignore */ }
 
         // Purge old temp zips > 6h (best-effort)
-        $zipRoot = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+        $zipRoot = rtrim(self::metaRoot(), '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
         $now = time();
         foreach ((glob($zipRoot . DIRECTORY_SEPARATOR . 'download-*.zip') ?: []) as $zp) {
             if (is_file($zp) && ($now - (int)@filemtime($zp)) > 21600) {
@@ -721,7 +1421,7 @@ class FileModel
 
         // Normalize and validate target folder
         $folder = trim((string)$folder) ?: 'root';
-        $baseDir = realpath(UPLOAD_DIR);
+        $baseDir = realpath(self::uploadRoot());
         if ($baseDir === false) {
             return ["error" => "Uploads directory not configured correctly."];
         }
@@ -738,7 +1438,7 @@ class FileModel
                     return ["error" => "Invalid folder name."];
                 }
             }
-            $folderPath = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
+            $folderPath = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
             $folderPathReal = realpath($folderPath);
             if ($folderPathReal === false || strpos($folderPathReal, $baseDir) !== 0) {
                 return ["error" => "Folder not found."];
@@ -766,7 +1466,7 @@ class FileModel
         }
 
         // Workspace on the big disk: META_DIR/ziptmp
-        $work = rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+        $work = rtrim(self::metaRoot(), '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
         if (!is_dir($work)) {
             @mkdir($work, 0775, true);
         }
@@ -841,7 +1541,7 @@ class FileModel
         $MAX_UNZIP_BYTES = defined('MAX_UNZIP_BYTES') ? (int)MAX_UNZIP_BYTES : (200 * 1024 * 1024 * 1024); // 200 GiB
         $MAX_UNZIP_FILES = defined('MAX_UNZIP_FILES') ? (int)MAX_UNZIP_FILES : 20000;
 
-        $baseDir = realpath(UPLOAD_DIR);
+        $baseDir = realpath(self::uploadRoot());
         if ($baseDir === false) {
             return ["error" => "Uploads directory not configured correctly."];
         }
@@ -1095,15 +1795,47 @@ class FileModel
      */
     public static function getShareRecord($token)
     {
-        $shareFile = META_DIR . "share_links.json";
-        if (!file_exists($shareFile)) {
+        $token = (string)$token;
+        $readRecord = function (string $path, string $token): ?array {
+            if (!is_file($path)) {
+                return null;
+            }
+            $shareLinks = json_decode((string)@file_get_contents($path), true);
+            if (!is_array($shareLinks) || !isset($shareLinks[$token])) {
+                return null;
+            }
+            return $shareLinks[$token];
+        };
+
+        $currentId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
+        $shareFile = self::metaRoot() . "share_links.json";
+        $record = $readRecord($shareFile, $token);
+        if ($record) {
+            return $record;
+        }
+
+        if (!class_exists('SourceContext') || !SourceContext::sourcesEnabled()) {
             return null;
         }
-        $shareLinks = json_decode(file_get_contents($shareFile), true);
-        if (!is_array($shareLinks) || !isset($shareLinks[$token])) {
-            return null;
+
+        $sources = SourceContext::listAllSources();
+        foreach ($sources as $src) {
+            if (isset($src['enabled']) && !$src['enabled']) {
+                continue;
+            }
+            $id = (string)($src['id'] ?? '');
+            if ($id === '' || $id === $currentId) {
+                continue;
+            }
+            $path = SourceContext::metaRootForId($id) . "share_links.json";
+            $record = $readRecord($path, $token);
+            if ($record) {
+                SourceContext::setActiveId($id, false);
+                return $record;
+            }
         }
-        return $shareLinks[$token];
+
+        return null;
     }
 
     /**
@@ -1144,7 +1876,7 @@ class FileModel
         $hashedPassword = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : "";
 
         // File to store share links.
-        $shareFile = META_DIR . "share_links.json";
+        $shareFile = self::metaRoot() . "share_links.json";
         $shareLinks = [];
         if (file_exists($shareFile)) {
             $data = file_get_contents($shareFile);
@@ -1185,15 +1917,16 @@ class FileModel
      */
     public static function getTrashItems()
     {
-        $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $storage = self::storage();
+        $trashDir = rtrim(self::trashRoot(), '/\\') . DIRECTORY_SEPARATOR;
         $trashMetadataFile = $trashDir . "trash.json";
         $trashItems = [];
-        if (file_exists($trashMetadataFile)) {
-            $json = file_get_contents($trashMetadataFile);
-            $trashItems = json_decode($json, true);
-            if (!is_array($trashItems)) {
-                $trashItems = [];
-            }
+        $trashJson = $storage->read($trashMetadataFile);
+        if ($trashJson !== false) {
+            $trashItems = json_decode($trashJson, true);
+        }
+        if (!is_array($trashItems)) {
+            $trashItems = [];
         }
 
         // Enrich each trash record.
@@ -1238,28 +1971,29 @@ class FileModel
     {
         $errors = [];
         $restoredItems = [];
+        $storage = self::storage();
 
         // Setup Trash directory and trash metadata file.
-        $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
-        if (!file_exists($trashDir)) {
-            mkdir($trashDir, 0755, true);
+        $trashDir = rtrim(self::trashRoot(), '/\\') . DIRECTORY_SEPARATOR;
+        if ($storage->stat($trashDir) === null) {
+            $storage->mkdir($trashDir, 0755, true);
         }
         $trashMetadataFile = $trashDir . "trash.json";
         $trashData = [];
-        if (file_exists($trashMetadataFile)) {
-            $json = file_get_contents($trashMetadataFile);
-            $trashData = json_decode($json, true);
-            if (!is_array($trashData)) {
-                $trashData = [];
-            }
+        $trashJson = $storage->read($trashMetadataFile);
+        if ($trashJson !== false) {
+            $trashData = json_decode($trashJson, true);
+        }
+        if (!is_array($trashData)) {
+            $trashData = [];
         }
 
         // Helper to get metadata file path for a folder.
         $getMetadataFilePath = function ($folder) {
             if (strtolower($folder) === 'root' || trim($folder) === '') {
-                return META_DIR . "root_metadata.json";
+                return self::metaRoot() . "root_metadata.json";
             }
-            return META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+            return self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
         };
 
         // Process each provided trash file name.
@@ -1294,8 +2028,9 @@ class FileModel
 
             // Convert absolute original folder to relative folder.
             $relativeFolder = 'root';
-            if (strpos($originalFolder, UPLOAD_DIR) === 0) {
-                $relativeFolder = trim(substr($originalFolder, strlen(UPLOAD_DIR)), '/\\');
+            $root = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR;
+            if (strpos($originalFolder, $root) === 0) {
+                $relativeFolder = trim(substr($originalFolder, strlen($root)), '/\\');
                 if ($relativeFolder === '') {
                     $relativeFolder = 'root';
                 }
@@ -1303,13 +2038,13 @@ class FileModel
 
             // Build destination path.
             $destinationPath = (strtolower($relativeFolder) !== 'root')
-                ? rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $relativeFolder . DIRECTORY_SEPARATOR . $originalName
-                : rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $originalName;
+                ? rtrim($root, '/\\') . DIRECTORY_SEPARATOR . $relativeFolder . DIRECTORY_SEPARATOR . $originalName
+                : rtrim($root, '/\\') . DIRECTORY_SEPARATOR . $originalName;
 
             // Handle folder-type records if necessary.
             if (isset($record['type']) && $record['type'] === 'folder') {
-                if (!file_exists($destinationPath)) {
-                    if (mkdir($destinationPath, 0755, true)) {
+                if ($storage->stat($destinationPath) === null) {
+                    if ($storage->mkdir($destinationPath, 0755, true)) {
                         $restoredItems[] = $originalName . " (folder restored)";
                     } else {
                         $errors[] = "Failed to restore folder $originalName.";
@@ -1325,22 +2060,22 @@ class FileModel
 
             // For files: Ensure destination directory exists.
             $destinationDir = dirname($destinationPath);
-            if (!file_exists($destinationDir)) {
-                if (!mkdir($destinationDir, 0755, true)) {
+            if ($storage->stat($destinationDir) === null) {
+                if (!$storage->mkdir($destinationDir, 0755, true)) {
                     $errors[] = "Failed to create destination folder for $originalName.";
                     continue;
                 }
             }
 
-            if (file_exists($destinationPath)) {
+            if ($storage->stat($destinationPath) !== null) {
                 $errors[] = "File already exists at destination: $originalName.";
                 continue;
             }
 
             // Move the file from trash to its original location.
             $sourcePath = $trashDir . $trashFileName;
-            if (file_exists($sourcePath)) {
-                if (rename($sourcePath, $destinationPath)) {
+            if ($storage->stat($sourcePath) !== null) {
+                if ($storage->move($sourcePath, $destinationPath)) {
                     $restoredItems[] = $originalName;
 
                     // Update metadata: Restore metadata for this file.
@@ -1368,7 +2103,7 @@ class FileModel
         }
 
         // Write back updated trash metadata.
-        file_put_contents($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT), LOCK_EX);
+        $storage->write($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT), LOCK_EX);
 
         if (empty($errors)) {
             return ["success" => "Items restored: " . implode(", ", $restoredItems), "restored" => $restoredItems];
@@ -1385,18 +2120,19 @@ class FileModel
      */
     public static function deleteTrashFiles(array $filesToDelete)
     {
+        $storage = self::storage();
         // Setup trash directory and metadata file.
-        $trashDir = rtrim(TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
-        if (!file_exists($trashDir)) {
-            mkdir($trashDir, 0755, true);
+        $trashDir = rtrim(self::trashRoot(), '/\\') . DIRECTORY_SEPARATOR;
+        if ($storage->stat($trashDir) === null) {
+            $storage->mkdir($trashDir, 0755, true);
         }
         $trashMetadataFile = $trashDir . "trash.json";
 
         // Load trash metadata into an associative array keyed by trashName.
         $trashData = [];
-        if (file_exists($trashMetadataFile)) {
-            $json = file_get_contents($trashMetadataFile);
-            $tempData = json_decode($json, true);
+        $trashJson = $storage->read($trashMetadataFile);
+        if ($trashJson !== false) {
+            $tempData = json_decode($trashJson, true);
             if (is_array($tempData)) {
                 foreach ($tempData as $item) {
                     if (isset($item['trashName'])) {
@@ -1425,8 +2161,8 @@ class FileModel
             }
             // Build the full path to the trash file.
             $filePath = $trashDir . $trashName;
-            if (file_exists($filePath)) {
-                if (unlink($filePath)) {
+            if ($storage->stat($filePath) !== null) {
+                if ($storage->delete($filePath)) {
                     $deletedFiles[] = $trashName;
                     unset($trashData[$trashName]);
                 } else {
@@ -1440,7 +2176,7 @@ class FileModel
         }
 
         // Save the updated trash metadata back as an indexed array.
-        file_put_contents($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT), LOCK_EX);
+        $storage->write($trashMetadataFile, json_encode(array_values($trashData), JSON_PRETTY_PRINT), LOCK_EX);
 
         if (empty($errors)) {
             return ["deleted" => $deletedFiles];
@@ -1456,7 +2192,7 @@ class FileModel
      */
     public static function getFileTags(): array
     {
-        $metadataPath = META_DIR . 'createdTags.json';
+        $metadataPath = self::metaRoot() . 'createdTags.json';
 
         // Check if the metadata file exists and is readable.
         if (!file_exists($metadataPath) || !is_readable($metadataPath)) {
@@ -1504,8 +2240,8 @@ class FileModel
 
         // Determine the folder metadata file.
         $metadataFile = (strtolower($folder) === "root")
-            ? META_DIR . "root_metadata.json"
-            : META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+            ? self::metaRoot() . "root_metadata.json"
+            : self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
 
         // Load existing metadata for this folder.
         $metadata = [];
@@ -1524,7 +2260,7 @@ class FileModel
         }
 
         // Now update the global tags file.
-        $globalTagsFile = META_DIR . "createdTags.json";
+        $globalTagsFile = self::metaRoot() . "createdTags.json";
         $globalTags = [];
         if (file_exists($globalTagsFile)) {
             $globalTags = json_decode(file_get_contents($globalTagsFile), true) ?? [];
@@ -1577,12 +2313,14 @@ class FileModel
         if (!defined('INDEX_TEXT_BYTES_MAX'))    define('INDEX_TEXT_BYTES_MAX', 5 * 1024 * 1024);     // only sample files ≤ 5 MB
 
         $folder = trim($folder) ?: 'root';
+        $storage = self::storage();
 
         // Determine the target directory.
+        $baseDir = rtrim(self::uploadRoot(), '/\\');
         if (strtolower($folder) !== 'root') {
-            $directory = rtrim(UPLOAD_DIR, '/\\') . DIRECTORY_SEPARATOR . $folder;
+            $directory = $baseDir . DIRECTORY_SEPARATOR . $folder;
         } else {
-            $directory = UPLOAD_DIR;
+            $directory = $baseDir;
         }
 
         // Validate folder.
@@ -1592,26 +2330,77 @@ class FileModel
 
         // Helper: Build the metadata file path.
         $getMetadataFilePath = function (string $folder): string {
+            $metaRoot = self::metaRoot();
             if (strtolower($folder) === 'root' || trim($folder) === '') {
-                return META_DIR . "root_metadata.json";
+                return $metaRoot . "root_metadata.json";
             }
-            return META_DIR . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+            return $metaRoot . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
         };
         $metadataFile = $getMetadataFilePath($folder);
         $metadata = file_exists($metadataFile) ? (json_decode(file_get_contents($metadataFile), true) ?: []) : [];
 
-        if (!is_dir($directory)) {
+        $dirStat = $storage->stat($directory);
+        if ($dirStat === null || $dirStat['type'] !== 'dir') {
             return ["error" => "Directory not found."];
         }
 
-        $allFiles = array_values(array_diff(scandir($directory), array('.', '..')));
+        $allFiles = array_values(array_diff($storage->list($directory), array('.', '..')));
         $fileList = [];
 
         // Define a safe file name pattern.
         $safeFileNamePattern = REGEX_FILE_NAME;
 
-        // Prepare finfo (if available) for MIME sniffing.
-        $finfo = function_exists('finfo_open') ? @finfo_open(FILEINFO_MIME_TYPE) : false;
+        // Prepare finfo (local only) for MIME sniffing.
+        $finfo = ($storage->isLocal() && function_exists('finfo_open'))
+            ? @finfo_open(FILEINFO_MIME_TYPE)
+            : false;
+        $remoteUploader = null;
+        $localUploader = null;
+        if (!$storage->isLocal()) {
+            $remoteUploader = 'Remote';
+            if (class_exists('SourceContext')) {
+                $src = SourceContext::getActiveSource();
+                $type = strtolower((string)($src['type'] ?? ''));
+                $name = trim((string)($src['name'] ?? ''));
+                $id = trim((string)($src['id'] ?? ''));
+                $cfg = is_array($src['config'] ?? null) ? $src['config'] : [];
+                $bucket = trim((string)($cfg['bucket'] ?? ''));
+                if ($type === 's3') {
+                    if ($bucket !== '') {
+                        $remoteUploader = 'S3: ' . $bucket;
+                    } elseif ($name !== '') {
+                        $remoteUploader = $name;
+                    } elseif ($id !== '') {
+                        $remoteUploader = $id;
+                    } else {
+                        $remoteUploader = 'S3';
+                    }
+                } elseif ($name !== '') {
+                    $remoteUploader = $name;
+                } elseif ($id !== '') {
+                    $remoteUploader = $id;
+                }
+            }
+        } elseif (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $src = SourceContext::getActiveSource();
+            $name = trim((string)($src['name'] ?? ''));
+            $id = trim((string)($src['id'] ?? ''));
+            if ($name !== '') {
+                $localUploader = $name;
+            } elseif ($id !== '') {
+                $localUploader = $id;
+            }
+        }
+        $skipContentForFtp = false;
+        if (!$storage->isLocal() && class_exists('SourceContext')) {
+            $src = SourceContext::getActiveSource();
+            if (is_array($src)) {
+                $type = strtolower((string)($src['type'] ?? ''));
+                if ($type === 'ftp') {
+                    $skipContentForFtp = true;
+                }
+            }
+        }
 
         foreach ($allFiles as $file) {
             if ($file === '' || $file[0] === '.') {
@@ -1619,7 +2408,8 @@ class FileModel
             }
 
             $filePath = $directory . DIRECTORY_SEPARATOR . $file;
-            if (!is_file($filePath)) {
+            $stat = $storage->stat($filePath);
+            if ($stat === null || $stat['type'] !== 'file') {
                 continue; // Only process files.
             }
             if (!preg_match($safeFileNamePattern, $file)) {
@@ -1627,15 +2417,38 @@ class FileModel
             }
 
             // Meta
-            $mtime = @filemtime($filePath);
-            $fileDateModified = $mtime ? date(DATE_TIME_FORMAT, $mtime) : "Unknown";
+            $mtime = $stat['mtime'] ?? 0;
+            $fileDateModified = $mtime ? date(DATE_TIME_FORMAT, $mtime) : '';
             $metaKey = $file;
+            $metaModified = isset($metadata[$metaKey]["modified"])
+                ? trim((string)$metadata[$metaKey]["modified"])
+                : '';
+            if ($fileDateModified === '' && $metaModified !== '' && $metaModified !== 'Unknown') {
+                $fileDateModified = $metaModified;
+            }
+            if ($fileDateModified === '') {
+                $fileDateModified = "Unknown";
+            }
             $fileUploadedDate = isset($metadata[$metaKey]["uploaded"]) ? $metadata[$metaKey]["uploaded"] : "Unknown";
             $fileUploader = isset($metadata[$metaKey]["uploader"]) ? $metadata[$metaKey]["uploader"] : "Unknown";
+            if (!$storage->isLocal()) {
+                if (($fileUploadedDate === "Unknown" || $fileUploadedDate === "") && $fileDateModified !== "Unknown") {
+                    $fileUploadedDate = $fileDateModified;
+                }
+                if (($fileUploader === "Unknown" || $fileUploader === "") && $remoteUploader) {
+                    $fileUploader = $remoteUploader;
+                }
+            } elseif (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                if (($fileUploadedDate === "Unknown" || $fileUploadedDate === "") && $fileDateModified !== "Unknown") {
+                    $fileUploadedDate = $fileDateModified;
+                }
+                if (($fileUploader === "Unknown" || $fileUploader === "") && $localUploader) {
+                    $fileUploader = $localUploader;
+                }
+            }
 
             // Size
-            $fileSizeBytes = @filesize($filePath);
-            if (!is_int($fileSizeBytes)) $fileSizeBytes = 0;
+            $fileSizeBytes = isset($stat['size']) ? (int)$stat['size'] : 0;
             if ($fileSizeBytes >= 1073741824) {
                 $fileSizeFormatted = sprintf("%.1f GB", $fileSizeBytes / 1073741824);
             } elseif ($fileSizeBytes >= 1048576) {
@@ -1647,7 +2460,10 @@ class FileModel
             }
 
             // MIME + text detection (fallback to extension)
-            $mime = 'application/octet-stream';
+            $mime = $stat['mime'] ?? 'application/octet-stream';
+            if (!is_string($mime) || $mime === '') {
+                $mime = 'application/octet-stream';
+            }
             if ($finfo) {
                 $det = @finfo_file($finfo, $filePath);
                 if (is_string($det) && $det !== '') $mime = $det;
@@ -1673,21 +2489,19 @@ class FileModel
             $fileEntry['contentTruncated'] = false;
 
             if ($isText && $fileSizeBytes > 0) {
-                if ($fileSizeBytes <= INDEX_TEXT_BYTES_MAX) {
-                    $fh = @fopen($filePath, 'rb');
-                    if ($fh) {
-                        $snippet = @fread($fh, LISTING_CONTENT_BYTES_MAX);
-                        @fclose($fh);
-                        if ($snippet !== false) {
-                            // ensure UTF-8 for JSON
-                            if (function_exists('mb_check_encoding') && !mb_check_encoding($snippet, 'UTF-8')) {
-                                if (function_exists('mb_convert_encoding')) {
-                                    $snippet = @mb_convert_encoding($snippet, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
-                                }
+                if ($skipContentForFtp) {
+                    $fileEntry['contentTruncated'] = true;
+                } elseif ($fileSizeBytes <= INDEX_TEXT_BYTES_MAX) {
+                    $snippet = $storage->read($filePath, LISTING_CONTENT_BYTES_MAX, 0);
+                    if ($snippet !== false) {
+                        // ensure UTF-8 for JSON
+                        if (function_exists('mb_check_encoding') && !mb_check_encoding($snippet, 'UTF-8')) {
+                            if (function_exists('mb_convert_encoding')) {
+                                $snippet = @mb_convert_encoding($snippet, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
                             }
-                            $fileEntry['content'] = $snippet;
-                            $fileEntry['contentTruncated'] = ($fileSizeBytes > LISTING_CONTENT_BYTES_MAX);
                         }
+                        $fileEntry['content'] = $snippet;
+                        $fileEntry['contentTruncated'] = ($fileSizeBytes > LISTING_CONTENT_BYTES_MAX);
                     }
                 } else {
                     // too large to sample: mark truncated so UI/search knows
@@ -1703,7 +2517,7 @@ class FileModel
         }
 
         // Load global tags.
-        $globalTagsFile = META_DIR . "createdTags.json";
+        $globalTagsFile = self::metaRoot() . "createdTags.json";
         $globalTags = file_exists($globalTagsFile) ? (json_decode(file_get_contents($globalTagsFile), true) ?: []) : [];
 
         return ["files" => $fileList, "globalTags" => $globalTags];
@@ -1711,7 +2525,7 @@ class FileModel
 
     public static function getAllShareLinks(): array
     {
-        $shareFile = META_DIR . "share_links.json";
+        $shareFile = self::metaRoot() . "share_links.json";
         if (!file_exists($shareFile)) {
             return [];
         }
@@ -1721,7 +2535,7 @@ class FileModel
 
     public static function deleteShareLink(string $token): bool
     {
-        $shareFile = META_DIR . "share_links.json";
+        $shareFile = self::metaRoot() . "share_links.json";
         if (!file_exists($shareFile)) {
             return false;
         }
@@ -1732,6 +2546,20 @@ class FileModel
         unset($links[$token]);
         file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT), LOCK_EX);
         return true;
+    }
+
+    private static function seedFileContents(string $filename): ?string
+    {
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if ($ext === 'docx') {
+            $data = base64_decode(self::EMPTY_DOCX_BASE64, true);
+            return ($data === false) ? null : $data;
+        }
+        if ($ext === 'xlsx') {
+            $data = base64_decode(self::EMPTY_XLSX_BASE64, true);
+            return ($data === false) ? null : $data;
+        }
+        return null;
     }
 
     /**
@@ -1750,6 +2578,8 @@ class FileModel
             return ['success' => false, 'error' => 'Invalid filename', 'code' => 400];
         }
 
+        $storage = self::storage();
+
         // 2) resolve target folder
         list($baseDir, $err) = self::resolveFolderPath($folder, true);
         if ($err) {
@@ -1759,19 +2589,21 @@ class FileModel
         $path = $baseDir . DIRECTORY_SEPARATOR . $filename;
 
         // 3) no overwrite
-        if (file_exists($path)) {
+        if ($storage->stat($path) !== null) {
             return ['success' => false, 'error' => 'File already exists', 'code' => 400];
         }
 
-        // 4) touch the file
-        if (false === @file_put_contents($path, '', LOCK_EX)) {
+        // 4) touch the file (seed minimal DOCX to keep ONLYOFFICE happy)
+        $seed = self::seedFileContents($filename);
+        $data = ($seed !== null) ? $seed : '';
+        if (!$storage->write($path, $data, LOCK_EX)) {
             return ['success' => false, 'error' => 'Could not create file', 'code' => 500];
         }
 
         // 5) write metadata
         $metaKey  = (strtolower($folder) === 'root' || trim($folder) === '') ? 'root' : $folder;
         $metaName = str_replace(['/', '\\', ' '], '-', $metaKey) . '_metadata.json';
-        $metaPath = META_DIR . $metaName;
+        $metaPath = self::metaRoot() . $metaName;
 
         $collection = [];
         if (file_exists($metaPath)) {

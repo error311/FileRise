@@ -210,8 +210,8 @@ class AdminModel
         $proSearchCfg = isset($config['proSearch']) && is_array($config['proSearch'])
             ? $config['proSearch']
             : [];
-        $proVersionNorm = is_string($proVersion) ? trim(ltrim($proVersion, "vV")) : '';
-        $proVersionOk = $proVersionNorm !== '' && version_compare($proVersionNorm, '1.3.0', '>=');
+        $proApiLevel = defined('FR_PRO_API_LEVEL') ? (int)FR_PRO_API_LEVEL : 0;
+        $proSearchApiOk = $isProActive && fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SEARCH);
         $proSearchExplicitDisabled = array_key_exists('enabled', $proSearchCfg) && !$proSearchCfg['enabled'];
         // Only respect opt-out when Pro is active; otherwise allow auto-enable after upgrade
         $proSearchOptOut = ($isProActive && !empty($proSearchCfg['optOut'])) || $proSearchExplicitDisabled;
@@ -227,8 +227,8 @@ class AdminModel
             if (!$isProActive) {
                 $proSearchEnabled = false;
             }
-        } elseif ($isProActive && $proVersionOk && !$proSearchOptOut) {
-            // Auto-enable for active Pro on v1.3.0+ unless user explicitly opted out or env locked
+        } elseif ($proSearchApiOk && !$proSearchOptOut) {
+            // Auto-enable for active Pro when the API level supports Search Everywhere
             $proSearchEnabled = true;
         }
 
@@ -243,10 +243,19 @@ class AdminModel
             'lockedByEnv'  => $proSearchLockedByEnv,
         ];
 
+        if ($isProActive && class_exists('ProSources') && fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SOURCES)) {
+            $public['storageSources'] = ProSources::getPublicConfig();
+        } else {
+            $public['storageSources'] = [
+                'enabled' => false,
+                'sources' => [],
+            ];
+        }
+
         $proAuditCfg = (isset($config['proAudit']) && is_array($config['proAudit']))
             ? $config['proAudit']
             : [];
-        $proAuditAvailable = $isProActive && class_exists('ProAudit');
+        $proAuditAvailable = $isProActive && class_exists('ProAudit') && fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_AUDIT);
         $proAuditLevelRaw = isset($proAuditCfg['level']) ? (string)$proAuditCfg['level'] : 'standard';
         $proAuditLevel = ($proAuditLevelRaw === 'standard' || $proAuditLevelRaw === 'verbose') ? $proAuditLevelRaw : 'standard';
         $proAuditMaxFileMb = isset($proAuditCfg['maxFileMb']) ? (int)$proAuditCfg['maxFileMb'] : 200;
@@ -263,6 +272,7 @@ class AdminModel
         $public['pro'] = [
             'active'  => $isProActive,
             'version' => is_string($proVersion) ? $proVersion : '',
+            'apiLevel' => $proApiLevel,
         ];
 
         return $public;
@@ -673,12 +683,10 @@ class AdminModel
                 $config['proSearch']['defaultLimit'] = max(1, min(200, $lim));
                 $config['proSearch']['optOut'] = !empty($config['proSearch']['optOut']);
                 $explicitDisabled = array_key_exists('enabled', $config['proSearch']) && !$config['proSearch']['enabled'];
-                // Auto-enable for active Pro v1.3.0+ if not explicitly opted out/disabled
+                // Auto-enable for active Pro when the API level supports Search Everywhere
                 $isProActive = defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE === true;
-                $proVersion = $config['pro']['version'] ?? ($config['proVersion'] ?? (defined('FR_PRO_BUNDLE_VERSION') ? FR_PRO_BUNDLE_VERSION : ''));
-                $proVersionNorm = is_string($proVersion) ? trim(ltrim($proVersion, "vV")) : '';
-                $proVersionOk = $proVersionNorm !== '' && version_compare($proVersionNorm, '1.3.0', '>=');
-                if ($isProActive && $proVersionOk && empty($config['proSearch']['optOut']) && !$explicitDisabled) {
+                $proSearchApiOk = $isProActive && fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SEARCH);
+                if ($proSearchApiOk && empty($config['proSearch']['optOut']) && !$explicitDisabled) {
                     $config['proSearch']['enabled'] = true;
                 }
             }

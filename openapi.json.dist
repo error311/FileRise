@@ -2,7 +2,7 @@
     "openapi": "3.0.0",
     "info": {
         "title": "FileRise API",
-        "version": "2.11.1"
+        "version": "3.0.0"
     },
     "servers": [
         {
@@ -118,6 +118,15 @@
                             "type": "string"
                         },
                         "example": "johndoe"
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "local"
                     }
                 ],
                 "responses": {
@@ -187,6 +196,10 @@
                                                 "type": "string",
                                                 "example": "johndoe"
                                             },
+                                            "sourceId": {
+                                                "type": "string",
+                                                "example": "local"
+                                            },
                                             "grants": {
                                                 "description": "Map of folder -> capabilities",
                                                 "type": "object"
@@ -199,6 +212,10 @@
                                             "changes"
                                         ],
                                         "properties": {
+                                            "sourceId": {
+                                                "type": "string",
+                                                "example": "local"
+                                            },
                                             "changes": {
                                                 "type": "array",
                                                 "items": {
@@ -394,6 +411,22 @@
                         }
                     }
                 ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
                 "responses": {
                     "200": {
                         "description": "Snapshot deleted"
@@ -443,6 +476,14 @@
                             "minimum": 0
                         },
                         "example": 0
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "responses": {
@@ -474,12 +515,79 @@
                 "summary": "Trigger disk usage scan",
                 "description": "Starts a background disk usage scan to build a new snapshot.",
                 "operationId": "adminDiskUsageTriggerScan",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
                 "responses": {
                     "200": {
                         "description": "Scan started"
                     },
                     "403": {
                         "description": "Forbidden"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/downloadProBundle.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Download and install latest Pro bundle",
+                "description": "Downloads the latest FileRise Pro bundle from filerise.net and installs it.",
+                "operationId": "adminDownloadProBundle",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Install result"
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "413": {
+                        "description": "Bundle too large"
+                    },
+                    "502": {
+                        "description": "Remote download failed"
                     },
                     "500": {
                         "description": "Server error"
@@ -1127,6 +1235,9 @@
                     },
                     "401": {
                         "description": "Unauthorized due to missing credentials or invalid credentials."
+                    },
+                    "429": {
+                        "description": "Too many failed login attempts."
                     }
                 }
             }
@@ -1968,6 +2079,15 @@
                             "type": "string"
                         },
                         "example": "root"
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "local"
                     }
                 ],
                 "responses": {
@@ -2540,6 +2660,15 @@
                             "type": "string"
                         },
                         "example": "root"
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "local"
                     }
                 ],
                 "responses": {
@@ -2760,6 +2889,10 @@
                                     "folder": {
                                         "type": "string",
                                         "example": "userA/reports"
+                                    },
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
                                     }
                                 },
                                 "type": "object"
@@ -3235,6 +3368,16 @@
                             "type": "string"
                         },
                         "example": "root"
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "description": "Optional source id (admin can target disabled sources)",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "local"
                     }
                 ],
                 "responses": {
@@ -3323,6 +3466,35 @@
                             "type": "string"
                         },
                         "example": "root"
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "local"
+                    },
+                    {
+                        "name": "deep",
+                        "in": "query",
+                        "description": "When 1, return recursive totals.",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    },
+                    {
+                        "name": "depth",
+                        "in": "query",
+                        "description": "Max recursive depth when deep=1 (0 = unlimited).",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 2
                     }
                 ],
                 "responses": {
@@ -3398,8 +3570,8 @@
                 "tags": [
                     "Folders"
                 ],
-                "summary": "Move a folder",
-                "description": "Moves a folder into a destination folder.",
+                "summary": "Move or copy a folder",
+                "description": "Moves (default) or copies a folder into a destination folder.",
                 "operationId": "moveFolder",
                 "parameters": [
                     {
@@ -3428,6 +3600,18 @@
                                     "destination": {
                                         "type": "string",
                                         "example": "archive"
+                                    },
+                                    "mode": {
+                                        "type": "string",
+                                        "example": "move"
+                                    },
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
+                                    },
+                                    "destSourceId": {
+                                        "type": "string",
+                                        "example": "s3-main"
                                     }
                                 },
                                 "type": "object"
@@ -4021,6 +4205,16 @@
                     "ONLYOFFICE"
                 ],
                 "summary": "ONLYOFFICE save callback",
+                "parameters": [
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK / error JSON"
@@ -4045,6 +4239,14 @@
                     {
                         "name": "file",
                         "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
                         "schema": {
                             "type": "string"
                         }
@@ -4138,6 +4340,14 @@
                     },
                     {
                         "name": "source",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "storage",
                         "in": "query",
                         "required": false,
                         "schema": {
@@ -4243,6 +4453,14 @@
                         }
                     },
                     {
+                        "name": "storage",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
                         "name": "from",
                         "in": "query",
                         "description": "ISO timestamp or epoch",
@@ -4309,6 +4527,14 @@
                             "type": "string"
                         },
                         "example": "root"
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "responses": {
@@ -4366,6 +4592,10 @@
                                     "name": {
                                         "type": "string",
                                         "example": "large.zip"
+                                    },
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
                                     }
                                 },
                                 "type": "object"
@@ -4427,6 +4657,10 @@
                                     "folder": {
                                         "type": "string",
                                         "example": "team/archive"
+                                    },
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
                                     }
                                 },
                                 "type": "object"
@@ -4476,6 +4710,14 @@
                             "minimum": 1
                         },
                         "example": 100
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "responses": {
@@ -4959,6 +5201,15 @@
                             "minimum": 1
                         },
                         "example": 50
+                    },
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "description": "Source id or 'all'",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
                     },
                     {
                         "name": "force",
@@ -6005,6 +6256,88 @@
                     }
                 },
                 "type": "object"
+            },
+            "ShareLinkEntry": {
+                "properties": {
+                    "folder": {
+                        "type": "string",
+                        "example": "root"
+                    },
+                    "file": {
+                        "type": "string",
+                        "example": "invoice.pdf"
+                    },
+                    "expires": {
+                        "type": "integer",
+                        "format": "int64",
+                        "example": 1735689600
+                    },
+                    "password": {
+                        "type": "string",
+                        "example": "***",
+                        "nullable": true
+                    },
+                    "token": {
+                        "type": "string",
+                        "example": "0123456789abcdef0123456789abcdef"
+                    },
+                    "sourceId": {
+                        "type": "string",
+                        "example": "local"
+                    },
+                    "sourceName": {
+                        "type": "string",
+                        "example": "Local"
+                    }
+                },
+                "type": "object"
+            },
+            "ShareLinksMap": {
+                "type": "object",
+                "additionalProperties": {
+                    "$ref": "#/components/schemas/ShareLinkEntry"
+                }
+            },
+            "ShareFolderLinkEntry": {
+                "properties": {
+                    "folder": {
+                        "type": "string",
+                        "example": "shared/reports"
+                    },
+                    "expires": {
+                        "type": "integer",
+                        "format": "int64",
+                        "example": 1735689600
+                    },
+                    "password": {
+                        "type": "string",
+                        "example": "***",
+                        "nullable": true
+                    },
+                    "allowUpload": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "token": {
+                        "type": "string",
+                        "example": "0123456789abcdef0123456789abcdef"
+                    },
+                    "sourceId": {
+                        "type": "string",
+                        "example": "local"
+                    },
+                    "sourceName": {
+                        "type": "string",
+                        "example": "Local"
+                    }
+                },
+                "type": "object"
+            },
+            "ShareFolderLinksMap": {
+                "type": "object",
+                "additionalProperties": {
+                    "$ref": "#/components/schemas/ShareFolderLinkEntry"
+                }
             },
             "LoginOptionsPublic": {
                 "properties": {

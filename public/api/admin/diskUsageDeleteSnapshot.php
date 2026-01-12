@@ -9,6 +9,12 @@
  *   tags={"Admin"},
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="X-CSRF-Token", in="header", required=false, @OA\Schema(type="string")),
+ *   @OA\RequestBody(
+ *     required=false,
+ *     @OA\JsonContent(
+ *       @OA\Property(property="sourceId", type="string", example="local")
+ *     )
+ *   ),
  *   @OA\Response(response=200, description="Snapshot deleted"),
  *   @OA\Response(response=400, description="CSRF mismatch"),
  *   @OA\Response(response=403, description="Forbidden"),
@@ -51,12 +57,35 @@ if ($meta !== '' && $csrf !== '' && !hash_equals($meta, $csrf)) {
 }
 
 try {
-    $deleted = DiskUsageModel::deleteSnapshot();
+    $raw = file_get_contents('php://input');
+    $body = json_decode($raw, true);
+    $sourceId = '';
+    if (is_array($body) && isset($body['sourceId'])) {
+        $sourceId = trim((string)$body['sourceId']);
+    } elseif (isset($_GET['sourceId'])) {
+        $sourceId = trim((string)$_GET['sourceId']);
+    }
+
+    if ($sourceId !== '') {
+        $ctx = DiskUsageModel::resolveSourceContext($sourceId);
+        if (empty($ctx['ok'])) {
+            http_response_code(400);
+            echo json_encode([
+                'ok'    => false,
+                'error' => $ctx['error'] ?? 'invalid_source',
+                'message' => $ctx['message'] ?? 'Invalid source.',
+            ]);
+            return;
+        }
+    }
+
+    $deleted = DiskUsageModel::deleteSnapshot($sourceId);
     http_response_code(200);
     echo json_encode([
         'ok'       => true,
         'deleted'  => $deleted,
-        'snapshot' => DiskUsageModel::snapshotPath(),
+        'snapshot' => DiskUsageModel::snapshotPath($sourceId),
+        'sourceId' => $sourceId !== '' ? $sourceId : null,
     ], JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);

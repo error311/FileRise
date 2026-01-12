@@ -10,6 +10,7 @@
  *   tags={"Files"},
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="folder", in="query", required=true, @OA\Schema(type="string"), example="root"),
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string"), example="local"),
  *   @OA\Response(response=200, description="Listing result (model-defined JSON)"),
  *   @OA\Response(response=400, description="Invalid folder"),
  *   @OA\Response(response=401, description="Unauthorized"),

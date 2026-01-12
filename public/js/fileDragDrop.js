@@ -1,6 +1,7 @@
 // fileDragDrop.js
-import { showToast } from './domUtils.js?v={{APP_QVER}}';
+import { showToast, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList, cancelHoverPreview, repairBlankFolderIcons } from './fileListView.js?v={{APP_QVER}}';
+import { startTransferProgress, finishTransferProgress } from './transferProgress.js?v={{APP_QVER}}';
 import {
   getParentFolder,
   syncTreeAfterFolderMove,
@@ -18,12 +19,12 @@ function parentFolderOf(path) {
   return parts.join('/');
 }
 
-function invalidateFolderStats(folders) {
+function invalidateFolderStats(folders, sourceId = '') {
   try {
     const list = Array.isArray(folders) ? folders : [folders];
     window.dispatchEvent(
       new CustomEvent('folderStatsInvalidated', {
-        detail: { folders: list }
+        detail: { folders: list, sourceId }
       })
     );
   } catch (e) {
@@ -50,8 +51,9 @@ function getNameFromAny(el) {
   if (span) return span.textContent.trim();
   return null;
 }
-function getSelectedFileNames() {
-  const boxes = Array.from(document.querySelectorAll('#fileList .file-checkbox:checked'));
+function getSelectedFileNames(rootEl) {
+  const scope = rootEl?.closest?.('#fileList, #fileListSecondary') || document.getElementById('fileList') || document;
+  const boxes = Array.from(scope.querySelectorAll('.file-checkbox:checked'));
   const names = boxes.map(cb => getNameFromAny(cb)).filter(Boolean);
   // de-dup just in case
   return Array.from(new Set(names));
@@ -127,6 +129,73 @@ function makeDragImage(labelText, iconName = 'insert_drive_file') {
   return wrap;
 }
 
+function getActiveSourceId() {
+  const paneKey = window.activePane === 'secondary' ? 'secondary' : 'primary';
+  const paneSource = window.__frPaneState?.[paneKey]?.sourceId || '';
+  if (paneSource) return paneSource;
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return sel.value;
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return stored;
+  } catch (e) {}
+  return '';
+}
+
+function getPaneSourceIdForElement(el) {
+  const pane = el?.closest?.('.file-list-pane');
+  if (!pane) return '';
+  const paneKey = pane.classList.contains('secondary-pane') ? 'secondary' : 'primary';
+  return window.__frPaneState?.[paneKey]?.sourceId || '';
+}
+
+function getPaneFolderForElement(el) {
+  const pane = el?.closest?.('.file-list-pane');
+  if (!pane) return '';
+  const paneKey = pane.classList.contains('secondary-pane') ? 'secondary' : 'primary';
+  return window.__frPaneState?.[paneKey]?.currentFolder || '';
+}
+
+function getPaneFileDataForElement(el) {
+  const pane = el?.closest?.('.file-list-pane');
+  const paneKey = pane && pane.classList.contains('secondary-pane') ? 'secondary' : 'primary';
+  const state = window.__frPaneState?.[paneKey];
+  if (state && Array.isArray(state.fileData)) return state.fileData;
+  return [];
+}
+
+function getTransferTotalsForNames(names, fileList) {
+  const list = Array.isArray(names) ? names : [];
+  const wanted = new Set(list.map(name => String(name || '')));
+  const files = Array.isArray(fileList) ? fileList : [];
+
+  let totalBytes = 0;
+  let matched = 0;
+  let unknown = 0;
+
+  files.forEach(file => {
+    if (!file || !file.name) return;
+    const raw = String(file.name);
+    const esc = escapeHTML(raw);
+    if (!wanted.has(raw) && !wanted.has(esc)) return;
+    matched += 1;
+    if (Number.isFinite(file.sizeBytes)) {
+      totalBytes += file.sizeBytes;
+    } else {
+      unknown += 1;
+    }
+  });
+
+  const missing = Math.max(0, list.length - matched);
+  if (missing) unknown += missing;
+
+  return {
+    totalBytes,
+    bytesKnown: unknown === 0 && totalBytes > 0,
+    itemCount: list.length
+  };
+}
+
 /* ---------------- drag start (rows/cards) ---------------- */
 export function fileDragStartHandler(event) {
   try { cancelHoverPreview(); } catch (e) {}
@@ -134,15 +203,25 @@ export function fileDragStartHandler(event) {
   if (!row) return;
 
   // Use current selection if present; otherwise drag just this row’s file
-  let names = getSelectedFileNames();
+  let names = getSelectedFileNames(row);
   if (names.length === 0) {
     const single = getNameFromAny(row);
     if (single) names = [single];
   }
   if (names.length === 0) return;
 
-  const sourceFolder = window.currentFolder || 'root';
-  const payload = { files: names, sourceFolder };
+  const sourceFolder = getPaneFolderForElement(row) || window.currentFolder || 'root';
+  const sourceId = getPaneSourceIdForElement(row) || getActiveSourceId();
+  const fileList = getPaneFileDataForElement(row);
+  const totals = getTransferTotalsForNames(names, fileList);
+  const payload = {
+    files: names,
+    sourceFolder,
+    sourceId,
+    totalBytes: totals.totalBytes,
+    totalItems: totals.itemCount,
+    bytesKnown: totals.bytesKnown
+  };
 
   // primary payload
   event.dataTransfer.setData('application/json', JSON.stringify(payload));
@@ -194,10 +273,13 @@ export async function folderDropHandler(event) {
   if (dragData.dragType === 'folder' && dragData.folder) {
     const source = String(dragData.folder);
     const destination = dropFolder || 'root';
+    const sourceId = String(dragData.sourceId || dragData.sourceSourceId || '').trim();
+    const destSourceId = getPaneSourceIdForElement(event.currentTarget) || getActiveSourceId();
+    const crossSource = sourceId && destSourceId && sourceId !== destSourceId;
 
     // quick no-op: same parent as before
     const oldParent = parentFolderOf(source);
-    if (destination === oldParent) {
+    if (!crossSource && destination === oldParent) {
       showToast('Source and destination are the same.');
       return;
     }
@@ -211,6 +293,7 @@ export async function folderDropHandler(event) {
     const dstNorm = destination === 'root' ? '' : norm(destination);
 
     if (
+      !crossSource &&
       dstNorm !== '' &&
       (
         dstNorm.toLowerCase() === srcNorm.toLowerCase() ||
@@ -220,6 +303,18 @@ export async function folderDropHandler(event) {
       showToast('Destination cannot be the source or its descendant');
       return;
     }
+
+    const progress = startTransferProgress({
+      action: 'Moving',
+      itemCount: 1,
+      itemLabel: 'folder',
+      bytesKnown: false,
+      indeterminate: true,
+      source,
+      destination
+    });
+    let ok = false;
+    let errMsg = '';
 
     try {
       const res = await fetch('/api/folder/moveFolder.php', {
@@ -232,7 +327,9 @@ export async function folderDropHandler(event) {
         },
         body: JSON.stringify({
           source,        // full folder path
-          destination    // parent or "root"
+          destination,   // parent or "root"
+          sourceId,
+          destSourceId
         })
       });
 
@@ -242,6 +339,8 @@ export async function folderDropHandler(event) {
 
       if (!res.ok || (data && data.error)) {
         const msg = (data && data.error) || text || `HTTP ${res.status}`;
+        ok = false;
+        errMsg = msg || 'Could not move folder';
         showToast('Error moving folder: ' + msg);
         return;
       }
@@ -250,17 +349,32 @@ export async function folderDropHandler(event) {
       const dstParent = destination || 'root';
 
       // keep inline folder stats in sync for both parents
-      invalidateFolderStats([oldParent, dstParent]);
+      if (crossSource) {
+        invalidateFolderStats([oldParent], sourceId);
+        invalidateFolderStats([dstParent], destSourceId);
+      } else {
+        const statSourceId = sourceId || destSourceId;
+        invalidateFolderStats([oldParent, dstParent], statSourceId);
+      }
 
       showToast(`Moved folder to "${dstParent || 'root'}".`);
+      ok = true;
 
-      // Let folderManager handle tree refresh + selection + file list reload
-      await syncTreeAfterFolderMove(source, dstParent);
-      scheduleBlankFolderIconRepair();
+      if (crossSource) {
+        loadFileList(dstParent).finally(scheduleBlankFolderIconRepair);
+      } else {
+        // Let folderManager handle tree refresh + selection + file list reload
+        await syncTreeAfterFolderMove(source, dstParent);
+        scheduleBlankFolderIconRepair();
+      }
 
     } catch (e) {
+      ok = false;
+      errMsg = e && e.message ? e.message : 'Could not move folder';
       console.error('Error moving folder:', e);
       showToast('Error moving folder.');
+    } finally {
+      finishTransferProgress(progress, { ok, error: errMsg });
     }
 
     return;
@@ -284,10 +398,30 @@ export async function folderDropHandler(event) {
   }
 
   const sourceFolder = dragData.sourceFolder || (window.currentFolder || 'root');
-  if (dropFolder === sourceFolder) {
+  const sourceId = String(dragData.sourceId || dragData.sourceSourceId || '').trim();
+  const destSourceId = getPaneSourceIdForElement(event.currentTarget) || getActiveSourceId();
+  const crossSource = sourceId && destSourceId && sourceId !== destSourceId;
+  if (!crossSource && dropFolder === sourceFolder) {
     showToast('Source and destination are the same.');
     return;
   }
+
+  const totals = {
+    totalBytes: Number.isFinite(dragData.totalBytes) ? dragData.totalBytes : 0,
+    bytesKnown: dragData.bytesKnown === true,
+    itemCount: names.length
+  };
+  const progress = startTransferProgress({
+    action: 'Moving',
+    itemCount: totals.itemCount,
+    itemLabel: totals.itemCount === 1 ? 'file' : 'files',
+    totalBytes: totals.totalBytes,
+    bytesKnown: totals.bytesKnown,
+    source: sourceFolder,
+    destination: dropFolder
+  });
+  let ok = false;
+  let errMsg = '';
 
   try {
     const res = await fetch('/api/file/moveFiles.php', {
@@ -301,13 +435,16 @@ export async function folderDropHandler(event) {
       body: JSON.stringify({
         source: sourceFolder,
         files: names,
-        destination: dropFolder
+        destination: dropFolder,
+        sourceId,
+        destSourceId
       })
     });
 
     const data = await res.json().catch(() => ({}));
 
     if (res.ok && data && data.success) {
+      ok = true;
       const msg =
         names.length === 1
           ? `Moved "${names[0]}" to ${dropFolder}.`
@@ -315,15 +452,30 @@ export async function folderDropHandler(event) {
       showToast(msg);
 
       // keep stats fresh for source + dest
-      invalidateFolderStats([sourceFolder, dropFolder]);
+      if (crossSource) {
+        invalidateFolderStats([sourceFolder], sourceId);
+        invalidateFolderStats([dropFolder], destSourceId);
+      } else {
+        const statSourceId = sourceId || destSourceId;
+        invalidateFolderStats([sourceFolder, dropFolder], statSourceId);
+      }
 
-      loadFileList(window.currentFolder || sourceFolder).finally(scheduleBlankFolderIconRepair);
+      const reloadFolder = crossSource
+        ? (window.currentFolder || dropFolder || sourceFolder)
+        : (window.currentFolder || sourceFolder);
+      loadFileList(reloadFolder).finally(scheduleBlankFolderIconRepair);
     } else {
       const err = (data && (data.error || data.message)) || `HTTP ${res.status}`;
+      ok = false;
+      errMsg = err;
       showToast('Error moving file(s): ' + err);
     }
   } catch (e) {
+    ok = false;
+    errMsg = e && e.message ? e.message : 'Could not move file(s)';
     console.error('Error moving file(s):', e);
     showToast('Error moving file(s).');
+  } finally {
+    finishTransferProgress(progress, { ok, error: errMsg });
   }
 }

@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/UploadModel.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class UploadController
 {
@@ -61,6 +62,33 @@ class UploadController
         if (!$isAdmin && !empty($userPerms['disableUpload'])) {
             http_response_code(403);
             echo json_encode(['error' => 'Upload disabled for this user.']);
+            return;
+        }
+
+        $sourceId = trim((string)($requestParams['sourceId'] ?? ($_GET['sourceId'] ?? '')));
+        if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid source id.']);
+                return;
+            }
+            $info = SourceContext::getSourceById($sourceId);
+            if (!$info) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid source.']);
+                return;
+            }
+            if (empty($info['enabled']) && !$isAdmin) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Source is disabled.']);
+                return;
+            }
+            SourceContext::setActiveId($sourceId, false, $isAdmin);
+        }
+
+        if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Source is read-only.']);
             return;
         }
 
@@ -130,6 +158,28 @@ class UploadController
         if ($receivedToken !== ($_SESSION['csrf_token'] ?? '')) {
             http_response_code(403);
             echo json_encode(['error' => 'Invalid CSRF token']);
+            return;
+        }
+
+        $sourceId = trim((string)($_POST['sourceId'] ?? ''));
+        if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid source id.']);
+                return;
+            }
+            $info = SourceContext::getSourceById($sourceId);
+            if (!$info) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid source.']);
+                return;
+            }
+            SourceContext::setActiveId($sourceId, false, true);
+        }
+
+        if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Source is read-only.']);
             return;
         }
 

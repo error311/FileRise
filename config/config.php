@@ -518,3 +518,55 @@ if (!defined('FR_PRO_INFO')) {
 if (!defined('FR_PRO_BUNDLE_VERSION')) {
     define('FR_PRO_BUNDLE_VERSION', null);
 }
+
+// ------------------------------------------------------------
+// Pro / Core API-level compatibility helpers
+// ------------------------------------------------------------
+
+if (!defined('FR_CORE_API_LEVEL')) {
+    define('FR_CORE_API_LEVEL', 1);
+}
+
+if (!function_exists('fr_pro_api_level_from_version')) {
+    function fr_pro_api_level_from_version(?string $version): int
+    {
+        $v = trim((string)$version);
+        if ($v === '') return 0;
+        $v = ltrim($v, "vV");
+        $parts = explode('.', $v);
+        $major = (isset($parts[0]) && ctype_digit($parts[0])) ? (int)$parts[0] : 0;
+        $minor = (isset($parts[1]) && ctype_digit($parts[1])) ? (int)$parts[1] : 0;
+        if ($major <= 0) return 0;
+        if ($major === 1) {
+            return max(0, $minor);
+        }
+        return ($major * 100) + max(0, $minor);
+    }
+}
+
+if (!defined('FR_PRO_API_LEVEL')) {
+    define('FR_PRO_API_LEVEL', fr_pro_api_level_from_version(
+        defined('FR_PRO_BUNDLE_VERSION') ? (string)FR_PRO_BUNDLE_VERSION : ''
+    ));
+}
+
+if (!function_exists('fr_pro_api_level_at_least')) {
+    function fr_pro_api_level_at_least(int $required): bool
+    {
+        $current = defined('FR_PRO_API_LEVEL') ? (int)FR_PRO_API_LEVEL : 0;
+        return $current >= $required;
+    }
+}
+
+if (!defined('FR_PRO_API_REQUIRE_DISK_USAGE')) {
+    define('FR_PRO_API_REQUIRE_DISK_USAGE', 2);
+}
+if (!defined('FR_PRO_API_REQUIRE_SEARCH')) {
+    define('FR_PRO_API_REQUIRE_SEARCH', 3);
+}
+if (!defined('FR_PRO_API_REQUIRE_AUDIT')) {
+    define('FR_PRO_API_REQUIRE_AUDIT', 4);
+}
+if (!defined('FR_PRO_API_REQUIRE_SOURCES')) {
+    define('FR_PRO_API_REQUIRE_SOURCES', 5);
+}

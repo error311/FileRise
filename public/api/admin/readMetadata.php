@@ -31,6 +31,7 @@
  */
 
 require_once __DIR__ . '/../../../config/config.php';
+require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 // Only admins may read these
 if (empty($_SESSION['isAdmin']) || $_SESSION['isAdmin'] !== true) {
@@ -54,39 +55,81 @@ if (!in_array($file, $allowed, true)) {
     exit;
 }
 
-$path = META_DIR . $file;
-if (!file_exists($path)) {
-    // Return empty object so JS sees `{}` not an error
-    http_response_code(200);
-    header('Content-Type: application/json');
-    echo json_encode((object)[]);
-    exit;
-}
-
-$jsonData = file_get_contents($path);
-$data = json_decode($jsonData, true);
-if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Corrupted JSON']);
-    exit;
-}
-
-// ——— Clean up expired entries ———
-$now = time();
-$changed = false;
-foreach ($data as $token => $entry) {
-    if (!empty($entry['expires']) && $entry['expires'] < $now) {
-        unset($data[$token]);
-        $changed = true;
+$targets = [];
+if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+    $sources = SourceContext::listAllSources();
+    foreach ($sources as $src) {
+        if (!is_array($src)) {
+            continue;
+        }
+        $id = trim((string)($src['id'] ?? ''));
+        if ($id === '') {
+            continue;
+        }
+        $name = trim((string)($src['name'] ?? ''));
+        if ($name === '') {
+            $name = $id;
+        }
+        $targets[] = [
+            'id' => $id,
+            'name' => $name,
+            'metaRoot' => SourceContext::metaRootForId($id),
+        ];
     }
 }
-if ($changed) {
-    // overwrite file with cleaned data
-    file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
+if (empty($targets)) {
+    $targets[] = [
+        'id' => 'local',
+        'name' => 'Local',
+        'metaRoot' => rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR,
+    ];
 }
 
-// ——— Send cleaned data back ———
+$out = [];
+$now = time();
+foreach ($targets as $target) {
+    $metaRoot = rtrim((string)($target['metaRoot'] ?? ''), '/\\');
+    if ($metaRoot === '') {
+        continue;
+    }
+    $path = $metaRoot . DIRECTORY_SEPARATOR . $file;
+    if (!file_exists($path)) {
+        continue;
+    }
+
+    $jsonData = file_get_contents($path);
+    $data = json_decode($jsonData, true);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Corrupted JSON', 'sourceId' => $target['id']]);
+        exit;
+    }
+
+    $changed = false;
+    $cleaned = [];
+    foreach ($data as $token => $entry) {
+        if (!empty($entry['expires']) && $entry['expires'] < $now) {
+            $changed = true;
+            continue;
+        }
+        $cleaned[$token] = $entry;
+        if (is_array($entry)) {
+            $entry['token'] = $token;
+            $entry['sourceId'] = $target['id'];
+            $entry['sourceName'] = $target['name'];
+        }
+        $key = $token;
+        if (isset($out[$key])) {
+            $key = $target['id'] . ':' . $token;
+        }
+        $out[$key] = $entry;
+    }
+    if ($changed) {
+        file_put_contents($path, json_encode($cleaned, JSON_PRETTY_PRINT));
+    }
+}
+
 http_response_code(200);
 header('Content-Type: application/json');
-echo json_encode($data);
+echo json_encode($out);
 exit;

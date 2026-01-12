@@ -95,14 +95,26 @@ async function shouldUseOnlyOffice(fileName) {
 
 function isAbsoluteHttpUrl(u) { return /^https?:\/\//i.test(u || ''); }
 
+function normalizeSourceId(raw) {
+  const id = String(raw || '').trim();
+  return id;
+}
+
 // Folder encryption check (used to bypass ONLYOFFICE in encrypted folders)
 const __folderEncryptedCache = new Map(); // folder -> Promise<bool>
-async function isFolderEncrypted(folder) {
+async function isFolderEncrypted(folder, sourceId = '') {
   const f = (!folder || folder === '') ? 'root' : String(folder);
-  if (__folderEncryptedCache.has(f)) return __folderEncryptedCache.get(f);
+  const sid = normalizeSourceId(sourceId);
+  const key = sid ? `${sid}::${f}` : f;
+  if (__folderEncryptedCache.has(key)) return __folderEncryptedCache.get(key);
   const p = (async () => {
     try {
-      const r = await fetch(withBase(`/api/folder/capabilities.php?folder=${encodeURIComponent(f)}&t=${Date.now()}`), { credentials: 'include' });
+      const params = new URLSearchParams({
+        folder: f,
+        t: String(Date.now())
+      });
+      if (sid) params.set('sourceId', sid);
+      const r = await fetch(withBase(`/api/folder/capabilities.php?${params.toString()}`), { credentials: 'include' });
       if (!r.ok) return false;
       const j = await r.json().catch(() => null);
       return !!(j && j.encryption && j.encryption.encrypted);
@@ -110,7 +122,7 @@ async function isFolderEncrypted(folder) {
       return false;
     }
   })();
-  __folderEncryptedCache.set(f, p);
+  __folderEncryptedCache.set(key, p);
   return p;
 }
 
@@ -400,7 +412,7 @@ async function warmDocServerOnce(cfg){
 }
 
 // Full-screen OO open with hidden warm-up EVERY click, then real editor
-async function openOnlyOffice(fileName, folder){
+async function openOnlyOffice(fileName, folder, sourceId = ''){
   let editor = null;
   let removeThemeListener = () => {};
   let cfg = null;
@@ -424,7 +436,14 @@ async function openOnlyOffice(fileName, folder){
 
   try{
     // 1) Fetch config
-    const url = `/api/onlyoffice/config.php?folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(fileName)}`;
+    const f = (!folder || folder === '') ? 'root' : String(folder);
+    const sid = normalizeSourceId(sourceId);
+    const params = new URLSearchParams({
+      folder: f,
+      file: fileName
+    });
+    if (sid) params.set('sourceId', sid);
+    const url = withBase(`/api/onlyoffice/config.php?${params.toString()}`);
     const resp = await fetch(url, { credentials: 'include' });
     const text = await resp.text();
 
@@ -560,19 +579,20 @@ function observeModalResize(modal) {
 }
 export { observeModalResize };
 
-export async function editFile(fileName, folder) {
+export async function editFile(fileName, folder, sourceId = '') {
   // destroy any previous editor
   let existingEditor = document.getElementById("editorContainer");
   if (existingEditor) existingEditor.remove();
 
   const folderUsed = folder || window.currentFolder || "root";
+  const sid = normalizeSourceId(sourceId);
   const fileUrl = buildPreviewUrl(folderUsed, fileName);
 
   const wantOO = await shouldUseOnlyOffice(fileName);
   if (wantOO) {
-    const enc = await isFolderEncrypted(folderUsed);
+    const enc = await isFolderEncrypted(folderUsed, sid);
     if (!enc) {
-      await openOnlyOffice(fileName, folderUsed);
+      await openOnlyOffice(fileName, folderUsed, sid);
       return;
     }
     showToast('ONLYOFFICE is disabled inside encrypted folders.');

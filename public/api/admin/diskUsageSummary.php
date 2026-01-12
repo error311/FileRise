@@ -10,6 +10,7 @@
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="topFolders", in="query", required=false, @OA\Schema(type="integer", minimum=1), example=5),
  *   @OA\Parameter(name="topFiles", in="query", required=false, @OA\Schema(type="integer", minimum=0), example=0),
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string")),
  *   @OA\Response(response=200, description="Summary payload"),
  *   @OA\Response(response=401, description="Unauthorized"),
  *   @OA\Response(response=404, description="Snapshot not found"),
@@ -42,18 +43,26 @@ if (!$authenticated || !$isAdmin) {
 // Optional tuning via query params
 $topFolders = isset($_GET['topFolders']) ? max(1, (int)$_GET['topFolders']) : 5;
   $topFiles   = isset($_GET['topFiles'])   ? max(0, (int)$_GET['topFiles'])   : 0;
+$sourceId   = isset($_GET['sourceId']) ? trim((string)$_GET['sourceId']) : '';
 
 try {
-    $summary = DiskUsageModel::getSummary($topFolders, $topFiles);
-    $logInfo = DiskUsageModel::readScanLogTail();
+    $summary = DiskUsageModel::getSummary($topFolders, $topFiles, $sourceId);
+    $logInfo = DiskUsageModel::readScanLogTail(4000, $sourceId);
     if ($logInfo !== null) {
         $summary['scanLog'] = $logInfo;
     }
     // Avoid noisy 404s in console when snapshot doesn't exist yet; still include ok=false
-    if (!$summary['ok'] && ($summary['error'] ?? '') === 'no_snapshot') {
-        http_response_code(200);
+    if (!$summary['ok']) {
+        $err = (string)($summary['error'] ?? '');
+        if ($err === 'no_snapshot') {
+            http_response_code(200);
+        } elseif ($err === 'invalid_source' || $err === 'unsupported_source') {
+            http_response_code(400);
+        } else {
+            http_response_code(404);
+        }
     } else {
-        http_response_code($summary['ok'] ? 200 : 404);
+        http_response_code(200);
     }
     echo json_encode($summary, JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {

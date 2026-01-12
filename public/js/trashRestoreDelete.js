@@ -9,6 +9,7 @@ const ENDPOINTS = {
   restore: '/api/file/restoreFiles.php',
   delete: '/api/file/deleteTrashFiles.php',
 };
+let trashFetchPromise = null;
 
 function showConfirm(message, onConfirm) {
     const modal = document.getElementById("customConfirmModal");
@@ -52,6 +53,7 @@ function getModalElements() {
         modal: document.getElementById("restoreFilesModal"),
         list: document.getElementById("restoreFilesList"),
         headerIcon: document.getElementById("restoreModalIcon"),
+        sourceHint: document.getElementById("restoreModalSourceHint"),
         restoreSelectedBtn: document.getElementById("restoreSelectedBtn"),
         restoreAllBtn: document.getElementById("restoreAllBtn"),
         deleteSelectedBtn: document.getElementById("deleteTrashSelectedBtn"),
@@ -64,6 +66,67 @@ function setHeaderIcon(hasItems) {
     const { headerIcon } = getModalElements();
     if (!headerIcon) return;
     headerIcon.innerHTML = recycleBinSVG(hasItems, 32);
+}
+
+function getActiveSourceLabel() {
+    let id = "";
+    try {
+        if (typeof window.__frGetActiveSourceId === "function") {
+            id = String(window.__frGetActiveSourceId() || "").trim();
+        }
+    } catch (e) { /* ignore */ }
+
+    if (!id) {
+        const sel = document.getElementById("sourceSelector");
+        if (sel && sel.value) id = String(sel.value || "").trim();
+    }
+
+    if (!id) return "";
+
+    let label = "";
+    try {
+        if (typeof window.__frGetSourceMetaById === "function") {
+            const meta = window.__frGetSourceMetaById(id);
+            if (meta && typeof meta === "object") {
+                const name = String(meta.name || "").trim();
+                const type = String(meta.type || "").trim();
+                if (name && type) label = `${name} (${type})`;
+                else label = name || type;
+            }
+        }
+    } catch (e) { /* ignore */ }
+
+    if (!label) {
+        try {
+            if (typeof window.__frGetSourceNameById === "function") {
+                label = String(window.__frGetSourceNameById(id) || "").trim();
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    if (!label) {
+        const sel = document.getElementById("sourceSelector");
+        if (sel) {
+            const opt = Array.from(sel.options).find(o => o.value === id);
+            if (opt) label = String(opt.textContent || "").trim();
+        }
+    }
+
+    return label || id;
+}
+
+function updateTrashSourceHint() {
+    const { sourceHint } = getModalElements();
+    if (!sourceHint) return;
+    const label = getActiveSourceLabel();
+    if (!label) {
+        sourceHint.textContent = "";
+        sourceHint.hidden = true;
+        return;
+    }
+    const prefix = tr("storage_source", "Source");
+    sourceHint.textContent = `${prefix}: ${label}`;
+    sourceHint.hidden = false;
 }
 
 async function fetchJson(url, body) {
@@ -81,9 +144,16 @@ async function fetchJson(url, body) {
 }
 
 async function fetchTrash() {
-    const res = await fetch(ENDPOINTS.list, { credentials: "include" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    if (trashFetchPromise) return trashFetchPromise;
+    trashFetchPromise = fetch(ENDPOINTS.list, { credentials: "include" })
+        .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        })
+        .finally(() => {
+            trashFetchPromise = null;
+        });
+    return trashFetchPromise;
 }
 
 function updateRowSelection(row, checked) {
@@ -165,7 +235,7 @@ function getSelectedFiles() {
 }
 
 function afterTrashMutation(message, closeModal = false) {
-    if (message) showToast(message);
+    if (message) showToast(message, 'success');
     loadTrashItems();
     loadFileList(window.currentFolder);
     loadFolderTree(window.currentFolder);
@@ -178,7 +248,7 @@ async function deleteAllTrashItems() {
     if (data.success) {
         afterTrashMutation(data.success, true);
     } else {
-        showToast(data.error || tr("error_deleting_trash", "Error deleting trash files."));
+        showToast(data.error || tr("error_deleting_trash", "Error deleting trash files."), 'error');
     }
 }
 
@@ -188,7 +258,7 @@ export function confirmEmptyRecycleBin() {
             await deleteAllTrashItems();
         } catch (err) {
             console.error("Error deleting all trash files:", err);
-            showToast(tr("error_deleting_trash", "Error deleting trash files."));
+            showToast(tr("error_deleting_trash", "Error deleting trash files."), 'error');
         }
     });
 }
@@ -237,7 +307,7 @@ export function setupTrashRestoreDelete() {
         restoreSelectedBtn.addEventListener("click", async () => {
             const files = getSelectedFiles();
             if (files.length === 0) {
-                showToast(tr("no_trash_selected", "No trash items selected."));
+                showToast(tr("no_trash_selected", "No trash items selected."), 'warning');
                 return;
             }
             try {
@@ -249,7 +319,7 @@ export function setupTrashRestoreDelete() {
                 afterTrashMutation(msg, true);
             } catch (err) {
                 console.error("Error restoring files:", err);
-                showToast(tr("error_restoring_files", "Error restoring files."));
+                showToast(tr("error_restoring_files", "Error restoring files."), 'error');
             }
         });
     }
@@ -259,7 +329,7 @@ export function setupTrashRestoreDelete() {
             const checkboxes = document.querySelectorAll("#restoreFilesList input[type='checkbox']");
             const files = Array.from(checkboxes).map(chk => chk.value);
             if (files.length === 0) {
-                showToast(tr("trash_empty", "Trash is empty."));
+                showToast(tr("trash_empty", "Trash is empty."), 'info');
                 return;
             }
             try {
@@ -271,7 +341,7 @@ export function setupTrashRestoreDelete() {
                 afterTrashMutation(msg, true);
             } catch (err) {
                 console.error("Error restoring files:", err);
-                showToast(tr("error_restoring_files", "Error restoring files."));
+                showToast(tr("error_restoring_files", "Error restoring files."), 'error');
             }
         });
     }
@@ -280,7 +350,7 @@ export function setupTrashRestoreDelete() {
         deleteSelectedBtn.addEventListener("click", () => {
             const files = getSelectedFiles();
             if (files.length === 0) {
-                showToast(tr("no_trash_selected", "No trash items selected for deletion."));
+                showToast(tr("no_trash_selected", "No trash items selected for deletion."), 'warning');
                 return;
             }
             showConfirm(tr("confirm_delete_selected", "Permanently delete the selected items?"), async () => {
@@ -289,11 +359,11 @@ export function setupTrashRestoreDelete() {
                     if (data.success) {
                         afterTrashMutation(data.success, true);
                     } else {
-                        showToast(data.error || tr("error_deleting_trash", "Error deleting trash files."));
+                        showToast(data.error || tr("error_deleting_trash", "Error deleting trash files."), 'error');
                     }
                 } catch (err) {
                     console.error("Error deleting trash files:", err);
-                    showToast(tr("error_deleting_trash", "Error deleting trash files."));
+                    showToast(tr("error_deleting_trash", "Error deleting trash files."), 'error');
                 }
             });
         });
@@ -318,6 +388,7 @@ export function setupTrashRestoreDelete() {
  */
 export async function loadTrashItems() {
     try {
+        updateTrashSourceHint();
         const trashItems = await fetchTrash();
         renderTrashList(trashItems);
         const hasItems = Array.isArray(trashItems) && trashItems.length > 0;
@@ -325,7 +396,7 @@ export async function loadTrashItems() {
         setHeaderIcon(hasItems);
     } catch (err) {
         console.error("Error loading trash items:", err);
-        showToast(tr("error_loading_trash", "Error loading trash items."));
+        showToast(tr("error_loading_trash", "Error loading trash items."), 'error');
         updateRecycleBinState(false);
         setHeaderIcon(false);
     }
@@ -347,8 +418,7 @@ export async function refreshRecycleBinIndicator() {
  * Automatically purges (permanently deletes) trash items older than 3 days.
  */
 function autoPurgeOldTrash() {
-    fetch(ENDPOINTS.list, { credentials: "include" })
-        .then(response => response.json())
+    fetchTrash()
         .then(trashItems => {
             const now = Date.now();
             const threeDays = 3 * 24 * 60 * 60 * 1000;
