@@ -43,12 +43,20 @@ Drag & drop uploads, OnlyOffice integration, and **optional folder-level encrypt
   - Works with `X-Forwarded-*` headers and Kubernetes ingress setups
 - 👥 **Pro: user groups, client portals, global search, storage explorer & audit logs** –  
   Group-based ACLs, brandable client upload portals, **ACL-aware global search across files, folders, users, and permissions**, an ncdu-style storage explorer for identifying large folders/files and reclaiming disk space directly from the UI, and **Pro Audit Logs** (configurable activity logging with filters + CSV export for tracking key actions across web, WebDAV, shares, and portals).
+- 🌐 **Pro: Sources (multi-storage adapters)** –  
+  Turn FileRise into a storage hub by connecting multiple backends and switching between them in the UI:
+  - Multiple local roots (additional local paths)
+  - **S3-compatible** (AWS S3 / MinIO / Wasabi / Backblaze B2 S3 / etc.)
+  - **SMB/CIFS**, **SFTP**, **FTP**
+  - **WebDAV** (Nextcloud / ownCloud / FileRise)
+  - **Google Drive**
+  - Works with **dual-pane** so you can copy/move via drag & drop or toolbar actions **between sources**, with **per-source Trash**
 
 Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
 ![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v3.0.0.png)
 
-https://raw.githubusercontent.com/error311/FileRise/master/resources/FileRisePro-Sources.gif
+![Sources](https://raw.githubusercontent.com/error311/FileRise/master/resources/FileRisePro-Sources.gif)
 
 > 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
 > Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open-source (MIT).
