@@ -2,6 +2,30 @@
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { openDownloadModal } from './fileActions.js?v={{APP_QVER}}';
 
+const ARCHIVE_EXTS = [
+  ".zip",
+  ".7z",
+  ".tar",
+  ".tar.gz",
+  ".tgz",
+  ".tar.bz2",
+  ".tbz2",
+  ".tar.xz",
+  ".txz",
+  ".gz",
+  ".bz2",
+  ".xz",
+  ".rar"
+];
+const RAR_PART_RE = /\.r\d{2}$/i;
+
+export function isArchiveFileName(name) {
+  const lower = String(name || "").toLowerCase();
+  if (!lower) return false;
+  if (RAR_PART_RE.test(lower)) return true;
+  return ARCHIVE_EXTS.some(ext => lower.endsWith(ext));
+}
+
 // Basic DOM Helpers
 export function toggleVisibility(elementId, shouldShow) {
   const element = document.getElementById(elementId);
@@ -60,7 +84,7 @@ export function updateFileActionButtons() {
   const anySelected = selectedCheckboxes.length > 0;
   const anyFolderSelected = selectedFolders.length > 0;
   const anyZip = Array.from(selectedCheckboxes)
-    .some(cb => cb.value.toLowerCase().endsWith(".zip"));
+    .some(cb => isArchiveFileName(cb.value));
   const singleSelected = selectedCheckboxes.length === 1;
   const currentFolderCaps = window.currentFolderCaps || null;
   const selectedFolderCaps = window.selectedFolderCaps || null;
@@ -158,7 +182,7 @@ export function updateFileActionButtons() {
   if (shareBtn) shareBtn.style.display = (showFileActions && !inEncryptedFolder) ? "" : "none";
   if (createBtn) createBtn.style.display = "";
 
-  // Extract ZIP still appears only when a .zip is selected (and file mode)
+  // Extract archive appears only when a supported archive is selected (and file mode)
   if (extractZipBtn) extractZipBtn.style.display = (showFileActions && anyZip && !inEncryptedFolder) ? "" : "none";
 
   // Finally disable the ones that are shown but shouldn’t be clickable

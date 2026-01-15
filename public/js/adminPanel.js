@@ -679,7 +679,7 @@ function renderAdminEncryptionSection({ config, dark }) {
       </div>
 
       <div class="small text-muted" style="margin-top:8px;">
-        ${tf("encryption_v1_note", "Admin notes:<ul style=\"margin:6px 0 0 18px; padding:0;\"><li>Master key can be set via <code>FR_ENCRYPTION_MASTER_KEY</code> (env overrides the key file) or via <code>META_DIR/encryption_master.key</code> (32 raw bytes).</li><li>Encrypted folders are recursive; shares, shared-folder uploads, WebDAV, and ZIP create/extract are blocked under encrypted folders.</li><li>Video/audio previews are disabled (no HTTP Range) but users can still download files normally.</li></ul>")}
+        ${tf("encryption_v1_note", "Admin notes:<ul style=\"margin:6px 0 0 18px; padding:0;\"><li>Master key can be set via <code>FR_ENCRYPTION_MASTER_KEY</code> (env overrides the key file) or via <code>META_DIR/encryption_master.key</code> (32 raw bytes).</li><li>Encrypted folders are recursive; shares, shared-folder uploads, WebDAV, and archive create/extract are blocked under encrypted folders.</li><li>Video/audio previews are disabled (no HTTP Range) but users can still download files normally.</li></ul>")}
       </div>
     </div>
   `;

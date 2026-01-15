@@ -1386,6 +1386,18 @@ function bindDarkMode() {
       alert('Login failed');
     });
   }
+  function focusLoginUsername() {
+    const input = document.getElementById('loginUsername');
+    const form = document.getElementById('authForm');
+    if (!input || !form || input.disabled) return;
+    if (form.hasAttribute('hidden') || form.style.display === 'none') return;
+    try {
+      if (getComputedStyle(form).display === 'none') return;
+    } catch (e) { }
+    requestAnimationFrame(() => {
+      try { input.focus(); } catch (e) { }
+    });
+  }
   function afterLogin() {
     // If index.html was opened with ?redirect=<url>, honor that first
     try {
@@ -1641,6 +1653,7 @@ function bindDarkMode() {
     keepCreateDropdownWired();
     wireModalEnterDefault();
     showLoginTip('Please log in to continue');
+    focusLoginUsername();
 
     if (overlay) overlay.style.display = 'none';
   }, { once: true });

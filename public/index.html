@@ -326,7 +326,7 @@
               </div>
               <div class="action-separator secondary-separator" aria-hidden="true"></div>
               <div class="action-group secondary-actions">
-                <button id="downloadZipBtn" class="btn action-btn icon-only" disabled title="Download selected" data-i18n-title="download">
+                <button id="downloadZipBtn" class="btn action-btn icon-only" disabled title="Download archive" data-i18n-title="download_zip">
                   <span class="material-icons" aria-hidden="true">file_download</span>
                 </button>
                 <button id="copySelectedBtn" class="btn action-btn icon-only" disabled title="Copy" data-i18n-title="copy_files">
@@ -344,7 +344,7 @@
                 <button id="deleteSelectedBtn" class="btn action-btn icon-only" disabled title="Delete" data-i18n-title="delete_files">
                   <span class="material-icons" aria-hidden="true">delete</span>
                 </button>
-                <button id="extractZipBtn" class="btn action-btn icon-only" style="display: none;" disabled title="Extract zip" data-i18n-title="extract_zip_button">
+                <button id="extractZipBtn" class="btn action-btn icon-only" style="display: none;" disabled title="Extract archive" data-i18n-title="extract_zip_button">
                   <span class="material-icons" aria-hidden="true">unarchive</span>
                 </button>
                 <button id="toolbarMenuBtn" class="btn action-btn icon-only" title="More actions">
@@ -442,8 +442,13 @@
             </div>
             <div id="downloadZipModal" class="modal" style="display:none;">
               <div class="modal-content">
-                <h4 data-i18n-key="download_zip_title">Download Selected Files as Zip</h4>
-                <p data-i18n-key="download_zip_prompt">Enter a name for the zip file:</p>
+                <h4 data-i18n-key="download_zip_title">Download Selected Files as Archive</h4>
+                <label for="archiveFormatSelect" data-i18n-key="download_archive_format" style="display:block; margin-top:10px;">Archive format</label>
+                <select id="archiveFormatSelect" class="form-control">
+                  <option value="zip">ZIP (.zip)</option>
+                  <option value="7z">7-Zip (.7z)</option>
+                </select>
+                <p data-i18n-key="download_zip_prompt" style="margin-top:10px;">Enter a name for the archive file:</p>
                 <input type="text" id="zipFileNameInput" class="form-control" data-i18n-placeholder="zip_placeholder"
                   placeholder="files.zip" />
                 <div class="modal-footer" style="margin-top:15px; text-align:right;">
@@ -579,7 +584,7 @@
             data-action="download_zip"
             data-when="any">
       <i class="material-icons">archive</i>
-      <span>Download as ZIP</span>
+      <span>Download Archive</span>
     </button>
   
     <!-- NEW: multi-download without ZIP -->
@@ -594,7 +599,7 @@
             data-action="extract_zip"
             data-when="zip">
       <i class="material-icons">unarchive</i>
-      <span>Extract ZIP</span>
+      <span>Extract Archive</span>
     </button>
   
     <div class="sep" data-when="any"></div>

@@ -1,6 +1,6 @@
 // fileMenu.js
 import { t } from './i18n.js?v={{APP_QVER}}';
-import { updateRowHighlight } from './domUtils.js?v={{APP_QVER}}';
+import { updateRowHighlight, escapeHTML, isArchiveFileName } from './domUtils.js?v={{APP_QVER}}';
 import {
   handleDeleteSelected, handleCopySelected, handleMoveSelected,
   handleDownloadZipSelected, handleExtractZipSelected,
@@ -10,9 +10,6 @@ import { previewFile, buildPreviewUrl, openShareModal } from './filePreview.js?v
 import { editFile } from './fileEditor.js?v={{APP_QVER}}';
 import { canEditFile, fileData, downloadSelectedFilesIndividually, startInlineRenameFromContext } from './fileListView.js?v={{APP_QVER}}';
 import { openTagModal, openMultiTagModal } from './fileTags.js?v={{APP_QVER}}';
-import { escapeHTML } from './domUtils.js?v={{APP_QVER}}';
-
-
 const MENU_ID = 'fileContextMenu';
 
 function qMenu() { return document.getElementById(MENU_ID); }
@@ -137,7 +134,7 @@ function currentSelection() {
   const any  = files.length > 0;
   const one  = files.length === 1;
   const many = files.length > 1;
-  const anyZip = files.some(f => f.name.toLowerCase().endsWith('.zip'));
+  const anyZip = files.some(f => isArchiveFileName(f.name));
   const file = one ? files[0] : null;
   const canEditFlag = !!(file && canEditFile(file.name));
 

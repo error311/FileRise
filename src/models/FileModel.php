@@ -1515,10 +1515,11 @@ class FileModel
     }
 
     /**
-     * Extracts ZIP archives from the specified folder.
+     * Extracts archive files from the specified folder.
+     * Supports ZIP via ZipArchive and other formats via 7z (RAR extraction prefers unar when available).
      *
-     * @param string $folder The folder from which ZIP files will be extracted (e.g., "root" or a subfolder).
-     * @param array $files An array of ZIP file names to extract.
+     * @param string $folder The folder from which archives will be extracted (e.g., "root" or a subfolder).
+     * @param array $files An array of archive file names to extract.
      * @return array An associative array with keys "success" (boolean), and either "extractedFiles" (array) on success or "error" (string) on failure.
      */
     public static function extractZipArchive($folder, $files)
@@ -1531,6 +1532,7 @@ class FileModel
         } catch (\Throwable $e) { /* ignore */ }
 
         $errors = [];
+        $warnings = [];
         $allSuccess = true;
         $extractedFiles = [];
 
@@ -1540,6 +1542,18 @@ class FileModel
         // Hard limits to mitigate zip-bombs (tweak via defines if you like)
         $MAX_UNZIP_BYTES = defined('MAX_UNZIP_BYTES') ? (int)MAX_UNZIP_BYTES : (200 * 1024 * 1024 * 1024); // 200 GiB
         $MAX_UNZIP_FILES = defined('MAX_UNZIP_FILES') ? (int)MAX_UNZIP_FILES : 20000;
+        $formatBytes = function (int $bytes): string {
+            $bytes = max(0, $bytes);
+            $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+            $value = (float)$bytes;
+            $i = 0;
+            while ($value >= 1024 && $i < count($units) - 1) {
+                $value /= 1024;
+                $i++;
+            }
+            $dec = ($value >= 10 || $i === 0) ? 0 : 1;
+            return number_format($value, $dec) . ' ' . $units[$i];
+        };
 
         $baseDir = realpath(self::uploadRoot());
         if ($baseDir === false) {
@@ -1632,109 +1646,196 @@ class FileModel
             $putMeta($folderStr, $meta);
         };
 
-        // No PHP execution time limit during heavy work
-        @set_time_limit(0);
+        $isRarArchiveName = function (string $name): bool {
+            $lower = strtolower($name);
+            if (str_ends_with($lower, '.rar')) return true;
+            if (preg_match('/\\.r\\d{2}$/i', $lower)) return true;
+            if (preg_match('/\\.part\\d+\\.rar$/i', $lower)) return true;
+            return false;
+        };
 
-        foreach ($files as $zipFileName) {
-            $zipBase = basename(trim((string)$zipFileName));
-            if (strtolower(substr($zipBase, -4)) !== '.zip') {
-                continue;
+        $archiveExts = [
+            '.rar',
+            '.7z',
+            '.tar',
+            '.tar.gz',
+            '.tgz',
+            '.tar.bz2',
+            '.tbz2',
+            '.tar.xz',
+            '.txz',
+            '.gz',
+            '.bz2',
+            '.xz',
+        ];
+        $resolveArchive = function (string $name) use ($archiveExts): array {
+            $lower = strtolower($name);
+            if (str_ends_with($lower, '.zip')) {
+                return ['name' => $name, 'type' => 'zip', 'mapped' => null];
             }
-            if (!preg_match($safeFileNamePattern, $zipBase)) {
-                $errors[] = "$zipBase has an invalid name.";
-                $allSuccess = false;
-                continue;
+            if (preg_match('/\\.r\\d{2}$/i', $name)) {
+                $base = substr($name, 0, -4) . '.rar';
+                return ['name' => $base, 'type' => '7z', 'mapped' => $name];
             }
-
-            $zipFilePath = $folderPathReal . DIRECTORY_SEPARATOR . $zipBase;
-            if (!file_exists($zipFilePath)) {
-                $errors[] = "$zipBase does not exist in folder.";
-                $allSuccess = false;
-                continue;
+            if (preg_match('/\\.part(\\d+)\\.rar$/i', $name, $m)) {
+                $pad = str_pad('1', strlen($m[1]), '0', STR_PAD_LEFT);
+                $base = preg_replace('/\\.part\\d+\\.rar$/i', '.part' . $pad . '.rar', $name);
+                $mapped = (strcasecmp($name, $base) === 0) ? null : $name;
+                return ['name' => $base, 'type' => '7z', 'mapped' => $mapped];
             }
-
-            $zip = new \ZipArchive();
-            if ($zip->open($zipFilePath) !== true) {
-                $errors[] = "Could not open $zipBase as a zip file.";
-                $allSuccess = false;
-                continue;
+            foreach ($archiveExts as $ext) {
+                if (str_ends_with($lower, $ext)) {
+                    return ['name' => $name, 'type' => '7z', 'mapped' => null];
+                }
             }
+            return ['name' => '', 'type' => null, 'mapped' => null];
+        };
 
-            // ---- Pre-scan: safety and size limits + build allow-list (skip dotfiles) ----
-            $unsafe = false;
-            $totalUncompressed = 0;
-            $fileCount = 0;
-            $allowedEntries = [];   // names to extract (files and/or directories)
-            $allowedFiles   = [];   // only files (for metadata stamping)
-
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-                $stat = $zip->statIndex($i);
-                $name = $zip->getNameIndex($i);
-                if ($name === false || !$stat) {
-                    $unsafe = true;
-                    break;
-                }
-
-                $isDir = str_ends_with($name, '/');
-
-                // Basic path checks
-                if ($isUnsafeEntryPath($name) || !$validEntrySubdirs($name)) {
-                    $unsafe = true;
-                    break;
-                }
-
-                // Skip hidden entries (any segment starts with '.')
-                if ($SKIP_DOTFILES && $isHiddenDotPath($name)) {
-                    continue; // just ignore; do not treat as unsafe
-                }
-
-                // Detect symlinks via external attributes (best-effort)
-                $mode = (isset($stat['external_attributes']) ? (($stat['external_attributes'] >> 16) & 0xF000) : 0);
-                if ($mode === 0120000) { // S_IFLNK
-                    $unsafe = true;
-                    break;
-                }
-
-                // Track limits only for files we're going to extract
-                if (!$isDir) {
-                    $fileCount++;
-                    $sz = isset($stat['size']) ? (int)$stat['size'] : 0;
-                    $totalUncompressed += $sz;
-                    if ($fileCount > $MAX_UNZIP_FILES || $totalUncompressed > $MAX_UNZIP_BYTES) {
-                        $unsafe = true;
-                        break;
+        $sevenZipBin = null;
+        $findSevenZip = function () use (&$sevenZipBin): ?string {
+            if ($sevenZipBin !== null) {
+                return $sevenZipBin ?: null;
+            }
+            $candidates = [
+                '7zz',
+                '/usr/bin/7zz',
+                '/usr/local/bin/7zz',
+                '/bin/7zz',
+                '7z',
+                '/usr/bin/7z',
+                '/usr/local/bin/7z',
+                '/bin/7z',
+            ];
+            foreach ($candidates as $bin) {
+                if ($bin === '') continue;
+                if (str_contains($bin, '/')) {
+                    if (is_file($bin) && is_executable($bin)) {
+                        $sevenZipBin = $bin;
+                        return $sevenZipBin;
                     }
-                    $allowedFiles[] = $name;
+                } else {
+                    $out = [];
+                    $rc = 1;
+                    @exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null', $out, $rc);
+                    if ($rc === 0 && !empty($out[0])) {
+                        $sevenZipBin = trim($out[0]);
+                        return $sevenZipBin;
+                    }
                 }
-
-                $allowedEntries[] = $name;
             }
+            $sevenZipBin = '';
+            return null;
+        };
 
-            if ($unsafe) {
-                $zip->close();
-                $errors[] = "$zipBase contains unsafe or oversized contents; extraction aborted.";
-                $allSuccess = false;
-                continue;
+        $unarBin = null;
+        $findUnar = function () use (&$unarBin): ?string {
+            if ($unarBin !== null) {
+                return $unarBin ?: null;
             }
-
-            // Nothing to extract after filtering?
-            if (empty($allowedEntries)) {
-                $zip->close();
-                // Treat as success (nothing visible to extract), but informatively note it
-                $errors[] = "$zipBase contained only hidden or unsupported entries.";
-                $allSuccess = false; // or keep true if you'd rather not mark as failure
-                continue;
+            $candidates = [
+                'unar',
+                '/usr/bin/unar',
+                '/usr/local/bin/unar',
+                '/bin/unar',
+            ];
+            foreach ($candidates as $bin) {
+                if ($bin === '') continue;
+                if (str_contains($bin, '/')) {
+                    if (is_file($bin) && is_executable($bin)) {
+                        $unarBin = $bin;
+                        return $unarBin;
+                    }
+                } else {
+                    $out = [];
+                    $rc = 1;
+                    @exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null', $out, $rc);
+                    if ($rc === 0 && !empty($out[0])) {
+                        $unarBin = trim($out[0]);
+                        return $unarBin;
+                    }
+                }
             }
+            $unarBin = '';
+            return null;
+        };
 
-            // ---- Extract ONLY the allowed entries ----
-            if (!$zip->extractTo($folderPathReal, $allowedEntries)) {
-                $errors[] = "Failed to extract $zipBase.";
-                $allSuccess = false;
-                $zip->close();
-                continue;
+        $sevenZipErrorDetail = function (array $lines): string {
+            $fallback = '';
+            for ($i = count($lines) - 1; $i >= 0; $i--) {
+                $line = trim((string)$lines[$i]);
+                if ($line === '') {
+                    continue;
+                }
+                $lower = strtolower($line);
+                $isSubItems = str_contains($lower, 'sub items errors');
+                if (!$isSubItems && $fallback === '') {
+                    $fallback = $line;
+                }
+                if ($isSubItems) {
+                    continue;
+                }
+                if (
+                    str_contains($lower, 'error')
+                    || str_contains($lower, 'warning')
+                    || str_contains($lower, 'unsupported')
+                    || str_contains($lower, 'data error')
+                    || str_contains($lower, 'crc')
+                    || str_contains($lower, 'cannot')
+                    || str_contains($lower, "can't")
+                ) {
+                    if (strlen($line) > 200) {
+                        $line = substr($line, 0, 200) . '...';
+                    }
+                    return $line;
+                }
+                if (!$isSubItems) {
+                    $fallback = $line;
+                }
             }
+            if ($fallback !== '') {
+                if (strlen($fallback) > 200) {
+                    $fallback = substr($fallback, 0, 200) . '...';
+                }
+                return $fallback;
+            }
+            return '';
+        };
 
-            // ---- Stamp metadata for files in the target folder AND nested subfolders (allowed files only) ----
+        $unarErrorDetail = function (array $lines): string {
+            $fallback = '';
+            for ($i = count($lines) - 1; $i >= 0; $i--) {
+                $line = trim((string)$lines[$i]);
+                if ($line === '') {
+                    continue;
+                }
+                $lower = strtolower($line);
+                if (
+                    str_contains($lower, 'error')
+                    || str_contains($lower, 'warning')
+                    || str_contains($lower, 'unsupported')
+                    || str_contains($lower, 'cannot')
+                    || str_contains($lower, "can't")
+                ) {
+                    if (strlen($line) > 200) {
+                        $line = substr($line, 0, 200) . '...';
+                    }
+                    return $line;
+                }
+                if ($fallback === '') {
+                    $fallback = $line;
+                }
+            }
+            if ($fallback !== '') {
+                if (strlen($fallback) > 200) {
+                    $fallback = substr($fallback, 0, 200) . '...';
+                }
+                return $fallback;
+            }
+            return '';
+        };
+
+        $stampExtractedFiles = function (array $allowedFiles) use ($folderPathReal, $folderNorm, $safeFileNamePattern, $stampMeta, &$extractedFiles): int {
+            $found = 0;
             foreach ($allowedFiles as $entryName) {
                 // Normalize entry path for filesystem checks
                 $entryFsRel = str_replace(['\\'], '/', $entryName);
@@ -1759,6 +1860,7 @@ class FileModel
                 // Only stamp if the file actually exists on disk after extraction
                 $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
                 if (is_file($targetAbs)) {
+                    $found++;
                     // Preserve list behavior: only include top-level extracted names
                     if ($relDir === '' || $relDir === '.') {
                         $extractedFiles[] = $basename;
@@ -1766,8 +1868,696 @@ class FileModel
                     $stampMeta($targetFolderNorm, $basename);
                 }
             }
+            return $found;
+        };
 
-            $zip->close();
+        $pruneExtractedFiles = function (array $allowedFiles, array $expectedSizes, string $archiveBase, bool $strictEmpty = false, bool $pruneEmpty = true) use ($folderPathReal, &$warnings): array {
+            $kept = [];
+            $emptyCount = 0;
+            $escapedCount = 0;
+            $rootPrefix = rtrim($folderPathReal, '/\\') . DIRECTORY_SEPARATOR;
+
+            foreach ($allowedFiles as $entryName) {
+                $entryFsRel = str_replace(['\\'], '/', $entryName);
+                $entryFsRel = ltrim($entryFsRel, '/');
+                if ($entryFsRel === '' || str_ends_with($entryFsRel, '/')) {
+                    continue;
+                }
+                $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                if (!is_file($targetAbs)) {
+                    continue;
+                }
+                $real = realpath($targetAbs);
+                if ($real === false || strpos($real, $rootPrefix) !== 0) {
+                    @unlink($targetAbs);
+                    $escapedCount++;
+                    continue;
+                }
+                if ($pruneEmpty) {
+                    $expected = $expectedSizes[$entryName] ?? null;
+                    $size = @filesize($targetAbs);
+                    if ($size === false) {
+                        $size = null;
+                    }
+                    $shouldPruneEmpty = ($size === 0) && (
+                        ($expected !== null && $expected > 0)
+                        || ($strictEmpty && $expected === null)
+                    );
+                    if ($shouldPruneEmpty) {
+                        clearstatcache(true, $targetAbs);
+                        $sizeCheck = @filesize($targetAbs);
+                        if ($sizeCheck === false) {
+                            $sizeCheck = 0;
+                        }
+                        if ($sizeCheck !== 0) {
+                            $shouldPruneEmpty = false;
+                        } else {
+                            $fh = @fopen($targetAbs, 'rb');
+                            if ($fh !== false) {
+                                $byte = @fread($fh, 1);
+                                @fclose($fh);
+                                if ($byte !== '' && $byte !== false) {
+                                    $shouldPruneEmpty = false;
+                                }
+                            } else {
+                                $shouldPruneEmpty = false;
+                            }
+                        }
+                    }
+                    if ($shouldPruneEmpty) {
+                        @unlink($targetAbs);
+                        $emptyCount++;
+                        continue;
+                    }
+                }
+                $kept[] = $entryName;
+            }
+
+            if ($escapedCount > 0) {
+                $warnings[] = "$archiveBase: removed {$escapedCount} file" . ($escapedCount === 1 ? '' : 's') . " that escaped the extraction root.";
+            }
+            if ($pruneEmpty && $emptyCount > 0) {
+                $warnings[] = "$archiveBase: removed {$emptyCount} empty file" . ($emptyCount === 1 ? '' : 's') . " created during extraction.";
+            }
+            return $kept;
+        };
+
+        $detectSizeMismatches = function (array $expectedSizes) use ($folderPathReal): array {
+            $mismatches = [];
+            foreach ($expectedSizes as $entryName => $expected) {
+                $expected = (int)$expected;
+                if ($expected <= 0) {
+                    continue;
+                }
+                $entryFsRel = str_replace(['\\'], '/', (string)$entryName);
+                $entryFsRel = ltrim($entryFsRel, '/');
+                if ($entryFsRel === '' || str_ends_with($entryFsRel, '/')) {
+                    continue;
+                }
+                $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                clearstatcache(true, $targetAbs);
+                $size = @filesize($targetAbs);
+                if ($size === false || (int)$size !== $expected) {
+                    $mismatches[] = $entryName;
+                }
+            }
+            return $mismatches;
+        };
+
+        $moveExtractedFile = function (string $src, string $dest): bool {
+            if (@rename($src, $dest)) {
+                return true;
+            }
+            if (@copy($src, $dest)) {
+                @unlink($src);
+                return true;
+            }
+            return false;
+        };
+
+        $removeTree = function (string $dir): void {
+            if (!is_dir($dir)) {
+                return;
+            }
+            $it = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($it as $item) {
+                $path = $item->getPathname();
+                if ($item->isDir()) {
+                    @rmdir($path);
+                } else {
+                    @unlink($path);
+                }
+            }
+            @rmdir($dir);
+        };
+
+        $processedArchives = [];
+
+        // No PHP execution time limit during heavy work
+        @set_time_limit(0);
+
+        foreach ($files as $archiveName) {
+            $rawBase = basename(trim((string)$archiveName));
+            if ($rawBase === '') {
+                continue;
+            }
+            if (!preg_match($safeFileNamePattern, $rawBase)) {
+                $errors[] = "$rawBase has an invalid name.";
+                $allSuccess = false;
+                continue;
+            }
+            $resolved = $resolveArchive($rawBase);
+            if (empty($resolved['type'])) {
+                continue;
+            }
+
+            $archiveBase = $resolved['name'];
+            $archiveType = $resolved['type'];
+            $mappedFrom = $resolved['mapped'];
+
+            if (
+                $archiveType === '7z'
+                && !preg_match('/\\.part\\d+\\.rar$/i', $archiveBase)
+                && preg_match('/^(.*?)([-_.])(\\d+)\\.rar$/i', $archiveBase, $m)
+            ) {
+                $num = (int)$m[3];
+                if ($num > 1) {
+                    $pad = str_pad('1', strlen($m[3]), '0', STR_PAD_LEFT);
+                    $candidate = $m[1] . $m[2] . $pad . '.rar';
+                    $candidatePath = $folderPathReal . DIRECTORY_SEPARATOR . $candidate;
+                    if (file_exists($candidatePath)) {
+                        $mappedFrom = $mappedFrom ?: $archiveBase;
+                        $archiveBase = $candidate;
+                    }
+                }
+            }
+
+            if (!preg_match($safeFileNamePattern, $archiveBase)) {
+                $errors[] = "$archiveBase has an invalid name.";
+                $allSuccess = false;
+                continue;
+            }
+
+            $isRarArchive = str_ends_with(strtolower($archiveBase), '.rar');
+
+            if (isset($processedArchives[$archiveBase])) {
+                continue;
+            }
+            $processedArchives[$archiveBase] = true;
+
+            $archivePath = $folderPathReal . DIRECTORY_SEPARATOR . $archiveBase;
+            if (!file_exists($archivePath)) {
+                if ($mappedFrom) {
+                    $fallbackPath = $folderPathReal . DIRECTORY_SEPARATOR . $mappedFrom;
+                    if (file_exists($fallbackPath)) {
+                        $archiveBase = $mappedFrom;
+                        $archivePath = $fallbackPath;
+                        $mappedFrom = null;
+                    } else {
+                        $errors[] = "$mappedFrom is part of a multi-part archive, but $archiveBase is missing.";
+                        $allSuccess = false;
+                        continue;
+                    }
+                } else {
+                    $errors[] = "$archiveBase does not exist in folder.";
+                    $allSuccess = false;
+                    continue;
+                }
+            }
+
+            if ($archiveType === 'zip') {
+                $zip = new \ZipArchive();
+                if ($zip->open($archivePath) !== true) {
+                    $errors[] = "Could not open $archiveBase as a zip file.";
+                    $allSuccess = false;
+                    continue;
+                }
+
+                // ---- Pre-scan: safety and size limits + build allow-list (skip dotfiles) ----
+                $unsafe = false;
+                $unsafeReason = '';
+                $skippedSymlinks = 0;
+                $totalUncompressed = 0;
+                $fileCount = 0;
+                $allowedEntries = [];   // names to extract (files and/or directories)
+                $allowedFiles   = [];   // only files (for metadata stamping)
+                $expectedSizes = [];
+
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $stat = $zip->statIndex($i);
+                    $name = $zip->getNameIndex($i);
+                    if ($name === false || !$stat) {
+                        $unsafe = true;
+                        $unsafeReason = 'Archive entry metadata is unreadable.';
+                        break;
+                    }
+
+                    $isDir = str_ends_with($name, '/');
+
+                    // Basic path checks
+                    if ($isUnsafeEntryPath($name)) {
+                        $unsafe = true;
+                        $unsafeReason = 'Archive contains absolute or traversal paths.';
+                        break;
+                    }
+                    if (!$validEntrySubdirs($name)) {
+                        $unsafe = true;
+                        $unsafeReason = 'Archive contains unsupported folder names.';
+                        break;
+                    }
+
+                    // Skip hidden entries (any segment starts with '.')
+                    if ($SKIP_DOTFILES && $isHiddenDotPath($name)) {
+                        continue; // just ignore; do not treat as unsafe
+                    }
+
+                    // Detect symlinks via external attributes (best-effort)
+                    $mode = (isset($stat['external_attributes']) ? (($stat['external_attributes'] >> 16) & 0xF000) : 0);
+                    if ($mode === 0120000) { // S_IFLNK
+                        $skippedSymlinks++;
+                        continue;
+                    }
+
+                    // Track limits only for files we're going to extract
+                    if (!$isDir) {
+                        $fileCount++;
+                        $sz = isset($stat['size']) ? (int)$stat['size'] : 0;
+                        $totalUncompressed += $sz;
+                        if ($fileCount > $MAX_UNZIP_FILES) {
+                            $unsafe = true;
+                            $unsafeReason = "Archive exceeds file limit ({$fileCount} > {$MAX_UNZIP_FILES}).";
+                            break;
+                        }
+                        if ($totalUncompressed > $MAX_UNZIP_BYTES) {
+                            $unsafe = true;
+                            $unsafeReason = "Archive exceeds size limit (" . $formatBytes($totalUncompressed) . " > " . $formatBytes($MAX_UNZIP_BYTES) . ").";
+                            break;
+                        }
+                        $allowedFiles[] = $name;
+                        $expectedSizes[$name] = $sz;
+                    }
+
+                    $allowedEntries[] = $name;
+                }
+
+                if ($unsafe) {
+                    $zip->close();
+                    $reason = $unsafeReason !== '' ? $unsafeReason : 'Archive contains unsafe or oversized contents.';
+                    $errors[] = "$archiveBase blocked: {$reason}";
+                    $allSuccess = false;
+                    continue;
+                }
+
+                // Nothing to extract after filtering?
+                if (empty($allowedEntries)) {
+                    $zip->close();
+                    // Treat as success (nothing visible to extract), but informatively note it
+                    if ($skippedSymlinks > 0) {
+                        $errors[] = "$archiveBase contained only symlink entries.";
+                    } else {
+                        $errors[] = "$archiveBase contained only hidden or unsupported entries.";
+                    }
+                    $allSuccess = false; // or keep true if you'd rather not mark as failure
+                    continue;
+                }
+
+                // ---- Extract ONLY the allowed entries ----
+                if (!$zip->extractTo($folderPathReal, $allowedEntries)) {
+                    $errors[] = "Failed to extract $archiveBase.";
+                    $allSuccess = false;
+                    $zip->close();
+                    continue;
+                }
+
+                $keptFiles = $pruneExtractedFiles($allowedFiles, $expectedSizes, $archiveBase);
+                $extractedCount = $stampExtractedFiles($keptFiles);
+                $zip->close();
+                if ($extractedCount === 0) {
+                    $errors[] = "Failed to extract $archiveBase: no valid files could be extracted.";
+                    $allSuccess = false;
+                    continue;
+                }
+                if ($skippedSymlinks > 0) {
+                    $warnings[] = "$archiveBase: skipped {$skippedSymlinks} symlink entr" . ($skippedSymlinks === 1 ? 'y' : 'ies') . ".";
+                }
+                continue;
+            }
+
+            $sevenZip = $findSevenZip();
+            if (!$sevenZip) {
+                $errors[] = "7z is not available on the server; cannot extract $archiveBase.";
+                $allSuccess = false;
+                continue;
+            }
+
+            // ---- 7z list: safety and size limits + build allow-list (skip dotfiles) ----
+            $listCmd = escapeshellarg($sevenZip) . ' l -slt -bd ' . escapeshellarg($archivePath);
+            $listOut = [];
+            $listCode = 1;
+            @exec($listCmd, $listOut, $listCode);
+            if ($listCode !== 0) {
+                $detail = $sevenZipErrorDetail($listOut);
+                $errors[] = $detail !== ''
+                    ? "Could not open $archiveBase as an archive: $detail."
+                    : "Could not open $archiveBase as an archive.";
+                $allSuccess = false;
+                continue;
+            }
+
+            $unsafe = false;
+            $unsafeReason = '';
+            $skippedSymlinks = 0;
+            $totalUncompressed = 0;
+            $fileCount = 0;
+            $allowedEntries = [];
+            $allowedFiles = [];
+            $expectedSizes = [];
+            $curPath = null;
+            $curIsDir = false;
+            $curSize = 0;
+            $curIsLink = false;
+            $curType = '';
+            $inFileList = false;
+            $seenHeaderPath = false;
+
+            $flushEntry = function () use (
+                &$curPath,
+                &$curIsDir,
+                &$curSize,
+                &$curIsLink,
+                &$allowedEntries,
+                &$allowedFiles,
+                &$expectedSizes,
+                &$curType,
+                &$unsafe,
+                &$unsafeReason,
+                &$skippedSymlinks,
+                &$totalUncompressed,
+                &$fileCount,
+                $isUnsafeEntryPath,
+                $validEntrySubdirs,
+                $isHiddenDotPath,
+                $SKIP_DOTFILES,
+                $MAX_UNZIP_BYTES,
+                $MAX_UNZIP_FILES,
+                $formatBytes
+            ) {
+                if ($curPath === null) return;
+                $name = $curPath;
+                $isDir = $curIsDir;
+                $size = $curSize;
+                $type = strtolower(trim((string)$curType));
+                $isLink = $type !== '' ? str_contains($type, 'link') : $curIsLink;
+
+                $curPath = null;
+                $curIsDir = false;
+                $curSize = 0;
+                $curIsLink = false;
+                $curType = '';
+
+                $name = str_replace('\\', '/', $name);
+                if ($name === '' || preg_match('/[\\r\\n]/', $name)) {
+                    $unsafe = true;
+                    if ($unsafeReason === '') $unsafeReason = 'Archive contains invalid entry names.';
+                    return;
+                }
+                if ($isUnsafeEntryPath($name)) {
+                    $unsafe = true;
+                    if ($unsafeReason === '') $unsafeReason = 'Archive contains absolute or traversal paths.';
+                    return;
+                }
+                if (!$validEntrySubdirs($name)) {
+                    $unsafe = true;
+                    if ($unsafeReason === '') $unsafeReason = 'Archive contains unsupported folder names.';
+                    return;
+                }
+                if ($SKIP_DOTFILES && $isHiddenDotPath($name)) {
+                    return; // ignore hidden entries
+                }
+                if ($isLink) {
+                    $skippedSymlinks++;
+                    return;
+                }
+
+                $allowedEntries[] = $name;
+                if (!$isDir) {
+                    $fileCount++;
+                    $totalUncompressed += $size;
+                    if ($fileCount > $MAX_UNZIP_FILES) {
+                        $unsafe = true;
+                        if ($unsafeReason === '') $unsafeReason = "Archive exceeds file limit ({$fileCount} > {$MAX_UNZIP_FILES}).";
+                        return;
+                    }
+                    if ($totalUncompressed > $MAX_UNZIP_BYTES) {
+                        $unsafe = true;
+                        if ($unsafeReason === '') $unsafeReason = "Archive exceeds size limit (" . $formatBytes($totalUncompressed) . " > " . $formatBytes($MAX_UNZIP_BYTES) . ").";
+                        return;
+                    }
+                    $allowedFiles[] = $name;
+                    $expectedSizes[$name] = $size;
+                }
+            };
+
+            foreach ($listOut as $line) {
+                $line = rtrim((string)$line, "\r");
+                if (strpos($line, '----------') === 0) {
+                    $inFileList = true;
+                    $curPath = null;
+                    $curIsDir = false;
+                    $curSize = 0;
+                    $curIsLink = false;
+                    continue;
+                }
+                if (!$inFileList && strpos($line, 'Path = ') === 0) {
+                    if (!$seenHeaderPath) {
+                        $seenHeaderPath = true;
+                        continue;
+                    }
+                    $inFileList = true;
+                }
+                if (!$inFileList) {
+                    continue;
+                }
+                if (strpos($line, 'Path = ') === 0) {
+                    $flushEntry();
+                    $curPath = substr($line, 7);
+                    continue;
+                }
+                if (strpos($line, 'Folder = ') === 0) {
+                    $curIsDir = (trim(substr($line, 9)) === '+');
+                    continue;
+                }
+                if (strpos($line, 'Type = ') === 0) {
+                    $curType = trim(substr($line, 7));
+                    continue;
+                }
+                if (strpos($line, 'Size = ') === 0) {
+                    $curSize = (int)trim(substr($line, 7));
+                    continue;
+                }
+                if (strpos($line, 'Attributes = ') === 0) {
+                    $attr = strtolower(trim(substr($line, 13)));
+                    if ($attr !== '' && $attr[0] === 'l') {
+                        $curIsLink = true;
+                    }
+                    continue;
+                }
+                if (strpos($line, 'Link = ') === 0) {
+                    $linkTarget = trim(substr($line, 7));
+                    $linkTargetLower = strtolower($linkTarget);
+                    if (
+                        $linkTarget !== ''
+                        && $linkTarget !== '-'
+                        && $linkTargetLower !== 'none'
+                        && $linkTargetLower !== 'false'
+                        && $linkTargetLower !== 'no'
+                        && !ctype_digit($linkTargetLower)
+                    ) {
+                        $curIsLink = true;
+                    }
+                    continue;
+                }
+                if (stripos($line, 'Symbolic Link = ') === 0 || stripos($line, 'Symlink = ') === 0) {
+                    $pos = strpos($line, '=');
+                    $linkTarget = ($pos === false) ? '' : trim(substr($line, $pos + 1));
+                    $linkTargetLower = strtolower($linkTarget);
+                    if (
+                        $linkTarget !== ''
+                        && $linkTarget !== '-'
+                        && $linkTargetLower !== 'none'
+                        && $linkTargetLower !== 'false'
+                        && $linkTargetLower !== 'no'
+                        && !ctype_digit($linkTargetLower)
+                    ) {
+                        $curIsLink = true;
+                    }
+                    continue;
+                }
+            }
+            $flushEntry();
+
+            if ($unsafe) {
+                $reason = $unsafeReason !== '' ? $unsafeReason : 'Archive contains unsafe or oversized contents.';
+                $errors[] = "$archiveBase blocked: {$reason}";
+                $allSuccess = false;
+                continue;
+            }
+
+            if (empty($allowedEntries)) {
+                if ($skippedSymlinks > 0) {
+                    $errors[] = "$archiveBase contained only symlink entries.";
+                } else {
+                    $errors[] = "$archiveBase contained only hidden or unsupported entries.";
+                }
+                $allSuccess = false;
+                continue;
+            }
+
+            $workDir = rtrim(self::metaRoot(), '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+            if (!is_dir($workDir)) {
+                @mkdir($workDir, 0775, true);
+            }
+            if (!is_dir($workDir) || !is_writable($workDir)) {
+                $errors[] = "Archive temp dir not writable: " . $workDir;
+                $allSuccess = false;
+                continue;
+            }
+
+            $unar = $isRarArchive ? $findUnar() : null;
+            $usedUnar = false;
+            $extractCode = 0;
+            $extractDetail = '';
+
+            if ($unar) {
+                $usedUnar = true;
+                $tmpBase = tempnam($workDir, 'unar-');
+                if ($tmpBase === false) {
+                    $errors[] = "Failed to prepare RAR extract workspace for $archiveBase.";
+                    $allSuccess = false;
+                    continue;
+                }
+                @unlink($tmpBase);
+                if (!@mkdir($tmpBase, 0775, true)) {
+                    $errors[] = "Failed to create RAR extract workspace for $archiveBase.";
+                    $allSuccess = false;
+                    continue;
+                }
+
+                $unarOut = [];
+                $unarCode = 1;
+                $unarCmd = escapeshellarg($unar) . ' -o ' . escapeshellarg($tmpBase) . ' ' . escapeshellarg($archivePath);
+                @exec($unarCmd, $unarOut, $unarCode);
+                if ($unarCode !== 0) {
+                    $detail = $unarErrorDetail($unarOut);
+                    $errors[] = $detail !== ''
+                        ? "Failed to extract $archiveBase: $detail"
+                        : "Failed to extract $archiveBase.";
+                    $allSuccess = false;
+                    $removeTree($tmpBase);
+                    continue;
+                }
+
+                $extractRoot = $tmpBase;
+                $entries = array_values(array_diff(@scandir($tmpBase) ?: [], ['.', '..']));
+                if (count($entries) === 1) {
+                    $single = $tmpBase . DIRECTORY_SEPARATOR . $entries[0];
+                    if (is_dir($single)) {
+                        $extractRoot = $single;
+                    }
+                }
+
+                $moveFailed = false;
+                foreach ($allowedFiles as $entryName) {
+                    $entryFsRel = str_replace(['\\'], '/', $entryName);
+                    $entryFsRel = ltrim($entryFsRel, '/');
+                    if ($entryFsRel === '' || str_ends_with($entryFsRel, '/')) {
+                        continue;
+                    }
+                    $srcPath = $extractRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                    if (!is_file($srcPath)) {
+                        continue;
+                    }
+                    $destPath = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                    $destDir = dirname($destPath);
+                    if (!is_dir($destDir) && !@mkdir($destDir, 0775, true)) {
+                        $errors[] = "Failed to create folder for extracted file $entryFsRel.";
+                        $moveFailed = true;
+                        continue;
+                    }
+                    if (!$moveExtractedFile($srcPath, $destPath)) {
+                        $errors[] = "Failed to place extracted file $entryFsRel.";
+                        $moveFailed = true;
+                    }
+                }
+
+                $removeTree($tmpBase);
+                if ($moveFailed) {
+                    $allSuccess = false;
+                    continue;
+                }
+
+                $sizeMismatches = $detectSizeMismatches($expectedSizes);
+                if (!empty($sizeMismatches)) {
+                    $count = count($sizeMismatches);
+                    $errors[] = "Failed to extract $archiveBase: {$count} file" . ($count === 1 ? '' : 's') . " extracted with incorrect sizes.";
+                    $allSuccess = false;
+                    continue;
+                }
+            } else {
+                $listFile = tempnam($workDir, '7zlist-');
+                if ($listFile === false) {
+                    $errors[] = "Failed to prepare archive extract list for $archiveBase.";
+                    $allSuccess = false;
+                    continue;
+                }
+                $extractEntries = $allowedFiles ?: $allowedEntries;
+                if (file_put_contents($listFile, implode("\n", $extractEntries) . "\n", LOCK_EX) === false) {
+                    @unlink($listFile);
+                    $errors[] = "Failed to write archive extract list for $archiveBase.";
+                    $allSuccess = false;
+                    continue;
+                }
+
+                $outDirArg = '-o' . $folderPathReal;
+                $extractCmd = escapeshellarg($sevenZip) . ' x -y -aoa -bd ' . escapeshellarg($outDirArg) . ' ' . escapeshellarg($archivePath) . ' ' . escapeshellarg('-i@' . $listFile);
+                $extractOut = [];
+                $extractCode = 1;
+                @exec($extractCmd, $extractOut, $extractCode);
+                @unlink($listFile);
+
+                if ($extractCode !== 0) {
+                    $detail = $sevenZipErrorDetail($extractOut);
+                    $extractDetail = $detail !== '' ? $detail : 'Archive extracted with warnings.';
+                }
+
+                if ($isRarArchive) {
+                    $sizeMismatches = $detectSizeMismatches($expectedSizes);
+                    if (!empty($sizeMismatches)) {
+                        $count = count($sizeMismatches);
+                        $errors[] = "Failed to extract $archiveBase: {$count} file" . ($count === 1 ? '' : 's') . " extracted with incorrect sizes. Install unar for RAR archives.";
+                        $allSuccess = false;
+                        continue;
+                    }
+                }
+            }
+
+            $hasLinks = 0;
+            foreach ($allowedEntries as $entryName) {
+                $entryFsRel = str_replace(['\\'], '/', $entryName);
+                $entryFsRel = ltrim($entryFsRel, '/');
+                if ($entryFsRel === '') continue;
+                $entryFsRel = rtrim($entryFsRel, '/');
+                if ($entryFsRel === '') continue;
+                $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                if (is_link($targetAbs)) {
+                    $hasLinks++;
+                    @unlink($targetAbs);
+                    if (is_link($targetAbs)) {
+                        @rmdir($targetAbs);
+                    }
+                }
+            }
+            if ($hasLinks > 0) {
+                $warnings[] = "$archiveBase: removed {$hasLinks} symlink entr" . ($hasLinks === 1 ? 'y' : 'ies') . ".";
+            }
+
+            $keptFiles = $pruneExtractedFiles($allowedFiles, $expectedSizes, $archiveBase, $extractCode !== 0, false);
+            $extractedCount = $stampExtractedFiles($keptFiles);
+            if ($extractedCount === 0) {
+                $reason = $extractDetail !== '' ? $extractDetail : 'no valid files could be extracted.';
+                $errors[] = "Failed to extract $archiveBase: $reason";
+                $allSuccess = false;
+                continue;
+            }
+            if ($skippedSymlinks > 0) {
+                $warnings[] = "$archiveBase: skipped {$skippedSymlinks} symlink entr" . ($skippedSymlinks === 1 ? 'y' : 'ies') . ".";
+            }
+            if (!$usedUnar && $extractDetail !== '') {
+                $warnings[] = "$archiveBase: " . $extractDetail;
+            }
         }
 
         // Persist metadata for any touched folder(s)
@@ -1782,9 +2572,16 @@ class FileModel
             }
         }
 
-        return $allSuccess
+        $response = $allSuccess
             ? ["success" => true, "extractedFiles" => $extractedFiles]
             : ["success" => false, "error" => implode(" ", $errors)];
+        if (!$allSuccess && $extractedFiles) {
+            $response['extractedFiles'] = $extractedFiles;
+        }
+        if ($warnings) {
+            $response['warning'] = implode(" ", $warnings);
+        }
+        return $response;
     }
 
     /**

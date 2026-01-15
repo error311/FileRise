@@ -1,6 +1,70 @@
 # Changelog
 
-## Changes 1/11/2025 (V3.0.0)
+## Changes 01/14/2026 (v3.0.1 Archive update + login focus)
+
+`release(v3.0.1): archive create/extract upgrades (7z + RAR via unar) + login focus fix (closes #82)`
+
+**Commit message**  
+
+```text
+release(v3.0.1): archive create/extract upgrades (7z + RAR via unar) + login focus fix (closes #82)
+
+- add 7z archive format option for multi-file downloads (worker + download streaming)
+- expand extraction to support ZIP + 7z formats via 7z, with RAR preferring unar when available
+- harden archive extraction against traversal, symlinks, zip-bombs, and empty/escaped outputs
+- improve archive job robustness (stale job cleanup, clearer queued/worker errors, correct MIME/filenames)
+- UI: archive format selector + name normalization, better “Extract Archive” handling, i18n updates
+- fix login screen focus (auto-focus username when login prompt shows)
+
+Closes #82
+```
+
+**Added**  
+
+- **Archive download format selector (ZIP / 7z)** in the “Download Selected Files as Archive” modal.
+- **7z archive creation** support in the background worker (`zip_worker.php`) using `7zz/7z`.
+- **RAR extraction prefers `unar`** when available (FOSS-friendly); falls back to `7z` when needed.
+- **Archive detection helper** `isArchiveFileName()` supporting:
+  - `.zip`, `.7z`, `.tar.*`, `.gz`, `.bz2`, `.xz`, `.rar`
+  - RAR split parts like `.r01`, `.r02`, etc.
+
+**Changed**  
+
+- **“ZIP” language → “Archive” language** across UI, admin notes, and translations.
+- **Archive job enqueue + download endpoint** now supports a `format` field (`zip` or `7z`):
+  - download streaming sets correct extension + MIME type (`application/zip` or `application/x-7z-compressed`)
+  - filename normalization strips any existing `.zip/.7z` and applies the chosen extension
+- **Archive extraction** is no longer ZIP-only:
+  - ZIP still uses `ZipArchive`
+  - non-ZIP formats use `7z` listing (`7z l -slt`) + extraction of an allow-listed set
+  - RAR parts like `.r01` map to their base `.rar` / `.part1.rar` automatically
+- **Archive queue robustness**
+  - stale queued/working jobs are cleaned up (PID checks + cmdline sanity where available)
+  - queued jobs that never start can surface a clearer error message (“worker did not start…”)
+
+**Fixed**  
+
+- **Login UX:** auto-focus username field when the login prompt appears (reduces “why can’t I type?” friction).
+- **Extract action visibility:** Extract button/menu now appears for supported archive formats (not just `.zip`).
+- **Better extraction feedback:** extraction API returns optional `warning` text; UI shows success + warning separately when partial issues occur.
+
+**Security / Hardening**  
+
+- **Archive extraction safety controls**:
+  - blocks absolute paths / traversal (`../`) and unsupported folder names
+  - skips dotfiles (configurable) instead of extracting hidden entries by default
+  - detects and skips symlinks and removes any symlinks created during extraction
+  - zip-bomb limits: max uncompressed bytes + max files (configurable)
+  - prunes empty outputs that indicate partial/broken extraction and removes any files that escape the extraction root
+
+**Docker**  
+
+- Image now installs **7zip + unar** so archive create/extract works out-of-the-box with FOSS tooling.
+- Ubuntu repo components are restricted to **`main universe`** (avoids non-free repos by default).
+
+---
+
+## Changes 1/11/2026 (V3.0.0)
 
 `release(v3.0.0): storage adapter seam + source-aware core (Sources-ready)`
 
@@ -131,7 +195,7 @@ FileRise v3.0.0 is a major internal milestone: a new storage adapter seam + sour
 
 ---
 
-## Changes 1/2/2025 (v2.13.1)
+## Changes 1/2/2026 (v2.13.1)
 
 `release(v2.13.1): harden Docker startup perms + explicit inline MIME mapping (see #79)`
 

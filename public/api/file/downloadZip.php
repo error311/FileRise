@@ -5,8 +5,8 @@
 /**
  * @OA\Post(
  *   path="/api/file/downloadZip.php",
- *   summary="Download multiple files as a ZIP",
- *   description="Requires view access (or own-only with ownership). May be gated by account flag.",
+ *   summary="Queue an archive download",
+ *   description="Queues a background archive build. Requires view access (or own-only with ownership). May be gated by account flag.",
  *   operationId="downloadZip",
  *   tags={"Files"},
  *   security={{"cookieAuth": {}}},
@@ -16,18 +16,19 @@
  *     @OA\JsonContent(
  *       required={"folder","files"},
  *       @OA\Property(property="folder", type="string", example="root"),
- *       @OA\Property(property="files", type="array", @OA\Items(type="string"), example={"a.jpg","b.png"})
+ *       @OA\Property(property="files", type="array", @OA\Items(type="string"), example={"a.jpg","b.png"}),
+ *       @OA\Property(property="format", type="string", example="zip", enum={"zip","7z"}, description="Archive format")
  *     )
  *   ),
  *   @OA\Response(
  *     response=200,
- *     description="ZIP archive",
- *     content={
- *       "application/zip": @OA\MediaType(
- *         mediaType="application/zip",
- *         @OA\Schema(type="string", format="binary")
- *       )
- *     }
+ *     description="Archive job queued",
+ *     @OA\JsonContent(
+ *       @OA\Property(property="ok", type="boolean", example=true),
+ *       @OA\Property(property="token", type="string"),
+ *       @OA\Property(property="statusUrl", type="string"),
+ *       @OA\Property(property="downloadUrl", type="string")
+ *     )
  *   ),
  *   @OA\Response(response=400, description="Invalid input"),
  *   @OA\Response(response=401, description="Unauthorized"),

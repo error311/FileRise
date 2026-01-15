@@ -2046,6 +2046,18 @@ class FileController
             'finalizeAt'  => $job['finalizeAt']  ?? null,
         ];
 
+        if (($job['status'] ?? '') === 'queued') {
+            $queuedAt = (int)($job['ctime'] ?? 0);
+            if ($queuedAt > 0 && empty($job['startedAt'])) {
+                $age = time() - $queuedAt;
+                if ($age > 20) {
+                    $out['status'] = 'error';
+                    $out['error'] = 'Archive worker did not start. Check server PHP CLI and permissions.';
+                    $out['ready'] = false;
+                }
+            }
+        }
+
         if ($ready) {
             $out['size']        = @filesize($job['zipPath']) ?: null;
             $out['downloadUrl'] = '/api/file/downloadZipFile.php?k=' . urlencode($token);
@@ -2115,14 +2127,38 @@ class FileController
         @ini_set('output_buffering', 'off');
         while (ob_get_level() > 0) @ob_end_clean();
 
+        $format = strtolower((string)($job['format'] ?? 'zip'));
+        if (!in_array($format, ['zip', '7z'], true)) {
+            @unlink($zipReal);
+            http_response_code(400);
+            echo "Unsupported archive format.";
+            return;
+        }
+        $ext = ($format === '7z') ? '7z' : 'zip';
+        $mimeMap = [
+            'zip' => 'application/zip',
+            '7z'  => 'application/x-7z-compressed',
+        ];
+        $mimeType = $mimeMap[$format] ?? 'application/octet-stream';
+
         @clearstatcache(true, $zipReal);
-        $name = isset($_GET['name']) ? preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$_GET['name']) : 'files.zip';
-        if ($name === '' || str_ends_with($name, '.')) $name = 'files.zip';
+        $name = isset($_GET['name']) ? preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$_GET['name']) : 'files.' . $ext;
+        if ($name === '' || str_ends_with($name, '.')) $name = 'files';
+        $lower = strtolower($name);
+        foreach (['.zip', '.7z'] as $suffix) {
+            if (str_ends_with($lower, $suffix)) {
+                $name = substr($name, 0, -strlen($suffix));
+                break;
+            }
+        }
+        $name = rtrim($name, '.');
+        if ($name === '') $name = 'files';
+        $name .= '.' . $ext;
         $size = (int)@filesize($zipReal);
 
         header('X-Accel-Buffering: no');
         header('X-Content-Type-Options: nosniff');
-        header('Content-Type: application/zip');
+        header('Content-Type: ' . $mimeType);
         header('Content-Disposition: attachment; filename="' . $name . '"');
         if ($size > 0) header('Content-Length: ' . $size);
         header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -2146,7 +2182,7 @@ class FileController
 
             $storage = StorageRegistry::getAdapter();
             if (!$storage->isLocal()) {
-                $this->_jsonOut(["error" => "ZIP operations are not supported for remote storage."], 400);
+                $this->_jsonOut(["error" => "Archive operations are not supported for remote storage."], 400);
                 return;
             }
 
@@ -2163,13 +2199,50 @@ class FileController
                 return;
             }
 
+            $format = strtolower(trim((string)($data['format'] ?? 'zip')));
+            if ($format === '') {
+                $format = 'zip';
+            }
+            $allowedFormats = ['zip', '7z'];
+            if (!in_array($format, $allowedFormats, true)) {
+                $msg = "Invalid archive format.";
+                $this->_jsonOut(["error" => $msg], 400);
+                return;
+            }
+
+            $findBin = function (array $candidates): ?string {
+                foreach ($candidates as $bin) {
+                    if ($bin === '') continue;
+                    if (str_contains($bin, '/')) {
+                        if (is_file($bin) && is_executable($bin)) {
+                            return $bin;
+                        }
+                        continue;
+                    }
+                    $out = [];
+                    $rc = 1;
+                    @exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null', $out, $rc);
+                    if ($rc === 0 && !empty($out[0])) {
+                        return trim($out[0]);
+                    }
+                }
+                return null;
+            };
+
+            if ($format === '7z') {
+                $bin = $findBin(['7zz', '/usr/bin/7zz', '/usr/local/bin/7zz', '/bin/7zz', '7z', '/usr/bin/7z', '/usr/local/bin/7z', '/bin/7z']);
+                if (!$bin) {
+                    $this->_jsonOut(["error" => "7z is not available on the server; cannot create 7z archives."], 400);
+                    return;
+                }
+            }
             $username = $_SESSION['username'] ?? '';
             $perms    = $this->loadPerms($username);
             $sourceId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
 
             // Optional zip gate by account flag
             if (!$this->isAdmin($perms) && !empty($perms['disableZip'])) {
-                $this->_jsonOut(["error" => "ZIP downloads are not allowed for your account."], 403);
+                $this->_jsonOut(["error" => "Archive downloads are not allowed for your account."], 403);
                 return;
             }
 
@@ -2210,7 +2283,7 @@ class FileController
             @chmod($tokDir, 0700);
             @chmod($logDir, 0700);
             if (!is_dir($tokDir) || !is_writable($tokDir)) {
-                $this->_jsonOut(["error" => "ZIP token dir not writable."], 500);
+                $this->_jsonOut(["error" => "Archive token dir not writable."], 500);
                 return;
             }
 
@@ -2237,17 +2310,50 @@ class FileController
             foreach ($tokens as $tf) {
                 $job = json_decode((string)@file_get_contents($tf), true) ?: [];
                 $st  = $job['status'] ?? 'unknown';
+                $pid = (int)($job['spawn']['pid'] ?? 0);
+                $tokenKey = pathinfo($tf, PATHINFO_FILENAME);
+                $pidAlive = false;
+                $pidCmdChecked = false;
+                $pidLooksLikeWorker = false;
+                if ($pid > 0) {
+                    if (is_dir('/proc/' . $pid)) {
+                        $pidAlive = true;
+                        $cmdline = @file_get_contents('/proc/' . $pid . '/cmdline');
+                        if (is_string($cmdline) && $cmdline !== '') {
+                            $pidCmdChecked = true;
+                            $cmdline = str_replace("\0", ' ', $cmdline);
+                            if (str_contains($cmdline, 'zip_worker.php') && ($tokenKey === '' || str_contains($cmdline, $tokenKey))) {
+                                $pidLooksLikeWorker = true;
+                            }
+                        }
+                    } elseif (function_exists('posix_kill')) {
+                        $pidAlive = @posix_kill($pid, 0);
+                    }
+                }
+                $queuedAt = (int)($job['ctime'] ?? 0);
+                $startedAt = (int)($job['startedAt'] ?? 0);
+                $queuedAge = ($queuedAt > 0) ? ($now - $queuedAt) : 0;
+
+                $staleQueued = ($st === 'queued' && $startedAt <= 0 && $queuedAge > 120);
+                $staleWorkingNoPid = (in_array($st, ['working', 'finalizing'], true) && $pid <= 0 && $queuedAge > 120);
+                $staleRunning = (in_array($st, ['working', 'finalizing'], true) && $pid > 0 && !$pidAlive);
+                $stalePidMismatch = (in_array($st, ['working', 'finalizing'], true) && $pid > 0 && $pidAlive && $pidCmdChecked && !$pidLooksLikeWorker && $queuedAge > 120);
+                if ($staleQueued || $staleWorkingNoPid || $staleRunning || $stalePidMismatch) {
+                    @unlink($tf);
+                    continue;
+                }
+
                 if ($st === 'queued' || $st === 'working' || $st === 'finalizing') {
                     $all++;
                     if (($job['user'] ?? '') === $username) $mine++;
                 }
             }
             if ($mine >= $perUserCap) {
-                $this->_jsonOut(["error" => "You already have ZIP jobs running. Try again shortly."], 429);
+                $this->_jsonOut(["error" => "You already have archive jobs running. Try again shortly."], 429);
                 return;
             }
             if ($all  >= $globalCap) {
-                $this->_jsonOut(["error" => "ZIP queue is busy. Try again shortly."], 429);
+                $this->_jsonOut(["error" => "Archive queue is busy. Try again shortly."], 429);
                 return;
             }
 
@@ -2259,6 +2365,7 @@ class FileController
                 'folder'     => $folder,
                 'files'      => array_values($files),
                 'sourceId'   => $sourceId,
+                'format'     => $format,
                 'status'     => 'queued',
                 'ctime'      => time(),
                 'startedAt'  => null,
@@ -2267,7 +2374,7 @@ class FileController
                 'error'      => null
             ];
             if (file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX) === false) {
-                $this->_jsonOut(["error" => "Failed to create zip job."], 500);
+                $this->_jsonOut(["error" => "Failed to create archive job."], 500);
                 return;
             }
 
@@ -2277,7 +2384,7 @@ class FileController
                 $job['status'] = 'error';
                 $job['error']  = 'Spawn failed: ' . $spawn['error'];
                 @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
-                $this->_jsonOut(["error" => "Failed to enqueue ZIP: " . $spawn['error']], 500);
+                $this->_jsonOut(["error" => "Failed to enqueue archive: " . $spawn['error']], 500);
                 return;
             }
 
@@ -2290,7 +2397,7 @@ class FileController
             ]);
         } catch (Throwable $e) {
             error_log('FileController::downloadZip enqueue error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
-            $this->_jsonOut(['error' => 'Internal error while queuing ZIP.'], 500);
+            $this->_jsonOut(['error' => 'Internal error while queuing archive.'], 500);
         }
     }
 
@@ -2303,7 +2410,7 @@ class FileController
 
             $storage = StorageRegistry::getAdapter();
             if (!$storage->isLocal()) {
-                $this->_jsonOut(["error" => "ZIP operations are not supported for remote storage."], 400);
+                $this->_jsonOut(["error" => "Archive operations are not supported for remote storage."], 400);
                 return;
             }
 

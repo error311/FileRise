@@ -33,13 +33,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PUID=99 PGID=100
 
 # Install Apache, PHP, and required extensions
-RUN apt-get update && \
+RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+        sed -i 's/^Components: .*/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources; \
+    fi && \
+    apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
       apache2 \
       php php-json php-curl php-zip php-mbstring php-gd php-xml \
       ca-certificates curl git openssl \
       smbclient \
+      7zip \
+      unar \
       clamav clamav-freshclam \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 

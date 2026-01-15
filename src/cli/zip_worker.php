@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../config/config.php';
 require __DIR__ . '/../../src/models/FileModel.php';
-require __DIR__ . '/../../src/lib/SourceContext.php';
+require_once __DIR__ . '/../../src/lib/SourceContext.php';
 
 $token = $argv[1] ?? '';
 $token = preg_replace('/[^a-f0-9]/','',$token);
@@ -57,6 +57,35 @@ $touchPhase = function(string $phase) use (&$job, $save) {
     $save();
 };
 
+$format = strtolower((string)($job['format'] ?? 'zip'));
+if (!in_array($format, ['zip', '7z'], true)) {
+    $job['status'] = 'error';
+    $job['error']  = 'Unsupported archive format.';
+    $save();
+    file_put_contents($logFile, "[".date('c')."] error: ".$job['error']."\n", FILE_APPEND);
+    exit(0);
+}
+$job['format'] = $format;
+
+$findBin = function(array $candidates): ?string {
+    foreach ($candidates as $bin) {
+        if ($bin === '') continue;
+        if (str_contains($bin, '/')) {
+            if (is_file($bin) && is_executable($bin)) {
+                return $bin;
+            }
+            continue;
+        }
+        $out = [];
+        $rc = 1;
+        @exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null', $out, $rc);
+        if ($rc === 0 && !empty($out[0])) {
+            return trim($out[0]);
+        }
+    }
+    return null;
+};
+
 // Init timing
 if (empty($job['startedAt'])) {
     $job['startedAt'] = time();
@@ -101,7 +130,7 @@ try {
         $fp = $folderPathReal . DIRECTORY_SEPARATOR . $bn;
         if (is_file($fp)) $filesToZip[] = $fp;
     }
-    if (!$filesToZip) throw new RuntimeException('No valid files to zip.');
+    if (!$filesToZip) throw new RuntimeException('No valid files to archive.');
 
     // Totals for progress
     $filesTotal = count($filesToZip);
@@ -120,71 +149,140 @@ try {
     $job['phase']      = 'zipping';
     $save();
 
-    // Create final zip path in META_DIR/ziptmp
-    $zipName = 'download-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.zip';
-    $zipPath = $root . DIRECTORY_SEPARATOR . $zipName;
+    if ($format === 'zip') {
+        // Create final zip path in META_DIR/ziptmp
+        $zipName = 'download-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.zip';
+        $zipPath = $root . DIRECTORY_SEPARATOR . $zipName;
 
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        throw new RuntimeException('Could not create zip archive.');
-    }
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('Could not create zip archive.');
+        }
 
-    // Enumerate files; report up to 98%
-    $bytesDone = 0;
-    $filesDone = 0;
-    foreach ($filesToZip as $fp) {
-        $bn = basename($fp);
-        $zip->addFile($fp, $bn);
+        // Enumerate files; report up to 98%
+        $bytesDone = 0;
+        $filesDone = 0;
+        foreach ($filesToZip as $fp) {
+            $bn = basename($fp);
+            $zip->addFile($fp, $bn);
 
-        $filesDone++;
-        $sz = @filesize($fp);
-        if ($sz !== false) $bytesDone += (int)$sz;
+            $filesDone++;
+            $sz = @filesize($fp);
+            if ($sz !== false) $bytesDone += (int)$sz;
 
-        $job['filesDone'] = $filesDone;
-        $job['bytesDone'] = $bytesDone;
-        $job['current']   = $bn;
+            $job['filesDone'] = $filesDone;
+            $job['bytesDone'] = $bytesDone;
+            $job['current']   = $bn;
 
-        $pct = ($bytesTotal > 0) ? (int) floor(($bytesDone / $bytesTotal) * 98) : 0;
-        if ($pct < 0) $pct = 0;
-        if ($pct > 98) $pct = 98;
-        if ($pct > (int)($job['pct'] ?? 0)) $job['pct'] = $pct;
+            $pct = ($bytesTotal > 0) ? (int) floor(($bytesDone / $bytesTotal) * 98) : 0;
+            if ($pct < 0) $pct = 0;
+            if ($pct > 98) $pct = 98;
+            if ($pct > (int)($job['pct'] ?? 0)) $job['pct'] = $pct;
+
+            $save();
+        }
+
+        // Finalizing (this is where libzip writes & renames)
+        $job['pct']           = max((int)($job['pct'] ?? 0), 99);
+        $job['phase']         = 'finalizing';
+        $job['finalizeAt']    = time();
+
+        // Publish selected totals for a truthful UI during finalizing,
+        // and clear incremental fields so the UI doesn't show "7/7 14 GB / 14 GB" prematurely.
+        $job['selectedFiles'] = $filesTotal;
+        $job['selectedBytes'] = $bytesTotal;
+        $job['filesDone']     = null;
+        $job['bytesDone']     = null;
+        $job['current']       = null;
 
         $save();
+
+        // ---- finalize the zip on disk ----
+        $ok = $zip->close();
+        $statusStr = method_exists($zip, 'getStatusString') ? $zip->getStatusString() : '';
+
+        if (!$ok || !is_file($zipPath)) {
+            $job['status'] = 'error';
+            $job['error']  = 'Failed to finalize ZIP' . ($statusStr ? " ($statusStr)" : '');
+            $save();
+            file_put_contents($logFile, "[".date('c')."] error: ".$job['error']."\n", FILE_APPEND);
+            exit(0);
+        }
+
+        $job['status']  = 'done';
+        $job['zipPath'] = $zipPath;
+        $job['pct']     = 100;
+        $job['phase']   = 'finalized';
+        $save();
+        file_put_contents($logFile, "[".date('c')."] done zip={$zipPath}\n", FILE_APPEND);
+        exit(0);
     }
 
-    // Finalizing (this is where libzip writes & renames)
-$job['pct']           = max((int)($job['pct'] ?? 0), 99);
-$job['phase']         = 'finalizing';
-$job['finalizeAt']    = time();
+    $archiveExt = ($format === '7z') ? '7z' : 'zip';
+    $archiveName = 'download-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.' . $archiveExt;
+    $archivePath = $root . DIRECTORY_SEPARATOR . $archiveName;
 
-// Publish selected totals for a truthful UI during finalizing,
-// and clear incremental fields so the UI doesn't show "7/7 14 GB / 14 GB" prematurely.
-$job['selectedFiles'] = $filesTotal;
-$job['selectedBytes'] = $bytesTotal;
-$job['filesDone']     = null;
-$job['bytesDone']     = null;
-$job['current']       = null;
+    $listFile = tempnam($root, '7zlist-');
+    if ($listFile === false) {
+        throw new RuntimeException('Failed to prepare archive file list.');
+    }
 
-$save();
+    $relNames = [];
+    foreach ($filesToZip as $fp) {
+        $relNames[] = basename($fp);
+    }
+    if (file_put_contents($listFile, implode("\n", $relNames) . "\n", LOCK_EX) === false) {
+        @unlink($listFile);
+        throw new RuntimeException('Failed to write archive file list.');
+    }
 
-// ---- finalize the zip on disk ----
-$ok = $zip->close();
-$statusStr = method_exists($zip, 'getStatusString') ? $zip->getStatusString() : '';
-
-if (!$ok || !is_file($zipPath)) {
-    $job['status'] = 'error';
-    $job['error']  = 'Failed to finalize ZIP' . ($statusStr ? " ($statusStr)" : '');
+    $job['pct']           = max((int)($job['pct'] ?? 0), 99);
+    $job['phase']         = 'finalizing';
+    $job['finalizeAt']    = time();
+    $job['selectedFiles'] = $filesTotal;
+    $job['selectedBytes'] = $bytesTotal;
+    $job['filesDone']     = null;
+    $job['bytesDone']     = null;
+    $job['current']       = null;
     $save();
-    file_put_contents($logFile, "[".date('c')."] error: ".$job['error']."\n", FILE_APPEND);
-    exit(0);
-}
 
-$job['status']  = 'done';
-$job['zipPath'] = $zipPath;
-$job['pct']     = 100;
-$job['phase']   = 'finalized';
-$save();
-file_put_contents($logFile, "[".date('c')."] done zip={$zipPath}\n", FILE_APPEND);
+    $cwd = getcwd();
+    if ($cwd !== false) {
+        @chdir($folderPathReal);
+    }
+
+    $out = [];
+    $rc = 1;
+    $bin = $findBin(['7zz', '/usr/bin/7zz', '/usr/local/bin/7zz', '/bin/7zz', '7z', '/usr/bin/7z', '/usr/local/bin/7z', '/bin/7z']);
+    if (!$bin) {
+        throw new RuntimeException('7z is not available on the server.');
+    }
+    $workArg = '-w' . $root;
+    $cmd = escapeshellarg($bin) . ' a -t7z -y -bd ' . escapeshellarg($workArg) . ' ' . escapeshellarg($archivePath) . ' ' . escapeshellarg('@' . $listFile);
+    @exec($cmd, $out, $rc);
+
+    if ($cwd !== false) {
+        @chdir($cwd);
+    }
+    @unlink($listFile);
+
+    if ($rc !== 0 || !is_file($archivePath)) {
+        $detail = trim(implode("\n", $out));
+        if (strlen($detail) > 200) $detail = substr($detail, 0, 200) . '...';
+        $job['status'] = 'error';
+        $job['error']  = 'Failed to create archive' . ($detail ? ': ' . $detail : '');
+        $save();
+        file_put_contents($logFile, "[".date('c')."] error: ".$job['error']."\n", FILE_APPEND);
+        exit(0);
+    }
+
+    $job['status']  = 'done';
+    $job['zipPath'] = $archivePath;
+    $job['pct']     = 100;
+    $job['phase']   = 'finalized';
+    $save();
+    file_put_contents($logFile, "[".date('c')."] done {$format}={$archivePath}\n", FILE_APPEND);
+    exit(0);
 } catch (Throwable $e) {
     $job['status'] = 'error';
     $job['error']  = 'Worker exception: '.$e->getMessage();

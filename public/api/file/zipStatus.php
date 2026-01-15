@@ -4,7 +4,7 @@
 /**
  * @OA\Get(
  *   path="/api/file/zipStatus.php",
- *   summary="Check status of a background ZIP build",
+ *   summary="Check status of a background archive build",
  *   description="Returns status for the authenticated user's token.",
  *   operationId="zipStatus",
  *   tags={"Files"},

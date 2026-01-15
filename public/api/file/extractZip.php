@@ -4,8 +4,8 @@
 /**
  * @OA\Post(
  *   path="/api/file/extractZip.php",
- *   summary="Extract ZIP file(s) into a folder",
- *   description="Requires write access on the target folder.",
+ *   summary="Extract archive file(s) into a folder",
+ *   description="Supports ZIP/7Z and RAR extraction via server tools. Requires write access on the target folder.",
  *   operationId="extractZip",
  *   tags={"Files"},
  *   security={{"cookieAuth": {}}},
@@ -15,7 +15,7 @@
  *     @OA\JsonContent(
  *       required={"folder","files"},
  *       @OA\Property(property="folder", type="string", example="root"),
- *       @OA\Property(property="files", type="array", @OA\Items(type="string"), example={"archive.zip"})
+ *       @OA\Property(property="files", type="array", @OA\Items(type="string"), example={"archive.zip","archive.7z"})
  *     )
  *   ),
  *   @OA\Response(response=200, description="Extraction result (model-defined)"),

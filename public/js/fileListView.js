@@ -137,7 +137,7 @@ function updateEncryptedFolderBanner(folder) {
   text.className = 'fr-enc-text';
   text.textContent =
     `This folder${rootLabel} is encrypted. ` +
-    'Video/audio previews, WebDAV, ONLYOFFICE, and ZIP create/extract are disabled.';
+    'Video/audio previews, WebDAV, ONLYOFFICE, and archive create/extract are disabled.';
 
   el.append(pill, text);
 }
@@ -7599,7 +7599,7 @@ export function downloadSelectedFilesIndividually(fileObjs) {
     const inEncrypted = !!(window.currentFolderCaps && window.currentFolderCaps.encryption && window.currentFolderCaps.encryption.encrypted);
     const msg = inEncrypted
       ? `You selected ${mapped.length} files. In encrypted folders, downloads are limited to ${limit} files at a time.`
-      : (t('too_many_plain_downloads') || `You selected ${mapped.length} files. For more than ${limit} files, please use "Download as ZIP".`);
+      : (t('too_many_plain_downloads') || `You selected ${mapped.length} files. For more than ${limit} files, please use "Download as Archive".`);
     showToast(msg, 'warning');
     return;
   }

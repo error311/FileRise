@@ -1,5 +1,5 @@
 // fileActions.js
-import { showToast, attachEnterKeyListener, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
+import { showToast, attachEnterKeyListener, escapeHTML, isArchiveFileName } from './domUtils.js?v={{APP_QVER}}';
 import {
   loadFileList,
   formatFolderName,
@@ -52,6 +52,54 @@ function getTransferTotalsForNames(names) {
     bytesKnown: unknown === 0 && totalBytes > 0,
     itemCount: list.length
   };
+}
+
+const ARCHIVE_FORMATS = ["zip", "7z"];
+const ARCHIVE_NAME_SUFFIXES = ["zip", "7z", "rar"];
+const ARCHIVE_EXT_RE = /\.(zip|7z|rar)$/i;
+
+function syncArchiveFormatSelect() {
+  const select = document.getElementById("archiveFormatSelect");
+  if (!select) return;
+  const rarOption = select.querySelector('option[value="rar"]');
+  if (rarOption) {
+    rarOption.remove();
+  }
+  if (!ARCHIVE_FORMATS.includes(select.value)) {
+    select.value = "zip";
+  }
+}
+
+function getSelectedArchiveFormat() {
+  const select = document.getElementById("archiveFormatSelect");
+  const value = select ? String(select.value || "").toLowerCase() : "zip";
+  return ARCHIVE_FORMATS.includes(value) ? value : "zip";
+}
+
+function normalizeArchiveName(raw, format) {
+  let name = String(raw || "").trim();
+  if (!name) return "";
+  const ext = format === "7z" ? "7z" : format;
+  const lower = name.toLowerCase();
+  for (const suffix of ARCHIVE_NAME_SUFFIXES) {
+    const token = "." + suffix;
+    if (lower.endsWith(token)) {
+      name = name.slice(0, -token.length);
+      break;
+    }
+  }
+  if (name === "") name = "files";
+  return name + "." + ext;
+}
+
+function updateArchiveNamePlaceholder(format) {
+  const input = document.getElementById("zipFileNameInput");
+  if (!input) return;
+  const ext = format === "7z" ? "7z" : format;
+  input.placeholder = `files.${ext}`;
+  if (input.value && ARCHIVE_EXT_RE.test(input.value)) {
+    input.value = normalizeArchiveName(input.value, format);
+  }
 }
 
 let __copyMoveSourcesCache = null;
@@ -359,7 +407,7 @@ export function handleDownloadMultiSelected(e) {
   const caps = window.currentFolderCaps || null;
   const inEncryptedFolder = !!(caps && caps.encryption && caps.encryption.encrypted);
 
-  // In encrypted folders, ZIP create is disabled. Allow plain downloads up to the limit only.
+  // In encrypted folders, archive creation is disabled. Allow plain downloads up to the limit only.
   if (inEncryptedFolder) {
     if (files.length > limit) {
       showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`, 'warning');
@@ -369,7 +417,7 @@ export function handleDownloadMultiSelected(e) {
     return;
   }
 
-  // Normal behavior: download individually up to the limit; ZIP for more than the limit.
+  // Normal behavior: download individually up to the limit; archive for more than the limit.
   if (files.length > limit) {
     handleDownloadZipSelected(e || new Event("click"));
     return;
@@ -394,7 +442,7 @@ export function handleDownloadZipSelected(e) {
       showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`, 'warning');
       return;
     }
-    // If we got here via an old/hidden ZIP action, fall back to plain download.
+    // If we got here via an old/hidden archive action, fall back to plain download.
     downloadSelectedFilesIndividually(files);
     return;
   }
@@ -406,6 +454,8 @@ export function handleDownloadZipSelected(e) {
   }
   window.filesToDownload = Array.from(checkboxes).map(chk => chk.value);
   document.getElementById("downloadZipModal").style.display = "block";
+  syncArchiveFormatSelect();
+  updateArchiveNamePlaceholder(getSelectedArchiveFormat());
   setTimeout(() => {
     const input = document.getElementById("zipFileNameInput");
     input.focus();
@@ -546,11 +596,11 @@ export function handleExtractZipSelected(e) {
     showToast("No files selected.", 'warning');
     return;
   }
-  const zipFiles = Array.from(checkboxes)
+  const archiveFiles = Array.from(checkboxes)
     .map(chk => chk.value)
-    .filter(name => name.toLowerCase().endsWith(".zip"));
-  if (!zipFiles.length) {
-    showToast("No zip files selected.", 'warning');
+    .filter(name => isArchiveFileName(name));
+  if (!archiveFiles.length) {
+    showToast("No archive files selected.", 'warning');
     return;
   }
 
@@ -577,27 +627,35 @@ export function handleExtractZipSelected(e) {
     },
     body: JSON.stringify({
       folder: window.currentFolder || "root",
-      files: zipFiles
+      files: archiveFiles
     })
   })
     .then(response => response.json())
     .then(data => {
       modal.style.display = "none";
+      const extracted = Array.isArray(data.extractedFiles) ? data.extractedFiles : [];
+      const extractedMsg = extracted.length ? ("Extracted: " + extracted.join(", ")) : "Archive extracted.";
+      const warning = (data && typeof data.warning === "string" && data.warning.trim()) ? data.warning.trim() : "";
+
       if (data.success) {
-        let msg = "Zip file(s) extracted successfully!";
-        if (Array.isArray(data.extractedFiles) && data.extractedFiles.length) {
-          msg = "Extracted: " + data.extractedFiles.join(", ");
+        if (warning) {
+          showToast(`${extractedMsg} Warning: ${warning}`, 'warning');
+        } else {
+          showToast(extractedMsg, 'success');
         }
-        showToast(msg, 'success');
-        loadFileList(window.currentFolder);
+      } else if (extracted.length) {
+        const warnMsg = warning || data.error || "Some files failed to extract.";
+        showToast(`${extractedMsg} Warning: ${warnMsg}`, 'warning');
       } else {
-        showToast("Error extracting zip: " + (data.error || "Unknown error"), 'error');
+        const errMsg = warning || data.error || "Unknown error";
+        showToast("Error extracting archive: " + errMsg, 'error');
       }
+      loadFileList(window.currentFolder);
     })
     .catch(error => {
       modal.style.display = "none";
-      console.error("Error extracting zip files:", error);
-      showToast("Error extracting zip files.", 'error');
+      console.error("Error extracting archive files:", error);
+      showToast("Error extracting archive files.", 'error');
     });
 }
 
@@ -606,6 +664,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const progressModal = document.getElementById("downloadProgressModal");
   const cancelZipBtn = document.getElementById("cancelDownloadZip");
   const confirmZipBtn = document.getElementById("confirmDownloadZip");
+  const formatSelect = document.getElementById("archiveFormatSelect");
   const cancelCreate = document.getElementById('cancelCreateFile');
 
   if (cancelCreate && !cancelCreate.__wiredCreateFile) {
@@ -631,41 +690,51 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 2) Confirm button kicks off the zip+download
+  if (formatSelect) {
+    syncArchiveFormatSelect();
+    formatSelect.addEventListener("change", () => {
+      updateArchiveNamePlaceholder(getSelectedArchiveFormat());
+    });
+  }
+
+  // 2) Confirm button kicks off the archive+download
   if (confirmZipBtn) {
     confirmZipBtn.setAttribute("data-default", "");
     confirmZipBtn.addEventListener("click", async () => {
-      // a) Validate ZIP filename
-      let zipName = document.getElementById("zipFileNameInput").value.trim();
-      if (!zipName) { showToast("Please enter a name for the zip file.", 'warning'); return; }
-      if (!zipName.toLowerCase().endsWith(".zip")) zipName += ".zip";
+      let archiveName = '';
+      let ui = null;
+      try {
+        // a) Validate archive filename
+        const format = getSelectedArchiveFormat();
+        const rawName = document.getElementById("zipFileNameInput").value.trim();
+        if (!rawName) { showToast("Please enter a name for the archive file.", 'warning'); return; }
+        archiveName = normalizeArchiveName(rawName, format);
 
-      // b) Hide the name‐input modal, show the progress modal
-      zipNameModal.style.display = "none";
-      progressModal.style.display = "block";
+        // b) Hide the name‐input modal, show the progress modal
+        zipNameModal.style.display = "none";
+        progressModal.style.display = "block";
 
-      // c) Title text (optional)
-      const titleEl = document.getElementById("downloadProgressTitle");
-      if (titleEl) titleEl.textContent = `Preparing ${zipName}…`;
+        // c) Title text (optional)
+        const titleEl = document.getElementById("downloadProgressTitle");
+        if (titleEl) titleEl.textContent = `Preparing ${archiveName}…`;
 
-      // d) Queue the job
-      const res = await fetch("/api/file/downloadZip.php", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
-        body: JSON.stringify({ folder: window.currentFolder || "root", files: window.filesToDownload })
-      });
-      const jsr = await res.json().catch(() => ({}));
-      if (!res.ok || !jsr.ok) {
-        const msg = (jsr && jsr.error) ? jsr.error : `Status ${res.status}`;
-        throw new Error(msg);
-      }
-      const token = jsr.token;
-      const statusUrl = jsr.statusUrl;
-      const downloadUrl = jsr.downloadUrl + "&name=" + encodeURIComponent(zipName);
+        // d) Queue the job
+        const res = await fetch("/api/file/downloadZip.php", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+          body: JSON.stringify({ folder: window.currentFolder || "root", files: window.filesToDownload, format })
+        });
+        const jsr = await res.json().catch(() => ({}));
+        if (!res.ok || !jsr.ok) {
+          const msg = (jsr && jsr.error) ? jsr.error : `Status ${res.status}`;
+          throw new Error(msg);
+        }
+        const statusUrl = jsr.statusUrl;
+        const downloadUrl = jsr.downloadUrl + "&name=" + encodeURIComponent(archiveName);
 
-      // Ensure a progress UI exists in the modal
-      function ensureZipProgressUI() {
+        // Ensure a progress UI exists in the modal
+        function ensureZipProgressUI() {
         const modalEl = document.getElementById("downloadProgressModal");
         if (!modalEl) {
           // really shouldn't happen, but fall back to body
@@ -753,71 +822,80 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${m}:${s.toString().padStart(2, '0')}`;
       }
 
-      const ui = ensureZipProgressUI();
-      const t0 = Date.now();
+        ui = ensureZipProgressUI();
+        const t0 = Date.now();
 
-      // e) Poll until ready
-      while (true) {
-        await new Promise(r => setTimeout(r, 1200));
-        const s = await fetch(`${statusUrl}&_=${Date.now()}`, {
-          credentials: "include", cache: "no-store",
-        }).then(r => r.json());
+        // e) Poll until ready
+        while (true) {
+          await new Promise(r => setTimeout(r, 1200));
+          const s = await fetch(`${statusUrl}&_=${Date.now()}`, {
+            credentials: "include", cache: "no-store",
+          }).then(r => r.json());
 
-        if (s.error) throw new Error(s.error);
-        if (ui.title) ui.title.textContent = `Preparing ${zipName}…`;
+          if (s.error) throw new Error(s.error);
+          if (ui.title) ui.title.textContent = `Preparing ${archiveName}…`;
 
-        // --- RENDER PROGRESS ---
-        if (typeof s.pct === "number" && ui.bar && ui.text) {
-          if ((s.phase !== 'finalizing') && (s.pct < 99)) {
-            ui.hideSpinner && ui.hideSpinner();
-            const filesDone = s.filesDone ?? 0;
-            const filesTotal = s.filesTotal ?? 0;
-            const bytesDone = s.bytesDone ?? 0;
-            const bytesTotal = s.bytesTotal ?? 0;
+          // --- RENDER PROGRESS ---
+          if (s.status === "queued" && ui.text) {
+            ui.text.textContent = "Queued… starting worker";
+          } else if (typeof s.pct === "number" && ui.bar && ui.text) {
+            if ((s.phase !== 'finalizing') && (s.pct < 99)) {
+              ui.hideSpinner && ui.hideSpinner();
+              const filesDone = s.filesDone ?? 0;
+              const filesTotal = s.filesTotal ?? 0;
+              const bytesDone = s.bytesDone ?? 0;
+              const bytesTotal = s.bytesTotal ?? 0;
 
-            // Determinate 0–98% while enumerating
-            const pct = Math.max(0, Math.min(98, s.pct | 0));
-            if (!ui.bar.hasAttribute("value")) ui.bar.value = 0;
-            ui.bar.value = pct;
-            ui.text.textContent =
-              `${pct}% — ${filesDone}/${filesTotal} files, ${humanBytes(bytesDone)} / ${humanBytes(bytesTotal)}`;
-          } else {
-            // FINALIZING: keep progress at 100% and show timer + selected totals
-            if (!ui.bar.hasAttribute("value")) ui.bar.value = 100;
-            ui.bar.value = 100; // lock at 100 during finalizing
-            const since = s.finalizeAt ? Math.max(0, (Date.now() / 1000 | 0) - (s.finalizeAt | 0)) : 0;
-            const selF = s.selectedFiles ?? s.filesTotal ?? 0;
-            const selB = s.selectedBytes ?? s.bytesTotal ?? 0;
-            ui.text.textContent = `Finalizing… ${mmss(since)} — ${selF} file${selF === 1 ? '' : 's'}, ~${humanBytes(selB)}`;
+              // Determinate 0–98% while enumerating
+              const pct = Math.max(0, Math.min(98, s.pct | 0));
+              if (!ui.bar.hasAttribute("value")) ui.bar.value = 0;
+              ui.bar.value = pct;
+              ui.text.textContent =
+                `${pct}% — ${filesDone}/${filesTotal} files, ${humanBytes(bytesDone)} / ${humanBytes(bytesTotal)}`;
+            } else {
+              // FINALIZING: keep progress at 100% and show timer + selected totals
+              if (!ui.bar.hasAttribute("value")) ui.bar.value = 100;
+              ui.bar.value = 100; // lock at 100 during finalizing
+              const since = s.finalizeAt ? Math.max(0, (Date.now() / 1000 | 0) - (s.finalizeAt | 0)) : 0;
+              const selF = s.selectedFiles ?? s.filesTotal ?? 0;
+              const selB = s.selectedBytes ?? s.bytesTotal ?? 0;
+              ui.text.textContent = `Finalizing… ${mmss(since)} — ${selF} file${selF === 1 ? '' : 's'}, ~${humanBytes(selB)}`;
+            }
+          } else if (ui.text) {
+            ui.text.textContent = "Still preparing…";
           }
-        } else if (ui.text) {
-          ui.text.textContent = "Still preparing…";
-        }
-        // --- /RENDER ---
+          // --- /RENDER ---
 
-        if (s.ready) {
-          // Snap to 100 and close modal just before download
-          if (ui.bar) { ui.bar.max = 100; ui.bar.value = 100; }
-          progressModal.style.display = "none";
-          await new Promise(r => setTimeout(r, 0));
-          break;
+          if (s.ready) {
+            // Snap to 100 and close modal just before download
+            if (ui.bar) { ui.bar.max = 100; ui.bar.value = 100; }
+            progressModal.style.display = "none";
+            await new Promise(r => setTimeout(r, 0));
+            break;
+          }
+          if (Date.now() - t0 > 15 * 60 * 1000) throw new Error("Timed out preparing archive");
         }
-        if (Date.now() - t0 > 15 * 60 * 1000) throw new Error("Timed out preparing ZIP");
+
+        // f) Trigger download
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = archiveName;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        // g) Reset for next time
+        if (ui.bar) ui.bar.value = 0;
+        if (ui.text) ui.text.textContent = "";
+        if (Array.isArray(window.filesToDownload)) window.filesToDownload = [];
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : "Failed to prepare archive.";
+        progressModal.style.display = "none";
+        if (ui && ui.bar) ui.bar.value = 0;
+        if (ui && ui.text) ui.text.textContent = "";
+        showToast(msg, 'error');
       }
-
-      // f) Trigger download
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = zipName;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      // g) Reset for next time
-      if (ui.bar) ui.bar.value = 0;
-      if (ui.text) ui.text.textContent = "";
-      if (Array.isArray(window.filesToDownload)) window.filesToDownload = [];
     });
   }
 });
