@@ -56,6 +56,21 @@ Used optionally for virus scanning of uploads (via the `clamscan` command).
 - **Source:** Available via your Linux distribution’s package repositories or from the ClamAV website.  
 - **Note:** ClamAV runs as a separate executable and is not part of the FileRise application code.
 
+Additional system packages bundled in the Docker image:
+
+- **FFmpeg** — LGPL-2.1+ (some builds include GPL components)  
+  **Home:** <https://ffmpeg.org/>  
+  **Source:** Linux distribution package repositories.  
+  **Note:** Installed for video thumbnail generation.
+
+- **7-Zip (p7zip)** — LGPL-2.1+ with unRAR restriction  
+  **Home:** <https://www.7-zip.org/>  
+  **Source:** Linux distribution package repositories.
+
+- **unar (The Unarchiver)** — LGPL-2.1+  
+  **Home:** <https://theunarchiver.com/>  
+  **Source:** Linux distribution package repositories.
+
 ### Base image and system packages
 
 The official Docker image is built on **Ubuntu 24.04** and includes common

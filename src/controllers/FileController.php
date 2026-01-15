@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/FileModel.php';
+require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/models/FolderModel.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
@@ -1794,8 +1795,31 @@ class FileController
             exit;
         }
 
-        $file   = isset($_GET['file'])   ? basename((string)$_GET['file'])   : '';
-        $folder = isset($_GET['folder']) ? trim((string)$_GET['folder'])     : 'root';
+        $readParam = function (string $key): string {
+            $val = $_GET[$key] ?? null;
+            if (is_array($val)) {
+                $val = reset($val);
+            }
+            if (is_string($val) || is_numeric($val)) {
+                return (string)$val;
+            }
+            $raw = $_SERVER['QUERY_STRING'] ?? '';
+            if ($raw !== '') {
+                $parsed = [];
+                parse_str($raw, $parsed);
+                $alt = $parsed[$key] ?? null;
+                if (is_array($alt)) {
+                    $alt = reset($alt);
+                }
+                if (is_string($alt) || is_numeric($alt)) {
+                    return (string)$alt;
+                }
+            }
+            return '';
+        };
+
+        $file   = basename($readParam('file'));
+        $folder = trim($readParam('folder')) ?: 'root';
         $inlineParam = isset($_GET['inline']) && (string)$_GET['inline'] === '1';
 
         if (!preg_match(REGEX_FILE_NAME, $file)) {
@@ -1981,6 +2005,272 @@ class FileController
 
         // Stream with proper Range support for video/audio seeking
         $this->streamFileWithRange($realFilePath, basename($realFilePath), $mimeType, $inline);
+        };
+
+        if ($sourceId !== '') {
+            $this->withSourceContext($sourceId, $runner, $allowDisabled);
+            return;
+        }
+
+        $runner();
+        return;
+    }
+
+    public function videoThumbnail()
+    {
+        if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+            http_response_code(401);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => "Unauthorized"]);
+            exit;
+        }
+
+        $readParam = function (string $key): string {
+            $val = $_GET[$key] ?? null;
+            if (is_array($val)) {
+                $val = reset($val);
+            }
+            if (is_string($val) || is_numeric($val)) {
+                return (string)$val;
+            }
+            $raw = $_SERVER['QUERY_STRING'] ?? '';
+            if ($raw !== '') {
+                $parsed = [];
+                parse_str($raw, $parsed);
+                $alt = $parsed[$key] ?? null;
+                if (is_array($alt)) {
+                    $alt = reset($alt);
+                }
+                if (is_string($alt) || is_numeric($alt)) {
+                    return (string)$alt;
+                }
+            }
+            return '';
+        };
+
+        $rawFile = $readParam('file');
+        $rawFolder = $readParam('folder');
+        $file   = basename($rawFile);
+        $folder = trim($rawFolder) ?: 'root';
+
+        $username = $_SESSION['username'] ?? '';
+        $perms    = $this->loadPerms($username);
+
+        $fail = function (int $code, string $message): void {
+            http_response_code($code);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => $message]);
+            exit;
+        };
+
+        if (!preg_match(REGEX_FILE_NAME, $file)) {
+            $fail(400, "Invalid file name.");
+        }
+        if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+            $fail(400, "Invalid folder name.");
+        }
+
+        $sourceId = '';
+        $allowDisabled = false;
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $rawSourceId = trim($readParam('sourceId'));
+            if ($rawSourceId !== '') {
+                $sourceId = $this->normalizeSourceId($rawSourceId);
+                if ($sourceId === '') {
+                    $fail(400, "Invalid source id.");
+                }
+                $info = SourceContext::getSourceById($sourceId);
+                if (!$info) {
+                    $fail(400, "Invalid source.");
+                }
+                $allowDisabled = $this->isAdmin($perms);
+                if (!$allowDisabled && empty($info['enabled'])) {
+                    $fail(403, "Source is disabled.");
+                }
+            }
+        }
+
+        $runner = function () use ($file, $folder, $username, $perms, $fail) {
+            $storage = StorageRegistry::getAdapter();
+            if (!$storage->isLocal()) {
+                $fail(501, "Thumbnail unavailable for remote sources.");
+            }
+
+            $ignoreOwnership = $this->isAdmin($perms)
+                || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
+
+            $fullView = $ignoreOwnership
+                || ACL::canRead($username, $perms, $folder)
+                || $this->ownsFolderOrAncestor($folder, $username, $perms);
+
+            $ownGrant = !$fullView && ACL::hasGrant($username, $folder, 'read_own');
+
+            if (!$fullView && !$ownGrant) {
+                $fail(403, "Forbidden: no view access to this folder.");
+            }
+
+            if ($ownGrant) {
+                $meta = $this->loadFolderMetadata($folder);
+                if (!isset($meta[$file]['uploader']) || strcasecmp((string)$meta[$file]['uploader'], $username) !== 0) {
+                    $fail(403, "Forbidden: you are not the owner of this file.");
+                }
+            }
+
+            $downloadInfo = FileModel::getDownloadInfo($folder, $file);
+            if (isset($downloadInfo['error'])) {
+                $code = in_array($downloadInfo['error'], ["File not found.", "Access forbidden."]) ? 404 : 400;
+                $fail($code, $downloadInfo['error']);
+            }
+
+            $realFilePath = $downloadInfo['filePath'];
+            $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
+            $videoExts = ['mp4', 'm4v', 'mkv', 'webm', 'mov', 'ogv'];
+            if (!in_array($ext, $videoExts, true)) {
+                $fail(415, "Unsupported media type.");
+            }
+
+            $isEncryptedFile = false;
+            try {
+                $isEncryptedFile = CryptoAtRest::isEncryptedFile($realFilePath);
+            } catch (\Throwable $e) {
+                $isEncryptedFile = false;
+            }
+            if ($isEncryptedFile) {
+                $fail(404, "Thumbnail unavailable.");
+            }
+
+            $maxMb = 200;
+            try {
+                $cfg = AdminModel::getConfig();
+                if (is_array($cfg) && !isset($cfg['error'])) {
+                    $display = (isset($cfg['display']) && is_array($cfg['display'])) ? $cfg['display'] : [];
+                    if (isset($display['hoverPreviewMaxVideoMb'])) {
+                        $maxMb = (int)$display['hoverPreviewMaxVideoMb'];
+                    }
+                }
+            } catch (\Throwable $e) { /* best-effort only */ }
+            $maxMb = max(1, min(2048, $maxMb));
+            $maxBytes = $maxMb * 1024 * 1024;
+            $size = @filesize($realFilePath);
+            if ($size !== false && $maxBytes > 0 && $size > $maxBytes) {
+                $fail(413, "Video too large for thumbnail.");
+            }
+
+            $metaRoot = class_exists('SourceContext')
+                ? SourceContext::metaRoot()
+                : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+            $thumbDir = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'thumb_cache' . DIRECTORY_SEPARATOR;
+            if (!is_dir($thumbDir) && !@mkdir($thumbDir, 0775, true) && !is_dir($thumbDir)) {
+                $fail(500, "Thumbnail cache unavailable.");
+            }
+
+            $stat = @stat($realFilePath) ?: [];
+            $mtime = (int)($stat['mtime'] ?? 0);
+            $fsize = (int)($stat['size'] ?? 0);
+            $maxW = 320;
+            $maxH = 180;
+            $envW = getenv('FR_VIDEO_THUMB_MAX_W');
+            if ($envW !== false && $envW !== '') {
+                $maxW = (int)$envW;
+            }
+            $envH = getenv('FR_VIDEO_THUMB_MAX_H');
+            if ($envH !== false && $envH !== '') {
+                $maxH = (int)$envH;
+            }
+            $maxW = max(64, min(2048, $maxW));
+            $maxH = max(64, min(2048, $maxH));
+            $hash = hash('sha256', $realFilePath . '|' . $mtime . '|' . $fsize . '|' . $maxW . 'x' . $maxH);
+            $thumbPath = $thumbDir . 'vthumb_' . $hash . '.jpg';
+
+            if (!is_file($thumbPath) || @filesize($thumbPath) === 0) {
+                if (!function_exists('exec')) {
+                    $fail(501, "Thumbnail generator unavailable.");
+                }
+
+                $ffmpeg = trim((string)(getenv('FR_FFMPEG_PATH') ?: 'ffmpeg'));
+                if ($ffmpeg === '') {
+                    $fail(501, "Thumbnail generator unavailable.");
+                }
+                if (strpos($ffmpeg, '/') === false) {
+                    foreach (['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/bin/ffmpeg'] as $cand) {
+                        if (is_file($cand) && is_executable($cand)) {
+                            $ffmpeg = $cand;
+                            break;
+                        }
+                    }
+                }
+                if (strpos($ffmpeg, '/') === false) {
+                    $which = [];
+                    $rc = 1;
+                    @exec('command -v ' . escapeshellarg($ffmpeg) . ' 2>/dev/null', $which, $rc);
+                    if ($rc === 0 && !empty($which[0])) {
+                        $ffmpeg = trim($which[0]);
+                    }
+                }
+                if (strpos($ffmpeg, '/') !== false && (!is_file($ffmpeg) || !is_executable($ffmpeg))) {
+                    $fail(501, "Thumbnail generator unavailable.");
+                }
+
+                @session_write_close();
+
+                $suffix = '';
+                try {
+                    $suffix = bin2hex(random_bytes(4));
+                } catch (\Throwable $e) {
+                    $suffix = str_replace('.', '', uniqid('t', true));
+                }
+                $tmp = $thumbPath . '.' . $suffix . '.tmp.jpg';
+                $scale = "scale={$maxW}:{$maxH}:force_original_aspect_ratio=decrease";
+                $run = function (string $seek) use ($ffmpeg, $realFilePath, $tmp, $scale): bool {
+                    $cmd = sprintf(
+                        '%s -hide_banner -loglevel error -y -ss %s -i %s -frames:v 1 -vf %s -an -q:v 4 %s',
+                        escapeshellarg($ffmpeg),
+                        escapeshellarg($seek),
+                        escapeshellarg($realFilePath),
+                        escapeshellarg($scale),
+                        escapeshellarg($tmp)
+                    );
+                    @exec($cmd . ' 2>&1', $out, $code);
+                    return $code === 0 && is_file($tmp) && @filesize($tmp) > 0;
+                };
+
+                $ok = $run('00:00:01');
+                if (!$ok) {
+                    $ok = $run('00:00:00');
+                }
+
+                if ($ok) {
+                    @rename($tmp, $thumbPath);
+                }
+                if (is_file($tmp)) {
+                    @unlink($tmp);
+                }
+            }
+
+            if (!is_file($thumbPath) || @filesize($thumbPath) === 0) {
+                $fail(404, "Thumbnail unavailable.");
+            }
+
+            $thumbSize = @filesize($thumbPath);
+            header('Content-Type: image/jpeg');
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: private, max-age=86400');
+            if ($thumbSize) {
+                header('Content-Length: ' . $thumbSize);
+            }
+
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+                http_response_code(200);
+                exit;
+            }
+
+            http_response_code(200);
+            $out = fopen($thumbPath, 'rb');
+            if ($out) {
+                fpassthru($out);
+                @fclose($out);
+            }
+            exit;
         };
 
         if ($sourceId !== '') {

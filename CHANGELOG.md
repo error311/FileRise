@@ -1,5 +1,58 @@
 # Changelog
 
+## Changes 01/15/2026 (v3.0.2)
+
+`release(v3.0.2): ffmpeg-backed video thumbnails (Docker) + new thumbnail API (closes #79)`
+
+**Commit message**  
+
+```text
+release(v3.0.2): ffmpeg-backed video thumbnails (Docker) + new thumbnail API (closes #79)
+
+- Docker: ship ffmpeg so video thumbnails work out-of-the-box in container installs
+- add /api/file/thumbnail.php endpoint to generate + cache JPEG thumbnails for video files
+- UI: use ffmpeg-backed thumbnails for hover previews + gallery cards (fallback to movie icon)
+- harden query param parsing for file endpoints (avoid array/querystring edge cases)
+- docs: add FFmpeg + archive tools to THIRD_PARTY notices
+
+Closes #79
+```
+
+**Added**  
+
+- **Video thumbnail API endpoint:** `GET /api/file/thumbnail.php?folder=...&file=...`  
+  Returns a cached **JPEG** thumbnail for supported video files.
+- **Server-side thumbnail generator** (local sources only):
+  - Uses `ffmpeg` to extract a frame and writes it into a meta-root cache (`thumb_cache/`).
+  - Cache key includes file path + mtime + size + thumb dimensions for stable reuse.
+  - Optional env tuning:
+    - `FR_FFMPEG_PATH` (override ffmpeg path)
+    - `FR_VIDEO_THUMB_MAX_W`, `FR_VIDEO_THUMB_MAX_H` (thumbnail max size)
+- **Docker image now installs `ffmpeg`** so thumbnails work in Docker/Unraid without extra setup.
+
+**Changed**  
+
+- **Hover preview video thumbs** now use the thumbnail API instead of `<video preload="metadata">` seeking.
+- **Gallery view video cards** now render an `<img>` thumbnail with a play overlay; falls back to the movie icon on error.
+- **Thumbnail generation respects your existing “max video preview size (MB)” setting**:
+  - If a video exceeds the configured cap, the thumbnail endpoint returns “too large”.
+- **Source-aware behavior (when Sources is enabled):**
+
+**Security / Hardening**  
+
+- Thumbnails are only generated for authenticated users and still enforce:
+  - ACL read rules (and read_own ownership checks where applicable)
+  - no thumbnails for encrypted files
+- Cache responses include `X-Content-Type-Options: nosniff` and a private cache policy.
+
+**Docs / Compliance**  
+
+- Updated `THIRD_PARTY.md` to mention Docker-bundled system packages:
+  - FFmpeg (LGPL-2.1+; builds may include GPL components)
+  - p7zip / unar (for archive handling)
+
+---
+
 ## Changes 01/14/2026 (v3.0.1 Archive update + login focus)
 
 `release(v3.0.1): archive create/extract upgrades (7z + RAR via unar) + login focus fix (closes #82)`

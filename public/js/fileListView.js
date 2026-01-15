@@ -3066,13 +3066,15 @@ async function fetchFolderPeek(folder, sourceId = '') {
 /* ===========================================================
    SECURITY: build file URLs only via the API (no /uploads)
    =========================================================== */
-   function apiFileUrl(folder, name, inline = false) {
+   function apiFileUrl(folder, name, inline = false, sourceId = "") {
     const fParam = folder && folder !== "root" ? folder : "root";
     const q = new URLSearchParams({
       folder: fParam,
       file: name,
       inline: inline ? "1" : "0"
     });
+    const sid = String(sourceId || "").trim();
+    if (sid) q.set("sourceId", sid);
   
     // Try to find this file in fileData to get a stable cache key
     try {
@@ -3089,8 +3091,35 @@ async function fetchFolderPeek(folder, sourceId = '') {
       }
     } catch (e) { /* best-effort only */ }
   
-	    return withBase(`/api/file/download.php?${q.toString()}`);
+    return withBase(`/api/file/download.php?${q.toString()}`);
 	  }
+
+  function apiVideoThumbUrl(folder, name, sourceId = "") {
+    const fParam = folder && folder !== "root" ? folder : "root";
+    const q = new URLSearchParams({
+      folder: fParam,
+      file: name
+    });
+    if (sourceId) q.set("sourceId", sourceId);
+
+    // Try to find this file in fileData to get a stable cache key
+    try {
+      if (Array.isArray(fileData)) {
+        const meta = fileData.find(
+          f => f.name === name && (f.folder || "root") === fParam
+        );
+        if (meta) {
+          const v = meta.cacheKey || meta.modified || meta.uploaded || meta.sizeBytes;
+          if (v != null && v !== "") {
+            q.set("t", String(v));  // stable per-file token
+          }
+        }
+      }
+    } catch (e) { /* best-effort only */ }
+
+    return withBase(`/api/file/thumbnail.php?${q.toString()}`);
+  }
+
 // Wire "select all" header checkbox for the current table render
 function wireSelectAll(fileListContent) {
   // Be flexible about how the header checkbox is identified
@@ -3418,130 +3447,7 @@ fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
     const canTextPreview = canEditFile(file.name);
     const isOfficeSnippet = OFFICE_SNIPPET_EXTS.has(ext);
 
-    // Left: image / video preview OR text snippet OR "No preview"
-    if (isImage) {
-      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
-      const maxImagePreviewBytes = getMaxImagePreviewBytes();
-      if (bytes != null && bytes > maxImagePreviewBytes) {
-        thumbEl.innerHTML = `
-          <div style="
-            padding:6px 8px;
-            border-radius:6px;
-            font-size:0.82rem;
-            text-align:center;
-            background-color:rgba(15,23,42,0.92);
-            color:#e5e7eb;
-            max-width:100%;
-          ">
-            ${escapeHTML(t("preview_too_large") || "Preview disabled for large image")}
-          </div>
-        `;
-      } else {
-      // --- image thumbnail
-      thumbEl.style.minHeight = "140px";
-      const img = document.createElement("img");
-      img.src = url;
-      img.alt = file.name;
-      img.style.maxWidth  = "180px";
-      img.style.maxHeight = "120px";
-      img.style.display   = "block";
-      thumbEl.appendChild(img);
-      }
-
-    } else if (isVideo) {
-      // --- NEW: lightweight video thumbnail ---
-      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
-      const maxVideoPreviewBytes = getMaxVideoPreviewBytes();
-      const fallbackMsg = t("no_preview_available") || "No preview available";
-      const isStillActive = () =>
-        hoverPreviewContext &&
-        hoverPreviewContext.type === "file" &&
-        hoverPreviewContext.file === file;
-      const renderVideoFallback = () => {
-        if (!isStillActive()) return;
-        thumbEl.innerHTML = `
-          <div style="
-            padding:6px 8px;
-            border-radius:6px;
-            font-size:0.8rem;
-            text-align:center;
-            background-color:rgba(15,23,42,0.92);
-            color:#e5e7eb;
-            max-width:100%;
-          ">
-            ${escapeHTML(fallbackMsg)}
-          </div>
-        `;
-      };
-    
-      if (bytes == null || bytes <= maxVideoPreviewBytes) {
-        thumbEl.style.minHeight = "140px";
-    
-        const video = document.createElement("video");
-        video.src = url;
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = "metadata"; // only fetch metadata + keyframe, not full file
-        video.controls = false;
-        video.style.maxWidth  = "200px";
-        video.style.maxHeight = "120px";
-        video.style.display   = "block";
-        video.style.borderRadius = "6px";
-    
-        let hasFrame = false;
-        let frameTimer = null;
-        const markFrame = () => {
-          if (!isStillActive()) return;
-          hasFrame = true;
-          if (frameTimer) {
-            clearTimeout(frameTimer);
-            frameTimer = null;
-          }
-        };
-
-        // Try to seek a tiny bit in so we don't get a black frame
-        video.addEventListener("loadedmetadata", () => {
-          try {
-            const dur = video.duration;
-            if (Number.isFinite(dur) && dur > 1) {
-              video.currentTime = Math.min(1, dur / 3);
-            }
-          } catch (e) {
-            // best effort; ignore errors
-          }
-        });
-
-        // Confirm we actually have a frame to show
-        video.addEventListener("loadeddata", () => {
-          markFrame();
-        });
-    
-        // graceful fallback if the video can't load
-        video.addEventListener("error", () => {
-          renderVideoFallback();
-        });
-
-        frameTimer = setTimeout(() => {
-          if (!hasFrame && isStillActive()) {
-            renderVideoFallback();
-          }
-        }, 2000);
-    
-        thumbEl.appendChild(video);
-    
-        const overlay = document.createElement("div");
-        overlay.textContent = "▶";
-        overlay.style.position = "absolute";
-        overlay.style.fontSize = "1.6rem";
-        overlay.style.opacity = "0.85";
-        thumbEl.appendChild(overlay);
-    
-      } else {
-        renderVideoFallback();
-      }
-    }
-
-    // Icon type for right column
+    // Right column: file details (always render, even if preview errors)
     let iconName = "insert_drive_file";
     if (isImage)      iconName = "image";
     else if (isVideo) iconName = "movie";
@@ -3633,7 +3539,167 @@ fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
 
     propsEl.innerHTML = props.join("");
 
-    propsEl.innerHTML = props.join("");
+    // Left: image / video preview OR text snippet OR "No preview"
+    if (isImage) {
+      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+      const maxImagePreviewBytes = getMaxImagePreviewBytes();
+      if (bytes != null && bytes > maxImagePreviewBytes) {
+        thumbEl.innerHTML = `
+          <div style="
+            padding:6px 8px;
+            border-radius:6px;
+            font-size:0.82rem;
+            text-align:center;
+            background-color:rgba(15,23,42,0.92);
+            color:#e5e7eb;
+            max-width:100%;
+          ">
+            ${escapeHTML(t("preview_too_large") || "Preview disabled for large image")}
+          </div>
+        `;
+      } else {
+      // --- image thumbnail
+      thumbEl.style.minHeight = "140px";
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = file.name;
+      img.style.maxWidth  = "180px";
+      img.style.maxHeight = "120px";
+      img.style.display   = "block";
+      thumbEl.appendChild(img);
+      }
+
+    } else if (isVideo) {
+      // --- video thumbnail (ffmpeg-backed) ---
+      const bytes = Number.isFinite(file.sizeBytes) ? file.sizeBytes : null;
+      const maxVideoPreviewBytes = getMaxVideoPreviewBytes();
+      const fallbackMsg = t("no_preview_available") || "No preview available";
+      const isStillActive = () =>
+        hoverPreviewContext &&
+        hoverPreviewContext.type === "file" &&
+        hoverPreviewContext.file === file;
+      const renderVideoFallbackMessage = () => {
+        if (!isStillActive()) return;
+        thumbEl.innerHTML = `
+          <div style="
+            padding:6px 8px;
+            border-radius:6px;
+            font-size:0.8rem;
+            text-align:center;
+            background-color:rgba(15,23,42,0.92);
+            color:#e5e7eb;
+            max-width:100%;
+          ">
+            ${escapeHTML(fallbackMsg)}
+          </div>
+        `;
+      };
+
+      const sourceId = String(
+        file.sourceId ||
+        (window.__frPaneState && window.__frPaneState[paneKey] && window.__frPaneState[paneKey].sourceId) ||
+        getActivePaneSourceId() ||
+        ""
+      ).trim();
+      const sourceType = String(getSourceTypeById(sourceId || getActivePaneSourceId()) || '').toLowerCase();
+      const isRemoteSource = sourceId !== '' && sourceType !== 'local';
+      const canStreamRemotePreview = isRemoteSource
+        && !isFtpSource(sourceId)
+        && bytes != null
+        && bytes <= maxVideoPreviewBytes;
+
+      const renderRemoteVideoPreview = () => {
+        if (!isStillActive()) return;
+
+        const previewUrl = apiFileUrl(folder, file.name, true, sourceId);
+        thumbEl.innerHTML = "";
+        thumbEl.style.minHeight = "140px";
+        thumbEl.style.position = "relative";
+
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.src = previewUrl;
+        video.style.maxWidth = "200px";
+        video.style.maxHeight = "120px";
+        video.style.display = "block";
+        video.style.borderRadius = "6px";
+        video.style.background = "rgba(0,0,0,0.15)";
+        video.setAttribute("aria-label", file.name);
+
+        video.addEventListener("loadedmetadata", () => {
+          try {
+            video.currentTime = 0.1;
+          } catch (e) { /* ignore */ }
+        }, { once: true });
+
+        video.addEventListener("error", () => {
+          renderVideoFallbackMessage();
+        }, { once: true });
+
+        thumbEl.appendChild(video);
+
+        const overlay = document.createElement("span");
+        overlay.className = "material-icons";
+        overlay.textContent = "play_circle";
+        overlay.style.position = "absolute";
+        overlay.style.left = "50%";
+        overlay.style.top = "50%";
+        overlay.style.transform = "translate(-50%, -50%)";
+        overlay.style.fontSize = "1.6rem";
+        overlay.style.opacity = "0.85";
+        overlay.style.color = "rgba(255,255,255,0.9)";
+        overlay.style.textShadow = "0 2px 6px rgba(0,0,0,0.5)";
+        overlay.style.pointerEvents = "none";
+        thumbEl.appendChild(overlay);
+      };
+
+      if (isRemoteSource) {
+        if (canStreamRemotePreview) {
+          renderRemoteVideoPreview();
+        } else {
+          renderVideoFallbackMessage();
+        }
+      } else {
+        const thumbUrl = apiVideoThumbUrl(folder, file.name, sourceId);
+
+        if (bytes == null || bytes <= maxVideoPreviewBytes) {
+          thumbEl.style.minHeight = "140px";
+          thumbEl.style.position = "relative";
+
+          const img = document.createElement("img");
+          img.src = thumbUrl;
+          img.alt = file.name;
+          img.style.maxWidth = "200px";
+          img.style.maxHeight = "120px";
+          img.style.display = "block";
+          img.style.borderRadius = "6px";
+
+          img.addEventListener("error", () => {
+            renderVideoFallbackMessage();
+          });
+
+          thumbEl.appendChild(img);
+
+          const overlay = document.createElement("span");
+          overlay.className = "material-icons";
+          overlay.textContent = "play_circle";
+          overlay.style.position = "absolute";
+          overlay.style.left = "50%";
+          overlay.style.top = "50%";
+          overlay.style.transform = "translate(-50%, -50%)";
+          overlay.style.fontSize = "1.6rem";
+          overlay.style.opacity = "0.85";
+          overlay.style.color = "rgba(255,255,255,0.9)";
+          overlay.style.textShadow = "0 2px 6px rgba(0,0,0,0.5)";
+          overlay.style.pointerEvents = "none";
+          thumbEl.appendChild(overlay);
+        } else {
+          renderVideoFallbackMessage();
+        }
+      }
+    }
 
         // Text snippet (left) for smaller text/code files
         if (canTextPreview || isOfficeSnippet) {
@@ -7246,6 +7312,15 @@ export function renderGalleryView(folder, container) {
         thumbnail = `<span class="material-icons gallery-icon">movie</span>`;
       } else {
         const maxHeight = getMaxImageHeight();
+        const sourceId = String(
+          file.sourceId ||
+          getPaneSourceIdForElement(container) ||
+          getActivePaneSourceId() ||
+          ""
+        ).trim();
+        const thumbUrl = apiVideoThumbUrl(folder, file.name, sourceId);
+        const cacheKey = thumbUrl;
+        const src = (window.imageCache && window.imageCache[cacheKey]) || thumbUrl;
         thumbnail = `
           <div class="gallery-video-thumb" style="
             position:relative;
@@ -7256,14 +7331,16 @@ export function renderGalleryView(folder, container) {
             background:rgba(0,0,0,0.04);
             border-radius:8px;
           ">
-            <video
-              class="gallery-video"
-              src="${previewURL}"
-              muted
-              playsinline
-              preload="metadata"
+            <img
+              src="${src}"
+              class="gallery-thumbnail gallery-video-thumb-img"
+              data-cache-key="${cacheKey}"
+              alt="${escapeHTML(file.name)}"
+              loading="lazy"
+              decoding="async"
+              fetchpriority="low"
               style="max-width:100%; max-height:${maxHeight}px; display:block; border-radius:8px; pointer-events:none;"
-            ></video>
+            >
             <span class="material-icons" style="
               position:absolute;
               font-size:32px;
@@ -7427,51 +7504,12 @@ export function renderGalleryView(folder, container) {
     img.addEventListener('load', () => cacheImage(img, key));
   });
 
-  // prime video thumbnails (reuse hover-preview style seek)
-  fileListContent.querySelectorAll('.gallery-video').forEach(video => {
-    const wrapper = video.closest('.gallery-video-thumb');
-    let hasFrame = false;
-    let frameTimer = null;
-    const cleanup = () => {
-      if (frameTimer) {
-        clearTimeout(frameTimer);
-        frameTimer = null;
-      }
-    };
-    const fallback = () => {
-      cleanup();
-      if (!wrapper) return;
-      wrapper.innerHTML = `<span class="material-icons gallery-icon">movie</span>`;
-    };
-    const onMeta = () => {
-      try {
-        const dur = video.duration;
-        if (Number.isFinite(dur) && dur > 1) {
-          video.currentTime = Math.min(1, dur / 3);
-        }
-      } catch (e) {
-        // best effort only
-      }
-    };
-    const onData = () => {
-      hasFrame = true;
-      cleanup();
-    };
-
-    video.addEventListener('loadedmetadata', onMeta, { once: true });
-    video.addEventListener('loadeddata', onData, { once: true });
-    video.addEventListener('error', fallback, { once: true });
-
-    frameTimer = setTimeout(() => {
-      if (!hasFrame) fallback();
-    }, 2000);
-
-    if (video.readyState >= 1) {
-      onMeta();
-    }
-    if (video.readyState >= 2) {
-      onData();
-    }
+  // video thumbnail fallback (ffmpeg may be unavailable)
+  fileListContent.querySelectorAll('.gallery-video-thumb-img').forEach(img => {
+    img.addEventListener('error', () => {
+      const wrapper = img.closest('.gallery-video-thumb');
+      if (wrapper) wrapper.innerHTML = `<span class="material-icons gallery-icon">movie</span>`;
+    }, { once: true });
   });
 
   // preview clicks (dynamic import to avoid global dependency)

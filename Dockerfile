@@ -41,6 +41,7 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
     apt-get install -y --no-install-recommends \
       apache2 \
       php php-json php-curl php-zip php-mbstring php-gd php-xml \
+      ffmpeg \
       ca-certificates curl git openssl \
       smbclient \
       7zip \
