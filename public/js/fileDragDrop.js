@@ -1,6 +1,7 @@
 // fileDragDrop.js
 import { showToast, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 import { loadFileList, cancelHoverPreview, repairBlankFolderIcons } from './fileListView.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 import { startTransferProgress, finishTransferProgress } from './transferProgress.js?v={{APP_QVER}}';
 import {
   getParentFolder,
@@ -263,7 +264,7 @@ export async function folderDropHandler(event) {
   }
 
   if (!dragData) {
-    showToast('Invalid drag data.');
+    showToast(t('invalid_drag_data'));
     return;
   }
 
@@ -280,7 +281,7 @@ export async function folderDropHandler(event) {
     // quick no-op: same parent as before
     const oldParent = parentFolderOf(source);
     if (!crossSource && destination === oldParent) {
-      showToast('Source and destination are the same.');
+      showToast(t('source_dest_same'));
       return;
     }
 
@@ -300,7 +301,7 @@ export async function folderDropHandler(event) {
         (dstNorm + '/').toLowerCase().startsWith((srcNorm + '/').toLowerCase())
       )
     ) {
-      showToast('Destination cannot be the source or its descendant');
+      showToast(t('dest_cannot_be_descendant'));
       return;
     }
 
@@ -340,8 +341,8 @@ export async function folderDropHandler(event) {
       if (!res.ok || (data && data.error)) {
         const msg = (data && data.error) || text || `HTTP ${res.status}`;
         ok = false;
-        errMsg = msg || 'Could not move folder';
-        showToast('Error moving folder: ' + msg);
+        errMsg = msg || t('move_folder_error_default');
+        showToast(t('move_folder_error_detail', { error: errMsg }), 'error');
         return;
       }
 
@@ -357,7 +358,8 @@ export async function folderDropHandler(event) {
         invalidateFolderStats([oldParent, dstParent], statSourceId);
       }
 
-      showToast(`Moved folder to "${dstParent || 'root'}".`);
+      const destLabel = dstParent || t('root_folder');
+      showToast(t('move_folder_success_to', { folder: destLabel }));
       ok = true;
 
       if (crossSource) {
@@ -370,9 +372,9 @@ export async function folderDropHandler(event) {
 
     } catch (e) {
       ok = false;
-      errMsg = e && e.message ? e.message : 'Could not move folder';
+      errMsg = e && e.message ? e.message : t('move_folder_error_default');
       console.error('Error moving folder:', e);
-      showToast('Error moving folder.');
+      showToast(t('move_folder_error'), 'error');
     } finally {
       finishTransferProgress(progress, { ok, error: errMsg });
     }
@@ -393,7 +395,7 @@ export async function folderDropHandler(event) {
   names = names.filter(v => typeof v === 'string' && v.length > 0);
 
   if (!names.length) {
-    showToast('No files to move.');
+    showToast(t('no_files_to_move'));
     return;
   }
 
@@ -402,7 +404,7 @@ export async function folderDropHandler(event) {
   const destSourceId = getPaneSourceIdForElement(event.currentTarget) || getActiveSourceId();
   const crossSource = sourceId && destSourceId && sourceId !== destSourceId;
   if (!crossSource && dropFolder === sourceFolder) {
-    showToast('Source and destination are the same.');
+    showToast(t('source_dest_same'));
     return;
   }
 
@@ -445,10 +447,10 @@ export async function folderDropHandler(event) {
 
     if (res.ok && data && data.success) {
       ok = true;
-      const msg =
-        names.length === 1
-          ? `Moved "${names[0]}" to ${dropFolder}.`
-          : `Moved ${names.length} files to ${dropFolder}.`;
+      const destLabel = dropFolder || t('root_folder');
+      const msg = (names.length === 1)
+        ? t('move_file_success_to', { name: names[0], folder: destLabel })
+        : t('move_files_success_to', { count: names.length, folder: destLabel });
       showToast(msg);
 
       // keep stats fresh for source + dest
@@ -468,13 +470,13 @@ export async function folderDropHandler(event) {
       const err = (data && (data.error || data.message)) || `HTTP ${res.status}`;
       ok = false;
       errMsg = err;
-      showToast('Error moving file(s): ' + err);
+      showToast(t('move_files_error', { error: err }), 'error');
     }
   } catch (e) {
     ok = false;
-    errMsg = e && e.message ? e.message : 'Could not move file(s)';
+    errMsg = e && e.message ? e.message : t('move_files_error_default');
     console.error('Error moving file(s):', e);
-    showToast('Error moving file(s).');
+    showToast(t('move_files_error_generic'), 'error');
   } finally {
     finishTransferProgress(progress, { ok, error: errMsg });
   }

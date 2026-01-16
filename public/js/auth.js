@@ -388,6 +388,7 @@ export async function updateAuthenticatedUI(data) {
       toggle.id = "userDropdownToggle";
       toggle.classList.add("btn", "btn-user");
       toggle.setAttribute("title", t("user_settings"));
+      toggle.setAttribute("data-i18n-title", "user_settings");
       toggle.innerHTML = `
         ${avatarHTML}
         <span class="dropdown-username">${usernameText}</span>
@@ -400,17 +401,21 @@ export async function updateAuthenticatedUI(data) {
       menu.classList.add("user-menu");
       menu.innerHTML = `
         <div class="item" id="menuUserPanel">
-          <i class="material-icons folder-icon">person</i> ${t("user_panel")}
+          <i class="material-icons folder-icon">person</i>
+          <span data-i18n-key="user_panel">${t("user_panel")}</span>
         </div>
         ${data.isAdmin ? `
         <div class="item" id="menuAdminPanel">
-          <i class="material-icons folder-icon">admin_panel_settings</i> ${t("admin_panel")}
+          <i class="material-icons folder-icon">admin_panel_settings</i>
+          <span data-i18n-key="admin_panel">${t("admin_panel")}</span>
         </div>` : ''}
         <div class="item" id="menuApiDocs">
-          <i class="material-icons folder-icon">description</i> ${t("api_docs")}
+          <i class="material-icons folder-icon">description</i>
+          <span data-i18n-key="api_docs">${t("api_docs")}</span>
         </div>
         <div class="item" id="menuLogout">
-          <i class="material-icons folder-icon">logout</i> ${t("logout")}
+          <i class="material-icons folder-icon">logout</i>
+          <span data-i18n-key="logout">${t("logout")}</span>
         </div>
       `;
       dd.append(menu);
@@ -486,7 +491,7 @@ function checkAuthentication(showLoginToast = true) {
         }
         document.getElementById('loginForm').style.display = 'none';
         window.setupMode = true;
-        if (showLoginToast) showToast("Setup mode: No users found. Please add an admin user.");
+        if (showLoginToast) showToast(t('setup_no_users'));
         toggleVisibility("loginForm", false);
         toggleVisibility("mainOperations", false);
         document.querySelector(".header-buttons").style.visibility = "hidden";
@@ -527,7 +532,7 @@ function checkAuthentication(showLoginToast = true) {
         // show the wrapper (so the login form can be visible)
         document.querySelector('.main-wrapper').style.display = '';
         document.getElementById('loginForm').style.display = '';
-        if (showLoginToast) showToast("Please log in to continue.");
+        if (showLoginToast) showToast(t('please_log_in_to_continue'));
         toggleVisibility("loginForm", !(localStorage.getItem("authBypass") === "true"));
         toggleVisibility("mainOperations", false);
         toggleVisibility("uploadFileForm", false);
@@ -700,7 +705,7 @@ async function submitLogin(data) {
         btn.disabled = true;
         setTimeout(() => {
           btn.disabled = false;
-          showToast("You can now try logging in again.");
+          showToast(t('login_try_again'));
         }, 30 * 60 * 1000);
       }
       return;
@@ -708,7 +713,8 @@ async function submitLogin(data) {
 
     if (body?.error && isDefinitiveLoginError(body.error)) {
       handleLoginFailureTip(body.error);
-      showToast('Login failed' + (body?.error ? `: ${body.error}` : ''));
+      const loginErr = body?.error ? t('login_failed_detail', { error: body.error }) : t('login_failed');
+      showToast(loginErr);
       return;
     }
 
@@ -764,7 +770,7 @@ async function submitLogin(data) {
         btn.disabled = true;
         setTimeout(() => {
           btn.disabled = false;
-          showToast("You can now try logging in again.");
+          showToast(t('login_try_again'));
         }, 30 * 60 * 1000);
       }
       return;
@@ -773,10 +779,12 @@ async function submitLogin(data) {
     if (body?.error) {
       handleLoginFailureTip(body.error);
     }
-    showToast('Login failed' + (body?.error ? `: ${body.error}` : ''));
+    const loginErr = body?.error ? t('login_failed_detail', { error: body.error }) : t('login_failed');
+    showToast(loginErr);
 
   } catch (e) {
-    showToast('Login failed: ' + (e.message || 'Unknown error'));
+    const errMsg = e && e.message ? e.message : t('unknown_error');
+    showToast(t('login_failed_detail', { error: errMsg }));
   } finally {
     __loginInFlight = false;
   }
@@ -821,7 +829,7 @@ function loadUserList() {
         selectElem.appendChild(option);
       });
       if (selectElem.options.length === 0) {
-        showToast("No other users found to remove.");
+        showToast(t('remove_user_none'));
         closeRemoveUserModal();
       }
     })
@@ -866,7 +874,7 @@ function initAuth() {
     const isAdmin = document.getElementById("isAdmin").checked;
 
     if (!newUsername || !newPassword) {
-      showToast("Username and password are required!");
+      showToast(t('username_password_required'));
       return;
     }
 
@@ -882,18 +890,19 @@ function initAuth() {
       .then(r => r.json())
       .then(data => {
         if (data.success) {
-          showToast("User added successfully!");
+          showToast(t('user_add_success'));
           closeAddUserModal();
           checkAuthentication(false);
           if (window.setupMode) {
             toggleVisibility("loginForm", true);
           }
         } else {
-          showToast("Error: " + (data.error || "Could not add user"));
+          const errMsg = data.error || t('user_add_error_default');
+          showToast(t('user_add_error', { error: errMsg }));
         }
       })
       .catch(() => {
-        showToast("Error: Could not add user");
+        showToast(t('user_add_error', { error: t('user_add_error_default') }));
       });
   });
   document.getElementById("cancelUserBtn").addEventListener("click", closeAddUserModal);
@@ -906,7 +915,7 @@ function initAuth() {
     const selectElem = document.getElementById("removeUsernameSelect");
     const usernameToRemove = selectElem.value;
     if (!usernameToRemove) {
-      showToast("Please select a user to remove.");
+      showToast(t('select_user_remove_prompt'));
       return;
     }
     const confirmed = await showCustomConfirmModal("Are you sure you want to delete user " + usernameToRemove + "?");
@@ -920,11 +929,12 @@ function initAuth() {
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          showToast("User removed successfully!");
+          showToast(t('user_remove_success'));
           closeRemoveUserModal();
           loadUserList();
         } else {
-          showToast("Error: " + (data.error || "Could not remove user"));
+          const errMsg = data.error || t('user_remove_error_default');
+          showToast(t('user_remove_error', { error: errMsg }));
         }
       })
       .catch(() => { });
@@ -932,7 +942,7 @@ function initAuth() {
   document.getElementById("cancelRemoveUserBtn").addEventListener("click", closeRemoveUserModal);
   document.getElementById("changePasswordBtn").addEventListener("click", function () {
     if (window.__FR_DEMO__) {
-      showToast("Password changes are disabled on the public demo.");
+      showToast(t('password_change_disabled_demo'));
       return;
     }
     document.getElementById("changePasswordModal").style.display = "block";
@@ -943,18 +953,18 @@ function initAuth() {
   });
   document.getElementById("saveNewPasswordBtn").addEventListener("click", function () {
     if (window.__FR_DEMO__) {
-      showToast("Password changes are disabled on the public demo.");
+      showToast(t('password_change_disabled_demo'));
       return;
     }
     const oldPassword = document.getElementById("oldPassword").value.trim();
     const newPassword = document.getElementById("newPassword").value.trim();
     const confirmPassword = document.getElementById("confirmPassword").value.trim();
     if (!oldPassword || !newPassword || !confirmPassword) {
-      showToast("Please fill in all fields.");
+      showToast(t('fill_all_fields'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      showToast("New passwords do not match.");
+      showToast(t('passwords_do_not_match'));
       return;
     }
     const data = { oldPassword, newPassword, confirmPassword };
@@ -973,10 +983,11 @@ function initAuth() {
           document.getElementById("confirmPassword").value = "";
           document.getElementById("changePasswordModal").style.display = "none";
         } else {
-          showToast("Error: " + (result.error || "Could not change password."));
+          const errMsg = result.error || t('password_change_error_default');
+          showToast(t('password_change_error', { error: errMsg }));
         }
       })
-      .catch(() => { showToast("Error changing password."); });
+      .catch(() => { showToast(t('password_change_error_generic')); });
   });
 }
 

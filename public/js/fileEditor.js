@@ -512,7 +512,7 @@ async function openOnlyOffice(fileName, folder, sourceId = ''){
     }
   }catch(e){
     console.error('[ONLYOFFICE] failed to open:', e);
-    showToast((e && e.message) ? e.message : 'Unable to open ONLYOFFICE editor.');
+    showToast((e && e.message) ? e.message : t('onlyoffice_open_failed'));
     destroy(true);
   }
 }
@@ -595,7 +595,7 @@ export async function editFile(fileName, folder, sourceId = '') {
       await openOnlyOffice(fileName, folderUsed, sid);
       return;
     }
-    showToast('ONLYOFFICE is disabled inside encrypted folders.');
+    showToast(t('onlyoffice_disabled_encrypted'));
   }
 
   // Probe size safely via API. Prefer HEAD; if missing Content-Length, fall back to a 1-byte Range GET.
@@ -622,7 +622,8 @@ export async function editFile(fileName, folder, sourceId = '') {
   probeSize(fileUrl)
     .then(sizeBytes => {
       if (sizeBytes !== null && sizeBytes > EDITOR_BLOCK_THRESHOLD) {
-        showToast("This file is larger than 10 MB and cannot be edited in the browser.");
+        const maxMb = Math.round(EDITOR_BLOCK_THRESHOLD / (1024 * 1024));
+        showToast(t('file_edit_too_large', { size: maxMb }));
         throw new Error("File too large.");
       }
       return fetch(fileUrl, { credentials: "include" });

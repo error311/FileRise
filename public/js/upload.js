@@ -1088,7 +1088,7 @@ async function initResumableUpload() {
         setUploadButtonVisible(false); 
       }, 5000);
     } else {
-      showToast("Some files failed to upload. Please check the list.", 'warning');
+      showToast(t('upload_failed_some'), 'warning');
     }
     // In all cases, once Resumable has finished its batch, hide the ClamAV notice.
     hideVirusScanNotice();
@@ -1156,7 +1156,7 @@ function submitFiles(allFiles) {
         li.progressBar.innerText = "Error";
       }
       try {
-        showToast("Could not read the selected file.", 6000, 'error');
+        showToast(t('upload_read_error'), 6000, 'error');
       } catch (e) {}
       uploadResults[file.uploadIndex] = false;
       allSucceeded = false;
@@ -1280,7 +1280,7 @@ function submitFiles(allFiles) {
         li.progressBar.innerText = "Error";
       }
       try {
-        showToast("Upload failed due to a network error.", 6000, 'error');
+        showToast(t('upload_network_error'), 6000, 'error');
       } catch (e) {}
       uploadResults[file.uploadIndex] = false;
       allSucceeded = false;
@@ -1299,7 +1299,7 @@ function submitFiles(allFiles) {
         li.progressBar.innerText = "Aborted";
       }
       try {
-        showToast("Upload was aborted.", 5000, 'warning');
+        showToast(t('upload_aborted'), 5000, 'warning');
       } catch (e) {}
       uploadResults[file.uploadIndex] = false;
       allSucceeded = false;
@@ -1371,16 +1371,16 @@ function submitFiles(allFiles) {
 
         if (!overallSuccess) {
           const failed = allFiles.length - succeeded;
-          showToast(`${failed} file(s) failed, ${succeeded} succeeded. Please check the list.`, 'warning');
+          showToast(t('upload_summary_failed', { failed, succeeded }), 'warning');
         } else {
-          showToast(`${succeeded} file(s) succeeded. Please check the list.`, 'success');
+          showToast(t('upload_summary_success', { succeeded }), 'success');
         }
         const anyItems = !!document.querySelector('li.upload-progress-item');
         setUploadButtonVisible(anyItems);
       })
       .catch(error => {
         console.error("Error fetching file list:", error);
-        showToast("Some files may have failed to upload. Please check the list.", 'warning');
+        showToast(t('upload_may_have_failed'), 'warning');
       })
       .finally(() => {
         // Folder list refresh + hide any ClamAV scan notice
@@ -1467,7 +1467,7 @@ function initUpload() {
           : (fileInput ? Array.from(fileInput.files || []) : []);
 
       if (!files || !files.length) {
-        showToast("No files selected.", 'warning');
+        showToast(t('no_files_selected'), 'warning');
         return;
       }
 
@@ -1498,7 +1498,7 @@ function initUpload() {
           }
 
           resumableInstance.upload();
-          showToast("Resumable upload started...", 'info');
+          showToast(t('upload_resumable_started'), 'info');
         } else {
           submitFiles(files);
         }
@@ -1550,6 +1550,6 @@ document.addEventListener('paste', function handlePasteUpload(e) {
 
   if (files.length > 0) {
     processFiles(files);
-    showToast('Pasted file added to upload list.', 'success');
+    showToast(t('upload_pasted_added'), 'success');
   }
 });

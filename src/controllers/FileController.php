@@ -2187,7 +2187,20 @@ class FileController
                     $fail(501, "Thumbnail generator unavailable.");
                 }
 
-                $ffmpeg = trim((string)(getenv('FR_FFMPEG_PATH') ?: 'ffmpeg'));
+                $ffmpeg = trim((string)getenv('FR_FFMPEG_PATH'));
+                if ($ffmpeg === '') {
+                    try {
+                        $cfg = AdminModel::getConfig();
+                        if (is_array($cfg) && empty($cfg['error'])) {
+                            $ffmpeg = trim((string)($cfg['ffmpegPath'] ?? ''));
+                        }
+                    } catch (\Throwable $e) {
+                        // best-effort only
+                    }
+                }
+                if ($ffmpeg === '') {
+                    $ffmpeg = 'ffmpeg';
+                }
                 if ($ffmpeg === '') {
                     $fail(501, "Thumbnail generator unavailable.");
                 }

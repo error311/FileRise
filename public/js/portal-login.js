@@ -1,8 +1,64 @@
 // public/js/portal-login.js
 import { patchFetchForBasePath, withBase } from './basePath.js?v={{APP_QVER}}';
+import { t, applyTranslations, setLocale } from './i18n.js?v={{APP_QVER}}';
 
 // Ensure /api/* calls work when FileRise is mounted under a subpath (e.g. /fr).
 patchFetchForBasePath();
+
+function getStoredLocale() {
+  try { return localStorage.getItem('language') || ''; } catch (e) { /* ignore */ }
+  return '';
+}
+
+function getSavedLocale() {
+  return getStoredLocale() || 'en';
+}
+
+async function resolveLocale() {
+  const stored = getStoredLocale();
+  if (stored) return stored;
+  try {
+    const res = await fetch(withBase('/api/siteConfig.php'), { credentials: 'include' });
+    const cfg = await res.json().catch(() => ({}));
+    const defaultLang = cfg && cfg.display && cfg.display.defaultLanguage
+      ? String(cfg.display.defaultLanguage)
+      : '';
+    if (defaultLang) {
+      setSavedLocale(defaultLang);
+      return defaultLang;
+    }
+  } catch (e) { /* ignore */ }
+  return 'en';
+}
+
+function setSavedLocale(locale) {
+  if (!locale) return;
+  try { localStorage.setItem('language', locale); } catch (e) { /* ignore */ }
+}
+
+async function applyLocale() {
+  const saved = await resolveLocale();
+  const applied = await setLocale(saved);
+  applyTranslations();
+  document.documentElement.lang = applied;
+}
+
+function setupLanguageSelect() {
+  const select = document.getElementById('portalLoginLangSelect');
+  if (!select) return;
+
+  const options = Array.from(select.options).map(opt => opt.value);
+  const saved = getSavedLocale();
+  select.value = options.includes(saved) ? saved : 'en';
+
+  select.addEventListener('change', async () => {
+    const next = select.value || 'en';
+    setSavedLocale(next);
+    const applied = await setLocale(next);
+    applyTranslations();
+    document.documentElement.lang = applied;
+  });
+}
 
 // -------- URL helpers --------
 function sanitizeRedirect(raw, { fallback = '/' } = {}) {
@@ -172,7 +228,7 @@ function getRedirectTarget() {
   function showError(msg) {
     const box = document.getElementById('portalLoginError');
     if (!box) return;
-    box.textContent = msg || 'Login failed.';
+    box.textContent = msg || t('portal_login_error_default') || 'Login failed.';
     box.classList.add('show');
   }
   
@@ -212,12 +268,12 @@ function getRedirectTarget() {
   
   function applyPortalBranding(portal) {
     if (!portal) return;
-  
+
     const title =
       (portal.title && portal.title.trim()) ||
       portal.label ||
       portal.slug ||
-      'Client portal';
+      (t('portal_label_default') || 'Client portal');
   
     const headingEl  = document.getElementById('portalLoginTitle');
     const subtitleEl = document.getElementById('portalLoginSubtitle');
@@ -225,10 +281,10 @@ function getRedirectTarget() {
     const logoEl     = document.getElementById('portalLoginLogo');
   
     if (headingEl) {
-      headingEl.textContent = 'Sign in to ' + title;
+      headingEl.textContent = t('portal_login_heading_with_title', { title }) || ('Sign in to ' + title);
     }
     if (subtitleEl) {
-      subtitleEl.textContent = 'to access this client portal';
+      subtitleEl.textContent = t('portal_login_subtitle') || 'to access this client portal';
     }
   
     // Footer text from portal metadata, if provided
@@ -263,7 +319,7 @@ function getRedirectTarget() {
   
     // Document title
     try {
-      document.title = 'Sign in – ' + title;
+      document.title = t('portal_login_doc_title', { title }) || ('Sign in – ' + title);
     } catch (e) { /* ignore */ }
   
     // Accent: portal brandColor -> CSS var
@@ -347,11 +403,14 @@ function getRedirectTarget() {
   }
   
   // --- Init ---
-  document.addEventListener('DOMContentLoaded', async () => {
-    const form   = document.getElementById('portalLoginForm');
-    const userEl = document.getElementById('portalLoginUser');
-    const passEl = document.getElementById('portalLoginPass');
-    const btn    = document.getElementById('portalLoginSubmit');
+document.addEventListener('DOMContentLoaded', async () => {
+  const form   = document.getElementById('portalLoginForm');
+  const userEl = document.getElementById('portalLoginUser');
+  const passEl = document.getElementById('portalLoginPass');
+  const btn    = document.getElementById('portalLoginSubmit');
+
+  await applyLocale();
+  setupLanguageSelect();
   
     // Accent first (fallback to global accent)
     applyAccentFromTheme();
@@ -383,13 +442,13 @@ function getRedirectTarget() {
       const username = userEl.value.trim();
       const password = passEl.value;
   
-      if (!username || !password) {
-        showError('Username and password are required');
+    if (!username || !password) {
+        showError(t('portal_login_error_required') || 'Username and password are required');
         return;
       }
-  
+
       btn.disabled = true;
-      btn.textContent = 'Signing in…';
+      btn.textContent = t('portal_login_signing_in') || 'Signing in…';
   
       try {
         await doLogin(username, password);
@@ -397,9 +456,9 @@ function getRedirectTarget() {
         window.location.href = target;
       } catch (err) {
         console.error('portal-login: auth failed', err);
-        showError(err.message || 'Login failed. Please try again.');
+        showError(err.message || t('portal_login_error_failed_retry') || 'Login failed. Please try again.');
         btn.disabled = false;
-        btn.textContent = 'Sign in';
+        btn.textContent = t('portal_login_sign_in') || 'Sign in';
       }
     });
   });

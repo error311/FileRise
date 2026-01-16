@@ -821,15 +821,16 @@ function startInlineRenameForFileRow(row, file, folder) {
       });
       const data = await res.json().catch(() => ({}));
       if (data && data.success) {
-        showToast('File renamed successfully!', 'success');
+        showToast(t('rename_file_success'), 'success');
         clearInlineRenameState({ restore: false });
         loadFileList(state.folder);
         return;
       }
-      showToast('Error renaming file: ' + (data.error || 'Unknown error'), 'error');
+      const errMsg = data.error || t('unknown_error');
+      showToast(t('rename_file_error', { error: errMsg }), 'error');
     } catch (err) {
       console.error('Error renaming file:', err);
-      showToast('Error renaming file', 'error');
+      showToast(t('rename_file_error_generic'), 'error');
     }
 
     if (inlineRenameState === state) {
@@ -1394,7 +1395,7 @@ window.addEventListener('keydown', (e) => {
   if (key === '?' || (key === '/' && e.shiftKey)) {
     e.preventDefault();
     e.stopPropagation();
-    showToast('Shortcuts: / search, ? help, Del delete, F2 rename, F3 preview, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete, Ctrl/Cmd+Shift+N new folder.', 6000, 'info');
+    showToast(t('keyboard_shortcuts_help'), 6000, 'info');
     return;
   }
 
@@ -2458,7 +2459,7 @@ async function paneDropHandler(e) {
     const sourceFolder = String(dragData.folder || '').trim();
     if (!sourceFolder || sourceFolder === 'root') return;
     if (!crossSource && (targetFolder === sourceFolder || targetFolder.startsWith(sourceFolder + '/'))) {
-      showToast('Invalid destination.', 'warning');
+      showToast(t('invalid_destination'), 'warning');
       return;
     }
 
@@ -2497,7 +2498,8 @@ async function paneDropHandler(e) {
       const data = await res.json().catch(() => ({}));
       if (data && !data.error) {
         ok = true;
-        showToast(`Folder moved to ${targetFolder}!`, 'success');
+        const destLabel = targetFolder || t('root_folder');
+        showToast(t('move_folder_success_to', { folder: destLabel }), 'success');
         if (crossSource) {
           if (sourceParent) invalidateFolderStats([sourceParent], sourceId);
           invalidateFolderStats([targetFolder], destSourceId);
@@ -2512,14 +2514,14 @@ async function paneDropHandler(e) {
         pruneMovedFolderFromInactivePane(sourceFolder, sourceParent, sourceId);
       } else {
         ok = false;
-        errMsg = data && data.error ? data.error : 'Could not move folder';
-        showToast(`Error: ${data && data.error || 'Could not move folder'}`, 'error');
+        errMsg = data && data.error ? data.error : t('move_folder_error_default');
+        showToast(t('move_folder_error_detail', { error: errMsg }), 'error');
       }
     } catch (err) {
       ok = false;
-      errMsg = err && err.message ? err.message : 'Could not move folder';
+      errMsg = err && err.message ? err.message : t('move_folder_error_default');
       console.error('Error moving folder:', err);
-      showToast('Error moving folder.', 'error');
+      showToast(t('move_folder_error'), 'error');
     } finally {
       finishTransferProgress(progress, { ok, error: errMsg });
     }
@@ -2531,7 +2533,7 @@ async function paneDropHandler(e) {
 
   const sourceFolder = dragData.sourceFolder || window.currentFolder || 'root';
   if (!crossSource && targetFolder === sourceFolder) {
-    showToast('Already in target folder.', 'info');
+    showToast(t('already_in_target_folder'), 'info');
     return;
   }
 
@@ -2575,7 +2577,8 @@ async function paneDropHandler(e) {
     const data = await res.json().catch(() => ({}));
     if (data.success) {
       ok = true;
-      showToast(`File(s) moved successfully to ${targetFolder}!`, 'success');
+      const destLabel = targetFolder || t('root_folder');
+      showToast(t('move_files_success_to', { count: files.length, folder: destLabel }), 'success');
       if (crossSource) {
         invalidateFolderStats([sourceFolder], sourceId);
         invalidateFolderStats([targetFolder], destSourceId);
@@ -2591,14 +2594,14 @@ async function paneDropHandler(e) {
       pruneMovedFilesFromInactivePane(sourceFolder, files, sourceId);
     } else {
       ok = false;
-      errMsg = data.error || 'Unknown error';
-      showToast(`Error moving files: ${data.error || 'Unknown error'}`, 'error');
+      errMsg = data.error || t('unknown_error');
+      showToast(t('move_files_error', { error: errMsg }), 'error');
     }
   } catch (err) {
     ok = false;
-    errMsg = err && err.message ? err.message : 'Unknown error';
+    errMsg = err && err.message ? err.message : t('unknown_error');
     console.error('Error moving files:', err);
-    showToast('Error moving files.', 'error');
+    showToast(t('move_files_error_generic'), 'error');
   } finally {
     finishTransferProgress(progress, { ok, error: errMsg });
   }
@@ -7637,7 +7640,7 @@ export function downloadSelectedFilesIndividually(fileObjs) {
     const inEncrypted = !!(window.currentFolderCaps && window.currentFolderCaps.encryption && window.currentFolderCaps.encryption.encrypted);
     const msg = inEncrypted
       ? `You selected ${mapped.length} files. In encrypted folders, downloads are limited to ${limit} files at a time.`
-      : (t('too_many_plain_downloads') || `You selected ${mapped.length} files. For more than ${limit} files, please use "Download as Archive".`);
+      : (t('too_many_plain_downloads', { count: mapped.length, limit }) || `You selected ${mapped.length} files. For more than ${limit} files, please use "Download as Archive".`);
     showToast(msg, 'warning');
     return;
   }

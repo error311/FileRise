@@ -1610,7 +1610,7 @@ async function loadUserGroupsList(useCacheOnly) {
         const nameInput = card.querySelector('input[data-group-field="name"]');
         const name = (nameInput && nameInput.value || '').trim();
         if (!name) {
-          showToast('Enter a group name first.');
+          showToast(t('admin_group_name_required'));
           return;
         }
         await openGroupAclEditor(name);
@@ -1673,7 +1673,7 @@ async function saveUserGroupsFromUI() {
   try {
     const res = await saveAllGroups(groups);
     if (!res.success) {
-      showToast(res.error || 'Error saving groups');
+      showToast(res.error || t('admin_groups_save_error'));
       if (status) {
         status.textContent = 'Error saving groups.';
         status.className = 'small text-danger';
@@ -1686,14 +1686,14 @@ async function saveUserGroupsFromUI() {
       status.textContent = 'Groups saved.';
       status.className = 'small text-success';
     }
-    showToast('Groups saved.');
+    showToast(t('admin_groups_saved'));
   } catch (e) {
     console.error(e);
     if (status) {
       status.textContent = 'Error saving groups.';
       status.className = 'small text-danger';
     }
-    showToast('Error saving groups', 'error');
+    showToast(t('admin_groups_save_error'), 'error');
   }
 }
 
@@ -1791,7 +1791,7 @@ function saveGroupAclFromUI() {
   }
   __groupsCache[groupName].grants = grants;
 
-  showToast('Group folder access updated. Remember to Save groups.');
+  showToast(t('admin_group_access_updated'));
   modal.style.display = 'none';
 }
 

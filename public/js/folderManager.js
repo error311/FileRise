@@ -1512,7 +1512,7 @@ export function openColorFolderModal(folder) {
       await saveFolderColor(folder, ''); // clear
       showToast(t('folder_color_cleared'), 'success');
     } catch (err) {
-      showToast(err.message || 'Error', 'error');
+      showToast(err.message || t('error_generic'), 'error');
     } finally {
       suppressNextToggle(300);
       setTimeout(() => expandTreePath(folder, { force: true }), 0);
@@ -2189,7 +2189,7 @@ function handleDropOnFolder(event, dropFolder) {
 
     // prevent moving into self/descendant
     if (!crossSource && (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/"))) {
-      showToast("Invalid destination.", 4000, 'warning');
+      showToast(t('invalid_destination'), 4000, 'warning');
       return;
     }
 
@@ -2220,7 +2220,8 @@ function handleDropOnFolder(event, dropFolder) {
       .then(async (data) => {
         if (data && !data.error) {
           ok = true;
-          showToast(`Folder moved to ${dropFolder}!`, 'success');
+          const destLabel = dropFolder || t('root_folder');
+          showToast(t('move_folder_success_to', { folder: destLabel }), 'success');
           if (crossSource) {
             try {
               if (sourceFolder) {
@@ -2242,15 +2243,15 @@ function handleDropOnFolder(event, dropFolder) {
           }
         } else {
           ok = false;
-          errMsg = data && data.error ? data.error : 'Could not move folder';
-          showToast("Error: " + (data && data.error || "Could not move folder"), 5000, 'error');
+          errMsg = data && data.error ? data.error : t('move_folder_error_default');
+          showToast(t('move_folder_error_detail', { error: errMsg }), 5000, 'error');
         }
       })
       .catch(err => {
         ok = false;
-        errMsg = err && err.message ? err.message : 'Could not move folder';
+        errMsg = err && err.message ? err.message : t('move_folder_error_default');
         console.error("Error moving folder:", err);
-        showToast("Error moving folder", 5000, 'error');
+        showToast(t('move_folder_error'), 5000, 'error');
       })
       .finally(() => {
         finishTransferProgress(progress, { ok, error: errMsg });
@@ -2274,7 +2275,7 @@ function handleDropOnFolder(event, dropFolder) {
     const sourceFolder = String(plainSource || "").trim();
     if (!sourceFolder || sourceFolder === "root") return;
     if (dropFolder === sourceFolder || (dropFolder + "/").startsWith(sourceFolder + "/")) {
-      showToast("Invalid destination.", 4000, 'warning');
+      showToast(t('invalid_destination'), 4000, 'warning');
       return;
     }
 
@@ -2300,19 +2301,20 @@ function handleDropOnFolder(event, dropFolder) {
       .then(async (data) => {
         if (data && !data.error) {
           ok = true;
-          showToast(`Folder moved to ${dropFolder}!`, 'success');
+          const destLabel = dropFolder || t('root_folder');
+          showToast(t('move_folder_success_to', { folder: destLabel }), 'success');
           await syncTreeAfterFolderMove(sourceFolder, dropFolder);
         } else {
           ok = false;
-          errMsg = data && data.error ? data.error : 'Could not move folder';
-          showToast("Error: " + (data && data.error || "Could not move folder"), 5000, 'error');
+          errMsg = data && data.error ? data.error : t('move_folder_error_default');
+          showToast(t('move_folder_error_detail', { error: errMsg }), 5000, 'error');
         }
       })
       .catch(err => {
         ok = false;
-        errMsg = err && err.message ? err.message : 'Could not move folder';
+        errMsg = err && err.message ? err.message : t('move_folder_error_default');
         console.error("Error moving folder:", err);
-        showToast("Error moving folder", 5000, 'error');
+        showToast(t('move_folder_error'), 5000, 'error');
       })
       .finally(() => {
         finishTransferProgress(progress, { ok, error: errMsg });
@@ -2361,7 +2363,8 @@ function handleDropOnFolder(event, dropFolder) {
   }).then(safeJson).then(data => {
     if (data.success) {
       ok = true;
-      showToast(`File(s) moved successfully to ${dropFolder}!`, 'success');
+      const destLabel = dropFolder || t('root_folder');
+      showToast(t('move_files_success_to', { count: filesToMove.length, folder: destLabel }), 'success');
       const activeSourceId = getActiveSourceId();
       if (!sourceId || sourceId === activeSourceId) {
         refreshFolderIcon(dragData.sourceFolder);
@@ -2396,13 +2399,13 @@ function handleDropOnFolder(event, dropFolder) {
       loadFileList(reloadFolder);
     } else {
       ok = false;
-      errMsg = data.error || "Unknown error";
-      showToast("Error moving files: " + (data.error || "Unknown error"), 'error');
+      errMsg = data.error || t('unknown_error');
+      showToast(t('move_files_error', { error: errMsg }), 'error');
     }
   }).catch(err => {
     ok = false;
-    errMsg = err && err.message ? err.message : "Unknown error";
-    showToast("Error moving files.", 'error');
+    errMsg = err && err.message ? err.message : t('unknown_error');
+    showToast(t('move_files_error_generic'), 'error');
   }).finally(() => {
     finishTransferProgress(progress, { ok, error: errMsg });
   });
@@ -2736,7 +2739,7 @@ selectFolder(target);
 
   } catch (err) {
     console.error("Error loading folder tree:", err);
-    if (err.status === 403) showToast("You don't have permission to view folders.", 'error');
+    if (err.status === 403) showToast(t('folders_view_denied'), 'error');
   }
 }
 
@@ -2907,7 +2910,7 @@ async function setFolderEncryption(folder, encrypted) {
     const data = await safeJson(resp);
 
     if (!data || data.ok !== true) {
-      showToast((data && (data.error || data.message)) || 'Failed to update folder encryption.', 'error');
+      showToast((data && (data.error || data.message)) || t('folder_encryption_update_failed'), 'error');
       return;
     }
 
@@ -2926,10 +2929,10 @@ async function setFolderEncryption(folder, encrypted) {
 
     invalidateFolderCaches(folder);
     await applyFolderCapabilities(folder);
-    showToast(encrypted ? 'Folder encryption enabled.' : 'Folder encryption disabled.', 'success');
+    showToast(encrypted ? t('folder_encryption_enabled') : t('folder_encryption_disabled'), 'success');
   } catch (e) {
     console.error('setFolderEncryption failed', e);
-    showToast((e && e.message) ? e.message : 'Failed to update folder encryption.', 'error');
+    showToast((e && e.message) ? e.message : t('folder_encryption_update_failed'), 'error');
   }
 }
 
@@ -3181,9 +3184,13 @@ function finalizeCryptoJobUi({ folder, mode, jobId, ok, error }) {
   if (pill) pill.style.display = 'none';
 
   if (ok) {
-    showToast(mode === 'decrypt' ? 'Folder decryption completed.' : 'Folder encryption completed.', 'success');
+    showToast(mode === 'decrypt' ? t('folder_decryption_completed') : t('folder_encryption_completed'), 'success');
   } else {
-    showToast(error ? (`Folder crypto failed: ${error}`) : 'Folder crypto failed.', 'error');
+    if (error) {
+      showToast(t('folder_crypto_failed_detail', { error }), 'error');
+    } else {
+      showToast(t('folder_crypto_failed'), 'error');
+    }
   }
 }
 
@@ -3193,7 +3200,7 @@ export async function startFolderCryptoJobFlow(folder, mode) {
     const planRes = await fetch(planUrl, { credentials: 'include' });
     const plan = await safeJson(planRes);
     if (!plan || plan.ok !== true) {
-      showToast((plan && (plan.error || plan.message)) || 'Failed to estimate folder encryption work.', 'error');
+      showToast((plan && (plan.error || plan.message)) || t('folder_encryption_estimate_failed'), 'error');
       return;
     }
 
@@ -3247,7 +3254,7 @@ export async function startFolderCryptoJobFlow(folder, mode) {
     await startCryptoRunner(st);
   } catch (e) {
     console.error('startFolderCryptoJobFlow error', e);
-    showToast((e && e.message) ? e.message : 'Failed to start folder encryption.', 'error');
+    showToast((e && e.message) ? e.message : t('folder_encryption_start_failed'), 'error');
   }
 }
 
@@ -3313,7 +3320,7 @@ async function folderManagerContextMenuHandler(e) {
           }
           const btn = document.getElementById('deleteAllBtn');
           if (btn) { btn.click(); return; }
-          showToast('Empty recycle bin action is not available.', 'warning');
+          showToast(t('recycle_bin_empty_unavailable'), 'warning');
         }
       }
     ];
@@ -3356,14 +3363,14 @@ function bindFolderManagerContextMenu() {
 export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
   const selectedFolder = oldFolder || window.currentFolder || "root";
   if (!selectedFolder || selectedFolder === "root") {
-    if (!opts.silent) showToast("Please select a valid folder to rename.", 'warning');
+    if (!opts.silent) showToast(t('select_folder_rename'), 'warning');
     return { success: false, error: "invalid_folder" };
   }
 
   const newNameBasename = String(newBaseName || "").trim();
   const currentBase = selectedFolder.split("/").pop() || "";
   if (!newNameBasename || newNameBasename === currentBase) {
-    if (!opts.silent) showToast("Please enter a valid new folder name.", 'warning');
+    if (!opts.silent) showToast(t('enter_new_folder_name'), 'warning');
     return { success: false, error: "invalid_name" };
   }
 
@@ -3379,12 +3386,12 @@ export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
     });
     const data = await safeJson(res);
     if (!data.success) {
-      const msg = data.error || "Could not rename folder";
-      if (!opts.silent) showToast("Error: " + msg, 'error');
+      const msg = data.error || t('rename_folder_error_default');
+      if (!opts.silent) showToast(t('rename_folder_error', { error: msg }), 'error');
       return { success: false, error: msg };
     }
 
-    if (!opts.silent) showToast("Folder renamed successfully!", 'success');
+    if (!opts.silent) showToast(t('rename_folder_success'), 'success');
 
     const oldPath = selectedFolder;
     const newPath = newFolderFull;
@@ -3432,7 +3439,8 @@ export async function renameFolderInline(oldFolder, newBaseName, opts = {}) {
   } catch (err) {
     console.error("Error renaming folder:", err);
     if (!opts.silent) {
-      showToast("Error: " + (err && err.message ? err.message : "Could not rename folder"), 'error');
+      const errMsg = err && err.message ? err.message : t('rename_folder_error_default');
+      showToast(t('rename_folder_error', { error: errMsg }), 'error');
     }
     return { success: false, error: err && err.message ? err.message : "rename_failed" };
   }
@@ -3472,7 +3480,7 @@ function focusTreeRenameInput(input) {
 export async function startInlineRenameInTree(folderPath, targetOpt) {
   const selectedFolder = folderPath || window.currentFolder || 'root';
   if (!selectedFolder || selectedFolder === 'root') {
-    showToast("Please select a valid folder to rename.", 'warning');
+    showToast(t('select_folder_rename'), 'warning');
     return false;
   }
 
@@ -3497,7 +3505,7 @@ export async function startInlineRenameInTree(folderPath, targetOpt) {
   }
 
   if (!opt) {
-    showToast("Please select a valid folder to rename.", 'warning');
+    showToast(t('select_folder_rename'), 'warning');
     return false;
   }
 
@@ -3599,7 +3607,7 @@ export async function startInlineRenameInTree(folderPath, targetOpt) {
 export function openRenameFolderModal() {
   detachFolderModalsToBody();
   const selectedFolder = window.currentFolder || "root";
-  if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to rename.", 'warning'); return; }
+  if (!selectedFolder || selectedFolder === "root") { showToast(t('select_folder_rename'), 'warning'); return; }
   const parts = selectedFolder.split("/");
   const input = document.getElementById("newRenameFolderName");
   const modal = document.getElementById("renameFolderModal");
@@ -3624,7 +3632,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
   if (!input) return;
   const newNameBasename = input.value.trim();
   if (!newNameBasename || newNameBasename === selectedFolder.split("/").pop()) {
-    showToast("Please enter a valid new folder name.", 'warning'); return;
+    showToast(t('enter_new_folder_name'), 'warning'); return;
   }
   const parentPath = getParentFolder(selectedFolder);
   const newFolderFull = parentPath === "root" ? newNameBasename : parentPath + "/" + newNameBasename;
@@ -3633,7 +3641,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
     body: JSON.stringify({ oldFolder: window.currentFolder, newFolder: newFolderFull })
   }).then(safeJson).then(async data => {
     if (data.success) {
-      showToast("Folder renamed successfully!", 'success');
+      showToast(t('rename_folder_success'), 'success');
       const oldPath = selectedFolder;
       window.currentFolder = newFolderFull;
       setLastOpenedFolder(newFolderFull);
@@ -3658,7 +3666,8 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
       // re-select the renamed node
       selectFolder(newFolderFull);
     } else {
-      showToast("Error: " + (data.error || "Could not rename folder"), 'error');
+      const errMsg = data.error || t('rename_folder_error_default');
+      showToast(t('rename_folder_error', { error: errMsg }), 'error');
     }
   }).catch(err => console.error("Error renaming folder:", err)).finally(() => {
     const modal = document.getElementById("renameFolderModal");
@@ -3671,7 +3680,7 @@ if (submitRename) submitRename.addEventListener("click", function (event) {
 export function openDeleteFolderModal() {
   detachFolderModalsToBody();
   const selectedFolder = window.currentFolder || "root";
-  if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to delete.", 'warning'); return; }
+  if (!selectedFolder || selectedFolder === "root") { showToast(t('select_folder_delete'), 'warning'); return; }
   const msgEl = document.getElementById("deleteFolderMessage");
   const modal = document.getElementById("deleteFolderModal");
   if (!msgEl || !modal) return;
@@ -3692,7 +3701,7 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
     body: JSON.stringify({ folder: selectedFolder })
   }).then(safeJson).then(async data => {
     if (data.success) {
-      showToast("Folder deleted successfully!", 'success');
+      showToast(t('delete_folder_success'), 'success');
       const parent = getParentFolder(selectedFolder);
       window.currentFolder = parent;
       setLastOpenedFolder(parent);
@@ -3703,7 +3712,8 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
       if (parent === 'root') placeRecycleBinNode();
       selectFolder(parent);
     } else {
-      showToast("Error: " + (data.error || "Could not delete folder"), 'error');
+      const errMsg = data.error || t('delete_folder_error_default');
+      showToast(t('delete_folder_error', { error: errMsg }), 'error');
     }
   }).catch(err => console.error("Error deleting folder:", err)).finally(() => {
     const modal = document.getElementById("deleteFolderModal");
@@ -3731,18 +3741,18 @@ const submitCreate = document.getElementById("submitCreateFolder");
 if (submitCreate) submitCreate.addEventListener("click", async () => {
   const input = document.getElementById("newFolderName");
   const folderInput = input ? input.value.trim() : "";
-  if (!folderInput) return showToast("Please enter a folder name.", 'warning');
+  if (!folderInput) return showToast(t('enter_folder_name_prompt'), 'warning');
   const selectedFolder = window.currentFolder || "root";
   const parent = selectedFolder === "root" ? "" : selectedFolder;
 
-  try { await loadCsrfToken(); } catch (e) { return showToast("Could not refresh CSRF token. Please reload.", 'error'); }
+  try { await loadCsrfToken(); } catch (e) { return showToast(t('csrf_refresh_failed'), 'error'); }
 
   fetchWithCsrf("/api/folder/createFolder.php", {
     method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
     body: JSON.stringify({ folderName: folderInput, parent })
   }).then(safeJson).then(async data => {
     if (!data.success) throw new Error(data.error || "Server rejected the request");
-    showToast("Folder created!", 'success');
+    showToast(t('create_folder_success'), 'success');
     const parentFolder = parent || 'root';
     const parentUL = getULForFolder(parentFolder);
     const full = parent ? `${parent}/${folderInput}` : folderInput;
@@ -3765,7 +3775,10 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
     setLastOpenedFolder(full);
     selectFolder(full);
 
-  }).catch(e => showToast("Error creating folder: " + e.message, 'error')).finally(() => {
+  }).catch(e => {
+    const errMsg = e && e.message ? e.message : t('unknown_error');
+    showToast(t('create_folder_error', { error: errMsg }), 'error');
+  }).finally(() => {
     const modal = document.getElementById("createFolderModal");
     const input2 = document.getElementById("newFolderName");
     if (modal) modal.style.display = "none";
@@ -3802,7 +3815,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (moveBtn) moveBtn.addEventListener('click', () => {
     const cf = window.currentFolder || 'root';
-    if (!cf || cf === 'root') { showToast('Select a non-root folder to move.', 'warning'); return; }
+    if (!cf || cf === 'root') { showToast(t('select_non_root_folder_move'), 'warning'); return; }
     openMoveFolderUI(cf, 'move');
   });
   if (cancelBtn) cancelBtn.addEventListener('click', () => { if (modal) modal.style.display = 'none'; });
@@ -3815,10 +3828,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const sourceId = getActiveSourceId();
     const destSourceId = document.getElementById('moveFolderTargetSource')?.value || sourceId;
 
-    if (!destination) { showToast('Pick a destination', 'warning'); return; }
+    if (!destination) { showToast(t('pick_destination'), 'warning'); return; }
     const sameSource = sourceId === destSourceId;
     if (sameSource && (destination === source || (destination + '/').startsWith(source + '/'))) {
-      showToast('Invalid destination', 'warning'); return;
+      showToast(t('invalid_destination'), 'warning'); return;
     }
 
     // snapshot expansion before move
@@ -3860,7 +3873,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (dstParent === 'root') placeRecycleBinNode();
           }
           if (modal) modal.style.display = 'none';
-          showToast('Folder copied', 'success');
+          showToast(t('copy_folder_success'), 'success');
           selectFolder(window.currentFolder || source);
           return;
         }
@@ -3903,7 +3916,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           if (modal) modal.style.display = 'none';
           refreshFolderIcon(srcParent); refreshFolderIcon(dstParent);
-          showToast('Folder moved', 'success');
+          showToast(t('move_folder_success'), 'success');
           selectFolder(window.currentFolder || newPath);
           return;
         }
@@ -3924,19 +3937,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (modal) modal.style.display = 'none';
-        showToast('Folder moved', 'success');
+        showToast(t('move_folder_success'), 'success');
         selectFolder(window.currentFolder || srcParent);
 
       } else {
         ok = false;
-        errMsg = data && data.error ? data.error : 'Move failed';
-        showToast('Error: ' + (data && data.error || 'Move failed'), 'error');
+        errMsg = data && data.error ? data.error : t('move_failed');
+        showToast(t('error_prefix', { error: errMsg }), 'error');
       }
     } catch (e) {
       ok = false;
-      errMsg = e && e.message ? e.message : 'Move failed';
+      errMsg = e && e.message ? e.message : t('move_failed');
       console.error(e);
-      showToast('Move failed', 'error');
+      showToast(t('move_failed'), 'error');
     } finally {
       finishTransferProgress(progress, { ok, error: errMsg });
     }
@@ -4004,14 +4017,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const renameBtn = document.getElementById("renameFolderBtn");
   if (renameBtn) renameBtn.addEventListener("click", () => {
     const cf = window.currentFolder || "root";
-    if (!cf || cf === "root") { showToast("Please select a valid folder to rename.", 'warning'); return; }
+    if (!cf || cf === "root") { showToast(t('select_folder_rename'), 'warning'); return; }
     startInlineRenameInTree(cf);
   });
 
   const deleteBtn = document.getElementById("deleteFolderBtn");
   if (deleteBtn) deleteBtn.addEventListener("click", () => {
     const cf = window.currentFolder || "root";
-    if (!cf || cf === "root") { showToast("Please select a valid folder to delete.", 'warning'); return; }
+    if (!cf || cf === "root") { showToast(t('select_folder_delete'), 'warning'); return; }
     openDeleteFolderModal();
   });
 });
@@ -4034,7 +4047,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (shareFolderBtn) {
     shareFolderBtn.addEventListener("click", () => {
       const selectedFolder = window.currentFolder || "root";
-      if (!selectedFolder || selectedFolder === "root") { showToast("Please select a valid folder to share.", 'warning'); return; }
+      if (!selectedFolder || selectedFolder === "root") { showToast(t('select_folder_share'), 'warning'); return; }
       openFolderShareModal(selectedFolder);
     });
   }

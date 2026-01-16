@@ -135,13 +135,21 @@ export async function openUserPanel() {
     // title
     const title = document.createElement('h3');
     title.style.cssText = 'text-align:center; margin:0;';
-    title.textContent = `${t('user_panel')} (${username})`;
+    const titleLabel = document.createElement('span');
+    titleLabel.setAttribute('data-i18n-key', 'user_panel');
+    titleLabel.textContent = t('user_panel');
+    const titleName = document.createElement('span');
+    titleName.id = 'userPanelUsername';
+    titleName.textContent = ` (${username})`;
+    title.appendChild(titleLabel);
+    title.appendChild(titleName);
     content.appendChild(title);
 
     // change password btn
     const pwdBtn = document.createElement('button');
     pwdBtn.id = 'openChangePasswordModalBtn';
     pwdBtn.className = 'btn btn-primary';
+    pwdBtn.setAttribute('data-i18n-key', 'change_password');
     pwdBtn.textContent = t('change_password');
     pwdBtn.addEventListener('click', () => {
       document.getElementById('changePasswordModal').style.display = 'block';
@@ -153,6 +161,7 @@ export async function openUserPanel() {
     totpFs.style.cssText = 'margin:0; border:0; padding:0;';
     const totpLegend = document.createElement('legend');
     totpLegend.style.cssText = 'margin:0 0 6px; padding:0; font-weight:600;';
+    totpLegend.setAttribute('data-i18n-key', 'totp_settings');
     totpLegend.textContent = t('totp_settings');
     totpFs.appendChild(totpLegend);
     const totpCb = document.createElement('input');
@@ -178,6 +187,7 @@ export async function openUserPanel() {
     const totpLabel = document.createElement('label');
     totpLabel.className = 'form-check-label';
     totpLabel.htmlFor = 'userTOTPEnabled';
+    totpLabel.setAttribute('data-i18n-key', 'enable_totp');
     totpLabel.textContent = t('enable_totp');
     totpRow.appendChild(totpCb);
     totpRow.appendChild(totpLabel);
@@ -189,6 +199,7 @@ export async function openUserPanel() {
     langFs.style.cssText = 'margin:0; border:0; padding:0;';
     const langLegend = document.createElement('legend');
     langLegend.style.cssText = 'margin:0 0 6px; padding:0; font-weight:600;';
+    langLegend.setAttribute('data-i18n-key', 'language');
     langLegend.textContent = t('language');
     langFs.appendChild(langLegend);
     const langSel = document.createElement('select');
@@ -199,6 +210,9 @@ export async function openUserPanel() {
       { code: 'es',    labelKey: 'spanish',             fallback: 'Español' },
       { code: 'fr',    labelKey: 'french',              fallback: 'Français' },
       { code: 'de',    labelKey: 'german',              fallback: 'Deutsch' },
+      { code: 'pl',    labelKey: 'polish',              fallback: 'Polski' },
+      { code: 'ru',    labelKey: 'russian',             fallback: 'Русский' },
+      { code: 'ja',    labelKey: 'japanese',            fallback: '日本語' },
       { code: 'zh-CN', labelKey: 'chinese_simplified',  fallback: '简体中文' },
     ];
 
@@ -206,14 +220,16 @@ export async function openUserPanel() {
       const opt = document.createElement('option');
       opt.value = code;
       // use i18n if available, otherwise fallback
+      opt.setAttribute('data-i18n-key', labelKey);
       opt.textContent = (typeof t === 'function' ? t(labelKey) : '') || fallback;
       langSel.appendChild(opt);
     });
     langSel.value = localStorage.getItem('language') || 'en';
-    langSel.addEventListener('change', function () {
+    langSel.addEventListener('change', async function () {
       localStorage.setItem('language', this.value);
-      setLocale(this.value);
+      const applied = await setLocale(this.value);
       applyTranslations();
+      document.documentElement.lang = applied;
     });
     langFs.appendChild(langSel);
     content.appendChild(langFs);
@@ -224,6 +240,7 @@ export async function openUserPanel() {
 
     const dispLegend = document.createElement('legend');
     dispLegend.style.cssText = 'margin:0 0 6px; padding:0; font-weight:600;';
+    dispLegend.setAttribute('data-i18n-key', 'display');
     dispLegend.textContent = t('display');
     dispFs.appendChild(dispLegend);
 
@@ -244,6 +261,7 @@ export async function openUserPanel() {
     const stripLabel = document.createElement('label');
     stripLabel.className = 'form-check-label';
     stripLabel.htmlFor = 'showFoldersInList';
+    stripLabel.setAttribute('data-i18n-key', 'show_folders_above_files');
     stripLabel.textContent = t('show_folders_above_files');
     stripRow.appendChild(stripCb);
     stripRow.appendChild(stripLabel);
@@ -266,7 +284,8 @@ export async function openUserPanel() {
     const inlineLabel = document.createElement('label');
     inlineLabel.className = 'form-check-label';
     inlineLabel.htmlFor = 'showInlineFolders';
-    inlineLabel.textContent = t('show_inline_folders') || 'Show folders inline (above files)';
+    inlineLabel.setAttribute('data-i18n-key', 'show_inline_folders');
+    inlineLabel.textContent = t('show_inline_folders');
     inlineRow.appendChild(inlineCb);
     inlineRow.appendChild(inlineLabel);
     dispFs.appendChild(inlineRow);
@@ -288,7 +307,8 @@ export async function openUserPanel() {
     const dualLabel = document.createElement('label');
     dualLabel.className = 'form-check-label';
     dualLabel.htmlFor = 'dualPaneMode';
-    dualLabel.textContent = t('dual_pane_mode') || 'Enable dual-pane mode';
+    dualLabel.setAttribute('data-i18n-key', 'dual_pane_mode');
+    dualLabel.textContent = t('dual_pane_mode');
     dualRow.appendChild(dualCb);
     dualRow.appendChild(dualLabel);
     dispFs.appendChild(dualRow);
@@ -342,6 +362,7 @@ export async function openUserPanel() {
     const hoverLabel = document.createElement('label');
     hoverLabel.className = 'form-check-label';
     hoverLabel.htmlFor = 'disableHoverPreview';
+    hoverLabel.setAttribute('data-i18n-key', 'show_hover_preview');
     hoverLabel.textContent = t('show_hover_preview');
     hoverRow.appendChild(hoverCb);
     hoverRow.appendChild(hoverLabel);
@@ -422,7 +443,8 @@ export async function openUserPanel() {
     modal.querySelector('#profilePicPreview').src = picUrl || withBase('/assets/default-avatar.png');
     modal.querySelector('#userTOTPEnabled').checked = totp_enabled;
     modal.querySelector('#languageSelector').value = localStorage.getItem('language') || 'en';
-    modal.querySelector('h3').textContent = `${t('user_panel')} (${username})`;
+    const titleName = modal.querySelector('#userPanelUsername');
+    if (titleName) titleName.textContent = ` (${username})`;
 
     // sync display toggles from localStorage
     const stripCb = modal.querySelector('#showFoldersInList');

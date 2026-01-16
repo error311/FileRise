@@ -1,5 +1,6 @@
 // /js/main.js — light bootstrap
 import { getBasePath, stripBase, withBase, patchFetchForBasePath } from './basePath.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 // Expose base path for non-module scripts / debugging.
 try { window.__FR_BASE_PATH__ = getBasePath(); } catch (e) {}
@@ -788,6 +789,18 @@ function bindDarkMode() {
         window.siteConfig = cfg || {};
         window.__FR_FLAGS = window.__FR_FLAGS || {};
         try {
+          const defaultLang = (cfg && cfg.display && cfg.display.defaultLanguage)
+            ? String(cfg.display.defaultLanguage)
+            : '';
+          if (defaultLang) {
+            let stored = null;
+            try { stored = localStorage.getItem('language'); } catch (e) { stored = null; }
+            if (!stored) {
+              localStorage.setItem('language', defaultLang);
+            }
+          }
+        } catch (e) { }
+        try {
           const proMeta = (cfg && cfg.pro && typeof cfg.pro === 'object') ? cfg.pro : {};
           window.__FR_IS_PRO = !!proMeta.active;
           window.__FR_PRO_VERSION = proMeta.version || '';
@@ -1215,7 +1228,7 @@ function bindDarkMode() {
       const isAdmin = isAdminEl ? !!isAdminEl.checked : true;
 
       if (!username || !password) {
-        alert('Enter a username and password.');
+        alert(t('setup_enter_username_password'));
         (username ? passwordEl : usernameEl)?.focus();
         return;
       }
@@ -1227,7 +1240,7 @@ function bindDarkMode() {
         window.setupMode = false;
         window.location.reload();
       } catch (e) {
-        alert(e.message || 'Failed to create user. Check server logs.');
+        alert(e.message || t('setup_create_user_failed'));
         if (!username) usernameEl?.focus();
         else if (!password) passwordEl?.focus();
       }
@@ -1347,7 +1360,7 @@ function bindDarkMode() {
 
         if (j && j.error && isDefinitiveLoginError(j.error)) {
           handleLoginFailureTip(j.error);
-          alert('Login failed');
+          alert(t('login_failed'));
           return;
         }
       } catch (e) { }
@@ -1383,7 +1396,7 @@ function bindDarkMode() {
           handleLoginFailureTip(j2.error);
         }
       } catch (e) { }
-      alert('Login failed');
+      alert(t('login_failed'));
     });
   }
   function focusLoginUsername() {
@@ -1417,7 +1430,7 @@ function bindDarkMode() {
       checkAuth().then(({ authed }) => {
         if (authed) { window.location.reload(); return; }
         if (Date.now() - start < 5000) return setTimeout(poll, 200);
-        alert('Login session not established');
+        alert(t('login_session_not_established'));
       }).catch(() => setTimeout(poll, 250));
     })();
   }
@@ -1484,9 +1497,10 @@ function bindDarkMode() {
           });
           let saved = 'en';
           try { saved = localStorage.getItem('language') || 'en'; } catch (e) { }
-          if (typeof i18n.setLocale === 'function') { await i18n.setLocale(saved); }
+          let appliedLocale = saved;
+          if (typeof i18n.setLocale === 'function') { appliedLocale = await i18n.setLocale(saved); }
           if (typeof i18n.applyTranslations === 'function') { i18n.applyTranslations(); }
-          try { document.documentElement.setAttribute('lang', saved); } catch (e) { }
+          try { document.documentElement.setAttribute('lang', appliedLocale); } catch (e) { }
         } catch (e) {
           console.error('[boot] i18n import/apply failed', e && e.message, e && e.sourceURL);
         }
@@ -1563,7 +1577,7 @@ function bindDarkMode() {
 
       } catch (e) {
         console.error('[main] heavy boot failed', e && e.message ? e.message : e, e && e.sourceURL, e && e.line, e && e.stack);
-        alert('Failed to load app');
+        alert(t('app_load_failed'));
       } finally {
         if (ov) ov.style.display = 'none';
         window.setupMode = false;

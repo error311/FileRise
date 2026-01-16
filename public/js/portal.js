@@ -1,9 +1,65 @@
 // public/js/portal.js
 // Standalone client portal logic – no imports from main app JS to avoid DOM coupling.
 import { patchFetchForBasePath, withBase } from './basePath.js?v={{APP_QVER}}';
+import { t, applyTranslations, setLocale } from './i18n.js?v={{APP_QVER}}';
 
 // Ensure /api/* calls work when FileRise is mounted under a subpath (e.g. /fr).
 patchFetchForBasePath();
+
+function getStoredLocale() {
+  try { return localStorage.getItem('language') || ''; } catch (e) { /* ignore */ }
+  return '';
+}
+
+function getSavedLocale() {
+  return getStoredLocale() || 'en';
+}
+
+async function resolveLocale() {
+  const stored = getStoredLocale();
+  if (stored) return stored;
+  try {
+    const res = await fetch(withBase('/api/siteConfig.php'), { credentials: 'include' });
+    const cfg = await res.json().catch(() => ({}));
+    const defaultLang = cfg && cfg.display && cfg.display.defaultLanguage
+      ? String(cfg.display.defaultLanguage)
+      : '';
+    if (defaultLang) {
+      setSavedLocale(defaultLang);
+      return defaultLang;
+    }
+  } catch (e) { /* ignore */ }
+  return 'en';
+}
+
+function setSavedLocale(locale) {
+  if (!locale) return;
+  try { localStorage.setItem('language', locale); } catch (e) { /* ignore */ }
+}
+
+async function applyLocale() {
+  const saved = await resolveLocale();
+  const applied = await setLocale(saved);
+  applyTranslations();
+  document.documentElement.lang = applied;
+}
+
+function setupLanguageSelect() {
+  const select = document.getElementById('portalLangSelect');
+  if (!select) return;
+
+  const options = Array.from(select.options).map(opt => opt.value);
+  const saved = getSavedLocale();
+  select.value = options.includes(saved) ? saved : 'en';
+
+  select.addEventListener('change', async () => {
+    const next = select.value || 'en';
+    setSavedLocale(next);
+    const applied = await setLocale(next);
+    applyTranslations();
+    document.documentElement.lang = applied;
+  });
+}
 
 let portal = null;
 let portalFormDone = false;
@@ -112,13 +168,13 @@ function applyUploadRateLimit(desiredCount) {
   }
 
   if (state.count >= maxPerDay) {
-    showToast('Daily upload limit reached for this portal.', 'warning');
+    showToast(t('portal_upload_limit_reached') || 'Daily upload limit reached for this portal.', 'warning');
     return 0;
   }
 
   const remaining = maxPerDay - state.count;
   if (desiredCount > remaining) {
-    showToast('You can only upload ' + remaining + ' more file(s) today for this portal.', 'warning');
+    showToast(t('portal_upload_limit_remaining', { count: remaining }) || ('You can only upload ' + remaining + ' more file(s) today for this portal.'), 'warning');
     return remaining;
   }
 
@@ -172,7 +228,7 @@ function showThankYouScreen() {
   if (msgEl) {
     const text =
       (portal.thankYouText && portal.thankYouText.trim()) ||
-      'Thank you. Your files have been uploaded successfully.';
+      (t('portal_thankyou_default') || 'Thank you. Your files have been uploaded successfully.');
     msgEl.textContent = text;
   }
 
@@ -207,10 +263,10 @@ function applyPortalFormLabels() {
   const required = portal.formRequired || {};
 
   const defs = [
-    { key: 'name',      forId: 'portalFormName',      defaultLabel: 'Name' },
-    { key: 'email',     forId: 'portalFormEmail',     defaultLabel: 'Email' },
-    { key: 'reference', forId: 'portalFormReference', defaultLabel: 'Reference / Case / Order #' },
-    { key: 'notes',     forId: 'portalFormNotes',     defaultLabel: 'Notes' },
+    { key: 'name',      forId: 'portalFormName',      defaultLabel: t('portal_form_label_name') || 'Name' },
+    { key: 'email',     forId: 'portalFormEmail',     defaultLabel: t('portal_form_label_email') || 'Email' },
+    { key: 'reference', forId: 'portalFormReference', defaultLabel: t('portal_form_label_reference') || 'Reference / Case / Order #' },
+    { key: 'notes',     forId: 'portalFormNotes',     defaultLabel: t('portal_form_label_notes') || 'Notes' },
   ];
 
   defs.forEach(def => {
@@ -235,7 +291,7 @@ async function submitPortalForm(slug, formData) {
   const headers = { 'X-CSRF-Token': getCsrfToken() || '' };
   const res = await sendRequest('/api/pro/portals/submitForm.php', 'POST', payload, headers);
   if (!res || !res.success) {
-    throw new Error((res && res.error) || 'Error saving form.');
+    throw new Error((res && res.error) || t('portal_form_error_save') || 'Error saving form.');
   }
 }
 
@@ -371,10 +427,10 @@ function setupPortalForm(slug) {
   };
 
   // Apply labels (fallback to defaults)
-  if (labelName)      labelName.textContent      = labels.name      || 'Name';
-  if (labelEmail)     labelEmail.textContent     = labels.email     || 'Email';
-  if (labelReference) labelReference.textContent = labels.reference || 'Reference / Case / Order #';
-  if (labelNotes)     labelNotes.textContent     = labels.notes     || 'Notes';
+  if (labelName)      labelName.textContent      = labels.name      || t('portal_form_label_name') || 'Name';
+  if (labelEmail)     labelEmail.textContent     = labels.email     || t('portal_form_label_email') || 'Email';
+  if (labelReference) labelReference.textContent = labels.reference || t('portal_form_label_reference') || 'Reference / Case / Order #';
+  if (labelNotes)     labelNotes.textContent     = labels.notes     || t('portal_form_label_notes') || 'Notes';
 
   // Helper to (re)add the required star spans
   const setStar = (labelEl, isVisible, isRequired) => {
@@ -440,13 +496,13 @@ function setupPortalForm(slug) {
     const missing = [];
 
     // Only validate visible fields
-    if (visible.name      && req.name      && !name)      missing.push(labels.name      || 'Name');
-    if (visible.email     && req.email     && !email)     missing.push(labels.email     || 'Email');
-    if (visible.reference && req.reference && !reference) missing.push(labels.reference || 'Reference');
-    if (visible.notes     && req.notes     && !notes)     missing.push(labels.notes     || 'Notes');
+    if (visible.name      && req.name      && !name)      missing.push(labels.name      || t('portal_form_label_name') || 'Name');
+    if (visible.email     && req.email     && !email)     missing.push(labels.email     || t('portal_form_label_email') || 'Email');
+    if (visible.reference && req.reference && !reference) missing.push(labels.reference || t('portal_form_label_reference') || 'Reference');
+    if (visible.notes     && req.notes     && !notes)     missing.push(labels.notes     || t('portal_form_label_notes') || 'Notes');
 
     if (missing.length) {
-      showToast('Please fill in: ' + missing.join(', ') + '.', 'warning');
+      showToast(t('portal_form_missing_fields', { fields: missing.join(', ') }) || ('Please fill in: ' + missing.join(', ') + '.'), 'warning');
       return;
     }
 
@@ -456,7 +512,7 @@ function setupPortalForm(slug) {
       const hasNameField  = visible.name;
       const hasEmailField = visible.email;
       if ((hasNameField || hasEmailField) && !name && !email) {
-        showToast('Please provide at least a name or email.', 'warning');
+        showToast(t('portal_form_require_one') || 'Please provide at least a name or email.', 'warning');
         return;
       }
     }
@@ -467,10 +523,10 @@ function setupPortalForm(slug) {
       sessionStorage.setItem(key, '1');
       if (formSection) formSection.style.display = 'none';
       if (uploadSection) uploadSection.style.opacity = '1';
-      showToast('Thank you. You can now upload files.', 'success');
+      showToast(t('portal_form_thanks_ready') || 'Thank you. You can now upload files.', 'success');
     } catch (e) {
       console.error(e);
-      showToast('Error saving your info. Please try again.', 'error');
+      showToast(t('portal_form_save_failed') || 'Error saving your info. Please try again.', 'error');
     }
   };
 }
@@ -538,18 +594,18 @@ async function ensureAuthenticated() {
 
 // ----------------- Portal fetch + render -----------------
 async function fetchPortal(slug) {
-  setStatus('Loading portal details…');
+  setStatus(t('portal_loading_details') || 'Loading portal details…');
   try {
     const data = await sendRequest('/api/pro/portals/get.php?slug=' + encodeURIComponent(slug), 'GET');
     if (!data || !data.success || !data.portal) {
-      throw new Error((data && data.error) || 'Portal not found.');
+      throw new Error((data && data.error) || t('portal_not_found') || 'Portal not found.');
     }
     portal = data.portal;
     return portal;
   } catch (e) {
     console.error(e);
-    setStatus('This portal could not be found or is no longer available.', true);
-    showToast('Portal not found or expired.', 'error');
+    setStatus(t('portal_status_not_found') || 'This portal could not be found or is no longer available.', true);
+    showToast(t('portal_toast_not_found') || 'Portal not found or expired.', 'error');
     return null;
   }
 }
@@ -570,32 +626,35 @@ function renderPortalInfo() {
 
   const heading = portal.title && portal.title.trim()
     ? portal.title.trim()
-    : (portal.label || portal.slug || 'Client portal');
+    : (portal.label || portal.slug || (t('portal_label_default') || 'Client portal'));
 
   if (titleEl)  titleEl.textContent  = heading;
   if (brandEl)  brandEl.textContent  = heading;
+  try {
+    document.title = heading;
+  } catch (e) { /* ignore */ }
 
   if (descEl) {
     if (portal.introText && portal.introText.trim()) {
       descEl.textContent = portal.introText.trim();
     } else {
       const folder = portalFolder();
-      descEl.textContent = 'Files you upload here go directly into: ' + folder;
+      descEl.textContent = t('portal_desc_uploads_to', { folder }) || ('Files you upload here go directly into: ' + folder);
     }
 
     const bits = [];
 
     if (portal.uploadMaxSizeMb) {
-      bits.push('Max file size: ' + portal.uploadMaxSizeMb + ' MB');
+      bits.push(t('portal_desc_max_file_size', { size: portal.uploadMaxSizeMb }) || ('Max file size: ' + portal.uploadMaxSizeMb + ' MB'));
     }
 
     const exts = getAllowedExts();
     if (exts.length) {
-      bits.push('Allowed types: ' + exts.join(', '));
+      bits.push(t('portal_desc_allowed_types', { types: exts.join(', ') }) || ('Allowed types: ' + exts.join(', ')));
     }
 
     if (portal.uploadMaxPerDay) {
-      bits.push('Daily upload limit: ' + portal.uploadMaxPerDay + ' file(s)');
+      bits.push(t('portal_desc_daily_limit', { count: portal.uploadMaxPerDay }) || ('Daily upload limit: ' + portal.uploadMaxPerDay + ' file(s)'));
     }
 
     if (bits.length) {
@@ -618,13 +677,13 @@ function renderPortalInfo() {
   if (subtitleEl) {
     let text = '';
     if (uploadsEnabled && downloadsEnabled) {
-      text = 'Upload & download';
+      text = t('portal_mode_upload_download') || 'Upload & download';
     } else if (uploadsEnabled && !downloadsEnabled) {
-      text = 'Upload only';
+      text = t('portal_mode_upload_only') || 'Upload only';
     } else if (!uploadsEnabled && downloadsEnabled) {
-      text = 'Download only';
+      text = t('portal_mode_download_only') || 'Download only';
     } else {
-      text = 'Access only';
+      text = t('portal_mode_access_only') || 'Access only';
     }
     subtitleEl.textContent = text;
   }
@@ -649,7 +708,7 @@ function renderPortalInfo() {
 
     const statusEl = qs('portalStatus');
     if (statusEl) {
-      statusEl.textContent = 'Uploads are disabled for this portal.';
+      statusEl.textContent = t('portal_uploads_disabled') || 'Uploads are disabled for this portal.';
       statusEl.classList.remove('text-muted');
       statusEl.classList.add('text-warning');
     }
@@ -690,11 +749,12 @@ function formatFileSizeLabel(f) {
 }
 
 function fileExtLabel(name) {
-  if (!name) return 'FILE';
+  const fallback = t('portal_file_badge') || 'FILE';
+  if (!name) return fallback;
   const parts = name.split('.');
-  if (parts.length < 2) return 'FILE';
+  if (parts.length < 2) return fallback;
   const ext = parts.pop().trim().toUpperCase();
-  if (!ext) return 'FILE';
+  if (!ext) return fallback;
   return ext.length <= 4 ? ext : ext.slice(0, 4);
 }
 
@@ -710,7 +770,7 @@ async function loadPortalFiles() {
   const listEl = qs('portalFilesList');
   if (!listEl) return;
 
-  listEl.innerHTML = '<div class="text-muted" style="padding:4px 0;">Loading files…</div>';
+  listEl.innerHTML = '<div class="text-muted" style="padding:4px 0;">' + (t('portal_files_loading') || 'Loading files…') + '</div>';
 
   try {
     const folder = portalFolder();
@@ -718,7 +778,7 @@ async function loadPortalFiles() {
     const sourceParam = sourceId ? '&sourceId=' + encodeURIComponent(sourceId) : '';
     const data = await sendRequest('/api/file/getFileList.php?folder=' + encodeURIComponent(folder) + sourceParam, 'GET');
     if (!data || data.error) {
-      const msg = (data && data.error) ? data.error : 'Error loading files.';
+      const msg = (data && data.error) ? data.error : (t('portal_files_error') || 'Error loading files.');
       listEl.innerHTML = '<div class="text-danger" style="padding:4px 0;">' + msg + '</div>';
       return;
     }
@@ -736,7 +796,7 @@ async function loadPortalFiles() {
     }
 
     if (!files.length) {
-      listEl.innerHTML = '<div class="text-muted" style="padding:4px 0;">No files in this portal yet.</div>';
+      listEl.innerHTML = '<div class="text-muted" style="padding:4px 0;">' + (t('portal_files_empty') || 'No files in this portal yet.') + '</div>';
       return;
     }
 
@@ -761,7 +821,7 @@ async function loadPortalFiles() {
 
       const nameEl = document.createElement('div');
       nameEl.className = 'portal-file-card-name';
-      nameEl.textContent = f.name || 'Unnamed file';
+      nameEl.textContent = f.name || (t('portal_file_unnamed') || 'Unnamed file');
 
       const metaEl = document.createElement('div');
       metaEl.className = 'portal-file-card-meta text-muted';
@@ -817,7 +877,7 @@ async function loadPortalFiles() {
           (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
           sourceParam
         );
-        a.textContent = 'Download';
+        a.textContent = t('download') || 'Download';
         a.className = 'portal-file-card-download';
         a.target = '_blank';
         a.rel = 'noopener';
@@ -834,12 +894,12 @@ async function loadPortalFiles() {
     if (files.length > MAX) {
       const more = document.createElement('div');
       more.className = 'portal-files-more text-muted';
-      more.textContent = 'And ' + (files.length - MAX) + ' more…';
+      more.textContent = t('portal_files_more', { count: files.length - MAX }) || ('And ' + (files.length - MAX) + ' more…');
       listEl.appendChild(more);
     }
   } catch (e) {
     console.error(e);
-    listEl.innerHTML = '<div class="text-danger" style="padding:4px 0;">Error loading files.</div>';
+    listEl.innerHTML = '<div class="text-danger" style="padding:4px 0;">' + (t('portal_files_error') || 'Error loading files.') + '</div>';
   }
 }
 
@@ -848,13 +908,13 @@ async function uploadFiles(fileList) {
   if (!portal || !fileList || !fileList.length) return;
 
   if (!portalCanUpload()) {
-    showToast('Uploads are disabled for this portal.', 'warning');
-    setStatus('Uploads are disabled for this portal.', true);
+    showToast(t('portal_uploads_disabled') || 'Uploads are disabled for this portal.', 'warning');
+    setStatus(t('portal_uploads_disabled') || 'Uploads are disabled for this portal.', true);
     return;
   }
 
   if (portal.requireForm && !portalFormDone) {
-    showToast('Please fill in your details before uploading.', 'warning');
+    showToast(t('portal_upload_form_required') || 'Please fill in your details before uploading.', 'warning');
     return;
   }
 
@@ -867,18 +927,15 @@ async function uploadFiles(fileList) {
     const tooBigNames = [];
     files = files.filter(f => {
       if (f.size && f.size > maxBytes) {
-        tooBigNames.push(f.name || 'unnamed');
+        tooBigNames.push(f.name || (t('portal_file_unnamed') || 'unnamed'));
         return false;
       }
       return true;
     });
     if (tooBigNames.length) {
       showToast(
-        'Skipped ' +
-          tooBigNames.length +
-          ' file(s) over ' +
-          portal.uploadMaxSizeMb +
-          ' MB.',
+        t('portal_upload_skipped_size', { count: tooBigNames.length, size: portal.uploadMaxSizeMb }) ||
+          ('Skipped ' + tooBigNames.length + ' file(s) over ' + portal.uploadMaxSizeMb + ' MB.'),
         'warning'
       );
     }
@@ -893,24 +950,22 @@ async function uploadFiles(fileList) {
       const parts = name.split('.');
       const ext = parts.length > 1 ? parts.pop().trim().toLowerCase() : '';
       if (!ext || !allowedExts.includes(ext)) {
-        skipped.push(name || 'unnamed');
+        skipped.push(name || (t('portal_file_unnamed') || 'unnamed'));
         return false;
       }
       return true;
     });
     if (skipped.length) {
       showToast(
-        'Skipped ' +
-          skipped.length +
-          ' file(s) not matching allowed types: ' +
-          allowedExts.join(', '),
+        t('portal_upload_skipped_types', { count: skipped.length, types: allowedExts.join(', ') }) ||
+          ('Skipped ' + skipped.length + ' file(s) not matching allowed types: ' + allowedExts.join(', ')),
         'warning'
       );
     }
   }
 
   if (!files.length) {
-    setStatus('No files to upload after applying portal rules.', true);
+    setStatus(t('portal_upload_none_after_rules') || 'No files to upload after applying portal rules.', true);
     return;
   }
 
@@ -918,7 +973,7 @@ async function uploadFiles(fileList) {
   const requestedCount = files.length;
   const allowedCount = applyUploadRateLimit(requestedCount);
   if (!allowedCount) {
-    setStatus('Upload blocked by daily limit.', true);
+    setStatus(t('portal_upload_blocked') || 'Upload blocked by daily limit.', true);
     return;
   }
   if (allowedCount < requestedCount) {
@@ -929,7 +984,7 @@ async function uploadFiles(fileList) {
   const portalSlug = getPortalSlug();
   const sourceId = portalSourceId();
 
-  setStatus('Uploading ' + files.length + ' file(s)…');
+  setStatus(t('portal_uploading', { count: files.length }) || ('Uploading ' + files.length + ' file(s)…'));
   let successCount = 0;
   let failureCount = 0;
 
@@ -997,14 +1052,14 @@ async function uploadFiles(fileList) {
   }
 
   if (successCount && !failureCount) {
-    setStatus('Uploaded ' + successCount + ' file(s).');
-    showToast('Upload complete.', 'success');
+    setStatus(t('portal_upload_success', { count: successCount }) || ('Uploaded ' + successCount + ' file(s).'));
+    showToast(t('portal_upload_complete') || 'Upload complete.', 'success');
   } else if (successCount && failureCount) {
-    setStatus('Uploaded ' + successCount + ' file(s), ' + failureCount + ' failed.', true);
-    showToast('Some files failed to upload.', 'warning');
+    setStatus(t('portal_upload_partial', { count: successCount, failed: failureCount }) || ('Uploaded ' + successCount + ' file(s), ' + failureCount + ' failed.'), true);
+    showToast(t('portal_upload_some_failed') || 'Some files failed to upload.', 'warning');
   } else {
-    setStatus('Upload failed.', true);
-    showToast('Upload failed.', 'error');
+    setStatus(t('portal_upload_failed') || 'Upload failed.', true);
+    showToast(t('portal_upload_failed') || 'Upload failed.', 'error');
   }
 
   // Bump local daily counter by successful uploads
@@ -1138,8 +1193,8 @@ function getPortalSlugFromUrl() {
 async function initPortal() {
   const slug = getPortalSlugFromUrl();
   if (!slug) {
-    setStatus('Missing portal slug.', true);
-    showToast('Portal slug missing in URL.', 'error');
+    setStatus(t('portal_missing_slug') || 'Missing portal slug.', true);
+    showToast(t('portal_slug_missing_url') || 'Portal slug missing in URL.', 'error');
     return;
   }
 
@@ -1163,13 +1218,15 @@ async function initPortal() {
     loadPortalFiles();
   }
 
-  setStatus('Ready.');
+  setStatus(t('portal_ready') || 'Ready.');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await applyLocale();
+  setupLanguageSelect();
   initPortal().catch(err => {
     console.error(err);
-    setStatus('Unexpected error initializing portal.', true);
-    showToast('Unexpected error loading portal.', 'error');
+    setStatus(t('portal_init_error') || 'Unexpected error initializing portal.', true);
+    showToast(t('portal_load_error') || 'Unexpected error loading portal.', 'error');
   });
 });

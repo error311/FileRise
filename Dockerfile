@@ -32,21 +32,29 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PERSISTENT_TOKENS_KEY=default_please_change_this_key \
     PUID=99 PGID=100
 
+ARG INSTALL_FFMPEG=0
+ARG INSTALL_CLAMAV=1
+ARG INSTALL_7ZIP=1
+ARG INSTALL_UNAR=1
+ARG INSTALL_SMBCLIENT=1
+
 # Install Apache, PHP, and required extensions
 RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
         sed -i 's/^Components: .*/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources; \
     fi && \
     apt-get update && \
-    apt-get upgrade -y && \
+    set -eux; \
+    extra_pkgs=""; \
+    if [ "${INSTALL_FFMPEG}" = "1" ]; then extra_pkgs="${extra_pkgs} ffmpeg"; fi; \
+    if [ "${INSTALL_CLAMAV}" = "1" ]; then extra_pkgs="${extra_pkgs} clamav clamav-freshclam"; fi; \
+    if [ "${INSTALL_7ZIP}" = "1" ]; then extra_pkgs="${extra_pkgs} 7zip"; fi; \
+    if [ "${INSTALL_UNAR}" = "1" ]; then extra_pkgs="${extra_pkgs} unar"; fi; \
+    if [ "${INSTALL_SMBCLIENT}" = "1" ]; then extra_pkgs="${extra_pkgs} smbclient"; fi; \
     apt-get install -y --no-install-recommends \
       apache2 \
       php php-json php-curl php-zip php-mbstring php-gd php-xml \
-      ffmpeg \
-      ca-certificates curl git openssl \
-      smbclient \
-      7zip \
-      unar \
-      clamav clamav-freshclam \
+      ca-certificates curl openssl \
+      ${extra_pkgs} \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Remap www-data to the PUID/PGID provided for safe bind mounts

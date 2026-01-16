@@ -424,18 +424,18 @@ function attachOnlyOfficeCspHelper(container) {
     const txt = (cspPre.textContent || '').trim();
     const ok = await copyToClipboard(txt);
     if (ok) {
-      showToast('CSP line copied.');
+      showToast(t('admin_onlyoffice_csp_copied'));
     } else {
       try { selectElementContents(cspPre); } catch (e) { /* ignore */ }
-      const reason = window.isSecureContext ? '' : ' (page is not HTTPS or localhost)';
-      showToast('Copy failed' + reason + '. Press Ctrl/Cmd+C to copy.');
+      const reason = window.isSecureContext ? '' : t('admin_onlyoffice_copy_failed_reason_insecure');
+      showToast(t('admin_onlyoffice_copy_failed', { reason }));
     }
   });
 
   document.getElementById('selectOoCsp')?.addEventListener('click', () => {
     try {
       selectElementContents(cspPre);
-      showToast('Selected — press Ctrl/Cmd+C');
+      showToast(t('admin_onlyoffice_select_prompt'));
     } catch (e) {
       /* ignore */
     }

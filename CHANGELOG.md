@@ -1,5 +1,66 @@
 # Changelog
 
+## Changes 01/16/2026 (v3.1.0)
+
+`release(v3.1.0): default language + portal i18n + ffmpeg path config (closes #88, closes #89)`
+
+**Commit message**  
+
+```text
+release(v3.1.0): default language + portal i18n + ffmpeg path config (closes #88, closes #89)
+
+- Admin: add “Default language” setting (used when a user has not chosen a language yet)
+- Admin: add optional FFmpeg binary path setting (env FR_FFMPEG_PATH overrides / locks)
+- Thumbnails: resolve ffmpeg path from env first, then admin config, then PATH
+- Portals: add language selector + apply defaultLanguage from siteConfig on first run
+- Portals: fix button styling (accent-aware) + refresh button color (fixes #88)
+- i18n: split locales into separate files and add Polish/Russian/Japanese; refresh German strings (fixes #89)
+- UI: replace hardcoded upload/login alerts/toasts with i18n keys for better translation coverage
+
+Closes #88
+Closes #89
+```
+
+**Added**  
+
+- **Admin setting: Default language**
+  - New `display.defaultLanguage` config surfaced in Admin → Header/File List/Language section.
+  - Used automatically when a user has not chosen a language yet.
+- **Admin setting: FFmpeg binary path (optional)**
+  - New `ffmpegPath` config for video thumbnail generation.
+  - `FR_FFMPEG_PATH` remains the source of truth when set (admin field becomes read-only).
+- **New locales shipped**
+  - **Polish (pl)**, **Russian (ru)**, **Japanese (ja)**, plus **Simplified Chinese (zh-CN)** locale file.
+- **Portal language selector**
+  - Added a language dropdown to both **portal.html** and **portal-login.html**.
+
+**Changed**  
+
+- **FFmpeg resolution order for thumbnails**
+  - `FR_FFMPEG_PATH` → admin `ffmpegPath` → fallback to `ffmpeg` from PATH (and standard locations).
+  - This keeps the Docker image lean while still supporting thumbnails when ffmpeg exists on the host/container.
+- **Portals now inherit default language**
+  - If `localStorage.language` is missing, portals fetch `/api/siteConfig.php` and apply `display.defaultLanguage`.
+- **Translations architecture**
+  - Locales are now maintained in dedicated files under `public/js/i18n/locales/` lazy load instead of a giant embedded map.
+  - Added missing i18n keys for upload flows and admin/pro toasts to reduce English-only strings.
+
+**Fixed**  
+
+- **Portal button styling / colors** (fixes #88)
+  - Portal buttons now use accent-aware classes (`portal-btn-primary` / `portal-btn-outline`) and render correctly across themes.
+- **German translation gaps** (fixes #89)
+  - German strings were refreshed and missing UI keys were added/normalized.
+- **More consistent i18n coverage**
+  - Upload-related toasts and some boot/login alerts now use translation keys instead of hardcoded English.
+
+**Notes**  
+
+- There are still parts of the Admin Panel and some edge UI strings that may fall back to English. This release fixes the reported German issues and adds new locales, but translation coverage will continue to improve over time.
+- If you want video thumbnails in Docker without bundling ffmpeg, mount a host ffmpeg binary or install it in your own derived image and set `FR_FFMPEG_PATH` (or set the path in Admin).
+
+---
+
 ## Changes 01/15/2026 (v3.0.2)
 
 `release(v3.0.2): ffmpeg-backed video thumbnails (Docker) + new thumbnail API (closes #79)`

@@ -191,7 +191,7 @@ async function downloadVirusLogCsv() {
     if (emptyEl) {
       emptyEl.textContent = 'Failed to download CSV.';
     }
-    showToast('Failed to download CSV.', 'error');
+    showToast(t('admin_csv_download_failed'), 'error');
   }
 }
 
@@ -528,7 +528,7 @@ function wireOidcTestButton(scope = document) {
         const msg = (data && (data.error || data.message)) || 'OIDC test failed.';
         statusEl.textContent = msg;
         statusEl.className = 'small text-danger';
-        showToast('OIDC test failed: ' + msg, 'error');
+        showToast(t('admin_oidc_test_failed_detail', { error: msg }), 'error');
         return;
       }
 
@@ -546,7 +546,7 @@ function wireOidcTestButton(scope = document) {
 
       statusEl.textContent = summary;
       statusEl.className = 'small text-success';
-      showToast('OIDC discovery is reachable.');
+      showToast(t('admin_oidc_discovery_reachable'));
 
       if (Array.isArray(data.warnings) && data.warnings.length) {
         console.warn('OIDC test warnings:', data.warnings);
@@ -555,7 +555,7 @@ function wireOidcTestButton(scope = document) {
       console.error('OIDC test error', e);
       statusEl.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
       statusEl.className = 'small text-danger';
-      showToast('OIDC test failed – see console.', 'error');
+      showToast(t('admin_oidc_test_failed_console'), 'error');
     }
   });
 }
@@ -607,13 +607,13 @@ function wireClamavTestButton(scope = document) {
 
       statusEl.textContent = parts.join(' • ');
       statusEl.className = 'small text-success';
-      showToast('ClamAV self-test succeeded.');
+      showToast(t('admin_clamav_selftest_ok'));
     } catch (e) {
       console.error('ClamAV test error', e);
       statusEl.textContent =
         'ClamAV test error: ' + (e && e.message ? e.message : String(e));
       statusEl.className = 'small text-danger';
-      showToast('ClamAV test failed – see console.', 'error');
+      showToast(t('admin_clamav_test_failed_console'), 'error');
     }
   });
 }
@@ -754,12 +754,12 @@ function renderAdminEncryptionSection({ config, dark }) {
         if (!res.ok && res.status === 409) {
           const errCode = res.body?.error || '';
           if (errCode === 'locked_by_env') {
-            showToast(res.body?.message || 'Key file is locked by env override.', 'error');
+            showToast(res.body?.message || t('admin_key_file_locked_env'), 'error');
             clearBtn.disabled = lockedByEnv;
             return;
           }
           if (errCode === 'not_supported') {
-            showToast(res.body?.message || 'Encryption at rest is not supported on this server.', 'error');
+            showToast(res.body?.message || t('admin_encryption_not_supported'), 'error');
             clearBtn.disabled = lockedByEnv;
             return;
           }
@@ -1964,7 +1964,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
       const readOnly = !!sourceReadOnlyEl?.checked;
 
       if (!id || !name || !type) {
-        showToast('Source ID, name, and type are required.', 'error');
+        showToast(t('admin_source_required_fields'), 'error');
         return;
       }
 
@@ -1977,7 +1977,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         } else if (type === 's3') {
         const bucket = (s3BucketEl?.value || '').trim();
         if (!bucket) {
-          showToast('S3 bucket is required.', 'error');
+          showToast(t('admin_source_s3_bucket_required'), 'error');
           return;
         }
         config.bucket = bucket;
@@ -2001,11 +2001,11 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         const privateKey = (sftpPrivateKeyEl?.value || '').trim();
         const privateKeyPassphrase = (sftpPrivateKeyPassEl?.value || '').trim();
         if (!host || !username) {
-          showToast('SFTP host and username are required.', 'error');
+          showToast(t('admin_source_sftp_host_required'), 'error');
           return;
         }
         if (!password && !privateKey && !editingId) {
-          showToast('SFTP requires a password or private key.', 'error');
+          showToast(t('admin_source_sftp_auth_required'), 'error');
           return;
         }
         config.host = host;
@@ -2024,7 +2024,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         const username = (ftpUsernameEl?.value || '').trim();
         const password = (ftpPasswordEl?.value || '').trim();
         if (!host || !username) {
-          showToast('FTP host and username are required.', 'error');
+          showToast(t('admin_source_ftp_host_required'), 'error');
           return;
         }
         config.host = host;
@@ -2045,11 +2045,11 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         const root = (webdavRootEl?.value || '').trim();
         const verifyTls = (webdavVerifyTlsEl?.checked !== false);
         if (!baseUrl || !username) {
-          showToast('WebDAV base URL and username are required.', 'error');
+          showToast(t('admin_source_webdav_base_required'), 'error');
           return;
         }
         if (!password && !editingId) {
-          showToast('WebDAV password is required.', 'error');
+          showToast(t('admin_source_webdav_password_required'), 'error');
           return;
         }
         config.baseUrl = baseUrl;
@@ -2066,11 +2066,11 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         const version = (smbVersionEl?.value || '').trim();
         const root = (smbRootEl?.value || '').trim();
         if (!host || !share || !username) {
-          showToast('SMB host, share, and username are required.', 'error');
+          showToast(t('admin_source_smb_host_required'), 'error');
           return;
         }
         if (!password && !editingId) {
-          showToast('SMB password is required.', 'error');
+          showToast(t('admin_source_smb_password_required'), 'error');
           return;
         }
         config.host = host;
@@ -2087,11 +2087,11 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         const rootId = (gdriveRootIdEl?.value || '').trim();
         const driveId = (gdriveDriveIdEl?.value || '').trim();
         if (!clientId) {
-          showToast('Google client ID is required.', 'error');
+          showToast(t('admin_source_gdrive_client_required'), 'error');
           return;
         }
         if ((!clientSecret || !refreshToken) && !editingId) {
-          showToast('Google Drive requires a client secret and refresh token.', 'error');
+          showToast(t('admin_source_gdrive_secret_required'), 'error');
           return;
         }
         config.clientId = clientId;
@@ -2147,8 +2147,8 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
           } else {
             const errMsg = data.autoTestError || tf('source_test_error', 'Test failed');
             setTestStatus(id, { state: 'error', message: errMsg });
-            const disabledNote = data.autoDisabled ? ' Source left disabled.' : '';
-            showToast(`Source test failed: ${errMsg}.${disabledNote}`, 5000);
+            const disabledNote = data.autoDisabled ? t('admin_source_test_left_disabled_note') : '';
+            showToast(t('admin_source_test_failed_detail', { error: errMsg, note: disabledNote }), 5000);
           }
         } else if (enabled) {
           const testOk = await runSourceTest({ id });
@@ -2169,10 +2169,10 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
               if (!disableData || disableData.ok !== true) {
                 throw new Error(disableData?.error || 'Failed to disable source after test failure.');
               }
-              showToast('Source test failed. Source left disabled.', 'error');
+              showToast(t('admin_source_test_failed_left_disabled'), 'error');
               await loadSources();
             } catch (disableErr) {
-              showToast(disableErr?.message || 'Source test failed and could not disable source.', 'error');
+              showToast(disableErr?.message || t('admin_source_test_failed_disable_error'), 'error');
             }
           }
         } else {
@@ -2263,7 +2263,7 @@ function wireOidcDebugSnapshotButton(scope = document) {
       });
 
       if (!data || data.success !== true) {
-        const msg = (data && (data.error || data.message)) || 'Failed to load OIDC snapshot.';
+        const msg = (data && (data.error || data.message)) || t('admin_oidc_snapshot_failed');
         box.textContent = msg;
         showToast(msg, 'error');
         return;
@@ -2273,7 +2273,7 @@ function wireOidcDebugSnapshotButton(scope = document) {
     } catch (e) {
       console.error('oidcDebugInfo error', e);
       box.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
-      showToast('Failed to load OIDC snapshot – see console.', 'error');
+      showToast(t('admin_oidc_snapshot_failed'), 'error');
     }
   });
 }
@@ -2322,8 +2322,10 @@ function captureInitialAdminConfig() {
     brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
     brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
     brandingFooterHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
+    defaultLanguage: (document.getElementById("defaultLanguage")?.value || "").trim(),
     hoverPreviewMaxImageMb: (document.getElementById("hoverPreviewMaxImageMb")?.value || "").trim(),
     hoverPreviewMaxVideoMb: (document.getElementById("hoverPreviewMaxVideoMb")?.value || "").trim(),
+    ffmpegPath: (document.getElementById("ffmpegPath")?.value || "").trim(),
     fileListSummaryDepth: (document.getElementById("fileListSummaryDepth")?.value || "").trim(),
 
     clamavScanUploads: !!document.getElementById("clamavScanUploads")?.checked,
@@ -2364,8 +2366,10 @@ function hasUnsavedChanges() {
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
     getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
     getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "") ||
+    getVal("defaultLanguage") !== (o.defaultLanguage || "") ||
     getVal("hoverPreviewMaxImageMb") !== (o.hoverPreviewMaxImageMb || "") ||
     getVal("hoverPreviewMaxVideoMb") !== (o.hoverPreviewMaxVideoMb || "") ||
+    getVal("ffmpegPath") !== (o.ffmpegPath || "") ||
     getVal("fileListSummaryDepth") !== (o.fileListSummaryDepth || "") ||
     getChk("clamavScanUploads") !== o.clamavScanUploads ||
     getChk("proSearchEnabled") !== o.proSearchEnabled ||
@@ -3507,7 +3511,7 @@ function loadShareLinksSection() {
               if (!res.ok) {
                 if (res.status === 403) {
                   // Optional: nicer message when CSRF/session is bad
-                  showToast("Forbidden while deleting share (check CSRF/session).", "error");
+                  showToast(t('admin_share_delete_forbidden'), 'error');
                 }
                 return Promise.reject(res);
               }
@@ -3623,6 +3627,30 @@ export function openAdminPanel() {
       const brandingHeaderBgDark = brandingCfg.headerBgDark || "";
       const brandingFooterHtml = brandingCfg.footerHtml || "";
       const displayCfg = (config.display && typeof config.display === 'object') ? config.display : {};
+      const ffmpegPathCfg = (typeof config.ffmpegPath === 'string') ? config.ffmpegPath : '';
+      const ffmpegPathEffective = (typeof config.ffmpegPathEffective === 'string') ? config.ffmpegPathEffective : '';
+      const ffmpegPathLockedByEnv = !!config.ffmpegPathLockedByEnv;
+      const ffmpegPathValue = ffmpegPathLockedByEnv ? ffmpegPathEffective : ffmpegPathCfg;
+      const ffmpegHelpDefault = 'Used for video thumbnail generation. Leave blank to use ffmpeg from PATH.';
+      const ffmpegHelpLocked = 'Controlled by container env FR_FFMPEG_PATH. Change it in your Docker/host env.';
+      const supportedLanguages = [
+        { code: 'en',    labelKey: 'english',             fallback: 'English' },
+        { code: 'es',    labelKey: 'spanish',             fallback: 'Español' },
+        { code: 'fr',    labelKey: 'french',              fallback: 'Français' },
+        { code: 'de',    labelKey: 'german',              fallback: 'Deutsch' },
+        { code: 'pl',    labelKey: 'polish',              fallback: 'Polski' },
+        { code: 'ru',    labelKey: 'russian',             fallback: 'Русский' },
+        { code: 'ja',    labelKey: 'japanese',            fallback: '日本語' },
+        { code: 'zh-CN', labelKey: 'chinese_simplified',  fallback: '简体中文' },
+      ];
+      const defaultLanguage = supportedLanguages.some(lang => lang.code === displayCfg.defaultLanguage)
+        ? displayCfg.defaultLanguage
+        : 'en';
+      const defaultLanguageOptions = supportedLanguages.map(({ code, labelKey, fallback }) => {
+        const label = ((typeof t === 'function' ? t(labelKey) : '') || fallback).replace(/\"/g, '&quot;');
+        const selected = code === defaultLanguage ? ' selected' : '';
+        return `<option value="${code}" data-i18n-key="${labelKey}"${selected}>${label}</option>`;
+      }).join('');
       const hoverPreviewMaxImageMb = Math.max(
         1,
         Math.min(50, parseInt(displayCfg.hoverPreviewMaxImageMb || 8, 10) || 8)
@@ -3665,7 +3693,7 @@ export function openAdminPanel() {
             ${(() => {
               const sections = [
                 { id: "userManagement", label: t("user_management") },
-                { id: "headerSettings", label: tf("header_footer_settings", "Header, File List & Footer settings") },
+                { id: "headerSettings", label: tf("header_footer_settings", "Header, FileList, Language & Footer Settings") },
                 { id: "loginOptions", label: t("login_webdav") + " (OIDC/TOTP)" },
                 { id: "network", label: tf("firewall_proxy_settings", "Firewall and Proxy Settings") },
                 { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
@@ -3804,7 +3832,7 @@ export function openAdminPanel() {
         if (groupsBtn) {
           groupsBtn.addEventListener("click", () => {
             if (!isPro) {
-              showToast("User Groups are a FileRise Pro feature. Visit filerise.net to purchase a license.");
+              showToast(t('admin_pro_feature_user_groups'));
               window.open("https://filerise.net", "_blank", "noopener");
               return;
             }
@@ -3816,7 +3844,7 @@ export function openAdminPanel() {
         if (clientBtn) {
           clientBtn.addEventListener("click", () => {
             if (!isPro) {
-              showToast("Client Portals are a FileRise Pro feature. Visit filerise.net to purchase a license.");
+              showToast(t('admin_pro_feature_portals'));
               window.open("https://filerise.net", "_blank", "noopener");
               return;
             }
@@ -3830,6 +3858,20 @@ export function openAdminPanel() {
       ${t("header_title_text")}
   </div>
     <input type="text" id="headerTitle" class="form-control" value="${window.headerTitle || ""}" />
+  </div>
+
+  <div class="form-group" style="margin-top:16px;">
+    <label for="defaultLanguage">
+      <div class="admin-subsection-title" style="margin-top:2px;">
+        ${tf("default_language", "Default language")}
+      </div>
+    </label>
+    <small class="text-muted d-block mb-1">
+      ${tf("default_language_help", "Used when a user has not chosen a language yet.")}
+    </small>
+    <select id="defaultLanguage" class="form-control">
+      ${defaultLanguageOptions}
+    </select>
   </div>
 
     <hr class="admin-divider">
@@ -3958,6 +4000,26 @@ export function openAdminPanel() {
     />
   </div>
 
+  <!-- Display: FFmpeg path -->
+  <div class="form-group" style="margin-top:16px;">
+    <label for="ffmpegPath">
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      FFmpeg binary path (optional)
+  </div>
+    </label>
+    <small id="ffmpegPathHelp" class="text-muted d-block mb-1">
+      ${ffmpegPathLockedByEnv ? ffmpegHelpLocked : ffmpegHelpDefault}
+    </small>
+    <input
+      type="text"
+      id="ffmpegPath"
+      class="form-control"
+      placeholder="/usr/local/bin/ffmpeg"
+      value="${(ffmpegPathValue || '').replace(/\"/g, '&quot;')}"
+      ${ffmpegPathLockedByEnv ? "disabled data-locked='1'" : ""}
+    />
+  </div>
+
   <!-- Display: File list summary depth -->
   <div class="form-group" style="margin-top:16px;">
     <label for="fileListSummaryDepth">
@@ -4014,7 +4076,7 @@ export function openAdminPanel() {
             uploadBtn.addEventListener('click', async () => {
               const f = fileInput.files && fileInput.files[0];
               if (!f) {
-                showToast('Please choose an image first.');
+                showToast(t('admin_logo_choose_image'));
                 return;
               }
 
@@ -4034,16 +4096,16 @@ export function openAdminPanel() {
                 try { js = JSON.parse(text || '{}'); } catch (e) { js = {}; }
 
                 if (!res.ok || !js.url) {
-                  showToast(js.error || 'Error uploading logo');
+                  showToast(js.error || t('admin_logo_upload_error'));
                   return;
                 }
 
                 const normalized = normalizeLogoPath(js.url); // your helper
                 urlInput.value = normalized;
-                showToast('Logo uploaded. Don\'t forget to Save settings.');
+                showToast(t('admin_logo_uploaded_reminder'));
               } catch (e) {
                 console.error(e);
-                showToast('Error uploading logo');
+                showToast(t('admin_logo_upload_error'));
               }
             });
           }
@@ -4878,16 +4940,16 @@ ${t("shared_max_upload_size_bytes")}
                 }
 
                 if (!license || !license.startsWith('FRP1.')) {
-                  showToast('Could not find a valid FRP1 license in that file.');
+                  showToast(t('admin_license_file_invalid'));
                   return;
                 }
 
                 licenseTextarea.value = license;
-                showToast('License loaded from file. Click "Save license" to apply.');
+                showToast(t('admin_license_loaded_prompt'));
               };
 
               reader.onerror = () => {
-                showToast('Error reading license file.');
+                showToast(t('admin_license_read_error'));
               };
 
               reader.readAsText(file);
@@ -4911,9 +4973,9 @@ ${t("shared_max_upload_size_bytes")}
                   document.execCommand('copy');
                   ta.remove();
                 }
-                showToast('License copied to clipboard.');
+                showToast(t('admin_license_copied'));
               } catch (e) {
-                showToast('Could not copy license. Please copy it manually.');
+                showToast(t('admin_license_copy_failed'));
               }
             });
           }
@@ -4934,9 +4996,9 @@ ${t("shared_max_upload_size_bytes")}
                   document.execCommand('copy');
                   ta.remove();
                 }
-                showToast('Instance ID copied to clipboard.');
+                showToast(t('admin_instance_id_copied'));
               } catch (e) {
-                showToast('Could not copy Instance ID. Please copy it manually.');
+                showToast(t('admin_instance_id_copy_failed'));
               }
             });
           }
@@ -4972,11 +5034,11 @@ ${t("shared_max_upload_size_bytes")}
 
                 if (!res.ok || !data.success) {
                   console.error('setLicense error:', res.status, text);
-                  showToast(data.error || 'Error saving license');
+                  showToast(data.error || t('admin_license_save_error'));
                   return;
                 }
 
-                showToast('License saved.');
+                showToast(t('admin_license_saved'));
 
                 if (!isPro) {
                   const ok = await showCustomConfirmModal(
@@ -5005,14 +5067,14 @@ ${t("shared_max_upload_size_bytes")}
                           ? (dlData.error || dlData.message)
                           : `HTTP ${resp.status}`;
                         setStatus('Download/install failed: ' + msg, 'danger');
-                        showToast('Download/install failed: ' + msg, 'error');
+                        showToast(t('admin_pro_install_failed_detail', { error: msg }), 'error');
                         return;
                       }
 
                       const finalVersion = dlData.proVersion ? String(dlData.proVersion) : '';
-                      const versionText = finalVersion ? ` (version ${finalVersion})` : '';
+                      const versionText = finalVersion ? ` (${finalVersion})` : '';
                       setStatus('Pro bundle installed' + versionText + '. Reloading...', 'success');
-                      showToast('Pro bundle installed' + versionText + '. Reloading...');
+                      showToast(t('admin_pro_installed_reloading', { version: versionText }));
                       if (typeof loadAdminConfigFunc === 'function') {
                         loadAdminConfigFunc();
                       }
@@ -5022,7 +5084,7 @@ ${t("shared_max_upload_size_bytes")}
                       return;
                     } catch (e) {
                       setStatus('Download/install failed.', 'danger');
-                      showToast('Download/install failed.', 'error');
+                      showToast(t('admin_pro_install_failed'), 'error');
                       return;
                     }
                   }
@@ -5031,7 +5093,7 @@ ${t("shared_max_upload_size_bytes")}
                 window.location.reload();
               } catch (e) {
                 console.error(e);
-                showToast('Error saving license');
+                showToast(t('admin_license_save_error'));
               } finally {
                 proSaveBtn.disabled = false;
               }
@@ -5371,7 +5433,7 @@ ${t("shared_max_upload_size_bytes")}
             exportBtn.__wired = true;
             exportBtn.addEventListener('click', () => {
               if (!isPro || !proAuditAvailable) {
-                showToast('Audit Logs are not available.');
+                showToast(t('admin_audit_logs_unavailable'));
                 return;
               }
               const params = auditFilters();
@@ -5494,6 +5556,21 @@ ${t("shared_max_upload_size_bytes")}
             pubEl.dataset.locked = "0";
           }
         }
+        // FFmpeg path (optional)
+        const ffmpegEl = document.getElementById("ffmpegPath");
+        if (ffmpegEl) {
+          const locked = !!config.ffmpegPathLockedByEnv;
+          const val = locked
+            ? (config.ffmpegPathEffective || config.ffmpegPath || "")
+            : (config.ffmpegPath || "");
+          ffmpegEl.value = (val || "").toString();
+          ffmpegEl.disabled = locked;
+          ffmpegEl.dataset.locked = locked ? "1" : "0";
+          const help = document.getElementById("ffmpegPathHelp");
+          if (help) {
+            help.textContent = locked ? ffmpegHelpLocked : ffmpegHelpDefault;
+          }
+        }
         // --- ClamAV toggle wiring ---
         const cfgClam = config.clamav || {};
         const clamChk = document.getElementById("clamavScanUploads");
@@ -5556,6 +5633,21 @@ ${t("shared_max_upload_size_bytes")}
           } else {
             pubEl2.disabled = false;
             pubEl2.dataset.locked = "0";
+          }
+        }
+        // FFmpeg path (optional)
+        const ffmpegEl2 = document.getElementById("ffmpegPath");
+        if (ffmpegEl2) {
+          const locked = !!config.ffmpegPathLockedByEnv;
+          const val = locked
+            ? (config.ffmpegPathEffective || config.ffmpegPath || "")
+            : (config.ffmpegPath || "");
+          ffmpegEl2.value = (val || "").toString();
+          ffmpegEl2.disabled = locked;
+          ffmpegEl2.dataset.locked = locked ? "1" : "0";
+          const help = document.getElementById("ffmpegPathHelp");
+          if (help) {
+            help.textContent = locked ? ffmpegHelpLocked : ffmpegHelpDefault;
           }
         }
         // --- ClamAV toggle wiring (refresh) ---
@@ -5694,6 +5786,12 @@ function handleSave() {
       if (el.dataset.locked === "1") return el.value || "";
       return (el.value || "").trim();
     })(),
+    ffmpegPath: (() => {
+      const el = document.getElementById("ffmpegPath");
+      if (!el) return "";
+      if (el.dataset.locked === "1") return el.value || "";
+      return (el.value || "").trim();
+    })(),
     loginOptions: {
       // Backend still expects “disable*” flags:
       disableFormLogin: !enableFormLogin,
@@ -5727,6 +5825,7 @@ function handleSave() {
       footerHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     },
     display: {
+      defaultLanguage: (document.getElementById("defaultLanguage")?.value || "en").trim(),
       hoverPreviewMaxImageMb: Math.max(
         1,
         Math.min(
@@ -5815,14 +5914,14 @@ function handleSave() {
   })
     .then(r => r.json())
     .then(j => {
-      if (j.error) { showToast('Error: ' + j.error); return; }
-      showToast('Settings saved.');
+      if (j.error) { showToast(t('error_prefix', { error: j.error })); return; }
+      showToast(t('admin_settings_saved'));
       closeAdminPanel();
       applyHeaderColorsFromAdmin();
       updateHeaderLogoFromAdmin();
       applyFooterFromAdmin();
     })
-    .catch(() => showToast('Save failed.'));
+    .catch(() => showToast(t('admin_settings_save_failed')));
 }
 
 export async function closeAdminPanel() {

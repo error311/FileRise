@@ -110,6 +110,13 @@ class AdminModel
         return self::sanitizeHttpUrl($url);
     }
 
+    private static function normalizeDefaultLanguage($lang): string
+    {
+        $lang = trim((string)$lang);
+        $allowed = ['en', 'es', 'fr', 'de', 'pl', 'ru', 'ja', 'zh-CN'];
+        return in_array($lang, $allowed, true) ? $lang : 'en';
+    }
+
     public static function buildPublicSubset(array $config): array
     {
         $isProActive = (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE === true);
@@ -157,10 +164,14 @@ class AdminModel
         $fileListSummaryDepth = isset($displayCfg['fileListSummaryDepth'])
             ? (int)$displayCfg['fileListSummaryDepth']
             : 2;
+        $defaultLanguage = isset($displayCfg['defaultLanguage'])
+            ? self::normalizeDefaultLanguage($displayCfg['defaultLanguage'])
+            : 'en';
         $public['display'] = [
             'hoverPreviewMaxImageMb' => max(1, min(50, $hoverPreviewMaxImageMb)),
             'hoverPreviewMaxVideoMb' => max(1, min(2048, $hoverPreviewMaxVideoMb)),
             'fileListSummaryDepth' => max(0, min(10, $fileListSummaryDepth)),
+            'defaultLanguage' => $defaultLanguage,
         ];
 
         // --- ONLYOFFICE public flag ---
@@ -714,6 +725,7 @@ class AdminModel
                     'hoverPreviewMaxImageMb' => 8,
                     'hoverPreviewMaxVideoMb' => 200,
                     'fileListSummaryDepth' => 2,
+                    'defaultLanguage' => 'en',
                 ];
             } else {
                 $hoverPreviewMaxImageMb = isset($config['display']['hoverPreviewMaxImageMb'])
@@ -728,6 +740,9 @@ class AdminModel
                     ? (int)$config['display']['fileListSummaryDepth']
                     : 2;
                 $config['display']['fileListSummaryDepth'] = max(0, min(10, $fileListSummaryDepth));
+                $config['display']['defaultLanguage'] = self::normalizeDefaultLanguage(
+                    $config['display']['defaultLanguage'] ?? 'en'
+                );
             }
 
             // Branding
@@ -764,6 +779,18 @@ class AdminModel
                 $config['publishedUrl'] = '';
             } else {
                 $config['publishedUrl'] = self::sanitizeHttpUrl($config['publishedUrl']);
+            }
+
+            // ---- FFmpeg path (optional): used for video thumbnails ----
+            if (!isset($config['ffmpegPath']) || !is_string($config['ffmpegPath'])) {
+                $config['ffmpegPath'] = '';
+            } else {
+                $path = trim($config['ffmpegPath']);
+                $path = preg_replace('/[\x00-\x1F\x7F]/', '', $path);
+                if (strlen($path) > 1024) {
+                    $path = substr($path, 0, 1024);
+                }
+                $config['ffmpegPath'] = $path;
             }
 
             return $config;
@@ -808,6 +835,7 @@ class AdminModel
                 'hoverPreviewMaxImageMb' => 8,
                 'hoverPreviewMaxVideoMb' => 200,
                 'fileListSummaryDepth' => 2,
+                'defaultLanguage' => 'en',
             ],
             'branding'              => [
                 'customLogoUrl' => '',
@@ -819,6 +847,7 @@ class AdminModel
                 'scanUploads' => false,
             ],
             'publishedUrl'          => '',
+            'ffmpegPath'            => '',
         ];
     }
 }

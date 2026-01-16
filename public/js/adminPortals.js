@@ -416,7 +416,7 @@ export async function openClientPortalsModal() {
         if (globalBtn) {
           globalBtn.click();
         } else {
-          showToast('Use the Users tab to add a new user.');
+          showToast(t('admin_portals_users_add'));
         }
       };
     }
@@ -427,7 +427,7 @@ export async function openClientPortalsModal() {
         if (btn) {
           btn.click();
         } else {
-          showToast('Use the Users tab to edit folder access.');
+          showToast(t('admin_portals_users_access'));
         }
       };
     }
@@ -439,7 +439,7 @@ export async function openClientPortalsModal() {
         if (btn) {
           btn.click();
         } else {
-          showToast('Use the Users tab to manage user groups.');
+          showToast(t('admin_portals_users_groups'));
         }
       };
     }
@@ -1114,7 +1114,7 @@ function attachPortalFolderPickers() {
             return;
           } catch (e) {
             console.error('Folder picker error', e);
-            showToast('Could not open folder picker.');
+            showToast(t('admin_portal_open_folder_picker_failed'));
             return;
           }
         }
@@ -1194,7 +1194,7 @@ function attachPortalFolderPickers() {
       uploadBtn.addEventListener('click', (e) => {
         e.preventDefault();
         if (!slug) {
-          showToast('Please set a portal slug before uploading a logo.');
+          showToast(t('admin_portal_slug_required'));
           return;
         }
         fileInput.click();
@@ -1228,10 +1228,11 @@ function attachPortalFolderPickers() {
             logoField.value = fileName;
           }
   
-          showToast('Portal logo uploaded.');
+          showToast(t('admin_portal_logo_uploaded'));
         } catch (err) {
           console.error(err);
-          showToast('Error uploading portal logo: ' + (err && err.message ? err.message : err));
+          const errMsg = (err && err.message) ? err.message : err;
+          showToast(t('admin_portal_logo_upload_error', { error: errMsg }));
         } finally {
           fileInput.value = '';
         }
@@ -1309,7 +1310,7 @@ function applyPresetToPortalCard(card, presetKey) {
       setChecked('[data-portal-field="reqNotes"]', !!preset.formRequired.notes);
     }
   
-    showToast(`Applied "${preset.label}" preset.`);
+    showToast(t('admin_portal_preset_applied', { label: preset.label }));
   }
   
   function attachPortalPresetSelectors() {
@@ -1473,7 +1474,7 @@ function normalizeSubmissionForCsv(sub) {
   
   function exportSubmissionsToCsv(slug, submissions) {
     if (!Array.isArray(submissions) || !submissions.length) {
-      showToast('No submissions to export.');
+      showToast(t('admin_portal_no_submissions_export'));
       return;
     }
   
@@ -1589,7 +1590,8 @@ function attachPortalSubmissionsUI() {
       } catch (err) {
         console.error(err);
         countEl.textContent = 'Error loading submissions';
-        showToast('Error loading submissions: ' + (err && err.message ? err.message : err));
+        const errMsg = (err && err.message) ? err.message : err;
+        showToast(t('admin_portal_submissions_load_error', { error: errMsg }));
         return [];
       }
     };
@@ -1607,7 +1609,7 @@ function attachPortalSubmissionsUI() {
       }
 
       if (!submissions || !submissions.length) {
-        showToast('No submissions to export yet.');
+        showToast(t('admin_portal_no_submissions_yet'));
         return;
       }
 
@@ -1837,7 +1839,7 @@ async function saveClientPortalsFromUI() {
       }
     }
 
-    showToast('Please set slug and folder for: ' + invalid.join(', '));
+    showToast(t('admin_portal_slug_folder_required', { list: invalid.join(', ') }));
     return; // Don’t hit the API if local validation failed
   }
 
@@ -1856,7 +1858,7 @@ async function saveClientPortalsFromUI() {
       status.textContent = 'Saved.';
       status.className = 'small text-success';
     }
-    showToast('Client portals saved.');
+    showToast(t('admin_portal_saved'));
 
     // Re-render from cache so headers / slugs / etc. all reflect the saved state
     await loadClientPortalsList(true);
@@ -1866,6 +1868,6 @@ async function saveClientPortalsFromUI() {
       status.textContent = 'Error saving.';
       status.className = 'small text-danger';
     }
-    showToast('Error saving client portals: ' + (e.message || e));
+    showToast(t('admin_portal_save_error', { error: (e.message || e) }));
   }
 }

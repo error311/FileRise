@@ -260,7 +260,7 @@ export function handleDeleteSelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("no_files_selected", 'warning');
+    showToast(t('no_files_selected'), 'warning');
     return;
   }
   window.filesToDelete = Array.from(checkboxes).map(chk => chk.value);
@@ -374,13 +374,14 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showToast("Selected files deleted successfully!", 'success');
+            showToast(t('delete_files_success'), 'success');
             // deleteFiles.php moves items into Trash; update the recycle bin indicator immediately.
             updateRecycleBinState(true);
             loadFileList(window.currentFolder);
             refreshFolderIcon(window.currentFolder);
           } else {
-            showToast("Error: " + (data.error || "Could not delete files"), 'error');
+            const errMsg = data.error || t('delete_files_error_default');
+            showToast(t('delete_files_error', { error: errMsg }), 'error');
           }
         })
         .catch(error => console.error("Error deleting files:", error))
@@ -399,7 +400,7 @@ export function handleDownloadMultiSelected(e) {
   }
   const files = getSelectedFileObjects();
   if (!files.length) {
-    showToast(t("no_files_selected") || "No files selected for download.", 'warning');
+    showToast(t('no_files_selected_for_download'), 'warning');
     return;
   }
 
@@ -410,7 +411,7 @@ export function handleDownloadMultiSelected(e) {
   // In encrypted folders, archive creation is disabled. Allow plain downloads up to the limit only.
   if (inEncryptedFolder) {
     if (files.length > limit) {
-      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`, 'warning');
+      showToast(t('encrypted_download_limit', { limit }), 'warning');
       return;
     }
     downloadSelectedFilesIndividually(files);
@@ -439,7 +440,7 @@ export function handleDownloadZipSelected(e) {
     const files = getSelectedFileObjects();
     const limit = getDownloadLimit();
     if (files.length > limit) {
-      showToast(`In encrypted folders, downloads are limited to ${limit} file(s) at a time.`, 'warning');
+      showToast(t('encrypted_download_limit', { limit }), 'warning');
       return;
     }
     // If we got here via an old/hidden archive action, fall back to plain download.
@@ -449,7 +450,7 @@ export function handleDownloadZipSelected(e) {
 
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("No files selected for download.", 'warning');
+    showToast(t('no_files_selected_for_download'), 'warning');
     return;
   }
   window.filesToDownload = Array.from(checkboxes).map(chk => chk.value);
@@ -560,7 +561,7 @@ export function confirmSingleDownload() {
   const input = document.getElementById("downloadFileNameInput");
   const fileName = input.value.trim();
   if (!fileName) {
-    showToast("Please enter a name for the file.", 'warning');
+    showToast(t('download_file_name_required'), 'warning');
     return;
   }
 
@@ -583,7 +584,7 @@ export function confirmSingleDownload() {
   document.body.removeChild(a);
 
   // 5) Notify the user
-  showToast("Download started. Check your browser’s download manager.", 'info');
+  showToast(t('download_started'), 'info');
 }
 
 export function handleExtractZipSelected(e) {
@@ -593,14 +594,14 @@ export function handleExtractZipSelected(e) {
   }
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (!checkboxes.length) {
-    showToast("No files selected.", 'warning');
+    showToast(t('no_files_selected'), 'warning');
     return;
   }
   const archiveFiles = Array.from(checkboxes)
     .map(chk => chk.value)
     .filter(name => isArchiveFileName(name));
   if (!archiveFiles.length) {
-    showToast("No archive files selected.", 'warning');
+    showToast(t('no_archive_files_selected'), 'warning');
     return;
   }
 
@@ -611,7 +612,7 @@ export function handleExtractZipSelected(e) {
   const progressBar = document.getElementById("downloadProgressBar");
   const progressPct = document.getElementById("downloadProgressPercent");
 
-  if (titleEl) titleEl.textContent = "Extracting files…";
+  if (titleEl) titleEl.textContent = t('extracting_files');
   if (spinner) spinner.style.display = "inline-block";
   if (progressBar) progressBar.style.display = "none";
   if (progressPct) progressPct.style.display = "none";
@@ -634,28 +635,30 @@ export function handleExtractZipSelected(e) {
     .then(data => {
       modal.style.display = "none";
       const extracted = Array.isArray(data.extractedFiles) ? data.extractedFiles : [];
-      const extractedMsg = extracted.length ? ("Extracted: " + extracted.join(", ")) : "Archive extracted.";
+      const extractedMsg = extracted.length
+        ? t('extract_result_files', { files: extracted.join(", ") })
+        : t('extract_result_default');
       const warning = (data && typeof data.warning === "string" && data.warning.trim()) ? data.warning.trim() : "";
 
       if (data.success) {
         if (warning) {
-          showToast(`${extractedMsg} Warning: ${warning}`, 'warning');
+          showToast(t('extract_result_warning', { result: extractedMsg, warning }), 'warning');
         } else {
           showToast(extractedMsg, 'success');
         }
       } else if (extracted.length) {
-        const warnMsg = warning || data.error || "Some files failed to extract.";
-        showToast(`${extractedMsg} Warning: ${warnMsg}`, 'warning');
+        const warnMsg = warning || data.error || t('extract_error_some_failed');
+        showToast(t('extract_result_warning', { result: extractedMsg, warning: warnMsg }), 'warning');
       } else {
-        const errMsg = warning || data.error || "Unknown error";
-        showToast("Error extracting archive: " + errMsg, 'error');
+        const errMsg = warning || data.error || t('unknown_error');
+        showToast(t('extract_error_prefix', { error: errMsg }), 'error');
       }
       loadFileList(window.currentFolder);
     })
     .catch(error => {
       modal.style.display = "none";
       console.error("Error extracting archive files:", error);
-      showToast("Error extracting archive files.", 'error');
+      showToast(t('extract_error_generic'), 'error');
     });
 }
 
@@ -707,7 +710,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // a) Validate archive filename
         const format = getSelectedArchiveFormat();
         const rawName = document.getElementById("zipFileNameInput").value.trim();
-        if (!rawName) { showToast("Please enter a name for the archive file.", 'warning'); return; }
+        if (!rawName) { showToast(t('archive_name_required'), 'warning'); return; }
         archiveName = normalizeArchiveName(rawName, format);
 
         // b) Hide the name‐input modal, show the progress modal
@@ -890,7 +893,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (ui.text) ui.text.textContent = "";
         if (Array.isArray(window.filesToDownload)) window.filesToDownload = [];
       } catch (err) {
-        const msg = (err && err.message) ? err.message : "Failed to prepare archive.";
+        const msg = (err && err.message) ? err.message : t('archive_prepare_failed');
         progressModal.style.display = "none";
         if (ui && ui.bar) ui.bar.value = 0;
         if (ui && ui.text) ui.text.textContent = "";
@@ -905,7 +908,7 @@ export function handleCopySelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("No files selected for copying.", 5000, 'warning');
+    showToast(t('no_files_selected_for_copy'), 5000, 'warning');
     return;
   }
   window.filesToCopy = Array.from(checkboxes).map(chk => chk.value);
@@ -990,7 +993,7 @@ export function handleMoveSelected(e) {
   e.stopImmediatePropagation();
   const checkboxes = getActiveSelectedFileCheckboxes();
   if (checkboxes.length === 0) {
-    showToast("No files selected for moving.", 'warning');
+    showToast(t('no_files_selected_for_move'), 'warning');
     return;
   }
   window.filesToMove = Array.from(checkboxes).map(chk => chk.value);
@@ -1013,13 +1016,13 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmCopy.addEventListener("click", function () {
       const targetFolder = document.getElementById("copyTargetFolder").value;
       if (!targetFolder) {
-        showToast("Please select a target folder for copying.", 5000, 'warning');
+        showToast(t('copy_target_folder_required'), 5000, 'warning');
         return;
       }
       const sourceId = getActiveSourceId();
       const destSourceId = document.getElementById("copyTargetSource")?.value || sourceId;
       if (targetFolder === window.currentFolder && sourceId === destSourceId) {
-        showToast("Error: Cannot copy files to the same folder.", 'error');
+        showToast(t('copy_same_folder_error'), 'error');
         return;
       }
       const selection = Array.isArray(window.filesToCopy) ? window.filesToCopy : [];
@@ -1054,7 +1057,7 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(data => {
           if (data.success) {
             ok = true;
-            showToast("Selected files copied successfully!", 5000, 'success');
+            showToast(t('copy_files_success'), 5000, 'success');
             loadFileList(window.currentFolder);
             if (!destSourceId || destSourceId === sourceId) {
               refreshFolderIcon(targetFolder);
@@ -1062,13 +1065,13 @@ document.addEventListener("DOMContentLoaded", function () {
             markPaneNeedsReloadForFolder(targetFolder, destSourceId);
           } else {
             ok = false;
-            errMsg = data.error || "Could not copy files";
-            showToast("Error: " + (data.error || "Could not copy files"), 5000, 'error');
+            errMsg = data.error || t('copy_files_error_default');
+            showToast(t('copy_files_error', { error: errMsg }), 5000, 'error');
           }
         })
         .catch(error => {
           ok = false;
-          errMsg = error && error.message ? error.message : "Could not copy files";
+          errMsg = error && error.message ? error.message : t('copy_files_error_default');
           console.error("Error copying files:", error);
         })
         .finally(() => {
@@ -1094,13 +1097,13 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmMove.addEventListener("click", function () {
       const targetFolder = document.getElementById("moveTargetFolder").value;
       if (!targetFolder) {
-        showToast("Please select a target folder for moving.", 'warning');
+        showToast(t('move_target_folder_required'), 'warning');
         return;
       }
       const sourceId = getActiveSourceId();
       const destSourceId = document.getElementById("moveTargetSource")?.value || sourceId;
       if (targetFolder === window.currentFolder && sourceId === destSourceId) {
-        showToast("Error: Cannot move files to the same folder.", 'error');
+        showToast(t('move_same_folder_error'), 'error');
         return;
       }
       const selection = Array.isArray(window.filesToMove) ? window.filesToMove : [];
@@ -1135,7 +1138,7 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(data => {
           if (data.success) {
             ok = true;
-            showToast("Selected files moved successfully!", 'success');
+            showToast(t('move_files_success'), 'success');
             loadFileList(window.currentFolder);
             if (!destSourceId || destSourceId === sourceId) {
               refreshFolderIcon(targetFolder);
@@ -1147,13 +1150,13 @@ document.addEventListener("DOMContentLoaded", function () {
             markPaneNeedsReloadForFolder(window.currentFolder, sourceId);
           } else {
             ok = false;
-            errMsg = data.error || "Could not move files";
-            showToast("Error: " + (data.error || "Could not move files"), 'error');
+            errMsg = data.error || t('move_files_error_default');
+            showToast(t('move_files_error', { error: errMsg }), 'error');
           }
         })
         .catch(error => {
           ok = false;
-          errMsg = error && error.message ? error.message : "Could not move files";
+          errMsg = error && error.message ? error.message : t('move_files_error_default');
           console.error("Error moving files:", error);
         })
         .finally(() => {
@@ -1293,15 +1296,16 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showToast("File renamed successfully!", 'success');
+            showToast(t('rename_file_success'), 'success');
             loadFileList(folderUsed);
           } else {
-            showToast("Error renaming file: " + (data.error || "Unknown error"), 'error');
+            const errMsg = data.error || t('unknown_error');
+            showToast(t('rename_file_error', { error: errMsg }), 'error');
           }
         })
         .catch(error => {
           console.error("Error renaming file:", error);
-          showToast("Error renaming file", 'error');
+          showToast(t('rename_file_error_generic'), 'error');
         })
         .finally(() => {
           document.getElementById("renameFileModal").style.display = "none";

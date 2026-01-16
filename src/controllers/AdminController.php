@@ -265,6 +265,11 @@ class AdminController
             $publishedCfg = (string)($config['publishedUrl'] ?? '');
             $publishedEffective = $publishedLockedByEnv ? trim((string)$envPublished) : $publishedCfg;
 
+            $envFfmpeg = getenv('FR_FFMPEG_PATH');
+            $ffmpegLockedByEnv = ($envFfmpeg !== false && trim((string)$envFfmpeg) !== '');
+            $ffmpegCfg = (string)($config['ffmpegPath'] ?? '');
+            $ffmpegEffective = $ffmpegLockedByEnv ? trim((string)$envFfmpeg) : $ffmpegCfg;
+
             $adminExtra = [
                 'loginOptions' => array_merge($public['loginOptions'], [
                     'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
@@ -297,6 +302,9 @@ class AdminController
                     'publishedUrlEffective' => $publishedEffective,
                     'publishedUrlLockedByEnv' => $publishedLockedByEnv,
                 ],
+                'ffmpegPath' => $ffmpegCfg,
+                'ffmpegPathEffective' => $ffmpegEffective,
+                'ffmpegPathLockedByEnv' => $ffmpegLockedByEnv,
                 'encryption' => [
                     'supported'   => (bool)$encSupported,
                     'hasMasterKey'=> (bool)$encHasMasterKey,
@@ -1689,6 +1697,7 @@ class AdminController
         $merged = $existing + [
             'header_title'        => '',
             'publishedUrl'        => '',
+            'ffmpegPath'          => '',
             'loginOptions'        => [
                 'disableFormLogin' => false,
                 'disableBasicAuth' => true,
@@ -1725,6 +1734,7 @@ class AdminController
                 'hoverPreviewMaxImageMb' => 8,
                 'hoverPreviewMaxVideoMb' => 200,
                 'fileListSummaryDepth' => 2,
+                'defaultLanguage' => 'en',
             ],
         ];
 
@@ -1756,6 +1766,19 @@ class AdminController
                 }
                 $merged['publishedUrl'] = $u;
             }
+        }
+
+        // ffmpegPath: optional binary path for video thumbnails
+        // Env var FR_FFMPEG_PATH (if set) is the source of truth; admin value becomes read-only.
+        $envFfmpeg = getenv('FR_FFMPEG_PATH');
+        $ffmpegLockedByEnv = ($envFfmpeg !== false && trim((string)$envFfmpeg) !== '');
+        if (!$ffmpegLockedByEnv && array_key_exists('ffmpegPath', $data)) {
+            $path = trim((string)$data['ffmpegPath']);
+            $path = preg_replace('/[\x00-\x1F\x7F]/', '', $path);
+            if (strlen($path) > 1024) {
+                $path = substr($path, 0, 1024);
+            }
+            $merged['ffmpegPath'] = $path;
         }
 
         // loginOptions: inherit existing then override if provided
@@ -2019,6 +2042,11 @@ if (isset($data['oidc']['allowDemote'])) {
             if (array_key_exists('fileListSummaryDepth', $data['display'])) {
                 $lim = filter_var($data['display']['fileListSummaryDepth'], FILTER_VALIDATE_INT);
                 $merged['display']['fileListSummaryDepth'] = max(0, min(10, $lim !== false ? $lim : 2));
+            }
+            if (array_key_exists('defaultLanguage', $data['display'])) {
+                $raw = trim((string)$data['display']['defaultLanguage']);
+                $allowed = ['en', 'es', 'fr', 'de', 'pl', 'ru', 'ja', 'zh-CN'];
+                $merged['display']['defaultLanguage'] = in_array($raw, $allowed, true) ? $raw : 'en';
             }
         }
 

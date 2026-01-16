@@ -15,7 +15,7 @@
   <link rel="shortcut icon" href="assets/favicon.ico?v={{APP_QVER}}">
 
   <!-- CSS (reuse main app look) -->
-  <link rel="stylesheet" href="vendor/bootstrap/4.5.2/bootstrap.min.css?v={{APP_QVER}}">
+  <link rel="stylesheet" href="vendor/bootstrap/4.6.2/bootstrap.min.css?v={{APP_QVER}}">
   <link rel="stylesheet" href="css/styles.css?v={{APP_QVER}}">
   <link rel="stylesheet" href="css/vendor/roboto.css?v={{APP_QVER}}">
 
@@ -72,6 +72,38 @@
     [data-theme="dark"] .portal-login-subtitle {
       color: #9ca3af;
     }
+    .portal-login-top {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+    .portal-login-lang {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .portal-login-lang label {
+      font-size: 0.75rem;
+      margin: 0;
+      color: #6c757d;
+    }
+    [data-theme="dark"] .portal-login-lang label {
+      color: #9ca3af;
+    }
+    .portal-login-lang select {
+      min-width: 140px;
+      font-size: 0.8rem;
+      padding: 4px 8px;
+      height: auto;
+    }
+    @media (max-width: 420px) {
+      .portal-login-lang label {
+        display: none;
+      }
+      .portal-login-lang select {
+        min-width: 120px;
+      }
+    }
     #portalLoginError {
       font-size: 0.85rem;
       margin-bottom: 8px;
@@ -92,15 +124,30 @@
 <body data-theme="light">
   <div class="portal-login-wrapper">
     <div class="portal-login-card">
+      <div class="portal-login-top">
+        <div class="portal-login-lang">
+          <label for="portalLoginLangSelect" data-i18n-key="portal_language_label">Language</label>
+          <select id="portalLoginLangSelect" class="form-control form-control-sm">
+            <option value="en" data-i18n-key="english">English</option>
+            <option value="es" data-i18n-key="spanish">Español</option>
+            <option value="fr" data-i18n-key="french">Français</option>
+            <option value="de" data-i18n-key="german">Deutsch</option>
+            <option value="pl" data-i18n-key="polish">Polski</option>
+            <option value="ru" data-i18n-key="russian">Русский</option>
+            <option value="ja" data-i18n-key="japanese">日本語</option>
+            <option value="zh-CN" data-i18n-key="chinese_simplified">简体中文</option>
+          </select>
+        </div>
+      </div>
       <div class="portal-login-header">
         <img id="portalLoginLogo"
              src="assets/logo.svg?v={{APP_QVER}}"
              alt="FileRise">
         <div>
-          <div id="portalLoginTitle" class="portal-login-title">
+          <div id="portalLoginTitle" class="portal-login-title" data-i18n-key="portal_login_heading_default">
             Sign in to Client Portal
           </div>
-          <div id="portalLoginSubtitle" class="portal-login-subtitle">
+          <div id="portalLoginSubtitle" class="portal-login-subtitle" data-i18n-key="portal_login_subtitle">
             to access this client portal
           </div>
         </div>
@@ -110,7 +157,7 @@
 
       <form id="portalLoginForm" novalidate>
         <div class="form-group">
-          <label for="portalLoginUser">Username or email</label>
+          <label for="portalLoginUser" data-i18n-key="portal_login_label_user">Username or email</label>
           <input type="text"
                  class="form-control form-control-sm"
                  id="portalLoginUser"
@@ -118,7 +165,7 @@
                  required>
         </div>
         <div class="form-group">
-          <label for="portalLoginPass">Password</label>
+          <label for="portalLoginPass" data-i18n-key="portal_login_label_password">Password</label>
           <input type="password"
                  class="form-control form-control-sm"
                  id="portalLoginPass"
@@ -127,14 +174,16 @@
         </div>
         <button type="submit"
                 id="portalLoginSubmit"
-                class="btn btn-primary btn-sm btn-block">
+                class="btn btn-primary btn-sm btn-block"
+                data-i18n-key="portal_login_sign_in">
           Sign in
         </button>
       </form>
 
       <small id="portalLoginHint"
              class="text-muted d-block mt-2"
-             style="font-size:0.75rem;">
+             style="font-size:0.75rem;"
+             data-i18n-key="portal_login_hint">
         You’ll be sent back to the portal automatically after signing in.
       </small>
 
