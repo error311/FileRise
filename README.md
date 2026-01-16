@@ -33,7 +33,7 @@ Drag & drop uploads, OnlyOffice integration, and **optional folder-level encrypt
 - 📚 **API + live docs** – OpenAPI spec (`openapi.json`) plus an embedded Redoc viewer (`api.html`) for exploring endpoints.
 - 📊 **Storage / disk usage summary** – CLI scanner with snapshots, total usage, and per-volume breakdowns surfaced in the admin panel.
 - 🎨 **Polished, responsive UI** – Dark/light mode, mobile-friendly layout, in-browser previews, and a built-in code editor powered by CodeMirror.
-- 🌐 **Internationalization** – English, Spanish, French, German, and Simplified Chinese included; community translations welcome.
+- 🌐 **Internationalization** – English, Spanish, French, German, Polish, Russian, Japanese and Simplified Chinese included; community translations welcome.
 - 🔑 **Login + SSO** – Local users, TOTP 2FA, and OIDC (Auth0 / Authentik / Keycloak / etc.) with optional auto-provisioning, IdP-driven admin role assignment, and Pro user-group mapping.
 - 🛡️ **ClamAV virus scanning (Core) + Pro virus log** – Optional ClamAV upload scanning, with a Pro virus detection log in the admin panel and CSV export.
 - 🌐 **Reverse proxy & subpath aware** – Designed to run cleanly behind Nginx, Traefik, Caddy, or Apache:
