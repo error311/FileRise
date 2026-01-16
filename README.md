@@ -14,6 +14,23 @@
 **FileRise** is a self-hosted web file manager with WebDAV, sharing, and per-folder ACLs.  
 Drag & drop uploads, OnlyOffice integration, and **optional folder-level encryption at rest** — all in one PHP app you control.
 
+Built for homelabs, teams, and client portals that need fast browsing, strict ACLs, and zero-database simplicity.
+
+## Table of contents
+
+- [Quick links](#quick-links)
+- [Install (Docker – recommended)](#install-docker--recommended)
+- [Manual install (PHP web server)](#manual-install-php-web-server)
+- [Data & backups](#data--backups)
+- [First-run security checklist](#first-run-security-checklist)
+- [Optional dependencies](#optional-dependencies)
+- [WebDAV & ONLYOFFICE (optional)](#webdav--onlyoffice-optional)
+- [Security & updates](#security--updates)
+- [Community, support & contributing](#community-support--contributing)
+- [AI Disclosure](#ai-disclosure)
+- [License & third-party code](#license--third-party-code)
+- [Press](#press)
+
 - 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external database required.
 - 🔐 **Granular per-folder ACLs** – Manage View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share, and more — all enforced consistently across the UI, API, and WebDAV.
 - 🔐 **Folder-level encryption at rest (optional)** – Encrypt entire folders (and all descendants) on disk using modern authenticated encryption.
@@ -30,7 +47,7 @@ Drag & drop uploads, OnlyOffice integration, and **optional folder-level encrypt
 - 🧩 **OnlyOffice support (optional)** – Edit DOCX/XLSX/PPTX using your own Document Server; ODT/ODS/ODP supported as well. PDFs can be viewed inline.
 - 🌍 **WebDAV (ACL-aware)** – Mount FileRise as a drive from macOS, Windows, Linux, or Cyberduck/WinSCP. Listings, uploads, overwrites, deletes, and folder creation all honor the same ACLs as the web UI.
 - 🏷️ **Tags, search & trash** – Tag files, search by name/tag/uploader/content via fuzzy search, and recover mistakes using a Trash with time-based retention.
-- 📚 **API + live docs** – OpenAPI spec (`openapi.json`) plus an embedded Redoc viewer (`api.html`) for exploring endpoints.
+- 📚 **API + live docs** – OpenAPI spec served at `api.php?spec=1` (from `openapi.json.dist`) with a Redoc UI at `api.php` (login required).
 - 📊 **Storage / disk usage summary** – CLI scanner with snapshots, total usage, and per-volume breakdowns surfaced in the admin panel.
 - 🎨 **Polished, responsive UI** – Dark/light mode, mobile-friendly layout, in-browser previews, and a built-in code editor powered by CodeMirror.
 - 🌐 **Internationalization** – English, Spanish, French, German, Polish, Russian, Japanese and Simplified Chinese included; community translations welcome.
@@ -39,6 +56,7 @@ Drag & drop uploads, OnlyOffice integration, and **optional folder-level encrypt
 - 🌐 **Reverse proxy & subpath aware** – Designed to run cleanly behind Nginx, Traefik, Caddy, or Apache:
   - Supports installs under a subpath (e.g. `https://example.com/files`)
   - Correct URL generation for assets, APIs, portals, PWA, and share links
+  - If the proxy strips the prefix, set `FR_BASE_PATH` or send `X-Forwarded-Prefix`
   - Explicit “Published URL” setting for proxy / firewall environments
   - Works with `X-Forwarded-*` headers and Kubernetes ingress setups
 - 👥 **Pro: user groups, client portals, global search, storage explorer & audit logs** –  
@@ -66,10 +84,20 @@ Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/
 ## Quick links
 
 - 🚀 **Live demo:** [Demo](https://demo.filerise.net) (username: `demo` / password: `demo`)
+- 🧩 **FileRise Pro:** [filerise.net](https://filerise.net)
 - 📚 **Docs & Wiki:** [Wiki](https://github.com/error311/FileRise/wiki)
   - [Features overview](https://github.com/error311/FileRise/wiki/Features)
-  - [WebDAV](https://github.com/error311/FileRise/wiki/WebDAV)
+  - [Installation & setup](https://github.com/error311/FileRise/wiki/Installation-Setup)
+  - [Common env vars](https://github.com/error311/FileRise/wiki/Common-Env-Variables)
+  - [Env vars (full reference)](https://github.com/error311/FileRise/wiki/Environment-Variables-Full-Reference)
+  - [WebDAV (mount)](https://github.com/error311/FileRise/wiki/WebDAV)
+  - [WebDAV via curl](https://github.com/error311/FileRise/wiki/Accessing-FileRise-via-curl%C2%A0(WebDAV))
   - [ONLYOFFICE](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
+  - [OIDC & SSO](https://github.com/error311/FileRise/wiki/OIDC-and-SSO)
+  - [Nginx setup](https://github.com/error311/FileRise/wiki/Nginx-Setup)
+  - [Kubernetes / k8s](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)
+  - [Backup & restore](https://github.com/error311/FileRise/wiki/Backup-and-Restore)
+  - [Reverse proxy & subpath](https://github.com/error311/FileRise/wiki/Reverse-Proxy-and-Subpath)
 - 🐳 **Docker image:**  
   - Docker Hub: [Docker](https://hub.docker.com/r/error311/filerise-docker)
   - Build pipeline / tags: [Workflow](https://github.com/error311/filerise-docker)
@@ -91,7 +119,7 @@ If you open an issue/discussion, please include:
 
 The easiest way to run FileRise is the official Docker image.
 
-> ✅ **Tip:** For stability, pin a version tag (example: `error311/filerise-docker:v2.10.5`) instead of `:latest`.
+> ✅ **Tip:** For stability, pin a version tag (example: `error311/filerise-docker:vX.Y.Z`) instead of `:latest`. See [Releases](https://github.com/error311/FileRise/releases) for current versions.
 
 ### Option A – Quick start (docker run)
 
@@ -119,7 +147,7 @@ http://your-server-ip:8080
 
 On first launch you’ll be guided through creating the **initial admin user**.
 
-> 💡 After the first run, you can set `CHOWN_ON_START="false"` if permissions are already correct and you don’t want a recursive `chown` on every start.
+> 💡 After the first run, you can set `CHOWN_ON_START="false"` if permissions are already correct and you don’t want a recursive `chown` on uploads/metadata on every start.
 >
 > ⚠️ **Uploads folder recommendation**
 >
@@ -146,7 +174,7 @@ services:
       SECURE: "false"
       PERSISTENT_TOKENS_KEY: "default_please_change_this_key"
       SCAN_ON_START: "true"   # auto-index existing files on startup
-      CHOWN_ON_START: "true"  # fix permissions on uploads/users/metadata on startup
+      CHOWN_ON_START: "true"  # fix permissions on uploads/metadata on startup
     volumes:
       - ./uploads:/var/www/uploads
       - ./users:/var/www/users
@@ -166,16 +194,26 @@ docker compose up -d
 | `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone. |
 | `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request; also used to set PHP/Apache upload limits. |
 | `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / a reverse proxy, else `false`. |
-| `PERSISTENT_TOKENS_KEY` | ✅       | `change_me_super_secret`         | Secret used to sign “remember me” tokens. **Do not leave this at the default.** |
+| `PERSISTENT_TOKENS_KEY` | ✅       | `change_me_super_secret`         | Secret used to encrypt stored secrets (tokens, permissions, admin config). **Do not leave this at the default.** |
 | `SCAN_ON_START`         | Optional | `true`                           | If `true`, runs a scan once on container start to index existing files. |
-| `CHOWN_ON_START`        | Optional | `true`                           | If `true`, recursively `chown`s `uploads/`, `users/`, `metadata/` to `www-data`. |
+| `CHOWN_ON_START`        | Optional | `true`                           | If `true`, recursively normalizes ownership/permissions on `uploads/` + `metadata/`. |
 | `PUID`                  | Optional | `99`                             | If running as root, remap `www-data` user to this UID (e.g. Unraid’s 99).                             |
 | `PGID`                  | Optional | `100`                            | If running as root, remap `www-data` group to this GID (e.g. Unraid’s 100).                           |
 | `FR_PUBLISHED_URL`      | Optional | `https://example.com/files`      | Public URL when behind proxies/subpaths (share links, portals, redirects). |
+| `FR_BASE_PATH`          | Optional | `/files`                         | Force a subpath when the proxy strips the prefix (overrides auto-detect). |
 | `FR_TRUSTED_PROXIES`    | Optional | `127.0.0.1,10.0.0.0/8`            | Comma-separated IPs/CIDRs for trusted proxies; only these can supply the client IP header. |
 | `FR_IP_HEADER`          | Optional | `X-Forwarded-For`                | Header to trust for the real client IP when the proxy is trusted. |
 
 > Full list of common env variables: [Common Environment variables](https://github.com/error311/FileRise/wiki/Common-Env-Variables)
+> Full reference: [Environment Variables (Full Reference)](https://github.com/error311/FileRise/wiki/Environment-Variables-Full-Reference)
+>
+> Other useful env vars (optional):  
+> `FR_WEBDAV_MAX_UPLOAD_BYTES` (WebDAV upload cap in bytes; `0` = unlimited),  
+> `FR_ENCRYPTION_MASTER_KEY` (32-byte key: hex or `base64:...`),  
+> `VIRUS_SCAN_ENABLED` / `VIRUS_SCAN_CMD` / `CLAMAV_AUTO_UPDATE`,  
+> `LOG_STREAM` (`error`/`access`/`both`/`none`),  
+> `HTTP_PORT` / `HTTPS_PORT` / `SERVER_NAME`,  
+> `SHARE_URL` (override share endpoint; `FR_PUBLISHED_URL` preferred).
 >
 > 🧩 **Traefik + subpath note (Kubernetes):** use `StripPrefix` and rely on `X-Forwarded-Prefix` + `FR_PUBLISHED_URL`.  
 > See: [Deployments Wiki](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)
@@ -238,13 +276,15 @@ sudo -u www-data touch /var/www/users/.write_test && echo OK
 
 ### Install from release ZIP (recommended)
 
+Get the latest tag from [Releases](https://github.com/error311/FileRise/releases).
+
 ```bash
 cd /var/www
 sudo mkdir -p filerise
 sudo chown -R $USER:$USER /var/www/filerise
 cd /var/www/filerise
 
-VERSION="v2.10.5"  # replace with the tag you want
+VERSION="vX.Y.Z"  # replace with the tag you want
 ASSET="FileRise-${VERSION}.zip"
 
 curl -fsSL "https://github.com/error311/FileRise/releases/download/${VERSION}/${ASSET}" -o "${ASSET}"
@@ -280,6 +320,34 @@ composer install
   - If it mentions `/var/www/users/users.txt`, fix permissions on `/var/www/users` (not `/var/www/html/users`).
 - **open_basedir restrictions**
   - Ensure it includes `/var/www` and `/tmp` (example: `/var/www:/tmp`).
+
+---
+
+## Data & backups
+
+Back up these paths (Docker volumes or host directories):
+
+- `/var/www/uploads` (file data)
+- `/var/www/users` (users, ACLs, admin config, Pro license)
+- `/var/www/metadata` (indexes, tags, logs)
+
+Notes:
+- Logs live in `/var/www/metadata/log` and can be rotated or pruned.
+- Keep your `PERSISTENT_TOKENS_KEY` consistent when restoring backups.
+
+## First-run security checklist
+
+- Set a strong `PERSISTENT_TOKENS_KEY` (encrypts tokens, permissions, admin config).
+- Use HTTPS and set `SECURE="true"` when behind TLS/reverse proxy.
+- If behind a proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER`.
+- Set `FR_PUBLISHED_URL` (and `FR_BASE_PATH` if needed) so share links are correct.
+
+## Optional dependencies
+
+- **FFmpeg** – video thumbnails (set `FR_FFMPEG_PATH` if not on PATH).
+- **ClamAV** – upload scanning (`VIRUS_SCAN_ENABLED=true`).
+- **PHP sodium (libsodium)** – required for encryption-at-rest.
+- **ONLYOFFICE Document Server** – document editing in the browser.
 
 ---
 
