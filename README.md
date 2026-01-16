@@ -31,6 +31,10 @@ Built for homelabs, teams, and client portals that need fast browsing, strict AC
 - [License & third-party code](#license--third-party-code)
 - [Press](#press)
 
+---
+
+## Highlights
+
 - 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external database required.
 - 🔐 **Granular per-folder ACLs** – Manage View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share, and more — all enforced consistently across the UI, API, and WebDAV.
 - 🔐 **Folder-level encryption at rest (optional)** – Encrypt entire folders (and all descendants) on disk using modern authenticated encryption.
