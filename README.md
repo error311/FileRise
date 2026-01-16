@@ -21,6 +21,7 @@ Built for homelabs, teams, and client portals that need fast browsing, strict AC
 - [Quick links](#quick-links)
 - [Install (Docker – recommended)](#install-docker--recommended)
 - [Manual install (PHP web server)](#manual-install-php-web-server)
+- [After install (5 minutes)](#after-install-5-minutes)
 - [Data & backups](#data--backups)
 - [First-run security checklist](#first-run-security-checklist)
 - [Optional dependencies](#optional-dependencies)
@@ -91,9 +92,12 @@ Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/
 - 🧩 **FileRise Pro:** [filerise.net](https://filerise.net)
 - 📚 **Docs & Wiki:** [Wiki](https://github.com/error311/FileRise/wiki)
   - [Features overview](https://github.com/error311/FileRise/wiki/Features)
+  - [FAQ](https://github.com/error311/FileRise/wiki/FAQ)
+  - [Screenshots](https://github.com/error311/FileRise/wiki/Screenshots)
   - [Installation & setup](https://github.com/error311/FileRise/wiki/Installation-Setup)
   - [Common env vars](https://github.com/error311/FileRise/wiki/Common-Env-Variables)
   - [Env vars (full reference)](https://github.com/error311/FileRise/wiki/Environment-Variables-Full-Reference)
+  - [ACL & permissions](https://github.com/error311/FileRise/wiki/ACL-and-Permissions)
   - [WebDAV (mount)](https://github.com/error311/FileRise/wiki/WebDAV)
   - [WebDAV via curl](https://github.com/error311/FileRise/wiki/Accessing-FileRise-via-curl%C2%A0(WebDAV))
   - [ONLYOFFICE](https://github.com/error311/FileRise/wiki/ONLYOFFICE)
@@ -101,6 +105,7 @@ Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/
   - [Nginx setup](https://github.com/error311/FileRise/wiki/Nginx-Setup)
   - [Kubernetes / k8s](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)
   - [Backup & restore](https://github.com/error311/FileRise/wiki/Backup-and-Restore)
+  - [Upgrade & migration](https://github.com/error311/FileRise/wiki/Upgrade-and-Migration)
   - [Reverse proxy & subpath](https://github.com/error311/FileRise/wiki/Reverse-Proxy-and-Subpath)
 - 🐳 **Docker image:**  
   - Docker Hub: [Docker](https://hub.docker.com/r/error311/filerise-docker)
@@ -227,29 +232,10 @@ docker compose up -d
 
 ## Manual install (PHP web server)
 
-> ⚠️ **Manual installs: understand the default paths (saves you 30 minutes of pain)**
->
-> By default, FileRise writes data to **these absolute paths**:
->
-> - `/var/www/uploads`
-> - `/var/www/users`
-> - `/var/www/metadata`
->
-> Your web server must point to FileRise’s **public/** folder:
->
-> - DocumentRoot → `/var/www/filerise/public` (example)
->
-> ✅ **Recommended layout (no config changes):**
->
-> - Install FileRise code in: `/var/www/filerise`
-> - Create data dirs in: `/var/www/uploads`, `/var/www/users`, `/var/www/metadata`
->
-> If you install FileRise under `/var/www/html` (or anywhere else), you must either:
->
-> - still create the data folders at `/var/www/{uploads,users,metadata}` **(simplest)**, or
-> - change the paths in `config/config.php` to match your layout.
->
->If you created `users/metadata/uploads` under `/var/www/html`, FileRise will still try to write to `/var/www/users` unless you change config.
+Short version: FileRise expects data at `/var/www/{uploads,users,metadata}` and your web server must point to the **public/** folder (for example `DocumentRoot /var/www/filerise/public`).
+
+Full guide + troubleshooting:  
+[Installation & setup](https://github.com/error311/FileRise/wiki/Installation-Setup) • [Upgrade & migration](https://github.com/error311/FileRise/wiki/Upgrade-and-Migration) • [Reverse proxy & subpath](https://github.com/error311/FileRise/wiki/Reverse-Proxy-and-Subpath)
 
 ### Requirements
 
@@ -258,7 +244,9 @@ docker compose up -d
 - PHP extensions: `json`, `curl`, `zip` (and usual defaults)
 - No database required
 
-### Step 0: Create data directories (default locations)
+### Quick start (release ZIP)
+
+1) Create data directories:
 
 ```bash
 sudo mkdir -p /var/www/uploads /var/www/users /var/www/metadata
@@ -266,21 +254,7 @@ sudo chown -R www-data:www-data /var/www/uploads /var/www/users /var/www/metadat
 sudo chmod -R 775 /var/www/uploads /var/www/users /var/www/metadata
 ```
 
-Quick write test:
-
-```bash
-sudo -u www-data touch /var/www/users/.write_test && echo OK
-```
-
-### Login security notes
-
-- Failed login attempts are throttled per **IP + username** and stored in `/var/www/users/failed_logins.json` by default.
-- Failed logins are also written to `/var/www/users/fail2ban.log` (rotate at 50MB, keep 5 files).
-- If you’re behind a reverse proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER` so rate limiting and logs use the real client IP.
-
-### Install from release ZIP (recommended)
-
-Get the latest tag from [Releases](https://github.com/error311/FileRise/releases).
+2) Download a release and extract:
 
 ```bash
 cd /var/www
@@ -295,35 +269,18 @@ curl -fsSL "https://github.com/error311/FileRise/releases/download/${VERSION}/${
 unzip "${ASSET}"
 ```
 
-Point your web server at `public/`:
+3) Point your web server at `/var/www/filerise/public`, then visit `http://serverip/`.
 
-- Apache: `DocumentRoot /var/www/filerise/public`
-- Nginx: `root /var/www/filerise/public;`
+If you install FileRise outside `/var/www/filerise`, keep the data dirs in `/var/www` or update the paths in `config/config.php`.
 
-> ✅ After setting DocumentRoot to `.../public`, access FileRise at:
-> `http://serverip/` (not `http://serverip/public/`)
+---
 
-### Install from git (developer mode)
+## After install (5 minutes)
 
-```bash
-cd /var/www
-sudo git clone https://github.com/error311/FileRise.git filerise
-sudo chown -R $USER:$USER /var/www/filerise
-
-cd /var/www/filerise
-composer install
-```
-
-### Manual install troubleshooting (common mistakes)
-
-- **Browsing `/public` in the URL**
-  - Wrong: `http://serverip/public/`
-  - Correct: `http://serverip/`
-- **“Failed to write users file”**
-  - Check your server error log — it will show the exact write path.
-  - If it mentions `/var/www/users/users.txt`, fix permissions on `/var/www/users` (not `/var/www/html/users`).
-- **open_basedir restrictions**
-  - Ensure it includes `/var/www` and `/tmp` (example: `/var/www:/tmp`).
+- Log in and create your first admin account (prompted on first run).
+- Open Admin → Users to add accounts, then Admin → Folder Access to set permissions.
+- If you’re behind a reverse proxy or subpath, set `FR_PUBLISHED_URL` (and `FR_BASE_PATH` if needed).
+- Optional: enable WebDAV or ONLYOFFICE in Admin and follow the wiki guides.
 
 ---
 
