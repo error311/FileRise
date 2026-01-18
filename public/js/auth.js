@@ -34,6 +34,16 @@ window.currentOIDCConfig = currentOIDCConfig;
 
 // Shared permissions cache across modules (populated once per tab)
 const PERMISSIONS_URL = '/api/getUserPermissions.php';
+const DEFAULT_HEADER_TITLE = 'FileRise';
+const PRO_DEFAULT_HEADER_TITLE = 'FileRise Pro';
+
+function resolveHeaderTitle(rawTitle, isPro) {
+  const cleaned = String(rawTitle || '').trim();
+  if (!cleaned || cleaned === DEFAULT_HEADER_TITLE) {
+    return isPro ? PRO_DEFAULT_HEADER_TITLE : DEFAULT_HEADER_TITLE;
+  }
+  return cleaned;
+}
 
 async function fetchUserPermissionsOnce() {
   if (window.__FR_PERMISSIONS_CACHE) return window.__FR_PERMISSIONS_CACHE;
@@ -261,7 +271,8 @@ export function loadAdminConfigFunc() {
       let config = {};
       try { config = await response.json(); } catch (e) { config = {}; }
 
-      const headerTitle = config.header_title || "FileRise";
+      const isPro = !!(config.pro && config.pro.active);
+      const headerTitle = resolveHeaderTitle(config.header_title, isPro);
       localStorage.setItem("headerTitle", headerTitle);
 
       document.title = headerTitle;
@@ -281,7 +292,11 @@ export function loadAdminConfigFunc() {
     })
     .catch(() => {
       // Fallback defaults if request truly fails
-      localStorage.setItem("headerTitle", "FileRise");
+      const fallbackTitle = resolveHeaderTitle(
+        DEFAULT_HEADER_TITLE,
+        window.__FR_IS_PRO === true
+      );
+      localStorage.setItem("headerTitle", fallbackTitle);
       localStorage.setItem("disableFormLogin", "false");
       localStorage.setItem("disableBasicAuth", "false");
       localStorage.setItem("disableOIDCLogin", "false");
@@ -289,7 +304,8 @@ export function loadAdminConfigFunc() {
       updateLoginOptionsUIFromStorage();
 
       const headerTitleElem = document.querySelector(".header-title h1");
-      if (headerTitleElem) headerTitleElem.textContent = "FileRise";
+      if (headerTitleElem) headerTitleElem.textContent = fallbackTitle;
+      document.title = fallbackTitle;
     })
     .finally(() => { window.__FR_SITE_CFG_PROMISE = null; });
   return window.__FR_SITE_CFG_PROMISE;

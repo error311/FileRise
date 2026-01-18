@@ -13,7 +13,7 @@ class UploadController
         header('Content-Type: application/json');
 
         $method         = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-        $requestParams  = ($method === 'GET') ? $_GET : $_POST;
+        $requestParams  = ($method === 'GET') ? $_GET : array_merge($_GET, $_POST);
 
         // Detect Resumable.js chunk "test" requests (testChunks=true, default GET)
         $isResumableTest =

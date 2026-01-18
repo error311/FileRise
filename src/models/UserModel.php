@@ -194,6 +194,40 @@ class userModel
     }
 
     /**
+     * Return the first admin username from users.txt order.
+     */
+    public static function getPrimaryAdminUsername(): string
+    {
+        self::ensureUserCaseMigration();
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (!file_exists($usersFile)) {
+            return '';
+        }
+
+        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            $parts = explode(':', $line);
+            if (count($parts) < 3) {
+                continue;
+            }
+            $username = $parts[0];
+            $role = trim((string)$parts[2]);
+            if (!preg_match(REGEX_USER, $username)) {
+                continue;
+            }
+            if ($role === '1') {
+                return $username;
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Add a user.
      *
      * @param string $username

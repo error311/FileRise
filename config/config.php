@@ -45,6 +45,8 @@ if (!defined('DEFAULT_CAN_ZIP'))          define('DEFAULT_CAN_ZIP', true);
 if (!defined('DEFAULT_VIEW_OWN_ONLY'))    define('DEFAULT_VIEW_OWN_ONLY', false);
 define('FOLDER_OWNERS_FILE', META_DIR . 'folder_owners.json');
 define('ACL_INHERIT_ON_CREATE', true);
+// Hidden file used to preserve empty remote folders (S3 prefixes, etc.).
+if (!defined('FR_REMOTE_DIR_MARKER')) define('FR_REMOTE_DIR_MARKER', '.filerise_keep');
 // ONLYOFFICE integration overrides (uncomment and set as needed)
 /*
 define('ONLYOFFICE_ENABLED', false);
@@ -63,23 +65,39 @@ if (!defined('OIDC_TOKEN_ENDPOINT_AUTH_METHOD')) {
 
 // Auto-create users from OIDC when no users.txt match.
 if (!defined('FR_OIDC_AUTO_CREATE')) {
-    define('FR_OIDC_AUTO_CREATE', true);
+    $envVal = getenv('FR_OIDC_AUTO_CREATE');
+    if ($envVal !== false && $envVal !== '') {
+        $val = strtolower(trim((string)$envVal));
+        define('FR_OIDC_AUTO_CREATE', in_array($val, ['1', 'true', 'yes', 'on'], true));
+    } else {
+        define('FR_OIDC_AUTO_CREATE', true);
+    }
 }
 
 // Claim that contains IdP groups/roles (typical: "groups" or "roles").
 if (!defined('FR_OIDC_GROUP_CLAIM')) {
-    define('FR_OIDC_GROUP_CLAIM', 'groups');
+    $envVal = getenv('FR_OIDC_GROUP_CLAIM');
+    define(
+        'FR_OIDC_GROUP_CLAIM',
+        ($envVal !== false && trim((string)$envVal) !== '') ? trim((string)$envVal) : 'groups'
+    );
 }
 
 // Name of an IdP group that should be treated as "FileRise admin".
 if (!defined('FR_OIDC_ADMIN_GROUP')) {
-    define('FR_OIDC_ADMIN_GROUP', 'filerise-admins');
+    $envVal = getenv('FR_OIDC_ADMIN_GROUP');
+    if ($envVal !== false) {
+        define('FR_OIDC_ADMIN_GROUP', trim((string)$envVal));
+    } else {
+        define('FR_OIDC_ADMIN_GROUP', 'filerise-admins');
+    }
 }
 
 // Prefix for IdP groups that should map into FileRise Pro groups.
 // Example: IdP group "frp_clients_acme" → Pro group "clients_acme".
 if (!defined('FR_OIDC_PRO_GROUP_PREFIX')) {
-    define('FR_OIDC_PRO_GROUP_PREFIX', '');
+    $envVal = getenv('FR_OIDC_PRO_GROUP_PREFIX');
+    define('FR_OIDC_PRO_GROUP_PREFIX', ($envVal !== false) ? trim((string)$envVal) : '');
 }
 // Optional env/constant override: if set, it wins; if not set, UI setting is used.
 if (!defined('FR_OIDC_ALLOW_DEMOTE')) {

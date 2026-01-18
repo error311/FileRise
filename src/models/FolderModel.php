@@ -1571,13 +1571,30 @@ class FolderModel
         if ($storage->isLocal()) {
             $items = array_diff(@scandir($real) ?: [], array('.', '..'));
         } else {
+            $markerName = defined('FR_REMOTE_DIR_MARKER') ? (string)FR_REMOTE_DIR_MARKER : '.filerise_keep';
             $items = array_values(array_filter(
                 $storage->list($real),
-                static fn($n) => $n !== '.' && $n !== '..' && $n !== ''
+                static function ($n) use ($markerName) {
+                    if ($n === '.' || $n === '..' || $n === '') {
+                        return false;
+                    }
+                    if ($markerName !== '' && $n === $markerName) {
+                        return false;
+                    }
+                    return true;
+                }
             ));
         }
         if (count($items) > 0) {
             return ["error" => "Folder is not empty."];
+        }
+
+        if (!$storage->isLocal()) {
+            $markerName = defined('FR_REMOTE_DIR_MARKER') ? (string)FR_REMOTE_DIR_MARKER : '.filerise_keep';
+            if ($markerName !== '') {
+                $markerPath = rtrim($real, '/\\') . DIRECTORY_SEPARATOR . $markerName;
+                $storage->delete($markerPath);
+            }
         }
 
         if (!$storage->delete($real)) {

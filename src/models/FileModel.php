@@ -68,6 +68,49 @@ class FileModel
         return rtrim((string)TRASH_DIR, '/\\') . DIRECTORY_SEPARATOR;
     }
 
+    private static function shouldUseRemoteMarker(StorageAdapterInterface $storage): bool
+    {
+        if ($storage->isLocal()) {
+            return false;
+        }
+        if (class_exists('SourceContext')) {
+            $src = SourceContext::getActiveSource();
+            $type = strtolower((string)($src['type'] ?? ''));
+            return $type === 's3';
+        }
+        return true;
+    }
+
+    private static function remoteDirMarker(): string
+    {
+        return defined('FR_REMOTE_DIR_MARKER') ? (string)FR_REMOTE_DIR_MARKER : '.filerise_keep';
+    }
+
+    private static function ensureRemoteFolderMarker(StorageAdapterInterface $storage, string $dir): void
+    {
+        if (!self::shouldUseRemoteMarker($storage)) {
+            return;
+        }
+        $markerName = self::remoteDirMarker();
+        if ($markerName === '') {
+            return;
+        }
+        $dir = rtrim($dir, "/\\");
+        if ($dir === '' || $dir === '.') {
+            return;
+        }
+        $markerPath = $dir . DIRECTORY_SEPARATOR . $markerName;
+        try {
+            if ($storage->stat($markerPath) !== null) {
+                return;
+            }
+            $storage->mkdir($dir, 0775, true);
+            $storage->write($markerPath, '');
+        } catch (\Throwable $e) {
+            // Best-effort only; remote backends may not support markers.
+        }
+    }
+
     /**
      * Resolve a logical folder key (e.g. "root", "invoices/2025") to a
      * real path under UPLOAD_DIR, enforce REGEX_FOLDER_NAME, and ensure
@@ -749,24 +792,38 @@ class FileModel
         $errors = [];
         $storage = self::storage();
         $isLocal = $storage->isLocal();
+        $skipTrash = false;
+        if (!$isLocal && class_exists('SourceContext')) {
+            $src = SourceContext::getActiveSource();
+            if (is_array($src)) {
+                $type = strtolower((string)($src['type'] ?? ''));
+                if ($type === 'gdrive') {
+                    $skipTrash = true;
+                }
+            }
+        }
 
         list($uploadDir, $err) = self::resolveFolderPath($folder, false);
         if ($err) return ["error" => $err];
         $uploadDir .= DIRECTORY_SEPARATOR;
 
         // Setup the Trash folder and metadata.
-        $trashDir = rtrim(self::trashRoot(), '/\\') . DIRECTORY_SEPARATOR;
-        if ($storage->stat($trashDir) === null) {
-            $storage->mkdir($trashDir, 0755, true);
-        }
-        $trashMetadataFile = $trashDir . "trash.json";
+        $trashDir = '';
+        $trashMetadataFile = '';
         $trashData = [];
-        $trashJson = $storage->read($trashMetadataFile);
-        if ($trashJson !== false) {
-            $trashData = json_decode($trashJson, true);
-        }
-        if (!is_array($trashData)) {
-            $trashData = [];
+        if (!$skipTrash) {
+            $trashDir = rtrim(self::trashRoot(), '/\\') . DIRECTORY_SEPARATOR;
+            if ($storage->stat($trashDir) === null) {
+                $storage->mkdir($trashDir, 0755, true);
+            }
+            $trashMetadataFile = $trashDir . "trash.json";
+            $trashJson = $storage->read($trashMetadataFile);
+            if ($trashJson !== false) {
+                $trashData = json_decode($trashJson, true);
+            }
+            if (!is_array($trashData)) {
+                $trashData = [];
+            }
         }
 
         // Load folder metadata if available.
@@ -793,53 +850,74 @@ class FileModel
 
             $filePath = $uploadDir . $basename;
 
-            // Check if file exists.
-            if ($storage->stat($filePath) !== null) {
-                // Unique trash name (timestamp + random)
-                $trashFileName = $basename . '_' . time() . '_' . bin2hex(random_bytes(4));
-                $trashTarget = $trashDir . $trashFileName;
-                $moved = $storage->move($filePath, $trashTarget);
-                if (!$moved) {
-                    // Fallback for backends that don't support MOVE across collections.
-                    $copied = $storage->copy($filePath, $trashTarget);
-                    if ($copied) {
-                        if ($storage->delete($filePath)) {
-                            $moved = true;
-                        } else {
-                            // Best-effort cleanup to avoid leaving a duplicate in trash.
-                            $storage->delete($trashTarget);
-                        }
-                    }
-                }
-                if ($moved) {
-                    $movedToTrash[] = $basename;
-                    // Record trash metadata for possible restoration.
-                    $trashData[] = [
-                        'type'           => 'file',
-                        'originalFolder' => $uploadDir,
-                        'originalName'   => $basename,
-                        'trashName'      => $trashFileName,
-                        'trashedAt'      => time(),
-                        'uploaded'       => $folderMetadata[$basename]['uploaded'] ?? "Unknown",
-                        'uploader'       => $folderMetadata[$basename]['uploader'] ?? "Unknown",
-                        'deletedBy'      => $_SESSION['username'] ?? "Unknown"
-                    ];
-                } else {
-                    if (!$isLocal && $storage->delete($filePath)) {
+            if ($skipTrash) {
+                if (!$storage->delete($filePath)) {
+                    if (!$isLocal && $storage->stat($filePath) === null) {
                         $deletedPermanent[] = $basename;
-                    } else {
-                        $errors[] = "Failed to move $basename to Trash.";
+                        continue;
                     }
+                    $errors[] = "Failed to delete $basename.";
                     continue;
                 }
-            } else {
-                // If file does not exist, consider it already removed.
                 $deletedPermanent[] = $basename;
+                continue;
+            }
+
+            // Local: check existence; Remote: avoid per-file stat unless needed.
+            if ($isLocal) {
+                if ($storage->stat($filePath) === null) {
+                    $deletedPermanent[] = $basename;
+                    continue;
+                }
+            }
+
+            // Unique trash name (timestamp + random)
+            $trashFileName = $basename . '_' . time() . '_' . bin2hex(random_bytes(4));
+            $trashTarget = $trashDir . $trashFileName;
+            $moved = $storage->move($filePath, $trashTarget);
+            if (!$moved) {
+                // Fallback for backends that don't support MOVE across collections.
+                $copied = $storage->copy($filePath, $trashTarget);
+                if ($copied) {
+                    if ($storage->delete($filePath)) {
+                        $moved = true;
+                    } else {
+                        // Best-effort cleanup to avoid leaving a duplicate in trash.
+                        $storage->delete($trashTarget);
+                    }
+                }
+            }
+            if ($moved) {
+                $movedToTrash[] = $basename;
+                // Record trash metadata for possible restoration.
+                $trashData[] = [
+                    'type'           => 'file',
+                    'originalFolder' => $uploadDir,
+                    'originalName'   => $basename,
+                    'trashName'      => $trashFileName,
+                    'trashedAt'      => time(),
+                    'uploaded'       => $folderMetadata[$basename]['uploaded'] ?? "Unknown",
+                    'uploader'       => $folderMetadata[$basename]['uploader'] ?? "Unknown",
+                    'deletedBy'      => $_SESSION['username'] ?? "Unknown"
+                ];
+            } else {
+                if (!$isLocal && $storage->delete($filePath)) {
+                    $deletedPermanent[] = $basename;
+                } else {
+                    if (!$isLocal && $storage->stat($filePath) === null) {
+                        $deletedPermanent[] = $basename;
+                        continue;
+                    }
+                    $errors[] = "Failed to move $basename to Trash.";
+                }
+                continue;
             }
         }
 
         // Save updated trash metadata.
-        $storage->write($trashMetadataFile, json_encode($trashData, JSON_PRETTY_PRINT), LOCK_EX);
+        if (!$skipTrash) {
+            $storage->write($trashMetadataFile, json_encode($trashData, JSON_PRETTY_PRINT), LOCK_EX);
+        }
 
         // Remove deleted file entries from folder metadata.
         if (file_exists($metadataFile)) {
@@ -852,6 +930,12 @@ class FileModel
                     }
                 }
                 file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT), LOCK_EX);
+            }
+        }
+
+        if (!$isLocal && strtolower((string)$folder) !== 'root') {
+            if (!empty($movedToTrash) || !empty($deletedPermanent)) {
+                self::ensureRemoteFolderMarker($storage, rtrim($uploadDir, '/\\'));
             }
         }
 
@@ -1012,6 +1096,10 @@ class FileModel
         }
         if (file_put_contents($destMetaFile, json_encode($destMetadata, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             $errors[] = "Failed to update destination metadata.";
+        }
+
+        if (!$isLocal && !empty($movedFiles) && strtolower((string)$sourceFolder) !== 'root') {
+            self::ensureRemoteFolderMarker($storage, rtrim($sourceDir, '/\\'));
         }
 
         if (empty($errors)) {
@@ -3188,13 +3276,13 @@ class FileModel
                 $localUploader = $id;
             }
         }
-        $skipContentForFtp = false;
+        $skipContentForRemote = false;
         if (!$storage->isLocal() && class_exists('SourceContext')) {
             $src = SourceContext::getActiveSource();
             if (is_array($src)) {
                 $type = strtolower((string)($src['type'] ?? ''));
-                if ($type === 'ftp') {
-                    $skipContentForFtp = true;
+                if (in_array($type, ['ftp', 'sftp', 'webdav', 'gdrive'], true)) {
+                    $skipContentForRemote = true;
                 }
             }
         }
@@ -3286,7 +3374,7 @@ class FileModel
             $fileEntry['contentTruncated'] = false;
 
             if ($isText && $fileSizeBytes > 0) {
-                if ($skipContentForFtp) {
+                if ($skipContentForRemote) {
                     $fileEntry['contentTruncated'] = true;
                 } elseif ($fileSizeBytes <= INDEX_TEXT_BYTES_MAX) {
                     $snippet = $storage->read($filePath, LISTING_CONTENT_BYTES_MAX, 0);

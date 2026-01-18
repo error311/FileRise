@@ -39,6 +39,16 @@ const PRO_API_MIN_VERSION_LABELS = {
   sources: '1.5.0'
 };
 const CORE_REQUIRED_PRO_API_LEVEL = Math.max(...Object.values(PRO_API_LEVELS));
+const DEFAULT_HEADER_TITLE = 'FileRise';
+const PRO_DEFAULT_HEADER_TITLE = 'FileRise Pro';
+
+function resolveHeaderTitle(rawTitle, isPro) {
+  const cleaned = String(rawTitle || '').trim();
+  if (!cleaned || cleaned === DEFAULT_HEADER_TITLE) {
+    return isPro ? PRO_DEFAULT_HEADER_TITLE : DEFAULT_HEADER_TITLE;
+  }
+  return cleaned;
+}
 
 function compareSemver(a, b) {
   const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
@@ -435,7 +445,7 @@ function wireHeaderTitleLive() {
   input.__live = true;
 
   const apply = (val) => {
-    const title = (val || '').trim() || 'FileRise';
+    const title = resolveHeaderTitle(val, window.__FR_IS_PRO === true);
     const h1 = document.querySelector('.header-title h1');
     if (h1) h1.textContent = title;
     document.title = title;
@@ -1414,6 +1424,9 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
               <input type="text" id="sourceGDriveDriveId" class="form-control" placeholder="" />
             </div>
           </div>
+          <div class="text-muted small" style="margin-top:6px;">
+            ${tf('source_gdrive_trash_note', 'Trash is not supported on Google Drive sources; deletes are permanent.')}
+          </div>
         </div>
 
         <div class="sources-form-actions">
@@ -2317,6 +2330,7 @@ function captureInitialAdminConfig() {
 
     enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
     sharedMaxUploadSize: (document.getElementById("sharedMaxUploadSize")?.value || "").trim(),
+    resumableChunkMb: (document.getElementById("resumableChunkMb")?.value || "").trim(),
     globalOtpauthUrl: (document.getElementById("globalOtpauthUrl")?.value || "").trim(),
     brandingCustomLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
     brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
@@ -2361,6 +2375,7 @@ function hasUnsavedChanges() {
 
     getChk("enableWebDAV") !== o.enableWebDAV ||
     getVal("sharedMaxUploadSize") !== o.sharedMaxUploadSize ||
+    getVal("resumableChunkMb") !== o.resumableChunkMb ||
     getVal("globalOtpauthUrl") !== o.globalOtpauthUrl ||
     getVal("brandingCustomLogoUrl") !== (o.brandingCustomLogoUrl || "") ||
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
@@ -2520,14 +2535,178 @@ function showTypedConfirmModal({ title, message, confirmText, placeholder }) {
   });
 }
 
+const SECTION_ANIM_MS = 160;
+
+function clearSectionTimer(cnt) {
+  if (cnt && cnt.__closeTimer) {
+    clearTimeout(cnt.__closeTimer);
+    cnt.__closeTimer = null;
+  }
+}
+
+function openSectionContent(cnt) {
+  if (!cnt) return;
+  clearSectionTimer(cnt);
+  cnt.style.display = "block";
+  cnt.classList.remove("is-closing");
+  requestAnimationFrame(() => {
+    cnt.classList.add("is-open");
+  });
+}
+
+function closeSectionContent(cnt) {
+  if (!cnt) return;
+  clearSectionTimer(cnt);
+  cnt.classList.remove("is-open");
+  cnt.classList.add("is-closing");
+  cnt.__closeTimer = setTimeout(() => {
+    if (cnt.classList.contains("is-closing")) {
+      cnt.style.display = "none";
+      cnt.classList.remove("is-closing");
+    }
+    cnt.__closeTimer = null;
+  }, SECTION_ANIM_MS);
+}
+
+function setSectionContentImmediate(cnt, open) {
+  if (!cnt) return;
+  clearSectionTimer(cnt);
+  if (open) {
+    cnt.style.display = "block";
+    cnt.classList.add("is-open");
+    cnt.classList.remove("is-closing");
+  } else {
+    cnt.style.display = "none";
+    cnt.classList.remove("is-open", "is-closing");
+  }
+}
+
 function toggleSection(id) {
   const hdr = document.getElementById(id + "Header");
   const cnt = document.getElementById(id + "Content");
   if (!hdr || !cnt) return;
   const isCollapsedNow = hdr.classList.toggle("collapsed");
-  cnt.style.display = isCollapsedNow ? "none" : "block";
+  if (isCollapsedNow) {
+    closeSectionContent(cnt);
+  } else {
+    openSectionContent(cnt);
+  }
   if (!isCollapsedNow && id === "shareLinks") {
     loadShareLinksSection();
+    cnt.dataset.loaded = "1";
+  }
+}
+
+function normalizeAdminSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function wireAdminPanelSearch(sectionIds) {
+  const input = document.getElementById("adminSettingsSearch");
+  const emptyState = document.getElementById("adminSettingsSearchEmpty");
+  const wrap = document.getElementById("adminSettingsSearchWrap");
+  const toggleBtn = document.getElementById("adminSearchToggle");
+  if (!input || !Array.isArray(sectionIds)) return;
+
+  const ids = sectionIds.filter(Boolean);
+
+  const setOpen = (open, opts = {}) => {
+    if (!wrap || !toggleBtn) return;
+    wrap.classList.toggle("is-collapsed", !open);
+    toggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open && opts.focus) {
+      input.focus();
+    }
+  };
+
+  const updateToggleState = () => {
+    if (!toggleBtn) return;
+    const hasQuery = !!normalizeAdminSearchText(input.value);
+    toggleBtn.classList.toggle("is-active", hasQuery);
+  };
+
+  const restoreState = () => {
+    ids.forEach(id => {
+      const hdr = document.getElementById(id + "Header");
+      const cnt = document.getElementById(id + "Content");
+      if (!hdr || !cnt) return;
+      const saved = hdr.dataset.prevCollapsed;
+      hdr.style.display = "";
+      cnt.style.display = "";
+      if (saved !== undefined) {
+        const wasCollapsed = saved === "1";
+        hdr.classList.toggle("collapsed", wasCollapsed);
+        setSectionContentImmediate(cnt, !wasCollapsed);
+        delete hdr.dataset.prevCollapsed;
+      }
+    });
+    if (emptyState) emptyState.style.display = "none";
+  };
+
+  const applyFilter = () => {
+    const query = normalizeAdminSearchText(input.value);
+    if (!query) {
+      restoreState();
+      updateToggleState();
+      return;
+    }
+
+    let matches = 0;
+    ids.forEach(id => {
+      const hdr = document.getElementById(id + "Header");
+      const cnt = document.getElementById(id + "Content");
+      if (!hdr || !cnt) return;
+      if (hdr.dataset.prevCollapsed === undefined) {
+        hdr.dataset.prevCollapsed = hdr.classList.contains("collapsed") ? "1" : "0";
+      }
+
+      const haystack = normalizeAdminSearchText(hdr.textContent + " " + cnt.textContent);
+      const match = haystack.includes(query);
+      hdr.style.display = match ? "" : "none";
+      setSectionContentImmediate(cnt, match);
+      if (match) {
+        hdr.classList.remove("collapsed");
+        matches += 1;
+        if (id === "shareLinks" && !cnt.dataset.loaded) {
+          loadShareLinksSection();
+          cnt.dataset.loaded = "1";
+        }
+      }
+    });
+
+    if (emptyState) emptyState.style.display = matches ? "none" : "block";
+    updateToggleState();
+  };
+
+  if (toggleBtn && wrap && !toggleBtn.__wired) {
+    toggleBtn.__wired = true;
+    toggleBtn.addEventListener("click", () => {
+      const isCollapsed = wrap.classList.contains("is-collapsed");
+      if (isCollapsed) {
+        setOpen(true, { focus: true });
+        return;
+      }
+      const hasQuery = !!normalizeAdminSearchText(input.value);
+      if (hasQuery) {
+        input.focus();
+        return;
+      }
+      setOpen(false);
+    });
+  }
+
+  input.addEventListener("input", applyFilter);
+
+  const initialQuery = normalizeAdminSearchText(input.value);
+  if (initialQuery) {
+    setOpen(true);
+    applyFilter();
+  } else {
+    setOpen(false);
+    updateToggleState();
   }
 }
 
@@ -3542,11 +3721,8 @@ export function openAdminPanel() {
   fetch("/api/admin/getConfig.php", { credentials: "include" })
     .then(r => r.json())
     .then(config => {
-      if (config.header_title) {
-        const h = document.querySelector(".header-title h1");
-        if (h) h.textContent = config.header_title;
-        window.headerTitle = config.header_title;
-      }
+      const rawHeaderTitle = (typeof config.header_title === 'string') ? config.header_title : '';
+      window.headerTitle = rawHeaderTitle;
       window.currentOIDCConfig = window.currentOIDCConfig || {};
 
       if (config.oidc && typeof config.oidc === 'object') {
@@ -3561,6 +3737,10 @@ export function openAdminPanel() {
       const proInfo = config.pro || {};
       const isPro = !!proInfo.active;
       window.__FR_IS_PRO = isPro;
+      const headerDisplayTitle = resolveHeaderTitle(rawHeaderTitle, isPro);
+      const h = document.querySelector(".header-title h1");
+      if (h) h.textContent = headerDisplayTitle;
+      document.title = headerDisplayTitle;
       const proType = proInfo.type || '';
       const proEmail = proInfo.email || '';
       const proVersion = proInfo.version || 'not installed';
@@ -3575,6 +3755,9 @@ export function openAdminPanel() {
       const proPlan = proInfo.plan || '';            // e.g. "early_supporter_1x", "personal_yearly"
       const proUpdatesUntil = proInfo.updatesUntil || proInfo.expiresAt || '';  // ISO timestamp string or ""
       const proInstanceId = proInfo.instanceId || '';
+      const proPrimaryAdmin = Object.prototype.hasOwnProperty.call(proInfo, 'primaryAdmin')
+        ? !!proInfo.primaryAdmin
+        : true;
       const proMaxMajor = (
         typeof proInfo.maxMajor === 'number'
           ? proInfo.maxMajor
@@ -3685,36 +3868,64 @@ export function openAdminPanel() {
           display:flex; justify-content:center; align-items:center;
           z-index:3000;
         `;
+        const sections = [
+          { id: "userManagement", label: tf("users_access", "Users & Access") },
+          { id: "headerSettings", label: tf("appearance_ui", "Appearance & UI") },
+          { id: "loginOptions", label: tf("auth_webdav", "Auth & WebDAV (OIDC/TOTP)") },
+          { id: "upload", label: tf("uploads_antivirus", "Uploads & Antivirus") },
+          { id: "shareLinks", label: tf("sharing_links", "Sharing & Links") },
+          { id: "network", label: tf("network_proxy", "Network & Proxy") },
+          { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
+          { id: "onlyoffice", label: "ONLYOFFICE" },
+          { id: "storage", label: tf("storage_usage", "Storage / Disk Usage") }
+        ];
+        if (showSourcesSection) {
+          const sourcesLabel = !isPro
+            ? `<span style="display:inline-flex; align-items:center; gap:6px;">${tf("sources", "Sources")}<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span></span>`
+            : tf("sources", "Sources");
+          sections.push({ id: "sources", label: sourcesLabel });
+        }
+        sections.push(
+          { id: "proFeatures", label: "Pro Features" },
+          { id: "pro", label: "FileRise Pro" },
+          { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Thanks / Sponsor / Donations") : "Thanks / Sponsor / Donations") }
+        );
+        const sectionIds = sections.map(sec => sec.id);
         mdl.innerHTML = `
           <div class="modal-content" style="${inner}">
             <div class="editor-close-btn" id="closeAdminPanel">&times;</div>
-            <h3>${getAdminTitle(isPro, proVersion, updatesExpired)}</h3>
+            <div class="admin-panel-header">
+              <h3>${getAdminTitle(isPro, proVersion, updatesExpired)}</h3>
+              <div class="admin-panel-actions">
+                <button
+                  type="button"
+                  id="adminSearchToggle"
+                  class="btn btn-sm btn-light admin-search-toggle"
+                  title="${tf("settings_search_toggle", "Search settings")}"
+                  aria-expanded="false"
+                >
+                  <i class="material-icons">search</i>
+                  <span class="admin-search-toggle-label">${tf("search", "Search")}</span>
+                </button>
+              </div>
+            </div>
             <form id="adminPanelForm">
-            ${(() => {
-              const sections = [
-                { id: "userManagement", label: t("user_management") },
-                { id: "headerSettings", label: tf("header_footer_settings", "Header, FileList, Language & Footer Settings") },
-                { id: "loginOptions", label: t("login_webdav") + " (OIDC/TOTP)" },
-                { id: "network", label: tf("firewall_proxy_settings", "Firewall and Proxy Settings") },
-                { id: "encryption", label: tf("encryption_at_rest", "Encryption at rest") },
-                { id: "onlyoffice", label: "ONLYOFFICE" },
-                { id: "upload", label: tf("antivirus_settings", "Antivirus") },
-                { id: "shareLinks", label: t("manage_shared_links_size") },
-                { id: "storage", label: "Storage / Disk Usage" }
-              ];
-              if (showSourcesSection) {
-                const sourcesLabel = !isPro
-                  ? `<span style="display:inline-flex; align-items:center; gap:6px;">${tf("sources", "Sources")}<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span></span>`
-                  : tf("sources", "Sources");
-                sections.push({ id: "sources", label: sourcesLabel });
-              }
-              sections.push(
-                { id: "proFeatures", label: "Pro Features" },
-                { id: "pro", label: "FileRise Pro" },
-                { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Thanks / Sponsor / Donations") : "Thanks / Sponsor / Donations") }
-              );
-              return sections;
-            })().map(sec => `
+            <div id="adminSettingsSearchWrap" class="form-group admin-search-wrap is-collapsed">
+              <input
+                type="text"
+                id="adminSettingsSearch"
+                class="form-control"
+                autocomplete="off"
+                placeholder="${tf("settings_search_placeholder", "Search settings...")}"
+              />
+              <small class="text-muted d-block mt-1">
+                ${tf("settings_search_help", "Type to filter sections and settings.")}
+              </small>
+              <div id="adminSettingsSearchEmpty" class="small text-muted" style="display:none; margin-top:6px;">
+                ${tf("settings_search_empty", "No matching settings found.")}
+              </div>
+            </div>
+            ${sections.map(sec => `
               <div id="${sec.id}Header" class="section-header collapsed">
                 ${sec.label} <i class="material-icons">expand_more</i>
               </div>
@@ -3732,22 +3943,9 @@ export function openAdminPanel() {
 
         document.getElementById("closeAdminPanel").addEventListener("click", closeAdminPanel);
         document.getElementById("cancelAdminSettings").addEventListener("click", closeAdminPanel);
+        wireAdminPanelSearch(sectionIds);
 
-        [
-          "userManagement",
-          "headerSettings",
-          "loginOptions",
-          "network",
-          "encryption",
-          "onlyoffice",
-          "upload",
-          "shareLinks",
-          "storage",
-          showSourcesSection ? "sources" : null,
-          "proFeatures",
-          "pro",
-          "sponsor"
-        ].filter(Boolean).forEach(id => {
+        sectionIds.filter(Boolean).forEach(id => {
           const headerEl = document.getElementById(id + "Header");
           if (!headerEl || headerEl.__wired) return;
           headerEl.__wired = true;
@@ -4264,11 +4462,37 @@ export function openAdminPanel() {
         renderAdminEncryptionSection({ config, dark });
 
         document.getElementById("uploadContent").innerHTML = `
-      <div class="admin-subsection-title" style="margin-top:2px;">
-    Antivirus upload scanning
+  <div class="admin-subsection-title" style="margin-top:2px;">
+    ${tf("upload_settings", "Upload settings")}
   </div>
 
-    <div class="form-group" style="margin-top:10px;">
+  <div class="form-group" style="margin-top:10px;">
+    <label for="resumableChunkMb">
+      ${tf("resumable_chunk_size_label", "Resumable chunk size (MB)")}
+    </label>
+    <input
+      type="number"
+      id="resumableChunkMb"
+      class="form-control"
+      min="0.5"
+      max="100"
+      step="0.1"
+    />
+    <small class="text-muted d-block mt-1">
+      ${tf(
+          "resumable_chunk_size_help",
+          "Applies to file picker uploads (Resumable.js). Use smaller chunks if your proxy limits request size (e.g., Cloudflare Tunnels 100 MB)."
+        )}
+    </small>
+  </div>
+
+  <hr class="admin-divider">
+
+  <div class="admin-subsection-title" style="margin-top:2px;">
+    ${tf("antivirus_upload_scanning", "Antivirus upload scanning")}
+  </div>
+
+  <div class="form-group" style="margin-top:10px;">
     <div class="form-check fr-toggle">
       <input
         type="checkbox"
@@ -4635,6 +4859,16 @@ ${t("shared_max_upload_size_bytes")}
         // --- FileRise Pro / License section ---
         const proContent = document.getElementById("proContent");
         if (proContent) {
+          if (!proPrimaryAdmin) {
+            proContent.innerHTML = `
+              <div class="card" style="padding:12px; border:1px solid #ddd; border-radius:12px; max-width:720px; margin:8px auto;">
+                <strong>FileRise Pro</strong>
+                <div class="text-muted" style="margin-top:6px;">
+                  This is only viewable on the registered administrator.
+                </div>
+              </div>
+            `;
+          } else {
           // Normalize versions so "v1.0.1" and "1.0.1" compare cleanly
           const norm = (v) => (String(v || '').trim().replace(/^v/i, ''));
 
@@ -5100,6 +5334,7 @@ ${t("shared_max_upload_size_bytes")}
             });
           }
 
+          }
         }
         // --- end FileRise Pro section ---
 
@@ -5109,9 +5344,9 @@ ${t("shared_max_upload_size_bytes")}
         if (proFeaturesHeaderEl) {
           const iconHtml = '<i class="material-icons">expand_more</i>';
           const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
-            ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin-left:6px;">Pro</span>'
+            ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span>'
             : '';
-          proFeaturesHeaderEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features ${pill}</span> ${iconHtml}`;
+          proFeaturesHeaderEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
         }
         if (proFeaturesContainer) {
           const proSearchBlockedReason = !isPro ? 'pro' : (!proSearchApiOk ? 'api' : null);
@@ -5541,6 +5776,14 @@ ${t("shared_max_upload_size_bytes")}
 
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
+        const uploadCfg = (config.uploads && typeof config.uploads === "object") ? config.uploads : {};
+        const chunkEl = document.getElementById("resumableChunkMb");
+        if (chunkEl) {
+          const raw = uploadCfg.resumableChunkMb;
+          const num = parseFloat(raw);
+          const val = Number.isFinite(num) ? Math.min(100, Math.max(0.5, num)) : 1.5;
+          chunkEl.value = val;
+        }
 
         // Published URL (optional)
         const deploy = (config && config.deployment && typeof config.deployment === 'object') ? config.deployment : {};
@@ -5620,6 +5863,14 @@ ${t("shared_max_upload_size_bytes")}
 
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
+        const uploadCfg2 = (config.uploads && typeof config.uploads === "object") ? config.uploads : {};
+        const chunkEl2 = document.getElementById("resumableChunkMb");
+        if (chunkEl2) {
+          const raw = uploadCfg2.resumableChunkMb;
+          const num = parseFloat(raw);
+          const val = Number.isFinite(num) ? Math.min(100, Math.max(0.5, num)) : 1.5;
+          chunkEl2.value = val;
+        }
 
         // Published URL (optional)
         const deploy2 = (config && config.deployment && typeof config.deployment === 'object') ? config.deployment : {};
@@ -5715,9 +5966,9 @@ ${t("shared_max_upload_size_bytes")}
         if (pfHeader) {
           const iconHtml = '<i class="material-icons">expand_more</i>';
           const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
-            ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin-left:6px;">Pro</span>'
+            ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span>'
             : '';
-          pfHeader.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features ${pill}</span> ${iconHtml}`;
+          pfHeader.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
         }
         const psToggle = document.getElementById("proSearchEnabled");
         const psLimit = document.getElementById("proSearchLimit");
@@ -5847,6 +6098,15 @@ function handleSave() {
           Number.isFinite(parseInt(document.getElementById("fileListSummaryDepth")?.value || "2", 10))
             ? parseInt(document.getElementById("fileListSummaryDepth")?.value || "2", 10)
             : 2
+          )
+      ),
+    },
+    uploads: {
+      resumableChunkMb: Math.max(
+        0.5,
+        Math.min(
+          100,
+          parseFloat(document.getElementById("resumableChunkMb")?.value || "1.5") || 1.5
         )
       ),
     },

@@ -152,6 +152,15 @@ class AdminModel
             ],
             'demoMode' => (defined('FR_DEMO_MODE') && FR_DEMO_MODE),
         ];
+        $uploadsCfg = (isset($config['uploads']) && is_array($config['uploads']))
+            ? $config['uploads']
+            : [];
+        $resumableChunkMb = (isset($uploadsCfg['resumableChunkMb']) && is_numeric($uploadsCfg['resumableChunkMb']))
+            ? (float)$uploadsCfg['resumableChunkMb']
+            : 1.5;
+        $public['uploads'] = [
+            'resumableChunkMb' => max(0.5, min(100, $resumableChunkMb)),
+        ];
         $displayCfg = (isset($config['display']) && is_array($config['display']))
             ? $config['display']
             : [];
@@ -381,6 +390,17 @@ class AdminModel
                 }
                 $configUpdate['sharedMaxUploadSize'] = $sms;
             }
+        }
+
+        // ---- Upload tuning (Resumable.js) ----
+        if (!isset($configUpdate['uploads']) || !is_array($configUpdate['uploads'])) {
+            $configUpdate['uploads'] = [
+                'resumableChunkMb' => 1.5,
+            ];
+        } else {
+            $raw = $configUpdate['uploads']['resumableChunkMb'] ?? 1.5;
+            $num = is_numeric($raw) ? (float)$raw : 1.5;
+            $configUpdate['uploads']['resumableChunkMb'] = max(0.5, min(100, $num));
         }
 
         // ---- ClamAV (simple boolean flag) ----
@@ -666,6 +686,17 @@ class AdminModel
                 $config['sharedMaxUploadSize'] = (int)min((int)$config['sharedMaxUploadSize'], $maxBytes);
             }
 
+            // Upload tuning (Resumable.js chunk size in MB)
+            if (!isset($config['uploads']) || !is_array($config['uploads'])) {
+                $config['uploads'] = [
+                    'resumableChunkMb' => 1.5,
+                ];
+            } else {
+                $raw = $config['uploads']['resumableChunkMb'] ?? 1.5;
+                $num = is_numeric($raw) ? (float)$raw : 1.5;
+                $config['uploads']['resumableChunkMb'] = max(0.5, min(100, $num));
+            }
+
             // ---- Ensure ONLYOFFICE structure exists, sanitize values ----
             if (!isset($config['onlyoffice']) || !is_array($config['onlyoffice'])) {
                 $config['onlyoffice'] = [
@@ -816,6 +847,9 @@ class AdminModel
             'globalOtpauthUrl'      => "",
             'enableWebDAV'          => false,
             'sharedMaxUploadSize'   => min(50 * 1024 * 1024, self::parseSize(TOTAL_UPLOAD_SIZE)),
+            'uploads'               => [
+                'resumableChunkMb' => 1.5,
+            ],
             'onlyoffice'            => [
                 'enabled'      => false,
                 'docsOrigin'   => '',

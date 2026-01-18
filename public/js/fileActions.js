@@ -361,7 +361,42 @@ document.addEventListener("DOMContentLoaded", function () {
   const confirmDelete = document.getElementById("confirmDeleteFiles");
   if (confirmDelete) {
     confirmDelete.setAttribute("data-default", "");
+    const deleteMsg = document.getElementById("deleteFilesMessage");
+    const setDeletingState = (busy) => {
+      if (busy) {
+        confirmDelete.dataset.originalLabel = confirmDelete.innerHTML;
+        confirmDelete.innerHTML =
+          '<span class="material-icons spinning" style="font-size:16px; vertical-align:middle; margin-right:6px;">autorenew</span>Deleting...';
+        confirmDelete.disabled = true;
+        if (cancelDelete) cancelDelete.disabled = true;
+        if (deleteMsg) {
+          deleteMsg.dataset.originalText = deleteMsg.textContent || "";
+          deleteMsg.textContent = "Deleting...";
+        }
+        return;
+      }
+      confirmDelete.innerHTML = confirmDelete.dataset.originalLabel || confirmDelete.innerHTML;
+      confirmDelete.disabled = false;
+      if (cancelDelete) cancelDelete.disabled = false;
+      if (deleteMsg && deleteMsg.dataset.originalText) {
+        deleteMsg.textContent = deleteMsg.dataset.originalText;
+        delete deleteMsg.dataset.originalText;
+      }
+      delete confirmDelete.dataset.originalLabel;
+    };
     confirmDelete.addEventListener("click", function () {
+      if (confirmDelete.dataset.busy === "1") return;
+      confirmDelete.dataset.busy = "1";
+      setDeletingState(true);
+      const fileCount = Array.isArray(window.filesToDelete) ? window.filesToDelete.length : 0;
+      const slowTimer = setTimeout(() => {
+        showToast(
+          fileCount > 0
+            ? `Deleting ${fileCount} file${fileCount === 1 ? '' : 's'}...`
+            : 'Deleting files...',
+          'info'
+        );
+      }, 2500);
       fetch("/api/file/deleteFiles.php", {
         method: "POST",
         credentials: "include",
@@ -386,6 +421,9 @@ document.addEventListener("DOMContentLoaded", function () {
         })
         .catch(error => console.error("Error deleting files:", error))
         .finally(() => {
+          clearTimeout(slowTimer);
+          setDeletingState(false);
+          delete confirmDelete.dataset.busy;
           document.getElementById("deleteFilesModal").style.display = "none";
           window.filesToDelete = [];
         });

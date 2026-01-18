@@ -441,6 +441,16 @@ body.dark-mode #restoreFilesModal .restore-empty{color: var(--fr-muted-dark,#aaa
     font-weight:600;
     box-shadow:0 1px 2px rgba(0,0,0,.08);
     transition: background-color var(--filr-transition-fast,150ms ease-out), transform var(--filr-transition-fast,150ms ease-out), box-shadow var(--filr-transition-fast,150ms ease-out);}
+#restoreFilesModal .restore-btn[aria-busy="true"]{cursor: wait;}
+#restoreFilesModal .restore-btn[aria-busy="true"]::after{content:"";
+    width:14px; height:14px;
+    border-radius:50%;
+    border:2px solid currentColor;
+    border-right-color: transparent;
+    display:inline-block;
+    margin-left:4px;
+    animation: filr-spin .8s linear infinite;}
+#restoreFilesModal .restore-btn[aria-busy="true"] .material-icons{opacity:0.6;}
 #restoreFilesModal .restore-btn .material-icons{font-size:20px;}
 #restoreFilesModal .restore-btn:hover{transform: translateY(-1px); background: #ffffff; box-shadow:0 6px 14px rgba(0,0,0,.12);}
 body.dark-mode #restoreFilesModal .restore-btn,body.dark-mode #deleteTrashSelectedBtn{background: var(--fr-surface-dark,#212121); color:#f1f1f1; border-color: var(--fr-border-dark,#303030);}
@@ -1331,7 +1341,7 @@ label{font-size: 0.9rem;}
 }
 #viewOptionsPopover input[type=range]{
   flex:1;
-  accent-color: var(--filr-accent-500,#0d6efd);
+
 }
 #viewOptionsPopover .vo-value{
   min-width:42px;
@@ -2943,6 +2953,171 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
 
 .section-content { display:none; margin-left:20px; margin-top:8px; margin-bottom:8px; }
 
+#adminPanelModal .section-header {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 23, 42, 0.02));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 8px 12px 8px 22px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+  position: relative;
+  margin-top: 12px;
+  color: #111827;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+#adminPanelModal .section-header:hover {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+}
+#adminPanelModal .section-header:not(.collapsed) {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+#adminPanelModal .section-header:not(.collapsed)::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.9), rgba(96, 165, 250, 0.9));
+}
+#adminPanelModal .section-header .material-icons { color: #475569; }
+body.dark-mode #adminPanelModal .section-header {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+}
+body.dark-mode #adminPanelModal .section-header:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+body.dark-mode #adminPanelModal .section-header:not(.collapsed) {
+  background: rgba(96, 165, 250, 0.18);
+  border-color: rgba(96, 165, 250, 0.35);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+body.dark-mode #adminPanelModal .section-header:not(.collapsed)::before {
+  background: linear-gradient(180deg, rgba(148, 197, 255, 0.95), rgba(96, 165, 250, 0.95));
+}
+body.dark-mode #adminPanelModal .section-header .material-icons { color: #cbd5f5; }
+
+#adminPanelModal .section-content {
+  display: none;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: #ffffff;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.04);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+#adminPanelModal .section-content.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+#adminPanelModal .section-content.is-closing {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+body.dark-mode #adminPanelModal .section-content {
+  background: #232323;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+#adminPanelModal .admin-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 42px;
+  margin-bottom: 6px;
+}
+#adminPanelModal .admin-panel-header h3 {
+  margin: 0;
+  font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+#adminPanelModal .admin-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#adminPanelModal .admin-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #fff;
+  color: #111;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+#adminPanelModal .admin-search-toggle .material-icons { font-size: 18px; }
+#adminPanelModal .admin-search-toggle:hover {
+  background: #f8fafc;
+}
+#adminPanelModal .admin-search-toggle.is-active {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+#adminPanelModal .admin-search-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+#adminPanelModal .admin-search-wrap {
+  margin: 6px 0 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.03);
+  overflow: hidden;
+  max-height: 180px;
+  transition: max-height 200ms ease, opacity 200ms ease, transform 200ms ease, margin 200ms ease, padding 200ms ease, border-color 200ms ease;
+}
+#adminPanelModal .admin-search-wrap.is-collapsed {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-color: transparent;
+}
+body.dark-mode #adminPanelModal .admin-search-toggle {
+  background: #2a2a2a;
+  color: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+body.dark-mode #adminPanelModal .admin-search-toggle:hover {
+  background: #333;
+}
+body.dark-mode #adminPanelModal .admin-search-toggle.is-active {
+  border-color: rgba(147, 197, 253, 0.45);
+  box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.12);
+}
+body.dark-mode #adminPanelModal .admin-search-wrap {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+@media (max-width: 720px) {
+  #adminPanelModal .admin-search-toggle-label { display: none; }
+  #adminPanelModal .admin-panel-header { gap: 8px; }
+}
+
 #adminPanelModal .editor-close-btn,
 #closeRestoreModal {
   position:absolute; top:10px; right:10px; display:flex; align-items:center; justify-content:center;
@@ -2956,6 +3131,50 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
 .dark-mode #closeRestoreModal{ background:rgba(0,0,0,0.6); color:#ff4d4d; }
 
 .action-row { display:flex; justify-content:space-between; margin-top:15px; }
+
+#adminPanelModal .action-row {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 18px;
+  padding: 10px 0 6px;
+  gap: 6px;
+  justify-content: flex-end;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.9) 35%, rgba(255, 255, 255, 1));
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+#adminPanelModal .action-row .btn {
+  border-radius: 999px;
+  min-width: 110px;
+  box-shadow: none;
+  transform: none;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+#adminPanelModal .action-row .btn:hover,
+#adminPanelModal .action-row .btn:focus-visible,
+#adminPanelModal .action-row .btn:active {
+  box-shadow: none;
+  transform: none;
+  opacity: 1;
+  filter: brightness(1.02);
+}
+#adminPanelModal .action-row .btn.btn-primary {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+}
+#adminPanelModal .action-row .btn.btn-primary:hover,
+#adminPanelModal .action-row .btn.btn-primary:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 140, 180, 0.28);
+  filter: brightness(1.04);
+}
+#adminPanelModal .action-row .btn.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0, 140, 180, 0.22);
+}
+body.dark-mode #adminPanelModal .action-row {
+  background: linear-gradient(180deg, rgba(35, 35, 35, 0), rgba(35, 35, 35, 0.92) 35%, rgba(35, 35, 35, 1));
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
 
 /* ---------- Folder access editor ---------- */
 .folder-access-toolbar {
@@ -3979,7 +4198,7 @@ body.dark-mode #adminPanelModal .sources-hint-btn::after{background:var(--fr-sur
 
 /* Give every admin section a little breathing room at the top */
 #adminPanelModal .section-content {
-  padding-top: 10px;
+  padding-top: 12px;
 }
 #adminPanelModal .admin-subsection-title {
   font-weight: 600;

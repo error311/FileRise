@@ -5670,8 +5670,14 @@ export async function loadFileList(folderParam, options = {}) {
   refreshCurrentFolderCaps(folder, paneSourceId, pane);
 
   // 1) show loader (only this request is allowed to render)
-  fileListContainer.style.visibility = "hidden";
+  fileListContainer.style.visibility = "visible";
+  fileListContainer.setAttribute('aria-busy', 'true');
   fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
+  const slowToastTimer = setTimeout(() => {
+    if (reqId === __fileListReqSeq[pane]) {
+      showToast(t('loading_slow') || "Still loading... remote sources can take a while.", 'info');
+    }
+  }, 8000);
 
   try {
     // Kick off both in parallel, but render as soon as FILES are ready
@@ -5983,6 +5989,21 @@ export async function loadFileList(folderParam, options = {}) {
     return data.files;
 
   } catch (err) {
+    if (reqId !== __fileListReqSeq[pane]) return [];
+    const errMsg = String(err?.message || '').toLowerCase();
+    const missingFolder = /directory not found|folder does not exist|does not exist|not found/.test(errMsg);
+    if (missingFolder && !skipFallback) {
+      const fallback = getParentFolder(folder || 'root') || 'root';
+      if (fallback && fallback !== folder) {
+        setLastOpenedFolder(fallback, paneSourceId);
+        if (isActivePane) {
+          window.currentFolder = fallback;
+          updateBreadcrumbTitle(fallback);
+          try { syncFolderTreeSelection(fallback); } catch (e) { /* ignore */ }
+        }
+        return await loadFileList(fallback, { pane, skipFallback: true });
+      }
+    }
     console.error("Error loading file list:", err);
     if (err.status === 403) {
       showToast(t("no_access_to_resource") || "You don't have access to this folder.", "error");
@@ -5995,7 +6016,9 @@ export async function loadFileList(folderParam, options = {}) {
     return [];
   } finally {
     if (reqId === __fileListReqSeq[pane]) {
+      clearTimeout(slowToastTimer);
       fileListContainer.style.visibility = "visible";
+      fileListContainer.removeAttribute('aria-busy');
     }
   }
 }

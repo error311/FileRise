@@ -1028,6 +1028,24 @@ export function refreshFolderIcon(folder) {
   invalidateFolderCaches(folder);
   ensureFolderIcon(folder);
 }
+
+export async function refreshFolderChildren(folder) {
+  const target = folder || 'root';
+  if (target === 'recycle_bin') return false;
+  invalidateFolderCaches(target);
+  clearPeekCache([target]);
+  const ul = getULForFolder(target);
+  if (!ul) {
+    refreshFolderIcon(target);
+    return false;
+  }
+  ul._renderedOnce = false;
+  ul.innerHTML = '';
+  try { await ensureChildrenLoaded(target, ul); primeChildToggles(ul); } catch (e) {}
+  if (target === 'root') placeRecycleBinNode();
+  refreshFolderIcon(target);
+  return true;
+}
 function ensureFolderIcon(folder) {
   if (folder === 'recycle_bin') return; // keep custom recycle icon intact
   const opt = document.querySelector(`.folder-option[data-folder="${CSS.escape(folder)}"]`);
@@ -3696,6 +3714,36 @@ attachEnterKeyListener("deleteFolderModal", "confirmDeleteFolder");
 const confirmDelete = document.getElementById("confirmDeleteFolder");
 if (confirmDelete) confirmDelete.addEventListener("click", async function () {
   const selectedFolder = window.currentFolder || "root";
+  if (confirmDelete.dataset.busy === "1") return;
+  confirmDelete.dataset.busy = "1";
+  const cancelBtn = document.getElementById("cancelDeleteFolder");
+  const msgEl = document.getElementById("deleteFolderMessage");
+  const setDeletingState = (busy) => {
+    if (busy) {
+      confirmDelete.dataset.originalLabel = confirmDelete.innerHTML;
+      confirmDelete.innerHTML =
+        '<span class="material-icons spinning" style="font-size:16px; vertical-align:middle; margin-right:6px;">autorenew</span>Deleting...';
+      confirmDelete.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = true;
+      if (msgEl) {
+        msgEl.dataset.originalText = msgEl.textContent || "";
+        msgEl.textContent = "Deleting...";
+      }
+      return;
+    }
+    confirmDelete.innerHTML = confirmDelete.dataset.originalLabel || confirmDelete.innerHTML;
+    confirmDelete.disabled = false;
+    if (cancelBtn) cancelBtn.disabled = false;
+    if (msgEl && msgEl.dataset.originalText) {
+      msgEl.textContent = msgEl.dataset.originalText;
+      delete msgEl.dataset.originalText;
+    }
+    delete confirmDelete.dataset.originalLabel;
+  };
+  setDeletingState(true);
+  const slowTimer = setTimeout(() => {
+    showToast(`Deleting folder ${selectedFolder}...`, 'info');
+  }, 2500);
   fetchWithCsrf("/api/folder/deleteFolder.php", {
     method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
     body: JSON.stringify({ folder: selectedFolder })
@@ -3705,6 +3753,14 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
       const parent = getParentFolder(selectedFolder);
       window.currentFolder = parent;
       setLastOpenedFolder(parent);
+      const sourceId = getActiveSourceId();
+      const sourceType = String(getSourceTypeById(sourceId || '') || '').toLowerCase();
+      const isRemote = !!sourceId && sourceType !== 'local';
+      if (isRemote) {
+        resetFolderTreeCaches();
+        await loadFolderTree(parent);
+        return;
+      }
       invalidateFolderCaches(parent);
       clearPeekCache([parent, selectedFolder]);
       const ul = getULForFolder(parent);
@@ -3716,6 +3772,9 @@ if (confirmDelete) confirmDelete.addEventListener("click", async function () {
       showToast(t('delete_folder_error', { error: errMsg }), 'error');
     }
   }).catch(err => console.error("Error deleting folder:", err)).finally(() => {
+    clearTimeout(slowTimer);
+    setDeletingState(false);
+    delete confirmDelete.dataset.busy;
     const modal = document.getElementById("deleteFolderModal");
     if (modal) modal.style.display = "none";
   });

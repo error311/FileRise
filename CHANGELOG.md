@@ -1,5 +1,67 @@
 # Changelog
 
+## Changes 01/17/2026 (v3.1.1)
+
+`release(v3.1.1): OIDC env overrides + configurable resumable chunk size + clearer startup logs (closes #86, closes #87, closes #90)`
+
+**Commit message**  
+
+```text
+release(v3.1.1): OIDC env overrides + configurable resumable chunk size + clearer startup logs (closes #86, closes #87, closes #90)
+
+- config: allow env overrides for OIDC knobs (auto-create, group claim, admin group, Pro group prefix)
+- uploads: add configurable Resumable.js chunk size (Admin + siteConfig) and honor it in upload.js
+- uploads: improve relative-path folder uploads and remote staging/cleanup for non-local sources
+- admin: add settings search + smoother section open/close animations
+- admin: restrict Pro license actions to the registered/primary admin user
+- remote storage: add FR_REMOTE_DIR_MARKER to preserve empty dirs; skip Trash on Google Drive sources
+- UX: clearer “FileRise startup complete” log line + better long-running delete/restore/loading feedback
+
+Closes #86
+Closes #87
+Closes #90
+```
+
+**Added**  
+
+- **OIDC env overrides** (in addition to config defaults):  
+  `FR_OIDC_AUTO_CREATE`, `FR_OIDC_GROUP_CLAIM`, `FR_OIDC_ADMIN_GROUP`, `FR_OIDC_PRO_GROUP_PREFIX`.
+- **Upload tuning (Admin):** “Resumable chunk size (MB)” (0.5–100 MB).  
+  Exported via siteConfig so the frontend can size chunks dynamically.
+- **Remote folder marker:** `FR_REMOTE_DIR_MARKER` (default: `.filerise_keep`) to preserve empty remote folders (S3-style prefix backends).
+- **Admin settings search:** quick filter for sections/settings in the Admin panel UI.
+
+**Changed**  
+
+- **Resumable uploads honor configured chunk size** (used by file picker + drag/drop when Resumable is available).
+- **Upload handling for folder paths**:
+  - validates and sanitizes `resumableRelativePath` / `relativePath`
+  - supports subfolder uploads more consistently
+  - remote sources stage chunks in meta root (`uploadtmp/`) and push via adapter, then cleanup temp folders
+- **Admin Pro license visibility/actions** are restricted to the **primary/registered admin** (first admin in `users.txt` order).
+- **Remote deletes / Trash behavior**:
+  - Google Drive sources skip Trash (deletes are permanent)
+  - remote folder “empty checks” ignore the marker file
+- **Docker startup log clarity**:
+  - `start.sh` prints a “startup complete” line and clarifies that further output is Apache logs.
+
+**Fixed**  
+
+- **#86:** OIDC behavior is now controllable via environment variables (no code/config edits required).
+- **#87:** Resumable chunk size is now configurable to fit proxy limits (e.g., tunnels/CDNs).
+- **#90:** Clearer startup output + better guidance for collecting logs.
+- **UI responsiveness / long operations**
+  - “Deleting…” busy states for file/folder delete confirmations and Trash restore/delete actions
+  - “Still loading…” toast for slow remote listings, with a fallback if a folder no longer exists
+
+**Notes**  
+
+- `FR_REMOTE_DIR_MARKER` is best-effort and primarily intended for remote backends that treat directories as prefixes (e.g., S3).
+- Google Drive sources do not support Trash semantics in the adapter; the UI notes this and deletes are permanent.
+- Some Admin Panel strings still fall back to English; translations will continue to improve over time.
+
+---
+
 ## Changes 01/16/2026 (v3.1.0)
 
 `release(v3.1.0): default language + portal i18n + ffmpeg path config (closes #88, closes #89)`

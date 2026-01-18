@@ -234,6 +234,30 @@ function getSelectedFiles() {
     return Array.from(list.querySelectorAll("input[type='checkbox']:checked")).map(chk => chk.value);
 }
 
+function setTrashActionBusy(isBusy, activeBtn) {
+    const {
+        restoreSelectedBtn,
+        restoreAllBtn,
+        deleteSelectedBtn,
+        deleteAllBtn
+    } = getModalElements();
+
+    [restoreSelectedBtn, restoreAllBtn, deleteSelectedBtn, deleteAllBtn].forEach((btn) => {
+        if (!btn) return;
+        if (isBusy) {
+            btn.disabled = true;
+            if (btn === activeBtn) {
+                btn.setAttribute("aria-busy", "true");
+            } else {
+                btn.removeAttribute("aria-busy");
+            }
+        } else {
+            btn.disabled = false;
+            btn.removeAttribute("aria-busy");
+        }
+    });
+}
+
 function afterTrashMutation(message, closeModal = false) {
     if (message) showToast(message, 'success');
     loadTrashItems();
@@ -252,13 +276,16 @@ async function deleteAllTrashItems() {
     }
 }
 
-export function confirmEmptyRecycleBin() {
+export function confirmEmptyRecycleBin(activeBtn = null) {
     showConfirm(tr("confirm_delete_all_trash", "Permanently delete all trash items? This cannot be undone."), async () => {
+        setTrashActionBusy(true, activeBtn);
         try {
             await deleteAllTrashItems();
         } catch (err) {
             console.error("Error deleting all trash files:", err);
             showToast(tr("error_deleting_trash", "Error deleting trash files."), 'error');
+        } finally {
+            setTrashActionBusy(false);
         }
     });
 }
@@ -310,6 +337,7 @@ export function setupTrashRestoreDelete() {
                 showToast(tr("no_trash_selected", "No trash items selected."), 'warning');
                 return;
             }
+            setTrashActionBusy(true, restoreSelectedBtn);
             try {
                 await fetchJson(ENDPOINTS.restore, { files });
                 const restoredLabel = tr("restored", "Restored");
@@ -320,6 +348,8 @@ export function setupTrashRestoreDelete() {
             } catch (err) {
                 console.error("Error restoring files:", err);
                 showToast(tr("error_restoring_files", "Error restoring files."), 'error');
+            } finally {
+                setTrashActionBusy(false);
             }
         });
     }
@@ -332,6 +362,7 @@ export function setupTrashRestoreDelete() {
                 showToast(tr("trash_empty", "Trash is empty."), 'info');
                 return;
             }
+            setTrashActionBusy(true, restoreAllBtn);
             try {
                 await fetchJson(ENDPOINTS.restore, { files });
                 const restoredLabel = tr("restored", "Restored");
@@ -342,6 +373,8 @@ export function setupTrashRestoreDelete() {
             } catch (err) {
                 console.error("Error restoring files:", err);
                 showToast(tr("error_restoring_files", "Error restoring files."), 'error');
+            } finally {
+                setTrashActionBusy(false);
             }
         });
     }
@@ -354,6 +387,7 @@ export function setupTrashRestoreDelete() {
                 return;
             }
             showConfirm(tr("confirm_delete_selected", "Permanently delete the selected items?"), async () => {
+                setTrashActionBusy(true, deleteSelectedBtn);
                 try {
                     const data = await fetchJson(ENDPOINTS.delete, { files });
                     if (data.success) {
@@ -364,6 +398,8 @@ export function setupTrashRestoreDelete() {
                 } catch (err) {
                     console.error("Error deleting trash files:", err);
                     showToast(tr("error_deleting_trash", "Error deleting trash files."), 'error');
+                } finally {
+                    setTrashActionBusy(false);
                 }
             });
         });
@@ -371,7 +407,7 @@ export function setupTrashRestoreDelete() {
 
     if (deleteAllBtn) {
         deleteAllBtn.addEventListener("click", () => {
-            confirmEmptyRecycleBin();
+            confirmEmptyRecycleBin(deleteAllBtn);
         });
     }
 

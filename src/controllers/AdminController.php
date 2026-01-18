@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/models/AdminModel.php';
+require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
@@ -52,6 +53,36 @@ class AdminController
             http_response_code(403);
             header('Content-Type: application/json');
             echo json_encode(['error' => 'Admin privileges required.']);
+            exit;
+        }
+    }
+
+    /** True if the current admin is the first admin in users.txt. */
+    private static function isPrimaryAdminUser(): bool
+    {
+        $user = $_SESSION['username'] ?? '';
+        if ($user === '') {
+            return false;
+        }
+        try {
+            $primary = UserModel::getPrimaryAdminUsername();
+        } catch (\Throwable $e) {
+            return false;
+        }
+        if ($primary === '') {
+            return false;
+        }
+        return strcasecmp($user, $primary) === 0;
+    }
+
+    /** Enforce primary admin (registered administrator) for Pro license actions. */
+    private static function requirePrimaryAdmin(): void
+    {
+        self::requireAdmin();
+        if (!self::isPrimaryAdminUser()) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Restricted to the registered administrator.']);
             exit;
         }
     }
@@ -152,9 +183,12 @@ class AdminController
 
         $publicOriginCfg = (string) ($ooCfg['publicOrigin'] ?? '');
 
+        $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
+        $isPrimaryAdmin = $isAdmin && self::isPrimaryAdminUser();
+
         // ---- Pro / license info (all guarded for clean core installs) ----
         $licenseString = null;
-        if (defined('PRO_LICENSE_FILE') && PRO_LICENSE_FILE && @is_file(PRO_LICENSE_FILE)) {
+        if ($isPrimaryAdmin && defined('PRO_LICENSE_FILE') && PRO_LICENSE_FILE && @is_file(PRO_LICENSE_FILE)) {
             $json = @file_get_contents(PRO_LICENSE_FILE);
             if ($json !== false) {
                 $decoded = json_decode($json, true);
@@ -211,6 +245,7 @@ class AdminController
             'apiLevel' => $proApiLevel,
             'buildEpoch' => $proBuildEpoch,
             'license'  => $licenseString ?: '',
+            'primaryAdmin' => (bool)$isPrimaryAdmin,
             'plan'        => $proPlan ?: '',
             'expiresAt'   => $proExpiresAt ?: '',
             'updatesUntil'=> $proUpdatesUntil ?: '',
@@ -226,8 +261,6 @@ class AdminController
             'version' => $proVersion ?: '',
             'apiLevel' => $proApiLevel,
         ];
-
-        $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
 
         if ($isAdmin) {
             // ---- Encryption at rest (master key status) ----
@@ -763,7 +796,7 @@ class AdminController
         try {
             // Same guards as other admin endpoints
             self::requireAuth();
-            self::requireAdmin();
+            self::requirePrimaryAdmin();
             self::requireCsrf();
 
             $raw = file_get_contents('php://input');
@@ -1395,7 +1428,7 @@ class AdminController
             }
 
             self::requireAuth();
-            self::requireAdmin();
+            self::requirePrimaryAdmin();
             self::requireCsrf();
 
             // Ensure ZipArchive is available
@@ -1491,7 +1524,7 @@ class AdminController
             }
 
             self::requireAuth();
-            self::requireAdmin();
+            self::requirePrimaryAdmin();
             self::requireCsrf();
 
             $licenseRaw = '';
@@ -1708,6 +1741,9 @@ class AdminController
             'globalOtpauthUrl'    => '',
             'enableWebDAV'        => false,
             'sharedMaxUploadSize' => 0,
+            'uploads'             => [
+                'resumableChunkMb' => 1.5,
+            ],
             'oidc'                => [
                 'providerUrl' => '',
                 'clientId'    => '',
@@ -1828,6 +1864,20 @@ class AdminController
                 $sms = $phpCap;
             }
             $merged['sharedMaxUploadSize'] = $sms;
+        }
+
+        // uploads: Resumable.js chunk size (MB)
+        if (isset($data['uploads']) && is_array($data['uploads'])) {
+            if (!isset($merged['uploads']) || !is_array($merged['uploads'])) {
+                $merged['uploads'] = [
+                    'resumableChunkMb' => 1.5,
+                ];
+            }
+            if (array_key_exists('resumableChunkMb', $data['uploads'])) {
+                $raw = $data['uploads']['resumableChunkMb'];
+                $num = is_numeric($raw) ? (float)$raw : 1.5;
+                $merged['uploads']['resumableChunkMb'] = max(0.5, min(100, $num));
+            }
         }
 
         // oidc: only overwrite non-empty inputs; validate when enabling OIDC

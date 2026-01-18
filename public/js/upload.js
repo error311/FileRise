@@ -1,9 +1,8 @@
 import { initFileActions } from './fileActions.js?v={{APP_QVER}}';
 import { displayFilePreview } from './filePreview.js?v={{APP_QVER}}';
 import { showToast, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
-import { loadFolderTree } from './folderManager.js?v={{APP_QVER}}';
+import { refreshFolderIcon, refreshFolderChildren } from './folderManager.js?v={{APP_QVER}}';
 import { loadFileList } from './fileListView.js?v={{APP_QVER}}';
-import { refreshFolderIcon } from './folderManager.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
 
@@ -21,6 +20,15 @@ function getActiveUploadSourceId() {
     if (stored) return stored;
   } catch (e) {}
   return '';
+}
+
+function getResumableChunkSizeBytes() {
+  const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
+  const uploads = (cfg && typeof cfg === 'object') ? cfg.uploads : null;
+  const raw = uploads ? uploads.resumableChunkMb : null;
+  const num = parseFloat(raw);
+  const mb = Number.isFinite(num) ? Math.min(100, Math.max(0.5, num)) : 1.5;
+  return mb * 1024 * 1024;
 }
 
 // --- ClamAV scanning UI helpers ----------------------------------------
@@ -197,20 +205,7 @@ function wireFileInputChange(fileInput) {
     if (!files.length) return;
   
     if (useResumable) {
-      // New resumable batch: reset selectedFiles so the count is correct
-      window.selectedFiles = [];
-      _currentResumableIds.clear();   // <--- add this
-  
-      // Ensure the lib/instance exists
-      if (!_resumableReady) await initResumableUpload();
-      if (resumableInstance) {
-        for (const f of files) {
-          resumableInstance.addFile(f);
-        }
-      } else {
-        // If Resumable failed to load, fall back to XHR
-        processFiles(files);
-      }
+      await queueResumableFiles(files);
     } else {
       // Non-resumable: normal XHR path, drag-and-drop etc.
       processFiles(files);
@@ -224,6 +219,65 @@ function setUploadButtonVisible(visible) {
 
   btn.style.display = visible ? 'block' : 'none';
   btn.disabled = !visible;
+}
+
+let _uploadRefreshTimer = null;
+let _uploadRefreshFolder = '';
+
+function scheduleUploadRefresh(folder, immediate = false) {
+  const target = folder || window.currentFolder || 'root';
+  _uploadRefreshFolder = target;
+  if (_uploadRefreshTimer) {
+    clearTimeout(_uploadRefreshTimer);
+  }
+  const delay = immediate ? 0 : 400;
+  _uploadRefreshTimer = setTimeout(() => {
+    _uploadRefreshTimer = null;
+    const active = _uploadRefreshFolder || target;
+    try { refreshFolderIcon(active); } catch (e) {}
+    loadFileList(active);
+  }, delay);
+}
+
+let _treeRefreshTimer = null;
+let _treeRefreshFolder = '';
+
+function getRelativePathForFile(file) {
+  if (!file || typeof file !== 'object') return '';
+  return (
+    file.relativePath ||
+    file.webkitRelativePath ||
+    file.customRelativePath ||
+    (file.file && (file.file.webkitRelativePath || file.file.customRelativePath)) ||
+    ''
+  );
+}
+
+function hasFolderPaths(files) {
+  if (!Array.isArray(files)) return false;
+  return files.some((file) => {
+    const relRaw = getRelativePathForFile(file);
+    if (!relRaw) return false;
+    const rel = String(relRaw).replace(/\\/g, '/').replace(/^\/+/, '');
+    return rel.includes('/');
+  });
+}
+
+function scheduleFolderTreeRefresh(folder, immediate = false) {
+  const target = folder || window.currentFolder || 'root';
+  _treeRefreshFolder = target;
+  if (_treeRefreshTimer) {
+    clearTimeout(_treeRefreshTimer);
+  }
+  const delay = immediate ? 0 : 500;
+  _treeRefreshTimer = setTimeout(() => {
+    _treeRefreshTimer = null;
+    const active = _treeRefreshFolder || target;
+    const p = refreshFolderChildren(active);
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {});
+    }
+  }, delay);
 }
 
 function getUserDraftContext() {
@@ -377,6 +431,11 @@ function traverseFileTreePromise(item, path = "") {
           writable: true,
           configurable: true
         });
+        Object.defineProperty(file, 'relativePath', {
+          value: path + file.name,
+          writable: true,
+          configurable: true
+        });
         resolve([file]);
       });
     } else if (item.isDirectory) {
@@ -521,15 +580,54 @@ function updateFileInfoCount() {
   }
 }
 
+function applyResumableRelativePath(file) {
+  if (!file || typeof file !== 'object') return;
+  const rel = file.webkitRelativePath || file.customRelativePath || '';
+  if (rel && (!('relativePath' in file) || !file.relativePath)) {
+    Object.defineProperty(file, 'relativePath', {
+      value: rel,
+      writable: true,
+      configurable: true
+    });
+  }
+}
+
+async function queueResumableFiles(files) {
+  if (!useResumable) {
+    processFiles(files);
+    return;
+  }
+
+  // New resumable batch: reset selectedFiles so the count is correct
+  window.selectedFiles = [];
+  _currentResumableIds.clear();
+
+  if (!_resumableReady) await initResumableUpload();
+  if (!resumableInstance) {
+    // If Resumable failed to load, fall back to XHR
+    processFiles(files);
+    return;
+  }
+
+  files.forEach(file => {
+    applyResumableRelativePath(file);
+    resumableInstance.addFile(file);
+  });
+}
+
 // Helper function to repeatedly call removeChunks.php
-function removeChunkFolderRepeatedly(identifier, csrfToken, maxAttempts = 3, interval = 1000) {
+function removeChunkFolderRepeatedly(identifier, csrfToken, targetFolder = null, maxAttempts = 3, interval = 1000) {
   let attempt = 0;
+  const folder = (typeof targetFolder === "string" && targetFolder.trim() !== "")
+    ? targetFolder
+    : (window.currentFolder || "root");
   const removalInterval = setInterval(() => {
     attempt++;
     const params = new URLSearchParams();
     // Prefix with "resumable_" to match your PHP regex.
     params.append('folder', 'resumable_' + identifier);
     params.append('csrf_token', csrfToken);
+    params.append('targetFolder', folder);
     const sourceId = getActiveUploadSourceId();
     if (sourceId) {
       params.append('sourceId', sourceId);
@@ -588,7 +686,7 @@ function createFileEntry(file) {
 
     // Call our helper repeatedly to remove the chunk folder.
     if (file.uniqueIdentifier) {
-      removeChunkFolderRepeatedly(file.uniqueIdentifier, window.csrfToken, 3, 1000);
+      removeChunkFolderRepeatedly(file.uniqueIdentifier, window.csrfToken, file.targetFolder, 3, 1000);
     }
 
     li.remove();
@@ -688,9 +786,8 @@ function createFileEntry(file) {
 
 /* -----------------------------------------------------
    Processing Files
-   - For drag–and–drop, use original processing (supports folders).
-   - For file picker, if using Resumable, those files use resumable.
------------------------------------------------------ */
+   - Used for XHR fallback + grouping in the upload UI.
+------------------------------------------------------ */
 function processFiles(filesInput) {
   const fileInfoContainer = document.getElementById("fileInfoContainer");
   const files = Array.from(filesInput);
@@ -832,7 +929,7 @@ async function initResumableUpload() {
   if (!resumableInstance) {
     resumableInstance = new ResumableCtor({
       target: RESUMABLE_TARGET,
-      chunkSize: 1.5 * 1024 * 1024,
+      chunkSize: getResumableChunkSizeBytes(),
       simultaneousUploads: 3,
       forceChunkSize: true,
       testChunks: false,
@@ -882,6 +979,7 @@ async function initResumableUpload() {
     // Initialize custom paused flag
     file.paused = false;
     file.uploadIndex = file.uniqueIdentifier;
+    file.targetFolder = window.currentFolder || "root";
     if (!window.selectedFiles) {
       window.selectedFiles = [];
     }
@@ -1021,8 +1119,9 @@ async function initResumableUpload() {
       if (removeBtn) removeBtn.style.display = "none";
       setTimeout(() => li.remove(), 5000);
     }
-    refreshFolderIcon(window.currentFolder);
-    loadFileList(window.currentFolder);
+    if (!hasFolderPaths([file])) {
+      scheduleUploadRefresh(window.currentFolder);
+    }
     // This file finished successfully, remove its draft record
     clearResumableDraft(file.uniqueIdentifier);
     showResumableDraftBanner();
@@ -1058,7 +1157,11 @@ async function initResumableUpload() {
 
     resumableInstance.on("complete", function () {
     // If any file is marked with an error, leave the list intact.
-    const hasError = Array.isArray(window.selectedFiles) && window.selectedFiles.some(f => f.isError);
+    const files = Array.isArray(window.selectedFiles) ? window.selectedFiles : [];
+    const hadFolderPaths = hasFolderPaths(files);
+    const failed = files.filter(f => f && f.isError).length;
+    const succeeded = Math.max(0, files.length - failed);
+    const hasError = failed > 0;
     if (!hasError) {
       // All files succeeded—clear the file input and progress container after 5 seconds.
       setTimeout(() => {
@@ -1087,8 +1190,15 @@ async function initResumableUpload() {
         showResumableDraftBanner();
         setUploadButtonVisible(false); 
       }, 5000);
+      if (succeeded > 0) {
+        scheduleUploadRefresh(window.currentFolder, true);
+        showToast(t('upload_summary_success', { succeeded }), 'success');
+      }
     } else {
-      showToast(t('upload_failed_some'), 'warning');
+      showToast(t('upload_summary_failed', { failed, succeeded }), 'warning');
+    }
+    if (succeeded > 0 && hadFolderPaths) {
+      scheduleFolderTreeRefresh(window.currentFolder, true);
     }
     // In all cases, once Resumable has finished its batch, hide the ClamAV notice.
     hideVirusScanNotice();
@@ -1104,8 +1214,8 @@ async function initResumableUpload() {
 }
 
 /* -----------------------------------------------------
-   XHR-based submitFiles for Drag–and–Drop (Folder) Uploads
------------------------------------------------------ */
+   XHR-based submitFiles (fallback when Resumable is unavailable)
+------------------------------------------------------ */
 function submitFiles(allFiles) {
   const folderToUse = (() => {
     const f = window.currentFolder || "root";
@@ -1316,6 +1426,10 @@ function submitFiles(allFiles) {
   });
 
   function refreshFileList(allFiles, uploadResults, progressElements) {
+    const hadFolderPaths = hasFolderPaths(allFiles);
+    const transferSucceeded = Array.isArray(uploadResults)
+      ? uploadResults.filter(Boolean).length
+      : 0;
     loadFileList(folderToUse)
       .then(serverFiles => {
         initFileActions();
@@ -1383,8 +1497,10 @@ function submitFiles(allFiles) {
         showToast(t('upload_may_have_failed'), 'warning');
       })
       .finally(() => {
-        // Folder list refresh + hide any ClamAV scan notice
-        loadFolderTree(window.currentFolder);
+        try { refreshFolderIcon(folderToUse); } catch (e) {}
+        if (hadFolderPaths && transferSucceeded > 0) {
+          scheduleFolderTreeRefresh(folderToUse, true);
+        }
         hideVirusScanNotice();
       });
   }
@@ -1414,7 +1530,7 @@ function initUpload() {
     fileInput.setAttribute("multiple", "");
   }
 
-  // Drag–and–drop events (for folder uploads) use original processing.
+  // Drag–and–drop events use Resumable when available, XHR as fallback.
   if (dropArea && !dropArea.__uploadBound) {
     dropArea.__uploadBound = true;
     dropArea.classList.add("upload-drop-area");
@@ -1437,11 +1553,11 @@ function initUpload() {
       if (dt && dt.items && dt.items.length > 0) {
         getFilesFromDataTransferItems(dt.items).then(files => {
           if (files.length > 0) {
-            processFiles(files);
+            queueResumableFiles(files);
           }
         });
       } else if (dt && dt.files && dt.files.length > 0) {
-        processFiles(dt.files);
+        queueResumableFiles(Array.from(dt.files));
       }
     });
 
@@ -1549,7 +1665,7 @@ document.addEventListener('paste', function handlePasteUpload(e) {
   }
 
   if (files.length > 0) {
-    processFiles(files);
+    queueResumableFiles(files);
     showToast(t('upload_pasted_added'), 'success');
   }
 });

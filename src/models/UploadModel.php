@@ -34,6 +34,78 @@ class UploadModel
         return rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
     }
 
+    private static function isLocalSourceType(): bool
+    {
+        if (!class_exists('SourceContext')) {
+            return true;
+        }
+        $src = SourceContext::getActiveSource();
+        $type = strtolower((string)($src['type'] ?? 'local'));
+        return $type === '' || $type === 'local';
+    }
+
+    private static function stagingRoot(bool $isLocal): string
+    {
+        if ($isLocal) {
+            return self::uploadRoot();
+        }
+        $base = rtrim(self::metaRoot(), '/\\') . DIRECTORY_SEPARATOR . 'uploadtmp' . DIRECTORY_SEPARATOR;
+        if (!is_dir($base)) {
+            @mkdir($base, 0775, true);
+        }
+        return $base;
+    }
+
+    private static function buildStorageDir(string $folderSan, string $relativeSubDir): string
+    {
+        $base = rtrim(self::uploadRoot(), '/\\');
+        $path = $base;
+        if ($folderSan !== '') {
+            $path .= DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folderSan);
+        }
+        if ($relativeSubDir !== '') {
+            $path .= DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeSubDir);
+        }
+        return $path;
+    }
+
+    private static function buildStoragePath(string $folderSan, string $relativeSubDir, string $fileName): string
+    {
+        $path = self::buildStorageDir($folderSan, $relativeSubDir);
+        return $path . DIRECTORY_SEPARATOR . $fileName;
+    }
+
+    private static function ensureRemoteUploadDir(StorageAdapterInterface $storage, string $folderSan, string $relativeSubDir): void
+    {
+        if ($storage->isLocal()) {
+            return;
+        }
+        $dir = rtrim(self::buildStorageDir($folderSan, $relativeSubDir), '/\\');
+        if ($dir === '' || $dir === '.') {
+            return;
+        }
+        try {
+            $stat = $storage->stat($dir);
+            if ($stat && ($stat['type'] ?? '') === 'dir') {
+                return;
+            }
+            $storage->mkdir($dir, 0775, true);
+        } catch (\Throwable $e) {
+            // Best-effort: some backends may auto-create paths on write.
+        }
+    }
+
+    private static function buildFolderForLog(string $folderSan, string $relativeSubDir = ''): string
+    {
+        $folderForLog = ($folderSan === '') ? 'root' : $folderSan;
+        if ($relativeSubDir !== '') {
+            $folderForLog = ($folderForLog === 'root')
+                ? $relativeSubDir
+                : ($folderForLog . '/' . $relativeSubDir);
+        }
+        return $folderForLog;
+    }
+
     private static function sanitizeFolder(string $folder): string
     {
         // decode "%20", normalise slashes & trim via ACL helper
@@ -58,6 +130,43 @@ class UploadModel
         }
 
         return $f; // safe, normalised, with spaces allowed
+    }
+
+    /**
+     * Parse a resumable relative path into [subDir, fileName].
+     * Returns [null, null] on invalid input.
+     */
+    private static function parseRelativePath(string $raw): array
+    {
+        $raw = rawurldecode($raw);
+        $raw = str_replace('\\', '/', trim($raw));
+        $raw = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
+        $raw = ltrim($raw, '/');
+        if ($raw === '' || $raw === '.') {
+            return ['', ''];
+        }
+        if (preg_match('~(^|/)\.\.(?:/|$)~', $raw)) {
+            return [null, null];
+        }
+        if (preg_match('~(^|/)\.(?:/|$)~', $raw)) {
+            return [null, null];
+        }
+
+        $file = basename($raw);
+        if ($file === '' || !preg_match(REGEX_FILE_NAME, $file)) {
+            return [null, null];
+        }
+
+        $dir = dirname($raw);
+        if ($dir === '.' || $dir === '') {
+            return ['', $file];
+        }
+
+        if (!preg_match(REGEX_FOLDER_NAME, $dir)) {
+            return [null, null];
+        }
+
+        return [$dir, $file];
     }
 
     private static function portalMetaFromRequest(): ?array
@@ -157,7 +266,10 @@ class UploadModel
     public static function handleUpload(array $post, array $files): array
     {
         $storage = StorageRegistry::getAdapter();
-        $isLocal = $storage->isLocal();
+        $isLocal = self::isLocalSourceType();
+        if (!$isLocal && $storage->isLocal()) {
+            return ['error' => 'Remote storage adapter unavailable.'];
+        }
 
         // --- GET resumable test (make folder handling consistent) ---
         if (
@@ -168,7 +280,7 @@ class UploadModel
             $resumableIdentifier = $post['resumableIdentifier'] ?? '';
             $folderSan           = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
 
-            $baseUploadDir = self::uploadRoot();
+            $baseUploadDir = self::stagingRoot($isLocal);
             if ($folderSan !== '') {
                 $baseUploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
                     . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
@@ -186,6 +298,18 @@ class UploadModel
             $totalChunks         = (int)$post['resumableTotalChunks'];
             $resumableIdentifier = $post['resumableIdentifier'] ?? '';
             $resumableFilename   = urldecode(basename($post['resumableFilename'] ?? ''));
+            $relativeSubDir      = '';
+
+            if (!empty($post['resumableRelativePath'])) {
+                [$subDir, $relFile] = self::parseRelativePath((string)$post['resumableRelativePath']);
+                if ($subDir === null) {
+                    return ['error' => 'Invalid relative path'];
+                }
+                if ($relFile !== '') {
+                    $resumableFilename = $relFile;
+                }
+                $relativeSubDir = $subDir;
+            }
 
             if (!preg_match(REGEX_FILE_NAME, $resumableFilename)) {
                 return ['error' => "Invalid file name: $resumableFilename"];
@@ -197,17 +321,19 @@ class UploadModel
                 return ['error' => 'No files received'];
             }
 
-            $baseUploadDir = self::uploadRoot();
+            $createdDirs = [];
+            $stagingRoot = self::stagingRoot($isLocal);
+            $baseUploadDir = $stagingRoot;
             if ($folderSan !== '') {
                 $baseUploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
                     . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
             }
-            if (!is_dir($baseUploadDir) && !mkdir($baseUploadDir, 0775, true)) {
+            if (!self::ensureDir($baseUploadDir, $createdDirs)) {
                 return ['error' => 'Failed to create upload directory'];
             }
 
             $tempDir = $baseUploadDir . 'resumable_' . $resumableIdentifier . DIRECTORY_SEPARATOR;
-            if (!is_dir($tempDir) && !mkdir($tempDir, 0775, true)) {
+            if (!self::ensureDir($tempDir, $createdDirs)) {
                 return ['error' => 'Failed to create temporary chunk directory'];
             }
 
@@ -229,19 +355,38 @@ class UploadModel
                 }
             }
 
+            $cleanupChunk = function () use ($tempDir, $createdDirs, $stagingRoot, $isLocal): void {
+                self::rrmdir($tempDir);
+                if (!$isLocal) {
+                    self::cleanupCreatedDirs($createdDirs, $stagingRoot);
+                }
+            };
+
             // Merge
-            $targetPath = $baseUploadDir . $resumableFilename;
+            $targetDir = $baseUploadDir;
+            if ($relativeSubDir !== '') {
+                $targetDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
+                    . str_replace('/', DIRECTORY_SEPARATOR, $relativeSubDir) . DIRECTORY_SEPARATOR;
+                if (!self::ensureDir($targetDir, $createdDirs)) {
+                    $cleanupChunk();
+                    return ['error' => 'Failed to create upload subfolder'];
+                }
+            }
+            $targetPath = $targetDir . $resumableFilename;
             if (!$out = fopen($targetPath, 'wb')) {
+                $cleanupChunk();
                 return ['error' => 'Failed to open target file for writing'];
             }
             for ($i = 1; $i <= $totalChunks; $i++) {
                 $chunkPath = $tempDir . $i;
                 if (!file_exists($chunkPath)) {
                     fclose($out);
+                    $cleanupChunk();
                     return ['error' => "Chunk $i missing during merge"];
                 }
                 if (!$in = fopen($chunkPath, 'rb')) {
                     fclose($out);
+                    $cleanupChunk();
                     return ['error' => "Failed to open chunk $i"];
                 }
                 while ($buff = fread($in, 4096)) {
@@ -252,7 +397,7 @@ class UploadModel
             fclose($out);
 
             // Optional: virus scan the merged file
-            $folderForLog = ($folderSan === '' ? 'root' : $folderSan);
+            $folderForLog = self::buildFolderForLog($folderSan, $relativeSubDir);
             $scanResult   = self::scanFileIfEnabled($targetPath, [
                 'folder' => $folderForLog,
                 'file'   => $resumableFilename,
@@ -260,8 +405,7 @@ class UploadModel
             ]);
 
             if (is_array($scanResult) && isset($scanResult['error'])) {
-                // Clean up temporary chunk directory
-                self::rrmdir($tempDir);
+                $cleanupChunk();
                 return $scanResult; // e.g. "Upload blocked: virus detected in file."
             }
 
@@ -269,7 +413,7 @@ class UploadModel
                 try {
                     if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
                         @unlink($targetPath);
-                        self::rrmdir($tempDir);
+                        $cleanupChunk();
                         return ['error' => 'Encrypted folders are not supported for remote storage.'];
                     }
                 } catch (\Throwable $e) { /* ignore */ }
@@ -290,7 +434,7 @@ class UploadModel
                 } catch (\Throwable $e) {
                     error_log('Upload encryption failed: ' . $e->getMessage());
                     @unlink($targetPath);
-                    self::rrmdir($tempDir);
+                    $cleanupChunk();
                     $msg = $e->getMessage();
                     if (!is_string($msg) || trim($msg) === '') {
                         $msg = 'Upload failed: could not encrypt file at rest.';
@@ -300,27 +444,29 @@ class UploadModel
             }
 
             if (!$isLocal) {
+                self::ensureRemoteUploadDir($storage, $folderSan, $relativeSubDir);
+                $remoteTargetPath = self::buildStoragePath($folderSan, $relativeSubDir, $resumableFilename);
                 $mimeType = function_exists('mime_content_type') ? mime_content_type($targetPath) : null;
                 $size = @filesize($targetPath);
                 $stream = @fopen($targetPath, 'rb');
                 if ($stream === false) {
                     @unlink($targetPath);
-                    self::rrmdir($tempDir);
+                    $cleanupChunk();
                     return ['error' => 'Failed to open file for remote upload.'];
                 }
-                $ok = $storage->writeStream($targetPath, $stream, ($size === false ? null : (int)$size), $mimeType ?: null);
+                $ok = $storage->writeStream($remoteTargetPath, $stream, ($size === false ? null : (int)$size), $mimeType ?: null);
                 @fclose($stream);
                 if (!$ok) {
                     $detail = self::adapterErrorDetail($storage);
                     @unlink($targetPath);
-                    self::rrmdir($tempDir);
+                    $cleanupChunk();
                     return ['error' => $detail !== '' ? ('Failed to upload to remote storage: ' . $detail) : 'Failed to upload to remote storage.'];
                 }
                 @unlink($targetPath);
             }
 
             // Metadata
-            $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
+            $metadataKey      = ($folderForLog === '' ? 'root' : $folderForLog);
             $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
             $metadataFile     = self::metaRoot() . $metadataFileName;
             $uploadedDate     = date(DATE_TIME_FORMAT);
@@ -346,8 +492,7 @@ class UploadModel
                 'meta'   => self::portalMetaFromRequest(),
             ]);
 
-            // Cleanup temp
-            self::rrmdir($tempDir);
+            $cleanupChunk();
 
             return ['success' => 'File uploaded successfully'];
         }
@@ -362,7 +507,7 @@ class UploadModel
                 $baseUploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
                     . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
             }
-            if (!self::ensureDir($baseUploadDir, $createdDirs)) {
+            if ($isLocal && !self::ensureDir($baseUploadDir, $createdDirs)) {
                 return ['error' => 'Failed to create upload directory'];
             }
 
@@ -385,9 +530,6 @@ class UploadModel
                 }
 
                 $safeFileName = trim(urldecode(basename($fileName)));
-                if (!preg_match($safeFileNamePattern, $safeFileName)) {
-                    return ['error' => 'Invalid file name: ' . $fileName];
-                }
 
                 $relativePath = '';
                 if (isset($post['relativePath'])) {
@@ -397,44 +539,49 @@ class UploadModel
                 }
 
                 $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR;
+                $relativeSubDir = '';
                 if (!empty($relativePath)) {
-                    $subDir = dirname($relativePath);
-                    if ($subDir !== '.' && $subDir !== '') {
+                    [$subDir, $relFile] = self::parseRelativePath((string)$relativePath);
+                    if ($subDir === null) {
+                        return ['error' => 'Invalid relative path'];
+                    }
+                    if ($relFile !== '') {
+                        $safeFileName = $relFile;
+                    }
+                    $relativeSubDir = $subDir;
+                    if ($relativeSubDir !== '') {
                         $uploadDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR
-                            . str_replace('/', DIRECTORY_SEPARATOR, $subDir) . DIRECTORY_SEPARATOR;
+                            . str_replace('/', DIRECTORY_SEPARATOR, $relativeSubDir) . DIRECTORY_SEPARATOR;
                     }
-                    $safeFileName = basename($relativePath);
+                }
+                if (!preg_match($safeFileNamePattern, $safeFileName)) {
+                    return ['error' => 'Invalid file name: ' . $fileName];
                 }
 
-                if (!self::ensureDir($uploadDir, $createdDirs)) {
-                    return ['error' => 'Failed to create subfolder: ' . $uploadDir];
-                }
+                $folderForLog = self::buildFolderForLog($folderSan, $relativeSubDir);
 
-                $targetPath = $uploadDir . $safeFileName;
-                if (!move_uploaded_file($files['file']['tmp_name'][$index], $targetPath)) {
-                    return ['error' => 'Error uploading file'];
-                }
-
-                // Compute logical folder for logging: relative to UPLOAD_DIR
-                $folderForLog = 'root';
-                $rootDir      = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR;
-                if (strpos($targetPath, $rootDir) === 0) {
-                    $rel = substr($targetPath, strlen($rootDir));
-                    $rel = str_replace(DIRECTORY_SEPARATOR, '/', $rel);
-                    $slashPos = strrpos($rel, '/');
-                    if ($slashPos !== false) {
-                        $folderRel = substr($rel, 0, $slashPos);
-                        if ($folderRel !== '') {
-                            $folderForLog = $folderRel;
-                        }
+                if ($isLocal) {
+                    if (!self::ensureDir($uploadDir, $createdDirs)) {
+                        return ['error' => 'Failed to create subfolder: ' . $uploadDir];
                     }
-                } elseif ($folderSan !== '') {
-                    // Fallback: if above fails, use sanitized folder
-                    $folderForLog = $folderSan;
+
+                    $targetPath = $uploadDir . $safeFileName;
+                    if (!move_uploaded_file($files['file']['tmp_name'][$index], $targetPath)) {
+                        return ['error' => 'Error uploading file'];
+                    }
+                    $scanPath = $targetPath;
+                } else {
+                    $tmpPath = $files['file']['tmp_name'][$index] ?? '';
+                    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+                        return ['error' => 'Error uploading file'];
+                    }
+                    self::ensureRemoteUploadDir($storage, $folderSan, $relativeSubDir);
+                    $targetPath = self::buildStoragePath($folderSan, $relativeSubDir, $safeFileName);
+                    $scanPath = $tmpPath;
                 }
 
                 // Optional: virus scan this file
-                $scanResult = self::scanFileIfEnabled($targetPath, [
+                $scanResult = self::scanFileIfEnabled($scanPath, [
                     'folder' => $folderForLog,
                     'file'   => $safeFileName,
                     'source' => 'normal', // core non-resumable upload
@@ -448,7 +595,7 @@ class UploadModel
                 if (!$isLocal) {
                     try {
                         if (FolderCrypto::isEncryptedOrAncestor($folderForLog)) {
-                            @unlink($targetPath);
+                            @unlink($scanPath);
                             return ['error' => 'Encrypted folders are not supported for remote storage.'];
                         }
                     } catch (\Throwable $e) { /* ignore */ }
@@ -478,21 +625,21 @@ class UploadModel
                 }
 
                 if (!$isLocal) {
-                    $mimeType = function_exists('mime_content_type') ? mime_content_type($targetPath) : null;
-                    $size = @filesize($targetPath);
-                    $stream = @fopen($targetPath, 'rb');
+                    $mimeType = function_exists('mime_content_type') ? mime_content_type($scanPath) : null;
+                    $size = @filesize($scanPath);
+                    $stream = @fopen($scanPath, 'rb');
                     if ($stream === false) {
-                        @unlink($targetPath);
+                        @unlink($scanPath);
                         return ['error' => 'Failed to open file for remote upload.'];
                     }
                     $ok = $storage->writeStream($targetPath, $stream, ($size === false ? null : (int)$size), $mimeType ?: null);
                     @fclose($stream);
                     if (!$ok) {
                         $detail = self::adapterErrorDetail($storage);
-                        @unlink($targetPath);
+                        @unlink($scanPath);
                         return ['error' => $detail !== '' ? ('Failed to upload to remote storage: ' . $detail) : 'Failed to upload to remote storage.'];
                     }
-                    @unlink($targetPath);
+                    @unlink($scanPath);
                 }
 
                 $uploader = $_SESSION['username'] ?? 'Unknown';
@@ -704,7 +851,14 @@ class UploadModel
             return ['error' => 'Invalid folder name'];
         }
 
-        $tempDir = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR . $folder;
+        $isLocal = self::isLocalSourceType();
+        $targetFolder = self::sanitizeFolder((string)($_POST['targetFolder'] ?? 'root'));
+        $baseDir = self::stagingRoot($isLocal);
+        if ($targetFolder !== '') {
+            $baseDir = rtrim($baseDir, '/\\') . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, $targetFolder) . DIRECTORY_SEPARATOR;
+        }
+        $tempDir = $baseDir . $folder;
         if (!is_dir($tempDir)) {
             return ['success' => true, 'message' => 'Temporary folder already removed.'];
         }

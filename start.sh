@@ -223,7 +223,8 @@ case "${LOG_STREAM,,}" in
   error|*)STREAM_ERR=true;  STREAM_ACC=false ;;
 esac
 
-echo "🔥 Starting Apache..."
+echo "🔥 Starting Apache (foreground)..."
+echo "[startup] FileRise startup complete. Any further output will be Apache logs (errors by default)."
 # Stream only the chosen logs; -n0 = don't dump history, -F = follow across rotations/creation
 [ "${STREAM_ERR}" = "true" ] && tail -n0 -F /var/www/metadata/log/error.log 2>/dev/null &
 [ "${STREAM_ACC}" = "true" ] && tail -n0 -F /var/www/metadata/log/access.log 2>/dev/null &

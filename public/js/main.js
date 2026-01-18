@@ -782,6 +782,16 @@ function bindDarkMode() {
     m.content = val;
   };
 
+    const DEFAULT_HEADER_TITLE = 'FileRise';
+    const PRO_DEFAULT_HEADER_TITLE = 'FileRise Pro';
+    const resolveHeaderTitle = (rawTitle, isPro) => {
+      const cleaned = String(rawTitle || '').trim();
+      if (!cleaned || cleaned === DEFAULT_HEADER_TITLE) {
+        return isPro ? PRO_DEFAULT_HEADER_TITLE : DEFAULT_HEADER_TITLE;
+      }
+      return cleaned;
+    };
+
     // ---------- site config / auth ----------
     function applySiteConfig(cfg, { phase = 'final' } = {}) {
       try {
@@ -843,7 +853,8 @@ function bindDarkMode() {
           window.__FR_FLAGS.clamavScanUploads = !!cfg.clamav.scanUploads;
         }
 
-        const title = (cfg && cfg.header_title) ? String(cfg.header_title) : 'FileRise';
+        const rawTitle = (cfg && typeof cfg.header_title === 'string') ? cfg.header_title : '';
+        const title = resolveHeaderTitle(rawTitle, window.__FR_IS_PRO === true);
   
         // Always keep <title> correct early (no visual flicker)
         document.title = title;
