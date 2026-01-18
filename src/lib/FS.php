@@ -9,7 +9,25 @@ final class FS
 {
     /** Hidden/system names to ignore entirely */
     public static function IGNORE(): array {
-        return ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
+        $raw = '';
+        if (defined('FR_IGNORE_NAMES')) {
+            $raw = FR_IGNORE_NAMES;
+        } else {
+            $env = getenv('FR_IGNORE_NAMES');
+            if ($env !== false && $env !== '') {
+                $raw = $env;
+            }
+        }
+
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (!is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+
+        $parts = array_map('trim', explode(',', $raw));
+        return array_values(array_filter($parts, fn($part) => $part !== ''));
     }
 
     /** App-specific names to skip from UI */
