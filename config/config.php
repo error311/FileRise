@@ -119,6 +119,12 @@ if (!defined('FR_OIDC_DEBUG')) {
         define('FR_OIDC_DEBUG', false);
     }
 }
+// Optional: which file or directory names to ignore while indexing
+// Set FR_IGNORE_NAMES to a comma-separated list of file or directory names to ignore.
+if (!defined('FR_IGNORE_NAMES')) {
+    $envVal = getenv('FR_IGNORE_NAMES');
+    define('FR_IGNORE_NAMES', ($envVal !== false && $envVal !== '') ? $envVal : '@eaDir,#recycle,.DS_Store,Thumbs.db');
+}
 // Optional: trusted proxy IP resolution for rate limiting/logging
 // Set FR_TRUSTED_PROXIES to a comma-separated list of IPs/CIDRs (e.g. "127.0.0.1,10.0.0.0/8").
 if (!defined('FR_TRUSTED_PROXIES')) {
