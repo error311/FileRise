@@ -1768,6 +1768,7 @@ class AdminController
             ],
             'clamav'              => [
                 'scanUploads' => false,
+                'excludeDirs' => '',
             ],
             'proAudit'            => [
                 'enabled' => false,
@@ -2033,6 +2034,8 @@ if (isset($data['oidc']['allowDemote'])) {
         // --- ClamAV: store admin toggle only when not locked by env/constant ---
         $envScanRaw    = getenv('VIRUS_SCAN_ENABLED');
         $clamLockedEnv = ($envScanRaw !== false && $envScanRaw !== '') || defined('VIRUS_SCAN_ENABLED');
+        $envExcludeRaw = getenv('VIRUS_SCAN_EXCLUDE_DIRS');
+        $clamExcludeLockedEnv = ($envExcludeRaw !== false && trim((string)$envExcludeRaw) !== '');
 
         if (!$clamLockedEnv && isset($data['clamav']) && is_array($data['clamav'])) {
             if (array_key_exists('scanUploads', $data['clamav'])) {
@@ -2040,6 +2043,13 @@ if (isset($data['oidc']['allowDemote'])) {
                     $data['clamav']['scanUploads'],
                     FILTER_VALIDATE_BOOLEAN
                 );
+            }
+        }
+        if (!$clamExcludeLockedEnv && isset($data['clamav']) && is_array($data['clamav'])) {
+            if (array_key_exists('excludeDirs', $data['clamav'])) {
+                $rawExclude = (string)$data['clamav']['excludeDirs'];
+                $rawExclude = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $rawExclude);
+                $merged['clamav']['excludeDirs'] = trim((string)$rawExclude);
             }
         }
 

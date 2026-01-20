@@ -2378,6 +2378,7 @@ function captureInitialAdminConfig() {
     ignoreRegex: (document.getElementById("ignoreRegex")?.value || "").trim(),
 
     clamavScanUploads: !!document.getElementById("clamavScanUploads")?.checked,
+    clamavExcludeDirs: (document.getElementById("clamavExcludeDirs")?.value || "").trim(),
     proSearchEnabled: !!document.getElementById("proSearchEnabled")?.checked,
     proSearchLimit: (document.getElementById("proSearchLimit")?.value || "").trim(),
     proAuditEnabled: !!document.getElementById("proAuditEnabled")?.checked,
@@ -2423,6 +2424,7 @@ function hasUnsavedChanges() {
     getVal("fileListSummaryDepth") !== (o.fileListSummaryDepth || "") ||
     getVal("ignoreRegex") !== (o.ignoreRegex || "") ||
     getChk("clamavScanUploads") !== o.clamavScanUploads ||
+    getVal("clamavExcludeDirs") !== (o.clamavExcludeDirs || "") ||
     getChk("proSearchEnabled") !== o.proSearchEnabled ||
     getVal("proSearchLimit") !== o.proSearchLimit ||
     getChk("proAuditEnabled") !== o.proAuditEnabled ||
@@ -4691,6 +4693,28 @@ export function openAdminPanel() {
     </small>
   </div>
 
+  <div class="form-group" style="margin-top:10px;">
+    <label for="clamavExcludeDirs">
+      ${tf("clamav_exclude_dirs_label", "Exclude upload paths")}
+    </label>
+    <textarea
+      id="clamavExcludeDirs"
+      class="form-control"
+      rows="2"
+      placeholder="${escapeHTML(tf("clamav_exclude_dirs_placeholder", "snapshot, tmp"))}"
+    ></textarea>
+    <small
+      id="clamavExcludeDirsHelp"
+      class="d-block text-muted"
+      style="margin-top:2px;"
+    >
+      ${tf(
+          "clamav_exclude_dirs_help",
+          "Comma or newline separated paths relative to the source root (example: snapshot, tmp). For Pro sources you can prefix with source id (example: s3:/snapshot)."
+        )}
+    </small>
+  </div>
+
   <div class="mt-2">
     <button
       type="button"
@@ -6018,6 +6042,18 @@ ${t("shared_max_upload_size_bytes")}
             }
           }
         }
+        const clamExclude = document.getElementById("clamavExcludeDirs");
+        if (clamExclude) {
+          clamExclude.value = (cfgClam.excludeDirs || "").toString();
+          if (cfgClam.excludeLockedByEnv) {
+            clamExclude.disabled = true;
+            const help = document.getElementById("clamavExcludeDirsHelp");
+            if (help) {
+              help.textContent =
+                'Controlled by container env VIRUS_SCAN_EXCLUDE_DIRS. Change it in your Docker/host env.';
+            }
+          }
+        }
         // Rebuild ONLYOFFICE section from fresh config
         initOnlyOfficeUI({ config });
 
@@ -6118,6 +6154,23 @@ ${t("shared_max_upload_size_bytes")}
                 'Controlled by container env VIRUS_SCAN_ENABLED (' +
                 (cfgClam.scanUploads ? 'enabled' : 'disabled') +
                 '). Change it in your Docker/host env.';
+            }
+          }
+        }
+        const clamExclude = document.getElementById("clamavExcludeDirs");
+        if (clamExclude) {
+          clamExclude.value = (cfgClam.excludeDirs || "").toString();
+          clamExclude.disabled = false;
+          const help = document.getElementById("clamavExcludeDirsHelp");
+          if (help) {
+            help.textContent =
+              'Comma or newline separated paths relative to the source root (example: snapshot, tmp). For Pro sources you can prefix with source id (example: s3:/snapshot).';
+          }
+          if (cfgClam.excludeLockedByEnv) {
+            clamExclude.disabled = true;
+            if (help) {
+              help.textContent =
+                'Controlled by container env VIRUS_SCAN_EXCLUDE_DIRS. Change it in your Docker/host env.';
             }
           }
         }
@@ -6318,6 +6371,7 @@ function handleSave() {
     },
     clamav: {
       scanUploads: document.getElementById("clamavScanUploads").checked,
+      excludeDirs: (document.getElementById("clamavExcludeDirs")?.value || "").trim(),
     },
     proSearch: {
       enabled: !!document.getElementById("proSearchEnabled")?.checked,

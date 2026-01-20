@@ -1652,7 +1652,17 @@ class FolderController
         }
 
         // ---- ClamAV: reuse UploadModel scan logic on the tmp file ----
-        $scan = UploadModel::scanSingleUploadIfEnabled($fileUpload);
+        $shareRecord = FolderModel::getShareFolderRecord($token);
+        $shareFolderKey = 'root';
+        if (is_array($shareRecord)) {
+            $rawFolder = trim((string)($shareRecord['folder'] ?? ''), "/\\ ");
+            $shareFolderKey = ($rawFolder === '' ? 'root' : $rawFolder);
+        }
+        $scan = UploadModel::scanSingleUploadIfEnabled($fileUpload, [
+            'folder' => $shareFolderKey,
+            'file'   => $basename,
+            'source' => 'shared',
+        ]);
         if (is_array($scan) && isset($scan['error'])) {
             // scanSingleUploadIfEnabled() already deletes the tmp file on infection
             http_response_code(400);

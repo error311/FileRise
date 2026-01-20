@@ -226,6 +226,15 @@ class AdminModel
             $clamLockedByEnv = false;
         }
 
+        $envExcludeRaw = getenv('VIRUS_SCAN_EXCLUDE_DIRS');
+        if ($envExcludeRaw !== false && trim((string)$envExcludeRaw) !== '') {
+            $clamExcludeDirs = trim((string)$envExcludeRaw);
+            $clamExcludeLockedByEnv = true;
+        } else {
+            $clamExcludeDirs = (string)($config['clamav']['excludeDirs'] ?? '');
+            $clamExcludeLockedByEnv = false;
+        }
+
         // Pro search (public awareness + env lock)
         $proSearchCfg = isset($config['proSearch']) && is_array($config['proSearch'])
             ? $config['proSearch']
@@ -255,6 +264,8 @@ class AdminModel
         $public['clamav'] = [
             'scanUploads' => $clamScanUploads,
             'lockedByEnv' => $clamLockedByEnv,
+            'excludeDirs' => $clamExcludeDirs,
+            'excludeLockedByEnv' => $clamExcludeLockedByEnv,
         ];
 
         $public['proSearch'] = [
@@ -403,13 +414,20 @@ class AdminModel
             $configUpdate['uploads']['resumableChunkMb'] = max(0.5, min(100, $num));
         }
 
-        // ---- ClamAV (simple boolean flag) ----
+        // ---- ClamAV (upload scan toggle + exclude list) ----
         if (!isset($configUpdate['clamav']) || !is_array($configUpdate['clamav'])) {
             $configUpdate['clamav'] = [
                 'scanUploads' => false,
+                'excludeDirs' => '',
             ];
         } else {
             $configUpdate['clamav']['scanUploads'] = !empty($configUpdate['clamav']['scanUploads']);
+            $rawExclude = $configUpdate['clamav']['excludeDirs'] ?? '';
+            if (!is_string($rawExclude)) {
+                $rawExclude = '';
+            }
+            $rawExclude = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $rawExclude);
+            $configUpdate['clamav']['excludeDirs'] = trim((string)$rawExclude);
         }
 
         // Normalize authBypass & authHeaderName
@@ -901,6 +919,7 @@ class AdminModel
             ],
             'clamav'                => [
                 'scanUploads' => false,
+                'excludeDirs' => '',
             ],
             'publishedUrl'          => '',
             'ffmpegPath'            => '',

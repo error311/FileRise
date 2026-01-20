@@ -211,6 +211,102 @@ class UploadModel
         return !empty($cfg['clamav']['scanUploads']);
     }
 
+    private static function getVirusScanExcludeRules(): array
+    {
+        static $rules = null;
+        if ($rules !== null) {
+            return $rules;
+        }
+
+        $raw = '';
+        $env = getenv('VIRUS_SCAN_EXCLUDE_DIRS');
+        if ($env !== false && trim((string)$env) !== '') {
+            $raw = (string)$env;
+        } elseif (class_exists('AdminModel')) {
+            $cfg = AdminModel::getConfig();
+            if (is_array($cfg) && !isset($cfg['error'])) {
+                $raw = (string)($cfg['clamav']['excludeDirs'] ?? '');
+            }
+        }
+
+        $rules = [];
+        if (trim($raw) !== '') {
+            $parts = preg_split('/[,\r\n]+/', $raw);
+            if (is_array($parts)) {
+                foreach ($parts as $entry) {
+                    $entry = trim((string)$entry);
+                    if ($entry === '') {
+                        continue;
+                    }
+
+                    $source = '';
+                    $path = $entry;
+                    if (strpos($entry, ':') !== false) {
+                        [$maybeSource, $rest] = explode(':', $entry, 2);
+                        $maybeSource = trim($maybeSource);
+                        if ($maybeSource !== '' && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $maybeSource)) {
+                            $source = $maybeSource;
+                            $path = $rest;
+                        }
+                    }
+
+                    $path = self::normalizeVirusScanExcludePath($path);
+                    if ($path === '') {
+                        continue;
+                    }
+
+                    $rules[] = [
+                        'source' => $source,
+                        'path'   => $path,
+                    ];
+                }
+            }
+        }
+
+        return $rules;
+    }
+
+    private static function normalizeVirusScanExcludePath(string $path): string
+    {
+        $norm = str_replace('\\', '/', trim($path));
+        return trim($norm, "/ \t\n\r\0\x0B");
+    }
+
+    private static function isVirusScanExcluded(array $context): bool
+    {
+        $rules = self::getVirusScanExcludeRules();
+        if (empty($rules)) {
+            return false;
+        }
+
+        $folder = trim((string)($context['folder'] ?? ''));
+        if ($folder === '') {
+            return false;
+        }
+        $folder = self::normalizeVirusScanExcludePath($folder);
+        if ($folder === '') {
+            return false;
+        }
+
+        $activeSource = class_exists('SourceContext') ? SourceContext::getActiveId() : 'local';
+
+        foreach ($rules as $rule) {
+            $ruleSource = (string)($rule['source'] ?? '');
+            if ($ruleSource !== '' && $ruleSource !== $activeSource) {
+                continue;
+            }
+            $path = (string)($rule['path'] ?? '');
+            if ($path === '') {
+                continue;
+            }
+            if ($folder === $path || str_starts_with($folder, $path . '/')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Public helper: scan a single $_FILES-style upload array, if ClamAV is enabled.
      *
@@ -772,6 +868,10 @@ class UploadModel
 
         if (!is_file($path)) {
             return ['error' => 'Virus scan failed: uploaded file not found.'];
+        }
+
+        if (self::isVirusScanExcluded($context)) {
+            return null; // excluded path
         }
 
         $cmd = defined('VIRUS_SCAN_CMD') ? VIRUS_SCAN_CMD : 'clamscan';

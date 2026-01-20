@@ -1,5 +1,44 @@
 # Changelog
 
+## Changes 01/20/2026 (v3.1.3)
+
+`release(v3.1.3): ClamAV exclude paths (Admin + env) for upload scanning (answers #94)`
+
+**Commit message**  
+
+```text
+release(v3.1.3): ClamAV exclude paths (Admin + env) for upload scanning (answers #94)
+
+- add VIRUS_SCAN_EXCLUDE_DIRS (env) + Admin setting to exclude upload paths from ClamAV scanning
+- support comma/newline-separated exclude paths relative to the source root
+- allow per-source excludes via `sourceId:/path` prefixes (Pro Sources)
+- apply excludes in UploadModel scan flow (local + shared-folder uploads) and lock Admin field when env is set
+```
+
+**Added**  
+
+- **ClamAV exclude paths setting**
+  - Admin setting: **Exclude upload paths** (`clamav.excludeDirs`)
+  - Env override: `VIRUS_SCAN_EXCLUDE_DIRS` (locks the Admin field when set)
+  - Input format: comma or newline-separated paths **relative to the source root**
+    - Examples: `snapshot`, `tmp`
+    - Pro Sources: prefix with a source id: `s3:/snapshot`, `gdrive:/tmp`
+
+**Changed**  
+
+- **Upload virus scan now checks excludes before running ClamAV**
+  - Exclude rules are normalized (trim, normalize slashes, strip leading/trailing `/`)
+  - Rules can optionally target a specific source id; otherwise they apply to the active source
+- **Shared-folder uploads pass folder context into the scan**
+  - Shared uploads now reuse the same exclude logic by providing the destination folder key.
+
+**Notes**  
+
+- Excludes match against the *destination folder path* (relative to the source root). Keep patterns simple (short paths) for predictable behavior.
+- If `VIRUS_SCAN_EXCLUDE_DIRS` is set, it is treated as the source of truth and the Admin field is read-only.
+
+---
+
 ## Changes 01/20/2026 (v3.1.2)
 
 `release(v3.1.2): configurable ignore rules for indexing/tree + admin UX polish (fixes #91, refs #92)`
