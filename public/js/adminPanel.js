@@ -5165,7 +5165,7 @@ ${t("shared_max_upload_size_bytes")}
             ? `
                 <div class="pro-license-meta" style="margin-top:8px;font-size:12px;color:#777;">
                   <div class="d-flex align-items-center flex-wrap" style="gap:6px;">
-                    <span>Instance ID (required for yearly updates plans): <code>${proInstanceId}</code></span>
+                    <span>Instance ID (required for 12-month updates plans): <code>${proInstanceId}</code></span>
                     <button type="button" class="btn btn-link btn-sm p-0" id="proCopyInstanceIdBtn">Copy</button>
                   </div>
                 </div>
@@ -5258,7 +5258,7 @@ ${t("shared_max_upload_size_bytes")}
             target="_blank"
             rel="noopener noreferrer"
             class="btn btn-sm btn-secondary">
-            Renew yearly updates
+            Renew 12-month updates
           </a>
           <a
             href="https://filerise.net/pro/instances.php"
@@ -5269,7 +5269,7 @@ ${t("shared_max_upload_size_bytes")}
           </a>
         </div>
         <small class="text-muted d-block" style="margin-top:4px;">
-          Renewals extend updates for yearly plans. Instance IDs apply to Business yearly updates.
+          Renewals extend updates for 12-month plans. Instance IDs apply to Business 12-month updates.
         </small>
       </div>
       ` : ''}

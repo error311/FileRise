@@ -932,7 +932,7 @@ async function initResumableUpload() {
       chunkSize: getResumableChunkSizeBytes(),
       simultaneousUploads: 3,
       forceChunkSize: true,
-      testChunks: false,
+      testChunks: true,
       withCredentials: true,
       headers: { 'X-CSRF-Token': window.csrfToken },
       query: () => {

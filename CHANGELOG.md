@@ -1,5 +1,30 @@
 # Changelog
 
+## Changes 01/20/2026 (v3.1.4)
+
+`release(v3.1.4): restore resumable upload resume checks (testChunks) + wording polish (fixes #93)`
+
+```text
+release(v3.1.4): restore resumable upload resume checks (testChunks) + wording polish (fixes #93)
+
+- uploads: re-enable Resumable.js testChunks so interrupted uploads can resume
+- admin: tweak Instance ID / renewal copy to “12-month updates” wording
+
+Fixes #93
+```
+
+**Fixed**  
+
+- Resumable uploads resume again (fixes #93)
+- Re-enabled testChunks in Resumable.js so the uploader checks which chunks already exist and continues where it left off after an interrupted upload.
+
+**Changed**  
+
+- Admin Pro license UI wording
+- Updated copy to say “12-month updates plans” and “Renew 12-month updates” (clarifies it’s not a forced yearly subscription).
+
+---
+
 ## Changes 01/20/2026 (v3.1.3)
 
 `release(v3.1.3): document VIRUS_SCAN_EXCLUDE_DIRS for ClamAV upload scanning`
