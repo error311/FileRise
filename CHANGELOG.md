@@ -2,6 +2,8 @@
 
 ## Changes 01/20/2026 (v3.1.3)
 
+`release(v3.1.3): document VIRUS_SCAN_EXCLUDE_DIRS for ClamAV upload scanning`
+
 `release(v3.1.3): ClamAV exclude paths (Admin + env) for upload scanning (answers #94)`
 
 **Commit message**  

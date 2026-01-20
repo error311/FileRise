@@ -224,7 +224,7 @@ docker compose up -d
 > Other useful env vars (optional):  
 > `FR_WEBDAV_MAX_UPLOAD_BYTES` (WebDAV upload cap in bytes; `0` = unlimited),  
 > `FR_ENCRYPTION_MASTER_KEY` (32-byte key: hex or `base64:...`),  
-> `VIRUS_SCAN_ENABLED` / `VIRUS_SCAN_CMD` / `CLAMAV_AUTO_UPDATE`,  
+> `VIRUS_SCAN_ENABLED` / `VIRUS_SCAN_CMD` / `VIRUS_SCAN_EXCLUDE_DIRS` / `CLAMAV_AUTO_UPDATE`,  
 > `LOG_STREAM` (`error`/`access`/`both`/`none`),  
 > `HTTP_PORT` / `HTTPS_PORT` / `SERVER_NAME`,  
 > `SHARE_URL` (override share endpoint; `FR_PUBLISHED_URL` preferred).
@@ -311,7 +311,7 @@ Notes:
 ## Optional dependencies
 
 - **FFmpeg** – video thumbnails (set `FR_FFMPEG_PATH` if not on PATH).
-- **ClamAV** – upload scanning (`VIRUS_SCAN_ENABLED=true`).
+- **ClamAV** – upload scanning (`VIRUS_SCAN_ENABLED=true`), optional `VIRUS_SCAN_EXCLUDE_DIRS` path excludes.
 - **PHP sodium (libsodium)** – required for encryption-at-rest.
 - **ONLYOFFICE Document Server** – document editing in the browser.
 
