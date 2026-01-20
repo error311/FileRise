@@ -303,6 +303,11 @@ class AdminController
             $ffmpegCfg = (string)($config['ffmpegPath'] ?? '');
             $ffmpegEffective = $ffmpegLockedByEnv ? trim((string)$envFfmpeg) : $ffmpegCfg;
 
+            $envIgnore = getenv('FR_IGNORE_REGEX');
+            $ignoreLockedByEnv = ($envIgnore !== false && trim((string)$envIgnore) !== '');
+            $ignoreCfg = (string)($config['ignoreRegex'] ?? '');
+            $ignoreEffective = $ignoreLockedByEnv ? trim((string)$envIgnore) : $ignoreCfg;
+
             $adminExtra = [
                 'loginOptions' => array_merge($public['loginOptions'], [
                     'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
@@ -338,6 +343,9 @@ class AdminController
                 'ffmpegPath' => $ffmpegCfg,
                 'ffmpegPathEffective' => $ffmpegEffective,
                 'ffmpegPathLockedByEnv' => $ffmpegLockedByEnv,
+                'ignoreRegex' => $ignoreCfg,
+                'ignoreRegexEffective' => $ignoreEffective,
+                'ignoreRegexLockedByEnv' => $ignoreLockedByEnv,
                 'encryption' => [
                     'supported'   => (bool)$encSupported,
                     'hasMasterKey'=> (bool)$encHasMasterKey,
@@ -1741,6 +1749,7 @@ class AdminController
             'globalOtpauthUrl'    => '',
             'enableWebDAV'        => false,
             'sharedMaxUploadSize' => 0,
+            'ignoreRegex'         => '',
             'uploads'             => [
                 'resumableChunkMb' => 1.5,
             ],
@@ -1815,6 +1824,18 @@ class AdminController
                 $path = substr($path, 0, 1024);
             }
             $merged['ffmpegPath'] = $path;
+        }
+
+        // ignoreRegex: optional ignore patterns (newline-delimited). Env FR_IGNORE_REGEX locks this field.
+        $envIgnore = getenv('FR_IGNORE_REGEX');
+        $ignoreLockedByEnv = ($envIgnore !== false && trim((string)$envIgnore) !== '');
+        if (!$ignoreLockedByEnv && array_key_exists('ignoreRegex', $data)) {
+            $raw = str_replace(["\r\n", "\r"], "\n", trim((string)$data['ignoreRegex']));
+            $raw = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $raw);
+            if (strlen($raw) > 2000) {
+                $raw = substr($raw, 0, 2000);
+            }
+            $merged['ignoreRegex'] = $raw;
         }
 
         // loginOptions: inherit existing then override if provided

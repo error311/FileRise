@@ -185,6 +185,31 @@ if ($envKey === false || $envKey === '') {
     $encryptionKey = $envKey;
 }
 
+// Optional: ignore regex for indexing/listing (env wins; admin config as fallback)
+if (!defined('FR_IGNORE_REGEX')) {
+    $envIgnore = getenv('FR_IGNORE_REGEX');
+    if ($envIgnore !== false && trim((string)$envIgnore) !== '') {
+        define('FR_IGNORE_REGEX', (string)$envIgnore);
+    } else {
+        $cfgPath = USERS_DIR . 'adminConfig.json';
+        if (is_file($cfgPath)) {
+            $enc = @file_get_contents($cfgPath);
+            if ($enc !== false && $enc !== '') {
+                $dec = decryptData($enc, $encryptionKey);
+                if ($dec !== false) {
+                    $cfg = json_decode($dec, true);
+                    if (is_array($cfg) && isset($cfg['ignoreRegex']) && is_string($cfg['ignoreRegex'])) {
+                        $val = trim($cfg['ignoreRegex']);
+                        if ($val !== '') {
+                            define('FR_IGNORE_REGEX', $val);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Helper to load JSON permissions (with optional decryption)
 function loadUserPermissions($username)
 {

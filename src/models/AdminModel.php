@@ -536,6 +536,11 @@ class AdminModel
             }
         }
 
+        // Ignore regex (optional)
+        $configUpdate['ignoreRegex'] = self::sanitizeIgnoreRegex(
+            $configUpdate['ignoreRegex'] ?? ''
+        );
+
         // Convert configuration to JSON.
         $plainTextConfig = json_encode($configUpdate, JSON_PRETTY_PRINT);
         if ($plainTextConfig === false) {
@@ -586,6 +591,17 @@ class AdminModel
             return strtoupper($value);
         }
         return '';
+    }
+
+    private static function sanitizeIgnoreRegex($value): string
+    {
+        $value = str_replace(["\r\n", "\r"], "\n", trim((string)$value));
+        if ($value === '') return '';
+        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
+        if (strlen($value) > 2000) {
+            $value = substr($value, 0, 2000);
+        }
+        return $value;
     }
 
     /**
@@ -824,6 +840,12 @@ class AdminModel
                 $config['ffmpegPath'] = $path;
             }
 
+            if (!isset($config['ignoreRegex']) || !is_string($config['ignoreRegex'])) {
+                $config['ignoreRegex'] = '';
+            } else {
+                $config['ignoreRegex'] = self::sanitizeIgnoreRegex($config['ignoreRegex']);
+            }
+
             return $config;
         }
 
@@ -882,6 +904,7 @@ class AdminModel
             ],
             'publishedUrl'          => '',
             'ffmpegPath'            => '',
+            'ignoreRegex'           => '',
         ];
     }
 }

@@ -17,6 +17,84 @@ final class FS
         return ['trash','profile_pics'];
     }
 
+    /** Optional regex patterns for additional ignores (env FR_IGNORE_REGEX). */
+    private static function ignoreRegexes(): array {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $raw = '';
+        if (defined('FR_IGNORE_REGEX')) {
+            $raw = (string)FR_IGNORE_REGEX;
+        } else {
+            $env = getenv('FR_IGNORE_REGEX');
+            $raw = ($env !== false) ? (string)$env : '';
+        }
+
+        $raw = trim($raw);
+        if ($raw === '') {
+            $cache = [];
+            return $cache;
+        }
+
+        $patterns = [];
+        $lines = preg_split('/\r?\n/', $raw) ?: [];
+        foreach ($lines as $line) {
+            $line = trim((string)$line);
+            if ($line === '') continue;
+            $pattern = self::normalizeIgnoreRegex($line);
+            if ($pattern === null) continue;
+            if (@preg_match($pattern, '') === false) {
+                error_log('FR_IGNORE_REGEX ignored invalid pattern.');
+                continue;
+            }
+            $patterns[] = $pattern;
+        }
+
+        $cache = $patterns;
+        return $cache;
+    }
+
+    private static function normalizeIgnoreRegex(string $raw): ?string {
+        $raw = trim($raw);
+        if ($raw === '') return null;
+
+        $delim = $raw[0] ?? '';
+        if ($delim !== '' && !ctype_alnum($delim) && $delim !== '\\') {
+            $quoted = preg_quote($delim, '/');
+            if (preg_match('/^' . $quoted . '.+' . $quoted . '[imsxuADU]*$/', $raw)) {
+                return $raw;
+            }
+        }
+
+        $wrap = '~';
+        $safe = str_replace($wrap, '\\' . $wrap, $raw);
+        return $wrap . $safe . $wrap;
+    }
+
+    public static function shouldIgnoreEntry(string $name, string $parentRel = ''): bool {
+        if ($name === '') return false;
+        if (in_array($name, self::IGNORE(), true)) return true;
+
+        $regexes = self::ignoreRegexes();
+        if (!$regexes) return false;
+
+        $prefix = str_replace('\\', '/', trim((string)$parentRel));
+        if ($prefix === '' || strtolower($prefix) === 'root') {
+            $path = $name;
+        } else {
+            $prefix = trim($prefix, '/');
+            $path = $prefix === '' ? $name : ($prefix . '/' . $name);
+        }
+
+        foreach ($regexes as $rx) {
+            if (preg_match($rx, $name) === 1) return true;
+            if ($path !== $name && preg_match($rx, $path) === 1) return true;
+        }
+        return false;
+    }
+
     public static function isSafeSegment(string $name): bool {
         if ($name === '.' || $name === '..') return false;
         if (strpos($name, '/') !== false || strpos($name, '\\') !== false) return false;
@@ -50,14 +128,13 @@ final class FS
     ): bool {
         if ($maxDepth <= 0 || !is_dir($absPath)) return false;
 
-        $IGNORE = self::IGNORE();
         $SKIP   = self::SKIP();
 
         $items = @scandir($absPath) ?: [];
         foreach ($items as $child) {
             if ($child === '.' || $child === '..') continue;
             if ($child[0] === '.') continue;
-            if (in_array($child, $IGNORE, true)) continue;
+            if (self::shouldIgnoreEntry($child, $relPath)) continue;
             if (!self::isSafeSegment($child)) continue;
 
             $lower = strtolower($child);

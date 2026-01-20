@@ -1,5 +1,61 @@
 # Changelog
 
+## Changes 01/20/2026 (v3.1.2)
+
+`release(v3.1.2): configurable ignore rules for indexing/tree + admin UX polish (fixes #91, refs #92)`
+
+**Commit message**  
+
+```text
+release(v3.1.2): configurable ignore rules for indexing/tree + admin UX polish (fixes #91, refs #92)
+
+- add ignoreRegex setting (admin config) with env override FR_IGNORE_REGEX to hide folders from tree/counts/indexing
+- add snapshot preset helper for common NAS snapshot paths (fixes #91)
+- unify ignore logic via FS::shouldIgnoreEntry across folder counts, tree listing, and disk usage scans
+- admin: improve settings search UX (clear button) + smoother section header styling
+- UI: polish header dock collapse/expand icon animations (landing/lift + reduced-motion support)
+
+Fixes #91
+Refs #92
+
+Co-authored-by: nikp123 <nikp123@e.email>
+```
+
+**Added**  
+
+- **Indexing ignore rules (regex)**:
+  - Admin setting: **Ignore paths (regex)** (`ignoreRegex`) — one pattern per line.
+  - Env override: `FR_IGNORE_REGEX` (locks the field when set).
+  - Built-in “quick add” button for a common snapshot preset: `(^|/)(@?snapshots?)(/|$)` (helps with NAS snapshot dirs).
+- **Centralized ignore helper**:
+  - `FS::shouldIgnoreEntry($name, $parentRel)` applies built-in ignores plus optional regex patterns.
+
+**Changed**  
+
+- **Folder tree / listing / counts now share ignore logic**:
+  - Replaced scattered ignore arrays with `FS::shouldIgnoreEntry(...)` in folder enumeration paths.
+- **Disk usage scan now filters earlier**:
+  - Uses a `RecursiveCallbackFilterIterator` so ignored entries are skipped before deeper traversal.
+- **Admin Panel UX**:
+  - Settings search now includes a dedicated clear (X) button that appears only when a query exists.
+  - Section headers now render via a `.section-header-inner` wrapper for cleaner layout/hover/active styles.
+  - Audit table area now caps height and scrolls to avoid huge modal growth.
+- **Header dock polish**:
+  - Adds “lift” and “land” animations for header dock icon buttons during card collapse/expand.
+  - Respects `prefers-reduced-motion`.
+
+**Fixed**  
+
+- **#91:** Snapshot folders (e.g., `snapshot`, `@snapshots`) can now be excluded cleanly from the tree, counts, indexing, and disk usage views via ignore rules.
+- Prevents “stuck landing” icon states by cleaning up animation classes/inline vars on `animationend`.
+
+**Notes**  
+
+- Ignore rules are applied frequently during tree/list/count operations. Keep patterns simple to avoid expensive regexes.
+- Invalid regex lines are ignored safely (and won’t crash listing/indexing).
+
+---
+
 ## Changes 01/17/2026 (v3.1.1)
 
 `release(v3.1.1): OIDC env overrides + configurable resumable chunk size + clearer startup logs (closes #86, closes #87, closes #90)`

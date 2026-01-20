@@ -317,6 +317,14 @@ function insertCardInHeader(card) {
     }
   });
 
+  iconButton.addEventListener('animationend', (event) => {
+    if (event.animationName === 'headerIconLand') {
+      iconButton.classList.remove('is-landing');
+      iconButton.style.removeProperty('--header-icon-delay');
+      iconButton.style.removeProperty('--header-icon-land-ms');
+    }
+  });
+
   host.appendChild(iconButton);
   // make sure the dock is visible when icons exist
   showHeaderDockPersistent();
@@ -503,6 +511,13 @@ const COLLAPSE_OPACITY_END = 0.06;
 const COLLAPSE_RISE_MS = 120;
 const COLLAPSE_RISE_PX = 14;
 const COLLAPSE_RISE_SCALE = 1.02;
+const HEADER_ICON_LAND_MS = 120;
+const HEADER_ICON_LIFT_MS = 90;
+const HEADER_ICON_LAND_EXTRA_DELAY_MS = 40;
+const HEADER_ICON_LAND_DELAY_MS = Math.max(
+  0,
+  COLLAPSE_ANIMATION_MS - HEADER_ICON_LAND_MS + HEADER_ICON_LAND_EXTRA_DELAY_MS
+);
 
 function animateCardsIntoHeaderAndThen(done) {
   const sb  = getSidebar();
@@ -544,6 +559,17 @@ function animateCardsIntoHeaderAndThen(done) {
 
     const iconBtn = card.headerIconButton;
     if (!iconBtn) return;
+
+    iconBtn.classList.remove('is-launching');
+    iconBtn.classList.add('is-landing');
+    iconBtn.style.setProperty('--header-icon-delay', `${HEADER_ICON_LAND_DELAY_MS}ms`);
+    iconBtn.style.setProperty('--header-icon-land-ms', `${HEADER_ICON_LAND_MS}ms`);
+    setTimeout(() => {
+      if (!iconBtn.isConnected) return;
+      iconBtn.classList.remove('is-landing');
+      iconBtn.style.removeProperty('--header-icon-delay');
+      iconBtn.style.removeProperty('--header-icon-land-ms');
+    }, HEADER_ICON_LAND_DELAY_MS + HEADER_ICON_LAND_MS + 40);
 
     const iconRect = iconBtn.getBoundingClientRect();
 
@@ -738,6 +764,11 @@ function animateCardsOutOfHeaderThen(done) {
     const iconRect = iconBtn.getBoundingClientRect();
     const fromCx = iconRect.left + iconRect.width / 2;
     const fromCy = iconRect.bottom + START_OFFSET_Y;
+
+    iconBtn.classList.remove('is-landing');
+    iconBtn.classList.add('is-launching');
+    iconBtn.style.setProperty('--header-icon-lift-ms', `${HEADER_ICON_LIFT_MS}ms`);
+    iconBtn.style.setProperty('--header-icon-delay', '0ms');
 
     const savedW = parseFloat(card.dataset.lastWidth  || '');
     const savedH = parseFloat(card.dataset.lastHeight || '');

@@ -215,7 +215,6 @@ class DiskUsageModel
         }
         $root = rtrim($root, DIRECTORY_SEPARATOR);
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         // Folder map: key => [
@@ -252,12 +251,46 @@ class DiskUsageModel
 
         $rootLen = strlen($root);
 
+        $dirIter = new RecursiveDirectoryIterator(
+            $root,
+            FilesystemIterator::SKIP_DOTS
+            | FilesystemIterator::FOLLOW_SYMLINKS
+        );
+        $filter = new RecursiveCallbackFilterIterator(
+            $dirIter,
+            function (SplFileInfo $current) use ($rootLen, $SKIP): bool {
+                $name = $current->getFilename();
+                if ($name === '.' || $name === '..') return false;
+                if ($name !== '' && $name[0] === '.') return false;
+                if (!FS::isSafeSegment($name)) return false;
+
+                $path = $current->getPathname();
+                $rel = substr($path, $rootLen);
+                $rel = str_replace('\\', '/', $rel);
+                $rel = ltrim($rel, '/');
+
+                $parentRel = dirname($rel);
+                if ($parentRel === '.' || $parentRel === DIRECTORY_SEPARATOR) {
+                    $parentRel = '';
+                }
+                if (FS::shouldIgnoreEntry($name, $parentRel)) return false;
+
+                $lowerRel = strtolower($rel);
+                if ($lowerRel === 'trash' || strpos($lowerRel, 'trash/') === 0) {
+                    return false;
+                }
+                if ($lowerRel === 'profile_pics' || strpos($lowerRel, 'profile_pics/') === 0) {
+                    return false;
+                }
+
+                $baseLower = strtolower(basename($rel));
+                if (in_array($baseLower, $SKIP, true)) return false;
+
+                return true;
+            }
+        );
         $it = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator(
-                $root,
-                FilesystemIterator::SKIP_DOTS
-                | FilesystemIterator::FOLLOW_SYMLINKS
-            ),
+            $filter,
             RecursiveIteratorIterator::SELF_FIRST
         );
 
@@ -274,10 +307,6 @@ class DiskUsageModel
             }
 
             // Skip system/ignored entries
-            if (in_array($name, $IGNORE, true)) {
-                continue;
-            }
-
             // Relative path under UPLOAD_DIR, normalized with '/'
             $rel = substr($path, $rootLen);
             $rel = str_replace('\\', '/', $rel);

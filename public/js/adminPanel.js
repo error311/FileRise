@@ -628,6 +628,40 @@ function wireClamavTestButton(scope = document) {
   });
 }
 
+function wireIgnoreRegexPresetButton(scope = document) {
+  const btn = scope.querySelector('#ignoreRegexSnapshotsPreset');
+  const input = scope.querySelector('#ignoreRegex');
+  if (!btn || !input || btn.__wired) return;
+
+  btn.__wired = true;
+
+  const preset = '(^|/)(@?snapshots?)(/|$)';
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (input.disabled) return;
+
+    const current = String(input.value || '');
+    const hasPreset = current
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .some(line => line.trim() === preset);
+    if (hasPreset) {
+      input.focus();
+      return;
+    }
+
+    if (current.trim() === '') {
+      input.value = preset;
+    } else {
+      const suffix = current.endsWith('\n') ? '' : '\n';
+      input.value = current + suffix + preset;
+    }
+
+    input.focus();
+  });
+}
+
 function renderAdminEncryptionSection({ config, dark }) {
   const host = document.getElementById("encryptionContent");
   if (!host) return;
@@ -2341,6 +2375,7 @@ function captureInitialAdminConfig() {
     hoverPreviewMaxVideoMb: (document.getElementById("hoverPreviewMaxVideoMb")?.value || "").trim(),
     ffmpegPath: (document.getElementById("ffmpegPath")?.value || "").trim(),
     fileListSummaryDepth: (document.getElementById("fileListSummaryDepth")?.value || "").trim(),
+    ignoreRegex: (document.getElementById("ignoreRegex")?.value || "").trim(),
 
     clamavScanUploads: !!document.getElementById("clamavScanUploads")?.checked,
     proSearchEnabled: !!document.getElementById("proSearchEnabled")?.checked,
@@ -2386,6 +2421,7 @@ function hasUnsavedChanges() {
     getVal("hoverPreviewMaxVideoMb") !== (o.hoverPreviewMaxVideoMb || "") ||
     getVal("ffmpegPath") !== (o.ffmpegPath || "") ||
     getVal("fileListSummaryDepth") !== (o.fileListSummaryDepth || "") ||
+    getVal("ignoreRegex") !== (o.ignoreRegex || "") ||
     getChk("clamavScanUploads") !== o.clamavScanUploads ||
     getChk("proSearchEnabled") !== o.proSearchEnabled ||
     getVal("proSearchLimit") !== o.proSearchLimit ||
@@ -2542,6 +2578,10 @@ function clearSectionTimer(cnt) {
     clearTimeout(cnt.__closeTimer);
     cnt.__closeTimer = null;
   }
+  if (cnt && cnt.__focusTimer) {
+    clearTimeout(cnt.__focusTimer);
+    cnt.__focusTimer = null;
+  }
 }
 
 function openSectionContent(cnt) {
@@ -2581,6 +2621,60 @@ function setSectionContentImmediate(cnt, open) {
   }
 }
 
+function focusSectionIntoView(hdr, cnt) {
+  if (!hdr || !cnt) return;
+  const scroller = hdr.closest(".modal-content") || document.scrollingElement || document.documentElement;
+  if (!scroller) {
+    try {
+      hdr.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+    } catch (e) {
+      hdr.scrollIntoView();
+    }
+    return;
+  }
+
+  const padding = 12;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const headerRect = hdr.getBoundingClientRect();
+  const targetTop = scroller.scrollTop + (headerRect.top - scrollerRect.top) - padding;
+  const nextTop = Math.max(0, targetTop);
+  if (Math.abs(nextTop - scroller.scrollTop) < 1) return;
+  try {
+    if (typeof scroller.scrollTo === "function") {
+      scroller.scrollTo({ top: nextTop, behavior: "smooth" });
+      setTimeout(() => {
+        if (Math.abs(scroller.scrollTop - nextTop) > 1) {
+          scroller.scrollTop = nextTop;
+        }
+      }, 40);
+      return;
+    }
+  } catch (e) {
+    // Fallback for browsers that don't accept scroll options.
+  }
+  scroller.scrollTop = nextTop;
+}
+
+function scheduleSectionFocus(hdr, cnt) {
+  if (!hdr || !cnt) return;
+  clearSectionTimer(cnt);
+  const focusNow = () => {
+    if (cnt.style.display === "none") return;
+    focusSectionIntoView(hdr, cnt);
+  };
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      focusNow();
+      cnt.__focusTimer = setTimeout(() => {
+        if (cnt.classList.contains("is-open") && cnt.style.display !== "none") {
+          focusSectionIntoView(hdr, cnt);
+        }
+        cnt.__focusTimer = null;
+      }, SECTION_ANIM_MS + 40);
+    });
+  });
+}
+
 function toggleSection(id) {
   const hdr = document.getElementById(id + "Header");
   const cnt = document.getElementById(id + "Content");
@@ -2590,6 +2684,7 @@ function toggleSection(id) {
     closeSectionContent(cnt);
   } else {
     openSectionContent(cnt);
+    scheduleSectionFocus(hdr, cnt);
   }
   if (!isCollapsedNow && id === "shareLinks") {
     loadShareLinksSection();
@@ -2609,6 +2704,7 @@ function wireAdminPanelSearch(sectionIds) {
   const emptyState = document.getElementById("adminSettingsSearchEmpty");
   const wrap = document.getElementById("adminSettingsSearchWrap");
   const toggleBtn = document.getElementById("adminSearchToggle");
+  const clearBtn = document.getElementById("adminSearchClear");
   if (!input || !Array.isArray(sectionIds)) return;
 
   const ids = sectionIds.filter(Boolean);
@@ -2623,9 +2719,14 @@ function wireAdminPanelSearch(sectionIds) {
   };
 
   const updateToggleState = () => {
-    if (!toggleBtn) return;
     const hasQuery = !!normalizeAdminSearchText(input.value);
-    toggleBtn.classList.toggle("is-active", hasQuery);
+    if (toggleBtn) {
+      toggleBtn.classList.toggle("is-active", hasQuery);
+    }
+    if (clearBtn) {
+      clearBtn.hidden = !hasQuery;
+      clearBtn.disabled = !hasQuery;
+    }
   };
 
   const restoreState = () => {
@@ -2681,6 +2782,25 @@ function wireAdminPanelSearch(sectionIds) {
     updateToggleState();
   };
 
+  const clearSearch = (opts = {}) => {
+    input.value = "";
+    applyFilter();
+    if (opts.collapse) {
+      setOpen(false);
+    }
+    if (opts.focus) {
+      input.focus();
+    }
+  };
+
+  if (clearBtn && !clearBtn.__wired) {
+    clearBtn.__wired = true;
+    clearBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      clearSearch({ focus: true });
+    });
+  }
+
   if (toggleBtn && wrap && !toggleBtn.__wired) {
     toggleBtn.__wired = true;
     toggleBtn.addEventListener("click", () => {
@@ -2691,7 +2811,7 @@ function wireAdminPanelSearch(sectionIds) {
       }
       const hasQuery = !!normalizeAdminSearchText(input.value);
       if (hasQuery) {
-        input.focus();
+        clearSearch({ collapse: true });
         return;
       }
       setOpen(false);
@@ -3816,6 +3936,10 @@ export function openAdminPanel() {
       const ffmpegPathValue = ffmpegPathLockedByEnv ? ffmpegPathEffective : ffmpegPathCfg;
       const ffmpegHelpDefault = 'Used for video thumbnail generation. Leave blank to use ffmpeg from PATH.';
       const ffmpegHelpLocked = 'Controlled by container env FR_FFMPEG_PATH. Change it in your Docker/host env.';
+      const ignoreRegexCfg = (typeof config.ignoreRegex === 'string') ? config.ignoreRegex : '';
+      const ignoreRegexEffective = (typeof config.ignoreRegexEffective === 'string') ? config.ignoreRegexEffective : '';
+      const ignoreRegexLockedByEnv = !!config.ignoreRegexLockedByEnv;
+      const ignoreRegexValue = ignoreRegexLockedByEnv ? ignoreRegexEffective : ignoreRegexCfg;
       const supportedLanguages = [
         { code: 'en',    labelKey: 'english',             fallback: 'English' },
         { code: 'es',    labelKey: 'spanish',             fallback: 'Español' },
@@ -3870,7 +3994,7 @@ export function openAdminPanel() {
         `;
         const sections = [
           { id: "userManagement", label: tf("users_access", "Users & Access") },
-          { id: "headerSettings", label: tf("appearance_ui", "Appearance & UI") },
+          { id: "headerSettings", label: tf("appearance_ui", "Appearance, UI & Indexing") },
           { id: "loginOptions", label: tf("auth_webdav", "Auth & WebDAV (OIDC/TOTP)") },
           { id: "upload", label: tf("uploads_antivirus", "Uploads & Antivirus") },
           { id: "shareLinks", label: tf("sharing_links", "Sharing & Links") },
@@ -3911,13 +4035,25 @@ export function openAdminPanel() {
             </div>
             <form id="adminPanelForm">
             <div id="adminSettingsSearchWrap" class="form-group admin-search-wrap is-collapsed">
-              <input
-                type="text"
-                id="adminSettingsSearch"
-                class="form-control"
-                autocomplete="off"
-                placeholder="${tf("settings_search_placeholder", "Search settings...")}"
-              />
+              <div class="admin-search-input">
+                <input
+                  type="text"
+                  id="adminSettingsSearch"
+                  class="form-control"
+                  autocomplete="off"
+                  placeholder="${tf("settings_search_placeholder", "Search settings...")}"
+                />
+                <button
+                  type="button"
+                  id="adminSearchClear"
+                  class="admin-search-clear"
+                  aria-label="${tf("clear_search", "Clear search")}"
+                  title="${tf("clear_search", "Clear search")}"
+                  hidden
+                >
+                  <i class="material-icons" aria-hidden="true">close</i>
+                </button>
+              </div>
               <small class="text-muted d-block mt-1">
                 ${tf("settings_search_help", "Type to filter sections and settings.")}
               </small>
@@ -3927,7 +4063,9 @@ export function openAdminPanel() {
             </div>
             ${sections.map(sec => `
               <div id="${sec.id}Header" class="section-header collapsed">
-                ${sec.label} <i class="material-icons">expand_more</i>
+                <div class="section-header-inner">
+                  ${sec.label} <i class="material-icons">expand_more</i>
+                </div>
               </div>
               <div id="${sec.id}Content" class="section-content"></div>
             `).join("")}
@@ -4237,6 +4375,44 @@ export function openAdminPanel() {
       step="1"
       value="${fileListSummaryDepth}"
     />
+  </div>
+
+  <div class="admin-subsection-title" style="margin-top:2px;">
+    ${tf("indexing_ignore_rules", "Indexing ignore rules")}
+  </div>
+  <div class="form-group" style="margin-top:8px;">
+    <label for="ignoreRegex">${tf("ignore_regex_label", "Ignore paths (regex)")}</label>
+    <textarea
+      id="ignoreRegex"
+      class="form-control"
+      rows="3"
+      placeholder="(^|/)(@?snapshots?)(/|$)"
+      ${ignoreRegexLockedByEnv ? "disabled data-locked='1'" : ""}>${escapeHTML(ignoreRegexValue || "")}</textarea>
+    <small class="text-muted d-block mt-1">
+      ${tf("ignore_regex_help", "One pattern per line. Matches entry name or relative path from root (no leading slash; e.g. \"projects/snapshot/2024\").")}
+    </small>
+    <small class="text-muted d-block mt-1">
+      ${tf("ignore_regex_scope_note", "Affects folder tree, counts, and indexing. Dot-prefixed entries (like .snapshots) are already hidden; use this for non-dot snapshot folders (snapshot, @snapshots).")}
+    </small>
+    <small class="text-muted d-block mt-1">
+      Built-in ignores: dot-prefixed entries (including .snapshots), <code>@eaDir</code>, <code>#recycle</code>,
+      <code>.DS_Store</code>, <code>Thumbs.db</code>, <code>trash</code>, <code>profile_pics</code>.
+    </small>
+    <div class="d-flex flex-wrap align-items-center" style="gap:8px; margin-top:6px;">
+      <span class="text-muted small">Quick add:</span>
+      <button
+        type="button"
+        id="ignoreRegexSnapshotsPreset"
+        class="btn btn-sm btn-outline-secondary"
+        ${ignoreRegexLockedByEnv ? "disabled" : ""}>
+        Add snapshot preset
+      </button>
+    </div>
+    <small class="text-muted d-block mt-1">
+      ${ignoreRegexLockedByEnv
+            ? `Env <code>FR_IGNORE_REGEX</code> overrides and locks this field.`
+            : `Env <code>FR_IGNORE_REGEX</code> overrides this field when set.`}
+    </small>
   </div>
 
     <hr class="admin-divider">
@@ -4645,9 +4821,13 @@ export function openAdminPanel() {
       </div>
       `
           }
+
 `;
 
-        wireClamavTestButton(document.getElementById("uploadContent"));
+        const uploadScope = document.getElementById("uploadContent");
+        const headerSettingsScope = document.getElementById("headerSettingsContent");
+        wireIgnoreRegexPresetButton(headerSettingsScope);
+        wireClamavTestButton(uploadScope);
         initVirusLogUI({ isPro });
         // ONLYOFFICE section (moved into adminOnlyOffice.js)
         initOnlyOfficeUI({ config });
@@ -4993,7 +5173,7 @@ ${t("shared_max_upload_size_bytes")}
       ${!isPro ? `
         <div style="margin-top:8px;">
           <a
-            href="https://filerise.net/pro/checkout.php"
+            href="https://filerise.net/pro/"
             target="_blank"
             rel="noopener noreferrer"
             class="btn btn-sm btn-pro-admin"
@@ -5346,7 +5526,13 @@ ${t("shared_max_upload_size_bytes")}
           const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
             ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span>'
             : '';
-          proFeaturesHeaderEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
+          const labelHtml = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
+          const inner = proFeaturesHeaderEl.querySelector('.section-header-inner');
+          if (inner) {
+            inner.innerHTML = labelHtml;
+          } else {
+            proFeaturesHeaderEl.innerHTML = `<div class="section-header-inner">${labelHtml}</div>`;
+          }
         }
         if (proFeaturesContainer) {
           const proSearchBlockedReason = !isPro ? 'pro' : (!proSearchApiOk ? 'api' : null);
@@ -5476,7 +5662,7 @@ ${t("shared_max_upload_size_bytes")}
 
               <div id="auditStatus" class="text-muted" style="font-size:12px; margin-bottom:8px;"></div>
 
-              <div class="table-responsive">
+              <div class="table-responsive audit-table-wrap">
                 <table class="table table-sm" style="margin-bottom:0;">
                   <thead>
                     <tr>
@@ -5901,6 +6087,16 @@ ${t("shared_max_upload_size_bytes")}
             help.textContent = locked ? ffmpegHelpLocked : ffmpegHelpDefault;
           }
         }
+        const ignoreEl = document.getElementById("ignoreRegex");
+        if (ignoreEl) {
+          const locked = !!config.ignoreRegexLockedByEnv;
+          const val = locked
+            ? (config.ignoreRegexEffective || "")
+            : (config.ignoreRegex || "");
+          ignoreEl.value = (val || "").toString();
+          ignoreEl.disabled = locked;
+          ignoreEl.dataset.locked = locked ? "1" : "0";
+        }
         // --- ClamAV toggle wiring (refresh) ---
         const cfgClam = config.clamav || {};
         const clamChk = document.getElementById("clamavScanUploads");
@@ -5925,7 +6121,10 @@ ${t("shared_max_upload_size_bytes")}
             }
           }
         }
-        wireClamavTestButton(document.getElementById("uploadContent"));
+        const uploadScope = document.getElementById("uploadContent");
+        const headerSettingsScope = document.getElementById("headerSettingsContent");
+        wireIgnoreRegexPresetButton(headerSettingsScope);
+        wireClamavTestButton(uploadScope);
         initVirusLogUI({ isPro });
         renderAdminEncryptionSection({ config, dark });
         document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig?.providerUrl || "";
@@ -5968,7 +6167,13 @@ ${t("shared_max_upload_size_bytes")}
           const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
             ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span>'
             : '';
-          pfHeader.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
+          const labelHtml = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
+          const inner = pfHeader.querySelector('.section-header-inner');
+          if (inner) {
+            inner.innerHTML = labelHtml;
+          } else {
+            pfHeader.innerHTML = `<div class="section-header-inner">${labelHtml}</div>`;
+          }
         }
         const psToggle = document.getElementById("proSearchEnabled");
         const psLimit = document.getElementById("proSearchLimit");
@@ -6043,6 +6248,7 @@ function handleSave() {
       if (el.dataset.locked === "1") return el.value || "";
       return (el.value || "").trim();
     })(),
+    ignoreRegex: (document.getElementById("ignoreRegex")?.value || "").trim(),
     loginOptions: {
       // Backend still expects “disable*” flags:
       disableFormLogin: !enableFormLogin,

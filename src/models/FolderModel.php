@@ -86,8 +86,7 @@ class FolderModel
         $relPrefix = implode('/', $parts);
     }
 
-    $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
-    $SKIP   = ['trash', 'profile_pics'];
+    $SKIP   = FS::SKIP();
 
     $entries = @scandir($dir);
     if ($entries === false) {
@@ -112,7 +111,7 @@ class FolderModel
 
         if ($name === '.' || $name === '..') continue;
         if ($name[0] === '.') continue;
-        if (in_array($name, $IGNORE, true)) continue;
+        if (FS::shouldIgnoreEntry($name, $relPrefix)) continue;
         if (in_array(strtolower($name), $SKIP, true)) continue;
         if (!self::isSafeSegment($name)) continue;
 
@@ -222,8 +221,7 @@ class FolderModel
             $relPrefix = implode('/', $parts);
         }
 
-        $IGNORE = ['@eaDir', '#recycle', '.DS_Store', 'Thumbs.db'];
-        $SKIP   = ['trash', 'profile_pics'];
+        $SKIP   = FS::SKIP();
 
         $folderCount = 0;
         $fileCount = 0;
@@ -251,7 +249,7 @@ class FolderModel
 
                 if ($name === '.' || $name === '..') continue;
                 if ($name[0] === '.') continue;
-                if (in_array($name, $IGNORE, true)) continue;
+                if (FS::shouldIgnoreEntry($name, $curRel)) continue;
                 if (in_array(strtolower($name), $SKIP, true)) continue;
                 if (!self::isSafeSegment($name)) continue;
 
@@ -347,7 +345,6 @@ class FolderModel
             return ['folders' => 0, 'files' => 0, 'bytes' => 0];
         }
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         $folderCount = 0;
@@ -359,7 +356,7 @@ class FolderModel
         foreach ($entries as $name) {
             if ($name === '.' || $name === '..' || $name === '') continue;
             if ($name[0] === '.') continue;
-            if (in_array($name, $IGNORE, true)) continue;
+            if (FS::shouldIgnoreEntry($name, $folder)) continue;
             if (!FS::isSafeSegment($name)) continue;
             if (in_array(strtolower($name), $SKIP, true)) continue;
 
@@ -443,7 +440,6 @@ class FolderModel
             : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
         $startRel = ($folder === 'root') ? '' : $folder;
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         $folderCount = 0;
@@ -469,7 +465,7 @@ class FolderModel
 
                 if ($name === '.' || $name === '..' || $name === '') continue;
                 if ($name[0] === '.') continue;
-                if (in_array($name, $IGNORE, true)) continue;
+                if (FS::shouldIgnoreEntry($name, $curRel)) continue;
                 if (!FS::isSafeSegment($name)) continue;
                 if (in_array(strtolower($name), $SKIP, true)) continue;
 
@@ -581,7 +577,6 @@ class FolderModel
             if ($dirReal === null || !is_dir($dirReal)) return ['items'=>[], 'nextCursor'=>null];
         }
     
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP(); // lowercased names to skip (e.g. 'trash', 'profile_pics')
     
         $entries = @scandir($dirReal);
@@ -591,7 +586,7 @@ class FolderModel
         foreach ($entries as $item) {
             if ($item === '.' || $item === '..') continue;
             if ($item[0] === '.') continue;
-            if (in_array($item, $IGNORE, true)) continue;
+            if (FS::shouldIgnoreEntry($item, $relPrefix)) continue;
             if (!FS::isSafeSegment($item)) continue;
     
             $lower = strtolower($item);
@@ -624,6 +619,7 @@ class FolderModel
                         $name = $child->getFilename();
                         if (!$name) continue;
                         if ($name[0] === '.') continue;
+                        if (FS::shouldIgnoreEntry($name, $rel)) continue;
                         if (!FS::isSafeSegment($name)) continue;
                         if (in_array(strtolower($name), $SKIP, true)) continue;
     
@@ -710,7 +706,6 @@ class FolderModel
             ? $base
             : $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         $entries = $storage->list($dirPath);
@@ -720,7 +715,7 @@ class FolderModel
         foreach ($entries as $item) {
             if ($item === '.' || $item === '..') continue;
             if ($item === '' || $item[0] === '.') continue;
-            if (in_array($item, $IGNORE, true)) continue;
+            if (FS::shouldIgnoreEntry($item, $folder)) continue;
             if (!FS::isSafeSegment($item)) continue;
 
             $lower = strtolower($item);
@@ -794,13 +789,12 @@ class FolderModel
         $entries = $storage->list($dirPath);
         if (!$entries) return false;
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         foreach ($entries as $item) {
             if ($item === '.' || $item === '..') continue;
             if ($item === '' || $item[0] === '.') continue;
-            if (in_array($item, $IGNORE, true)) continue;
+            if (FS::shouldIgnoreEntry($item, $folder)) continue;
             if (!FS::isSafeSegment($item)) continue;
             if (in_array(strtolower($item), $SKIP, true)) continue;
 
@@ -1054,7 +1048,6 @@ class FolderModel
         $fileCount = 0;
         $totalBytes = 0;
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         while ($queue) {
@@ -1080,7 +1073,7 @@ class FolderModel
             foreach ($entries as $name) {
                 if ($name === '.' || $name === '..') continue;
                 if ($name === '' || $name[0] === '.') continue;
-                if (in_array($name, $IGNORE, true)) continue;
+                if (FS::shouldIgnoreEntry($name, $rel)) continue;
                 if (!FS::isSafeSegment($name)) continue;
 
                 $lower = strtolower($name);
@@ -1707,9 +1700,13 @@ class FolderModel
     {
         $folders = [];
         $items   = @scandir($dir) ?: [];
+        $SKIP    = FS::SKIP();
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') continue;
+            if ($item === '' || $item[0] === '.') continue;
+            if (FS::shouldIgnoreEntry($item, $relative)) continue;
             if (!preg_match(REGEX_FOLDER_NAME, $item)) continue;
+            if (in_array(strtolower($item), $SKIP, true)) continue;
 
             $path = $dir . DIRECTORY_SEPARATOR . $item;
             if (is_dir($path)) {
@@ -1810,7 +1807,6 @@ class FolderModel
         $scanned = 0;
         $queue = [['root', $base]];
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         while ($queue && $scanned < $maxFolders) {
@@ -1821,7 +1817,7 @@ class FolderModel
             foreach ($entries as $name) {
                 if ($name === '.' || $name === '..') continue;
                 if ($name === '' || $name[0] === '.') continue;
-                if (in_array($name, $IGNORE, true)) continue;
+                if (FS::shouldIgnoreEntry($name, $rel)) continue;
                 if (!FS::isSafeSegment($name)) continue;
                 if (in_array(strtolower($name), $SKIP, true)) continue;
 
@@ -1888,13 +1884,12 @@ class FolderModel
             return $folderInfoList;
         }
 
-        $IGNORE = FS::IGNORE();
         $SKIP   = FS::SKIP();
 
         foreach ($entries as $name) {
             if ($name === '.' || $name === '..') continue;
             if ($name === '' || $name[0] === '.') continue;
-            if (in_array($name, $IGNORE, true)) continue;
+            if (FS::shouldIgnoreEntry($name, $parentRel)) continue;
             if (!FS::isSafeSegment($name)) continue;
             if (in_array(strtolower($name), $SKIP, true)) continue;
 
