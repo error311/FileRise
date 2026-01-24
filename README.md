@@ -72,7 +72,7 @@ Built for homelabs, teams, and client portals that need fast browsing, strict AC
   - **S3-compatible** (AWS S3 / MinIO / Wasabi / Backblaze B2 S3 / etc.)
   - **SMB/CIFS**, **SFTP**, **FTP**
   - **WebDAV** (Nextcloud / ownCloud / FileRise)
-  - **Google Drive**
+  - **Google Drive**, **OneDrive**, **Dropbox**
   - Works with **dual-pane** so you can copy/move via drag & drop or toolbar actions **between sources**, with **per-source Trash**
 
 Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
