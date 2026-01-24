@@ -33,7 +33,8 @@ const DEFAULT_SUPPORTERS = [
   'peterchia',
   'Edisto Pirates of SC',
   '@jubnl',
-  'Juozaitis S'
+  'Juozaitis S',
+  'Cocoseb31'
 ];
 
 /**

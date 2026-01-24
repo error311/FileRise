@@ -456,9 +456,15 @@ export async function refreshRecycleBinIndicator() {
 function autoPurgeOldTrash() {
     fetchTrash()
         .then(trashItems => {
+            const items = Array.isArray(trashItems)
+                ? trashItems
+                : (Array.isArray(trashItems?.items) ? trashItems.items : []);
+            if (items.length === 0) {
+                return;
+            }
             const now = Date.now();
             const threeDays = 3 * 24 * 60 * 60 * 1000;
-            const oldItems = trashItems.filter(item => (now - (item.trashedAt * 1000)) > threeDays);
+            const oldItems = items.filter(item => (now - (item.trashedAt * 1000)) > threeDays);
             if (oldItems.length > 0) {
                 const files = oldItems.map(item => item.trashName);
                 fetchJson(ENDPOINTS.delete, { files })

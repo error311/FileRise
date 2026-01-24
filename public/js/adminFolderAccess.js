@@ -15,6 +15,12 @@ let __aclSourcesCache = null;
 let __aclSourceId = '';
 
 function getFolderAccessSourceId() {
+  const groupModal = document.getElementById('groupAclModal');
+  if (groupModal && groupModal.style.display !== 'none') {
+    const groupSel = document.getElementById('groupAclSourceSelect');
+    const groupId = groupSel && groupSel.value ? String(groupSel.value) : '';
+    return groupId || __aclSourceId || '';
+  }
   const sel = document.getElementById('folderAccessSourceSelect');
   const id = sel && sel.value ? String(sel.value) : '';
   return id || __aclSourceId || '';
@@ -60,28 +66,35 @@ function populateFolderAccessSourceSelect(selectEl, sources, activeId) {
   selectEl.value = hasActive ? activeId : selectEl.options[0].value;
 }
 
-async function initFolderAccessSourceSelector() {
-  const row = document.getElementById('folderAccessSourceRow');
-  const selectEl = document.getElementById('folderAccessSourceSelect');
+async function initFolderAccessSourceSelector(opts = {}) {
+  const rowId = opts.rowId || 'folderAccessSourceRow';
+  const selectId = opts.selectId || 'folderAccessSourceSelect';
+  const onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
+  const row = document.getElementById(rowId);
+  const selectEl = document.getElementById(selectId);
   if (!row || !selectEl) return;
 
   const data = await loadFolderAccessSources();
   if (!data || !Array.isArray(data.sources) || data.sources.length <= 1) {
     row.style.display = 'none';
     __aclSourceId = (data && data.activeId) ? String(data.activeId) : '';
+    selectEl.__onSourceChange = onChange;
     return;
   }
 
   row.style.display = '';
   populateFolderAccessSourceSelect(selectEl, data.sources, data.activeId || '');
   __aclSourceId = selectEl.value || '';
+  selectEl.__onSourceChange = onChange;
 
   if (!selectEl.__wired) {
     selectEl.__wired = true;
     selectEl.addEventListener('change', () => {
       __aclSourceId = selectEl.value || '';
       __allFoldersCache = new Map();
-      loadUserPermissionsList();
+      if (typeof selectEl.__onSourceChange === 'function') {
+        selectEl.__onSourceChange(__aclSourceId);
+      }
     });
   }
 }
@@ -792,9 +805,66 @@ async function saveAllGroups(groups) {
 
 let __groupsCache = {};
 
-function computeGroupGrantMaskForUser(username, folders = []) {
+function normalizeSourceId(sourceId) {
+  return String(sourceId || '').trim();
+}
+
+function isLocalSourceId(sourceId) {
+  const sid = normalizeSourceId(sourceId);
+  if (!sid || sid === 'local') return true;
+  const data = __aclSourcesCache;
+  if (data && Array.isArray(data.sources)) {
+    const match = data.sources.find(src => String(src.id || '') === sid);
+    if (match) return String(match.type || '').toLowerCase() === 'local';
+  }
+  return false;
+}
+
+function pickGroupGrantsForSource(group, sourceId) {
+  if (!group || typeof group !== 'object') return {};
+  const sid = normalizeSourceId(sourceId);
+  const bySource = (group.grantsBySource && typeof group.grantsBySource === 'object' && !Array.isArray(group.grantsBySource))
+    ? group.grantsBySource
+    : null;
+  if (bySource) {
+    if (sid && Object.prototype.hasOwnProperty.call(bySource, sid)) {
+      const candidate = bySource[sid];
+      return (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) ? candidate : {};
+    }
+    if (!sid && Object.prototype.hasOwnProperty.call(bySource, 'local')) {
+      const candidate = bySource.local;
+      return (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) ? candidate : {};
+    }
+    if (isLocalSourceId(sid)) {
+      const legacy = group.grants;
+      return (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) ? legacy : {};
+    }
+    return {};
+  }
+  if (isLocalSourceId(sid)) {
+    const legacy = group.grants;
+    return (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) ? legacy : {};
+  }
+  return {};
+}
+
+function setGroupGrantsForSource(group, sourceId, grants) {
+  if (!group || typeof group !== 'object') return;
+  const sid = normalizeSourceId(sourceId);
+  if (!sid) {
+    group.grants = grants;
+    return;
+  }
+  if (!group.grantsBySource || typeof group.grantsBySource !== 'object' || Array.isArray(group.grantsBySource)) {
+    group.grantsBySource = {};
+  }
+  group.grantsBySource[sid] = grants;
+}
+
+function computeGroupGrantMaskForUser(username, folders = [], sourceId = null) {
   const mask = {};
   if (!username || !__groupsCache) return mask;
+  const sid = normalizeSourceId(sourceId == null ? getFolderAccessSourceId() : sourceId);
   const uname = String(username).toLowerCase();
 
   const userGroups = Object.keys(__groupsCache || {}).map(groupName => {
@@ -802,7 +872,7 @@ function computeGroupGrantMaskForUser(username, folders = []) {
     const members = Array.isArray(g.members) ? g.members : [];
     const inGroup = members.some(m => String(m || "").toLowerCase() === uname);
     if (!inGroup) return null;
-    return { name: groupName, grants: g.grants || {} };
+    return { name: groupName, grants: pickGroupGrantsForSource(g, sid) };
   }).filter(Boolean);
 
   if (!userGroups.length) return mask;
@@ -1091,7 +1161,9 @@ export function openUserPermissionsModal(initialUser = null) {
     userPermissionsModal.style.display = "flex";
   }
 
-  initFolderAccessSourceSelector().finally(() => {
+  initFolderAccessSourceSelector({
+    onChange: () => loadUserPermissionsList()
+  }).finally(() => {
     loadUserPermissionsList();
   });
 }
@@ -1109,7 +1181,7 @@ export async function openUserGroupsModal() {
     modal.id = 'userGroupsModal';
     modal.style.cssText = `
       position:fixed; inset:0; background:${overlayBg};
-      display:flex; align-items:center; justify-content:center; z-index:3650;
+      display:flex; align-items:center; justify-content:center; z-index:3750;
     `;
     modal.innerHTML = `
       <div class="modal-content"
@@ -1260,7 +1332,7 @@ async function loadUserPermissionsList() {
           if (grantsBox.dataset.loaded === "1") return;
           try {
             const group = __groupsCache[name] || {};
-            const grants = group.grants || {};
+            const grants = pickGroupGrantsForSource(group, sourceId);
 
             renderFolderGrantsUI(
               name,
@@ -1386,7 +1458,7 @@ async function loadUserPermissionsList() {
           );
 
           if (!isAdmin && groupNamesForUser.length) {
-            const groupMask = computeGroupGrantMaskForUser(username, orderedFolders);
+            const groupMask = computeGroupGrantMaskForUser(username, orderedFolders, sourceId);
             applyGroupLocksForUser(username, grantsBox, groupMask, groupNamesForUser);
           }
 
@@ -1656,13 +1728,16 @@ async function saveUserGroupsFromUI() {
     const label = (labelEl && labelEl.value || '').trim() || name;
     const members = Array.from(membersSel && membersSel.selectedOptions || []).map(o => o.value);
 
-    const existing = __groupsCache[oldName] || __groupsCache[name] || { grants: {} };
+    const existing = __groupsCache[oldName] || __groupsCache[name] || { grants: {}, grantsBySource: {} };
     groups[name] = {
       name,
       label,
       members,
       grants: existing.grants || {}
     };
+    if (existing.grantsBySource && typeof existing.grantsBySource === 'object' && !Array.isArray(existing.grantsBySource)) {
+      groups[name].grantsBySource = existing.grantsBySource;
+    }
   });
 
   if (status) {
@@ -1710,7 +1785,7 @@ async function openGroupAclEditor(groupName) {
     modal.id = 'groupAclModal';
     modal.style.cssText = `
       position:fixed; inset:0; background:${overlayBg};
-      display:flex; align-items:center; justify-content:center; z-index:3700;
+      display:flex; align-items:center; justify-content:center; z-index:3800;
     `;
     modal.innerHTML = `
       <div class="modal-content"
@@ -1725,6 +1800,11 @@ async function openGroupAclEditor(groupName) {
         <h3 id="groupAclTitle">Group folder access</h3>
         <div class="muted" style="margin:-4px 0 10px;">
           Group grants are merged with each member’s own folder access. They never reduce access.
+        </div>
+
+        <div class="modal-source-row" id="groupAclSourceRow" style="display:none;">
+          <label for="groupAclSourceSelect">${tf("storage_source", "Source")}</label>
+          <select id="groupAclSourceSelect" class="form-control form-control-sm"></select>
         </div>
 
         <div id="groupAclBody" style="max-height:70vh; overflow-y:auto; margin-bottom:12px;"></div>
@@ -1759,19 +1839,30 @@ async function openGroupAclEditor(groupName) {
   modal.dataset.groupName = groupName;
   modal.style.display = 'flex';
 
-  const sourceId = getFolderAccessSourceId();
-  const folders = await getAllFolders(true, sourceId);
-  const grants = (__groupsCache[groupName] && __groupsCache[groupName].grants) || {};
+  const renderGroupAcl = async () => {
+    const bodyEl = document.getElementById('groupAclBody');
+    if (!bodyEl) return;
+    bodyEl.textContent = `${t('loading')}…`;
 
-  if (body) {
-    body.textContent = '';
+    const sourceId = getFolderAccessSourceId();
+    const folders = await getAllFolders(true, sourceId);
+    const grants = pickGroupGrantsForSource(__groupsCache[groupName] || {}, sourceId);
+
+    bodyEl.textContent = '';
     const box = document.createElement('div');
     box.className = 'folder-grants-box';
-    body.appendChild(box);
+    bodyEl.appendChild(box);
 
     renderFolderGrantsUI(groupName, box, ['root', ...folders.filter(f => f !== 'root')], grants);
     box.__grantsFallback = grants;
-  }
+  };
+
+  await initFolderAccessSourceSelector({
+    rowId: 'groupAclSourceRow',
+    selectId: 'groupAclSourceSelect',
+    onChange: renderGroupAcl
+  });
+  await renderGroupAcl();
 }
 
 function saveGroupAclFromUI() {
@@ -1786,10 +1877,11 @@ function saveGroupAclFromUI() {
   if (!box) return;
 
   const grants = collectGrantsFrom(box, box.__grantsFallback || {});
+  const sourceId = getFolderAccessSourceId();
   if (!__groupsCache[groupName]) {
     __groupsCache[groupName] = { name: groupName, label: groupName, members: [], grants: {} };
   }
-  __groupsCache[groupName].grants = grants;
+  setGroupGrantsForSource(__groupsCache[groupName], sourceId, grants);
 
   showToast(t('admin_group_access_updated'));
   modal.style.display = 'none';

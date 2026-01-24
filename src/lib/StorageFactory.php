@@ -96,6 +96,26 @@ final class StorageFactory
             if (class_exists('ProGDriveAdapter')) {
                 $adapter = ProGDriveAdapter::fromConfig($cfg, $root);
             }
+        } elseif ($type === 'onedrive') {
+            if (!class_exists('ProOneDriveAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
+                $adapterPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . DIRECTORY_SEPARATOR . 'ProOneDriveAdapter.php';
+                if (is_file($adapterPath)) {
+                    require_once $adapterPath;
+                }
+            }
+            if (class_exists('ProOneDriveAdapter')) {
+                $adapter = ProOneDriveAdapter::fromConfig($cfg, $root);
+            }
+        } elseif ($type === 'dropbox') {
+            if (!class_exists('ProDropboxAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
+                $adapterPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . DIRECTORY_SEPARATOR . 'ProDropboxAdapter.php';
+                if (is_file($adapterPath)) {
+                    require_once $adapterPath;
+                }
+            }
+            if (class_exists('ProDropboxAdapter')) {
+                $adapter = ProDropboxAdapter::fromConfig($cfg, $root);
+            }
         } else {
             $adapter = new LocalFsAdapter();
         }
@@ -201,6 +221,28 @@ final class StorageFactory
             if (class_exists('ProGDriveAdapter')) {
                 $root = SourceContext::uploadRootForId((string)($source['id'] ?? ''));
                 $adapter = ProGDriveAdapter::fromConfig($source['config'] ?? [], $root);
+            }
+        } elseif ($type === 'onedrive') {
+            if (!class_exists('ProOneDriveAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
+                $adapterPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . DIRECTORY_SEPARATOR . 'ProOneDriveAdapter.php';
+                if (is_file($adapterPath)) {
+                    require_once $adapterPath;
+                }
+            }
+            if (class_exists('ProOneDriveAdapter')) {
+                $root = SourceContext::uploadRootForId((string)($source['id'] ?? ''));
+                $adapter = ProOneDriveAdapter::fromConfig($source['config'] ?? [], $root);
+            }
+        } elseif ($type === 'dropbox') {
+            if (!class_exists('ProDropboxAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
+                $adapterPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . DIRECTORY_SEPARATOR . 'ProDropboxAdapter.php';
+                if (is_file($adapterPath)) {
+                    require_once $adapterPath;
+                }
+            }
+            if (class_exists('ProDropboxAdapter')) {
+                $root = SourceContext::uploadRootForId((string)($source['id'] ?? ''));
+                $adapter = ProDropboxAdapter::fromConfig($source['config'] ?? [], $root);
             }
         } else {
             $adapter = new LocalFsAdapter();

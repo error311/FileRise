@@ -169,8 +169,9 @@ export function initializeApp() {
   loadHeaderOrder();
   initFileActions();
   initUpload();
-  initSourceSelector();
-  loadFolderTree();
+  initSourceSelector().finally(() => {
+    loadFolderTree();
+  });
 
   // Only run trash/restore for admins
   const isAdmin =

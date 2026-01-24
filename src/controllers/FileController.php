@@ -1284,65 +1284,99 @@ class FileController
 
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
-
-            if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
-                $this->_jsonOut(["error" => "Source is read-only."], 403);
-                return;
-            }
-
-            // Need write (or ancestor-owner)
-            if (!(ACL::canEdit($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
-                $this->_jsonOut(["error" => "Forbidden: no full write access"], 403);
-                return;
-            }
-
-            // Folder scope: write
-            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'edit');
-            if ($dv) {
-                $this->_jsonOut(["error" => $dv], 403);
-                return;
-            }
-
-            // If overwriting, enforce ownership for non-admins (unless folder owner)
-            $storage = StorageRegistry::getAdapter();
-            $baseDir = rtrim((class_exists('SourceContext') ? SourceContext::uploadRoot() : (string)UPLOAD_DIR), '/\\');
-            $dir = ($folder === 'root') ? $baseDir : $baseDir . DIRECTORY_SEPARATOR . $folder;
-            $path = $dir . DIRECTORY_SEPARATOR . $fileName;
-            if ($storage->stat($path) !== null) {
-                $ignoreOwnership = $this->isAdmin($userPermissions)
-                    || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false))
-                    || ACL::isOwner($username, $userPermissions, $folder)
-                    || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
-
-                if (!$ignoreOwnership) {
-                    $violation = $this->enforceScopeAndOwnership($folder, [$fileName], $username, $userPermissions);
-                    if ($violation) {
-                        $this->_jsonOut(["error" => $violation], 403);
+            $sourceId = '';
+            $allowDisabled = false;
+            if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                $rawSourceId = trim((string)($data['sourceId'] ?? ''));
+                if ($rawSourceId !== '') {
+                    $sourceId = $this->normalizeSourceId($rawSourceId);
+                    if ($sourceId === '') {
+                        $this->_jsonOut(["error" => "Invalid source id."], 400);
+                        return;
+                    }
+                    $info = SourceContext::getSourceById($sourceId);
+                    if (!$info) {
+                        $this->_jsonOut(["error" => "Invalid source."], 400);
+                        return;
+                    }
+                    $allowDisabled = $this->isAdmin($userPermissions);
+                    if (!$allowDisabled && empty($info['enabled'])) {
+                        $this->_jsonOut(["error" => "Source is disabled."], 403);
+                        return;
+                    }
+                    if (!empty($info['readOnly'])) {
+                        $this->_jsonOut(["error" => "Source is read-only."], 403);
                         return;
                     }
                 }
             }
 
-            $deny = ['php', 'phtml', 'phar', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'shtml', 'cgi', 'fcgi'];
-            $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-            if (in_array($ext, $deny, true)) {
-                $this->_jsonOut(['error' => 'Saving this file type is not allowed.'], 400);
-                return;
-            }
+            $runner = function () use ($data, $fileName, $folder, $username, $userPermissions) {
+                if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+                    $this->_jsonOut(["error" => "Source is read-only."], 403);
+                    return;
+                }
 
-            $content = (string)($data['content'] ?? '');
-            $result = FileModel::saveFile($folder, $fileName, $content, $username);
-            if (!is_array($result)) throw new RuntimeException('FileModel::saveFile returned non-array');
-            if (isset($result['error'])) {
-                $this->_jsonOut($result, 400);
+                // Need write (or ancestor-owner)
+                if (!(ACL::canEdit($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
+                    $this->_jsonOut(["error" => "Forbidden: no full write access"], 403);
+                    return;
+                }
+
+                // Folder scope: write
+                $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'edit');
+                if ($dv) {
+                    $this->_jsonOut(["error" => $dv], 403);
+                    return;
+                }
+
+                // If overwriting, enforce ownership for non-admins (unless folder owner)
+                $storage = StorageRegistry::getAdapter();
+                $baseDir = rtrim((class_exists('SourceContext') ? SourceContext::uploadRoot() : (string)UPLOAD_DIR), '/\\');
+                $dir = ($folder === 'root') ? $baseDir : $baseDir . DIRECTORY_SEPARATOR . $folder;
+                $path = $dir . DIRECTORY_SEPARATOR . $fileName;
+                if ($storage->stat($path) !== null) {
+                    $ignoreOwnership = $this->isAdmin($userPermissions)
+                        || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false))
+                        || ACL::isOwner($username, $userPermissions, $folder)
+                        || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
+
+                    if (!$ignoreOwnership) {
+                        $violation = $this->enforceScopeAndOwnership($folder, [$fileName], $username, $userPermissions);
+                        if ($violation) {
+                            $this->_jsonOut(["error" => $violation], 403);
+                            return;
+                        }
+                    }
+                }
+
+                $deny = ['php', 'phtml', 'phar', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'shtml', 'cgi', 'fcgi'];
+                $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                if (in_array($ext, $deny, true)) {
+                    $this->_jsonOut(['error' => 'Saving this file type is not allowed.'], 400);
+                    return;
+                }
+
+                $content = (string)($data['content'] ?? '');
+                $result = FileModel::saveFile($folder, $fileName, $content, $username);
+                if (!is_array($result)) throw new RuntimeException('FileModel::saveFile returned non-array');
+                if (isset($result['error'])) {
+                    $this->_jsonOut($result, 400);
+                    return;
+                }
+                AuditHook::log('file.edit', [
+                    'user'   => $username,
+                    'folder' => $folder,
+                    'path'   => ($folder === 'root') ? $fileName : ($folder . '/' . $fileName),
+                ]);
+                $this->_jsonOut($result);
+            };
+
+            if ($sourceId !== '') {
+                $this->withSourceContext($sourceId, $runner, $allowDisabled);
                 return;
             }
-            AuditHook::log('file.edit', [
-                'user'   => $username,
-                'folder' => $folder,
-                'path'   => ($folder === 'root') ? $fileName : ($folder . '/' . $fileName),
-            ]);
-            $this->_jsonOut($result);
+            $runner();
         } catch (Throwable $e) {
             error_log('FileController::saveFile error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
             $this->_jsonOut(['error' => 'Internal server error while saving file.'], 500);
@@ -1514,6 +1548,21 @@ class FileController
         }
     }
 
+    private function adapterErrorDetail(StorageAdapterInterface $storage): string
+    {
+        if (method_exists($storage, 'getLastError')) {
+            $detail = trim((string)$storage->getLastError());
+            if ($detail !== '') {
+                $detail = preg_replace('/(\\w+:\\/\\/)([^\\s@]+@)/i', '$1', $detail) ?? $detail;
+                if (strlen($detail) > 240) {
+                    $detail = substr($detail, 0, 240) . '...';
+                }
+                return $detail;
+            }
+        }
+        return '';
+    }
+
     private function streamAdapterWithRange(
         StorageAdapterInterface $storage,
         string $path,
@@ -1555,6 +1604,10 @@ class FileController
             $end  = 0;
         }
 
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
         // Close session + disable output buffering for streaming
         if (session_status() === PHP_SESSION_ACTIVE) {
             @session_write_close();
@@ -1584,9 +1637,11 @@ class FileController
 
             $stream = $storage->openReadStream($path, null, 0);
             if ($stream === false) {
+                $detail = $this->adapterErrorDetail($storage);
+                $msg = $detail !== '' ? ('Unable to open file stream: ' . $detail) : 'Unable to open file stream.';
                 http_response_code(500);
                 header('Content-Type: application/json; charset=utf-8');
-                echo json_encode(['error' => 'Unable to open file stream.']);
+                echo json_encode(['error' => $msg]);
                 exit;
             }
 
@@ -1609,8 +1664,10 @@ class FileController
         }
 
         $length = $size;
+        $rangeRequested = false;
         $rangeHeader = $_SERVER['HTTP_RANGE'] ?? '';
         if ($rangeHeader !== '' && preg_match('/bytes=\\s*(\\d*)-(\\d*)/i', $rangeHeader, $m)) {
+            $rangeRequested = true;
             $rangeStart = $m[1];
             $rangeEnd = $m[2];
 
@@ -1666,12 +1723,15 @@ class FileController
             exit;
         }
 
-        $streamLength = ($length > 0) ? $length : null;
-        $stream = $storage->openReadStream($path, $streamLength, $start);
+        $streamLength = ($rangeRequested && $length > 0) ? $length : null;
+        $streamOffset = $rangeRequested ? $start : 0;
+        $stream = $storage->openReadStream($path, $streamLength, $streamOffset);
         if ($stream === false) {
+            $detail = $this->adapterErrorDetail($storage);
+            $msg = $detail !== '' ? ('Unable to open file stream: ' . $detail) : 'Unable to open file stream.';
             http_response_code(500);
             header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['error' => 'Unable to open file stream.']);
+            echo json_encode(['error' => $msg]);
             exit;
         }
 
@@ -1788,6 +1848,9 @@ class FileController
 
     public function downloadFile()
     {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
         if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
             http_response_code(401);
             header('Content-Type: application/json; charset=utf-8');

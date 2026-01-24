@@ -370,6 +370,7 @@ function wireFolderStripItems(strip, sourceId = '') {
   });
 
   // Close menu when clicking elsewhere
+  document.removeEventListener("click", hideFolderManagerContextMenu);
   document.addEventListener("click", hideFolderManagerContextMenu);
 
   // Folder icons
@@ -630,7 +631,8 @@ async function fillFileSnippet(file, snippetEl) {
   snippetEl.textContent = t("loading") || "Loading...";
 
   try {
-    const url = apiFileUrl(folder, file.name, true);
+    const sourceId = String(file.sourceId || getActivePaneSourceId() || '').trim();
+    const url = apiFileUrl(folder, file.name, true, sourceId);
     const res = await fetch(url, { credentials: "include" });
     if (!res.ok) throw 0;
     const text = await res.text();
@@ -1316,7 +1318,7 @@ window.addEventListener('keydown', async (e) => {
 
   if (key === 'F3') {
     try {
-      const url = apiFileUrl(folder, file.name, true);
+      const url = apiFileUrl(folder, file.name, true, sourceId);
       const m = await import('./filePreview.js?v={{APP_QVER}}');
       m.previewFile(url, file.name);
     } catch (err) {
@@ -1332,7 +1334,7 @@ window.addEventListener('keydown', async (e) => {
     }
     try {
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(file.name, folder, sourceId);
+      m.editFile(file.name, folder, sourceId, file.sizeBytes);
     } catch (err) {
       console.error('Failed to open editor', err);
     }
@@ -1531,6 +1533,12 @@ function getSourceTypeById(sourceId) {
 function isFtpSource(sourceId = '') {
   const type = String(getSourceTypeById(sourceId || getGlobalActiveSourceId()) || '').toLowerCase();
   return type === 'ftp';
+}
+
+function isSlowRemoteSource(sourceId = '') {
+  const type = String(getSourceTypeById(sourceId || getGlobalActiveSourceId()) || '').toLowerCase();
+  if (!type || type === 'local') return false;
+  return ['ftp', 'sftp', 'webdav', 'smb', 'gdrive', 'onedrive', 'dropbox'].includes(type);
 }
 
 function getSourceMetaById(sourceId) {
@@ -2851,6 +2859,7 @@ function _runFolderStats(url, timeoutMs) {
 
 function fetchFolderStats(folder, sourceId = '') {
   if (!folder) return Promise.resolve(null);
+  if (isSlowRemoteSource(sourceId)) return Promise.resolve(null);
 
   const key = folderCacheKey(folder, sourceId);
   if (_folderStatsCache.has(key)) {
@@ -2890,7 +2899,7 @@ function fetchFolderStats(folder, sourceId = '') {
 
 function fetchFolderSummaryStats(folder, depthOverride, sourceId = '') {
   if (!folder) return Promise.resolve(null);
-  if (isFtpSource(sourceId)) {
+  if (isSlowRemoteSource(sourceId)) {
     return Promise.resolve(null);
   }
 
@@ -2976,7 +2985,7 @@ window.addEventListener('folderStatsInvalidated', (e) => {
  */
 async function fetchFolderPeek(folder, sourceId = '') {
   if (!folder) return null;
-  if (isFtpSource(sourceId)) return null;
+  if (isSlowRemoteSource(sourceId)) return null;
 
   const key = folderCacheKey(folder, sourceId);
   if (_folderPeekCache.has(key)) {
@@ -3076,23 +3085,34 @@ async function fetchFolderPeek(folder, sourceId = '') {
       file: name,
       inline: inline ? "1" : "0"
     });
-    const sid = String(sourceId || "").trim();
-    if (sid) q.set("sourceId", sid);
+    let meta = null;
+    let sid = String(sourceId || "").trim();
   
-    // Try to find this file in fileData to get a stable cache key
     try {
       if (Array.isArray(fileData)) {
-        const meta = fileData.find(
+        meta = fileData.find(
           f => f.name === name && (f.folder || "root") === fParam
         );
-        if (meta) {
-          const v = meta.cacheKey || meta.modified || meta.uploaded || meta.sizeBytes;
-          if (v != null && v !== "") {
-            q.set("t", String(v));  // stable per-file token
-          }
+        if (!sid && meta && meta.sourceId) {
+          sid = String(meta.sourceId || "").trim();
         }
       }
     } catch (e) { /* best-effort only */ }
+
+    if (!sid) {
+      try {
+        sid = String(getActivePaneSourceId() || "").trim();
+      } catch (e) { /* ignore */ }
+    }
+    if (sid) q.set("sourceId", sid);
+
+    // Try to find this file in fileData to get a stable cache key
+    if (meta) {
+      const v = meta.cacheKey || meta.modified || meta.uploaded || meta.sizeBytes;
+      if (v != null && v !== "") {
+        q.set("t", String(v));  // stable per-file token
+      }
+    }
   
     return withBase(`/api/file/download.php?${q.toString()}`);
 	  }
@@ -3446,7 +3466,13 @@ fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
     const isPdf   = /\.pdf$/i.test(lower);
 
     const folder = file.folder || window.currentFolder || "root";
-    const url    = apiFileUrl(folder, file.name, true);
+    const sourceId = String(
+      file.sourceId ||
+      (window.__frPaneState && window.__frPaneState[paneKey] && window.__frPaneState[paneKey].sourceId) ||
+      getActivePaneSourceId() ||
+      ""
+    ).trim();
+    const url    = apiFileUrl(folder, file.name, true, sourceId);
     const canTextPreview = canEditFile(file.name);
     const isOfficeSnippet = OFFICE_SNIPPET_EXTS.has(ext);
 
@@ -3598,12 +3624,6 @@ fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
         `;
       };
 
-      const sourceId = String(
-        file.sourceId ||
-        (window.__frPaneState && window.__frPaneState[paneKey] && window.__frPaneState[paneKey].sourceId) ||
-        getActivePaneSourceId() ||
-        ""
-      ).trim();
       const sourceType = String(getSourceTypeById(sourceId || getActivePaneSourceId()) || '').toLowerCase();
       const isRemoteSource = sourceId !== '' && sourceType !== 'local';
       const canStreamRemotePreview = isRemoteSource
@@ -4372,8 +4392,8 @@ function triggerNextNonZipDownload() {
     return;
   }
 
-  const { folder, name } = q.shift();
-  const url = apiFileUrl(folder || 'root', name, /* inline */ false);
+  const { folder, name, sourceId } = q.shift();
+  const url = apiFileUrl(folder || 'root', name, /* inline */ false, sourceId);
 
   const a = document.createElement('a');
   a.href = url;
@@ -5618,7 +5638,7 @@ export async function loadFileList(folderParam, options = {}) {
     window.userFolderOnly === true ||
     localStorage.getItem("folderOnly") === "true";
   const username = (localStorage.getItem("username") || "").trim();
-  const paneSourceId = getPaneSourceId(pane);
+  let paneSourceId = getPaneSourceId(pane);
   const paneState = getPaneState(pane);
   const paneFolder = (paneState && paneState.sourceId === paneSourceId && typeof paneState.currentFolder === 'string')
     ? paneState.currentFolder.trim()
@@ -5778,6 +5798,11 @@ export async function loadFileList(folderParam, options = {}) {
     if (data.error) {
       throw new Error(typeof data.error === 'string' ? data.error : 'Server returned an error.');
     }
+    const responseSourceId = String(data.sourceId || '').trim();
+    if (!paneSourceId && responseSourceId) {
+      paneSourceId = responseSourceId;
+      savePaneState(pane, { sourceId: responseSourceId });
+    }
 
     // If another loadFileList ran after this one, bail before touching the DOM
     if (reqId !== __fileListReqSeq[pane]) return [];
@@ -5841,6 +5866,10 @@ export async function loadFileList(folderParam, options = {}) {
     
       f.cacheKey = cacheKey;
       f.folder   = folder;
+      const sid = String(f.sourceId || paneSourceId || '').trim();
+      if (sid) {
+        f.sourceId = sid;
+      }
     
       // For editing: if size is unknown, assume it's OK and let the editor enforce limits.
       const safeForEdit = (bytes == null) || (bytes <= MAX_EDIT_BYTES);
@@ -6710,9 +6739,9 @@ async function openDefaultFileFromHover(file) {
   try {
     if (canEditFile(file.name) && file.editable) {
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(file.name, folder, sourceId);
+      m.editFile(file.name, folder, sourceId, file.sizeBytes);
     } else {
-      const url = apiFileUrl(folder, file.name, true);
+      const url = apiFileUrl(folder, file.name, true, sourceId);
       const m = await import('./filePreview.js?v={{APP_QVER}}');
       m.previewFile(url, file.name);
     }
@@ -7037,7 +7066,8 @@ wireSelectAll(fileListContent);
         const rowEl = document.getElementById(`file-row-${rowKey}`);
         if (!rowEl) return;
   
-        const previewUrl = apiFileUrl(file.folder || folder, file.name, true);
+        const rowSourceId = String(file.sourceId || paneSourceId || '').trim();
+        const previewUrl = apiFileUrl(file.folder || folder, file.name, true, rowSourceId);
   
         // Preview button dataset
         const previewBtn = rowEl.querySelector(".preview-btn");
@@ -7122,7 +7152,10 @@ wireSelectAll(fileListContent);
     btn.addEventListener("click", async e => {
       e.stopPropagation();
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(btn.dataset.editName, btn.dataset.editFolder, paneSourceId);
+      const rawSize = btn.dataset.editSizeBytes;
+      const sizeNum = (rawSize === undefined || rawSize === '') ? NaN : Number(rawSize);
+      const sizeArg = Number.isFinite(sizeNum) ? sizeNum : null;
+      m.editFile(btn.dataset.editName, btn.dataset.editFolder, paneSourceId, sizeArg);
     });
   });
 
@@ -7223,15 +7256,13 @@ function getMaxImageHeight() {
 export function renderGalleryView(folder, container) {
   clearInlineRenameState({ restore: false });
   const fileListContent = container || document.getElementById("fileList");
+  const paneSourceId = String(getPaneSourceIdForElement(fileListContent) || getActivePaneSourceId() || '');
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   let filteredFiles = searchFiles(searchTerm);
 
   if (Array.isArray(filteredFiles) && filteredFiles.length) {
     filteredFiles = [...filteredFiles].sort(compareFilesForSort);
   }
-
-  // API preview base (we’ll build per-file URLs)
-	  const apiBase = withBase(`/api/file/download.php?folder=${encodeURIComponent(folder)}&file=`);
 
   // pagination settings
   const itemsPerPage = window.itemsPerPage;
@@ -7293,7 +7324,8 @@ export function renderGalleryView(folder, container) {
   pageFiles.forEach((file, idx) => {
     const idSafe = encodeURIComponent(file.name) + "-" + (startIdx + idx);
 
-    const previewURL = apiFileUrl(folder, file.name, true);
+    const sourceId = String(file.sourceId || paneSourceId || '').trim();
+    const previewURL = apiFileUrl(folder, file.name, true, sourceId);
 
     // thumbnail
     let thumbnail;
@@ -7423,7 +7455,7 @@ export function renderGalleryView(folder, container) {
   
           <div class="gallery-preview" style="cursor:pointer;"
                data-preview-url="${previewURL}"
-               data-preview-name="${file.name}">
+               data-preview-name="${escapeHTML(file.name)}">
             ${thumbnail}
           </div>
   
@@ -7452,6 +7484,7 @@ export function renderGalleryView(folder, container) {
                 class="btn btn-secondary py-1 edit-btn"
                 data-edit-name="${escapeHTML(file.name)}"
                 data-edit-folder="${file.folder || "root"}"
+                data-edit-size-bytes="${bytes != null ? String(bytes) : ''}"
                 title="${t('edit')}"
               >
                 <i class="material-icons">edit</i>
@@ -7554,14 +7587,15 @@ export function renderGalleryView(folder, container) {
     });
   });
 
-  const paneSourceId = String(getPaneSourceIdForElement(fileListContent) || getActivePaneSourceId() || '');
-
   // edit clicks
   fileListContent.querySelectorAll(".edit-btn").forEach(btn => {
     btn.addEventListener("click", async e => {
       e.stopPropagation();
       const m = await import('./fileEditor.js?v={{APP_QVER}}');
-      m.editFile(btn.dataset.editName, btn.dataset.editFolder, paneSourceId);
+      const rawSize = btn.dataset.editSizeBytes;
+      const sizeNum = (rawSize === undefined || rawSize === '') ? NaN : Number(rawSize);
+      const sizeArg = Number.isFinite(sizeNum) ? sizeNum : null;
+      m.editFile(btn.dataset.editName, btn.dataset.editFolder, paneSourceId, sizeArg);
     });
   });
 
@@ -7655,7 +7689,8 @@ export function downloadSelectedFilesIndividually(fileObjs) {
 
   const mapped = src.map(f => ({
     folder: f.folder || window.currentFolder || 'root',
-    name: f.name
+    name: f.name,
+    sourceId: String(f.sourceId || getActivePaneSourceId() || '').trim()
   }));
 
   const limit = window.maxNonZipDownloads || MAX_NONZIP_MULTI_DOWNLOAD;

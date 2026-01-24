@@ -220,14 +220,18 @@ function menuClickDelegate(ev) {
       break;
 
     case 'preview':
-      if (s.file) previewFile(buildPreviewUrl(folder, s.file.name), s.file.name);
+      if (s.file) {
+        const sourceId = String(s.file.sourceId || '').trim()
+          || (window.__frGetActiveSourceId ? String(window.__frGetActiveSourceId() || '').trim() : '');
+        previewFile(buildPreviewUrl(folder, s.file.name, sourceId), s.file.name);
+      }
       break;
 
     case 'edit':
       if (s.file && s.canEdit) {
         const sourceId = String(s.file.sourceId || '').trim()
           || (window.__frGetActiveSourceId ? String(window.__frGetActiveSourceId() || '').trim() : '');
-        editFile(s.file.name, folder, sourceId);
+        editFile(s.file.name, folder, sourceId, s.file.sizeBytes);
       }
       break;
 

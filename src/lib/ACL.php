@@ -486,6 +486,45 @@ class ACL
         return $cache;
     }
 
+    private static function groupSourceContext(): array
+    {
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $src = SourceContext::getActiveSource();
+            $id = (string)($src['id'] ?? '');
+            $type = strtolower((string)($src['type'] ?? ''));
+            return [
+                'id' => $id,
+                'isLocal' => ($type === 'local' || $id === ''),
+            ];
+        }
+        return ['id' => '', 'isLocal' => true];
+    }
+
+    private static function groupGrantsForSource(array $group, array $ctx): array
+    {
+        $bySource = $group['grantsBySource'] ?? null;
+        if (is_array($bySource)) {
+            $id = (string)($ctx['id'] ?? '');
+            if ($id !== '' && array_key_exists($id, $bySource) && is_array($bySource[$id])) {
+                return $bySource[$id];
+            }
+            if ($id === '' && array_key_exists('local', $bySource) && is_array($bySource['local'])) {
+                return $bySource['local'];
+            }
+            if (!empty($ctx['isLocal'])) {
+                $legacy = $group['grants'] ?? [];
+                return is_array($legacy) ? $legacy : [];
+            }
+            return [];
+        }
+
+        $legacy = $group['grants'] ?? [];
+        if (!empty($ctx['isLocal'])) {
+            return is_array($legacy) ? $legacy : [];
+        }
+        return [];
+    }
+
     /**
      * Map a group grants record for a single folder to a capability bucket.
      * Supports both internal bucket keys and the UI-style keys: view, viewOwn,
@@ -573,6 +612,7 @@ class ACL
         $groups = self::loadGroupData();
         if (!$groups) return false;
 
+        $ctx = self::groupSourceContext();
         foreach ($groups as $g) {
             if (!is_array($g)) continue;
 
@@ -588,7 +628,7 @@ class ACL
             }
             if (!$isMember) continue;
 
-            $grantsMap = isset($g['grants']) && is_array($g['grants']) ? $g['grants'] : [];
+            $grantsMap = self::groupGrantsForSource($g, $ctx);
 
             $folderGrants = $grantsMap[$folder] ?? null;
             if (is_array($folderGrants) && self::groupGrantsCap($folderGrants, $capKey)) {
@@ -740,6 +780,7 @@ class ACL
         $groups = self::loadGroupData();
         if (!$groups) return false;
 
+        $ctx = self::groupSourceContext();
         foreach ($groups as $g) {
             if (!is_array($g)) continue;
             $members = $g['members'] ?? [];
@@ -754,7 +795,7 @@ class ACL
             }
             if (!$isMember) continue;
 
-            $grantsMap = isset($g['grants']) && is_array($g['grants']) ? $g['grants'] : [];
+            $grantsMap = self::groupGrantsForSource($g, $ctx);
             foreach ($grantsMap as $folder => $grants) {
                 if (!is_array($grants)) continue;
                 if (self::groupGrantsExplicit($grants)) {

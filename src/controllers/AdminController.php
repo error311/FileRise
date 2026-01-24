@@ -1093,13 +1093,21 @@ class AdminController
             $label   = isset($info['label']) ? trim((string)$info['label']) : $name;
             $members = isset($info['members']) && is_array($info['members']) ? $info['members'] : [];
             $grants  = isset($info['grants']) && is_array($info['grants']) ? $info['grants'] : [];
+            $grantsBySource = isset($info['grantsBySource']) && is_array($info['grantsBySource'])
+                ? $info['grantsBySource']
+                : null;
 
-            $data['groups'][$name] = [
+            $entry = [
                 'name'    => $name,
                 'label'   => $label,
                 'members' => array_values(array_unique(array_map('strval', $members))),
                 'grants'  => $grants,
             ];
+            if ($grantsBySource !== null) {
+                $entry['grantsBySource'] = $grantsBySource;
+            }
+
+            $data['groups'][$name] = $entry;
         }
 
         $store = new ProGroups(FR_PRO_BUNDLE_DIR);

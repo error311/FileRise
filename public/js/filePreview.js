@@ -4,14 +4,49 @@ import { t } from './i18n.js?v={{APP_QVER}}';
 import { fileData, setFileProgressBadge, setFileWatchedBadge } from './fileListView.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
 
+function resolvePreviewSourceId(sourceId, folder, name) {
+  let sid = String(sourceId || '').trim();
+  if (sid) return sid;
+  const fParam = (!folder || folder === '') ? 'root' : String(folder);
+  try {
+    if (Array.isArray(fileData)) {
+      const meta = fileData.find(
+        f => f.name === name && (f.folder || 'root') === fParam
+      );
+      if (meta && meta.sourceId) return String(meta.sourceId || '').trim();
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (typeof window.__frGetActiveSourceId === 'function') {
+      const v = window.__frGetActiveSourceId();
+      if (v) return String(v).trim();
+    }
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return String(sel.value).trim();
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return stored;
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
 // Build a preview URL that always goes through the API layer (respects ACLs/UPLOAD_DIR)
-export function buildPreviewUrl(folder, name) {
+export function buildPreviewUrl(folder, name, sourceId = '') {
   const f = (!folder || folder === '') ? 'root' : String(folder);
-  return withBase(`/api/file/download.php?folder=${encodeURIComponent(f)}&file=${encodeURIComponent(name)}&inline=1&t=${Date.now()}`);
+  const params = new URLSearchParams({
+    folder: f,
+    file: name,
+    inline: '1',
+    t: String(Date.now())
+  });
+  const sid = resolvePreviewSourceId(sourceId, f, name);
+  if (sid) params.set('sourceId', sid);
+  return withBase(`/api/file/download.php?${params.toString()}`);
 }
 
 // New: build a download URL (attachment)
-export function buildDownloadUrl(folder, name) {
+export function buildDownloadUrl(folder, name, sourceId = '') {
   const f = (!folder || folder === '') ? 'root' : String(folder);
   const params = new URLSearchParams({
     folder: f,
@@ -19,6 +54,8 @@ export function buildDownloadUrl(folder, name) {
     inline: '0',
     t: String(Date.now())
   });
+  const sid = resolvePreviewSourceId(sourceId, f, name);
+  if (sid) params.set('sourceId', sid);
   return withBase(`/api/file/download.php?${params.toString()}`);
 }
 
@@ -344,6 +381,59 @@ function ensureMediaModal() {
   return overlay;
 }
 
+function ensurePreviewLoader(overlay) {
+  const stage = overlay.querySelector('.media-stage');
+  if (!stage) return null;
+  let loader = stage.querySelector('.preview-loading');
+  if (loader) return loader;
+
+  loader = document.createElement('div');
+  loader.className = 'preview-loading';
+  Object.assign(loader.style, {
+    position: 'absolute',
+    inset: '0',
+    display: 'none',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    fontSize: '13px',
+    color: 'inherit',
+    background: 'rgba(0,0,0,0.05)',
+    backdropFilter: 'blur(1px)',
+    pointerEvents: 'none',
+    zIndex: '1000'
+  });
+  loader.innerHTML = `
+    <span class="material-icons preview-loading-icon spinning" style="font-size:18px;">autorenew</span>
+    <span class="preview-loading-text"></span>
+  `;
+  stage.appendChild(loader);
+  return loader;
+}
+
+function setPreviewLoading(overlay, on, message, tone = '') {
+  const loader = ensurePreviewLoader(overlay);
+  if (!loader) return;
+  const icon = loader.querySelector('.preview-loading-icon');
+  const textEl = loader.querySelector('.preview-loading-text');
+  const label = message || (t('loading') || 'Loading...');
+  if (textEl) textEl.textContent = label;
+
+  if (icon) {
+    if (tone === 'error') {
+      icon.textContent = 'error_outline';
+      icon.classList.remove('spinning');
+      loader.style.color = '#e11d48';
+    } else {
+      icon.textContent = 'autorenew';
+      icon.classList.add('spinning');
+      loader.style.color = 'inherit';
+    }
+  }
+
+  loader.style.display = on ? 'flex' : 'none';
+}
+
 function setTitle(overlay, name) {
   const textEl = overlay.querySelector('.title-text');
   const iconEl = overlay.querySelector('.title-icon');
@@ -493,6 +583,7 @@ export function previewFile(fileUrl, fileName) {
   container.innerHTML = "";
   actionWrap.innerHTML = "";
   if (statusChip) statusChip.style.display = 'none';
+  setPreviewLoading(overlay, true, t('loading') || 'Loading...');
   if (overlay._onKey) window.removeEventListener('keydown', overlay._onKey);
   overlay._onKey = null;
 
@@ -529,6 +620,7 @@ export function previewFile(fileUrl, fileName) {
     container.textContent =
       t("svg_preview_disabled") ||
       "SVG preview is disabled for security. Use Download to view this file.";
+    setPreviewLoading(overlay, false);
     overlay.style.display = "flex";
     return;
   }
@@ -536,13 +628,25 @@ export function previewFile(fileUrl, fileName) {
   /* -------------------- IMAGES -------------------- */
   if (isImage) {
     const img = document.createElement("img");
-    img.src = fileUrl;
     img.className = "image-modal-img";
     img.style.maxWidth  = "88vw";
     img.style.maxHeight = "88vh";
     img.style.transition = "transform 0.3s ease";
     img.dataset.scale = 1;
     img.dataset.rotate = 0;
+    img.addEventListener('load', () => {
+      img.style.display = '';
+      setPreviewLoading(overlay, false);
+    });
+    img.addEventListener('error', () => {
+      img.style.display = 'none';
+      setPreviewLoading(
+        overlay,
+        true,
+        t('preview_not_available') || 'Preview not available for this file type.',
+        'error'
+      );
+    });
     container.appendChild(img);
   
     let currentName = name;
@@ -600,6 +704,7 @@ const navigate = (dir) => {
   img.dataset.scale = 1;
   img.dataset.rotate = 0;
   img.style.transform = 'scale(1) rotate(0deg)';
+  setPreviewLoading(overlay, true, t('loading') || 'Loading...');
   img.src = siblingPreviewUrl(newFile);   // <-- changed
 };
 
@@ -615,6 +720,8 @@ const navigate = (dir) => {
       overlay._onKey = onKey;
     }
 
+    setPreviewLoading(overlay, true, t('loading') || 'Loading...');
+    img.src = fileUrl;
     overlay.style.display = "flex";
     return;
   }
@@ -636,6 +743,20 @@ if (isVideo) {
   video.style.maxWidth  = "88vw";
   video.style.maxHeight = "88vh";
   video.style.objectFit = "contain";
+  video.addEventListener('loadstart', () => {
+    setPreviewLoading(overlay, true, t('loading') || 'Loading...');
+  });
+  video.addEventListener('loadeddata', () => {
+    setPreviewLoading(overlay, false);
+  });
+  video.addEventListener('error', () => {
+    setPreviewLoading(
+      overlay,
+      true,
+      t('preview_not_available') || 'Preview not available for this file type.',
+      'error'
+    );
+  });
   container.appendChild(video);
 
   // Apply last-used volume/mute, and persist future changes
@@ -844,6 +965,7 @@ if (isVideo) {
   // Kick off first video using the original working URL
   setVideoSrc(name);
   renderStatus(null);
+  setPreviewLoading(overlay, true, t('loading') || 'Loading...');
   overlay.style.display = "flex";
   return;
 }
@@ -855,6 +977,20 @@ if (isVideo) {
     audio.controls = true;
     audio.className = "audio-modal";
     audio.style.maxWidth = "88vw";
+    audio.addEventListener('loadstart', () => {
+      setPreviewLoading(overlay, true, t('loading') || 'Loading...');
+    });
+    audio.addEventListener('loadeddata', () => {
+      setPreviewLoading(overlay, false);
+    });
+    audio.addEventListener('error', () => {
+      setPreviewLoading(
+        overlay,
+        true,
+        t('preview_not_available') || 'Preview not available for this file type.',
+        'error'
+      );
+    });
     container.appendChild(audio);
   
     // Share the same volume/mute behavior with videos
@@ -870,6 +1006,7 @@ if (isVideo) {
     actionWrap.appendChild(downloadBtn);
   
     container.textContent = t("preview_not_available") || "Preview not available for this file type.";
+    setPreviewLoading(overlay, false);
     overlay.style.display = "flex";
   }
 }

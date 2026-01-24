@@ -388,7 +388,20 @@ document.addEventListener("DOMContentLoaded", function () {
       if (confirmDelete.dataset.busy === "1") return;
       confirmDelete.dataset.busy = "1";
       setDeletingState(true);
-      const fileCount = Array.isArray(window.filesToDelete) ? window.filesToDelete.length : 0;
+      const selection = Array.isArray(window.filesToDelete) ? window.filesToDelete : [];
+      const fileCount = selection.length;
+      const totals = getTransferTotalsForNames(selection);
+      const progress = startTransferProgress({
+        action: 'Deleting',
+        itemCount: totals.itemCount,
+        itemLabel: totals.itemCount === 1 ? 'file' : 'files',
+        totalBytes: totals.totalBytes,
+        bytesKnown: totals.bytesKnown,
+        source: window.currentFolder || 'root',
+        destination: 'Trash'
+      });
+      let ok = false;
+      let errMsg = '';
       const slowTimer = setTimeout(() => {
         showToast(
           fileCount > 0
@@ -409,23 +422,30 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(response => response.json())
         .then(data => {
           if (data.success) {
+            ok = true;
             showToast(t('delete_files_success'), 'success');
             // deleteFiles.php moves items into Trash; update the recycle bin indicator immediately.
             updateRecycleBinState(true);
             loadFileList(window.currentFolder);
             refreshFolderIcon(window.currentFolder);
           } else {
-            const errMsg = data.error || t('delete_files_error_default');
+            ok = false;
+            errMsg = data.error || t('delete_files_error_default');
             showToast(t('delete_files_error', { error: errMsg }), 'error');
           }
         })
-        .catch(error => console.error("Error deleting files:", error))
+        .catch(error => {
+          ok = false;
+          errMsg = error && error.message ? error.message : t('delete_files_error_default');
+          console.error("Error deleting files:", error);
+        })
         .finally(() => {
           clearTimeout(slowTimer);
           setDeletingState(false);
           delete confirmDelete.dataset.busy;
           document.getElementById("deleteFilesModal").style.display = "none";
           window.filesToDelete = [];
+          finishTransferProgress(progress, { ok, error: errMsg });
         });
     });
   }
@@ -537,6 +557,31 @@ export async function handleCreateFile(e) {
     return;
   }
 
+  const confirmBtn = document.getElementById('confirmCreateFile');
+  const cancelBtn = document.getElementById('cancelCreateFile');
+  const setCreatingState = (busy) => {
+    if (!confirmBtn) return;
+    if (busy) {
+      if (!confirmBtn.dataset.originalLabel) {
+        confirmBtn.dataset.originalLabel = confirmBtn.innerHTML;
+      }
+      confirmBtn.innerHTML =
+        '<span class="material-icons spinning" style="font-size:16px; vertical-align:middle; margin-right:6px;">autorenew</span>Creating...';
+      confirmBtn.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = true;
+      return;
+    }
+    if (confirmBtn.dataset.originalLabel) {
+      confirmBtn.innerHTML = confirmBtn.dataset.originalLabel;
+      delete confirmBtn.dataset.originalLabel;
+    }
+    confirmBtn.disabled = false;
+    if (cancelBtn) cancelBtn.disabled = false;
+  };
+  if (confirmBtn && confirmBtn.dataset.busy === "1") return;
+  if (confirmBtn) confirmBtn.dataset.busy = "1";
+  setCreatingState(true);
+
   const folder = window.currentFolder || 'root';
   try {
     const res = await fetch('/api/file/createFile.php', {
@@ -549,14 +594,24 @@ export async function handleCreateFile(e) {
       // ⚠️ must send `name`, not `filename`
       body: JSON.stringify({ folder, name })
     });
-    const js = await res.json();
-    if (!js.success) throw new Error(js.error);
+    const raw = await res.text();
+    let js = null;
+    if (raw) {
+      try { js = JSON.parse(raw); } catch (e) { js = null; }
+    }
+    if (!res.ok || !js || !js.success) {
+      const text = raw ? raw.replace(/<[^>]*>/g, '').trim() : '';
+      const msg = (js && (js.error || js.message)) || text || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
     showToast(t('file_created'), 'success');
     loadFileList(folder);
     refreshFolderIcon(folder);
   } catch (err) {
     showToast(err.message || t('error_creating_file'), 'error');
   } finally {
+    if (confirmBtn) delete confirmBtn.dataset.busy;
+    setCreatingState(false);
     document.getElementById('createFileModal').style.display = 'none';
   }
 }
@@ -608,9 +663,13 @@ export function confirmSingleDownload() {
 
   // 3) Build the direct download URL
   const folder = window.currentFolder || "root";
-  const downloadURL = withBase("/api/file/download.php")
+  let downloadURL = withBase("/api/file/download.php")
     + "?folder=" + encodeURIComponent(folder)
     + "&file=" + encodeURIComponent(window.singleFileToDownload);
+  const sourceId = getActiveSourceId();
+  if (sourceId) {
+    downloadURL += "&sourceId=" + encodeURIComponent(sourceId);
+  }
 
   // 4) Trigger native browser download
   const a = document.createElement("a");

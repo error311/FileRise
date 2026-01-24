@@ -129,6 +129,7 @@ class FileModel
         }
 
         $storage = self::storage();
+        $activeSourceId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
         if (!$storage->isLocal()) {
             try {
                 if (FolderCrypto::isEncryptedOrAncestor($folder)) {
@@ -387,6 +388,10 @@ class FileModel
         if (method_exists($storage, 'getLastError')) {
             $detail = trim((string)$storage->getLastError());
             if ($detail !== '') {
+                $detail = preg_replace('/(\\w+:\\/\\/)([^\\s@]+@)/i', '$1', $detail) ?? $detail;
+                if (strlen($detail) > 240) {
+                    $detail = substr($detail, 0, 240) . '...';
+                }
                 return $detail;
             }
         }
@@ -3199,6 +3204,7 @@ class FileModel
 
         $folder = trim($folder) ?: 'root';
         $storage = self::storage();
+        $activeSourceId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
 
         // Determine the target directory.
         $baseDir = rtrim(self::uploadRoot(), '/\\');
@@ -3281,7 +3287,7 @@ class FileModel
             $src = SourceContext::getActiveSource();
             if (is_array($src)) {
                 $type = strtolower((string)($src['type'] ?? ''));
-                if (in_array($type, ['ftp', 'sftp', 'webdav', 'gdrive'], true)) {
+                if (in_array($type, ['ftp', 'sftp', 'webdav', 'gdrive', 'onedrive', 'dropbox'], true)) {
                     $skipContentForRemote = true;
                 }
             }
@@ -3367,6 +3373,7 @@ class FileModel
                 'uploader'  => $fileUploader,
                 'tags'      => isset($metadata[$metaKey]['tags']) ? $metadata[$metaKey]['tags'] : [],
                 'mime'      => $mime,
+                'sourceId'  => $activeSourceId,
             ];
 
             // Small, safe snippet for text files only (never full content)
@@ -3405,7 +3412,7 @@ class FileModel
         $globalTagsFile = self::metaRoot() . "createdTags.json";
         $globalTags = file_exists($globalTagsFile) ? (json_decode(file_get_contents($globalTagsFile), true) ?: []) : [];
 
-        return ["files" => $fileList, "globalTags" => $globalTags];
+        return ["files" => $fileList, "globalTags" => $globalTags, "sourceId" => $activeSourceId];
     }
 
     public static function getAllShareLinks(): array
@@ -3482,7 +3489,12 @@ class FileModel
         $seed = self::seedFileContents($filename);
         $data = ($seed !== null) ? $seed : '';
         if (!$storage->write($path, $data, LOCK_EX)) {
-            return ['success' => false, 'error' => 'Could not create file', 'code' => 500];
+            $detail = self::adapterErrorDetail($storage);
+            return [
+                'success' => false,
+                'error' => $detail !== '' ? ('Could not create file: ' . $detail) : 'Could not create file',
+                'code' => 500
+            ];
         }
 
         // 5) write metadata

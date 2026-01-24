@@ -3798,13 +3798,40 @@ if (cancelCreate) cancelCreate.addEventListener("click", function () {
 attachEnterKeyListener("createFolderModal", "submitCreateFolder");
 const submitCreate = document.getElementById("submitCreateFolder");
 if (submitCreate) submitCreate.addEventListener("click", async () => {
+  if (submitCreate.dataset.busy === "1") return;
+  const cancelBtn = document.getElementById("cancelCreateFolder");
+  const setCreatingState = (busy) => {
+    if (busy) {
+      if (!submitCreate.dataset.originalLabel) {
+        submitCreate.dataset.originalLabel = submitCreate.innerHTML;
+      }
+      submitCreate.innerHTML =
+        '<span class="material-icons spinning" style="font-size:16px; vertical-align:middle; margin-right:6px;">autorenew</span>Creating...';
+      submitCreate.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = true;
+      return;
+    }
+    if (submitCreate.dataset.originalLabel) {
+      submitCreate.innerHTML = submitCreate.dataset.originalLabel;
+      delete submitCreate.dataset.originalLabel;
+    }
+    submitCreate.disabled = false;
+    if (cancelBtn) cancelBtn.disabled = false;
+  };
   const input = document.getElementById("newFolderName");
   const folderInput = input ? input.value.trim() : "";
   if (!folderInput) return showToast(t('enter_folder_name_prompt'), 'warning');
   const selectedFolder = window.currentFolder || "root";
   const parent = selectedFolder === "root" ? "" : selectedFolder;
 
-  try { await loadCsrfToken(); } catch (e) { return showToast(t('csrf_refresh_failed'), 'error'); }
+  submitCreate.dataset.busy = "1";
+  setCreatingState(true);
+
+  try { await loadCsrfToken(); } catch (e) {
+    delete submitCreate.dataset.busy;
+    setCreatingState(false);
+    return showToast(t('csrf_refresh_failed'), 'error');
+  }
 
   fetchWithCsrf("/api/folder/createFolder.php", {
     method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
@@ -3838,6 +3865,8 @@ if (submitCreate) submitCreate.addEventListener("click", async () => {
     const errMsg = e && e.message ? e.message : t('unknown_error');
     showToast(t('create_folder_error', { error: errMsg }), 'error');
   }).finally(() => {
+    delete submitCreate.dataset.busy;
+    setCreatingState(false);
     const modal = document.getElementById("createFolderModal");
     const input2 = document.getElementById("newFolderName");
     if (modal) modal.style.display = "none";

@@ -69,6 +69,7 @@ const translations = {
     "rename": "Rename",
     "trash_empty": "Trash is empty.",
     "no_trash_selected": "No trash items selected for restore.",
+    "loading_slow": "Please remain patient; loading may take a while for large files/folders.",
 
     // Additional keys for HTML translations:
     "title": "FileRise",
@@ -529,7 +530,7 @@ const translations = {
     "portal_login_error_failed_retry": "Login failed. Please try again.",
     "portal_login_doc_title": "Sign in – {title}",
 
-    "portal_doc_title": "{title} – FileRise",
+    "portal_doc_title": "{title}",
     "portal_form_heading": "Your details",
     "portal_form_hint": "Please fill in your information before uploading files.",
     "portal_form_label_name": "Name",

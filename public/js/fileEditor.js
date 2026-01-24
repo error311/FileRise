@@ -8,6 +8,9 @@ import { withBase } from './basePath.js?v={{APP_QVER}}';
 // thresholds for editor behavior
 const EDITOR_PLAIN_THRESHOLD = 5 * 1024 * 1024;  // >5 MiB => force plain text, lighter settings
 const EDITOR_BLOCK_THRESHOLD = 10 * 1024 * 1024; // >10 MiB => block editing
+let editorLoadSeq = 0;
+let editorAbortController = null;
+let editorLoadingEl = null;
 
 // ==== CodeMirror lazy loader ===============================================
 const CM_BASE = withBase("/vendor/codemirror/5.65.18/");
@@ -98,6 +101,85 @@ function isAbsoluteHttpUrl(u) { return /^https?:\/\//i.test(u || ''); }
 function normalizeSourceId(raw) {
   const id = String(raw || '').trim();
   return id;
+}
+
+function resolveActiveSourceId() {
+  try {
+    if (typeof window.__frGetActiveSourceId === 'function') {
+      const v = window.__frGetActiveSourceId();
+      if (v) return String(v).trim();
+    }
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return String(sel.value).trim();
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return String(stored).trim();
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
+function isRemoteSourceId(sourceId) {
+  const id = String(sourceId || '').trim();
+  if (!id) return false;
+  let type = '';
+  try {
+    if (typeof window.__frGetSourceTypeById === 'function') {
+      type = String(window.__frGetSourceTypeById(id) || '');
+    }
+  } catch (e) { /* ignore */ }
+  if (!type) {
+    const sel = document.getElementById('sourceSelector');
+    if (sel) {
+      const opt = Array.from(sel.options).find(o => o.value === id);
+      if (opt) type = String(opt.dataset?.sourceType || '');
+    }
+  }
+  type = type.toLowerCase();
+  return type !== '' && type !== 'local';
+}
+
+function showEditorLoading(fileName, seq) {
+  if (!editorLoadingEl) {
+    const el = document.createElement('div');
+    el.id = 'editorLoadingIndicator';
+    Object.assign(el.style, {
+      position: 'fixed',
+      right: '16px',
+      bottom: '16px',
+      zIndex: '9999',
+      padding: '8px 12px',
+      borderRadius: '999px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontSize: '13px',
+      color: 'inherit',
+      background: 'rgba(0,0,0,0.08)',
+      backdropFilter: 'blur(2px)',
+      pointerEvents: 'none',
+      boxShadow: '0 1px 6px rgba(0,0,0,0.15)'
+    });
+    el.innerHTML = `
+      <span class="material-icons spinning" style="font-size:16px;">autorenew</span>
+      <span class="editor-loading-text"></span>
+    `;
+    document.body.appendChild(el);
+    editorLoadingEl = el;
+  }
+  editorLoadingEl.dataset.seq = String(seq);
+  const label = t('loading') || 'Loading...';
+  const text = fileName ? `${label} ${fileName}` : label;
+  const textEl = editorLoadingEl.querySelector('.editor-loading-text');
+  if (textEl) textEl.textContent = text;
+  editorLoadingEl.style.display = 'flex';
+}
+
+function hideEditorLoading(seq) {
+  if (!editorLoadingEl) return;
+  if (editorLoadingEl.dataset.seq !== String(seq)) return;
+  editorLoadingEl.remove();
+  editorLoadingEl = null;
 }
 
 // Folder encryption check (used to bypass ONLYOFFICE in encrypted folders)
@@ -579,19 +661,33 @@ function observeModalResize(modal) {
 }
 export { observeModalResize };
 
-export async function editFile(fileName, folder, sourceId = '') {
+export async function editFile(fileName, folder, sourceId = '', sizeBytes = null) {
   // destroy any previous editor
   let existingEditor = document.getElementById("editorContainer");
   if (existingEditor) existingEditor.remove();
 
+  const loadSeq = ++editorLoadSeq;
+  if (editorAbortController) {
+    try { editorAbortController.abort(); } catch (e) { /* ignore */ }
+  }
+  const controller = new AbortController();
+  editorAbortController = controller;
+  const { signal } = controller;
+  showEditorLoading(fileName, loadSeq);
+
   const folderUsed = folder || window.currentFolder || "root";
   const sid = normalizeSourceId(sourceId);
-  const fileUrl = buildPreviewUrl(folderUsed, fileName);
+  window.currentEditorSourceId = sid;
+  const fileUrl = buildPreviewUrl(folderUsed, fileName, sid);
+  const sizeHint = Number(sizeBytes);
+  const sizeHintBytes = (Number.isFinite(sizeHint) && sizeHint >= 0) ? sizeHint : null;
+  const isRemote = isRemoteSourceId(sid);
 
   const wantOO = await shouldUseOnlyOffice(fileName);
   if (wantOO) {
     const enc = await isFolderEncrypted(folderUsed, sid);
     if (!enc) {
+      hideEditorLoading(loadSeq);
       await openOnlyOffice(fileName, folderUsed, sid);
       return;
     }
@@ -599,17 +695,21 @@ export async function editFile(fileName, folder, sourceId = '') {
   }
 
   // Probe size safely via API. Prefer HEAD; if missing Content-Length, fall back to a 1-byte Range GET.
-  async function probeSize(url) {
+  async function probeSize(url, signal, allowRange = true) {
     try {
-      const h = await fetch(url, { method: "HEAD", credentials: "include" });
-      const len = h.headers.get("content-length") ?? h.headers.get("Content-Length");
-      if (len && !Number.isNaN(parseInt(len, 10))) return parseInt(len, 10);
+      const h = await fetch(url, { method: "HEAD", credentials: "include", signal });
+      if (h.ok) {
+        const len = h.headers.get("content-length") ?? h.headers.get("Content-Length");
+        if (len && !Number.isNaN(parseInt(len, 10))) return parseInt(len, 10);
+      }
     } catch (e) { }
+    if (!allowRange) return null;
     try {
       const r = await fetch(url, {
         method: "GET",
         headers: { Range: "bytes=0-0" },
-        credentials: "include"
+        credentials: "include",
+        signal
       });
       // Content-Range: bytes 0-0/12345
       const cr = r.headers.get("content-range") ?? r.headers.get("Content-Range");
@@ -619,22 +719,36 @@ export async function editFile(fileName, folder, sourceId = '') {
     return null;
   }
 
-  probeSize(fileUrl)
+  const sizeProbe = (sizeHintBytes !== null)
+    ? Promise.resolve(sizeHintBytes)
+    : (isRemote ? Promise.resolve(null) : probeSize(fileUrl, signal, !isRemote));
+
+  sizeProbe
     .then(sizeBytes => {
+      if (loadSeq !== editorLoadSeq || signal.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
       if (sizeBytes !== null && sizeBytes > EDITOR_BLOCK_THRESHOLD) {
         const maxMb = Math.round(EDITOR_BLOCK_THRESHOLD / (1024 * 1024));
         showToast(t('file_edit_too_large', { size: maxMb }));
         throw new Error("File too large.");
       }
-      return fetch(fileUrl, { credentials: "include" });
+      return fetch(fileUrl, { credentials: "include", signal });
     })
     .then(response => {
+      if (loadSeq !== editorLoadSeq || signal.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
       if (!response.ok) throw new Error("HTTP error! Status: " + response.status);
       const lenHeader = response.headers.get("content-length") ?? response.headers.get("Content-Length");
       const sizeBytes = lenHeader ? parseInt(lenHeader, 10) : null;
-      return Promise.all([response.text(), sizeBytes]);
+      const resolvedSize = Number.isFinite(sizeBytes) ? sizeBytes : sizeHintBytes;
+      return Promise.all([response.text(), resolvedSize]);
     })
     .then(([content, sizeBytes]) => {
+      if (loadSeq !== editorLoadSeq || signal.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
       const forcePlainText = sizeBytes !== null && sizeBytes > EDITOR_PLAIN_THRESHOLD;
 
       // --- Build modal immediately and wire close controls BEFORE any async loads ---
@@ -661,6 +775,7 @@ export async function editFile(fileName, folder, sourceId = '') {
         </div>
       `;
       document.body.appendChild(modal);
+      hideEditorLoading(loadSeq);
       modal.style.display = "block";
       modal.focus();
 
@@ -668,6 +783,7 @@ export async function editFile(fileName, folder, sourceId = '') {
       const doClose = () => {
         canceled = true;
         window.currentEditor = null;
+        window.currentEditorSourceId = '';
         modal.remove();
       };
 
@@ -747,7 +863,7 @@ export async function editFile(fileName, folder, sourceId = '') {
         const saveBtn = document.getElementById("saveBtn");
         saveBtn.disabled = false;
         saveBtn.addEventListener("click", function () {
-          saveFile(fileName, folderUsed);
+          saveFile(fileName, folderUsed, sid);
         });
 
         // Theme switch
@@ -770,23 +886,55 @@ export async function editFile(fileName, folder, sourceId = '') {
       });
     })
     .catch(error => {
-      if (error && error.name === "AbortError") return;
+      if (error && error.name === "AbortError") {
+        hideEditorLoading(loadSeq);
+        return;
+      }
+      hideEditorLoading(loadSeq);
       console.error("Error loading file:", error);
     });
 }
 
-export function saveFile(fileName, folder) {
+export function saveFile(fileName, folder, sourceId = '') {
   const editor = window.currentEditor;
   if (!editor) {
     console.error("Editor not found!");
     return;
   }
+  const saveBtn = document.getElementById("saveBtn");
+  const setSavingState = (busy) => {
+    if (!saveBtn) return;
+    if (busy) {
+      if (!saveBtn.dataset.originalLabel) {
+        saveBtn.dataset.originalLabel = saveBtn.innerHTML;
+      }
+      saveBtn.innerHTML =
+        '<span class="material-icons spinning" style="font-size:16px; vertical-align:middle; margin-right:6px;">autorenew</span>Saving...';
+      saveBtn.disabled = true;
+      return;
+    }
+    if (saveBtn.dataset.originalLabel) {
+      saveBtn.innerHTML = saveBtn.dataset.originalLabel;
+      delete saveBtn.dataset.originalLabel;
+    }
+    saveBtn.disabled = false;
+  };
+  if (saveBtn && saveBtn.dataset.busy === "1") return;
+  if (saveBtn) saveBtn.dataset.busy = "1";
+  setSavingState(true);
+
   const folderUsed = folder || window.currentFolder || "root";
+  const sid = normalizeSourceId(sourceId)
+    || normalizeSourceId(window.currentEditorSourceId)
+    || normalizeSourceId(resolveActiveSourceId());
   const fileDataObj = {
     fileName: fileName,
     content: editor.getValue(),
     folder: folderUsed
   };
+  if (sid) {
+    fileDataObj.sourceId = sid;
+  }
   fetch("/api/file/saveFile.php", {
     method: "POST",
     credentials: "include",
@@ -802,5 +950,9 @@ export function saveFile(fileName, folder) {
       document.getElementById("editorContainer")?.remove();
       loadFileList(folderUsed);
     })
-    .catch(error => console.error("Error saving file:", error));
+    .catch(error => console.error("Error saving file:", error))
+    .finally(() => {
+      if (saveBtn) delete saveBtn.dataset.busy;
+      setSavingState(false);
+    });
 }

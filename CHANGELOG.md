@@ -1,5 +1,72 @@
 # Changelog
 
+## Changes 01/24/2026 (v3.1.5)
+
+`release(v3.1.5): Pro Sources adds OneDrive + Dropbox + source-aware UX fixes`
+
+**Commit message**  
+
+```text
+release(v3.1.5): Pro Sources adds OneDrive + Dropbox + source-aware UX fixes
+
+- Pro v1.6.0 adds OneDrive + Dropbox storage adapters/sources
+- core wire onedrive/dropbox adapters in StorageFactory and extend remote-indexing skip list
+- UI make previews/downloads/editor source-aware + add loading/busy feedback for create/delete/preview
+- ACL support group grants per source (grantsBySource) incl. Group ACL modal source selector
+- misc harden adapter error reporting + fix trash auto-purge + portal doc title
+```
+
+**Added**  
+
+- **Pro v1.6.0 Sources:** **OneDrive** + **Dropbox** adapters (new source types).
+- **Admin → Sources UI** fields and setup hints for OneDrive + Dropbox:
+  - OneDrive: client id/secret/refresh token, tenant, driveId/siteId, optional root path
+  - Dropbox: app key/secret/refresh token, optional root path + business team fields
+- **Group ACL per source**
+  - Group data supports `grantsBySource` to scope group folder grants to a specific source
+  - Group ACL modal now includes a **Source selector** so you can edit grants per source
+- **UX feedback**
+  - Busy/disabled states for **Create folder** and **Create file**
+  - Preview overlays show a **loading indicator** and “preview not available” error state
+  - Delete flow integrates with transfer progress UI (shows totals + completion status)
+
+**Changed**  
+
+- **Source-aware file list metadata**
+  - File list responses now include `sourceId`
+  - Each file entry includes `sourceId` so frontend can build correct URLs
+- **Preview/Download URLs now include `sourceId`**
+  - Preview, snippet fetch, gallery thumbnails, queued downloads, and file menu actions now pass the correct source id
+- **Editor improvements**
+  - Editor accepts `sourceId` + `sizeBytes` hint, shows a loading pill, supports aborting previous loads, and adds a “Saving…” state
+  - Remote sources skip size probing that relies on Range/HEAD when not reliable
+- **Remote source performance guards**
+  - Treats `ftp/sftp/webdav/smb/gdrive/onedrive/dropbox` as “slow remote sources” and skips folder stats/peek probes for them
+- **FileController hardening**
+  - `saveFile` is source-aware (supports `sourceId`, blocks disabled sources for non-admins, blocks read-only sources)
+  - `downloadFile` ensures session is active; streaming uses `set_time_limit(0)` and improved adapter error detail messages
+  - Range openReadStream now only applies offset/length when a Range is actually requested
+- **S3 hints**
+  - Sources hint text expanded to call out common S3-compatible providers (Wasabi/MinIO/B2/Spaces/R2)
+- **Portals**
+  - `portal_doc_title` changed to just `{title}` (lets the portal title stand alone)
+
+**Fixed**  
+
+- **Trash auto-purge** now correctly handles API responses that return `{ items: [...] }` instead of a raw array.
+- **Folder tree init order:** load folder tree after the source selector finishes initializing (prevents race conditions on boot).
+- **Group grants visibility** and save paths now keep `grantsBySource` intact when admin saves groups.
+- **Preview stability on Sources**
+  - Prevents “wrong source” previews/downloads when panes/sources differ or when file metadata lacks a direct sourceId.
+
+**Notes**  
+
+- OneDrive/Dropbox are **Pro Sources** (requires Pro bundle v1.6.0+).
+- Some remote sources don’t support “Trash” semantics; behavior remains backend-dependent (Drive already notes permanent deletes).
+- For best results, keep OneDrive/Dropbox root paths scoped (optional) so listings remain snappy.
+
+---
+
 ## Changes 01/20/2026 (v3.1.4)
 
 `release(v3.1.4): restore resumable upload resume checks (testChunks) + wording polish (fixes #93)`

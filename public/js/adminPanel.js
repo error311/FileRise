@@ -25,7 +25,7 @@ export {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.5.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.6.0';
 const PRO_API_LEVELS = {
   diskUsage: 2,
   search: 3,
@@ -1209,6 +1209,8 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
               <option value="webdav">webdav</option>
               <option value="smb">smb</option>
               <option value="gdrive">gdrive</option>
+              <option value="onedrive">onedrive</option>
+              <option value="dropbox">dropbox</option>
             </select>
           </div>
           <div class="form-group sources-form-inline">
@@ -1239,7 +1241,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
 
         <div class="sources-type-block" data-type="s3" hidden>
           <div class="sources-hint-row">
-            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_s3', 'Bucket is required. Region is optional (defaults to us-east-1). Endpoint and path-style are for S3-compatible providers. Prefix is optional.')}">!</button>
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_s3', 'Bucket is required. Region is optional (defaults to us-east-1). Endpoint and path-style are for S3-compatible providers like Wasabi, MinIO, Backblaze B2 (S3 API), DigitalOcean Spaces, or Cloudflare R2. Prefix is optional.')}">!</button>
           </div>
           <div class="sources-form-grid">
             <div class="form-group">
@@ -1463,6 +1465,74 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
           </div>
         </div>
 
+        <div class="sources-type-block" data-type="onedrive" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_onedrive', 'Create a Microsoft Entra app with delegated Files.ReadWrite.All + offline_access. Tenant: use common/organizations/consumers or a tenant ID. For SharePoint/Business, supply siteId or driveId. Root path is optional and scopes the source to a subfolder.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceOneDriveClientId">${tf('source_onedrive_client_id', 'OneDrive client ID')}:</label>
+              <input type="text" id="sourceOneDriveClientId" class="form-control" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+            </div>
+            <div class="form-group">
+              <label for="sourceOneDriveClientSecret">${tf('source_onedrive_client_secret', 'OneDrive client secret')}:</label>
+              <input type="password" id="sourceOneDriveClientSecret" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceOneDriveRefreshToken">${tf('source_onedrive_refresh_token', 'OneDrive refresh token')}:</label>
+              <input type="password" id="sourceOneDriveRefreshToken" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceOneDriveTenant">${tf('source_onedrive_tenant', 'Tenant (optional)')}:</label>
+              <input type="text" id="sourceOneDriveTenant" class="form-control" placeholder="common" />
+            </div>
+            <div class="form-group">
+              <label for="sourceOneDriveDriveId">${tf('source_onedrive_drive_id', 'Drive ID (optional)')}:</label>
+              <input type="text" id="sourceOneDriveDriveId" class="form-control" placeholder="" />
+            </div>
+            <div class="form-group">
+              <label for="sourceOneDriveSiteId">${tf('source_onedrive_site_id', 'Site ID (optional)')}:</label>
+              <input type="text" id="sourceOneDriveSiteId" class="form-control" placeholder="" />
+            </div>
+            <div class="form-group">
+              <label for="sourceOneDriveRootPath">${tf('source_onedrive_root_path', 'Root path (optional)')}:</label>
+              <input type="text" id="sourceOneDriveRootPath" class="form-control" placeholder="optional/path" />
+            </div>
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-type="dropbox" hidden>
+          <div class="sources-hint-row">
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_dropbox', 'Create a Dropbox app with files.content.write, files.content.read, and files.metadata.read. Generate a refresh token. TeamMemberId and RootNamespaceId are optional for Dropbox Business team spaces. Root path scopes the source to a subfolder.')}">!</button>
+          </div>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="sourceDropboxAppKey">${tf('source_dropbox_app_key', 'Dropbox app key')}:</label>
+              <input type="text" id="sourceDropboxAppKey" class="form-control" placeholder="app-key" />
+            </div>
+            <div class="form-group">
+              <label for="sourceDropboxAppSecret">${tf('source_dropbox_app_secret', 'Dropbox app secret')}:</label>
+              <input type="password" id="sourceDropboxAppSecret" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceDropboxRefreshToken">${tf('source_dropbox_refresh_token', 'Dropbox refresh token')}:</label>
+              <input type="password" id="sourceDropboxRefreshToken" class="form-control" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="sourceDropboxRootPath">${tf('source_dropbox_root_path', 'Root path (optional)')}:</label>
+              <input type="text" id="sourceDropboxRootPath" class="form-control" placeholder="optional/path" />
+            </div>
+            <div class="form-group">
+              <label for="sourceDropboxTeamMemberId">${tf('source_dropbox_team_member_id', 'Team member ID (optional)')}:</label>
+              <input type="text" id="sourceDropboxTeamMemberId" class="form-control" placeholder="" />
+            </div>
+            <div class="form-group">
+              <label for="sourceDropboxRootNamespaceId">${tf('source_dropbox_root_namespace_id', 'Root namespace ID (optional)')}:</label>
+              <input type="text" id="sourceDropboxRootNamespaceId" class="form-control" placeholder="" />
+            </div>
+          </div>
+        </div>
+
         <div class="sources-form-actions">
           <button type="button" id="sourceSaveBtn" class="btn btn-sm btn-primary">
             ${tf('source_save', 'Save Source')}
@@ -1531,6 +1601,19 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
   const gdriveRefreshTokenEl = container.querySelector('#sourceGDriveRefreshToken');
   const gdriveRootIdEl = container.querySelector('#sourceGDriveRootId');
   const gdriveDriveIdEl = container.querySelector('#sourceGDriveDriveId');
+  const onedriveClientIdEl = container.querySelector('#sourceOneDriveClientId');
+  const onedriveClientSecretEl = container.querySelector('#sourceOneDriveClientSecret');
+  const onedriveRefreshTokenEl = container.querySelector('#sourceOneDriveRefreshToken');
+  const onedriveTenantEl = container.querySelector('#sourceOneDriveTenant');
+  const onedriveDriveIdEl = container.querySelector('#sourceOneDriveDriveId');
+  const onedriveSiteIdEl = container.querySelector('#sourceOneDriveSiteId');
+  const onedriveRootPathEl = container.querySelector('#sourceOneDriveRootPath');
+  const dropboxAppKeyEl = container.querySelector('#sourceDropboxAppKey');
+  const dropboxAppSecretEl = container.querySelector('#sourceDropboxAppSecret');
+  const dropboxRefreshTokenEl = container.querySelector('#sourceDropboxRefreshToken');
+  const dropboxRootPathEl = container.querySelector('#sourceDropboxRootPath');
+  const dropboxTeamMemberIdEl = container.querySelector('#sourceDropboxTeamMemberId');
+  const dropboxRootNamespaceIdEl = container.querySelector('#sourceDropboxRootNamespaceId');
   const typeBlocks = Array.from(container.querySelectorAll('.sources-type-block'));
 
   let editingId = '';
@@ -1636,6 +1719,10 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
       smbPasswordEl,
       gdriveClientSecretEl,
       gdriveRefreshTokenEl,
+      onedriveClientSecretEl,
+      onedriveRefreshTokenEl,
+      dropboxAppSecretEl,
+      dropboxRefreshTokenEl,
     ].forEach(el => {
       if (!el) return;
       el.value = '';
@@ -1682,6 +1769,15 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
     if (gdriveClientIdEl) gdriveClientIdEl.value = '';
     if (gdriveRootIdEl) gdriveRootIdEl.value = '';
     if (gdriveDriveIdEl) gdriveDriveIdEl.value = '';
+    if (onedriveClientIdEl) onedriveClientIdEl.value = '';
+    if (onedriveTenantEl) onedriveTenantEl.value = '';
+    if (onedriveDriveIdEl) onedriveDriveIdEl.value = '';
+    if (onedriveSiteIdEl) onedriveSiteIdEl.value = '';
+    if (onedriveRootPathEl) onedriveRootPathEl.value = '';
+    if (dropboxAppKeyEl) dropboxAppKeyEl.value = '';
+    if (dropboxRootPathEl) dropboxRootPathEl.value = '';
+    if (dropboxTeamMemberIdEl) dropboxTeamMemberIdEl.value = '';
+    if (dropboxRootNamespaceIdEl) dropboxRootNamespaceIdEl.value = '';
     resetSecrets();
     setType('local');
     if (listEl) renderList();
@@ -1705,6 +1801,10 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
     setSaved(smbPasswordEl, !!cfg.hasPassword);
     setSaved(gdriveClientSecretEl, !!cfg.hasClientSecret);
     setSaved(gdriveRefreshTokenEl, !!cfg.hasRefreshToken);
+    setSaved(onedriveClientSecretEl, !!cfg.hasClientSecret);
+    setSaved(onedriveRefreshTokenEl, !!cfg.hasRefreshToken);
+    setSaved(dropboxAppSecretEl, !!cfg.hasAppSecret);
+    setSaved(dropboxRefreshTokenEl, !!cfg.hasRefreshToken);
   };
 
   const fillForm = (src) => {
@@ -1755,6 +1855,15 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
     if (gdriveClientIdEl) gdriveClientIdEl.value = cfg.clientId || '';
     if (gdriveRootIdEl) gdriveRootIdEl.value = cfg.rootId || '';
     if (gdriveDriveIdEl) gdriveDriveIdEl.value = cfg.driveId || '';
+    if (onedriveClientIdEl) onedriveClientIdEl.value = cfg.clientId || '';
+    if (onedriveTenantEl) onedriveTenantEl.value = cfg.tenant || '';
+    if (onedriveDriveIdEl) onedriveDriveIdEl.value = cfg.driveId || '';
+    if (onedriveSiteIdEl) onedriveSiteIdEl.value = cfg.siteId || '';
+    if (onedriveRootPathEl) onedriveRootPathEl.value = cfg.rootPath || '';
+    if (dropboxAppKeyEl) dropboxAppKeyEl.value = cfg.appKey || '';
+    if (dropboxRootPathEl) dropboxRootPathEl.value = cfg.rootPath || '';
+    if (dropboxTeamMemberIdEl) dropboxTeamMemberIdEl.value = cfg.teamMemberId || '';
+    if (dropboxRootNamespaceIdEl) dropboxRootNamespaceIdEl.value = cfg.rootNamespaceId || '';
     applySecretPlaceholders(src);
     if (listEl) renderList();
   };
@@ -2146,6 +2255,50 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         if (refreshToken) config.refreshToken = refreshToken;
         if (rootId) config.rootId = rootId;
         if (driveId) config.driveId = driveId;
+      } else if (type === 'onedrive') {
+        const clientId = (onedriveClientIdEl?.value || '').trim();
+        const clientSecret = (onedriveClientSecretEl?.value || '').trim();
+        const refreshToken = (onedriveRefreshTokenEl?.value || '').trim();
+        const tenant = (onedriveTenantEl?.value || '').trim();
+        const driveId = (onedriveDriveIdEl?.value || '').trim();
+        const siteId = (onedriveSiteIdEl?.value || '').trim();
+        const rootPath = (onedriveRootPathEl?.value || '').trim();
+        if (!clientId) {
+          showToast(tf('admin_source_onedrive_client_required', 'OneDrive client ID is required.'), 'error');
+          return;
+        }
+        if ((!clientSecret || !refreshToken) && !editingId) {
+          showToast(tf('admin_source_onedrive_secret_required', 'OneDrive client secret and refresh token are required.'), 'error');
+          return;
+        }
+        config.clientId = clientId;
+        if (clientSecret) config.clientSecret = clientSecret;
+        if (refreshToken) config.refreshToken = refreshToken;
+        if (tenant) config.tenant = tenant;
+        if (driveId) config.driveId = driveId;
+        if (siteId) config.siteId = siteId;
+        if (rootPath) config.rootPath = rootPath;
+      } else if (type === 'dropbox') {
+        const appKey = (dropboxAppKeyEl?.value || '').trim();
+        const appSecret = (dropboxAppSecretEl?.value || '').trim();
+        const refreshToken = (dropboxRefreshTokenEl?.value || '').trim();
+        const rootPath = (dropboxRootPathEl?.value || '').trim();
+        const teamMemberId = (dropboxTeamMemberIdEl?.value || '').trim();
+        const rootNamespaceId = (dropboxRootNamespaceIdEl?.value || '').trim();
+        if (!appKey) {
+          showToast(tf('admin_source_dropbox_app_required', 'Dropbox app key is required.'), 'error');
+          return;
+        }
+        if ((!appSecret || !refreshToken) && !editingId) {
+          showToast(tf('admin_source_dropbox_secret_required', 'Dropbox app secret and refresh token are required.'), 'error');
+          return;
+        }
+        config.appKey = appKey;
+        if (appSecret) config.appSecret = appSecret;
+        if (refreshToken) config.refreshToken = refreshToken;
+        if (rootPath) config.rootPath = rootPath;
+        if (teamMemberId) config.teamMemberId = teamMemberId;
+        if (rootNamespaceId) config.rootNamespaceId = rootNamespaceId;
       }
 
       const payload = {
