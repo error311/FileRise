@@ -1,7 +1,8 @@
 # Changelog
 
-## Changes 01/24/2026 (v3.1.5)
+## Changes 01/24/2026 (v3.1.5 & v3.1.6)
 
+`release(v3.1.6): CodeQL fix for error handling (strip HTML safely in fileActions)`
 `release(v3.1.5): Pro Sources adds OneDrive + Dropbox + source-aware UX fixes`
 
 **Commit message**  

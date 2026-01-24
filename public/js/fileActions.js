@@ -54,6 +54,21 @@ function getTransferTotalsForNames(names) {
   };
 }
 
+function stripHtmlToText(raw) {
+  const input = raw == null ? '' : String(raw);
+  if (input === '') return '';
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const doc = new DOMParser().parseFromString(input, 'text/html');
+      const out = doc && doc.body ? doc.body.textContent : '';
+      return (out || '').trim();
+    } catch (e) {
+      // Fall through to basic stripping.
+    }
+  }
+  return input.replace(/[<>]/g, '').trim();
+}
+
 const ARCHIVE_FORMATS = ["zip", "7z"];
 const ARCHIVE_NAME_SUFFIXES = ["zip", "7z", "rar"];
 const ARCHIVE_EXT_RE = /\.(zip|7z|rar)$/i;
@@ -600,7 +615,7 @@ export async function handleCreateFile(e) {
       try { js = JSON.parse(raw); } catch (e) { js = null; }
     }
     if (!res.ok || !js || !js.success) {
-      const text = raw ? raw.replace(/<[^>]*>/g, '').trim() : '';
+      const text = stripHtmlToText(raw);
       const msg = (js && (js.error || js.message)) || text || `HTTP ${res.status}`;
       throw new Error(msg);
     }
