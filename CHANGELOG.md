@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 01/24/2026 (v3.1.7)
+
+`release(v3.1.7): fix table header select-all checkbox + Pro bundle install progress UI (closes #99)`
+
+**Commit message**  
+
+```text
+release(v3.1.7): fix table header select-all checkbox + Pro bundle install progress UI (closes #99)
+
+- file list fix header select-all checkbox robust click handling + sync state
+- file list preserve file selections when table re-renders after folder strip loads
+- admin show transfer progress for Pro bundle upload/download install actions
+
+Closes #99
+```
+
+**Fixed**  
+
+- **#99:** The checkbox left of the **Name** column now correctly toggles “select all” in table view.
+  - Uses a stable selector (`.select-all` + `data-select-all`) and robust click handling (checkbox + header cell click).
+  - Keeps the header checkbox state synced (checked/indeterminate) as individual rows change.
+  - Excludes folder rows from file “select all” so only file rows are toggled.
+
+**Changed**  
+
+- **Selection preservation on table refresh**
+  - When subfolders are loaded and the table view re-renders (inline folders above files), existing file selections are preserved.
+- **Pro bundle install UX**
+  - Admin “Upload Pro bundle” and “Download latest Pro bundle” actions now use the existing transfer progress UI (minimizable card) and surface success/failure cleanly.
+
+---
+
 ## Changes 01/24/2026 (v3.1.5 & v3.1.6)
 
 `release(v3.1.6): CodeQL fix for error handling (strip HTML safely in fileActions)`

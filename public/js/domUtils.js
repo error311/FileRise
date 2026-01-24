@@ -121,7 +121,11 @@ export function updateFileActionButtons() {
   };
 
   // — Select All checkbox sync (unchanged) —
-  const master = document.getElementById("selectAll");
+  const master = document.querySelector(
+    '#fileList thead input[type="checkbox"][data-select-all], ' +
+    '#fileList thead input[type="checkbox"].select-all, ' +
+    '#fileList thead input#selectAll'
+  );
   if (master) {
     if (anyFolderSelected) {
       master.disabled = false;
@@ -292,7 +296,7 @@ export function buildFileTableHeader(sortOrder) {
     <table class="table filr-table table-hover table-striped">
       <thead>
         <tr>
-          <th class="checkbox-col"><input type="checkbox" id="selectAll"></th>
+          <th class="checkbox-col"><input type="checkbox" class="select-all" data-select-all="1"></th>
           <th data-column="name" class="sortable-col">${t("name")} ${sortOrder.column === "name" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="modified" class="hide-small sortable-col">${t("modified")} ${sortOrder.column === "modified" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>
           <th data-column="uploaded" class="hide-small hide-medium sortable-col">${t("created")} ${sortOrder.column === "uploaded" ? (sortOrder.ascending ? "▲" : "▼") : ""}</th>

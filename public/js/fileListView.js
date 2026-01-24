@@ -3146,26 +3146,32 @@ async function fetchFolderPeek(folder, sourceId = '') {
 // Wire "select all" header checkbox for the current table render
 function wireSelectAll(fileListContent) {
   // Be flexible about how the header checkbox is identified
-  const selectAll = fileListContent.querySelector(
+  const getSelectAll = () => fileListContent.querySelector(
     'thead input[type="checkbox"].select-all, ' +
     'thead .select-all input[type="checkbox"], ' +
     'thead input#selectAll, ' +
     'thead input#selectAllCheckbox, ' +
     'thead input[data-select-all]'
   );
+  const selectAll = getSelectAll();
   if (!selectAll) return;
+  if (selectAll.__wiredSelectAll) return;
+  selectAll.__wiredSelectAll = true;
 
   const getRowCbs = () =>
     Array.from(fileListContent.querySelectorAll('tbody .file-checkbox'))
-      .filter(cb => !cb.disabled);
+      .filter(cb => !cb.disabled && !cb.closest('tr.folder-row'));
 
-  // Toggle all rows when the header checkbox changes
-  selectAll.addEventListener('change', () => {
-    // Clear any folder selection when toggling all files
-    document.querySelectorAll('#fileList .folder-checkbox:checked').forEach(cb => {
+  const clearFolderSelections = () => {
+    fileListContent.querySelectorAll('tbody .folder-checkbox:checked').forEach(cb => {
       cb.checked = false;
       updateRowHighlight(cb);
     });
+  };
+
+  const applySelectAll = () => {
+    // Clear any folder selection when toggling all files
+    clearFolderSelections();
     const checked = selectAll.checked;
     getRowCbs().forEach(cb => {
       cb.checked = checked;
@@ -3174,28 +3180,69 @@ function wireSelectAll(fileListContent) {
     updateFileActionButtons();
     // No indeterminate state when explicitly toggled
     selectAll.indeterminate = false;
+    selectAll.__lastSelectAllChecked = selectAll.checked;
+  };
+
+  const handleSelectAllChange = () => {
+    applySelectAll();
+  };
+
+  // Toggle all rows when the header checkbox changes
+  selectAll.addEventListener('change', handleSelectAllChange);
+
+  // Some UI layers can swallow left-click toggles. Track state and force toggle if needed.
+  selectAll.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    selectAll.__lastSelectAllChecked = selectAll.checked;
   });
+
+  selectAll.addEventListener('click', (e) => {
+    if (e.button !== 0) return;
+    if (selectAll.disabled) return;
+    const last = selectAll.__lastSelectAllChecked;
+    if (last === selectAll.checked) {
+      selectAll.checked = !selectAll.checked;
+      handleSelectAllChange();
+    }
+    selectAll.__lastSelectAllChecked = selectAll.checked;
+  });
+
+  const headerCell = selectAll.closest('th');
+  if (headerCell && !headerCell.__wiredSelectAllCell) {
+    headerCell.__wiredSelectAllCell = true;
+    headerCell.addEventListener('click', (e) => {
+      if (e.target === selectAll) return;
+      if (selectAll.disabled) return;
+      selectAll.checked = !selectAll.checked;
+      handleSelectAllChange();
+    });
+  }
 
   // Keep header checkbox state in sync with row selections
   const syncHeader = () => {
+    const master = getSelectAll();
+    if (!master) return;
     const cbs = getRowCbs();
     const total = cbs.length;
     const checked = cbs.filter(cb => cb.checked).length;
     if (!total) {
-      selectAll.checked = false;
-      selectAll.indeterminate = false;
+      master.checked = false;
+      master.indeterminate = false;
       return;
     }
-    selectAll.checked = checked === total;
-    selectAll.indeterminate = checked > 0 && checked < total;
+    master.checked = checked === total;
+    master.indeterminate = checked > 0 && checked < total;
   };
 
   // Listen for any row checkbox changes to refresh header state
-  fileListContent.addEventListener('change', (e) => {
-    if (e.target && e.target.classList.contains('file-checkbox')) {
-      syncHeader();
-    }
-  });
+  if (!fileListContent.__wiredSelectAllContainer) {
+    fileListContent.__wiredSelectAllContainer = true;
+    fileListContent.addEventListener('change', (e) => {
+      if (e.target && e.target.classList.contains('file-checkbox')) {
+        syncHeader();
+      }
+    });
+  }
 
   // Initial sync on mount
   syncHeader();
@@ -6001,7 +6048,7 @@ export async function loadFileList(folderParam, options = {}) {
 
         // Re-render table view once folders are known so they appear inline above files
         if (window.viewMode === "table" && reqId === __fileListReqSeq[pane]) {
-          renderFileTable(folder);
+          renderFileTable(folder, fileListContainer, undefined, { preserveSelection: true });
         }
       }
     } catch (e) {
@@ -6755,9 +6802,30 @@ async function openDefaultFileFromHover(file) {
  */
 
 
-export async function renderFileTable(folder, container, subfolders) {
+function getSelectedFileValuesForList(listEl) {
+  if (!listEl) return [];
+  return Array.from(listEl.querySelectorAll('tbody .file-checkbox:checked'))
+    .map(cb => cb.value);
+}
+
+function restoreSelectedFileValues(listEl, selectedValues) {
+  if (!listEl || !Array.isArray(selectedValues) || !selectedValues.length) return;
+  const selectedSet = new Set(selectedValues.map(v => String(v)));
+  listEl.querySelectorAll('tbody .file-checkbox').forEach(cb => {
+    const raw = cb.value;
+    const decoded = decodeHtmlEntities(raw);
+    if (selectedSet.has(raw) || (decoded && selectedSet.has(decoded))) {
+      cb.checked = true;
+      updateRowHighlight(cb);
+    }
+  });
+}
+
+export async function renderFileTable(folder, container, subfolders, options = {}) {
   clearInlineRenameState({ restore: false });
   const fileListContent = container || document.getElementById("fileList");
+  const preserveSelection = options && options.preserveSelection === true;
+  let preservedSelection = [];
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "50", 10);
   let currentPage = window.currentPage || 1;
@@ -6784,6 +6852,11 @@ export async function renderFileTable(folder, container, subfolders) {
 
 // NEW: sort folders according to current sort order (name / size)
 const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
+
+  if (preserveSelection) {
+    // Capture after async work so user selections during the wait aren't lost.
+    preservedSelection = getSelectedFileValuesForList(fileListContent);
+  }
 
   const totalFiles   = filteredFiles.length;
   const totalFolders = subfoldersSorted.length;
@@ -6894,6 +6967,7 @@ const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
 
   fileListContent.innerHTML = combinedTopHTML + headerHTML + rowsHTML + bottomControlsHTML;
   updatePaneWidthClasses();
+  restoreSelectedFileValues(fileListContent, preservedSelection);
 
   (function rightAlignSizeColumn() {
     const table = fileListContent.querySelector("table.filr-table");

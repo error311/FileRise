@@ -4,6 +4,7 @@ import { loadAdminConfigFunc } from './auth.js?v={{APP_QVER}}';
 import { showToast, toggleVisibility, attachEnterKeyListener, escapeHTML } from './domUtils.js?v={{APP_QVER}}';
 import { sendRequest } from './networkUtils.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
+import { startTransferProgress, finishTransferProgress } from './transferProgress.js?v={{APP_QVER}}';
 import { initAdminStorageSection } from './adminStorage.js?v={{APP_QVER}}';
 import { initAdminSponsorSection } from './adminSponsor.js?v={{APP_QVER}}';
 import { initOnlyOfficeUI, collectOnlyOfficeSettingsForSave } from './adminOnlyOffice.js?v={{APP_QVER}}';
@@ -61,6 +62,21 @@ function compareSemver(a, b) {
     if (na < nb) return -1;
   }
   return 0;
+}
+
+function startProBundleProgress({ action = 'Updating Pro', title, subText } = {}) {
+  return startTransferProgress({
+    action,
+    title: title || action,
+    subText: subText || 'Please keep this tab open.',
+    itemCount: 0,
+    bytesKnown: false
+  });
+}
+
+function finishProBundleProgress(job, ok, error = '') {
+  if (!job) return;
+  finishTransferProgress(job, { ok, error });
 }
 
 // Ensure OIDC config object always exists
@@ -3030,6 +3046,10 @@ export function initProBundleInstaller(options = {}) {
 
       statusEl.textContent = 'Uploading and installing Pro bundle...';
       statusEl.className = 'small text-muted';
+      const progress = startProBundleProgress({
+        action: 'Installing Pro',
+        title: 'Installing FileRise Pro bundle'
+      });
 
       try {
         const resp = await fetch('/api/admin/installProBundle.php', {
@@ -3053,6 +3073,7 @@ export function initProBundleInstaller(options = {}) {
             : `HTTP ${resp.status}`;
           statusEl.textContent = 'Install failed: ' + msg;
           statusEl.className = 'small text-danger';
+          finishProBundleProgress(progress, false, msg);
           return;
         }
 
@@ -3081,6 +3102,7 @@ export function initProBundleInstaller(options = {}) {
         const versionText = finalVersion ? ` (version ${finalVersion})` : '';
         statusEl.textContent = 'Pro bundle installed' + versionText + '. Reload the page to apply changes.';
         statusEl.className = 'small text-success';
+        finishProBundleProgress(progress, true);
 
         // Clear file input so repeat installs feel "fresh"
         try { fileInput.value = ''; } catch (_) { }
@@ -3093,8 +3115,10 @@ export function initProBundleInstaller(options = {}) {
           window.location.reload();
         }, 800);
       } catch (e) {
-        statusEl.textContent = 'Install failed: ' + (e && e.message ? e.message : String(e));
+        const errMsg = e && e.message ? e.message : String(e);
+        statusEl.textContent = 'Install failed: ' + errMsg;
         statusEl.className = 'small text-danger';
+        finishProBundleProgress(progress, false, errMsg);
       }
     });
 
@@ -3115,6 +3139,10 @@ export function initProBundleInstaller(options = {}) {
         dlBtn.disabled = true;
         statusEl.textContent = 'Downloading and installing latest Pro bundle...';
         statusEl.className = 'small text-muted';
+        const progress = startProBundleProgress({
+          action: 'Updating Pro',
+          title: 'Downloading and installing FileRise Pro bundle'
+        });
 
         try {
           const resp = await fetch('/api/admin/downloadProBundle.php', {
@@ -3138,6 +3166,7 @@ export function initProBundleInstaller(options = {}) {
               : `HTTP ${resp.status}`;
             statusEl.textContent = 'Download/install failed: ' + msg;
             statusEl.className = 'small text-danger';
+            finishProBundleProgress(progress, false, msg);
             return;
           }
 
@@ -3145,20 +3174,23 @@ export function initProBundleInstaller(options = {}) {
           const versionText = finalVersion ? ` (version ${finalVersion})` : '';
           statusEl.textContent = 'Pro bundle installed' + versionText + '. Reloading...';
           statusEl.className = 'small text-success';
+          finishProBundleProgress(progress, true);
 
           if (typeof loadAdminConfigFunc === 'function') {
             loadAdminConfigFunc();
           }
           setTimeout(() => {
-            window.location.reload();
-          }, 800);
-        } catch (e) {
-          statusEl.textContent = 'Download/install failed: ' + (e && e.message ? e.message : String(e));
-          statusEl.className = 'small text-danger';
-        } finally {
-          dlBtn.disabled = false;
-        }
-      });
+          window.location.reload();
+        }, 800);
+      } catch (e) {
+        const errMsg = e && e.message ? e.message : String(e);
+        statusEl.textContent = 'Download/install failed: ' + errMsg;
+        statusEl.className = 'small text-danger';
+        finishProBundleProgress(progress, false, errMsg);
+      } finally {
+        dlBtn.disabled = false;
+      }
+    });
     }
   } catch (e) {
     console.warn('Failed to init Pro bundle installer', e);
@@ -5637,6 +5669,10 @@ ${t("shared_max_upload_size_bytes")}
                   );
                   if (ok) {
                     setStatus('Downloading and installing latest Pro bundle...', 'muted');
+                    const progress = startProBundleProgress({
+                      action: 'Updating Pro',
+                      title: 'Downloading and installing FileRise Pro bundle'
+                    });
                     try {
                       const resp = await fetch('/api/admin/downloadProBundle.php', {
                         method: 'POST',
@@ -5659,6 +5695,7 @@ ${t("shared_max_upload_size_bytes")}
                           : `HTTP ${resp.status}`;
                         setStatus('Download/install failed: ' + msg, 'danger');
                         showToast(t('admin_pro_install_failed_detail', { error: msg }), 'error');
+                        finishProBundleProgress(progress, false, msg);
                         return;
                       }
 
@@ -5666,6 +5703,7 @@ ${t("shared_max_upload_size_bytes")}
                       const versionText = finalVersion ? ` (${finalVersion})` : '';
                       setStatus('Pro bundle installed' + versionText + '. Reloading...', 'success');
                       showToast(t('admin_pro_installed_reloading', { version: versionText }));
+                      finishProBundleProgress(progress, true);
                       if (typeof loadAdminConfigFunc === 'function') {
                         loadAdminConfigFunc();
                       }
@@ -5674,8 +5712,10 @@ ${t("shared_max_upload_size_bytes")}
                       }, 800);
                       return;
                     } catch (e) {
+                      const errMsg = e && e.message ? e.message : 'Download/install failed.';
                       setStatus('Download/install failed.', 'danger');
                       showToast(t('admin_pro_install_failed'), 'error');
+                      finishProBundleProgress(progress, false, errMsg);
                       return;
                     }
                   }
