@@ -1930,7 +1930,7 @@ class FileController
             }
         }
 
-        $runner = function () use ($file, $folder, $inlineParam, $username, $perms) {
+        $runner = function () use ($file, $folder, $inlineParam, $username, $perms, $sourceId) {
             $storage = StorageRegistry::getAdapter();
             $isLocal = $storage->isLocal();
 
@@ -2033,11 +2033,15 @@ class FileController
         }
 
         $portalMeta = null;
+        $portalSubmissionRef = '';
         if (!empty($_GET['source']) && strtolower((string)$_GET['source']) === 'portal') {
             $slug = trim((string)($_GET['portal'] ?? ''));
             if ($slug !== '') {
                 $slug = str_replace(["\r", "\n"], '', $slug);
-                $portalMeta = ['portal' => $slug];
+                $portalMeta = $this->getValidatedPortalMeta($slug, $folder, $username, $sourceId);
+                if ($portalMeta) {
+                    $portalSubmissionRef = $this->sanitizePortalSubmissionRef((string)($_GET['submissionRef'] ?? ''));
+                }
             }
         }
 
@@ -2048,6 +2052,16 @@ class FileController
                 'path'   => ($folder === 'root') ? $file : ($folder . '/' . $file),
                 'meta'   => $portalMeta,
             ]);
+            if ($portalMeta && !$inlineParam) {
+                $this->logPortalDownload(
+                    (string)($portalMeta['portal'] ?? ''),
+                    $folder,
+                    $file,
+                    (string)$username,
+                    $portalSubmissionRef,
+                    (string)$sourceId
+                );
+            }
         }
 
         if (!$isLocal) {
@@ -2077,6 +2091,212 @@ class FileController
 
         $runner();
         return;
+    }
+
+    private function sanitizePortalSubmissionRef(string $value): string
+    {
+        $clean = strtoupper(preg_replace('/[^A-Za-z0-9_-]/', '', $value));
+        if ($clean === '') {
+            return '';
+        }
+        return substr($clean, 0, 48);
+    }
+
+    private function getValidatedPortalMeta(string $slug, string $folder, string $username, string $sourceId): ?array
+    {
+        if ($slug === '' || $username === '') {
+            return null;
+        }
+
+        $portal = $this->loadPortalRecord($slug);
+        if (!$portal) {
+            return null;
+        }
+
+        if ($this->isPortalExpired((string)($portal['expiresAt'] ?? ''))) {
+            return null;
+        }
+
+        if (!$this->portalAllowsDownload($portal)) {
+            return null;
+        }
+
+        $portalFolder = ACL::normalizeFolder((string)($portal['folder'] ?? 'root'));
+        $allowSubfolders = !empty($portal['allowSubfolders']);
+        if (!$this->portalFolderMatches($portalFolder, $folder, $allowSubfolders)) {
+            return null;
+        }
+
+        $portalUsername = $this->resolvePortalUsername($portal, $slug);
+        if ($portalUsername === '' || strcasecmp($portalUsername, $username) !== 0) {
+            return null;
+        }
+
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $portalSourceRaw = trim((string)($portal['sourceId'] ?? ''));
+            $portalSourceId = $portalSourceRaw !== '' ? $this->normalizeSourceId($portalSourceRaw) : 'local';
+            if ($portalSourceId === '') {
+                return null;
+            }
+            $requestSourceId = $sourceId !== '' ? $sourceId : 'local';
+            if ($portalSourceId !== $requestSourceId) {
+                return null;
+            }
+        }
+
+        return ['portal' => $slug];
+    }
+
+    private function loadPortalRecord(string $slug): ?array
+    {
+        if ($slug === '' || !defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
+            return null;
+        }
+        if (!defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
+            return null;
+        }
+        $proPortalsPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . '/ProPortals.php';
+        if (!is_file($proPortalsPath)) {
+            return null;
+        }
+        require_once $proPortalsPath;
+        $store = new ProPortals(FR_PRO_BUNDLE_DIR);
+        $portals = $store->listPortals();
+        if (!is_array($portals)) {
+            return null;
+        }
+        $portal = $portals[$slug] ?? null;
+        return is_array($portal) ? $portal : null;
+    }
+
+    private function portalAllowsDownload(array $portal): bool
+    {
+        $hasAllowDownload = array_key_exists('allowDownload', $portal);
+        $uploadOnly = !empty($portal['uploadOnly']);
+        $allowDownload = $hasAllowDownload ? !empty($portal['allowDownload']) : true;
+        return $hasAllowDownload ? (bool)$allowDownload : !$uploadOnly;
+    }
+
+    private function isPortalExpired(string $expiresAt): bool
+    {
+        $expiresAt = trim($expiresAt);
+        if ($expiresAt === '') {
+            return false;
+        }
+        $ts = strtotime($expiresAt . ' 23:59:59');
+        if ($ts === false) {
+            return false;
+        }
+        return time() > $ts;
+    }
+
+    private function resolvePortalUsername(array $portal, string $slug): string
+    {
+        $portalUser = isset($portal['portalUser']) && is_array($portal['portalUser']) ? $portal['portalUser'] : [];
+        $username = trim((string)($portalUser['username'] ?? ''));
+        if ($username !== '') {
+            return $username;
+        }
+
+        $portalUserCreate = !array_key_exists('create', $portalUser) || !empty($portalUser['create']);
+        if (!$portalUserCreate || $slug === '') {
+            return '';
+        }
+
+        $clean = preg_replace('/[^A-Za-z0-9_-]+/', '-', $slug);
+        $clean = trim((string)$clean, '-_');
+        $cleanLower = strtolower($clean);
+        if (strpos($cleanLower, 'portal-') === 0) {
+            $cleanLower = substr($cleanLower, 7);
+        } elseif ($cleanLower === 'portal') {
+            $cleanLower = '';
+        }
+        if ($cleanLower === '') {
+            return '';
+        }
+        $candidate = 'portal_' . $cleanLower;
+        if (!preg_match(REGEX_USER, $candidate)) {
+            return '';
+        }
+        return $candidate;
+    }
+
+    private function portalFolderMatches(string $portalFolder, string $folder, bool $allowSubfolders): bool
+    {
+        $portalFolder = ACL::normalizeFolder($portalFolder);
+        $folder = ACL::normalizeFolder($folder);
+        if ($portalFolder === 'root') {
+            return $allowSubfolders ? true : $folder === 'root';
+        }
+        if ($folder === $portalFolder) {
+            return true;
+        }
+        if ($allowSubfolders && strpos($folder, $portalFolder . '/') === 0) {
+            return true;
+        }
+        return false;
+    }
+
+    private function detectClientIp(): string
+    {
+        $ip = '';
+        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $parts = explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR']);
+            foreach ($parts as $part) {
+                $candidate = trim($part);
+                if ($candidate !== '') {
+                    $ip = $candidate;
+                    break;
+                }
+            }
+        } elseif (!empty($_SERVER['HTTP_X_REAL_IP'])) {
+            $ip = trim((string)$_SERVER['HTTP_X_REAL_IP']);
+        } elseif (!empty($_SERVER['REMOTE_ADDR'])) {
+            $ip = trim((string)$_SERVER['REMOTE_ADDR']);
+        }
+        return $ip;
+    }
+
+    private function logPortalDownload(
+        string $slug,
+        string $folder,
+        string $file,
+        string $username,
+        string $submissionRef,
+        string $sourceId
+    ): void {
+        if ($slug === '' || !defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
+            return;
+        }
+
+        $metaRoot = rtrim((string)META_DIR, "/\\") . DIRECTORY_SEPARATOR;
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $metaRoot = $sourceId !== '' ? SourceContext::metaRootForId($sourceId) : SourceContext::metaRoot();
+        }
+
+        if (!is_dir($metaRoot)) {
+            @mkdir($metaRoot, 0775, true);
+        }
+
+        $entry = [
+            'slug'          => $slug,
+            'folder'        => $folder,
+            'file'          => $file,
+            'path'          => ($folder === 'root') ? $file : ($folder . '/' . $file),
+            'username'      => $username,
+            'submissionRef' => $submissionRef,
+            'sourceId'      => $sourceId,
+            'ip'            => $this->detectClientIp(),
+            'userAgent'     => (string)($_SERVER['HTTP_USER_AGENT'] ?? ''),
+            'createdAt'     => gmdate('c'),
+        ];
+
+        $logPath = $metaRoot . 'portal_downloads.log';
+        @file_put_contents(
+            $logPath,
+            json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL,
+            FILE_APPEND | LOCK_EX
+        );
     }
 
     public function videoThumbnail()
@@ -2546,12 +2766,6 @@ class FileController
                 return;
             }
 
-            $storage = StorageRegistry::getAdapter();
-            if (!$storage->isLocal()) {
-                $this->_jsonOut(["error" => "Archive operations are not supported for remote storage."], 400);
-                return;
-            }
-
             $data = $this->_readJsonBody();
             if (!is_array($data) || !isset($data['folder'], $data['files']) || !is_array($data['files'])) {
                 $this->_jsonOut(["error" => "Invalid input."], 400);
@@ -2565,46 +2779,78 @@ class FileController
                 return;
             }
 
-            $format = strtolower(trim((string)($data['format'] ?? 'zip')));
-            if ($format === '') {
-                $format = 'zip';
-            }
-            $allowedFormats = ['zip', '7z'];
-            if (!in_array($format, $allowedFormats, true)) {
-                $msg = "Invalid archive format.";
-                $this->_jsonOut(["error" => $msg], 400);
-                return;
-            }
-
-            $findBin = function (array $candidates): ?string {
-                foreach ($candidates as $bin) {
-                    if ($bin === '') continue;
-                    if (str_contains($bin, '/')) {
-                        if (is_file($bin) && is_executable($bin)) {
-                            return $bin;
-                        }
-                        continue;
-                    }
-                    $out = [];
-                    $rc = 1;
-                    @exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null', $out, $rc);
-                    if ($rc === 0 && !empty($out[0])) {
-                        return trim($out[0]);
-                    }
-                }
-                return null;
-            };
-
-            if ($format === '7z') {
-                $bin = $findBin(['7zz', '/usr/bin/7zz', '/usr/local/bin/7zz', '/bin/7zz', '7z', '/usr/bin/7z', '/usr/local/bin/7z', '/bin/7z']);
-                if (!$bin) {
-                    $this->_jsonOut(["error" => "7z is not available on the server; cannot create 7z archives."], 400);
-                    return;
-                }
-            }
             $username = $_SESSION['username'] ?? '';
             $perms    = $this->loadPerms($username);
-            $sourceId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
+
+            $sourceId = '';
+            $allowDisabled = false;
+            if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                $rawSourceId = trim((string)($data['sourceId'] ?? ''));
+                if ($rawSourceId !== '') {
+                    $sourceId = $this->normalizeSourceId($rawSourceId);
+                    if ($sourceId === '') {
+                        $this->_jsonOut(["error" => "Invalid source id."], 400);
+                        return;
+                    }
+                    $info = SourceContext::getSourceById($sourceId);
+                    if (!$info) {
+                        $this->_jsonOut(["error" => "Invalid source."], 400);
+                        return;
+                    }
+                    $allowDisabled = $this->isAdmin($perms);
+                    if (!$allowDisabled && empty($info['enabled'])) {
+                        $this->_jsonOut(["error" => "Source is disabled."], 403);
+                        return;
+                    }
+                }
+            }
+
+            $runner = function () use ($data, $folder, $files, $username, $perms) {
+                $storage = StorageRegistry::getAdapter();
+                if (!$storage->isLocal()) {
+                    $this->_jsonOut(["error" => "Archive operations are not supported for remote storage."], 400);
+                    return;
+                }
+
+                $format = strtolower(trim((string)($data['format'] ?? 'zip')));
+                if ($format === '') {
+                    $format = 'zip';
+                }
+                $allowedFormats = ['zip', '7z'];
+                if (!in_array($format, $allowedFormats, true)) {
+                    $msg = "Invalid archive format.";
+                    $this->_jsonOut(["error" => $msg], 400);
+                    return;
+                }
+
+                $findBin = function (array $candidates): ?string {
+                    foreach ($candidates as $bin) {
+                        if ($bin === '') continue;
+                        if (str_contains($bin, '/')) {
+                            if (is_file($bin) && is_executable($bin)) {
+                                return $bin;
+                            }
+                            continue;
+                        }
+                        $out = [];
+                        $rc = 1;
+                        @exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null', $out, $rc);
+                        if ($rc === 0 && !empty($out[0])) {
+                            return trim($out[0]);
+                        }
+                    }
+                    return null;
+                };
+
+                if ($format === '7z') {
+                    $bin = $findBin(['7zz', '/usr/bin/7zz', '/usr/local/bin/7zz', '/bin/7zz', '7z', '/usr/bin/7z', '/usr/local/bin/7z', '/bin/7z']);
+                    if (!$bin) {
+                        $this->_jsonOut(["error" => "7z is not available on the server; cannot create 7z archives."], 400);
+                        return;
+                    }
+                }
+
+                $activeSourceId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
 
             // Optional zip gate by account flag
             if (!$this->isAdmin($perms) && !empty($perms['disableZip'])) {
@@ -2730,7 +2976,7 @@ class FileController
                 'user'       => $username,
                 'folder'     => $folder,
                 'files'      => array_values($files),
-                'sourceId'   => $sourceId,
+                'sourceId'   => $activeSourceId,
                 'format'     => $format,
                 'status'     => 'queued',
                 'ctime'      => time(),
@@ -2745,7 +2991,7 @@ class FileController
             }
 
             // Robust spawn (detect php CLI, log, record PID)
-            $spawn = $this->spawnZipWorker($token, $tokFile, $logDir, $sourceId);
+            $spawn = $this->spawnZipWorker($token, $tokFile, $logDir, $activeSourceId);
             if (!$spawn['ok']) {
                 $job['status'] = 'error';
                 $job['error']  = 'Spawn failed: ' . $spawn['error'];
@@ -2761,6 +3007,15 @@ class FileController
                 'statusUrl'   => '/api/file/zipStatus.php?k=' . urlencode($token),
                 'downloadUrl' => '/api/file/downloadZipFile.php?k=' . urlencode($token)
             ]);
+            };
+
+            if ($sourceId !== '') {
+                $this->withSourceContext($sourceId, $runner, $allowDisabled);
+                return;
+            }
+
+            $runner();
+            return;
         } catch (Throwable $e) {
             error_log('FileController::downloadZip enqueue error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
             $this->_jsonOut(['error' => 'Internal error while queuing archive.'], 500);
@@ -3026,6 +3281,8 @@ class FileController
     {
         $token        = trim((string)($_GET['token'] ?? ''));
         $providedPass = (string)($_GET['pass'] ?? '');
+        $view         = ((string)($_GET['view'] ?? '') === '1');
+        $inlineRequested = ((string)($_GET['inline'] ?? '') === '1');
 
         // adjust if your token format differs
         if ($token === '' || !preg_match('/^[a-f0-9]{32}$/i', $token)) {
@@ -3050,39 +3307,60 @@ class FileController
             exit;
         }
 
-        if (!empty($record['password']) && empty($providedPass)) {
+        $renderPasswordForm = function (string $errorMsg = '') use ($token, $view): void {
             header('X-Content-Type-Options: nosniff');
             header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
             header('Pragma: no-cache');
-            header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+            header("Content-Security-Policy: frame-ancestors 'none'");
             header("Content-Type: text/html; charset=utf-8");
 ?>
             <!DOCTYPE html>
-            <html>
-
+            <html lang="en">
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>Enter Password</title>
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/vendor/roboto.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/share.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
             </head>
-
-            <body>
-                <h2>This file is protected by a password.</h2>
-                <form method="get" action="<?php echo htmlspecialchars(fr_with_base_path('/api/file/share.php'), ENT_QUOTES, 'UTF-8'); ?>">
-                    <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
-                    <label for="pass">Password:</label>
-                    <input type="password" name="pass" id="pass" required>
-                    <button type="submit">Submit</button>
-                </form>
+            <body class="fr-share-body">
+                <div class="fr-share-shell">
+                    <div class="fr-share-card">
+                        <div class="fr-share-card-header">
+                            <img id="shareLogo" class="fr-share-logo" src="<?php echo htmlspecialchars(fr_with_base_path('/assets/logo.svg?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" alt="FileRise">
+                            <div>
+                                <div class="fr-share-title">This file is protected</div>
+                                <div class="fr-share-subtitle">Enter the password to continue.</div>
+                            </div>
+                        </div>
+                        <?php if ($errorMsg !== ''): ?>
+                            <div class="fr-share-alert fr-share-alert-error"><?php echo htmlspecialchars($errorMsg, ENT_QUOTES, 'UTF-8'); ?></div>
+                        <?php endif; ?>
+                        <form class="fr-share-form" method="get" action="<?php echo htmlspecialchars(fr_with_base_path('/api/file/share.php'), ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
+                            <?php if ($view): ?><input type="hidden" name="view" value="1"><?php endif; ?>
+                            <label for="pass" class="fr-share-label">Password</label>
+                            <input type="password" name="pass" id="pass" class="fr-share-input" required>
+                            <button type="submit" class="fr-share-btn">Unlock</button>
+                        </form>
+                    </div>
+                </div>
+                <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/shareBranding.js?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
             </body>
-
             </html>
 <?php
             exit;
+        };
+
+        if (!empty($record['password']) && empty($providedPass)) {
+            $renderPasswordForm('');
         }
 
         if (!empty($record['password'])) {
             if (!password_verify($providedPass, $record['password'])) {
+                if ($view) {
+                    $renderPasswordForm('Invalid password.');
+                }
                 http_response_code(403);
                 header('Content-Type: application/json; charset=utf-8');
                 echo json_encode(["error" => "Invalid password."]);
@@ -3105,8 +3383,154 @@ class FileController
         } catch (\Throwable $e) { /* ignore */ }
 
         $storage = StorageRegistry::getAdapter();
+        $folderKey = ($folder === '' || strtolower($folder) === 'root') ? 'root' : $folder;
+
+        if ($view) {
+            $info = FileModel::getDownloadInfo($folderKey, $file);
+            if (!is_array($info) || !empty($info['error'] ?? null)) {
+                http_response_code(404);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "File not found."]);
+                exit;
+            }
+
+            $realFilePath = (string)($info['filePath'] ?? '');
+            $mimeType = (string)($info['mimeType'] ?? 'application/octet-stream');
+            $downloadName = (string)($info['downloadName'] ?? basename($realFilePath));
+            if ($downloadName === '') {
+                $downloadName = $file;
+            }
+            $ext = strtolower(pathinfo($downloadName, PATHINFO_EXTENSION));
+
+            $sizeBytes = null;
+            $modifiedTs = null;
+            if ($storage->isLocal()) {
+                $sizeBytes = @filesize($realFilePath);
+                $modifiedTs = @filemtime($realFilePath);
+            } else {
+                $stat = $storage->stat($realFilePath);
+                if (is_array($stat)) {
+                    if (array_key_exists('size', $stat)) {
+                        $sizeBytes = (int)$stat['size'];
+                    }
+                    $rawMtime = $stat['mtime'] ?? $stat['modified'] ?? $stat['lastModified'] ?? null;
+                    if (is_numeric($rawMtime)) {
+                        $modifiedTs = (int)$rawMtime;
+                    } elseif (is_string($rawMtime) && $rawMtime !== '') {
+                        $ts = strtotime($rawMtime);
+                        if ($ts !== false) $modifiedTs = $ts;
+                    }
+                }
+            }
+
+            $formatBytes = function (?int $bytes): string {
+                if ($bytes === null || $bytes < 0) return '-';
+                if ($bytes < 1024) return $bytes . " B";
+                if ($bytes < 1048576) return round($bytes / 1024, 2) . " KB";
+                if ($bytes < 1073741824) return round($bytes / 1048576, 2) . " MB";
+                return round($bytes / 1073741824, 2) . " GB";
+            };
+
+            $sizeLabel = $formatBytes(is_int($sizeBytes) ? $sizeBytes : null);
+            $modifiedLabel = $modifiedTs ? date('M j, Y H:i', $modifiedTs) : '-';
+            $typeLabel = $ext !== '' ? strtoupper($ext) : 'FILE';
+
+            $imgExt = ['jpg','jpeg','png','gif','bmp','webp','ico'];
+            $vidExt = ['mp4','mkv','webm','mov','ogv'];
+            $audExt = ['mp3','wav','m4a','ogg','flac','aac','wma','opus'];
+            $pdfExt = ['pdf'];
+            $previewType = '';
+            $lowerMime = strtolower($mimeType);
+            if (in_array($ext, $imgExt, true) || (str_starts_with($lowerMime, 'image/') && $lowerMime !== 'image/svg+xml')) {
+                $previewType = 'image';
+            } elseif (in_array($ext, $vidExt, true) || str_starts_with($lowerMime, 'video/')) {
+                $previewType = 'video';
+            } elseif (in_array($ext, $audExt, true) || str_starts_with($lowerMime, 'audio/')) {
+                $previewType = 'audio';
+            } elseif (in_array($ext, $pdfExt, true) || $lowerMime === 'application/pdf') {
+                $previewType = 'pdf';
+            }
+            if ($ext === 'svg' || $ext === 'svgz') {
+                $previewType = '';
+            }
+
+            $passParam = $providedPass !== '' ? ('&pass=' . urlencode($providedPass)) : '';
+            $downloadUrl = fr_with_base_path('/api/file/share.php?token=' . urlencode($token) . $passParam);
+            $previewUrl = $downloadUrl . '&inline=1';
+
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Frame-Options: DENY');
+            header("Content-Security-Policy: frame-ancestors 'none'");
+            header("Content-Type: text/html; charset=utf-8");
+?>
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Shared File: <?php echo htmlspecialchars($downloadName, ENT_QUOTES, 'UTF-8'); ?></title>
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/vendor/roboto.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/share.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
+            </head>
+            <body class="fr-share-body">
+                <div class="fr-share-shell">
+                    <div class="fr-share-card fr-share-card-wide">
+                        <div class="fr-share-card-header">
+                            <img id="shareLogo" class="fr-share-logo" src="<?php echo htmlspecialchars(fr_with_base_path('/assets/logo.svg?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" alt="FileRise">
+                            <div>
+                                <div class="fr-share-kicker">Shared file</div>
+                                <div class="fr-share-title"><?php echo htmlspecialchars($downloadName, ENT_QUOTES, 'UTF-8'); ?></div>
+                            </div>
+                            <div class="fr-share-actions">
+                                <a class="fr-share-btn" href="<?php echo htmlspecialchars($downloadUrl, ENT_QUOTES, 'UTF-8'); ?>">Download</a>
+                                <?php if ($previewType !== ''): ?>
+                                    <a class="fr-share-btn fr-share-btn-ghost" href="<?php echo htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener">Open</a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <div class="fr-share-preview">
+                            <?php if ($previewType === 'image'): ?>
+                                <img src="<?php echo htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($downloadName, ENT_QUOTES, 'UTF-8'); ?>">
+                            <?php elseif ($previewType === 'video'): ?>
+                                <video controls preload="metadata" src="<?php echo htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8'); ?>"></video>
+                            <?php elseif ($previewType === 'audio'): ?>
+                                <audio controls preload="metadata" src="<?php echo htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8'); ?>"></audio>
+                            <?php elseif ($previewType === 'pdf'): ?>
+                                <iframe src="<?php echo htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8'); ?>" title="Preview"></iframe>
+                            <?php else: ?>
+                                <div class="fr-share-preview-empty">Preview not available for this file type.</div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="fr-share-meta">
+                            <div class="fr-share-meta-item">
+                                <div class="fr-share-meta-label">Size</div>
+                                <div class="fr-share-meta-value"><?php echo htmlspecialchars($sizeLabel, ENT_QUOTES, 'UTF-8'); ?></div>
+                            </div>
+                            <div class="fr-share-meta-item">
+                                <div class="fr-share-meta-label">Modified</div>
+                                <div class="fr-share-meta-value"><?php echo htmlspecialchars($modifiedLabel, ENT_QUOTES, 'UTF-8'); ?></div>
+                            </div>
+                            <div class="fr-share-meta-item">
+                                <div class="fr-share-meta-label">Type</div>
+                                <div class="fr-share-meta-value"><?php echo htmlspecialchars($typeLabel, ENT_QUOTES, 'UTF-8'); ?></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="shareFooter" class="fr-share-footer">
+                        &copy; <?php echo date("Y"); ?> FileRise. All rights reserved.
+                    </div>
+                </div>
+                <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/shareBranding.js?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+            </body>
+            </html>
+<?php
+            exit;
+        }
+
         if (!$storage->isLocal()) {
-            $folderKey = ($folder === '' || strtolower($folder) === 'root') ? 'root' : $folder;
             $info = FileModel::getDownloadInfo($folderKey, $file);
             if (!is_array($info) || !empty($info['error'] ?? null)) {
                 http_response_code(404);
@@ -3116,8 +3540,7 @@ class FileController
             }
 
             $realFilePath = (string)$info['filePath'];
-            $mimeType = (string)$info['mimeType'];
-            $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
+            $mimeType = (string)($info['mimeType'] ?? 'application/octet-stream');
 
             // Clear any buffered output so headers + binary stream are clean
             while (ob_get_level() > 0) {
@@ -3133,6 +3556,7 @@ class FileController
             $downloadName = (string)($info['downloadName'] ?? basename($realFilePath));
             $downloadName = str_replace(["\r", "\n"], '', $downloadName);
             $downloadNameStar = rawurlencode($downloadName);
+            $ext = strtolower(pathinfo($downloadName, PATHINFO_EXTENSION));
 
             $rasterMime = [
                 'jpg'  => 'image/jpeg',
@@ -3143,6 +3567,22 @@ class FileController
                 'webp' => 'image/webp',
                 'ico'  => 'image/x-icon',
             ];
+            $inlineMime = [
+                'mp4'  => 'video/mp4',
+                'mkv'  => 'video/x-matroska',
+                'webm' => 'video/webm',
+                'mov'  => 'video/quicktime',
+                'ogv'  => 'video/ogg',
+                'mp3'  => 'audio/mpeg',
+                'wav'  => 'audio/wav',
+                'm4a'  => 'audio/mp4',
+                'ogg'  => 'audio/ogg',
+                'flac' => 'audio/flac',
+                'aac'  => 'audio/aac',
+                'wma'  => 'audio/x-ms-wma',
+                'opus' => 'audio/opus',
+                'pdf'  => 'application/pdf',
+            ];
 
             $inline = false;
             if ($ext === 'svg' || $ext === 'svgz' || $mimeType === 'image/svg+xml') {
@@ -3151,6 +3591,18 @@ class FileController
             } elseif (isset($rasterMime[$ext])) {
                 $mimeType = $rasterMime[$ext];
                 $inline = true;
+            } elseif ($inlineRequested) {
+                $lowerMime = strtolower($mimeType);
+                $inlineOk = isset($inlineMime[$ext])
+                    || str_starts_with($lowerMime, 'video/')
+                    || str_starts_with($lowerMime, 'audio/')
+                    || $lowerMime === 'application/pdf';
+                if ($inlineOk) {
+                    if (isset($inlineMime[$ext])) {
+                        $mimeType = $inlineMime[$ext];
+                    }
+                    $inline = true;
+                }
             }
 
             if ($inline) {
@@ -3251,6 +3703,22 @@ class FileController
             'webp' => 'image/webp',
             'ico'  => 'image/x-icon',
         ];
+        $inlineMime = [
+            'mp4'  => 'video/mp4',
+            'mkv'  => 'video/x-matroska',
+            'webm' => 'video/webm',
+            'mov'  => 'video/quicktime',
+            'ogv'  => 'video/ogg',
+            'mp3'  => 'audio/mpeg',
+            'wav'  => 'audio/wav',
+            'm4a'  => 'audio/mp4',
+            'ogg'  => 'audio/ogg',
+            'flac' => 'audio/flac',
+            'aac'  => 'audio/aac',
+            'wma'  => 'audio/x-ms-wma',
+            'opus' => 'audio/opus',
+            'pdf'  => 'application/pdf',
+        ];
 
         // If detector says SVG, never inline it (even if extension lies)
         if ($ext === 'svg' || $ext === 'svgz' || $mimeType === 'image/svg+xml') {
@@ -3260,6 +3728,22 @@ class FileController
             // Raster images: force correct MIME so gallery/inline works even under nosniff
             header('Content-Type: ' . $rasterMime[$ext]);
             header("Content-Disposition: inline; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+        } elseif ($inlineRequested) {
+            $lowerMime = strtolower((string)$mimeType);
+            $inlineOk = isset($inlineMime[$ext])
+                || str_starts_with($lowerMime, 'video/')
+                || str_starts_with($lowerMime, 'audio/')
+                || $lowerMime === 'application/pdf';
+            if ($inlineOk) {
+                if (isset($inlineMime[$ext])) {
+                    $mimeType = $inlineMime[$ext];
+                }
+                header('Content-Type: ' . ($mimeType ?: 'application/octet-stream'));
+                header("Content-Disposition: inline; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+            } else {
+                header('Content-Type: ' . $mimeType);
+                header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+            }
         } else {
             header('Content-Type: ' . $mimeType);
             header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");

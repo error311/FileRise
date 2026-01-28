@@ -170,6 +170,7 @@ const translations = {
     // Folder Share
     "share_folder": "Share Folder",
     "allow_uploads": "Allow Uploads",
+    "allow_subfolders": "Include Subfolders",
     "share_link_generated": "Share Link Generated",
     "error_generating_share_link": "Error Generating Share Link",
     "custom": "Custom",
@@ -551,7 +552,7 @@ const translations = {
     "portal_files_more": "And {count} more…",
     "portal_thankyou_heading": "Thank you!",
     "portal_thankyou_message": "Your files have been uploaded.",
-    "portal_thankyou_default": "Thank you. Your files have been uploaded successfully.",
+    "portal_thankyou_default": "Your files have been uploaded successfully.",
     "portal_form_error_save": "Error saving form.",
     "portal_form_missing_fields": "Please fill in: {fields}.",
     "portal_form_require_one": "Please provide at least a name or email.",

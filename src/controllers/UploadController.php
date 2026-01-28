@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/models/UploadModel.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/controllers/PortalController.php';
 
 class UploadController
 {
@@ -92,6 +93,15 @@ class UploadController
             return;
         }
 
+        $sourceLabel = strtolower((string)($requestParams['source'] ?? ($_GET['source'] ?? '')));
+        $portalSlug  = trim((string)($requestParams['portal'] ?? ($_GET['portal'] ?? '')));
+        $isPortalUpload = ($sourceLabel === 'portal' && $portalSlug !== '');
+        if ($sourceLabel === 'portal' && $portalSlug === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing portal slug.']);
+            return;
+        }
+
         // ---- 3) Folder-level WRITE permission (ACL) ----
         // Prefer the unified param array, fall back to GET only if needed.
         $folderParam = isset($requestParams['folder'])
@@ -101,6 +111,69 @@ class UploadController
         // Decode %xx (e.g., "test%20folder") then normalize
         $folderParam  = rawurldecode($folderParam);
         $targetFolder = ACL::normalizeFolder($folderParam);
+
+        if ($isPortalUpload) {
+            try {
+                $portal = PortalController::getPortalBySlug($portalSlug);
+            } catch (\Throwable $e) {
+                http_response_code(403);
+                echo json_encode(['error' => $e->getMessage() ?: 'Portal upload not allowed.']);
+                return;
+            }
+
+            if (empty($portal['canUpload'])) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Uploads are disabled for this portal.']);
+                return;
+            }
+
+            $portalFolder = ACL::normalizeFolder((string)($portal['folder'] ?? 'root'));
+            if ($portalFolder === '') {
+                $portalFolder = 'root';
+            }
+            $allowSubfolders = !empty($portal['allowSubfolders']);
+
+            $reqSourceId = trim((string)($requestParams['sourceId'] ?? ($_GET['sourceId'] ?? '')));
+            $portalSourceId = (string)($portal['sourceId'] ?? '');
+            if ($portalSourceId !== '' && $portalSourceId !== $reqSourceId) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Portal source mismatch.']);
+                return;
+            }
+
+            if (!$allowSubfolders) {
+                $relativePath = (string)($requestParams['relativePath'] ?? ($requestParams['resumableRelativePath'] ?? ''));
+                $relativePath = str_replace('\\', '/', trim($relativePath));
+                $relativePath = trim($relativePath, '/');
+                $hasSubfolder = ($relativePath !== '' && strpos($relativePath, '/') !== false);
+                if ($hasSubfolder) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Subfolder uploads are not allowed for this portal.']);
+                    return;
+                }
+            }
+
+            $withinPortal = false;
+            if ($portalFolder === 'root') {
+                $withinPortal = $allowSubfolders ? true : ($targetFolder === 'root');
+            } else {
+                if ($targetFolder === $portalFolder) {
+                    $withinPortal = true;
+                } elseif ($allowSubfolders) {
+                    $withinPortal = (strpos($targetFolder . '/', $portalFolder . '/') === 0);
+                }
+            }
+
+            if (!$withinPortal) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Uploads must stay within the portal folder.']);
+                return;
+            }
+
+            if (!$allowSubfolders) {
+                $targetFolder = $portalFolder;
+            }
+        }
 
         // Admins bypass folder canWrite checks
         if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {

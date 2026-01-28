@@ -40,6 +40,24 @@ const PORTAL_INTAKE_PRESETS = {
       reference: true,
       notes: false,
     },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(37, 99, 235, 0.25), transparent 55%), linear-gradient(180deg, #f3f7ff 0%, #e8effa 100%)',
+        surface: '#f8fbff',
+        text: '#0b1a33',
+        muted: '#4b6284',
+        border: 'rgba(37, 99, 235, 0.2)',
+        shadow: '0 18px 50px rgba(37, 99, 235, 0.18)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(59, 130, 246, 0.25), transparent 55%), linear-gradient(180deg, #070d1a 0%, #0b1426 100%)',
+        surface: '#0f1b2f',
+        text: '#e6efff',
+        muted: '#9bb1d1',
+        border: 'rgba(96, 165, 250, 0.35)',
+        shadow: '0 24px 70px rgba(2, 6, 23, 0.6)',
+      },
+    },
   },
 
   tax: {
@@ -76,6 +94,24 @@ const PORTAL_INTAKE_PRESETS = {
       reference: true,
       notes: false,
     },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(16, 185, 129, 0.22), transparent 55%), linear-gradient(180deg, #f2fffa 0%, #e6f7ef 100%)',
+        surface: '#f6fffb',
+        text: '#052018',
+        muted: '#4c6b5f',
+        border: 'rgba(16, 185, 129, 0.22)',
+        shadow: '0 18px 50px rgba(16, 185, 129, 0.16)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(34, 197, 94, 0.22), transparent 55%), linear-gradient(180deg, #071a14 0%, #0b221a 100%)',
+        surface: '#0f241c',
+        text: '#e6fff5',
+        muted: '#9cc8b8',
+        border: 'rgba(34, 197, 94, 0.3)',
+        shadow: '0 24px 70px rgba(0, 0, 0, 0.55)',
+      },
+    },
   },
 
   order: {
@@ -110,6 +146,290 @@ const PORTAL_INTAKE_PRESETS = {
       email: true,
       reference: true,
       notes: true,
+    },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(245, 158, 11, 0.22), transparent 55%), linear-gradient(180deg, #fff7ed 0%, #fde7c7 100%)',
+        surface: '#fff9f0',
+        text: '#2b1700',
+        muted: '#86623a',
+        border: 'rgba(234, 179, 8, 0.26)',
+        shadow: '0 18px 50px rgba(234, 179, 8, 0.18)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(251, 191, 36, 0.22), transparent 55%), linear-gradient(180deg, #1a1106 0%, #2a1a00 100%)',
+        surface: '#2a1a00',
+        text: '#fff1dc',
+        muted: '#d3b48b',
+        border: 'rgba(251, 191, 36, 0.3)',
+        shadow: '0 24px 70px rgba(0, 0, 0, 0.55)',
+      },
+    },
+  },
+
+  healthcare: {
+    label: 'Healthcare intake',
+    title: 'Secure patient document upload',
+    introText:
+      'Upload referrals, intake forms, insurance cards, and supporting documents here. ' +
+      'Please avoid emailing sensitive files.',
+    footerText:
+      'If you uploaded something in error, contact our office. Please do not share this link.',
+    brandColor: '#0f766e',
+    requireForm: true,
+    formVisible: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: true,
+    },
+    formLabels: {
+      name: 'Patient name',
+      email: 'Contact email',
+      reference: 'Patient ID / DOB',
+      notes: 'Notes for our team',
+    },
+    formDefaults: {
+      name: '',
+      email: '',
+      reference: '',
+      notes: '',
+    },
+    formRequired: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: false,
+    },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 12% -10%, rgba(13, 148, 136, 0.22), transparent 55%), linear-gradient(180deg, #ecfdfb 0%, #d9f7f1 100%)',
+        surface: '#f4fffd',
+        text: '#053330',
+        muted: '#3a6b66',
+        border: 'rgba(13, 148, 136, 0.22)',
+        shadow: '0 18px 50px rgba(13, 148, 136, 0.16)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(20, 184, 166, 0.22), transparent 55%), linear-gradient(180deg, #061a18 0%, #0b2a27 100%)',
+        surface: '#0f2d2a',
+        text: '#e6fffb',
+        muted: '#9acfc9',
+        border: 'rgba(20, 184, 166, 0.3)',
+        shadow: '0 24px 70px rgba(0, 0, 0, 0.55)',
+      },
+    },
+  },
+
+  realestate: {
+    label: 'Real estate',
+    title: 'Property document upload',
+    introText:
+      'Upload disclosures, contracts, inspections, and related property documents here.',
+    footerText:
+      'If you have questions about required files, contact your agent before uploading.',
+    brandColor: '#1e3a8a',
+    requireForm: true,
+    formVisible: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: true,
+    },
+    formLabels: {
+      name: 'Client name',
+      email: 'Contact email',
+      reference: 'Property / Listing #',
+      notes: 'Notes for our team',
+    },
+    formDefaults: {
+      name: '',
+      email: '',
+      reference: '',
+      notes: '',
+    },
+    formRequired: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: false,
+    },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(30, 64, 175, 0.2), transparent 55%), linear-gradient(180deg, #f6f8ff 0%, #eef1f9 100%)',
+        surface: '#f9f6ef',
+        text: '#1f2937',
+        muted: '#6b7280',
+        border: 'rgba(30, 64, 175, 0.18)',
+        shadow: '0 18px 50px rgba(30, 64, 175, 0.16)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(59, 130, 246, 0.2), transparent 55%), linear-gradient(180deg, #0b1220 0%, #10192c 100%)',
+        surface: '#1a2337',
+        text: '#f5f2e8',
+        muted: '#c9c1b4',
+        border: 'rgba(148, 163, 184, 0.35)',
+        shadow: '0 24px 70px rgba(0, 0, 0, 0.55)',
+      },
+    },
+  },
+
+  construction: {
+    label: 'Construction / field',
+    title: 'Site report upload',
+    introText:
+      'Upload site photos, safety reports, invoices, and daily logs from the field.',
+    footerText:
+      'Please include the project ID so we can route the files quickly.',
+    brandColor: '#f97316',
+    requireForm: true,
+    formVisible: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: true,
+    },
+    formLabels: {
+      name: 'Contact name',
+      email: 'Contact email',
+      reference: 'Project / Site #',
+      notes: 'Notes / issue summary',
+    },
+    formDefaults: {
+      name: '',
+      email: '',
+      reference: '',
+      notes: '',
+    },
+    formRequired: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: true,
+    },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 12% -10%, rgba(249, 115, 22, 0.22), transparent 55%), linear-gradient(180deg, #fff7ed 0%, #ffe3c7 100%)',
+        surface: '#fff4e6',
+        text: '#2b1400',
+        muted: '#7a4f2a',
+        border: 'rgba(249, 115, 22, 0.28)',
+        shadow: '0 18px 50px rgba(249, 115, 22, 0.2)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(249, 115, 22, 0.22), transparent 55%), linear-gradient(180deg, #1c1206 0%, #2a1a0b 100%)',
+        surface: '#2a1a0b',
+        text: '#ffe9d4',
+        muted: '#d4b08e',
+        border: 'rgba(249, 115, 22, 0.3)',
+        shadow: '0 24px 70px rgba(0, 0, 0, 0.6)',
+      },
+    },
+  },
+
+  creative: {
+    label: 'Creative studio',
+    title: 'Creative assets upload',
+    introText:
+      'Upload briefs, mood boards, drafts, and final assets for your project.',
+    footerText:
+      'For large deliveries, split into multiple uploads or contact us for a transfer link.',
+    brandColor: '#f973a7',
+    requireForm: true,
+    formVisible: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: true,
+    },
+    formLabels: {
+      name: 'Client / brand name',
+      email: 'Contact email',
+      reference: 'Project name',
+      notes: 'Notes / creative direction',
+    },
+    formDefaults: {
+      name: '',
+      email: '',
+      reference: '',
+      notes: '',
+    },
+    formRequired: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: false,
+    },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 12% -10%, rgba(244, 63, 94, 0.22), transparent 55%), linear-gradient(180deg, #fff1f5 0%, #ffe3ec 100%)',
+        surface: '#fff7fb',
+        text: '#2b0f1d',
+        muted: '#7a4a5c',
+        border: 'rgba(244, 63, 94, 0.24)',
+        shadow: '0 18px 50px rgba(244, 63, 94, 0.18)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(244, 63, 94, 0.22), transparent 55%), linear-gradient(180deg, #1a0b12 0%, #2a0f1c 100%)',
+        surface: '#2a1424',
+        text: '#ffe5f2',
+        muted: '#d3a5ba',
+        border: 'rgba(244, 63, 94, 0.3)',
+        shadow: '0 24px 70px rgba(0, 0, 0, 0.6)',
+      },
+    },
+  },
+
+  finance: {
+    label: 'Finance / mortgage',
+    title: 'Secure financial document upload',
+    introText:
+      'Upload statements, pay stubs, and required documents for your application.',
+    footerText:
+      'If you have questions about required documents, contact your advisor.',
+    brandColor: '#1d4ed8',
+    requireForm: true,
+    formVisible: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: true,
+    },
+    formLabels: {
+      name: 'Applicant name',
+      email: 'Contact email',
+      reference: 'Application / Loan #',
+      notes: 'Notes for our team',
+    },
+    formDefaults: {
+      name: '',
+      email: '',
+      reference: '',
+      notes: '',
+    },
+    formRequired: {
+      name: true,
+      email: true,
+      reference: true,
+      notes: false,
+    },
+    theme: {
+      light: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(37, 99, 235, 0.2), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #e7eef8 100%)',
+        surface: '#fdf6ef',
+        text: '#1f2937',
+        muted: '#6b7280',
+        border: 'rgba(29, 78, 216, 0.2)',
+        shadow: '0 18px 50px rgba(29, 78, 216, 0.16)',
+      },
+      dark: {
+        bodyBg: 'radial-gradient(1200px 600px at 10% -10%, rgba(37, 99, 235, 0.22), transparent 55%), linear-gradient(180deg, #0b1220 0%, #121a2d 100%)',
+        surface: '#1c2336',
+        text: '#f8e9d7',
+        muted: '#d6b894',
+        border: 'rgba(180, 83, 9, 0.35)',
+        shadow: '0 24px 70px rgba(0, 0, 0, 0.55)',
+      },
     },
   },
 };
@@ -244,6 +564,30 @@ function getDefaultPortalSourceId() {
   return getPortalSourceFallbackId();
 }
 
+function buildPortalUsernamePreview(slug) {
+  const raw = String(slug || '').trim();
+  let clean = raw.replace(/[^A-Za-z0-9_-]+/g, '-');
+  clean = clean.replace(/^[-_]+|[-_]+$/g, '');
+  let lower = clean.toLowerCase();
+  if (lower.startsWith('portal-')) {
+    lower = lower.slice(7);
+  } else if (lower === 'portal') {
+    lower = '';
+  }
+  if (!lower) {
+    return 'portal_user';
+  }
+  return 'portal_' + lower;
+}
+
+function isPortalExpiredDate(expiresAt) {
+  const raw = String(expiresAt || '').trim();
+  if (!raw) return false;
+  const date = new Date(raw + 'T23:59:59');
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getTime() < Date.now();
+}
+
 async function loadPortalSources() {
   if (__portalSourcesLoaded) return __portalSources;
   __portalSourcesLoaded = true;
@@ -355,8 +699,7 @@ export async function openClientPortalsModal() {
 
         <h3>Client Portals</h3>
         <p class="muted" style="margin-top:-6px;">
-          Create upload portals that point to specific folders. Clients can upload
-          (and optionally download) files without seeing your full FileRise UI.
+          Create client portals for specific folders and configure access, users, branding, and intake details per portal.
         </p>
 
 <div class="d-flex justify-content-between align-items-center" style="margin:8px 0 10px;">
@@ -501,6 +844,7 @@ async function loadClientPortalsList(useCacheOnly) {
       const sourceOptions = renderPortalSourceOptions(sourceId);
       const clientEmail = p.clientEmail || '';
       const uploadOnly = !!p.uploadOnly;
+      const allowSubfolders = !!p.allowSubfolders;
 
       // Backwards compat:
       //  - Old portals only had "uploadOnly":
@@ -520,6 +864,45 @@ async function loadClientPortalsList(useCacheOnly) {
       const expiresAt = p.expiresAt ? String(p.expiresAt).slice(0, 10) : '';
       const brandColor = p.brandColor || '';
       const footerText = p.footerText || '';
+      const theme = p.theme || {};
+      const themeLight = theme.light || {};
+      const themeDark = theme.dark || {};
+      const themeLightBodyBg = themeLight.bodyBg || '';
+      const themeLightSurface = themeLight.surface || '';
+      const themeLightText = themeLight.text || '';
+      const themeLightMuted = themeLight.muted || '';
+      const themeLightBorder = themeLight.border || '';
+      const themeLightShadow = themeLight.shadow || '';
+      const themeDarkBodyBg = themeDark.bodyBg || '';
+      const themeDarkSurface = themeDark.surface || '';
+      const themeDarkText = themeDark.text || '';
+      const themeDarkMuted = themeDark.muted || '';
+      const themeDarkBorder = themeDark.border || '';
+      const themeDarkShadow = themeDark.shadow || '';
+      const portalUser = (p.portalUser && typeof p.portalUser === 'object') ? p.portalUser : {};
+      const portalUserCreate = portalUser.create !== false;
+      const portalUserPreset = portalUser.preset || 'match';
+      const portalUserName = portalUser.username || '';
+      const portalUserPlaceholder = buildPortalUsernamePreview(slug);
+      const isNewPortal = !!p._isNewPortal;
+      const portalExpired = isPortalExpiredDate(expiresAt);
+      const portalUserPasswordSet = portalUserCreate
+        && !portalExpired
+        && (portalUser.passwordSet === true
+          || (portalUser.passwordSet !== false && !isNewPortal));
+      const portalUserPasswordNote = portalExpired
+        ? 'Portal is expired; its portal user is removed on save.'
+        : (isNewPortal
+          ? 'Required for new portal users.'
+          : 'Leave blank to keep the current password.');
+      const portalUserPasswordPlaceholder = isNewPortal
+        ? 'Set a password (required)'
+        : 'Leave blank to keep current';
+      const portalUserPasswordStatus = portalUserPasswordSet
+        ? '<span class="text-success" style="font-size:0.75rem;">Password saved</span>'
+        : '';
+      const portalSectionStyle = 'margin-top:10px; padding:10px; border:1px dashed rgba(100, 116, 139, 0.35); border-radius:8px;';
+      const portalSectionTitleStyle = 'font-weight:600; font-size:0.8rem; margin-bottom:6px;';
 
       const formDefaults = p.formDefaults || {};
       const formRequired = p.formRequired || {};
@@ -537,6 +920,7 @@ async function loadClientPortalsList(useCacheOnly) {
       : (p.uploadMaxPerDay ? parseInt(p.uploadMaxPerDay, 10) || 0 : 0);
 
     const showThankYou  = !!p.showThankYou;
+    const thankYouShowRef = !!p.thankYouShowRef;
     const thankYouText  = p.thankYouText || '';
 
       const defName  = formDefaults.name      || '';
@@ -559,7 +943,7 @@ async function loadClientPortalsList(useCacheOnly) {
       const requireForm = !!p.requireForm;
 
       html += `
-        <div class="card portal-card" data-portal-slug="${slug}">
+        <div class="card portal-card" data-portal-slug="${slug}" data-portal-new="${isNewPortal ? '1' : '0'}">
           <div class="portal-card-header" tabindex="0" role="button" aria-expanded="true">
             <span class="portal-card-caret">▸</span>
             <div class="portal-card-header-main">
@@ -576,7 +960,9 @@ async function loadClientPortalsList(useCacheOnly) {
           </button>
 
           <div class="portal-card-body">
-            <div class="portal-meta-row">
+            <div class="portal-section" style="${portalSectionStyle}">
+              <div style="${portalSectionTitleStyle}">Portal access</div>
+              <div class="portal-meta-row">
 <label style="font-weight:600;">
   Portal slug<span class="text-danger">*</span>:
                 <input type="text"
@@ -595,7 +981,7 @@ async function loadClientPortalsList(useCacheOnly) {
               </label>
             </div>
 
-            <div class="portal-meta-row portal-source-row">
+              <div class="portal-meta-row portal-source-row">
               <label>
                 Source:
                 <select class="form-control form-control-sm portal-source-select"
@@ -627,7 +1013,7 @@ async function loadClientPortalsList(useCacheOnly) {
               </small>
             </div>
 
-            <div class="portal-meta-row">
+              <div class="portal-meta-row">
               <label>
                 Client email (optional):
                 <input type="email"
@@ -647,22 +1033,92 @@ async function loadClientPortalsList(useCacheOnly) {
                   value="${expiresAt}"
                 />
               </div>
+            </div>
+
+              <div class="portal-meta-row portal-access-row">
+                <label style="display:flex; align-items:center; gap:4px;">
+                  <input type="checkbox"
+                         data-portal-field="uploadOnly"
+                         ${uploadOnly ? 'checked' : ''} />
+                  <span>Allow upload</span>
+                </label>
 
                 <label style="display:flex; align-items:center; gap:4px;">
-                <input type="checkbox"
-                       data-portal-field="uploadOnly"
-                       ${uploadOnly ? 'checked' : ''} />
-                <span>Allow upload</span>
-              </label>
+                  <input type="checkbox"
+                         data-portal-field="allowDownload"
+                         ${allowDownload ? 'checked' : ''} />
+                  <span>Allow download</span>
+                </label>
+                <label style="display:flex; align-items:center; gap:4px;">
+                  <input type="checkbox"
+                         data-portal-field="allowSubfolders"
+                         ${allowSubfolders ? 'checked' : ''} />
+                  <span>Allow subfolders</span>
+                </label>
+              </div>
 
-              <label style="display:flex; align-items:center; gap:4px;">
-                <input type="checkbox"
-                       data-portal-field="allowDownload"
-                       ${allowDownload ? 'checked' : ''} />
-                <span>Allow download</span>
-              </label>
+              <div class="text-muted" style="font-size:0.75rem; margin-top:4px;">
+                Any user with access to the portal folder can sign in to the portal view.
+              </div>
+            </div>
 
-            <div style="margin-top:8px;">
+            <div class="portal-section portal-user-block" style="${portalSectionStyle}">
+              <div style="${portalSectionTitleStyle}">Portal user</div>
+              <div class="text-muted" style="font-size:0.75rem; margin-top:-2px; margin-bottom:6px;">
+                Optional: create a dedicated portal user for this portal and set its password here.
+              </div>
+              <div class="portal-user-row" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                <label style="display:flex; align-items:center; gap:4px; margin:0; font-size:0.8rem;">
+                  <input type="checkbox"
+                         data-portal-field="portalUserCreate"
+                         ${portalUserCreate ? 'checked' : ''} />
+                  <span>Create portal user</span>
+                </label>
+                <label style="margin:0; font-size:0.8rem;">
+                  User preset:
+                  <select class="form-control form-control-sm"
+                          data-portal-field="portalUserPreset"
+                          style="display:inline-block; width:190px; margin-left:4px;">
+                    <option value="match"${portalUserPreset === 'match' ? ' selected' : ''}>Match portal access</option>
+                    <option value="view_download"${portalUserPreset === 'view_download' ? ' selected' : ''}>View &amp; download</option>
+                    <option value="view_upload"${portalUserPreset === 'view_upload' ? ' selected' : ''}>View &amp; upload</option>
+                    <option value="upload_only"${portalUserPreset === 'upload_only' ? ' selected' : ''}>Upload only</option>
+                  </select>
+                </label>
+                <label style="margin:0; font-size:0.8rem;">
+                  Username:
+                  <input type="text"
+                         class="form-control form-control-sm"
+                         data-portal-field="portalUsername"
+                         value="${portalUserName}"
+                         placeholder="${portalUserPlaceholder}"
+                         style="display:inline-block; width:200px; margin-left:4px;">
+                </label>
+              </div>
+              <div class="portal-user-pass-row" style="margin-top:6px;">
+                <label style="margin:0; font-size:0.8rem;">
+                  Password:
+                  <input type="text"
+                         class="form-control form-control-sm"
+                         data-portal-field="portalUserPassword"
+                         value=""
+                         placeholder="${portalUserPasswordPlaceholder}"
+                         style="width:220px; margin-left:4px;">
+                </label>
+                <div style="margin-top:4px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                  ${portalUserPasswordStatus}
+                  <small class="text-muted" style="font-size:0.75rem;">
+                    ${portalUserPasswordNote}
+                  </small>
+                </div>
+              </div>
+              <div class="text-muted" style="font-size:0.75rem; margin-top:4px;">
+                Deleting or expiring a portal removes its portal user on save.
+              </div>
+            </div>
+
+            <div class="portal-section" style="${portalSectionStyle}">
+              <div style="${portalSectionTitleStyle}">Portal content</div>
               <div class="form-group" style="margin-bottom:6px;">
                 <label style="margin:0;">
                   Portal title (optional):
@@ -683,15 +1139,10 @@ async function loadClientPortalsList(useCacheOnly) {
                             placeholder="Describe what the client should upload, deadlines, etc.">${introText}</textarea>
                 </label>
               </div>
-              <label style="margin:0; display:flex; align-items:center; gap:4px;">
-                <input type="checkbox"
-                       data-portal-field="requireForm"
-                       ${requireForm ? 'checked' : ''} />
-                <span>Require info form before upload</span>
-              </label>
             </div>
 
-                        <div style="margin-top:8px;">
+            <div class="portal-section" style="${portalSectionStyle}">
+              <div style="${portalSectionTitleStyle}">Branding &amp; theme</div>
               <div class="form-group" style="margin-bottom:6px;">
                 <label style="margin:0;">
                   Accent color:
@@ -705,6 +1156,117 @@ async function loadClientPortalsList(useCacheOnly) {
               </div>
 
               <div class="form-group" style="margin-bottom:6px;">
+                <strong style="font-size:0.85rem;">Theme overrides</strong>
+                <div class="text-muted" style="font-size:0.75rem; margin-top:2px;">
+                  Optional CSS values for light/dark themes (colors, gradients, shadows).
+                </div>
+              </div>
+              <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+                <div style="min-width:220px; flex:1 1 260px;">
+                  <div class="text-muted" style="font-size:0.75rem; margin-bottom:4px;">Light mode</div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Background</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeLightBodyBg"
+                           value="${themeLightBodyBg}"
+                           placeholder="e.g. #f8fafc or linear-gradient(...)">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Card surface</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeLightSurface"
+                           value="${themeLightSurface}"
+                           placeholder="e.g. #ffffff">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Text</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeLightText"
+                           value="${themeLightText}"
+                           placeholder="e.g. #0f172a">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Muted text</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeLightMuted"
+                           value="${themeLightMuted}"
+                           placeholder="e.g. #64748b">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Border</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeLightBorder"
+                           value="${themeLightBorder}"
+                           placeholder="e.g. rgba(15,23,42,0.12)">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Shadow</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeLightShadow"
+                           value="${themeLightShadow}"
+                           placeholder="e.g. 0 18px 50px rgba(15,23,42,0.12)">
+                  </div>
+                </div>
+                <div style="min-width:220px; flex:1 1 260px;">
+                  <div class="text-muted" style="font-size:0.75rem; margin-bottom:4px;">Dark mode</div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Background</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeDarkBodyBg"
+                           value="${themeDarkBodyBg}"
+                           placeholder="e.g. #0f172a or linear-gradient(...)">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Card surface</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeDarkSurface"
+                           value="${themeDarkSurface}"
+                           placeholder="e.g. #111827">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Text</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeDarkText"
+                           value="${themeDarkText}"
+                           placeholder="e.g. #e2e8f0">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Muted text</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeDarkMuted"
+                           value="${themeDarkMuted}"
+                           placeholder="e.g. #94a3b8">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Border</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeDarkBorder"
+                           value="${themeDarkBorder}"
+                           placeholder="e.g. rgba(148,163,184,0.2)">
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px;">
+                    <label style="margin:0; font-size:0.78rem;">Shadow</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-portal-field="themeDarkShadow"
+                           value="${themeDarkShadow}"
+                           placeholder="e.g. 0 20px 60px rgba(0,0,0,0.4)">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom:6px;">
                 <label style="margin:0; display:block;">
                   Footer text (shown at bottom of portal):
                   <textarea class="form-control form-control-sm"
@@ -714,8 +1276,31 @@ async function loadClientPortalsList(useCacheOnly) {
                 </label>
               </div>
 
+              <div class="form-group" style="margin-bottom:6px;">
+                <label style="margin:0; display:block;">
+                  Portal logo:
+                  <input type="text"
+                         class="form-control form-control-sm"
+                         data-portal-field="logoFile"
+                         value="${p.logoFile || ''}"
+                         placeholder="e.g. acme-portal.png" />
+                </label>
+                <div style="margin-top:4px; display:flex; align-items:center; gap:8px;">
+                  <button type="button"
+                          class="btn btn-sm btn-primary portal-logo-upload-btn"
+                          style="min-width:120px;">
+                    Upload logo…
+                  </button>
+                  <small class="text-muted" style="font-size:0.75rem;">
+                    File is stored under <code>profile_pics</code>. Leave blank to use the default FileRise logo.
+                  </small>
+                </div>
+              </div>
+            </div>
 
-                            <div class="form-group" style="margin-bottom:6px;">
+            <div class="portal-section" style="${portalSectionStyle}">
+              <div style="${portalSectionTitleStyle}">Upload behavior</div>
+              <div class="form-group" style="margin-bottom:6px;">
                 <strong style="font-size:0.85rem;">Upload rules</strong>
                 <div class="text-muted" style="font-size:0.75rem; margin-top:2px;">
                   Optional per-portal limits. Leave blank / zero to use global defaults.
@@ -770,38 +1355,32 @@ async function loadClientPortalsList(useCacheOnly) {
                   <span>Show thank-you screen after upload</span>
                 </label>
 
+                <label style="margin:4px 0 0; display:flex; align-items:center; gap:6px; font-size:0.8rem;">
+                  <input type="checkbox"
+                         data-portal-field="thankYouShowRef"
+                         ${thankYouShowRef ? 'checked' : ''}>
+                  <span>Include submission ID in thank-you message</span>
+                </label>
+
                 <textarea class="form-control form-control-sm"
                           data-portal-field="thankYouText"
                           rows="2"
-                          placeholder="e.g. Thank you for submitting your documents. Our team will review them shortly.">${thankYouText}</textarea>
+                          placeholder="e.g. Your files have been uploaded successfully. Our team will review them shortly.">${thankYouText}</textarea>
               </div>
+            </div>
 
-                            <div class="form-group" style="margin-bottom:6px;">
-                <label style="margin:0; display:block;">
-                  Portal logo:
-                  <input type="text"
-                         class="form-control form-control-sm"
-                         data-portal-field="logoFile"
-                         value="${p.logoFile || ''}"
-                         placeholder="e.g. acme-portal.png" />
-                </label>
-                <div style="margin-top:4px; display:flex; align-items:center; gap:8px;">
-                  <button type="button"
-                class="btn btn-sm btn-primary portal-logo-upload-btn"
-                style="min-width: 120px;">
-                Upload logo…
-                    </button>
-                  <small class="text-muted" style="font-size:0.75rem;">
-                    File is stored under <code>profile_pics</code>. Leave blank to use the default FileRise logo.
-                  </small>
-                </div>
-              </div>
-
-                          <div class="form-group" style="margin-bottom:4px;">
-              <strong style="font-size:0.85rem;">Intake form</strong>
+            <div class="portal-section" style="${portalSectionStyle}">
+              <div style="${portalSectionTitleStyle}">Intake form</div>
               <div class="text-muted" style="font-size:0.75rem; margin-top:2px;">
                 Customize field labels shown on the portal, plus optional defaults &amp; required flags.
               </div>
+
+              <label style="margin:4px 0 6px; display:flex; align-items:center; gap:6px; font-size:0.8rem;">
+                <input type="checkbox"
+                       data-portal-field="requireForm"
+                       ${requireForm ? 'checked' : ''} />
+                <span>Require info form before upload</span>
+              </label>
 
                             <div style="margin-top:4px;">
                 <label style="font-size:0.75rem; margin:0;">
@@ -812,6 +1391,11 @@ async function loadClientPortalsList(useCacheOnly) {
                     <option value="legal">Legal intake</option>
                     <option value="tax">Tax client</option>
                     <option value="order">Order / RMA</option>
+                    <option value="healthcare">Healthcare intake</option>
+                    <option value="realestate">Real estate listing</option>
+                    <option value="construction">Construction project</option>
+                    <option value="creative">Creative brief</option>
+                    <option value="finance">Finance onboarding</option>
                   </select>
                 </label>
               </div>
@@ -923,8 +1507,6 @@ async function loadClientPortalsList(useCacheOnly) {
                     </label>
                   </div>
                 </div>
-              </div>
-            </div>
             </div>
           </div> <!-- /.portal-card-body -->
         </div>
@@ -954,6 +1536,10 @@ async function loadClientPortalsList(useCacheOnly) {
         slugInput.addEventListener('input', () => {
           const raw = slugInput.value.trim();
           headerSlugEl.textContent = raw || card.getAttribute('data-portal-slug') || '';
+          const portalUserInput = card.querySelector('[data-portal-field="portalUsername"]');
+          if (portalUserInput && !portalUserInput.value.trim()) {
+            portalUserInput.placeholder = buildPortalUsernamePreview(raw);
+          }
         });
       }
 
@@ -995,7 +1581,8 @@ body.querySelectorAll('[data-portal-action="delete"]').forEach(btn => {
   
       const ok = await portalConfirm(
         `Delete portal "${name}"?\n\n` +
-        `Existing links for this portal will stop working once you click “Save settings”.`
+        `Existing links for this portal will stop working once you click “Save settings”.\n` +
+        `The portal user will be deleted on save.`
       );
       if (!ok) return;
   
@@ -1039,6 +1626,8 @@ body.querySelectorAll('[data-portal-action="delete"]').forEach(btn => {
         attachPortalFolderPickers();
         // Portal logo uploaders
         attachPortalLogoUploaders();
+        // Portal user controls (preset/username/password)
+        attachPortalUserControls();
 
 
   } catch (e) {
@@ -1063,15 +1652,22 @@ function addEmptyPortalRow() {
     slug = `${base}-${i++}`;
   }
 
-  __portalsCache[slug] = {
-    label: 'New client portal',
-    folder: '',
-    sourceId: getDefaultPortalSourceId(),
-    clientEmail: '',
-    uploadOnly: true,
-    allowDownload: false,
-    expiresAt: ''
-  };
+    __portalsCache[slug] = {
+      label: 'New client portal',
+      folder: '',
+      sourceId: getDefaultPortalSourceId(),
+      clientEmail: '',
+      uploadOnly: true,
+      allowDownload: false,
+      allowSubfolders: false,
+      expiresAt: '',
+      portalUser: {
+        create: true,
+        preset: 'match',
+        username: ''
+      },
+      _isNewPortal: true
+    };
 
   // After re-render, auto-focus this portal's folder field
   __portalSlugToFocus = slug;
@@ -1240,6 +1836,36 @@ function attachPortalFolderPickers() {
     });
   }
 
+  function attachPortalUserControls() {
+    const body = document.getElementById('clientPortalsBody');
+    if (!body) return;
+
+    body.querySelectorAll('.portal-card').forEach(card => {
+      const createEl = card.querySelector('[data-portal-field="portalUserCreate"]');
+      const presetEl = card.querySelector('[data-portal-field="portalUserPreset"]');
+      const userEl = card.querySelector('[data-portal-field="portalUsername"]');
+      const passRow = card.querySelector('.portal-user-pass-row');
+      const passInput = card.querySelector('[data-portal-field="portalUserPassword"]');
+
+      const sync = () => {
+        const enabled = !createEl || createEl.checked;
+        [presetEl, userEl, passInput].forEach(el => {
+          if (el) el.disabled = !enabled;
+        });
+        if (passRow) {
+          passRow.style.display = enabled ? 'block' : 'none';
+        }
+      };
+
+      if (createEl && !createEl.__portalUserBound) {
+        createEl.__portalUserBound = true;
+        createEl.addEventListener('change', sync);
+      }
+
+      sync();
+    });
+  }
+
   // ─────────────────────
 //  Intake presets helpers
 // ─────────────────────
@@ -1275,7 +1901,24 @@ function applyPresetToPortalCard(card, presetKey) {
     if (preset.brandColor) {
       setVal('[data-portal-field="brandColor"]', preset.brandColor);
     }
-  
+
+    if (preset.theme) {
+      const light = preset.theme.light || {};
+      const dark = preset.theme.dark || {};
+      setVal('[data-portal-field="themeLightBodyBg"]', light.bodyBg || '');
+      setVal('[data-portal-field="themeLightSurface"]', light.surface || '');
+      setVal('[data-portal-field="themeLightText"]', light.text || '');
+      setVal('[data-portal-field="themeLightMuted"]', light.muted || '');
+      setVal('[data-portal-field="themeLightBorder"]', light.border || '');
+      setVal('[data-portal-field="themeLightShadow"]', light.shadow || '');
+      setVal('[data-portal-field="themeDarkBodyBg"]', dark.bodyBg || '');
+      setVal('[data-portal-field="themeDarkSurface"]', dark.surface || '');
+      setVal('[data-portal-field="themeDarkText"]', dark.text || '');
+      setVal('[data-portal-field="themeDarkMuted"]', dark.muted || '');
+      setVal('[data-portal-field="themeDarkBorder"]', dark.border || '');
+      setVal('[data-portal-field="themeDarkShadow"]', dark.shadow || '');
+    }
+
     setChecked('[data-portal-field="requireForm"]', !!preset.requireForm);
   
     // Visibility toggles
@@ -1369,6 +2012,26 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
     ? '1 submission'
     : submissions.length + ' submissions';
 
+  const formatTimestamp = (value) => {
+    if (!value) return '';
+    try {
+      const d = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleString(undefined, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+      }
+    } catch (e) {
+      return String(value);
+    }
+    return String(value);
+  };
+
   submissions.forEach(sub => {
     const item = document.createElement('div');
     item.className = 'portal-submissions-item';
@@ -1380,24 +2043,7 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
 
     const created = sub.createdAt || sub.created_at || sub.timestamp || sub.time;
     if (created) {
-      try {
-        const d = typeof created === 'number'
-          ? new Date(created * 1000)
-          : new Date(created);
-
-        if (!isNaN(d.getTime())) {
-          headerParts.push(d.toLocaleString(undefined, {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          }));
-        }
-      } catch (e) {
-        headerParts.push(String(created));
-      }
+      headerParts.push(formatTimestamp(created));
     }
 
     const raw = sub.raw || sub;
@@ -1421,10 +2067,12 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
     const email = form.email || sub.email || '';
     const ref = form.reference || form.ref || sub.reference || sub.ref || '';
     const notes = form.notes || form.message || sub.notes || sub.message || '';
+    const submissionRef = sub.submissionRef || raw.submissionRef || '';
 
     if (name) summaryParts.push('Name: ' + name);
     if (email) summaryParts.push('Email: ' + email);
     if (ref) summaryParts.push('Ref: ' + ref);
+    if (submissionRef) summaryParts.push('Submission ID: ' + submissionRef);
     if (notes) summaryParts.push('Notes: ' + notes);
 
     summary.textContent = summaryParts.join(' • ');
@@ -1432,6 +2080,25 @@ function renderPortalSubmissionsList(listEl, countEl, submissions) {
     item.appendChild(header);
     if (summaryParts.length) {
       item.appendChild(summary);
+    }
+
+    const downloads = Array.isArray(sub.downloads)
+      ? sub.downloads
+      : (Array.isArray(raw.downloads) ? raw.downloads : []);
+    if (downloads.length) {
+      const dlEl = document.createElement('div');
+      dlEl.className = 'portal-submissions-downloads';
+      dlEl.style.fontSize = '0.78rem';
+      dlEl.style.color = '#6c757d';
+      const parts = downloads.map(dl => {
+        const file = dl.file || dl.path || '';
+        const when = formatTimestamp(dl.createdAt || dl.created_at || dl.timestamp || dl.time);
+        if (file && when) return file + ' (' + when + ')';
+        if (file) return file;
+        return when;
+      }).filter(Boolean);
+      dlEl.textContent = parts.length ? ('Downloads: ' + parts.join(' • ')) : 'Downloads:';
+      item.appendChild(dlEl);
     }
 
     listEl.appendChild(item);
@@ -1450,26 +2117,41 @@ function normalizeSubmissionForCsv(sub) {
     const email = form.email || sub.email || '';
     const reference = form.reference || form.ref || sub.reference || sub.ref || '';
     const notes = form.notes || form.message || sub.notes || sub.message || '';
+    const submissionRef = sub.submissionRef || raw.submissionRef || '';
+    const downloads = Array.isArray(sub.downloads)
+      ? sub.downloads
+      : (Array.isArray(raw.downloads) ? raw.downloads : []);
+    const downloadsSummary = downloads.map(dl => {
+      const file = dl.file || dl.path || '';
+      const when = dl.createdAt || dl.created_at || dl.timestamp || dl.time || '';
+      if (file && when) return file + ' @ ' + when;
+      return file || String(when || '');
+    }).filter(Boolean).join('; ');
   
     return {
       created,
       folder,
       submittedBy,
       ip,
+      submissionRef,
       name,
       email,
       reference,
-      notes
+      notes,
+      downloadsSummary
     };
   }
   
   function csvEscape(val) {
     if (val == null) return '';
     const str = String(val);
-    if (/[",\n\r]/.test(str)) {
-      return '"' + str.replace(/"/g, '""') + '"';
+    const trimmed = str.replace(/^\s+/, '');
+    const needsGuard = trimmed !== '' && /^[=+\-@]/.test(trimmed);
+    const safe = needsGuard ? ("'" + str) : str;
+    if (/[",\n\r]/.test(safe)) {
+      return '"' + safe.replace(/"/g, '""') + '"';
     }
-    return str;
+    return safe;
   }
   
   function exportSubmissionsToCsv(slug, submissions) {
@@ -1483,10 +2165,12 @@ function normalizeSubmissionForCsv(sub) {
       'Folder',
       'SubmittedBy',
       'IP',
+      'SubmissionRef',
       'Name',
       'Email',
       'Reference',
-      'Notes'
+      'Notes',
+      'Downloads'
     ];
   
     const lines = [];
@@ -1499,10 +2183,12 @@ function normalizeSubmissionForCsv(sub) {
         row.folder,
         row.submittedBy,
         row.ip,
+        row.submissionRef,
         row.name,
         row.email,
         row.reference,
-        row.notes
+        row.notes,
+        row.downloadsSummary
       ];
       lines.push(cols.map(csvEscape).join(','));
     });
@@ -1632,7 +2318,9 @@ async function saveClientPortalsFromUI() {
 
   const cards = body.querySelectorAll('.card[data-portal-slug]');
   const portals = {};
+  const portalsCache = {};
   const invalid = [];
+  const portalUserInvalid = [];
   let firstInvalidField = null;
 
   // Clear previous visual errors
@@ -1677,7 +2365,12 @@ async function saveClientPortalsFromUI() {
 
   cards.forEach(card => {
     const origSlug = card.getAttribute('data-portal-slug') || '';
+    const isNewPortal = card.getAttribute('data-portal-new') === '1';
     let slug = origSlug.trim();
+    const existingPortal = __portalsCache[origSlug] || {};
+    const existingPortalUser = (existingPortal.portalUser && typeof existingPortal.portalUser === 'object')
+      ? existingPortal.portalUser
+      : {};
 
     const getVal = (selector) => {
       const el = card.querySelector(selector);
@@ -1696,6 +2389,38 @@ async function saveClientPortalsFromUI() {
     const footerText = getVal('[data-portal-field="footerText"]').trim();
     const logoFile   = getVal('[data-portal-field="logoFile"]').trim();
     const logoUrl    = getVal('[data-portal-field="logoUrl"]').trim(); // (optional, not exposed in UI yet)
+    const themeLightBodyBg = getVal('[data-portal-field="themeLightBodyBg"]').trim();
+    const themeLightSurface = getVal('[data-portal-field="themeLightSurface"]').trim();
+    const themeLightText = getVal('[data-portal-field="themeLightText"]').trim();
+    const themeLightMuted = getVal('[data-portal-field="themeLightMuted"]').trim();
+    const themeLightBorder = getVal('[data-portal-field="themeLightBorder"]').trim();
+    const themeLightShadow = getVal('[data-portal-field="themeLightShadow"]').trim();
+    const themeDarkBodyBg = getVal('[data-portal-field="themeDarkBodyBg"]').trim();
+    const themeDarkSurface = getVal('[data-portal-field="themeDarkSurface"]').trim();
+    const themeDarkText = getVal('[data-portal-field="themeDarkText"]').trim();
+    const themeDarkMuted = getVal('[data-portal-field="themeDarkMuted"]').trim();
+    const themeDarkBorder = getVal('[data-portal-field="themeDarkBorder"]').trim();
+    const themeDarkShadow = getVal('[data-portal-field="themeDarkShadow"]').trim();
+    const theme = {
+      light: {
+        bodyBg: themeLightBodyBg,
+        surface: themeLightSurface,
+        text: themeLightText,
+        muted: themeLightMuted,
+        border: themeLightBorder,
+        shadow: themeLightShadow,
+      },
+      dark: {
+        bodyBg: themeDarkBodyBg,
+        surface: themeDarkSurface,
+        text: themeDarkText,
+        muted: themeDarkMuted,
+        border: themeDarkBorder,
+        shadow: themeDarkShadow,
+      },
+    };
+    const themeHasValue = Object.values(theme.light).some((v) => v !== '')
+      || Object.values(theme.dark).some((v) => v !== '');
 
     const defName  = getVal('[data-portal-field="defName"]').trim();
     const defEmail = getVal('[data-portal-field="defEmail"]').trim();
@@ -1709,11 +2434,20 @@ async function saveClientPortalsFromUI() {
 
     const uploadOnlyEl    = card.querySelector('[data-portal-field="uploadOnly"]');
     const allowDownloadEl = card.querySelector('[data-portal-field="allowDownload"]');
+    const allowSubfoldersEl = card.querySelector('[data-portal-field="allowSubfolders"]');
     const requireFormEl   = card.querySelector('[data-portal-field="requireForm"]');
 
     const uploadOnly    = uploadOnlyEl ? !!uploadOnlyEl.checked : true;
     const allowDownload = allowDownloadEl ? !!allowDownloadEl.checked : false;
+    const allowSubfolders = allowSubfoldersEl ? !!allowSubfoldersEl.checked : false;
     const requireForm   = requireFormEl ? !!requireFormEl.checked : false;
+
+    const portalUserCreateEl = card.querySelector('[data-portal-field="portalUserCreate"]');
+    const portalUserPresetRaw = getVal('[data-portal-field="portalUserPreset"]').trim();
+    const portalUserPreset = portalUserPresetRaw || 'match';
+    const portalUserName = getVal('[data-portal-field="portalUsername"]').trim();
+    const portalUserPassword = getVal('[data-portal-field="portalUserPassword"]').trim();
+    const portalUserCreate = portalUserCreateEl ? !!portalUserCreateEl.checked : true;
 
     const reqNameEl  = card.querySelector('[data-portal-field="reqName"]');
     const reqEmailEl = card.querySelector('[data-portal-field="reqEmail"]');
@@ -1742,6 +2476,8 @@ async function saveClientPortalsFromUI() {
 
     const showThankYouEl = card.querySelector('[data-portal-field="showThankYou"]');
     const showThankYou   = showThankYouEl ? !!showThankYouEl.checked : false;
+    const thankYouShowRefEl = card.querySelector('[data-portal-field="thankYouShowRef"]');
+    const thankYouShowRef   = thankYouShowRefEl ? !!thankYouShowRefEl.checked : false;
     const folderInput = card.querySelector('[data-portal-field="folder"]');
     const slugInput = card.querySelector('[data-portal-field="slug"]');
     if (slugInput) {
@@ -1773,13 +2509,68 @@ async function saveClientPortalsFromUI() {
       return;
     }
 
-    portals[slug] = {
+    if (portalUserCreate && portalUserPassword && portalUserPassword.length < 6) {
+      portalUserInvalid.push(labelForError);
+      const passwordInput = card.querySelector('[data-portal-field="portalUserPassword"]');
+      if (!firstInvalidField) {
+        firstInvalidField = passwordInput || card;
+      }
+      markCardMissingRequired(
+        card,
+        'Portal user password must be at least 6 characters.'
+      );
+      return;
+    }
+
+    if (isNewPortal && portalUserCreate && !portalUserPassword) {
+      portalUserInvalid.push(labelForError);
+      const passwordInput = card.querySelector('[data-portal-field="portalUserPassword"]');
+      if (!firstInvalidField) {
+        firstInvalidField = passwordInput || card;
+      }
+      markCardMissingRequired(
+        card,
+        'Portal user password is required when creating a new portal.'
+      );
+      return;
+    }
+
+    const portalExpired = isPortalExpiredDate(expiresAt);
+    let portalUserPasswordSet = false;
+    if (portalUserCreate && !portalExpired) {
+      if (portalUserPassword) {
+        portalUserPasswordSet = true;
+      } else if (!isNewPortal) {
+        portalUserPasswordSet = true;
+      }
+      if (!portalUserPassword && existingPortalUser.passwordSet === false) {
+        portalUserPasswordSet = false;
+      }
+    }
+
+    const portalUserPayload = {
+      create: portalUserCreate,
+      preset: portalUserPreset,
+      username: portalUserName
+    };
+    if (portalUserCreate && portalUserPassword) {
+      portalUserPayload.password = portalUserPassword;
+    }
+    const portalUserStored = {
+      create: portalUserCreate,
+      preset: portalUserPreset,
+      username: portalUserName,
+      passwordSet: portalUserPasswordSet
+    };
+
+    const portalData = {
       label,
       folder,
       sourceId,
       clientEmail,
       uploadOnly,
       allowDownload,
+      allowSubfolders,
       expiresAt,
       title,
       introText,
@@ -1788,6 +2579,7 @@ async function saveClientPortalsFromUI() {
       footerText,
       logoFile,
       logoUrl,
+      portalUser: portalUserPayload,
       formDefaults: {
         name:      defName,
         email:     defEmail,
@@ -1816,8 +2608,16 @@ async function saveClientPortalsFromUI() {
       uploadExtWhitelist,
       uploadMaxPerDay:   uploadMaxPerDay ? parseInt(uploadMaxPerDay, 10) || 0 : 0,
       showThankYou,
+      thankYouShowRef,
       thankYouText,
+      ...(themeHasValue ? { theme } : {}),
     };
+    const portalDataCache = {
+      ...portalData,
+      portalUser: portalUserStored
+    };
+    portals[slug] = portalData;
+    portalsCache[slug] = portalDataCache;
   });
 
   if (invalid.length) {
@@ -1843,6 +2643,25 @@ async function saveClientPortalsFromUI() {
     return; // Don’t hit the API if local validation failed
   }
 
+  if (portalUserInvalid.length) {
+    if (status) {
+      status.textContent = 'Please fix portal user passwords for highlighted portals.';
+      status.className = 'small text-danger';
+    }
+    const targetEl = firstInvalidField || body.querySelector('.portal-card-has-error');
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (typeof targetEl.focus === 'function') {
+        targetEl.focus();
+        if (typeof targetEl.select === 'function') {
+          targetEl.select();
+        }
+      }
+    }
+    showToast('Portal user password issue: ' + portalUserInvalid.join(', '));
+    return;
+  }
+
   if (status) {
     status.textContent = 'Saving…';
     status.className = 'small text-muted';
@@ -1853,7 +2672,7 @@ async function saveClientPortalsFromUI() {
     if (!res || res.success !== true) {
       throw new Error(res && res.error ? res.error : 'Unknown error saving client portals');
     }
-    __portalsCache = portals;
+    __portalsCache = portalsCache;
     if (status) {
       status.textContent = 'Saved.';
       status.className = 'small text-success';

@@ -95,6 +95,11 @@ class AdminModel
         $url = trim((string)$url);
         if ($url === '') return '';
 
+        // Normalize plain relative paths (no scheme, no leading slash) to site-root form.
+        if ($url[0] !== '/' && !preg_match('~^[a-z][a-z0-9+.\-]*:~i', $url)) {
+            $url = '/' . ltrim($url, '/');
+        }
+
         // 1) Site-relative like "/uploads/profile_pics/branding_foo.png"
         if ($url[0] === '/') {
             // Strip CRLF just in case
@@ -147,6 +152,48 @@ class AdminModel
                 ),
                 'headerBgDark'  => self::sanitizeColorHex(
                     $config['branding']['headerBgDark'] ?? ''
+                ),
+                'metaDescription' => self::sanitizeMetaDescription(
+                    $config['branding']['metaDescription'] ?? ''
+                ),
+                'faviconSvg' => self::sanitizeLogoUrl(
+                    $config['branding']['faviconSvg'] ?? ''
+                ),
+                'faviconPng' => self::sanitizeLogoUrl(
+                    $config['branding']['faviconPng'] ?? ''
+                ),
+                'faviconIco' => self::sanitizeLogoUrl(
+                    $config['branding']['faviconIco'] ?? ''
+                ),
+                'appleTouchIcon' => self::sanitizeLogoUrl(
+                    $config['branding']['appleTouchIcon'] ?? ''
+                ),
+                'maskIcon' => self::sanitizeLogoUrl(
+                    $config['branding']['maskIcon'] ?? ''
+                ),
+                'maskIconColor' => self::sanitizeColorHex(
+                    $config['branding']['maskIconColor'] ?? ''
+                ),
+                'themeColorLight' => self::sanitizeColorHex(
+                    $config['branding']['themeColorLight'] ?? ''
+                ),
+                'themeColorDark' => self::sanitizeColorHex(
+                    $config['branding']['themeColorDark'] ?? ''
+                ),
+                'loginBgLight' => self::sanitizeCssBackground(
+                    $config['branding']['loginBgLight'] ?? ''
+                ),
+                'loginBgDark' => self::sanitizeCssBackground(
+                    $config['branding']['loginBgDark'] ?? ''
+                ),
+                'appBgLight' => self::sanitizeCssBackground(
+                    $config['branding']['appBgLight'] ?? ''
+                ),
+                'appBgDark' => self::sanitizeCssBackground(
+                    $config['branding']['appBgDark'] ?? ''
+                ),
+                'loginTagline' => self::sanitizeTagline(
+                    $config['branding']['loginTagline'] ?? ''
                 ),
                 'footerHtml'    => (string)($config['branding']['footerHtml'] ?? ''),
             ],
@@ -533,23 +580,81 @@ class AdminModel
                 'customLogoUrl'   => '',
                 'headerBgLight'   => '',
                 'headerBgDark'    => '',
+                'metaDescription' => '',
+                'faviconSvg'      => '',
+                'faviconPng'      => '',
+                'faviconIco'      => '',
+                'appleTouchIcon'  => '',
+                'maskIcon'        => '',
+                'maskIconColor'   => '',
+                'themeColorLight' => '',
+                'themeColorDark'  => '',
+                'loginBgLight'    => '',
+                'loginBgDark'     => '',
+                'appBgLight'      => '',
+                'appBgDark'       => '',
+                'loginTagline'    => '',
                 'footerHtml'      => '',
             ];
         } else {
             $logo   = self::sanitizeLogoUrl($configUpdate['branding']['customLogoUrl'] ?? '');
             $light  = self::sanitizeColorHex($configUpdate['branding']['headerBgLight'] ?? '');
             $dark   = self::sanitizeColorHex($configUpdate['branding']['headerBgDark'] ?? '');
+            $metaDescription = self::sanitizeMetaDescription(
+                $configUpdate['branding']['metaDescription'] ?? ''
+            );
+            $faviconSvg = self::sanitizeLogoUrl($configUpdate['branding']['faviconSvg'] ?? '');
+            $faviconPng = self::sanitizeLogoUrl($configUpdate['branding']['faviconPng'] ?? '');
+            $faviconIco = self::sanitizeLogoUrl($configUpdate['branding']['faviconIco'] ?? '');
+            $appleTouchIcon = self::sanitizeLogoUrl($configUpdate['branding']['appleTouchIcon'] ?? '');
+            $maskIcon = self::sanitizeLogoUrl($configUpdate['branding']['maskIcon'] ?? '');
+            $maskIconColor = self::sanitizeColorHex($configUpdate['branding']['maskIconColor'] ?? '');
+            $themeColorLight = self::sanitizeColorHex($configUpdate['branding']['themeColorLight'] ?? '');
+            $themeColorDark = self::sanitizeColorHex($configUpdate['branding']['themeColorDark'] ?? '');
+            $loginBgLight = self::sanitizeCssBackground($configUpdate['branding']['loginBgLight'] ?? '');
+            $loginBgDark = self::sanitizeCssBackground($configUpdate['branding']['loginBgDark'] ?? '');
+            $appBgLight = self::sanitizeCssBackground($configUpdate['branding']['appBgLight'] ?? '');
+            $appBgDark = self::sanitizeCssBackground($configUpdate['branding']['appBgDark'] ?? '');
+            $loginTagline = self::sanitizeTagline($configUpdate['branding']['loginTagline'] ?? '');
             $footer = trim((string)($configUpdate['branding']['footerHtml'] ?? ''));
 
             if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) {
                 $configUpdate['branding']['customLogoUrl'] = $logo;
                 $configUpdate['branding']['headerBgLight'] = $light;
                 $configUpdate['branding']['headerBgDark']  = $dark;
+                $configUpdate['branding']['metaDescription'] = $metaDescription;
+                $configUpdate['branding']['faviconSvg'] = $faviconSvg;
+                $configUpdate['branding']['faviconPng'] = $faviconPng;
+                $configUpdate['branding']['faviconIco'] = $faviconIco;
+                $configUpdate['branding']['appleTouchIcon'] = $appleTouchIcon;
+                $configUpdate['branding']['maskIcon'] = $maskIcon;
+                $configUpdate['branding']['maskIconColor'] = $maskIconColor;
+                $configUpdate['branding']['themeColorLight'] = $themeColorLight;
+                $configUpdate['branding']['themeColorDark'] = $themeColorDark;
+                $configUpdate['branding']['loginBgLight'] = $loginBgLight;
+                $configUpdate['branding']['loginBgDark'] = $loginBgDark;
+                $configUpdate['branding']['appBgLight'] = $appBgLight;
+                $configUpdate['branding']['appBgDark'] = $appBgDark;
+                $configUpdate['branding']['loginTagline'] = $loginTagline;
                 $configUpdate['branding']['footerHtml']    = $footer;
             } else {
                 $configUpdate['branding']['customLogoUrl'] = '';
                 $configUpdate['branding']['headerBgLight'] = '';
                 $configUpdate['branding']['headerBgDark']  = '';
+                $configUpdate['branding']['metaDescription'] = '';
+                $configUpdate['branding']['faviconSvg'] = '';
+                $configUpdate['branding']['faviconPng'] = '';
+                $configUpdate['branding']['faviconIco'] = '';
+                $configUpdate['branding']['appleTouchIcon'] = '';
+                $configUpdate['branding']['maskIcon'] = '';
+                $configUpdate['branding']['maskIconColor'] = '';
+                $configUpdate['branding']['themeColorLight'] = '';
+                $configUpdate['branding']['themeColorDark'] = '';
+                $configUpdate['branding']['loginBgLight'] = '';
+                $configUpdate['branding']['loginBgDark'] = '';
+                $configUpdate['branding']['appBgLight'] = '';
+                $configUpdate['branding']['appBgDark'] = '';
+                $configUpdate['branding']['loginTagline'] = '';
                 $configUpdate['branding']['footerHtml']    = '';
             }
         }
@@ -604,11 +709,60 @@ class AdminModel
         $value = trim((string)$value);
         if ($value === '') return '';
 
-        // allow #RGB or #RRGGBB
-        if (preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $value)) {
-            return strtoupper($value);
+        // allow #RGB or #RRGGBB (or without leading #)
+        if (preg_match('/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $value, $m)) {
+            return '#' . strtoupper($m[1]);
+        }
+
+        // allow basic rgb()/rgba()/hsl()/hsla() syntaxes
+        $clean = preg_replace('/\s+/', ' ', $value);
+        if (preg_match('/^(rgb|rgba|hsl|hsla)\([0-9%.,\s]+\)$/i', $clean)) {
+            return $clean;
+        }
+
+        // allow a few safe keywords
+        $lower = strtolower($clean);
+        $keywords = ['transparent', 'black', 'white', 'red', 'green', 'blue', 'gray', 'grey'];
+        if (in_array($lower, $keywords, true)) {
+            return $lower;
         }
         return '';
+    }
+
+    private static function sanitizeMetaDescription($value): string
+    {
+        $text = trim((string)$value);
+        if ($text === '') return '';
+        $text = preg_replace('/[\x00-\x1F\x7F]/', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', (string)$text);
+        if (strlen($text) > 320) {
+            $text = substr($text, 0, 320);
+        }
+        return trim($text);
+    }
+
+    private static function sanitizeTagline($value): string
+    {
+        $text = trim((string)$value);
+        if ($text === '') return '';
+        $text = preg_replace('/[\x00-\x1F\x7F]/', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', (string)$text);
+        if (strlen($text) > 200) {
+            $text = substr($text, 0, 200);
+        }
+        return trim($text);
+    }
+
+    private static function sanitizeCssBackground($value): string
+    {
+        $text = trim((string)$value);
+        if ($text === '') return '';
+        $text = preg_replace('/[\x00-\x1F\x7F]/', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', (string)$text);
+        if (strlen($text) > 500) {
+            $text = substr($text, 0, 500);
+        }
+        return trim($text);
     }
 
     private static function sanitizeIgnoreRegex($value): string
@@ -816,6 +970,20 @@ class AdminModel
                     'customLogoUrl' => '',
                     'headerBgLight' => '',
                     'headerBgDark'  => '',
+                    'metaDescription' => '',
+                    'faviconSvg' => '',
+                    'faviconPng' => '',
+                    'faviconIco' => '',
+                    'appleTouchIcon' => '',
+                    'maskIcon' => '',
+                    'maskIconColor' => '',
+                    'themeColorLight' => '',
+                    'themeColorDark' => '',
+                    'loginBgLight' => '',
+                    'loginBgDark' => '',
+                    'appBgLight' => '',
+                    'appBgDark' => '',
+                    'loginTagline' => '',
                     'footerHtml'    => '',
                 ];
             } else {
@@ -827,6 +995,48 @@ class AdminModel
                 );
                 $config['branding']['headerBgDark'] = self::sanitizeColorHex(
                     $config['branding']['headerBgDark'] ?? ''
+                );
+                $config['branding']['metaDescription'] = self::sanitizeMetaDescription(
+                    $config['branding']['metaDescription'] ?? ''
+                );
+                $config['branding']['faviconSvg'] = self::sanitizeLogoUrl(
+                    $config['branding']['faviconSvg'] ?? ''
+                );
+                $config['branding']['faviconPng'] = self::sanitizeLogoUrl(
+                    $config['branding']['faviconPng'] ?? ''
+                );
+                $config['branding']['faviconIco'] = self::sanitizeLogoUrl(
+                    $config['branding']['faviconIco'] ?? ''
+                );
+                $config['branding']['appleTouchIcon'] = self::sanitizeLogoUrl(
+                    $config['branding']['appleTouchIcon'] ?? ''
+                );
+                $config['branding']['maskIcon'] = self::sanitizeLogoUrl(
+                    $config['branding']['maskIcon'] ?? ''
+                );
+                $config['branding']['maskIconColor'] = self::sanitizeColorHex(
+                    $config['branding']['maskIconColor'] ?? ''
+                );
+                $config['branding']['themeColorLight'] = self::sanitizeColorHex(
+                    $config['branding']['themeColorLight'] ?? ''
+                );
+                $config['branding']['themeColorDark'] = self::sanitizeColorHex(
+                    $config['branding']['themeColorDark'] ?? ''
+                );
+                $config['branding']['loginBgLight'] = self::sanitizeCssBackground(
+                    $config['branding']['loginBgLight'] ?? ''
+                );
+                $config['branding']['loginBgDark'] = self::sanitizeCssBackground(
+                    $config['branding']['loginBgDark'] ?? ''
+                );
+                $config['branding']['appBgLight'] = self::sanitizeCssBackground(
+                    $config['branding']['appBgLight'] ?? ''
+                );
+                $config['branding']['appBgDark'] = self::sanitizeCssBackground(
+                    $config['branding']['appBgDark'] ?? ''
+                );
+                $config['branding']['loginTagline'] = self::sanitizeTagline(
+                    $config['branding']['loginTagline'] ?? ''
                 );
             }
 
@@ -915,6 +1125,20 @@ class AdminModel
                 'customLogoUrl' => '',
                 'headerBgLight'   => '',
                 'headerBgDark'    => '',
+                'metaDescription' => '',
+                'faviconSvg' => '',
+                'faviconPng' => '',
+                'faviconIco' => '',
+                'appleTouchIcon' => '',
+                'maskIcon' => '',
+                'maskIconColor' => '',
+                'themeColorLight' => '',
+                'themeColorDark' => '',
+                'loginBgLight' => '',
+                'loginBgDark' => '',
+                'appBgLight' => '',
+                'appBgDark' => '',
+                'loginTagline' => '',
                 'footerHtml'    => '',
             ],
             'clamav'                => [

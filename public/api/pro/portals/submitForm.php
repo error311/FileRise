@@ -40,6 +40,25 @@ require_once __DIR__ . '/../../../../config/config.php';
 require_once PROJECT_ROOT . '/src/controllers/PortalController.php';
 require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
 
+function generatePortalSubmissionRef(): string
+{
+    try {
+        $rand = strtoupper(bin2hex(random_bytes(3)));
+    } catch (\Throwable $e) {
+        $rand = strtoupper(substr(sha1(uniqid('', true)), 0, 6));
+    }
+    return 'PRT-' . gmdate('Ymd') . '-' . $rand;
+}
+
+function sanitizePortalSubmissionRef(string $value): string
+{
+    $clean = strtoupper(preg_replace('/[^A-Za-z0-9_-]/', '', $value));
+    if ($clean === '') {
+        return '';
+    }
+    return substr($clean, 0, 48);
+}
+
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
         http_response_code(405);
@@ -75,6 +94,11 @@ try {
     $email     = trim((string)($form['email'] ?? ''));
     $reference = trim((string)($form['reference'] ?? ''));
     $notes     = trim((string)($form['notes'] ?? ''));
+    $submissionRefRaw = isset($body['submissionRef']) ? (string)$body['submissionRef'] : '';
+    $submissionRef = sanitizePortalSubmissionRef($submissionRefRaw);
+    if ($submissionRef === '') {
+        $submissionRef = generatePortalSubmissionRef();
+    }
 
     // Make sure portal exists and is not expired
     $portal = PortalController::getPortalBySlug($slug);
@@ -116,6 +140,7 @@ try {
         'portalLabel' => $portal['label'] ?? '',
         'folder'      => $portal['folder'] ?? '',
         'sourceId'    => $portal['sourceId'] ?? '',
+        'submissionRef' => $submissionRef,
         'form'        => [
             'name'      => $name,
             'email'     => $email,
@@ -134,7 +159,10 @@ try {
         throw new RuntimeException('Failed to store portal submission.');
     }
 
-    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode([
+        'success' => true,
+        'submissionRef' => $submissionRef,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     $code = $e instanceof InvalidArgumentException ? 400 : 500;
     http_response_code($code);

@@ -1,5 +1,100 @@
 # Changelog
 
+## Changes 01/28/2026 (v3.2.0)
+
+`release(v3.2.0): share pages revamp + portals browse/download-all + Pro branding upgrades`
+
+**Commit message**  
+
+```text
+release(v3.2.0): share pages revamp + portals browse/download-all + Pro branding upgrades
+
+- shares: modern Dropbox-like share UI (file + folder), safe inline previews, and optional subfolder access
+- portals: subfolder browsing + pagination, list/gallery toggle, download-all zip, resumable uploads, submission IDs
+- branding (Pro): meta description + favicons + theme colors + login/app backgrounds + share/portal branding
+- security: sanitize footer HTML; tighten shared uploads with per-share upload token; validate share/portal paths
+```
+
+**Added**  
+
+- **Shares (Core)**
+  - **Folder shares** can optionally **include subfolders** (`allowSubfolders`) when creating the link.
+  - Shared folder browsing supports `path=` for subfolder navigation (when enabled).
+  - New public endpoint: **`GET /api/folder/downloadSharedFolder.php`** to download a shared folder (or subfolder) as a ZIP **(local storage only)**.
+  - Shared downloads support `inline=1` for safe types (images/video/audio/pdf) and **never inline SVG**.
+
+- **Share UI revamp (Core)**
+  - New modern share layout + styles in `public/css/share.css` (folder + file share views).
+  - Shared folder now supports:
+    - **Download all**
+    - **List/Gallery toggle**
+    - **Search within the shared folder**
+    - **Breadcrumbs** when subfolder browsing is enabled
+    - Optional XHR upload progress UI for shared-folder uploads
+  - File shares now generate a link that defaults to a landing page (`&view=1`) with metadata + preview.
+
+- **Portals (Pro)**
+  - New API: **`GET /api/pro/portals/listEntries.php`** (folders + files, pagination, optional “all files” mode).
+  - Portal UI now supports:
+    - **Subfolder browsing** (optional, per portal) using `?path=...`
+    - **Breadcrumbs + pagination**
+    - **List/Gallery toggle**
+    - **Download all** (queues a ZIP via `/api/file/downloadZip.php`)
+    - **Resumable uploads** for portals (with standard upload fallback)
+    - Optional **Submission ID** tracking + show in thank-you screen
+    - **5 New preset templates**
+
+- **Branding upgrades (Pro)**
+  - Admin branding now supports:
+    - **Meta description**
+    - **Favicons** (SVG/PNG/ICO), **Apple touch icon**, **Safari pinned mask icon + color**
+    - **Theme color** (light/dark) for browser UI
+    - **Login background** (light/dark) and **App background** (light/dark)
+    - Optional **login tagline**
+  - New `public/js/shareBranding.js` applies Pro branding to share pages (logo, accents, footer, icons, theme-color).
+  - New `public/index.php` can serve `index.html` with branding meta/favicons applied (via `.htaccess` DirectoryIndex).
+
+**Changed**  
+
+- **Shared folder data model**
+  - Shared folder listing now returns a unified `entries[]` array (folders + files), plus `shareRoot`, `path`, and `allowSubfolders`.
+  - Shared file download supports `path=subfolder/file.ext` (with subfolder gating).
+
+- **Shared uploads hardening**
+  - Shared-folder upload POST now supports `pass` + `path` and includes a per-share **`share_upload_token`** guard (HMAC) to reduce abuse.
+
+- **Portal uploads enforcement**
+  - Portal uploads are enforced server-side:
+    - Must stay within the portal’s configured folder
+    - Subfolder uploads are blocked unless the portal enables them
+    - Portal sourceId must match (when configured)
+
+- **Portals admin UX**
+  - Adds portal theme presets (new industries), per-portal theme override fields, and portal logo field.
+  - Adds “portal user” controls (optional per-portal user + password, preset modes).
+
+- **Branding plumbing**
+  - `main.js` now applies branding meta + icons + theme color + backgrounds, and **sanitizes footer HTML** before injecting.
+
+**Fixed**  
+
+- Shared folder password form and file share password form now use the unified share UI and preserve `path` when prompting.
+- `downloadZip` now supports passing an explicit `sourceId` (local sources) by running inside a source context.
+- Various base-path issues resolved for share/portal JS/CSS includes by using `withBase()` and versioned assets.
+
+**Security**  
+
+- Share and portal subpaths are normalized/validated (no `..`, invalid segments).
+- Shared downloads: SVG/SVGZ are always attachment-only (defense in depth).
+- Footer branding HTML is sanitized (allowlist) before inserting into DOM.
+
+**Notes**  
+
+- `downloadSharedFolder.php` only supports **local** storage; remote adapters return a clear error.
+- Portals “download all” depends on ZIP being enabled for the account + server having the needed tooling for ZIP/7z where applicable.
+
+---
+
 ## Changes 01/24/2026 (v3.1.7)
 
 `release(v3.1.7): fix table header select-all checkbox + Pro bundle install progress UI (closes #99)`

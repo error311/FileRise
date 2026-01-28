@@ -1968,10 +1968,124 @@ class FolderModel
         return self::findShareFolderRecord($token);
     }
 
-    /**
-     * Retrieves shared folder data based on a share token.
-     */
-    public static function getSharedFolderData(string $token, ?string $providedPass, int $page = 1, int $itemsPerPage = 10): array
+    private static function normalizeShareSubPath(string $raw): array
+    {
+        $path = str_replace('\\', '/', trim((string)$raw));
+        $path = trim($path, "/ \t\n\r\0\x0B");
+        if ($path === '') {
+            return ['', null];
+        }
+        $parts = array_filter(explode('/', $path), fn($p) => $p !== '');
+        if (empty($parts)) {
+            return ['', null];
+        }
+        foreach ($parts as $seg) {
+            if ($seg === '.' || $seg === '..') {
+                return ['', "Invalid folder name."];
+            }
+            if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+                return ['', "Invalid folder name."];
+            }
+        }
+        return [implode('/', $parts), null];
+    }
+
+    private static function splitShareFilePath(string $raw): array
+    {
+        $path = str_replace('\\', '/', trim((string)$raw));
+        $path = trim($path, "/ \t\n\r\0\x0B");
+        if ($path === '') {
+            return ['', '', "Missing file name."];
+        }
+        $parts = array_filter(explode('/', $path), fn($p) => $p !== '');
+        if (empty($parts)) {
+            return ['', '', "Missing file name."];
+        }
+        $file = array_pop($parts);
+        if ($file === '' || !preg_match(REGEX_FILE_NAME, $file)) {
+            return ['', '', "Invalid file name."];
+        }
+        $folder = '';
+        if (!empty($parts)) {
+            [$normalized, $err] = self::normalizeShareSubPath(implode('/', $parts));
+            if ($err) {
+                return ['', '', $err];
+            }
+            $folder = $normalized;
+        }
+        return [$folder, $file, null];
+    }
+
+    private static function buildSharedFolderKey(string $shareRootKey, string $subPath): string
+    {
+        if ($shareRootKey === '' || strtolower($shareRootKey) === 'root') {
+            return $subPath === '' ? 'root' : $subPath;
+        }
+        return $subPath === '' ? $shareRootKey : ($shareRootKey . '/' . $subPath);
+    }
+
+    private static function extractStatMtime(array $stat): ?int
+    {
+        $raw = $stat['mtime'] ?? $stat['modified'] ?? $stat['lastModified'] ?? null;
+        if (is_int($raw)) return $raw;
+        if (is_numeric($raw)) return (int)$raw;
+        if (is_string($raw) && $raw !== '') {
+            $ts = strtotime($raw);
+            if ($ts !== false) return $ts;
+        }
+        return null;
+    }
+
+    private static function listSharedFolderEntries(StorageAdapterInterface $storage, string $realFolderPath): array
+    {
+        $folders = [];
+        $files = [];
+        $all = $storage->list($realFolderPath);
+        foreach ($all as $it) {
+            if ($it === '.' || $it === '..') continue;
+            if ($it === '' || $it[0] === '.') continue;
+
+            $fullPath = $realFolderPath . DIRECTORY_SEPARATOR . $it;
+            $stat = $storage->stat($fullPath);
+            if ($stat === null) {
+                continue;
+            }
+            $type = $stat['type'] ?? '';
+            if ($type === 'dir') {
+                if (!preg_match(REGEX_FOLDER_NAME, $it)) {
+                    continue;
+                }
+                $folders[] = [
+                    'type' => 'folder',
+                    'name' => $it,
+                    'size' => null,
+                    'modified' => self::extractStatMtime($stat),
+                ];
+                continue;
+            }
+            if ($type === 'file') {
+                if (!preg_match(REGEX_FILE_NAME, $it)) {
+                    continue;
+                }
+                $files[] = [
+                    'type' => 'file',
+                    'name' => $it,
+                    'size' => array_key_exists('size', $stat) ? (int)$stat['size'] : null,
+                    'modified' => self::extractStatMtime($stat),
+                ];
+            }
+        }
+
+        $sortByName = function (array $a, array $b): int {
+            return strnatcasecmp($a['name'] ?? '', $b['name'] ?? '');
+        };
+        usort($folders, $sortByName);
+        usort($files, $sortByName);
+
+        return array_merge($folders, $files);
+    }
+
+    private static function resolveSharedFolderContext(string $token, ?string $providedPass, string $subPath = ''): array
     {
         $record = self::findShareFolderRecord($token);
         if (!$record) {
@@ -1998,10 +2112,27 @@ class FolderModel
             }
         } catch (\Throwable $e) { /* ignore */ }
 
+        $allowSubfolders = !empty($record['allowSubfolders']);
+        [$normalizedSubPath, $pathErr] = self::normalizeShareSubPath($subPath);
+        if ($pathErr) {
+            return ["error" => $pathErr];
+        }
+        if ($normalizedSubPath !== '' && !$allowSubfolders) {
+            return ["error" => "Subfolder access is not enabled for this share."];
+        }
+
+        $combinedKey = self::buildSharedFolderKey($folderKey, $normalizedSubPath);
+        if ($combinedKey !== $folderKey) {
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($combinedKey)) {
+                    return ["error" => "This shared folder is not accessible (encrypted folders cannot be shared)."];
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
         $storage = self::storage();
 
         // Resolve shared folder
-        [$realFolderPath, $relative, $err] = self::resolveFolderPath($folder === '' ? 'root' : $folder, false);
+        [$realFolderPath, $relative, $err] = self::resolveFolderPath($combinedKey, false);
         if ($err) {
             return ["error" => "Shared folder not found."];
         }
@@ -2010,53 +2141,57 @@ class FolderModel
             return ["error" => "Shared folder not found."];
         }
 
-        // List files (safe names only; skip hidden)
-        $all = $storage->list($realFolderPath);
-        $allFiles = [];
-        $fileSizes = [];
-        foreach ($all as $it) {
-            if ($it === '.' || $it === '..') continue;
-            if ($it === '' || $it[0] === '.') continue;
-            if (!preg_match(REGEX_FILE_NAME, $it)) continue;
-            $fullPath = $realFolderPath . DIRECTORY_SEPARATOR . $it;
-            $stat = $storage->stat($fullPath);
-            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
-                continue;
-            }
-            $allFiles[] = $it;
-            if (array_key_exists('size', $stat)) {
-                $fileSizes[$it] = (int)$stat['size'];
-            }
-        }
-        sort($allFiles, SORT_NATURAL | SORT_FLAG_CASE);
-
-        $totalFiles  = count($allFiles);
-        $totalPages  = max(1, (int)ceil($totalFiles / max(1, $itemsPerPage)));
-        $currentPage = min(max(1, $page), $totalPages);
-        $startIndex  = ($currentPage - 1) * $itemsPerPage;
-        $filesOnPage = array_slice($allFiles, $startIndex, $itemsPerPage);
-        $fileSizesOnPage = [];
-        foreach ($filesOnPage as $name) {
-            if (array_key_exists($name, $fileSizes)) {
-                $fileSizesOnPage[$name] = $fileSizes[$name];
-            }
+        $allEntries = self::listSharedFolderEntries($storage, $realFolderPath);
+        if (!$allowSubfolders) {
+            $allEntries = array_values(array_filter($allEntries, function ($entry) {
+                return (($entry['type'] ?? '') !== 'folder');
+            }));
         }
 
         return [
             "record"        => $record,
             "folder"        => $relative,
+            "shareRoot"     => $folderKey,
+            "path"          => $normalizedSubPath,
             "realFolderPath" => $realFolderPath,
-            "files"         => $filesOnPage,
-            "fileSizes"     => $fileSizesOnPage,
-            "currentPage"   => $currentPage,
-            "totalPages"    => $totalPages
+            "entries"       => $allEntries,
+            "allowSubfolders" => $allowSubfolders ? 1 : 0,
         ];
+    }
+
+    public static function getSharedFolderEntries(string $token, ?string $providedPass, string $subPath = ''): array
+    {
+        return self::resolveSharedFolderContext($token, $providedPass, $subPath);
+    }
+
+    /**
+     * Retrieves shared folder data based on a share token.
+     */
+    public static function getSharedFolderData(string $token, ?string $providedPass, int $page = 1, int $itemsPerPage = 10, string $subPath = ''): array
+    {
+        $ctx = self::resolveSharedFolderContext($token, $providedPass, $subPath);
+        if (isset($ctx['error']) || isset($ctx['needs_password'])) {
+            return $ctx;
+        }
+        $allEntries = $ctx['entries'] ?? [];
+
+        $totalEntries = count($allEntries);
+        $totalPages  = max(1, (int)ceil($totalEntries / max(1, $itemsPerPage)));
+        $currentPage = min(max(1, $page), $totalPages);
+        $startIndex  = ($currentPage - 1) * $itemsPerPage;
+        $entriesOnPage = array_slice($allEntries, $startIndex, $itemsPerPage);
+
+        $ctx['entries'] = $entriesOnPage;
+        $ctx['currentPage'] = $currentPage;
+        $ctx['totalPages'] = $totalPages;
+        $ctx['totalEntries'] = $totalEntries;
+        return $ctx;
     }
 
     /**
      * Creates a share link for a folder.
      */
-    public static function createShareFolderLink(string $folder, int $expirationSeconds = 3600, string $password = "", int $allowUpload = 0): array
+    public static function createShareFolderLink(string $folder, int $expirationSeconds = 3600, string $password = "", int $allowUpload = 0, int $allowSubfolders = 0): array
     {
         try {
             if (FolderCrypto::isEncryptedOrAncestor($folder)) {
@@ -2095,7 +2230,8 @@ class FolderModel
             "folder"      => $relative,
             "expires"     => $expires,
             "password"    => $hashedPassword,
-            "allowUpload" => $allowUpload ? 1 : 0
+            "allowUpload" => $allowUpload ? 1 : 0,
+            "allowSubfolders" => $allowSubfolders ? 1 : 0
         ];
 
         if (file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT), LOCK_EX) === false) {
@@ -2121,7 +2257,7 @@ class FolderModel
     /**
      * Retrieves information for a shared file from a shared folder link.
      */
-    public static function getSharedFileInfo(string $token, string $file): array
+    public static function getSharedFileInfo(string $token, string $path, ?string $providedPass = null): array
     {
         $record = self::findShareFolderRecord($token);
         if (!$record) {
@@ -2130,6 +2266,13 @@ class FolderModel
 
         if (time() > ($record['expires'] ?? 0)) {
             return ["error" => "This share link has expired."];
+        }
+
+        if (!empty($record['password']) && ($providedPass === null || $providedPass === '')) {
+            return ["needs_password" => true];
+        }
+        if (!empty($record['password']) && !password_verify((string)$providedPass, $record['password'])) {
+            return ["error" => "Invalid password."];
         }
 
         // Encrypted folders/descendants: shared access is blocked (v1).
@@ -2141,19 +2284,31 @@ class FolderModel
             }
         } catch (\Throwable $e) { /* ignore */ }
 
+        $allowSubfolders = !empty($record['allowSubfolders']);
+        [$subPath, $file, $pathErr] = self::splitShareFilePath($path);
+        if ($pathErr) {
+            return ["error" => $pathErr];
+        }
+        if ($subPath !== '' && !$allowSubfolders) {
+            return ["error" => "Subfolder access is not enabled for this share."];
+        }
+        $combinedKey = self::buildSharedFolderKey($folderKey, $subPath);
+        if ($combinedKey !== $folderKey) {
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($combinedKey)) {
+                    return ["error" => "This shared folder is not accessible (encrypted folders cannot be shared)."];
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+
         $storage = self::storage();
-        [$realFolderPath,, $err] = self::resolveFolderPath((string)$record['folder'], false);
+        [$realFolderPath,, $err] = self::resolveFolderPath($combinedKey, false);
         if ($err) {
             return ["error" => "Shared folder not found."];
         }
         $dirStat = $storage->stat($realFolderPath);
         if ($dirStat === null || ($dirStat['type'] ?? '') !== 'dir') {
             return ["error" => "Shared folder not found."];
-        }
-
-        $file = basename(trim($file));
-        if (!preg_match(REGEX_FILE_NAME, $file)) {
-            return ["error" => "Invalid file name."];
         }
 
         $full = $realFolderPath . DIRECTORY_SEPARATOR . $file;
@@ -2175,7 +2330,7 @@ class FolderModel
                 "filePath"     => $real,
                 "mimeType"     => $mime,
                 "downloadName" => basename($real),
-                "folder"       => $folderKey,
+                "folder"       => $combinedKey,
                 "file"         => $file,
                 "isLocal"      => true,
             ];
@@ -2225,7 +2380,7 @@ class FolderModel
             "filePath"     => $full,
             "mimeType"     => $mimeType,
             "downloadName" => $downloadName,
-            "folder"       => $folderKey,
+            "folder"       => $combinedKey,
             "file"         => $file,
             "isLocal"      => false,
             "size"         => (int)($stat['size'] ?? 0),
@@ -2236,7 +2391,7 @@ class FolderModel
     /**
      * Handles uploading a file to a shared folder.
      */
-    public static function uploadToSharedFolder(string $token, array $fileUpload): array
+    public static function uploadToSharedFolder(string $token, array $fileUpload, string $subPath = '', ?string $providedPass = null): array
     {
         // Max size & allowed extensions (mirror FileModel’s common types)
         $maxSize = 50 * 1024 * 1024; // 50 MB
@@ -2275,6 +2430,12 @@ class FolderModel
         if (time() > ($record['expires'] ?? 0)) {
             return ["error" => "This share link has expired."];
         }
+        if (!empty($record['password']) && ($providedPass === null || $providedPass === '')) {
+            return ["error" => "Password required."];
+        }
+        if (!empty($record['password']) && !password_verify((string)$providedPass, $record['password'])) {
+            return ["error" => "Invalid password."];
+        }
         if (empty($record['allowUpload']) || (int)$record['allowUpload'] !== 1) {
             return ["error" => "File uploads are not allowed for this share."];
         }
@@ -2288,6 +2449,15 @@ class FolderModel
                 return ["error" => "Uploads are disabled for encrypted folders."];
             }
         } catch (\Throwable $e) { /* ignore */ }
+
+        $allowSubfolders = !empty($record['allowSubfolders']);
+        [$normalizedSubPath, $pathErr] = self::normalizeShareSubPath($subPath);
+        if ($pathErr) {
+            return ["error" => $pathErr];
+        }
+        if ($normalizedSubPath !== '' && !$allowSubfolders) {
+            return ["error" => "Subfolder uploads are not enabled for this share."];
+        }
 
         if (($fileUpload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             return ["error" => "File upload error. Code: " . (int)$fileUpload['error']];
@@ -2305,7 +2475,16 @@ class FolderModel
         $storage = self::storage();
 
         // Resolve target folder
-        [$targetDir, $relative, $err] = self::resolveFolderPath((string)$record['folder'], true);
+        $combinedKey = self::buildSharedFolderKey($folderKey, $normalizedSubPath);
+        if ($combinedKey !== $folderKey) {
+            try {
+                if (FolderCrypto::isEncryptedOrAncestor($combinedKey)) {
+                    @unlink($fileUpload['tmp_name'] ?? '');
+                    return ["error" => "Uploads are disabled for encrypted folders."];
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+        [$targetDir, $relative, $err] = self::resolveFolderPath($combinedKey, true);
         if ($err) return ["error" => $err];
 
         // New safe filename
@@ -2349,7 +2528,7 @@ class FolderModel
         return [
             "success" => "File uploaded successfully.",
             "newFilename" => $newFilename,
-            "folder" => $folderKey,
+            "folder" => $combinedKey,
         ];
     }
 

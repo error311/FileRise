@@ -18,7 +18,8 @@
  *       @OA\Property(property="expirationValue", type="integer", example=60),
  *       @OA\Property(property="expirationUnit", type="string", enum={"seconds","minutes","hours","days"}, example="minutes"),
  *       @OA\Property(property="password", type="string", example=""),
- *       @OA\Property(property="allowUpload", type="integer", enum={0,1}, example=0)
+ *       @OA\Property(property="allowUpload", type="integer", enum={0,1}, example=0),
+ *       @OA\Property(property="allowSubfolders", type="integer", enum={0,1}, example=0)
  *     )
  *   ),
  *   @OA\Response(
@@ -27,7 +28,7 @@
  *     @OA\JsonContent(
  *       type="object",
  *       @OA\Property(property="token", type="string", example="sf_abc123"),
- *       @OA\Property(property="url", type="string", example="/api/folder/shareFolder.php?token=sf_abc123"),
+ *       @OA\Property(property="link", type="string", example="/api/folder/shareFolder.php?token=sf_abc123"),
  *       @OA\Property(property="expires", type="integer", example=1700000000)
  *     )
  *   ),

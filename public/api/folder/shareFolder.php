@@ -10,6 +10,7 @@
  *   tags={"Shared Folders"},
  *   @OA\Parameter(name="token", in="query", required=true, @OA\Schema(type="string")),
  *   @OA\Parameter(name="pass", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="path", in="query", required=false, @OA\Schema(type="string"), description="Subfolder path within the shared folder"),
  *   @OA\Parameter(name="page", in="query", required=false, @OA\Schema(type="integer", minimum=1), example=1),
  *   @OA\Response(
  *     response=200,

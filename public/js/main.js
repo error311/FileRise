@@ -693,6 +693,30 @@ function wireUserNameLabel(state) {
   label.textContent = username || '';
 }
 
+function resolveBrandThemeColor(isDark) {
+  const branding = window.__FR_BRANDING__ || {};
+  const color = isDark ? branding.themeColorDark : branding.themeColorLight;
+  return String(color || '').trim();
+}
+
+function resolveAppBackground(isDark) {
+  const branding = window.__FR_BRANDING__ || {};
+  const color = isDark ? branding.appBgDark : branding.appBgLight;
+  return String(color || '').trim();
+}
+
+function applyBrandingThemeColor(isDark) {
+  const color = resolveBrandThemeColor(isDark);
+  if (!color) return;
+  let mt = document.querySelector('meta[name="theme-color"]');
+  if (!mt) {
+    mt = document.createElement('meta');
+    mt.name = 'theme-color';
+    document.head.appendChild(mt);
+  }
+  mt.content = color;
+}
+
 // -------- DARK MODE (persist + system fallback + a11y labels) --------
 function applyDarkMode({ fromSystemChange = false } = {}) {
   let stored = null;
@@ -712,15 +736,23 @@ function applyDarkMode({ fromSystemChange = false } = {}) {
   });
 
   // keep UA chrome & bg consistent post-toggle
-  const bg = isDark ? '#121212' : '#ffffff';
-  root.style.backgroundColor = bg;
-  root.style.colorScheme = isDark ? 'dark' : 'light';
-  if (body) {
-    body.style.backgroundColor = bg;
-    body.style.colorScheme = isDark ? 'dark' : 'light';
+  const customBg = resolveAppBackground(isDark);
+  const bg = customBg || (isDark ? '#121212' : '#ffffff');
+  const isLoginView = body && body.classList.contains('fr-login-view');
+  if (isLoginView) {
+    root.style.background = '';
+    root.style.backgroundColor = '';
+    if (body) {
+      body.style.background = '';
+      body.style.backgroundColor = '';
+    }
+  } else {
+    root.style.background = bg;
+    if (body) body.style.background = bg;
   }
-  const mt = document.querySelector('meta[name="theme-color"]');
-  if (mt) mt.content = bg;
+  root.style.colorScheme = isDark ? 'dark' : 'light';
+  if (body) body.style.colorScheme = isDark ? 'dark' : 'light';
+  applyBrandingThemeColor(isDark);
   const mcs = document.querySelector('meta[name="color-scheme"]');
   if (mcs) mcs.content = isDark ? 'dark light' : 'light dark';
 
@@ -781,6 +813,130 @@ function bindDarkMode() {
     if (!m) { m = document.createElement('meta'); m.name = name; document.head.appendChild(m); }
     m.content = val;
   };
+  const withBaseIfRelative = (url) => {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    if (raw[0] === '/') return withBase(raw);
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return raw;
+    return withBase('/' + raw.replace(/^\.?\//, ''));
+  };
+  const upsertLink = (selector, builder, href) => {
+    if (!href) return;
+    let el = document.querySelector(selector);
+    if (!el) {
+      el = builder();
+      document.head.appendChild(el);
+    }
+    el.setAttribute('href', href);
+  };
+  const updateIconLinks = (branding) => {
+    if (!branding || typeof branding !== 'object') return;
+
+    const svg = withBaseIfRelative(branding.faviconSvg || '');
+    const png = withBaseIfRelative(branding.faviconPng || '');
+    const ico = withBaseIfRelative(branding.faviconIco || '');
+    const apple = withBaseIfRelative(branding.appleTouchIcon || '');
+    const mask = withBaseIfRelative(branding.maskIcon || '');
+
+    if (svg) {
+      upsertLink('link[rel="icon"][type="image/svg+xml"]', () => {
+        const link = document.createElement('link');
+        link.rel = 'icon';
+        link.type = 'image/svg+xml';
+        link.sizes = 'any';
+        return link;
+      }, svg);
+    }
+
+    if (png) {
+      const pngLinks = document.querySelectorAll('link[rel="icon"][type="image/png"]');
+      if (pngLinks.length) {
+        pngLinks.forEach((link) => link.setAttribute('href', png));
+      } else {
+        upsertLink('link[rel="icon"][type="image/png"]', () => {
+          const link = document.createElement('link');
+          link.rel = 'icon';
+          link.type = 'image/png';
+          return link;
+        }, png);
+      }
+    }
+
+    if (ico) {
+      upsertLink('link[rel="shortcut icon"]', () => {
+        const link = document.createElement('link');
+        link.rel = 'shortcut icon';
+        return link;
+      }, ico);
+    }
+
+    if (apple) {
+      upsertLink('link[rel="apple-touch-icon"]', () => {
+        const link = document.createElement('link');
+        link.rel = 'apple-touch-icon';
+        return link;
+      }, apple);
+    }
+
+    if (mask) {
+      upsertLink('link[rel="mask-icon"]', () => {
+        const link = document.createElement('link');
+        link.rel = 'mask-icon';
+        return link;
+      }, mask);
+      const maskLink = document.querySelector('link[rel="mask-icon"]');
+      if (maskLink) {
+        const color = String(branding.maskIconColor || '').trim();
+        if (color) {
+          maskLink.setAttribute('color', color);
+        } else {
+          maskLink.removeAttribute('color');
+        }
+      }
+    }
+  };
+  const applyLoginBranding = (branding) => {
+    if (!branding || typeof branding !== 'object') return;
+    const root = document.documentElement;
+    const light = String(branding.loginBgLight || '').trim();
+    const dark = String(branding.loginBgDark || '').trim();
+    if (light) root.style.setProperty('--fr-login-bg-light', light);
+    else root.style.removeProperty('--fr-login-bg-light');
+    if (dark) root.style.setProperty('--fr-login-bg-dark', dark);
+    else root.style.removeProperty('--fr-login-bg-dark');
+
+    const tagline = String(branding.loginTagline || '').trim();
+    const taglineEl = document.getElementById('loginBrandTagline');
+    if (taglineEl) {
+      if (tagline) {
+        taglineEl.textContent = tagline;
+        taglineEl.style.display = 'block';
+      } else {
+        taglineEl.textContent = '';
+        taglineEl.style.display = 'none';
+      }
+    }
+  };
+  const applyAppBranding = (branding) => {
+    if (!branding || typeof branding !== 'object') return;
+    const root = document.documentElement;
+    const light = String(branding.appBgLight || '').trim();
+    const dark = String(branding.appBgDark || '').trim();
+    if (light) root.style.setProperty('--fr-app-bg-light', light);
+    else root.style.removeProperty('--fr-app-bg-light');
+    if (dark) root.style.setProperty('--fr-app-bg-dark', dark);
+    else root.style.removeProperty('--fr-app-bg-dark');
+
+    const body = document.body;
+    if (body && body.classList.contains('fr-login-view')) return;
+    const isDark = root.classList.contains('dark-mode') || (body && body.classList.contains('dark-mode'));
+    const bg = isDark ? dark : light;
+    if (bg) {
+      root.style.background = bg;
+      if (body) body.style.background = bg;
+    }
+  };
+  const defaultDescription = document.querySelector('meta[name="description"]')?.content || '';
 
     const DEFAULT_HEADER_TITLE = 'FileRise';
     const PRO_DEFAULT_HEADER_TITLE = 'FileRise Pro';
@@ -790,6 +946,71 @@ function bindDarkMode() {
         return isPro ? PRO_DEFAULT_HEADER_TITLE : DEFAULT_HEADER_TITLE;
       }
       return cleaned;
+    };
+
+    const isSafeFooterHref = (href) => {
+      if (!href) return false;
+      const trimmed = String(href).trim();
+      if (trimmed.startsWith('#')) return true;
+      try {
+        const u = new URL(trimmed, window.location.origin);
+        return u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'mailto:';
+      } catch (e) {
+        return false;
+      }
+    };
+
+    const sanitizeFooterHtml = (raw) => {
+      if (!raw) return '';
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = String(raw);
+
+      const allowedTags = new Set(['A', 'B', 'STRONG', 'EM', 'I', 'SPAN', 'SMALL', 'BR']);
+
+      const walk = (node) => {
+        const children = Array.from(node.childNodes || []);
+        children.forEach((child) => {
+          if (child.nodeType === Node.ELEMENT_NODE) {
+            const tag = child.tagName.toUpperCase();
+            if (!allowedTags.has(tag)) {
+              const text = document.createTextNode(child.textContent || '');
+              child.parentNode.replaceChild(text, child);
+              return;
+            }
+
+            const attrs = Array.from(child.attributes || []);
+            attrs.forEach((attr) => {
+              const name = attr.name.toLowerCase();
+              if (tag === 'A' && name === 'href') {
+                if (!isSafeFooterHref(attr.value)) {
+                  child.removeAttribute(attr.name);
+                }
+                return;
+              }
+              if (tag === 'A' && (name === 'target' || name === 'rel')) {
+                return;
+              }
+              child.removeAttribute(attr.name);
+            });
+
+            if (tag === 'A') {
+              const target = (child.getAttribute('target') || '').toLowerCase();
+              if (target === '_blank') {
+                child.setAttribute('rel', 'noopener noreferrer');
+              } else if (target && target !== '_self') {
+                child.setAttribute('target', '_self');
+              }
+            }
+
+            walk(child);
+          } else if (child.nodeType === Node.COMMENT_NODE) {
+            child.parentNode.removeChild(child);
+          }
+        });
+      };
+
+      walk(wrapper);
+      return wrapper.innerHTML.trim();
     };
 
     // ---------- site config / auth ----------
@@ -858,10 +1079,31 @@ function bindDarkMode() {
   
         // Always keep <title> correct early (no visual flicker)
         document.title = title;
+
+        const branding = (cfg && cfg.branding) ? cfg.branding : {};
+        window.__FR_BRANDING__ = branding;
+        updateIconLinks(branding);
+        applyLoginBranding(branding);
+        applyAppBranding(branding);
+        applyBrandingThemeColor(
+          document.documentElement.classList.contains('dark-mode') ||
+          document.body.classList.contains('dark-mode')
+        );
+
+        // --- Meta description (branding) in BOTH phases ---
+        try {
+          const desc = (branding.metaDescription || '').trim();
+          if (desc) {
+            setMeta('description', desc);
+          } else if (defaultDescription) {
+            setMeta('description', defaultDescription);
+          }
+        } catch (e) {
+          // non-fatal
+        }
   
         // --- Header logo (branding) in BOTH phases ---
         try {
-          const branding = (cfg && cfg.branding) ? cfg.branding : {};
           const customLogoUrl = branding.customLogoUrl || "";
           const logoImg = document.querySelector('.header-logo img');
           if (logoImg) {
@@ -880,7 +1122,6 @@ function bindDarkMode() {
   
         // --- Header colors (branding) in BOTH phases ---
         try {
-          const branding = (cfg && cfg.branding) ? cfg.branding : {};
           const root = document.documentElement;
   
           const light = branding.headerBgLight || '';
@@ -897,13 +1138,18 @@ function bindDarkMode() {
   
         // --- Footer HTML (branding) in BOTH phases ---
         try {
-          const branding = (cfg && cfg.branding) ? cfg.branding : {};
           const footerEl = document.getElementById('siteFooter');
           if (footerEl) {
             const html = (branding.footerHtml || '').trim();
             if (html) {
-              // allow simple HTML from config
-              footerEl.innerHTML = html;
+              const safe = sanitizeFooterHtml(html);
+              if (safe) {
+                footerEl.innerHTML = safe;
+              } else {
+                const year = new Date().getFullYear();
+                footerEl.innerHTML =
+  `&copy; ${year}&nbsp;<a href="https://filerise.net" target="_blank" rel="noopener noreferrer">FileRise</a>`;
+              }
             } else {
               const year = new Date().getFullYear();
               footerEl.innerHTML =
@@ -1604,6 +1850,7 @@ function bindDarkMode() {
 
     // Always start clean
     document.body.classList.remove('authed');
+    document.body.classList.remove('fr-login-view');
 
     const overlay = document.getElementById('loadingOverlay');
     const wrap = document.querySelector('.main-wrapper');   // app shell
@@ -1616,6 +1863,7 @@ function bindDarkMode() {
     const { authed, setup, raw: authRaw } = await checkAuth();
 
     if (setup) {
+      document.body.classList.remove('fr-login-view');
       // Setup wizard runs without the app shell
       hideEl(wrap);
       hideEl(login);
@@ -1627,6 +1875,7 @@ function bindDarkMode() {
 
     if (authed) {
       // Authenticated path: show app, hide login
+      document.body.classList.remove('fr-login-view');
       document.body.classList.add('authed');
       unhide(wrap);            // works whether CSS or [hidden] was used
       hideEl(login);
@@ -1640,12 +1889,14 @@ function bindDarkMode() {
     }
 
     // ---- NOT AUTHED: show only the login view ----
+    document.body.classList.add('fr-login-view');
     hideEl(wrap);              // ensure app shell stays hidden while logged out
     unhide(mainEl);
     unhide(login);
     if (login) login.style.display = '';
     // …wire stuff…
     applySiteConfig(window.__FR_SITE_CFG__ || {}, { phase: 'final' });
+    applyDarkMode();
     // Auto-SSO if OIDC is the only enabled method (add ?noauto=1 to skip)
     (() => {
       const lo = (window.__FR_SITE_CFG__ && window.__FR_SITE_CFG__.loginOptions) || {};
@@ -1662,6 +1913,10 @@ function bindDarkMode() {
       }
     })();
     await revealAppAndHideOverlay();
+    requestAnimationFrame(() => {
+      const pre = document.getElementById('pretheme-css');
+      if (pre) pre.remove();
+    });
     const hb = document.querySelector('.header-buttons');
     if (hb) hb.style.visibility = 'hidden';
 

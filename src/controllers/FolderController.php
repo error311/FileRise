@@ -969,25 +969,42 @@ class FolderController
     {
         $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
         $file  = filter_input(INPUT_GET, 'file', FILTER_SANITIZE_STRING);
+        $providedPass = filter_input(INPUT_GET, 'pass', FILTER_SANITIZE_STRING);
+        if ($providedPass === null || $providedPass === false) {
+            $providedPass = '';
+        }
+        $path  = (string)($_GET['path'] ?? '');
+        $inlineRequested = ((string)($_GET['inline'] ?? '') === '1');
 
-        if (empty($token) || empty($file)) {
+        if (empty($token) || (empty($file) && $path === '')) {
             http_response_code(400);
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => "Missing token or file parameter."]);
             exit;
         }
 
-        $basename = basename($file);
-        if (!preg_match(REGEX_FILE_NAME, $basename)) {
-            http_response_code(400);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(["error" => "Invalid file name."]);
-            exit;
+        $relPath = $path !== '' ? $path : (string)$file;
+        if ($path === '') {
+            $basename = basename($relPath);
+            if (!preg_match(REGEX_FILE_NAME, $basename)) {
+                http_response_code(400);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "Invalid file name."]);
+                exit;
+            }
+            $relPath = $basename;
         }
 
-        $result = FolderModel::getSharedFileInfo($token, $basename);
+        $result = FolderModel::getSharedFileInfo($token, $relPath, $providedPass);
+        if (isset($result['needs_password'])) {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => "Password required."]);
+            exit;
+        }
         if (isset($result['error'])) {
-            http_response_code(404);
+            $code = ($result['error'] === 'Invalid password.') ? 403 : 404;
+            http_response_code($code);
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => $result['error']]);
             exit;
@@ -996,8 +1013,9 @@ class FolderController
         $storage = StorageRegistry::getAdapter();
         $filePath = (string)($result['filePath'] ?? '');
         $downloadName = (string)($result['downloadName'] ?? basename($filePath));
+        $fallbackName = basename($relPath);
         if ($downloadName === '') {
-            $downloadName = $basename;
+            $downloadName = $fallbackName;
         }
         $ext = strtolower(pathinfo($downloadName, PATHINFO_EXTENSION));
 
@@ -1016,7 +1034,7 @@ class FolderController
         $downloadName = str_replace(["\r", "\n"], '', $downloadName);
         $downloadNameStar = rawurlencode($downloadName);
 
-        // Explicit raster map (so PNG/JPG always render even if model mime is wrong)
+        // Explicit raster map (so PNG/JPG render correctly when inline is requested)
         $rasterMime = [
             'jpg'  => 'image/jpeg',
             'jpeg' => 'image/jpeg',
@@ -1027,24 +1045,53 @@ class FolderController
             'ico'  => 'image/x-icon',
         ];
 
+        $inlineMime = [
+            'mp4'  => 'video/mp4',
+            'mkv'  => 'video/x-matroska',
+            'webm' => 'video/webm',
+            'mov'  => 'video/quicktime',
+            'ogv'  => 'video/ogg',
+            'mp3'  => 'audio/mpeg',
+            'wav'  => 'audio/wav',
+            'm4a'  => 'audio/mp4',
+            'ogg'  => 'audio/ogg',
+            'flac' => 'audio/flac',
+            'aac'  => 'audio/aac',
+            'wma'  => 'audio/x-ms-wma',
+            'opus' => 'audio/opus',
+            'pdf'  => 'application/pdf',
+        ];
+
+        $mimeType = $result['mimeType'] ?? 'application/octet-stream';
+        if (!is_string($mimeType) || $mimeType === '') {
+            $mimeType = 'application/octet-stream';
+        }
+        if (isset($rasterMime[$ext])) {
+            $mimeType = $rasterMime[$ext];
+        }
+
         // SVG / SVGZ: NEVER render inline on shared/public links
         if ($ext === 'svg' || $ext === 'svgz') {
             header('Content-Type: application/octet-stream');
             header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
             // defense-in-depth if something opens it anyway
             header("Content-Security-Policy: sandbox; default-src 'none'; base-uri 'none'; form-action 'none'");
-        } elseif (isset($rasterMime[$ext])) {
-            // Raster images: allow inline so gallery <img> works
-            header('Content-Type: ' . $rasterMime[$ext]);
-            header("Content-Disposition: inline; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
         } else {
-            // Everything else: download
-            $mimeType = $result['mimeType'] ?? 'application/octet-stream';
-            if (!is_string($mimeType) || $mimeType === '') {
-                $mimeType = 'application/octet-stream';
+            $inlineOk = false;
+            if ($inlineRequested) {
+                $lowerMime = strtolower($mimeType);
+                $inlineOk = isset($rasterMime[$ext])
+                    || isset($inlineMime[$ext])
+                    || str_starts_with($lowerMime, 'video/')
+                    || str_starts_with($lowerMime, 'audio/')
+                    || $lowerMime === 'application/pdf';
+                if (isset($inlineMime[$ext])) {
+                    $mimeType = $inlineMime[$ext];
+                }
             }
             header('Content-Type: ' . $mimeType);
-            header("Content-Disposition: attachment; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
+            $disposition = $inlineOk ? 'inline' : 'attachment';
+            header("Content-Disposition: {$disposition}; filename=\"{$downloadName}\"; filename*=UTF-8''{$downloadNameStar}");
         }
 
         AuditHook::log('file.download', [
@@ -1052,8 +1099,8 @@ class FolderController
             'source' => 'share',
             'folder' => $result['folder'] ?? 'root',
             'path'   => !empty($result['folder']) && $result['folder'] !== 'root'
-                ? ($result['folder'] . '/' . $basename)
-                : $basename,
+                ? ($result['folder'] . '/' . ($result['file'] ?? $fallbackName))
+                : ($result['file'] ?? $fallbackName),
             'meta'   => [
                 'token' => $token,
             ],
@@ -1114,12 +1161,279 @@ class FolderController
         exit;
     }
 
+    /* -------------------- API: Download Shared Folder (ZIP) -------------------- */
+    public function downloadSharedFolder(): void
+    {
+        $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
+        $providedPass = filter_input(INPUT_GET, 'pass', FILTER_SANITIZE_STRING);
+        $path  = (string)($_GET['path'] ?? '');
+
+        $accept = (string)($_SERVER['HTTP_ACCEPT'] ?? '');
+        $wantsHtml = stripos($accept, 'text/html') !== false;
+
+        $renderError = function (int $status, string $message) use ($wantsHtml, $token, $providedPass, $path): void {
+            http_response_code($status);
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Frame-Options: DENY');
+            header("Content-Security-Policy: frame-ancestors 'none';");
+
+            if (!$wantsHtml) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => $message]);
+                exit;
+            }
+
+            header('Content-Type: text/html; charset=utf-8');
+            $backUrl = '';
+            if (!empty($token)) {
+                $backUrl = fr_with_base_path('/api/folder/shareFolder.php?token=' . urlencode($token));
+                if (!empty($providedPass)) {
+                    $backUrl .= '&pass=' . urlencode($providedPass);
+                }
+                if (!empty($path)) {
+                    $backUrl .= '&path=' . urlencode($path);
+                }
+            }
+            $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
+            ?>
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Shared Folder</title>
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/vendor/roboto.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/share.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
+            </head>
+            <body class="fr-share-body">
+                <div class="fr-share-shell">
+                    <div class="fr-share-card">
+                        <div class="fr-share-card-header">
+                            <img id="shareLogo" class="fr-share-logo" src="<?php echo htmlspecialchars(fr_with_base_path('/assets/logo.svg?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" alt="FileRise">
+                            <div>
+                                <div class="fr-share-title">Unable to download</div>
+                                <div class="fr-share-subtitle">Please review the message below.</div>
+                            </div>
+                        </div>
+                        <div class="fr-share-alert fr-share-alert-error"><?php echo $safeMessage; ?></div>
+                        <?php if ($backUrl !== ''): ?>
+                            <div class="fr-share-actions">
+                                <a class="fr-share-btn" href="<?php echo htmlspecialchars($backUrl, ENT_QUOTES, 'UTF-8'); ?>">Back to shared folder</a>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/shareBranding.js?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+            </body>
+            </html>
+            <?php
+            exit;
+        };
+
+        if (empty($token)) {
+            $renderError(400, "Missing share token.");
+        }
+
+        $ctx = FolderModel::getSharedFolderEntries($token, $providedPass, $path);
+        if (isset($ctx['needs_password'])) {
+            $renderError(403, "Password required.");
+        }
+        if (isset($ctx['error'])) {
+            $renderError(404, (string)$ctx['error']);
+        }
+
+        $storage = StorageRegistry::getAdapter();
+        if (!$storage->isLocal()) {
+            $renderError(400, "Archive downloads are not supported for remote storage.");
+        }
+
+        $realFolderPath = (string)($ctx['realFolderPath'] ?? '');
+        if ($realFolderPath === '' || !is_dir($realFolderPath)) {
+            $renderError(404, "Shared folder not found.");
+        }
+
+        if (!class_exists('\\ZipArchive')) {
+            $renderError(400, "ZipArchive extension is required on the server.");
+        }
+
+        $maxFiles = 2000;
+        $maxBytes = 2 * 1024 * 1024 * 1024; // 2 GB
+
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $work = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'ziptmp';
+        if (!is_dir($work)) {
+            @mkdir($work, 0775, true);
+        }
+        if (!is_dir($work) || !is_writable($work)) {
+            $renderError(500, "ZIP temp dir not writable.");
+        }
+
+        $rateWindow = 30;
+        $safeToken = preg_replace('/[^a-f0-9]/i', '', (string)$token);
+        $lockPath = $work . DIRECTORY_SEPARATOR . 'share-zip-' . ($safeToken !== '' ? $safeToken : 'unknown') . '.lock';
+        if (is_file($lockPath)) {
+            $age = time() - (int)@filemtime($lockPath);
+            if ($age >= 0 && $age < $rateWindow) {
+                $retry = max(1, $rateWindow - $age);
+                header('Retry-After: ' . $retry);
+                $renderError(429, "Please wait a moment before requesting another archive download.");
+            }
+        }
+        @file_put_contents($lockPath, (string)time(), LOCK_EX);
+        register_shutdown_function(function () use ($lockPath) {
+            if (is_file($lockPath)) {
+                @unlink($lockPath);
+            }
+        });
+
+        $allowSubfolders = !empty($ctx['allowSubfolders']);
+
+        $files = [];
+        $totalBytes = 0;
+        $baseLen = strlen($realFolderPath);
+
+        $iter = $allowSubfolders
+            ? new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($realFolderPath, FilesystemIterator::SKIP_DOTS)
+            )
+            : new FilesystemIterator($realFolderPath, FilesystemIterator::SKIP_DOTS);
+        foreach ($iter as $info) {
+            if (!$info->isFile() || $info->isLink()) {
+                continue;
+            }
+            $fullPath = $info->getPathname();
+            $rel = substr($fullPath, $baseLen + 1);
+            if ($rel === '' || $rel === false) {
+                continue;
+            }
+            $rel = str_replace('\\', '/', $rel);
+            $parts = explode('/', $rel);
+            $bad = false;
+            $lastIdx = count($parts) - 1;
+            foreach ($parts as $idx => $seg) {
+                if ($seg === '' || $seg[0] === '.') {
+                    $bad = true;
+                    break;
+                }
+                if ($idx < $lastIdx) {
+                    if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
+                        $bad = true;
+                        break;
+                    }
+                } else {
+                    if (!preg_match(REGEX_FILE_NAME, $seg)) {
+                        $bad = true;
+                        break;
+                    }
+                }
+            }
+            if ($bad) {
+                continue;
+            }
+
+            $files[] = ['path' => $fullPath, 'rel' => $rel];
+            $size = $info->getSize();
+            if (is_int($size)) {
+                $totalBytes += $size;
+            }
+            if (count($files) > $maxFiles || ($maxBytes > 0 && $totalBytes > $maxBytes)) {
+                $renderError(413, "Shared folder is too large to download as a ZIP.");
+            }
+        }
+
+        if (empty($files)) {
+            $renderError(400, "No files found to archive.");
+        }
+
+        // Light cleanup of old zips (> 6h)
+        $now = time();
+        foreach ((glob($work . DIRECTORY_SEPARATOR . 'download-*.zip') ?: []) as $zp) {
+            if (is_file($zp) && ($now - (int)@filemtime($zp)) > 21600) {
+                @unlink($zp);
+            }
+        }
+
+        // Ensure enough free space (best-effort)
+        $free = @disk_free_space($work);
+        if ($free !== false && $totalBytes > 0) {
+            $needed = (int)ceil($totalBytes * 1.05) + (20 * 1024 * 1024);
+            if ($free < $needed) {
+                $renderError(507, "Insufficient free space to build archive.");
+            }
+        }
+
+        @set_time_limit(0);
+        @ignore_user_abort(true);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
+        $zipName = 'download-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.zip';
+        $zipPath = $work . DIRECTORY_SEPARATOR . $zipName;
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            $renderError(500, "Could not create zip archive.");
+        }
+
+        foreach ($files as $item) {
+            $zip->addFile($item['path'], $item['rel']);
+        }
+        if (!$zip->close()) {
+            @unlink($zipPath);
+            $renderError(500, "Failed to finalize ZIP.");
+        }
+
+        $folderKey = (string)($ctx['folder'] ?? 'root');
+        AuditHook::log('file.download_zip', [
+            'user'   => 'share:' . $token,
+            'source' => 'share',
+            'folder' => $folderKey,
+            'meta'   => [
+                'token' => $token,
+                'files' => count($files),
+            ],
+        ]);
+
+        $nameBase = 'shared-folder';
+        $pathForName = (string)($ctx['path'] ?? '');
+        $shareRoot = (string)($ctx['shareRoot'] ?? '');
+        if ($pathForName !== '') {
+            $nameBase = basename($pathForName);
+        } elseif ($shareRoot !== '' && strtolower($shareRoot) !== 'root') {
+            $nameBase = basename($shareRoot);
+        }
+        $nameBase = preg_replace('/[^A-Za-z0-9._-]/', '_', $nameBase);
+        if ($nameBase === '' || $nameBase === '.' || $nameBase === '..') {
+            $nameBase = 'shared-folder';
+        }
+        $downloadName = $nameBase . '.zip';
+
+        $size = (int)@filesize($zipPath);
+        header('X-Accel-Buffering: no');
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+        if ($size > 0) header('Content-Length: ' . $size);
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+
+        readfile($zipPath);
+        @unlink($zipPath);
+        exit;
+    }
+
     /* -------------------- Public Shared Folder HTML -------------------- */
     public function shareFolder(): void
     {
         $token        = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
         $providedPass = filter_input(INPUT_GET, 'pass', FILTER_SANITIZE_STRING);
         $page         = filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT);
+        $path         = (string)($_GET['path'] ?? '');
         if ($page === false || $page < 1) $page = 1;
 
         if (empty($token)) {
@@ -1129,7 +1443,7 @@ class FolderController
             exit;
         }
 
-        $data = FolderModel::getSharedFolderData($token, $providedPass, $page);
+        $data = FolderModel::getSharedFolderData($token, $providedPass, $page, 10, $path);
 
         if (isset($data['needs_password']) && $data['needs_password'] === true) {
             header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -1144,49 +1458,30 @@ class FolderController
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>Enter Password</title>
-                <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        padding: 20px;
-                        background: #f7f7f7
-                    }
-
-                    .container {
-                        max-width: 400px;
-                        margin: 80px auto;
-                        background: #fff;
-                        padding: 20px;
-                        border-radius: 4px;
-                        box-shadow: 0 2px 8px rgba(0, 0, 0, .1)
-                    }
-
-                    input[type=password],
-                    button {
-                        width: 100%;
-                        padding: 10px;
-                        margin: 10px 0;
-                        font-size: 1rem
-                    }
-
-                    button {
-                        background: #007BFF;
-                        border: none;
-                        color: #fff;
-                        cursor: pointer
-                    }
-
-                    button:hover {
-                        background: #0056b3
-                    }
-                </style>
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/vendor/roboto.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
+                <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/share.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
             </head>
 
-            <body>
-                <div class="container">
-                    <h2>Folder Protected</h2>
-                    <p>This folder is protected by a password. Please enter the password to view its contents.</p>
-                    <form method="get" action="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>"><input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>"><label for="pass">Password:</label><input type="password" name="pass" id="pass" required><button type="submit">Submit</button></form>
+            <body class="fr-share-body">
+                <div class="fr-share-shell">
+                    <div class="fr-share-card">
+                        <div class="fr-share-card-header">
+                            <img id="shareLogo" class="fr-share-logo" src="<?php echo htmlspecialchars(fr_with_base_path('/assets/logo.svg?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" alt="FileRise">
+                            <div>
+                                <div class="fr-share-title">This folder is protected</div>
+                                <div class="fr-share-subtitle">Enter the password to continue.</div>
+                            </div>
+                        </div>
+                        <form class="fr-share-form" method="get" action="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
+                            <?php if (!empty($path)): ?><input type="hidden" name="path" value="<?php echo htmlspecialchars($path, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+                            <label for="pass" class="fr-share-label">Password</label>
+                            <input type="password" name="pass" id="pass" class="fr-share-input" required>
+                            <button type="submit" class="fr-share-btn">Unlock</button>
+                        </form>
+                    </div>
                 </div>
+                <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/shareBranding.js?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
             </body>
 
             </html>
@@ -1204,12 +1499,47 @@ class FolderController
         $adminConfig          = AdminModel::getConfig();
         $sharedMaxUploadSize  = (isset($adminConfig['sharedMaxUploadSize']) && is_numeric($adminConfig['sharedMaxUploadSize']))
             ? (int)$adminConfig['sharedMaxUploadSize'] : null;
+        $headerTitle = trim((string)($adminConfig['header_title'] ?? 'FileRise'));
+        if ($headerTitle === '') {
+            $headerTitle = 'FileRise';
+        }
 
-        $folderName  = $data['folder'];
-        $files       = $data['files'];
-        $fileSizes   = is_array($data['fileSizes'] ?? null) ? $data['fileSizes'] : [];
-        $currentPage = $data['currentPage'];
-        $totalPages  = $data['totalPages'];
+        $entries     = is_array($data['entries'] ?? null) ? $data['entries'] : [];
+        $currentPage = (int)($data['currentPage'] ?? 1);
+        $totalPages  = (int)($data['totalPages'] ?? 1);
+        $totalEntries = (int)($data['totalEntries'] ?? 0);
+        $shareRoot   = (string)($data['shareRoot'] ?? 'root');
+        $currentPath = (string)($data['path'] ?? '');
+        $allowSubfolders = !empty($data['allowSubfolders']);
+        $displayName = 'Shared Folder';
+        if ($currentPath !== '') {
+            $displayName = basename($currentPath);
+        } elseif ($shareRoot !== '' && strtolower($shareRoot) !== 'root') {
+            $displayName = basename($shareRoot);
+        }
+        $pageTitle = $headerTitle . ' Share';
+        if ($displayName !== '') {
+            $pageTitle .= ': ' . $displayName;
+        }
+        $storage = StorageRegistry::getAdapter();
+        $canDownloadAll = $storage->isLocal();
+        $allowUpload = isset($data['record']['allowUpload']) && (int)$data['record']['allowUpload'] === 1;
+        $uploadToken = '';
+        if ($allowUpload) {
+            $secret = (string)($GLOBALS['encryptionKey'] ?? '');
+            if ($secret !== '') {
+                $seed = $token . '|' . $currentPath . '|' . $providedPass;
+                $uploadToken = hash_hmac('sha256', $seed, $secret);
+            }
+        }
+        $shareBaseUrl = fr_with_base_path('/api/folder/shareFolder.php');
+        $queryBase = 'token=' . urlencode($token);
+        if (!empty($providedPass)) {
+            $queryBase .= '&pass=' . urlencode($providedPass);
+        }
+        if ($currentPath !== '') {
+            $queryBase .= '&path=' . urlencode($currentPath);
+        }
 
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('Pragma: no-cache');
@@ -1222,215 +1552,95 @@ class FolderController
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Shared Folder: <?php echo htmlspecialchars($folderName, ENT_QUOTES, 'UTF-8'); ?></title>
-            <style>
-                body {
-                    background: #f2f2f2;
-                    font-family: Arial, sans-serif;
-                    padding: 0 20px 20px;
-                    color: #333
-                }
-
-                .header {
-                    text-align: center;
-                    margin: 0 0 30px
-                }
-
-                .container {
-                    max-width: 800px;
-                    margin: 0 auto;
-                    background: #fff;
-                    border-radius: 4px;
-                    padding: 20px;
-                    box-shadow: 0 2px 12px rgba(0, 0, 0, .1)
-                }
-
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 20px
-                }
-
-                th,
-                td {
-                    padding: 12px;
-                    border-bottom: 1px solid #ddd;
-                    text-align: left
-                }
-
-                th {
-                    background: #007BFF;
-                    color: #fff
-                }
-
-                .pagination {
-                    text-align: center;
-                    margin-top: 20px
-                }
-
-                .pagination a,
-                .pagination span {
-                    margin: 0 5px;
-                    padding: 8px 12px;
-                    background: #007BFF;
-                    color: #fff;
-                    border-radius: 4px;
-                    text-decoration: none
-                }
-
-                .pagination span.current {
-                    background: #0056b3
-                }
-
-                .shared-gallery-container {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                    gap: 10px;
-                    padding: 10px 0
-                }
-
-                .shared-gallery-card {
-                    border: 1px solid #ccc;
-                    padding: 5px;
-                    text-align: center
-                }
-
-                .shared-gallery-card img {
-                    max-width: 100%;
-                    display: block;
-                    margin: 0 auto
-                }
-
-                .upload-container {
-                    margin-top: 30px;
-                    text-align: center
-                }
-
-                .upload-container h3 {
-                    font-size: 1.4rem;
-                    margin-bottom: 10px
-                }
-
-                .upload-container form {
-                    display: inline-block;
-                    margin-top: 10px
-                }
-
-                .upload-container button {
-                    background-color: #28a745;
-                    border: none;
-                    color: #fff;
-                    padding: 10px 20px;
-                    font-size: 1rem;
-                    border-radius: 4px;
-                    cursor: pointer
-                }
-
-                .upload-container button:hover {
-                    background-color: #218838
-                }
-
-                .footer {
-                    text-align: center;
-                    margin-top: 40px;
-                    font-size: .9rem;
-                    color: #777
-                }
-
-                .toggle-btn {
-                    background-color: #007BFF;
-                    color: #fff;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    font-size: 1rem;
-                    cursor: pointer
-                }
-
-                .toggle-btn:hover {
-                    background-color: #0056b3
-                }
-
-                .pagination a:hover {
-                    background-color: #0056b3
-                }
-
-                .pagination span {
-                    cursor: default
-                }
-            </style>
+            <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
+            <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/vendor/roboto.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
+            <link rel="stylesheet" href="<?php echo htmlspecialchars(fr_with_base_path('/css/share.css?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>">
         </head>
 
-        <body>
-            <div class="header">
-                <h1>Shared Folder: <?php echo htmlspecialchars($folderName, ENT_QUOTES, 'UTF-8'); ?></h1>
-            </div>
-            <div class="container">
-                <button id="toggleBtn" class="toggle-btn">Switch to Gallery View</button>
-                <div id="listViewContainer">
-                    <?php if (empty($files)): ?>
-                        <p style="text-align:center;">This folder is empty.</p>
-                    <?php else: ?>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Filename</th>
-                                    <th>Size</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($files as $file):
-                                    $safeName   = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
-                                    $sizeString = "Unknown";
-                                    if (array_key_exists($file, $fileSizes)) {
-                                        $sizeString = self::formatBytes((int)$fileSizes[$file]);
-                                    }
-                                    $downloadLink = fr_with_base_path("/api/folder/downloadSharedFile.php?token=" . urlencode($token) . "&file=" . urlencode($file));
-                                ?>
-                                    <tr>
-                                        <td><a href="<?php echo htmlspecialchars($downloadLink, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $safeName; ?> <span class="download-icon">&#x21E9;</span></a></td>
-                                        <td><?php echo $sizeString; ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
+        <body class="fr-share-body">
+            <div class="fr-share-shell">
+                <div class="fr-share-card fr-share-card-wide">
+                    <div class="fr-share-card-header">
+                        <img id="shareLogo" class="fr-share-logo" src="<?php echo htmlspecialchars(fr_with_base_path('/assets/logo.svg?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" alt="FileRise">
+                        <div class="fr-share-header-text">
+                            <div class="fr-share-kicker">Shared folder</div>
+                            <div id="shareTitle" class="fr-share-title"><?php echo htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8'); ?></div>
+                            <div id="shareBreadcrumbs" class="fr-share-breadcrumbs"></div>
+                        </div>
+                        <div class="fr-share-actions">
+                            <button type="button" id="downloadAllBtn" class="fr-share-btn" <?php echo $canDownloadAll ? '' : 'disabled'; ?>>Download all</button>
+                            <button type="button" id="toggleViewBtn" class="fr-share-btn fr-share-btn-ghost">Gallery</button>
+                            <button type="button" id="shareThemeToggle" class="fr-share-btn fr-share-btn-ghost">Dark mode</button>
+                        </div>
+                    </div>
+
+                    <div class="fr-share-toolbar">
+                        <div class="fr-share-search-wrap">
+                            <input type="text" id="shareSearchInput" class="fr-share-search" placeholder="Search this folder">
+                        </div>
+                        <div id="shareCount" class="fr-share-count"></div>
+                    </div>
+
+                    <?php if ($allowUpload): ?>
+                        <div class="fr-share-card fr-share-upload">
+                            <div class="fr-share-upload-title">
+                                Upload file<?php if ($sharedMaxUploadSize !== null): ?> (<?php echo self::formatBytes($sharedMaxUploadSize); ?> max)<?php endif; ?>
+                            </div>
+                            <form action="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/uploadToSharedFolder.php'), ENT_QUOTES, 'UTF-8'); ?>" method="post" enctype="multipart/form-data" class="fr-share-upload-form">
+                                <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
+                                <?php if (!empty($providedPass)): ?><input type="hidden" name="pass" value="<?php echo htmlspecialchars($providedPass, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+                                <?php if ($currentPath !== ''): ?><input type="hidden" name="path" value="<?php echo htmlspecialchars($currentPath, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+                                <?php if ($uploadToken !== ''): ?><input type="hidden" name="share_upload_token" value="<?php echo htmlspecialchars($uploadToken, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+                                <input type="file" name="fileToUpload" required>
+                                <button type="submit" class="fr-share-btn">Upload</button>
+                            </form>
+                            <div id="shareUploadProgress" class="fr-share-upload-progress" hidden>
+                                <div class="fr-share-upload-progress-track">
+                                    <div class="fr-share-upload-progress-fill"></div>
+                                </div>
+                                <div id="shareUploadProgressText" class="fr-share-upload-progress-text">Uploading...</div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <div id="shareListView" class="fr-share-list"></div>
+                    <div id="shareGalleryView" class="fr-share-gallery" style="display:none;"></div>
+                    <div id="shareEmptyState" class="fr-share-empty" style="display:none;">This folder is empty.</div>
+
+                    <?php if ($totalPages > 1): ?>
+                        <div class="fr-share-pagination">
+                            <?php if ($currentPage > 1): ?>
+                                <a href="<?php echo htmlspecialchars($shareBaseUrl . '?' . $queryBase . '&page=' . ($currentPage - 1), ENT_QUOTES, 'UTF-8'); ?>">Prev</a>
+                            <?php else: ?><span>Prev</span><?php endif; ?>
+                            <?php $startPage = max(1, $currentPage - 2);
+                            $endPage = min($totalPages, $currentPage + 2);
+                            for ($i = $startPage; $i <= $endPage; $i++): ?>
+                                <?php if ($i == $currentPage): ?><span class="current"><?php echo $i; ?></span>
+                                <?php else: ?><a href="<?php echo htmlspecialchars($shareBaseUrl . '?' . $queryBase . '&page=' . $i, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $i; ?></a>
+                            <?php endif;
+                            endfor; ?>
+                            <?php if ($currentPage < $totalPages): ?>
+                                <a href="<?php echo htmlspecialchars($shareBaseUrl . '?' . $queryBase . '&page=' . ($currentPage + 1), ENT_QUOTES, 'UTF-8'); ?>">Next</a>
+                            <?php else: ?><span>Next</span><?php endif; ?>
+                        </div>
                     <?php endif; ?>
                 </div>
-                <div id="galleryViewContainer" style="display:none;"></div>
-                <div class="pagination">
-                    <?php if ($currentPage > 1): ?>
-                        <a href="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage - 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Prev</a>
-                    <?php else: ?><span>Prev</span><?php endif; ?>
-                    <?php $startPage = max(1, $currentPage - 2);
-                    $endPage = min($totalPages, $currentPage + 2);
-                    for ($i = $startPage; $i <= $endPage; $i++): ?>
-                        <?php if ($i == $currentPage): ?><span class="current"><?php echo $i; ?></span>
-                        <?php else: ?><a href="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>?token=<?php echo urlencode($token); ?>&page=<?php echo $i; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>"><?php echo $i; ?></a>
-                    <?php endif;
-                    endfor; ?>
-                    <?php if ($currentPage < $totalPages): ?>
-                        <a href="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/shareFolder.php'), ENT_QUOTES, 'UTF-8'); ?>?token=<?php echo urlencode($token); ?>&page=<?php echo $currentPage + 1; ?><?php echo !empty($providedPass) ? "&pass=" . urlencode($providedPass) : ""; ?>">Next</a>
-                    <?php else: ?><span>Next</span><?php endif; ?>
-                </div>
 
-                <?php if (isset($data['record']['allowUpload']) && (int)$data['record']['allowUpload'] === 1): ?>
-                    <div class="upload-container">
-                        <h3>Upload File <?php if ($sharedMaxUploadSize !== null): ?>(<?php echo self::formatBytes($sharedMaxUploadSize); ?> max size)<?php endif; ?></h3>
-                        <form action="<?php echo htmlspecialchars(fr_with_base_path('/api/folder/uploadToSharedFolder.php'), ENT_QUOTES, 'UTF-8'); ?>" method="post" enctype="multipart/form-data">
-                            <input type="hidden" name="token" value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
-                            <input type="file" name="fileToUpload" required><br><br><button type="submit">Upload</button>
-                        </form>
-                    </div>
-                <?php endif; ?>
+                <div id="shareFooter" class="fr-share-footer">&copy; <?php echo date("Y"); ?> FileRise. All rights reserved.</div>
             </div>
-            <div class="footer">&copy; <?php echo date("Y"); ?> FileRise. All rights reserved.</div>
-            <script type="application/json" id="shared-data">
-                {
-                    "token": <?php echo json_encode($token, JSON_HEX_TAG); ?>,
-                    "files": <?php echo json_encode($files, JSON_HEX_TAG); ?>
-                }
-            </script>
-            <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/sharedFolderView.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+            <script type="application/json" id="shared-data"><?php echo json_encode([
+                'token' => $token,
+                'entries' => $entries,
+                'shareRoot' => $shareRoot,
+                'path' => $currentPath,
+                'allowSubfolders' => $allowSubfolders ? 1 : 0,
+                'canDownloadAll' => $canDownloadAll ? 1 : 0,
+                'totalEntries' => $totalEntries,
+                'currentPage' => $currentPage,
+                'totalPages' => $totalPages,
+            ], JSON_HEX_TAG | JSON_HEX_AMP); ?></script>
+            <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/shareBranding.js?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+            <script src="<?php echo htmlspecialchars(fr_with_base_path('/js/sharedFolderView.js?v={{APP_QVER}}'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
         </body>
 
         </html>
@@ -1458,6 +1668,7 @@ class FolderController
         $unit        = $in['expirationUnit'] ?? 'minutes';
         $password    = (string)($in['password'] ?? '');
         $allowUpload = intval($in['allowUpload'] ?? 0);
+        $allowSubfolders = intval($in['allowSubfolders'] ?? 0);
 
         if ($folder !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             http_response_code(400);
@@ -1522,7 +1733,7 @@ class FolderController
         }
         $seconds = min($seconds, 31536000);
 
-        $res = FolderModel::createShareFolderLink($folder, $seconds, $password, $allowUpload);
+        $res = FolderModel::createShareFolderLink($folder, $seconds, $password, $allowUpload, $allowSubfolders);
         if (is_array($res) && !empty($res['token'])) {
             AuditHook::log('share.link.create', [
                 'user'   => $username,
@@ -1554,6 +1765,21 @@ class FolderController
             exit;
         }
         $token = trim((string)$_POST['token']);
+        $subPath = (string)($_POST['path'] ?? '');
+        $providedPass = (string)($_POST['pass'] ?? '');
+        $uploadToken = (string)($_POST['share_upload_token'] ?? '');
+
+        $secret = (string)($GLOBALS['encryptionKey'] ?? '');
+        if ($secret !== '') {
+            $seed = $token . '|' . $subPath . '|' . $providedPass;
+            $expected = hash_hmac('sha256', $seed, $secret);
+            if ($uploadToken === '' || !hash_equals($expected, $uploadToken)) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "Upload token missing or invalid."]);
+                exit;
+            }
+        }
 
         if (!isset($_FILES['fileToUpload'])) {
             http_response_code(400);
@@ -1672,7 +1898,7 @@ class FolderController
         }
         // --------------------------------------------------------------
 
-        $result = FolderModel::uploadToSharedFolder($token, $fileUpload);
+        $result = FolderModel::uploadToSharedFolder($token, $fileUpload, $subPath, $providedPass);
         if (isset($result['error'])) {
             http_response_code(400);
             header('Content-Type: application/json; charset=utf-8');
@@ -1696,6 +1922,12 @@ class FolderController
 
         $_SESSION['upload_message'] = "File uploaded successfully.";
         $redirectUrl = fr_with_base_path("/api/folder/shareFolder.php?token=" . urlencode($token));
+        if ($providedPass !== '') {
+            $redirectUrl .= "&pass=" . urlencode($providedPass);
+        }
+        if ($subPath !== '') {
+            $redirectUrl .= "&path=" . urlencode($subPath);
+        }
         header("Location: " . $redirectUrl);
         exit;
     }

@@ -9,7 +9,10 @@
  *   operationId="downloadSharedFile",
  *   tags={"Shared Folders"},
  *   @OA\Parameter(name="token", in="query", required=true, @OA\Schema(type="string")),
- *   @OA\Parameter(name="file", in="query", required=true, @OA\Schema(type="string"), example="report.pdf"),
+ *   @OA\Parameter(name="pass", in="query", required=false, @OA\Schema(type="string")),
+ *   @OA\Parameter(name="file", in="query", required=false, @OA\Schema(type="string"), example="report.pdf"),
+ *   @OA\Parameter(name="path", in="query", required=false, @OA\Schema(type="string"), example="subfolder/report.pdf"),
+ *   @OA\Parameter(name="inline", in="query", required=false, @OA\Schema(type="integer", enum={0,1}), description="Allow inline rendering for safe types"),
  *   @OA\Response(
  *     response=200,
  *     description="Binary file",
@@ -21,6 +24,7 @@
  *     }
  *   ),
  *   @OA\Response(response=400, description="Invalid input"),
+ *   @OA\Response(response=403, description="Password required"),
  *   @OA\Response(response=404, description="Not found")
  * )
  */

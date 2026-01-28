@@ -2,7 +2,7 @@
 # FileRise portable .htaccess
 # --------------------------------
 Options -Indexes -Multiviews
-DirectoryIndex index.html
+DirectoryIndex index.php index.html
 
 # Allow PATH_INFO for routes like /webdav.php/foo/bar
 AcceptPathInfo On
@@ -37,6 +37,7 @@ RewriteRule ^portal/([A-Za-z0-9_-]+)$ portal.html?slug=$1 [L,QSA]
 RewriteCond %{REQUEST_URI} !^/api/ [NC]
 RewriteCond %{REQUEST_URI} !^/api\.php$ [NC]
 RewriteCond %{REQUEST_URI} !^/webdav\.php$ [NC]
+RewriteCond %{REQUEST_URI} !^/index\.php$ [NC]
 RewriteRule \.php$ - [F,L]
 
 # 3) Never redirect local/dev hosts

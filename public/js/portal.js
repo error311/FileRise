@@ -6,6 +6,340 @@ import { t, applyTranslations, setLocale } from './i18n.js?v={{APP_QVER}}';
 // Ensure /api/* calls work when FileRise is mounted under a subpath (e.g. /fr).
 patchFetchForBasePath();
 
+const portalThemeStorageKey = 'fr_portal_theme';
+
+let portal = null;
+let portalFormDone = false;
+let portalFilesCache = [];
+let portalViewMode = 'list';
+let portalZipBusy = false;
+let portalDownloadAllDisabled = false;
+let portalPath = '';
+let portalPage = 1;
+let portalFilesTotalEntries = 0;
+let portalFilesTotalFiles = 0;
+let portalFilesTotalPages = 1;
+const portalFilesPerPage = 50;
+const portalSubmissionRefKey = 'fr_portal_submission_ref:';
+let portalSubmissionRef = '';
+let portalSubmissionRefSlug = '';
+
+function sanitizePortalSubmissionRef(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const cleaned = raw.replace(/[^A-Za-z0-9_-]/g, '').toUpperCase();
+  return cleaned.slice(0, 48);
+}
+
+function generatePortalSubmissionRef() {
+  const stamp = Date.now().toString(36).toUpperCase();
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return 'PRT-' + stamp + '-' + rand;
+}
+
+function getPortalSubmissionRef() {
+  const slug = getPortalSlug();
+  if (!slug) return '';
+  if (portalSubmissionRef && portalSubmissionRefSlug === slug) {
+    return portalSubmissionRef;
+  }
+  portalSubmissionRef = '';
+  portalSubmissionRefSlug = slug;
+  const key = portalSubmissionRefKey + slug;
+  let ref = '';
+  try { ref = localStorage.getItem(key) || ''; } catch (e) { /* ignore */ }
+  ref = sanitizePortalSubmissionRef(ref);
+  if (!ref) {
+    ref = generatePortalSubmissionRef();
+    try { localStorage.setItem(key, ref); } catch (e) { /* ignore */ }
+  }
+  portalSubmissionRef = ref;
+  return ref;
+}
+
+function setPortalSubmissionRef(value) {
+  const slug = getPortalSlug();
+  if (!slug) return;
+  const key = portalSubmissionRefKey + slug;
+  const ref = sanitizePortalSubmissionRef(value);
+  if (!ref) return;
+  portalSubmissionRef = ref;
+  portalSubmissionRefSlug = slug;
+  try { localStorage.setItem(key, ref); } catch (e) { /* ignore */ }
+}
+
+function getPortalThemeStored() {
+  try { return localStorage.getItem(portalThemeStorageKey) || ''; } catch (e) { /* ignore */ }
+  return '';
+}
+
+function setPortalThemeStored(theme) {
+  try { localStorage.setItem(portalThemeStorageKey, theme); } catch (e) { /* ignore */ }
+}
+
+function getPortalThemeDefault() {
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
+  }
+  return 'light';
+}
+
+let portalTheme = '';
+let portalSiteConfig = null;
+let portalBranding = null;
+
+function withBaseIfRelative(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (raw[0] === '/') return withBase(raw);
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return raw;
+  return withBase('/' + raw.replace(/^\.?\//, ''));
+}
+
+function upsertLink(selector, builder, href) {
+  if (!href) return;
+  let el = document.querySelector(selector);
+  if (!el) {
+    el = builder();
+    document.head.appendChild(el);
+  }
+  el.setAttribute('href', href);
+}
+
+function updatePortalIconLinks(branding) {
+  if (!branding || typeof branding !== 'object') return;
+
+  const svg = withBaseIfRelative(branding.faviconSvg || '');
+  const png = withBaseIfRelative(branding.faviconPng || '');
+  const ico = withBaseIfRelative(branding.faviconIco || '');
+  const apple = withBaseIfRelative(branding.appleTouchIcon || '');
+  const mask = withBaseIfRelative(branding.maskIcon || '');
+
+  if (svg) {
+    upsertLink('link[rel="icon"][type="image/svg+xml"]', () => {
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      link.type = 'image/svg+xml';
+      link.sizes = 'any';
+      return link;
+    }, svg);
+  }
+
+  if (png) {
+    const pngLinks = document.querySelectorAll('link[rel="icon"][type="image/png"]');
+    if (pngLinks.length) {
+      pngLinks.forEach((link) => link.setAttribute('href', png));
+    } else {
+      upsertLink('link[rel="icon"][type="image/png"]', () => {
+        const link = document.createElement('link');
+        link.rel = 'icon';
+        link.type = 'image/png';
+        return link;
+      }, png);
+    }
+  }
+
+  if (ico) {
+    upsertLink('link[rel="shortcut icon"]', () => {
+      const link = document.createElement('link');
+      link.rel = 'shortcut icon';
+      return link;
+    }, ico);
+  }
+
+  if (apple) {
+    upsertLink('link[rel="apple-touch-icon"]', () => {
+      const link = document.createElement('link');
+      link.rel = 'apple-touch-icon';
+      return link;
+    }, apple);
+  }
+
+  if (mask) {
+    upsertLink('link[rel="mask-icon"]', () => {
+      const link = document.createElement('link');
+      link.rel = 'mask-icon';
+      return link;
+    }, mask);
+    const maskLink = document.querySelector('link[rel="mask-icon"]');
+    if (maskLink) {
+      const color = String(branding.maskIconColor || '').trim();
+      if (color) {
+        maskLink.setAttribute('color', color);
+      } else {
+        maskLink.removeAttribute('color');
+      }
+    }
+  }
+}
+
+function clearPortalFaviconFallback() {
+  document.querySelectorAll('link[data-portal-fallback="1"]').forEach((el) => el.remove());
+}
+
+function applyPortalFaviconFallback(url) {
+  const href = withBaseIfRelative(url);
+  if (!href) return;
+  const clean = href.split('?')[0].toLowerCase();
+  let type = '';
+  if (clean.endsWith('.svg') || clean.endsWith('.svgz')) {
+    type = 'image/svg+xml';
+  } else if (clean.endsWith('.png')) {
+    type = 'image/png';
+  }
+
+  let icon = document.querySelector('link[rel="icon"][data-portal-fallback="1"]');
+  if (!icon) {
+    icon = document.createElement('link');
+    icon.rel = 'icon';
+    icon.setAttribute('data-portal-fallback', '1');
+    document.head.appendChild(icon);
+  }
+  if (type) {
+    icon.type = type;
+  } else {
+    icon.removeAttribute('type');
+  }
+  icon.href = href;
+
+  let apple = document.querySelector('link[rel="apple-touch-icon"][data-portal-fallback="1"]');
+  if (!apple) {
+    apple = document.createElement('link');
+    apple.rel = 'apple-touch-icon';
+    apple.setAttribute('data-portal-fallback', '1');
+    document.head.appendChild(apple);
+  }
+  apple.href = href;
+}
+
+function applyPortalThemeColor(isDark) {
+  if (!portalBranding || typeof portalBranding !== 'object') return;
+  const color = isDark
+    ? String(portalBranding.themeColorDark || '').trim()
+    : String(portalBranding.themeColorLight || '').trim();
+  if (!color) return;
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+  meta.content = color;
+}
+
+function applyPortalSiteBranding(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  if (!cfg.pro || !cfg.pro.active) return;
+  portalSiteConfig = cfg;
+  portalBranding = (cfg && cfg.branding) ? cfg.branding : null;
+  if (!portalBranding) return;
+  updatePortalIconLinks(portalBranding);
+  clearPortalFaviconFallback();
+  applyPortalThemeColor(portalTheme === 'dark');
+}
+
+function applyPortalTheme(theme) {
+  const next = (theme === 'dark' || theme === 'light') ? theme : getPortalThemeDefault();
+  document.documentElement.setAttribute('data-portal-theme', next);
+  portalTheme = next;
+  applyPortalThemeOverrides();
+  applyPortalThemeColor(next === 'dark');
+  return next;
+}
+
+function setPortalCssVar(name, value) {
+  const root = document.documentElement;
+  const clean = (value == null) ? '' : String(value).trim();
+  if (clean) {
+    root.style.setProperty(name, clean);
+  } else {
+    root.style.removeProperty(name);
+  }
+}
+
+function applyPortalThemeOverrides() {
+  if (!portal || !portal.theme || typeof portal.theme !== 'object') {
+    setPortalCssVar('--portal-body-bg', '');
+    setPortalCssVar('--portal-surface', '');
+    setPortalCssVar('--portal-text', '');
+    setPortalCssVar('--portal-muted', '');
+    setPortalCssVar('--portal-border', '');
+    setPortalCssVar('--portal-shadow', '');
+    return;
+  }
+
+  const theme = portal.theme || {};
+  const cfg = (portalTheme === 'dark') ? (theme.dark || {}) : (theme.light || {});
+
+  setPortalCssVar('--portal-body-bg', cfg.bodyBg || '');
+  setPortalCssVar('--portal-surface', cfg.surface || '');
+  setPortalCssVar('--portal-text', cfg.text || '');
+  setPortalCssVar('--portal-muted', cfg.muted || '');
+  setPortalCssVar('--portal-border', cfg.border || '');
+  setPortalCssVar('--portal-shadow', cfg.shadow || '');
+}
+
+function parsePortalHexColor(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const hex = raw[0] === '#' ? raw.slice(1) : raw;
+  if (!/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(hex)) return null;
+  const full = hex.length === 3
+    ? hex.split('').map((c) => c + c).join('')
+    : hex;
+  return {
+    r: parseInt(full.slice(0, 2), 16),
+    g: parseInt(full.slice(2, 4), 16),
+    b: parseInt(full.slice(4, 6), 16),
+  };
+}
+
+function parsePortalRgbColor(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^rgba?\(([^)]+)\)$/i);
+  if (!match) return null;
+  const parts = match[1].split(',').map((p) => p.trim());
+  if (parts.length < 3) return null;
+  const r = parseFloat(parts[0]);
+  const g = parseFloat(parts[1]);
+  const b = parseFloat(parts[2]);
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return null;
+  return {
+    r: Math.max(0, Math.min(255, r)),
+    g: Math.max(0, Math.min(255, g)),
+    b: Math.max(0, Math.min(255, b)),
+  };
+}
+
+function getPortalAccentContrast(value) {
+  const rgb = parsePortalHexColor(value) || parsePortalRgbColor(value);
+  if (!rgb) return '';
+  const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+  return lum > 0.6 ? '#0f172a' : '#ffffff';
+}
+
+function updatePortalThemeToggle() {
+  const btn = document.getElementById('portalThemeToggle');
+  if (!btn) return;
+  const isDark = portalTheme === 'dark';
+  btn.textContent = isDark ? 'Light mode' : 'Dark mode';
+  btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+}
+
+function initPortalThemeToggle() {
+  const btn = document.getElementById('portalThemeToggle');
+  if (!btn) return;
+  updatePortalThemeToggle();
+  btn.addEventListener('click', () => {
+    const next = portalTheme === 'dark' ? 'light' : 'dark';
+    applyPortalTheme(next);
+    setPortalThemeStored(next);
+    updatePortalThemeToggle();
+  });
+}
+
+applyPortalTheme(getPortalThemeStored() || getPortalThemeDefault());
+
 function getStoredLocale() {
   try { return localStorage.getItem('language') || ''; } catch (e) { /* ignore */ }
   return '';
@@ -15,12 +349,31 @@ function getSavedLocale() {
   return getStoredLocale() || 'en';
 }
 
+let portalSiteConfigPromise = null;
+async function fetchPortalSiteConfigOnce() {
+  if (portalSiteConfig) return portalSiteConfig;
+  if (portalSiteConfigPromise) return portalSiteConfigPromise;
+  portalSiteConfigPromise = fetch(withBase('/api/siteConfig.php'), { credentials: 'include' })
+    .then((res) => res.json().catch(() => ({})))
+    .then((cfg) => {
+      if (cfg && typeof cfg === 'object') {
+        portalSiteConfig = cfg;
+        applyPortalSiteBranding(cfg);
+      }
+      return portalSiteConfig;
+    })
+    .catch(() => portalSiteConfig);
+  return portalSiteConfigPromise;
+}
+
 async function resolveLocale() {
   const stored = getStoredLocale();
-  if (stored) return stored;
+  if (stored) {
+    fetchPortalSiteConfigOnce();
+    return stored;
+  }
   try {
-    const res = await fetch(withBase('/api/siteConfig.php'), { credentials: 'include' });
-    const cfg = await res.json().catch(() => ({}));
+    const cfg = await fetchPortalSiteConfigOnce();
     const defaultLang = cfg && cfg.display && cfg.display.defaultLanguage
       ? String(cfg.display.defaultLanguage)
       : '';
@@ -61,13 +414,314 @@ function setupLanguageSelect() {
   });
 }
 
-let portal = null;
-let portalFormDone = false;
+const PORTAL_RESUMABLE_SRC = withBase('/vendor/resumable/1.1.0/resumable.min.js?v={{APP_QVER}}');
+const PORTAL_RESUMABLE_TARGET = withBase('/api/upload/upload.php');
+let portalResumableInstance = null;
+let portalResumableReady = false;
+let portalResumableLoadPromise = null;
+let portalResumableChunkBytes = null;
+let portalResumableBatch = null;
+let portalResumableBusy = false;
+
+function loadScriptOnce(src) {
+  if (portalResumableLoadPromise) return portalResumableLoadPromise;
+  portalResumableLoadPromise = new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.async = true;
+    el.onload = () => resolve(true);
+    el.onerror = () => reject(new Error('Failed to load script: ' + src));
+    document.head.appendChild(el);
+  });
+  return portalResumableLoadPromise;
+}
+
+async function getPortalResumableChunkBytes() {
+  if (portalResumableChunkBytes) return portalResumableChunkBytes;
+  let mb = 1.5;
+  try {
+    const cfg = await fetchPortalSiteConfigOnce();
+    const raw = cfg && cfg.uploads && cfg.uploads.resumableChunkMb;
+    if (raw !== undefined && raw !== null) {
+      const parsed = parseFloat(raw);
+      if (!Number.isNaN(parsed)) {
+        mb = parsed;
+      }
+    }
+  } catch (e) { /* ignore */ }
+  mb = Math.max(0.5, Math.min(100, mb));
+  portalResumableChunkBytes = mb * 1024 * 1024;
+  return portalResumableChunkBytes;
+}
+
+async function initPortalResumable() {
+  if (portalResumableReady && portalResumableInstance) return portalResumableInstance;
+  if (window.Resumable) {
+    portalResumableReady = true;
+  } else {
+    try {
+      await loadScriptOnce(PORTAL_RESUMABLE_SRC);
+    } catch (e) {
+      console.warn('Resumable.js unavailable:', e);
+      return null;
+    }
+  }
+
+  if (!window.Resumable) return null;
+
+  if (!portalResumableInstance) {
+    const chunkSize = await getPortalResumableChunkBytes();
+    portalResumableInstance = new window.Resumable({
+      target: PORTAL_RESUMABLE_TARGET,
+      chunkSize,
+      simultaneousUploads: 3,
+      forceChunkSize: true,
+      testChunks: true,
+      withCredentials: true,
+      headers: { 'X-CSRF-Token': getCsrfToken() || '' },
+      query: () => {
+        const q = {
+          folder: portalTargetFolder(),
+          upload_token: getCsrfToken() || '',
+          source: 'portal'
+        };
+        const portalSlug = getPortalSlug();
+        if (portalSlug) {
+          q.portal = portalSlug;
+        }
+        const submissionRef = getPortalSubmissionRef();
+        if (submissionRef) {
+          q.submissionRef = submissionRef;
+        }
+        const sourceId = portalSourceId();
+        if (sourceId) {
+          q.sourceId = sourceId;
+        }
+        return q;
+      }
+    });
+
+    if (portalResumableInstance && portalResumableInstance.support === false) {
+      portalResumableInstance = null;
+      return null;
+    }
+
+    portalResumableInstance.on('fileProgress', () => {
+      if (!portalResumableBatch || !portalResumableInstance) return;
+      portalResumableBatch.hadProgress = true;
+      const pct = Math.min(100, Math.max(0, Math.floor(portalResumableInstance.progress() * 100)));
+      const base = t('portal_uploading', { count: portalResumableBatch.total }) || ('Uploading ' + portalResumableBatch.total + ' file(s)…');
+      setStatus(base + ' ' + pct + '%');
+      setUploadProgress(pct);
+    });
+
+    portalResumableInstance.on('fileSuccess', (file, message) => {
+      if (!portalResumableBatch) return;
+      let data = null;
+      try { data = JSON.parse(message); } catch (e) { /* ignore */ }
+      if (data && data.csrf_expired && data.csrf_token) {
+        setCsrfToken(data.csrf_token);
+        if (portalResumableInstance) {
+          portalResumableInstance.opts.headers['X-CSRF-Token'] = data.csrf_token;
+        }
+        if (file && typeof file.retry === 'function') {
+          file.retry();
+        }
+        return;
+      }
+      portalResumableBatch.success += 1;
+    });
+
+    portalResumableInstance.on('fileError', (file, message) => {
+      if (!portalResumableBatch) return;
+      portalResumableBatch.failed += 1;
+      let detail = '';
+      if (typeof message === 'string' && message.trim()) {
+        try {
+          const parsed = JSON.parse(message);
+          detail = (parsed && (parsed.error || parsed.message)) ? String(parsed.error || parsed.message) : message.trim();
+        } catch (e) {
+          detail = message.trim();
+        }
+      }
+      if (detail) {
+        portalResumableBatch.lastError = detail;
+      }
+    });
+
+    portalResumableInstance.on('complete', () => {
+      const batch = portalResumableBatch;
+      portalResumableBatch = null;
+      portalResumableBusy = false;
+      if (portalResumableInstance) {
+        portalResumableInstance.cancel();
+      }
+
+      if (!batch) return;
+      if (!batch.success && !batch.hadProgress && Array.isArray(batch.files) && batch.files.length) {
+        showToast(t('portal_resumable_fallback') || 'Resumable upload did not start. Trying standard upload…', 'info');
+        uploadFilesStandard(batch.files);
+        return;
+      }
+      if (batch.success && !batch.failed) {
+        setStatus(t('portal_upload_success', { count: batch.success }) || ('Uploaded ' + batch.success + ' file(s).'));
+        showToast(t('portal_upload_complete') || 'Upload complete.', 'success');
+      } else if (batch.success && batch.failed) {
+        setStatus(t('portal_upload_partial', { count: batch.success, failed: batch.failed }) || ('Uploaded ' + batch.success + ' file(s), ' + batch.failed + ' failed.'), true);
+        showToast(t('portal_upload_some_failed') || 'Some files failed to upload.', 'warning');
+      } else {
+        const base = t('portal_upload_failed') || 'Upload failed.';
+        const detail = batch.lastError ? (' ' + batch.lastError) : '';
+        setStatus(base + detail, true);
+        showToast(base + detail, 'error');
+      }
+
+      if (batch.success > 0) {
+        bumpUploadRateCounter(batch.success);
+      }
+
+      if (portalCanDownload()) {
+        loadPortalFiles();
+      }
+
+      if (batch.success > 0 && portal && portal.showThankYou) {
+        showThankYouScreen();
+      }
+
+      setUploadProgress(100);
+      setTimeout(() => resetUploadProgress(), 600);
+    });
+  }
+
+  portalResumableReady = true;
+  return portalResumableInstance;
+}
 
 // --- Portal helpers: folder + download flag -----------------
 function portalFolder() {
   if (!portal) return 'root';
   return portal.folder || portal.targetFolder || portal.path || 'root';
+}
+
+function normalizePortalPath(raw) {
+  const trimmed = String(raw || '').replace(/\\/g, '/').trim();
+  const clean = trimmed.replace(/^\/+|\/+$/g, '');
+  if (!clean) {
+    return { value: '', error: null };
+  }
+  const parts = clean.split('/').filter(Boolean);
+  for (const seg of parts) {
+    if (seg === '.' || seg === '..') {
+      return { value: '', error: 'Invalid folder name.' };
+    }
+    if (seg.length > 255 || /[\x00-\x1F\x7F]/.test(seg)) {
+      return { value: '', error: 'Invalid folder name.' };
+    }
+  }
+  return { value: parts.join('/'), error: null };
+}
+
+function portalTargetFolder() {
+  const base = portalFolder();
+  const sub = portalPath;
+  if (!sub) return base;
+  if (base === 'root' || base === '') return sub;
+  return base + '/' + sub;
+}
+
+function getPortalPathFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    return (url.searchParams.get('path') || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+function joinPortalPath(base, name) {
+  if (!base) return name;
+  return base.replace(/\/+$/g, '') + '/' + name;
+}
+
+function buildPortalUrl(path) {
+  const url = new URL(window.location.href);
+  if (path) {
+    url.searchParams.set('path', path);
+  } else {
+    url.searchParams.delete('path');
+  }
+  return url.pathname + url.search + url.hash;
+}
+
+function updatePortalUrl(path, replace = false) {
+  const next = buildPortalUrl(path);
+  if (replace) {
+    history.replaceState({ path }, '', next);
+  } else {
+    history.pushState({ path }, '', next);
+  }
+}
+
+function navigatePortalPath(path, opts = {}) {
+  const { replace = false } = opts;
+  if (!portal || !portal.allowSubfolders) {
+    return;
+  }
+  if (portalResumableBusy) {
+    showToast(t('portal_upload_in_progress') || 'An upload is already in progress.', 'warning');
+    return;
+  }
+  portalPath = path;
+  portalPage = 1;
+  updatePortalUrl(path, replace);
+  renderPortalBreadcrumbs();
+  if (portalCanDownload()) {
+    loadPortalFiles();
+  }
+}
+
+function renderPortalBreadcrumbs() {
+  const el = qs('portalBreadcrumbs');
+  if (!el) return;
+  el.innerHTML = '';
+
+  if (!portal) return;
+
+  const rootLabel = (portal.title && portal.title.trim())
+    ? portal.title.trim()
+    : (portal.label || portal.slug || 'Portal');
+
+  const rootLink = document.createElement('a');
+  rootLink.href = buildPortalUrl('');
+  rootLink.textContent = rootLabel;
+  rootLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (portalPath) {
+      navigatePortalPath('', { replace: false });
+    }
+  });
+  el.appendChild(rootLink);
+
+  if (!portal.allowSubfolders || !portalPath) return;
+
+  const parts = portalPath.split('/').filter(Boolean);
+  let acc = '';
+  parts.forEach((part) => {
+    acc = acc ? acc + '/' + part : part;
+    const sep = document.createElement('span');
+    sep.className = 'portal-breadcrumb-sep';
+    sep.textContent = '/';
+    el.appendChild(sep);
+
+    const link = document.createElement('a');
+    link.href = buildPortalUrl(acc);
+    link.textContent = part;
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigatePortalPath(acc, { replace: false });
+    });
+    el.appendChild(link);
+  });
 }
 
 function portalSourceId() {
@@ -223,13 +877,26 @@ function showThankYouScreen() {
 
   const section = qs('portalThankYouSection');
   const msgEl   = document.getElementById('portalThankYouMessage');
+  const refEl   = document.getElementById('portalThankYouRef');
   const upload  = qs('portalUploadSection');
 
   if (msgEl) {
     const text =
       (portal.thankYouText && portal.thankYouText.trim()) ||
-      (t('portal_thankyou_default') || 'Thank you. Your files have been uploaded successfully.');
+      (t('portal_thankyou_default') || 'Your files have been uploaded successfully.');
     msgEl.textContent = text;
+  }
+
+  if (refEl) {
+    const showRef = !!portal.thankYouShowRef;
+    const ref = showRef ? getPortalSubmissionRef() : '';
+    if (ref) {
+      refEl.textContent = 'Submission ID: ' + ref;
+      refEl.style.display = 'block';
+    } else {
+      refEl.textContent = '';
+      refEl.style.display = 'none';
+    }
   }
 
   if (section) {
@@ -250,9 +917,38 @@ function setStatus(msg, isError = false) {
   if (!el) return;
   el.textContent = msg || '';
   el.classList.toggle('text-danger', !!isError);
-  if (!isError) {
-    el.classList.add('text-muted');
-  }
+  el.classList.toggle('text-muted', !isError);
+}
+
+function setUploadProgress(pct) {
+  const wrap = qs('portalUploadProgress');
+  const bar = qs('portalUploadProgressBar');
+  if (!wrap || !bar) return;
+  const safe = Math.max(0, Math.min(100, Math.round(pct)));
+  wrap.classList.add('is-visible');
+  wrap.classList.remove('is-indeterminate');
+  bar.style.width = safe + '%';
+  wrap.setAttribute('aria-valuenow', String(safe));
+}
+
+function setUploadProgressIndeterminate() {
+  const wrap = qs('portalUploadProgress');
+  const bar = qs('portalUploadProgressBar');
+  if (!wrap || !bar) return;
+  wrap.classList.add('is-visible');
+  wrap.classList.add('is-indeterminate');
+  bar.style.width = '40%';
+  wrap.removeAttribute('aria-valuenow');
+}
+
+function resetUploadProgress() {
+  const wrap = qs('portalUploadProgress');
+  const bar = qs('portalUploadProgressBar');
+  if (!wrap || !bar) return;
+  wrap.classList.remove('is-visible');
+  wrap.classList.remove('is-indeterminate');
+  bar.style.width = '0%';
+  wrap.removeAttribute('aria-valuenow');
 }
 
 // ----------------- Form labels (custom captions) -----------------
@@ -288,11 +984,19 @@ async function submitPortalForm(slug, formData) {
     slug,
     form: formData
   };
+  const submissionRef = getPortalSubmissionRef();
+  if (submissionRef) {
+    payload.submissionRef = submissionRef;
+  }
   const headers = { 'X-CSRF-Token': getCsrfToken() || '' };
   const res = await sendRequest('/api/pro/portals/submitForm.php', 'POST', payload, headers);
   if (!res || !res.success) {
     throw new Error((res && res.error) || t('portal_form_error_save') || 'Error saving form.');
   }
+  if (res && res.submissionRef) {
+    setPortalSubmissionRef(res.submissionRef);
+  }
+  return res && res.submissionRef ? res.submissionRef : submissionRef;
 }
 
 // ----------------- Toast -----------------
@@ -638,7 +1342,7 @@ function renderPortalInfo() {
     if (portal.introText && portal.introText.trim()) {
       descEl.textContent = portal.introText.trim();
     } else {
-      const folder = portalFolder();
+      const folder = portalTargetFolder();
       descEl.textContent = t('portal_desc_uploads_to', { folder }) || ('Files you upload here go directly into: ' + folder);
     }
 
@@ -662,13 +1366,26 @@ function renderPortalInfo() {
     }
   }
 
-  if (logoImg) {
-    if (portal.logoUrl && portal.logoUrl.trim()) {
-      logoImg.src = portal.logoUrl.trim();
-    } else if (portal.logoFile && portal.logoFile.trim()) {
-      // Fallback if backend only supplies logoFile
-      logoImg.src = withBase('/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim()));
-    }
+  let portalLogoUrl = '';
+  if (portal.logoUrl && portal.logoUrl.trim()) {
+    portalLogoUrl = portal.logoUrl.trim();
+  } else if (portal.logoFile && portal.logoFile.trim()) {
+    // Fallback if backend only supplies logoFile
+    portalLogoUrl = '/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim());
+  }
+
+  if (logoImg && portalLogoUrl) {
+    logoImg.src = portalLogoUrl.startsWith('/') ? withBase(portalLogoUrl) : portalLogoUrl;
+  }
+
+  const hasBrandIcon = !!(
+    portalBranding &&
+    (portalBranding.faviconSvg || portalBranding.faviconPng || portalBranding.faviconIco || portalBranding.appleTouchIcon || portalBranding.maskIcon)
+  );
+  if (hasBrandIcon) {
+    clearPortalFaviconFallback();
+  } else if (portalLogoUrl) {
+    applyPortalFaviconFallback(portalLogoUrl);
   }
 
   const uploadsEnabled   = portalCanUpload();
@@ -692,6 +1409,11 @@ function renderPortalInfo() {
     footerEl.textContent = portal.footerText && portal.footerText.trim()
       ? portal.footerText.trim()
       : '';
+  }
+
+  if (!portal.allowSubfolders && portalPath) {
+    portalPath = '';
+    updatePortalUrl('', true);
   }
 
   const formSection   = qs('portalFormSection');
@@ -718,6 +1440,7 @@ function renderPortalInfo() {
   if (color) {
     // expose brand color as a CSS variable for gallery styling
     document.documentElement.style.setProperty('--portal-accent', color);
+    setPortalCssVar('--portal-accent-contrast', getPortalAccentContrast(color));
 
     if (drop) {
       drop.style.borderColor = color;
@@ -730,21 +1453,49 @@ function renderPortalInfo() {
       formBtn.style.borderColor = color;
     }
     if (refreshBtn) {
-      refreshBtn.style.borderColor = color;
-      refreshBtn.style.color = color;
+      refreshBtn.style.borderColor = '';
+      refreshBtn.style.color = '';
     }
+  } else {
+    setPortalCssVar('--portal-accent-contrast', '');
   }
+
+  applyPortalThemeOverrides();
 
   // Show/hide files section based on download capability
   if (filesSection) {
     filesSection.style.display = portalCanDownload() ? 'block' : 'none';
   }
+
+  renderPortalBreadcrumbs();
 }
 
 // ----------------- File helpers for gallery -----------------
 function formatFileSizeLabel(f) {
-  // API currently returns f.size as a human-readable string, so prefer that
-  if (f && f.size) return f.size;
+  if (!f) return '';
+  if (typeof f.size === 'string' && f.size.trim()) return f.size.trim();
+  if (typeof f.size === 'number' && Number.isFinite(f.size)) {
+    return formatBytes(f.size);
+  }
+  return '';
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(1) + ' GB';
+}
+
+function formatDateLabel(value) {
+  if (!value) return '';
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const ts = value < 1000000000000 ? value * 1000 : value;
+    const d = new Date(ts);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString();
+  }
+  if (typeof value === 'string') return value;
   return '';
 }
 
@@ -760,10 +1511,431 @@ function fileExtLabel(name) {
 
 function isImageName(name) {
   if (!name) return false;
-  return /\.(jpe?g|png|gif|bmp|webp|svg)$/i.test(name);
+  return /\.(jpe?g|png|gif|bmp|webp)$/i.test(name);
 }
 
-// ----------------- Load files for portal gallery -----------------
+function updatePortalViewToggle() {
+  const btn = qs('portalViewToggleBtn');
+  if (!btn) return;
+  const isGallery = portalViewMode === 'gallery';
+  btn.textContent = isGallery ? 'List' : 'Gallery';
+  btn.setAttribute('aria-pressed', isGallery ? 'true' : 'false');
+}
+
+function updatePortalFilesCount() {
+  const el = qs('portalFilesCount');
+  if (!el) return;
+  if (!Number.isFinite(portalFilesTotalEntries)) {
+    el.textContent = '';
+    return;
+  }
+  let label = portalFilesTotalEntries + ' item' + (portalFilesTotalEntries === 1 ? '' : 's');
+  if (Number.isFinite(portalFilesTotalFiles) && portalFilesTotalFiles > 0 && portalFilesTotalFiles !== portalFilesTotalEntries) {
+    label += ' • ' + portalFilesTotalFiles + ' file' + (portalFilesTotalFiles === 1 ? '' : 's');
+  }
+  el.textContent = label;
+}
+
+function setPortalView(mode) {
+  portalViewMode = (mode === 'gallery') ? 'gallery' : 'list';
+  updatePortalViewToggle();
+  renderPortalFiles(portalFilesCache);
+}
+
+function portalArchiveName() {
+  const base = (portal && (portal.title || portal.label || portal.slug)) ? String(portal.title || portal.label || portal.slug) : 'portal-files';
+  const cleaned = base.trim().replace(/[^A-Za-z0-9._-]/g, '_').replace(/_+/g, '_');
+  return cleaned || 'portal-files';
+}
+
+function renderPortalList(listEl, files) {
+  const folder = portalTargetFolder();
+  const portalSlug = getPortalSlug();
+  const sourceId = portalSourceId();
+  const sourceParam = sourceId ? '&sourceId=' + encodeURIComponent(sourceId) : '';
+  const submissionRef = getPortalSubmissionRef();
+  const submissionRefParam = submissionRef ? '&submissionRef=' + encodeURIComponent(submissionRef) : '';
+  const accent = portal && portal.brandColor && portal.brandColor.trim();
+  const canDownload = portalCanDownload();
+
+  files.forEach(f => {
+    const entryType = (f && f.type) ? String(f.type) : 'file';
+    const isFolder = entryType === 'folder';
+    const name = f.name || (t('portal_file_unnamed') || 'Unnamed file');
+    const nextPath = joinPortalPath(portalPath, name);
+
+    const row = document.createElement('div');
+    row.className = 'portal-file-row' + (isFolder ? ' portal-file-row-folder' : '');
+
+    const nameCell = document.createElement('div');
+    nameCell.className = 'portal-file-cell portal-file-cell-name';
+
+    const icon = document.createElement('div');
+    icon.className = 'portal-file-icon';
+    if (isFolder) {
+      icon.classList.add('is-folder');
+      icon.textContent = 'DIR';
+    } else {
+      icon.textContent = fileExtLabel(name);
+    }
+    if (accent) {
+      icon.style.borderColor = accent;
+    }
+
+    let nameEl;
+    if (isFolder) {
+      nameEl = document.createElement('a');
+      nameEl.className = 'portal-file-link portal-folder-link';
+      nameEl.textContent = name;
+      nameEl.href = buildPortalUrl(nextPath);
+      nameEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigatePortalPath(nextPath);
+      });
+    } else {
+      nameEl = document.createElement(canDownload ? 'a' : 'div');
+      nameEl.className = 'portal-file-link';
+      nameEl.textContent = name;
+      if (canDownload) {
+        nameEl.href = withBase(
+          '/api/file/download.php?folder=' +
+          encodeURIComponent(folder) +
+          '&file=' + encodeURIComponent(name) +
+          '&source=portal' +
+          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
+          submissionRefParam +
+          sourceParam
+        );
+        nameEl.target = '_blank';
+        nameEl.rel = 'noopener';
+      }
+    }
+
+    nameCell.appendChild(icon);
+    nameCell.appendChild(nameEl);
+
+    const sizeCell = document.createElement('div');
+    sizeCell.className = 'portal-file-cell portal-file-cell-size';
+    sizeCell.textContent = isFolder ? '-' : (formatFileSizeLabel(f) || '');
+
+    const modifiedCell = document.createElement('div');
+    modifiedCell.className = 'portal-file-cell portal-file-cell-modified';
+    modifiedCell.textContent = formatDateLabel(f.modified) || '';
+
+    const actions = document.createElement('div');
+    actions.className = 'portal-file-cell portal-file-cell-actions';
+    if (isFolder) {
+      const openBtn = document.createElement('a');
+      openBtn.href = buildPortalUrl(nextPath);
+      openBtn.textContent = t('open') || 'Open';
+      openBtn.className = 'portal-file-action';
+      openBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigatePortalPath(nextPath);
+      });
+      actions.appendChild(openBtn);
+    } else if (canDownload) {
+      const a = document.createElement('a');
+      a.href = withBase(
+        '/api/file/download.php?folder=' +
+        encodeURIComponent(folder) +
+        '&file=' + encodeURIComponent(name) +
+        '&source=portal' +
+        (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
+        submissionRefParam +
+        sourceParam
+      );
+      a.textContent = t('download') || 'Download';
+      a.className = 'portal-file-action portal-file-action-primary';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      actions.appendChild(a);
+    }
+
+    row.appendChild(nameCell);
+    row.appendChild(sizeCell);
+    row.appendChild(modifiedCell);
+    row.appendChild(actions);
+    listEl.appendChild(row);
+  });
+}
+
+function renderPortalGallery(listEl, files) {
+  const folder = portalTargetFolder();
+  const portalSlug = getPortalSlug();
+  const sourceId = portalSourceId();
+  const sourceParam = sourceId ? '&sourceId=' + encodeURIComponent(sourceId) : '';
+  const submissionRef = getPortalSubmissionRef();
+  const submissionRefParam = submissionRef ? '&submissionRef=' + encodeURIComponent(submissionRef) : '';
+  const accent = portal && portal.brandColor && portal.brandColor.trim();
+  const canDownload = portalCanDownload();
+
+  files.forEach(f => {
+    const entryType = (f && f.type) ? String(f.type) : 'file';
+    const isFolder = entryType === 'folder';
+    const name = f.name || (t('portal_file_unnamed') || 'Unnamed file');
+    const nextPath = joinPortalPath(portalPath, name);
+
+    const card = document.createElement('div');
+    card.className = 'portal-file-card' + (isFolder ? ' portal-file-card-folder' : '');
+
+    const icon = document.createElement('div');
+    icon.className = 'portal-file-card-icon';
+    if (isFolder) {
+      icon.classList.add('is-folder');
+    }
+
+    const main = document.createElement('div');
+    main.className = 'portal-file-card-main';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'portal-file-card-name';
+    nameEl.textContent = name;
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'portal-file-card-meta';
+    metaEl.textContent = isFolder ? (t('folder') || 'Folder') : formatFileSizeLabel(f);
+
+    main.appendChild(nameEl);
+    main.appendChild(metaEl);
+
+    const actions = document.createElement('div');
+    actions.className = 'portal-file-card-actions';
+
+    if (!isFolder && isImageName(name)) {
+      const thumbUrl = withBase(
+        '/api/file/download.php?folder=' +
+        encodeURIComponent(folder) +
+        '&file=' + encodeURIComponent(name) +
+        '&inline=1&t=' + Date.now() +
+        '&source=portal' +
+        (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
+        sourceParam
+      );
+
+      const img = document.createElement('img');
+      img.src = thumbUrl;
+      img.alt = name;
+      img.className = 'portal-file-card-thumb';
+
+      icon.appendChild(img);
+    } else {
+      icon.textContent = isFolder ? 'DIR' : fileExtLabel(name);
+    }
+
+    if (accent) {
+      icon.style.borderColor = accent;
+    }
+
+    if (isFolder) {
+      const openBtn = document.createElement('a');
+      openBtn.href = buildPortalUrl(nextPath);
+      openBtn.textContent = t('open') || 'Open';
+      openBtn.className = 'portal-file-card-download';
+      openBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigatePortalPath(nextPath);
+      });
+      actions.appendChild(openBtn);
+    } else if (canDownload) {
+      const a = document.createElement('a');
+      a.href = withBase(
+        '/api/file/download.php?folder=' +
+        encodeURIComponent(folder) +
+        '&file=' + encodeURIComponent(name) +
+        '&source=portal' +
+        (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
+        submissionRefParam +
+        sourceParam
+      );
+      a.textContent = t('download') || 'Download';
+      a.className = 'portal-file-card-download';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      actions.appendChild(a);
+    }
+
+    card.appendChild(icon);
+    card.appendChild(main);
+    card.appendChild(actions);
+    listEl.appendChild(card);
+  });
+}
+
+function renderPortalFiles(files) {
+  const listEl = qs('portalFilesList');
+  if (!listEl) return;
+
+  const items = Array.isArray(files) ? files : [];
+  portalFilesCache = items;
+  updatePortalFilesCount();
+
+  const downloadAllBtn = qs('portalDownloadAllBtn');
+  if (downloadAllBtn) {
+    downloadAllBtn.disabled = portalZipBusy || portalDownloadAllDisabled || portalFilesTotalFiles === 0;
+    if (!portalDownloadAllDisabled && downloadAllBtn.hasAttribute('title')) {
+      downloadAllBtn.removeAttribute('title');
+    }
+  }
+
+  if (!items.length) {
+    listEl.classList.remove('portal-files-grid');
+    listEl.innerHTML = '<div class="text-muted" style="padding:4px 0;">' + (t('portal_files_empty') || 'No items in this folder yet.') + '</div>';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  listEl.classList.toggle('portal-files-grid', portalViewMode === 'gallery');
+
+  if (portalViewMode === 'gallery') {
+    renderPortalGallery(listEl, items);
+  } else {
+    renderPortalList(listEl, items);
+  }
+}
+
+function setPortalPage(nextPage) {
+  const page = Math.max(1, Math.min(portalFilesTotalPages || 1, nextPage));
+  if (page === portalPage) return;
+  portalPage = page;
+  loadPortalFiles();
+}
+
+function renderPortalPagination() {
+  const el = qs('portalPagination');
+  if (!el) return;
+
+  el.innerHTML = '';
+
+  if (!portalCanDownload() || portalFilesTotalPages <= 1) {
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = 'flex';
+
+  const makeBtn = (label, page, disabled, active) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'portal-page-btn' + (active ? ' is-active' : '');
+    btn.textContent = label;
+    if (disabled) {
+      btn.disabled = true;
+    } else {
+      btn.addEventListener('click', () => setPortalPage(page));
+    }
+    return btn;
+  };
+
+  el.appendChild(makeBtn('Prev', portalPage - 1, portalPage <= 1, false));
+
+  const startPage = Math.max(1, portalPage - 2);
+  const endPage = Math.min(portalFilesTotalPages, portalPage + 2);
+  for (let i = startPage; i <= endPage; i++) {
+    el.appendChild(makeBtn(String(i), i, false, i === portalPage));
+  }
+
+  el.appendChild(makeBtn('Next', portalPage + 1, portalPage >= portalFilesTotalPages, false));
+}
+
+async function pollPortalZipStatus(statusUrl, downloadUrl, archiveName) {
+  const baseStatusUrl = withBase(statusUrl);
+  const baseDownloadUrl = withBase(downloadUrl);
+  const targetUrl = baseDownloadUrl + (baseDownloadUrl.includes('?') ? '&' : '?') + 'name=' + encodeURIComponent(archiveName);
+
+  while (true) {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    const statusUrlWithCache = baseStatusUrl + (baseStatusUrl.includes('?') ? '&' : '?') + '_=' + Date.now();
+    const status = await fetch(statusUrlWithCache, { credentials: 'include', cache: 'no-store' })
+      .then(r => r.json());
+
+    if (status.error) {
+      throw status;
+    }
+
+    if (status.ready || status.status === 'done') {
+      setStatus(t('portal_download_ready') || 'Download ready.');
+      window.location.href = targetUrl;
+      return;
+    }
+
+    if (status.status === 'error') {
+      throw new Error(status.error || (t('portal_files_error') || 'Error loading files.'));
+    }
+
+    if (typeof status.pct === 'number') {
+      setStatus((t('portal_download_preparing') || 'Preparing download…') + ' ' + status.pct + '%');
+    } else {
+      setStatus(t('portal_download_preparing') || 'Preparing download…');
+    }
+  }
+}
+
+async function fetchPortalAllFileNames() {
+  const slug = getPortalSlug();
+  if (!slug) return [];
+  const params = new URLSearchParams({
+    slug,
+    path: portalPath || '',
+    all: '1'
+  });
+  const data = await sendRequest(withBase('/api/pro/portals/listEntries.php?' + params.toString()), 'GET');
+  return Array.isArray(data.files) ? data.files : [];
+}
+
+async function downloadAllPortalFiles() {
+  if (!portalCanDownload() || portalZipBusy) return;
+
+  if (!portalFilesTotalFiles) {
+    showToast(t('portal_files_empty') || 'No files in this folder yet.', 'warning');
+    return;
+  }
+
+  portalZipBusy = true;
+  const btn = qs('portalDownloadAllBtn');
+  if (btn) btn.disabled = true;
+
+  try {
+    setStatus(t('portal_download_preparing') || 'Preparing download…');
+
+    const folder = portalTargetFolder();
+    const files = await fetchPortalAllFileNames();
+    if (!files.length) {
+      throw new Error(t('portal_files_empty') || 'No files in this folder yet.');
+    }
+    const payload = { folder, files, format: 'zip' };
+    const sourceId = portalSourceId();
+    if (sourceId) {
+      payload.sourceId = sourceId;
+    }
+
+    const res = await sendRequest('/api/file/downloadZip.php', 'POST', payload, {
+      'X-CSRF-Token': getCsrfToken()
+    });
+
+    const statusUrl = res && res.statusUrl ? res.statusUrl : '';
+    const downloadUrl = res && res.downloadUrl ? res.downloadUrl : '';
+    if (!statusUrl || !downloadUrl) {
+      throw new Error('Archive response missing status url.');
+    }
+
+    await pollPortalZipStatus(statusUrl, downloadUrl, portalArchiveName());
+  } catch (err) {
+    const msg = (err && err.error) ? err.error : (err && err.message ? err.message : (t('portal_files_error') || 'Error loading files.'));
+    setStatus(msg, true);
+    showToast(msg, 'error');
+    if (btn && /archive operations are not supported|archive downloads are not allowed/i.test(msg)) {
+      portalDownloadAllDisabled = true;
+      btn.disabled = true;
+      btn.title = msg;
+    }
+  } finally {
+    portalZipBusy = false;
+    if (btn) btn.disabled = portalZipBusy || portalDownloadAllDisabled || portalFilesCache.length === 0;
+  }
+}
+
+// ----------------- Load files for portal list/gallery -----------------
 async function loadPortalFiles() {
   if (!portal || !portalCanDownload()) return;
 
@@ -773,139 +1945,227 @@ async function loadPortalFiles() {
   listEl.innerHTML = '<div class="text-muted" style="padding:4px 0;">' + (t('portal_files_loading') || 'Loading files…') + '</div>';
 
   try {
-    const folder = portalFolder();
-    const sourceId = portalSourceId();
-    const sourceParam = sourceId ? '&sourceId=' + encodeURIComponent(sourceId) : '';
-    const data = await sendRequest('/api/file/getFileList.php?folder=' + encodeURIComponent(folder) + sourceParam, 'GET');
-    if (!data || data.error) {
-      const msg = (data && data.error) ? data.error : (t('portal_files_error') || 'Error loading files.');
-      listEl.innerHTML = '<div class="text-danger" style="padding:4px 0;">' + msg + '</div>';
-      return;
+    const slug = getPortalSlug();
+    if (!slug) {
+      throw new Error(t('portal_not_found') || 'Portal not found.');
     }
 
-    // Normalize files: handle both array and object-return shapes
-    let files = [];
-    if (Array.isArray(data.files)) {
-      files = data.files;
-    } else if (data.files && typeof data.files === 'object') {
-      files = Object.entries(data.files).map(([name, meta]) => {
-        const f = meta || {};
-        f.name = name;
-        return f;
-      });
-    }
-
-    if (!files.length) {
-      listEl.innerHTML = '<div class="text-muted" style="padding:4px 0;">' + (t('portal_files_empty') || 'No files in this portal yet.') + '</div>';
-      return;
-    }
-
-    const accent = portal.brandColor && portal.brandColor.trim();
-    const portalSlug = getPortalSlug();
-
-    listEl.innerHTML = '';
-    listEl.classList.add('portal-files-grid'); // gallery layout
-
-    const MAX = 24;
-    const slice = files.slice(0, MAX);
-
-    slice.forEach(f => {
-      const card = document.createElement('div');
-      card.className = 'portal-file-card';
-
-      const icon = document.createElement('div');
-      icon.className = 'portal-file-card-icon';
-
-      const main = document.createElement('div');
-      main.className = 'portal-file-card-main';
-
-      const nameEl = document.createElement('div');
-      nameEl.className = 'portal-file-card-name';
-      nameEl.textContent = f.name || (t('portal_file_unnamed') || 'Unnamed file');
-
-      const metaEl = document.createElement('div');
-      metaEl.className = 'portal-file-card-meta text-muted';
-      metaEl.textContent = formatFileSizeLabel(f);
-
-      main.appendChild(nameEl);
-      main.appendChild(metaEl);
-
-      const actions = document.createElement('div');
-      actions.className = 'portal-file-card-actions';
-
-      // Thumbnail vs extension badge
-      const fname = f.name || '';
-      const folder = portalFolder();
-
-      if (isImageName(fname)) {
-        const thumbUrl = withBase(
-          '/api/file/download.php?folder=' +
-          encodeURIComponent(folder) +
-          '&file=' + encodeURIComponent(fname) +
-          '&inline=1&t=' + Date.now() +
-          '&source=portal' +
-          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
-          sourceParam
-        );
-
-        const img = document.createElement('img');
-        img.src = thumbUrl;
-        img.alt = fname;
-        // 🔧 constrain image so it doesn't fill the whole list
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '120px';
-        img.style.objectFit = 'cover';
-        img.style.display = 'block';
-        img.style.borderRadius = '6px';
-
-        icon.appendChild(img);
-      } else {
-        icon.textContent = fileExtLabel(fname);
-      }
-
-      if (accent) {
-        icon.style.borderColor = accent;
-      }
-
-      if (portalCanDownload()) {
-        const a = document.createElement('a');
-        a.href = withBase(
-          '/api/file/download.php?folder=' +
-          encodeURIComponent(folder) +
-          '&file=' + encodeURIComponent(fname) +
-          '&source=portal' +
-          (portalSlug ? '&portal=' + encodeURIComponent(portalSlug) : '') +
-          sourceParam
-        );
-        a.textContent = t('download') || 'Download';
-        a.className = 'portal-file-card-download';
-        a.target = '_blank';
-        a.rel = 'noopener';
-        actions.appendChild(a);
-      }
-
-      card.appendChild(icon);
-      card.appendChild(main);
-      card.appendChild(actions);
-
-      listEl.appendChild(card);
+    const params = new URLSearchParams({
+      slug,
+      path: portalPath || '',
+      page: String(portalPage),
+      perPage: String(portalFilesPerPage)
     });
 
-    if (files.length > MAX) {
-      const more = document.createElement('div');
-      more.className = 'portal-files-more text-muted';
-      more.textContent = t('portal_files_more', { count: files.length - MAX }) || ('And ' + (files.length - MAX) + ' more…');
-      listEl.appendChild(more);
-    }
+    const data = await sendRequest(withBase('/api/pro/portals/listEntries.php?' + params.toString()), 'GET');
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+
+    const totalEntries = Number(data.totalEntries);
+    const totalFiles = Number(data.totalFiles);
+    const totalPages = Number(data.totalPages);
+    const currentPage = Number(data.currentPage);
+
+    portalFilesTotalEntries = Number.isFinite(totalEntries) ? totalEntries : entries.length;
+    portalFilesTotalFiles = Number.isFinite(totalFiles) ? totalFiles : 0;
+    portalFilesTotalPages = Number.isFinite(totalPages) ? totalPages : 1;
+    portalPage = Number.isFinite(currentPage) ? currentPage : portalPage;
+
+    renderPortalFiles(entries);
+    renderPortalPagination();
+    renderPortalBreadcrumbs();
   } catch (e) {
     console.error(e);
     listEl.innerHTML = '<div class="text-danger" style="padding:4px 0;">' + (t('portal_files_error') || 'Error loading files.') + '</div>';
+    portalFilesCache = [];
+    portalFilesTotalEntries = 0;
+    portalFilesTotalFiles = 0;
+    portalFilesTotalPages = 1;
+    updatePortalFilesCount();
+    renderPortalPagination();
   }
 }
 
 // ----------------- Upload -----------------
+async function uploadFilesResumable(files) {
+  const inst = await initPortalResumable();
+  if (!inst) return false;
+  if (inst.support === false) return false;
+
+  if (portalResumableBusy) {
+    showToast(t('portal_upload_in_progress') || 'An upload is already in progress.', 'warning');
+    return true;
+  }
+
+  portalResumableBusy = true;
+  portalResumableBatch = {
+    total: files.length,
+    success: 0,
+    failed: 0,
+    hadProgress: false,
+    files: files.slice()
+  };
+
+  const uploadFolder = portalTargetFolder();
+  const portalSlug = getPortalSlug();
+  const sourceId = portalSourceId();
+  inst.opts.headers['X-CSRF-Token'] = getCsrfToken() || '';
+  inst.opts.query = () => {
+    const q = {
+      folder: uploadFolder,
+      upload_token: getCsrfToken() || '',
+      source: 'portal'
+    };
+    if (portalSlug) {
+      q.portal = portalSlug;
+    }
+    const submissionRef = getPortalSubmissionRef();
+    if (submissionRef) {
+      q.submissionRef = submissionRef;
+    }
+    if (sourceId) {
+      q.sourceId = sourceId;
+    }
+    return q;
+  };
+  inst.cancel();
+
+  for (const file of files) {
+    inst.addFile(file);
+  }
+
+  const queuedCount = inst.files ? inst.files.length : 0;
+  if (!queuedCount) {
+    portalResumableBusy = false;
+    portalResumableBatch = null;
+    return false;
+  }
+
+  portalResumableBatch.total = queuedCount;
+
+  setStatus(t('portal_uploading', { count: queuedCount }) || ('Uploading ' + queuedCount + ' file(s)…'));
+  setUploadProgress(0);
+  inst.upload();
+  showToast(t('upload_resumable_started') || 'Resumable upload started...', 'info');
+  return true;
+}
+
+async function uploadFilesStandard(files) {
+  setStatus(t('portal_uploading', { count: files.length }) || ('Uploading ' + files.length + ' file(s)…'));
+  setUploadProgressIndeterminate();
+  let successCount = 0;
+  let failureCount = 0;
+  let lastError = '';
+
+  const folder = portalTargetFolder();
+  const portalSlug = getPortalSlug();
+  const sourceId = portalSourceId();
+
+  for (const file of files) {
+    const form = new FormData();
+
+    const csrf = getCsrfToken() || '';
+
+    // Match main upload.js
+    form.append('file[]', file);
+    form.append('folder', folder);
+    form.append('source', 'portal');
+    const submissionRef = getPortalSubmissionRef();
+    if (submissionRef) {
+      form.append('submissionRef', submissionRef);
+    }
+    if (sourceId) {
+      form.append('sourceId', sourceId);
+    }
+    if (portalSlug) {
+      form.append('portal', portalSlug);
+    }
+    if (csrf) {
+      form.append('upload_token', csrf);  // legacy alias, but your controller supports it
+    }
+
+    let retried = false;
+    while (true) {
+      try {
+        const resp = await fetch(withBase('/api/upload/upload.php'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'X-CSRF-Token': csrf || '',
+            'X-FR-Source': 'portal'
+          },
+          body: form
+        });
+
+        const text = await resp.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          data = {};
+        }
+
+        if (data && data.csrf_expired && data.csrf_token) {
+          setCsrfToken(data.csrf_token);
+          if (!retried) {
+            retried = true;
+            continue;
+          }
+        }
+
+        if (!resp.ok || (data && data.error)) {
+          failureCount++;
+          const detail = (data && (data.error || data.message)) ? (data.error || data.message) : text;
+          if (detail) {
+            lastError = String(detail).trim();
+          }
+          console.error('Upload error:', detail || data || text);
+        } else {
+          successCount++;
+        }
+        break;
+      } catch (e) {
+        console.error('Upload error:', e);
+        failureCount++;
+        break;
+      }
+    }
+  }
+
+  if (successCount && !failureCount) {
+    setStatus(t('portal_upload_success', { count: successCount }) || ('Uploaded ' + successCount + ' file(s).'));
+    showToast(t('portal_upload_complete') || 'Upload complete.', 'success');
+  } else if (successCount && failureCount) {
+    setStatus(t('portal_upload_partial', { count: successCount, failed: failureCount }) || ('Uploaded ' + successCount + ' file(s), ' + failureCount + ' failed.'), true);
+    showToast(t('portal_upload_some_failed') || 'Some files failed to upload.', 'warning');
+  } else {
+    const base = t('portal_upload_failed') || 'Upload failed.';
+    const detail = lastError ? (' ' + lastError) : '';
+    setStatus(base + detail, true);
+    showToast(base + detail, 'error');
+  }
+
+  setUploadProgress(100);
+  setTimeout(() => resetUploadProgress(), 600);
+
+  // Bump local daily counter by successful uploads
+  if (successCount > 0) {
+    bumpUploadRateCounter(successCount);
+  }
+
+  if (portalCanDownload()) {
+    loadPortalFiles();
+  }
+
+  // Optional thank-you screen
+  if (successCount > 0 && portal.showThankYou) {
+    showThankYouScreen();
+  }
+}
+
 async function uploadFiles(fileList) {
   if (!portal || !fileList || !fileList.length) return;
+
+  resetUploadProgress();
 
   if (!portalCanUpload()) {
     showToast(t('portal_uploads_disabled') || 'Uploads are disabled for this portal.', 'warning');
@@ -980,101 +2240,10 @@ async function uploadFiles(fileList) {
     files = files.slice(0, allowedCount);
   }
 
-  const folder = portalFolder();
-  const portalSlug = getPortalSlug();
-  const sourceId = portalSourceId();
+  const usedResumable = await uploadFilesResumable(files);
+  if (usedResumable) return;
 
-  setStatus(t('portal_uploading', { count: files.length }) || ('Uploading ' + files.length + ' file(s)…'));
-  let successCount = 0;
-  let failureCount = 0;
-
-  for (const file of files) {
-    const form = new FormData();
-
-    const csrf = getCsrfToken() || '';
-
-    // Match main upload.js
-    form.append('file[]', file);
-    form.append('folder', folder);
-    form.append('source', 'portal');
-    if (sourceId) {
-      form.append('sourceId', sourceId);
-    }
-    if (portalSlug) {
-      form.append('portal', portalSlug);
-    }
-    if (csrf) {
-      form.append('upload_token', csrf);  // legacy alias, but your controller supports it
-    }
-
-    let retried = false;
-    while (true) {
-      try {
-        const resp = await fetch('/api/upload/upload.php', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'X-CSRF-Token': csrf || '',
-            'X-FR-Source': 'portal'
-          },
-          body: form
-        });
-
-        const text = await resp.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          data = {};
-        }
-
-        if (data && data.csrf_expired && data.csrf_token) {
-          setCsrfToken(data.csrf_token);
-          if (!retried) {
-            retried = true;
-            continue;
-          }
-        }
-
-        if (!resp.ok || (data && data.error)) {
-          failureCount++;
-          console.error('Upload error:', data || text);
-        } else {
-          successCount++;
-        }
-        break;
-      } catch (e) {
-        console.error('Upload error:', e);
-        failureCount++;
-        break;
-      }
-    }
-  }
-
-  if (successCount && !failureCount) {
-    setStatus(t('portal_upload_success', { count: successCount }) || ('Uploaded ' + successCount + ' file(s).'));
-    showToast(t('portal_upload_complete') || 'Upload complete.', 'success');
-  } else if (successCount && failureCount) {
-    setStatus(t('portal_upload_partial', { count: successCount, failed: failureCount }) || ('Uploaded ' + successCount + ' file(s), ' + failureCount + ' failed.'), true);
-    showToast(t('portal_upload_some_failed') || 'Some files failed to upload.', 'warning');
-  } else {
-    setStatus(t('portal_upload_failed') || 'Upload failed.', true);
-    showToast(t('portal_upload_failed') || 'Upload failed.', 'error');
-  }
-
-  // Bump local daily counter by successful uploads
-  if (successCount > 0) {
-    bumpUploadRateCounter(successCount);
-  }
-
-  if (portalCanDownload()) {
-    loadPortalFiles();
-  }
-
-  // Optional thank-you screen
-  if (successCount > 0 && portal.showThankYou) {
-    showThankYouScreen();
-  }
+  await uploadFilesStandard(files);
 }
 
 // ----------------- Upload UI wiring -----------------
@@ -1082,6 +2251,8 @@ function wireUploadUI() {
   const drop       = qs('portalDropzone');
   const input      = qs('portalFileInput');
   const refreshBtn = qs('portalRefreshBtn');
+  const viewBtn    = qs('portalViewToggleBtn');
+  const downloadAllBtn = qs('portalDownloadAllBtn');
 
   const uploadsEnabled   = portalCanUpload();
   const downloadsEnabled = portalCanDownload();
@@ -1136,6 +2307,27 @@ function wireUploadUI() {
     } else {
       refreshBtn.addEventListener('click', () => {
         loadPortalFiles();
+      });
+    }
+  }
+
+  if (viewBtn) {
+    if (!downloadsEnabled) {
+      viewBtn.style.display = 'none';
+    } else {
+      updatePortalViewToggle();
+      viewBtn.addEventListener('click', () => {
+        setPortalView(portalViewMode === 'list' ? 'gallery' : 'list');
+      });
+    }
+  }
+
+  if (downloadAllBtn) {
+    if (!downloadsEnabled) {
+      downloadAllBtn.style.display = 'none';
+    } else {
+      downloadAllBtn.addEventListener('click', () => {
+        downloadAllPortalFiles();
       });
     }
   }
@@ -1210,6 +2402,19 @@ async function initPortal() {
   const p = await fetchPortal(slug);
   if (!p) return;
 
+  const rawPath = getPortalPathFromUrl();
+  if (rawPath) {
+    const { value, error } = normalizePortalPath(rawPath);
+    if (error) {
+      showToast(error, 'warning');
+    } else if (portal && portal.allowSubfolders) {
+      portalPath = value;
+    } else if (value) {
+      showToast(t('portal_subfolder_not_allowed') || 'Subfolder access is not enabled for this portal.', 'warning');
+      updatePortalUrl('', true);
+    }
+  }
+
   renderPortalInfo();
   setupPortalForm(slug);
   wireUploadUI();
@@ -1218,10 +2423,29 @@ async function initPortal() {
     loadPortalFiles();
   }
 
+  if (portal.allowSubfolders && !window.__portalPopstateBound) {
+    window.__portalPopstateBound = true;
+    window.addEventListener('popstate', () => {
+      if (!portal || !portal.allowSubfolders) return;
+      const raw = getPortalPathFromUrl();
+      const { value, error } = normalizePortalPath(raw);
+      if (error) return;
+      if (value !== portalPath) {
+        portalPath = value;
+        portalPage = 1;
+        renderPortalBreadcrumbs();
+        if (portalCanDownload()) {
+          loadPortalFiles();
+        }
+      }
+    });
+  }
+
   setStatus(t('portal_ready') || 'Ready.');
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initPortalThemeToggle();
   await applyLocale();
   setupLanguageSelect();
   initPortal().catch(err => {

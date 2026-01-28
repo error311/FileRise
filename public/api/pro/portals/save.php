@@ -61,9 +61,14 @@ try {
     }
 
     $ctrl = new AdminController();
-    $ctrl->saveProPortals($portals);
+    $result = $ctrl->saveProPortals($portals);
 
-    echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $payload = ['success' => true];
+    if (is_array($result) && !empty($result['portalUsers'])) {
+        $payload['portalUsers'] = $result['portalUsers'];
+    }
+
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     $code = $e instanceof InvalidArgumentException ? 400 : 500;
     http_response_code($code);

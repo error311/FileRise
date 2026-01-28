@@ -1085,12 +1085,12 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
     const title = tf('sources_pro_locked_title', 'Sources are a Pro feature');
     const body = tf(
       'sources_pro_locked_body',
-      'Connect remote storage and manage it like local — switch sources, move/copy between them, and keep separate trash per source. Upgrade to FileRise Pro to add S3, SFTP, FTP, WebDAV, SMB, Local and Google Drive sources.'
+      'Connect remote storage and manage it like local — switch sources, move/copy between them, and keep separate trash per source. Upgrade to FileRise Pro to add S3, SFTP, FTP, WebDAV, SMB, additional Local, Google Drive, Dropbox and OneDrive sources.'
     );
     const help = tf('sources_help', 'Sources are separate roots; users only see sources they can access.');
     const adapterHint = tf(
       'sources_adapter_hint',
-      'Adapters: local, S3, SFTP, FTP, WebDAV, SMB, Google Drive.'
+      'Adapters: local, S3, SFTP, FTP, WebDAV, SMB, Google Drive, Dropbox, OneDrive.'
     );
 
     container.innerHTML = `
@@ -2538,6 +2538,20 @@ function captureInitialAdminConfig() {
     brandingCustomLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
     brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
     brandingHeaderBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
+    brandingMetaDescription: (document.getElementById("brandingMetaDescription")?.value || "").trim(),
+    brandingFaviconSvg: (document.getElementById("brandingFaviconSvg")?.value || "").trim(),
+    brandingFaviconPng: (document.getElementById("brandingFaviconPng")?.value || "").trim(),
+    brandingFaviconIco: (document.getElementById("brandingFaviconIco")?.value || "").trim(),
+    brandingAppleTouchIcon: (document.getElementById("brandingAppleTouchIcon")?.value || "").trim(),
+    brandingMaskIcon: (document.getElementById("brandingMaskIcon")?.value || "").trim(),
+    brandingMaskIconColor: (document.getElementById("brandingMaskIconColor")?.value || "").trim(),
+    brandingThemeColorLight: (document.getElementById("brandingThemeColorLight")?.value || "").trim(),
+    brandingThemeColorDark: (document.getElementById("brandingThemeColorDark")?.value || "").trim(),
+    brandingLoginBgLight: (document.getElementById("brandingLoginBgLight")?.value || "").trim(),
+    brandingLoginBgDark: (document.getElementById("brandingLoginBgDark")?.value || "").trim(),
+    brandingAppBgLight: (document.getElementById("brandingAppBgLight")?.value || "").trim(),
+    brandingAppBgDark: (document.getElementById("brandingAppBgDark")?.value || "").trim(),
+    brandingLoginTagline: (document.getElementById("brandingLoginTagline")?.value || "").trim(),
     brandingFooterHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     defaultLanguage: (document.getElementById("defaultLanguage")?.value || "").trim(),
     hoverPreviewMaxImageMb: (document.getElementById("hoverPreviewMaxImageMb")?.value || "").trim(),
@@ -2585,6 +2599,20 @@ function hasUnsavedChanges() {
     getVal("brandingCustomLogoUrl") !== (o.brandingCustomLogoUrl || "") ||
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
     getVal("brandingHeaderBgDark") !== (o.brandingHeaderBgDark || "") ||
+    getVal("brandingMetaDescription") !== (o.brandingMetaDescription || "") ||
+    getVal("brandingFaviconSvg") !== (o.brandingFaviconSvg || "") ||
+    getVal("brandingFaviconPng") !== (o.brandingFaviconPng || "") ||
+    getVal("brandingFaviconIco") !== (o.brandingFaviconIco || "") ||
+    getVal("brandingAppleTouchIcon") !== (o.brandingAppleTouchIcon || "") ||
+    getVal("brandingMaskIcon") !== (o.brandingMaskIcon || "") ||
+    getVal("brandingMaskIconColor") !== (o.brandingMaskIconColor || "") ||
+    getVal("brandingThemeColorLight") !== (o.brandingThemeColorLight || "") ||
+    getVal("brandingThemeColorDark") !== (o.brandingThemeColorDark || "") ||
+    getVal("brandingLoginBgLight") !== (o.brandingLoginBgLight || "") ||
+    getVal("brandingLoginBgDark") !== (o.brandingLoginBgDark || "") ||
+    getVal("brandingAppBgLight") !== (o.brandingAppBgLight || "") ||
+    getVal("brandingAppBgDark") !== (o.brandingAppBgDark || "") ||
+    getVal("brandingLoginTagline") !== (o.brandingLoginTagline || "") ||
     getVal("brandingFooterHtml") !== (o.brandingFooterHtml || "") ||
     getVal("defaultLanguage") !== (o.defaultLanguage || "") ||
     getVal("hoverPreviewMaxImageMb") !== (o.hoverPreviewMaxImageMb || "") ||
@@ -4115,6 +4143,20 @@ export function openAdminPanel() {
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
       const brandingHeaderBgDark = brandingCfg.headerBgDark || "";
+      const brandingMetaDescription = brandingCfg.metaDescription || "";
+      const brandingFaviconSvg = brandingCfg.faviconSvg || "";
+      const brandingFaviconPng = brandingCfg.faviconPng || "";
+      const brandingFaviconIco = brandingCfg.faviconIco || "";
+      const brandingAppleTouchIcon = brandingCfg.appleTouchIcon || "";
+      const brandingMaskIcon = brandingCfg.maskIcon || "";
+      const brandingMaskIconColor = brandingCfg.maskIconColor || "";
+      const brandingThemeColorLight = brandingCfg.themeColorLight || "";
+      const brandingThemeColorDark = brandingCfg.themeColorDark || "";
+      const brandingLoginBgLight = brandingCfg.loginBgLight || "";
+      const brandingLoginBgDark = brandingCfg.loginBgDark || "";
+      const brandingAppBgLight = brandingCfg.appBgLight || "";
+      const brandingAppBgDark = brandingCfg.appBgDark || "";
+      const brandingLoginTagline = brandingCfg.loginTagline || "";
       const brandingFooterHtml = brandingCfg.footerHtml || "";
       const displayCfg = (config.display && typeof config.display === 'object') ? config.display : {};
       const ffmpegPathCfg = (typeof config.ffmpegPath === 'string') ? config.ffmpegPath : '';
@@ -4476,6 +4518,227 @@ export function openAdminPanel() {
       ${isPro
             ? 'If left empty, FileRise uses its default blue and dark header colors.'
             : 'Requires FileRise Pro to enable custom color branding.'}
+    </small>
+  </div>
+
+    <hr class="admin-divider">
+
+  <!-- Pro: Meta description -->
+  <div class="form-group" style="margin-top:16px;">
+    <label for="brandingMetaDescription">
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      Meta description
+  </div>
+      ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
+    </label>
+    <small class="text-muted d-block mb-1">
+      ${isPro
+            ? 'Shown in the <meta name="description"> tag on index.html. Recommended 50-160 characters.'
+            : 'Requires FileRise Pro to customize the site description.'}
+    </small>
+    <textarea
+      id="brandingMetaDescription"
+      class="form-control"
+      rows="2"
+      placeholder="FileRise is a fast, self-hosted file manager for your team."
+      ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}>${isPro ? (brandingMetaDescription || '') : ''}</textarea>
+  </div>
+
+    <hr class="admin-divider">
+
+  <!-- Pro: Favicons + theme color -->
+  <div class="form-group" style="margin-top:16px;">
+    <label>
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      Favicons & browser theme color
+  </div>
+      ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
+    </label>
+    <small class="text-muted d-block mb-2">
+      ${isPro
+            ? 'Use site-relative paths or full URLs. PNG replaces all PNG favicon sizes. Theme colors tint the browser UI on mobile/PWA. Mask icon color applies to Safari pinned tabs (requires the mask icon SVG).'
+            : 'Requires FileRise Pro to customize favicons and theme colors.'}
+    </small>
+    <div class="form-group">
+      <label for="brandingFaviconSvg" class="d-block" style="font-size:12px;">Favicon (SVG)</label>
+      <input
+        type="text"
+        id="brandingFaviconSvg"
+        class="form-control"
+        placeholder="/assets/logo.svg"
+        value="${isPro ? (brandingFaviconSvg.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+    <div class="form-group">
+      <label for="brandingFaviconPng" class="d-block" style="font-size:12px;">Favicon (PNG)</label>
+      <input
+        type="text"
+        id="brandingFaviconPng"
+        class="form-control"
+        placeholder="/assets/logo-32.png"
+        value="${isPro ? (brandingFaviconPng.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+    <div class="form-group">
+      <label for="brandingFaviconIco" class="d-block" style="font-size:12px;">Favicon (ICO)</label>
+      <input
+        type="text"
+        id="brandingFaviconIco"
+        class="form-control"
+        placeholder="/assets/favicon.ico"
+        value="${isPro ? (brandingFaviconIco.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+    <div class="form-group">
+      <label for="brandingAppleTouchIcon" class="d-block" style="font-size:12px;">Apple touch icon</label>
+      <input
+        type="text"
+        id="brandingAppleTouchIcon"
+        class="form-control"
+        placeholder="/assets/icons/icon-192.png"
+        value="${isPro ? (brandingAppleTouchIcon.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+    <div class="form-group">
+      <label for="brandingMaskIcon" class="d-block" style="font-size:12px;">Pinned tab mask icon (SVG)</label>
+      <input
+        type="text"
+        id="brandingMaskIcon"
+        class="form-control"
+        placeholder="/assets/icons/safari-pinned-tab.svg"
+        value="${isPro ? (brandingMaskIcon.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+    <div class="d-flex align-items-center" style="gap:12px; flex-wrap:wrap;">
+      <div style="min-width:180px;">
+        <label for="brandingMaskIconColor" class="d-block" style="font-size:12px;">Mask icon color</label>
+        <input
+          type="text"
+          id="brandingMaskIconColor"
+          class="form-control"
+          placeholder="#0b5ed7"
+          value="${isPro ? (brandingMaskIconColor.replace(/\"/g, '&quot;')) : ''}"
+          ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+        />
+      </div>
+      <div style="min-width:180px;">
+        <label for="brandingThemeColorLight" class="d-block" style="font-size:12px;">Theme color (light)</label>
+        <input
+          type="text"
+          id="brandingThemeColorLight"
+          class="form-control"
+          placeholder="#0b5ed7"
+          value="${isPro ? (brandingThemeColorLight.replace(/\"/g, '&quot;')) : ''}"
+          ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+        />
+      </div>
+      <div style="min-width:180px;">
+        <label for="brandingThemeColorDark" class="d-block" style="font-size:12px;">Theme color (dark)</label>
+        <input
+          type="text"
+          id="brandingThemeColorDark"
+          class="form-control"
+          placeholder="#121212"
+          value="${isPro ? (brandingThemeColorDark.replace(/\"/g, '&quot;')) : ''}"
+          ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+        />
+      </div>
+    </div>
+    <small class="text-muted d-block mt-2">
+      Mask icon color is visible in Safari pinned tabs only. Theme colors change the browser chrome, not the page background.
+    </small>
+  </div>
+
+    <hr class="admin-divider">
+
+  <!-- Pro: Login page background -->
+  <div class="form-group" style="margin-top:16px;">
+    <label>
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      Login page background
+  </div>
+      ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
+    </label>
+    <small class="text-muted d-block mb-2">
+      ${isPro
+            ? 'Accepts any CSS background value (color, gradient, or url(...)).'
+            : 'Requires FileRise Pro to customize the login background.'}
+    </small>
+    <div class="form-group">
+      <label for="brandingLoginBgLight" class="d-block" style="font-size:12px;">Light mode background</label>
+      <textarea
+        id="brandingLoginBgLight"
+        class="form-control"
+        rows="2"
+        placeholder="radial-gradient(circle at 20% 20%, rgba(11,94,215,0.15), transparent 55%)"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}>${isPro ? (brandingLoginBgLight || '') : ''}</textarea>
+    </div>
+    <div class="form-group">
+      <label for="brandingLoginBgDark" class="d-block" style="font-size:12px;">Dark mode background</label>
+      <textarea
+        id="brandingLoginBgDark"
+        class="form-control"
+        rows="2"
+        placeholder="linear-gradient(180deg, #0b1220 0%, #0f172a 100%)"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}>${isPro ? (brandingLoginBgDark || '') : ''}</textarea>
+    </div>
+    <div class="form-group">
+      <label for="brandingLoginTagline" class="d-block" style="font-size:12px;">Login tagline (optional)</label>
+      <input
+        type="text"
+        id="brandingLoginTagline"
+        class="form-control"
+        placeholder="Secure files. Simple workflow."
+        value="${isPro ? (brandingLoginTagline.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+  </div>
+
+    <hr class="admin-divider">
+
+  <!-- Pro: App background -->
+  <div class="form-group" style="margin-top:16px;">
+    <label>
+     <div class="admin-subsection-title" style="margin-top:2px;">
+      App background (after login)
+  </div>
+      ${!isPro ? '<span class="badge badge-pill badge-warning admin-pro-badge" style="margin-left:6px;">Pro</span>' : ''}
+    </label>
+    <small class="text-muted d-block mb-2">
+      ${isPro
+            ? 'Accepts any CSS background value (color, gradient, or url(...)). Leave blank to use FileRise defaults.'
+            : 'Requires FileRise Pro to customize the app background.'}
+    </small>
+    <div class="form-group">
+      <label for="brandingAppBgLight" class="d-block" style="font-size:12px;">Light mode background</label>
+      <input
+        type="text"
+        id="brandingAppBgLight"
+        class="form-control"
+        placeholder="linear-gradient(135deg,#0ea5e9,#22c55e)"
+        value="${isPro ? (brandingAppBgLight.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+    <div class="form-group">
+      <label for="brandingAppBgDark" class="d-block" style="font-size:12px;">Dark mode background</label>
+      <input
+        type="text"
+        id="brandingAppBgDark"
+        class="form-control"
+        placeholder="linear-gradient(180deg,#0b1220,#0f172a)"
+        value="${isPro ? (brandingAppBgDark.replace(/\"/g, '&quot;')) : ''}"
+        ${!isPro ? 'disabled data-disabled-reason="pro"' : ''}
+      />
+    </div>
+    <small class="text-muted d-block mt-1">
+      ${tf("app_bg_color_help", "Tip: use the same CSS background format as the login screen. This affects the main app, not the login screen.")}
     </small>
   </div>
 
@@ -6525,6 +6788,20 @@ function handleSave() {
       customLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
       headerBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
       headerBgDark: (document.getElementById("brandingHeaderBgDark")?.value || "").trim(),
+      metaDescription: (document.getElementById("brandingMetaDescription")?.value || "").trim(),
+      faviconSvg: (document.getElementById("brandingFaviconSvg")?.value || "").trim(),
+      faviconPng: (document.getElementById("brandingFaviconPng")?.value || "").trim(),
+      faviconIco: (document.getElementById("brandingFaviconIco")?.value || "").trim(),
+      appleTouchIcon: (document.getElementById("brandingAppleTouchIcon")?.value || "").trim(),
+      maskIcon: (document.getElementById("brandingMaskIcon")?.value || "").trim(),
+      maskIconColor: (document.getElementById("brandingMaskIconColor")?.value || "").trim(),
+      themeColorLight: (document.getElementById("brandingThemeColorLight")?.value || "").trim(),
+      themeColorDark: (document.getElementById("brandingThemeColorDark")?.value || "").trim(),
+      loginBgLight: (document.getElementById("brandingLoginBgLight")?.value || "").trim(),
+      loginBgDark: (document.getElementById("brandingLoginBgDark")?.value || "").trim(),
+      appBgLight: (document.getElementById("brandingAppBgLight")?.value || "").trim(),
+      appBgDark: (document.getElementById("brandingAppBgDark")?.value || "").trim(),
+      loginTagline: (document.getElementById("brandingLoginTagline")?.value || "").trim(),
       footerHtml: (document.getElementById("brandingFooterHtml")?.value || "").trim(),
     },
     display: {

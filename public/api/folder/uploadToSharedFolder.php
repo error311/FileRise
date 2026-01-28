@@ -17,6 +17,8 @@
  *           type="object",
  *           required={"token","fileToUpload"},
  *           @OA\Property(property="token", type="string", description="Share token"),
+ *           @OA\Property(property="pass", type="string", description="Share password (if required)"),
+ *           @OA\Property(property="path", type="string", description="Optional subfolder path within the shared folder"),
  *           @OA\Property(property="fileToUpload", type="string", format="binary", description="File to upload")
  *         )
  *       )

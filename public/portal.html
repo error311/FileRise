@@ -412,8 +412,9 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="../css/portal.css?v={{APP_QVER}}">
 </head>
-<body>
+<body class="portal-body">
   <div id="portalRoot" class="portal-wrapper">
     <div class="portal-card">
       <div class="portal-header">
@@ -439,6 +440,7 @@
               <option value="zh-CN" data-i18n-key="chinese_simplified">简体中文</option>
             </select>
           </div>
+          <button type="button" id="portalThemeToggle" class="btn btn-sm portal-btn-outline portal-theme-toggle">Dark mode</button>
         </div>
       </div>
       <h3 id="portalTitle" style="margin-bottom:4px;" data-i18n-key="loading">Loading…</h3>
@@ -480,37 +482,61 @@
 
       <div id="portalUploadSection">
         <div id="portalDropzone" class="portal-dropzone">
-          <div>
-            <strong data-i18n-key="portal_dropzone_drop_here">Drop files here</strong>
-            <span data-i18n-key="portal_dropzone_browse">or click to browse.</span>
-          </div>
-          <div style="font-size:0.8rem;" class="text-muted" data-i18n-key="portal_dropzone_uploads_note">
-            Files will be uploaded to this portal only.
+          <div class="portal-dropzone-content">
+            <div class="portal-dropzone-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <path d="M7.2 18.5h9.1a3.6 3.6 0 0 0 .2-7.2 5.1 5.1 0 0 0-9.9 1.4 2.9 2.9 0 0 0 .6 5.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 10.8v6.2M12 10.8l-2.6 2.6M12 10.8l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="portal-dropzone-text">
+              <div class="portal-dropzone-title">
+                <strong data-i18n-key="portal_dropzone_drop_here">Drop files here</strong>
+                <span data-i18n-key="portal_dropzone_browse">or click to browse.</span>
+              </div>
+              <div class="portal-dropzone-note text-muted" data-i18n-key="portal_dropzone_uploads_note">
+                Files will be uploaded to this portal only.
+              </div>
+            </div>
           </div>
         </div>
         <input type="file" id="portalFileInput" multiple style="display:none;">
+        <div id="portalUploadProgress" class="portal-upload-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+          <div id="portalUploadProgressBar" class="portal-upload-progress-bar"></div>
+        </div>
         <div id="portalStatus" class="portal-status text-muted"></div>
       </div>
 
-      <div id="portalFilesSection" style="margin-top:12px; display:none;">
+      <div id="portalThankYouSection" style="margin-top:12px; display:none;">
+        <div class="alert alert-success" style="font-size:0.9rem; margin-bottom:8px;">
+          <strong data-i18n-key="portal_thankyou_heading">Thank you!</strong>
+          <span id="portalThankYouMessage" data-i18n-key="portal_thankyou_message">
+            Your files have been uploaded.
+          </span>
+          <div id="portalThankYouRef" style="margin-top:4px; font-size:0.82rem; display:none;"></div>
+        </div>
+      </div>
+
+      <div id="portalFilesSection" class="portal-files-section" style="margin-top:12px; display:none;">
         <div class="portal-files-header">
-          <strong style="font-size:0.95rem;" data-i18n-key="portal_files_heading">Files in this portal</strong>
-          <button type="button" id="portalRefreshBtn" class="btn btn-sm portal-btn-outline" data-i18n-key="portal_files_refresh">
-            Refresh
-          </button>
+          <div class="portal-files-title">
+            <strong style="font-size:0.95rem;" data-i18n-key="portal_files_heading">Items in this portal</strong>
+            <div id="portalFilesCount" class="portal-files-count"></div>
+          </div>
+          <div class="portal-files-actions">
+            <button type="button" id="portalDownloadAllBtn" class="btn btn-sm portal-btn-primary">Download all</button>
+            <button type="button" id="portalViewToggleBtn" class="btn btn-sm portal-btn-outline">Gallery</button>
+            <button type="button" id="portalRefreshBtn" class="btn btn-sm portal-btn-outline" data-i18n-key="portal_files_refresh">
+              Refresh
+            </button>
+          </div>
+        </div>
+        <div class="portal-files-meta">
+          <div id="portalBreadcrumbs" class="portal-breadcrumbs"></div>
+          <div id="portalPagination" class="portal-pagination"></div>
         </div>
         <div id="portalFilesList" class="portal-files-list"></div>
       </div>
-
-      <div id="portalThankYouSection"
-      style="margin-top:12px; display:none;">
-   <div class="alert alert-success" style="font-size:0.9rem; margin-bottom:8px;">
-     <strong data-i18n-key="portal_thankyou_heading">Thank you!</strong>
-     <span id="portalThankYouMessage" data-i18n-key="portal_thankyou_message">
-       Your files have been uploaded.
-     </span>
-   </div>
- </div>
       <div id="portalFooter" class="text-muted"
       style="margin-top:12px; font-size:0.75rem; text-align:center;"></div>
     </div>

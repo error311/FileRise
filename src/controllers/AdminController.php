@@ -8,6 +8,7 @@ require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 require_once PROJECT_ROOT . '/src/models/UserModel.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
+require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class AdminController
@@ -892,8 +893,44 @@ class AdminController
             throw new InvalidArgumentException('Invalid portals format.');
         }
 
-        $data    = ['portals' => []];
-        $invalid = [];
+        $store = new ProPortals(FR_PRO_BUNDLE_DIR);
+        $existingPortals = $store->listPortals();
+        if (!is_array($existingPortals)) {
+            $existingPortals = [];
+        }
+
+        $sourcesEnabled = class_exists('SourceContext') && SourceContext::sourcesEnabled();
+        $existingPortalGrants = self::collectPortalUserGrants($existingPortals, $sourcesEnabled);
+        $desiredPortalGrants = [];
+
+        $data                     = ['portals' => []];
+        $invalid                  = [];
+        $portalUserPlans          = [];
+        $portalUserPasswordUpdates = [];
+        $portalUsersToDelete      = [];
+
+        $existingSlugs = array_keys($existingPortals);
+        $incomingSlugs = array_keys($portalsPayload);
+        $removedSlugs = array_diff($existingSlugs, $incomingSlugs);
+        foreach ($removedSlugs as $removedSlug) {
+            $removedSlug = trim((string)$removedSlug);
+            if ($removedSlug === '') {
+                continue;
+            }
+            $existingPortal = is_array($existingPortals[$removedSlug] ?? null) ? $existingPortals[$removedSlug] : [];
+            $existingPortalUser = isset($existingPortal['portalUser']) && is_array($existingPortal['portalUser'])
+                ? $existingPortal['portalUser']
+                : [];
+            $portalUserCreate = !array_key_exists('create', $existingPortalUser) || !empty($existingPortalUser['create']);
+            if (!$portalUserCreate) {
+                continue;
+            }
+            $existingPortalUserName = trim((string)($existingPortalUser['username'] ?? ''));
+            $username = $existingPortalUserName !== '' ? $existingPortalUserName : self::buildPortalUsername($removedSlug);
+            if ($username !== '' && self::portalUserExists($username)) {
+                $portalUsersToDelete[strtolower($username)] = $username;
+            }
+        }
 
         foreach ($portalsPayload as $slug => $info) {
             $slug = trim((string)$slug);
@@ -926,12 +963,73 @@ class AdminController
                 continue;
             }
 
+            $isNewPortal = !array_key_exists($slug, $existingPortals);
+            $existingPortal = is_array($existingPortals[$slug] ?? null) ? $existingPortals[$slug] : [];
+            $existingPortalUser = isset($existingPortal['portalUser']) && is_array($existingPortal['portalUser'])
+                ? $existingPortal['portalUser']
+                : [];
+
             $clientEmail  = trim((string)($info['clientEmail'] ?? ''));
-            $uploadOnly   = !empty($info['uploadOnly']);
-            $allowDownload = array_key_exists('allowDownload', $info)
-                ? !empty($info['allowDownload'])
-                : true;
+            $hasAllowDownload = array_key_exists('allowDownload', $info);
+            $uploadOnly        = !empty($info['uploadOnly']);
+            $allowDownload     = $hasAllowDownload ? !empty($info['allowDownload']) : true;
+            // Normalize legacy semantics for portal-user ACLs
+            $allowUploadNormalized   = $hasAllowDownload ? $uploadOnly : true;
+            $allowDownloadNormalized = $hasAllowDownload ? $allowDownload : !$uploadOnly;
             $expiresAt    = trim((string)($info['expiresAt'] ?? ''));
+
+            $portalUser = isset($info['portalUser']) && is_array($info['portalUser']) ? $info['portalUser'] : [];
+            $portalUserCreate = !array_key_exists('create', $portalUser) ? true : !empty($portalUser['create']);
+            $portalUserPresetRaw = strtolower(trim((string)($portalUser['preset'] ?? 'match')));
+            $portalUserPreset = in_array($portalUserPresetRaw, ['match', 'view_download', 'view_upload', 'upload_only'], true)
+                ? $portalUserPresetRaw
+                : 'match';
+            $portalUserNameInput = trim((string)($portalUser['username'] ?? ''));
+            $portalUserName = $portalUserNameInput;
+            $existingPortalUserName = trim((string)($existingPortalUser['username'] ?? ''));
+            if ($portalUserName === '' && $existingPortalUserName !== '') {
+                $portalUserName = $existingPortalUserName;
+            }
+            $portalUserPassword = trim((string)($portalUser['password'] ?? ''));
+            if ($portalUserCreate && $portalUserPassword !== '' && strlen($portalUserPassword) < 6) {
+                throw new InvalidArgumentException(
+                    'Portal user password must be at least 6 characters for: ' . ($label !== '' ? $label : $slug)
+                );
+            }
+            if ($portalUserCreate && $isNewPortal && $portalUserPassword === '') {
+                throw new InvalidArgumentException(
+                    'Portal user password is required for: ' . ($label !== '' ? $label : $slug)
+                );
+            }
+            if ($portalUserName !== '' && !preg_match(REGEX_USER, $portalUserName)) {
+                throw new InvalidArgumentException(
+                    'Invalid portal user name for portal: ' . ($label !== '' ? $label : $slug)
+                );
+            }
+            if ($portalUserCreate && $isNewPortal && $portalUserNameInput !== '' && self::portalUserExists($portalUserName)) {
+                throw new InvalidArgumentException(
+                    'Portal user already exists: ' . $portalUserName
+                );
+            }
+            $portalUserResolvedName = $portalUserName !== '' ? $portalUserName : self::buildPortalUsername($slug);
+            $portalExpired = self::isPortalExpired($expiresAt);
+
+            $portalUserAllowUpload = $allowUploadNormalized;
+            $portalUserAllowDownload = $allowDownloadNormalized;
+            switch ($portalUserPreset) {
+                case 'view_download':
+                    $portalUserAllowUpload = false;
+                    $portalUserAllowDownload = true;
+                    break;
+                case 'view_upload':
+                    $portalUserAllowUpload = true;
+                    $portalUserAllowDownload = true;
+                    break;
+                case 'upload_only':
+                    $portalUserAllowUpload = true;
+                    $portalUserAllowDownload = false;
+                    break;
+            }
 
             // Branding + form behavior
             $title        = trim((string)($info['title'] ?? ''));
@@ -944,12 +1042,83 @@ class AdminController
             $logoFile = trim((string)($info['logoFile'] ?? ''));
             $logoUrl  = trim((string)($info['logoUrl']  ?? ''));
 
+            $theme = isset($info['theme']) && is_array($info['theme']) ? $info['theme'] : [];
+            $themeLight = isset($theme['light']) && is_array($theme['light']) ? $theme['light'] : [];
+            $themeDark = isset($theme['dark']) && is_array($theme['dark']) ? $theme['dark'] : [];
+            $theme = [
+                'light' => [
+                    'bodyBg'  => trim((string)($themeLight['bodyBg'] ?? '')),
+                    'surface' => trim((string)($themeLight['surface'] ?? '')),
+                    'text'    => trim((string)($themeLight['text'] ?? '')),
+                    'muted'   => trim((string)($themeLight['muted'] ?? '')),
+                    'border'  => trim((string)($themeLight['border'] ?? '')),
+                    'shadow'  => trim((string)($themeLight['shadow'] ?? '')),
+                ],
+                'dark' => [
+                    'bodyBg'  => trim((string)($themeDark['bodyBg'] ?? '')),
+                    'surface' => trim((string)($themeDark['surface'] ?? '')),
+                    'text'    => trim((string)($themeDark['text'] ?? '')),
+                    'muted'   => trim((string)($themeDark['muted'] ?? '')),
+                    'border'  => trim((string)($themeDark['border'] ?? '')),
+                    'shadow'  => trim((string)($themeDark['shadow'] ?? '')),
+                ],
+            ];
+            $theme['light'] = array_filter($theme['light'], static fn($value) => $value !== '');
+            $theme['dark'] = array_filter($theme['dark'], static fn($value) => $value !== '');
+            if (empty($theme['light']) && empty($theme['dark'])) {
+                $theme = null;
+            }
+
             // Upload rules / thank-you behavior
             $uploadMaxSizeMb    = isset($info['uploadMaxSizeMb']) ? (int)$info['uploadMaxSizeMb'] : 0;
             $uploadExtWhitelist = trim((string)($info['uploadExtWhitelist'] ?? ''));
             $uploadMaxPerDay    = isset($info['uploadMaxPerDay']) ? (int)$info['uploadMaxPerDay'] : 0;
+            $allowSubfolders    = !empty($info['allowSubfolders']);
             $showThankYou       = !empty($info['showThankYou']);
+            $thankYouShowRef    = !empty($info['thankYouShowRef']);
             $thankYouText       = trim((string)($info['thankYouText'] ?? ''));
+
+            if ($portalUserCreate && !$portalExpired && $portalUserResolvedName !== '') {
+                $caps = self::buildPortalUserCaps($portalUserAllowUpload, $portalUserAllowDownload, $allowSubfolders);
+                $sourceKey = self::normalizePortalSourceKey($sourceId, $sourcesEnabled);
+                self::recordPortalUserGrant($desiredPortalGrants, $sourceKey, $portalUserResolvedName, $folder, $caps);
+            }
+
+            $portalUserPasswordSet = false;
+            if ($portalUserCreate) {
+                $userExists = $portalUserResolvedName !== '' && self::portalUserExists($portalUserResolvedName);
+                if ($portalExpired) {
+                    if ($userExists) {
+                        $portalUsersToDelete[strtolower($portalUserResolvedName)] = $portalUserResolvedName;
+                    }
+                } else {
+                    if ($portalUserPassword !== '') {
+                        if ($userExists) {
+                            $portalUserPasswordUpdates[] = [
+                                'slug'     => $slug,
+                                'label'    => $label,
+                                'username' => $portalUserResolvedName,
+                                'password' => $portalUserPassword,
+                            ];
+                        } else {
+                            $portalUserPlans[] = [
+                                'slug'            => $slug,
+                                'folder'          => $folder,
+                                'sourceId'        => $sourceId,
+                                'allowUpload'     => $portalUserAllowUpload,
+                                'allowDownload'   => $portalUserAllowDownload,
+                                'allowSubfolders' => $allowSubfolders,
+                                'username'        => $portalUserResolvedName,
+                                'password'        => $portalUserPassword,
+                                'usernameExplicit' => ($portalUserNameInput !== ''),
+                            ];
+                        }
+                        $portalUserPasswordSet = true;
+                    } else {
+                        $portalUserPasswordSet = $userExists;
+                    }
+                }
+            }
 
             // Form defaults
             $formDefaults = isset($info['formDefaults']) && is_array($info['formDefaults'])
@@ -999,9 +1168,14 @@ class AdminController
                 'notes'     => !array_key_exists('notes', $formVisible)     || !empty($formVisible['notes']),
             ];
 
+            $portalUserStored = [
+                'create'      => $portalUserCreate,
+                'preset'      => $portalUserPreset,
+                'username'    => $portalUserCreate ? $portalUserResolvedName : $portalUserName,
+                'passwordSet' => $portalUserPasswordSet,
+            ];
 
-
-            $data['portals'][$slug] = [
+            $portalData = [
                 'label'              => $label,
                 'folder'             => $folder,
                 'sourceId'           => $sourceId,
@@ -1019,13 +1193,20 @@ class AdminController
                 'uploadMaxSizeMb'    => $uploadMaxSizeMb,
                 'uploadExtWhitelist' => $uploadExtWhitelist,
                 'uploadMaxPerDay'    => $uploadMaxPerDay,
+                'allowSubfolders'    => $allowSubfolders,
                 'showThankYou'       => $showThankYou,
+                'thankYouShowRef'    => $thankYouShowRef,
                 'thankYouText'       => $thankYouText,
+                'portalUser'         => $portalUserStored,
                 'formDefaults'       => $formDefaults,
                 'formRequired'       => $formRequired,
                 'formLabels'         => $formLabels,
                 'formVisible'        => $formVisible,
             ];
+            if ($theme !== null) {
+                $portalData['theme'] = $theme;
+            }
+            $data['portals'][$slug] = $portalData;
         }
         if (!empty($invalid)) {
             throw new InvalidArgumentException(
@@ -1033,13 +1214,394 @@ class AdminController
             );
         }
 
+        if (!empty($portalUsersToDelete)) {
+            foreach ($portalUsersToDelete as $username) {
+                self::deletePortalUserIfExists($username);
+            }
+        }
 
-        $store = new ProPortals(FR_PRO_BUNDLE_DIR);
+        $createdUsers = [];
+        if (!empty($portalUserPlans)) {
+            try {
+                self::createPortalUsers($portalUserPlans, $createdUsers);
+            } catch (\Throwable $e) {
+                self::rollbackPortalUsers($createdUsers);
+                throw $e;
+            }
+        }
+
+        if (!empty($portalUserPasswordUpdates)) {
+            foreach ($portalUserPasswordUpdates as $update) {
+                $username = (string)($update['username'] ?? '');
+                $password = (string)($update['password'] ?? '');
+                $label    = (string)($update['label'] ?? '');
+                $res = UserModel::adminResetPassword($username, $password);
+                if (isset($res['error'])) {
+                    self::rollbackPortalUsers($createdUsers);
+                    $ctx = $label !== '' ? $label : $username;
+                    throw new RuntimeException('Failed to update portal user password for ' . $ctx . ': ' . $res['error']);
+                }
+            }
+        }
+
         $ok    = $store->savePortals($data);
 
         if (!$ok) {
+            self::rollbackPortalUsers($createdUsers);
             throw new RuntimeException('Could not write portals.json');
         }
+
+        self::syncPortalUserGrants($existingPortalGrants, $desiredPortalGrants, $sourcesEnabled);
+
+        return;
+    }
+
+    private static function normalizePortalSourceKey(string $sourceId, bool $sourcesEnabled): string
+    {
+        if (!$sourcesEnabled) {
+            return 'local';
+        }
+        $id = trim($sourceId);
+        if ($id === '') {
+            return 'local';
+        }
+        if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
+            return '';
+        }
+        return $id;
+    }
+
+    private static function buildPortalUserCaps(bool $allowUpload, bool $allowDownload, bool $allowSubfolders): array
+    {
+        $caps = [];
+        if ($allowDownload) {
+            $caps['view'] = true;
+        }
+        if ($allowUpload) {
+            $caps['upload'] = true;
+        }
+        if ($allowSubfolders) {
+            $caps['inherit'] = true;
+        }
+        if (!empty($caps)) {
+            $caps['explicit'] = true;
+        }
+        return $caps;
+    }
+
+    private static function recordPortalUserGrant(
+        array &$grants,
+        string $sourceKey,
+        string $username,
+        string $folder,
+        array $caps
+    ): void {
+        $username = trim($username);
+        if ($username === '' || $sourceKey === '') {
+            return;
+        }
+        $folder = ACL::normalizeFolder($folder);
+        if ($folder === '') {
+            return;
+        }
+        if (!isset($grants[$sourceKey]) || !is_array($grants[$sourceKey])) {
+            $grants[$sourceKey] = [];
+        }
+        if (!isset($grants[$sourceKey][$username]) || !is_array($grants[$sourceKey][$username])) {
+            $grants[$sourceKey][$username] = [];
+        }
+        $grants[$sourceKey][$username][$folder] = $caps;
+    }
+
+    private static function collectPortalUserGrants(array $portals, bool $sourcesEnabled): array
+    {
+        $grants = [];
+        foreach ($portals as $slug => $info) {
+            $slug = trim((string)$slug);
+            if (!is_array($info)) {
+                $info = [];
+            }
+            $folder = trim((string)($info['folder'] ?? ''));
+            if ($folder === '') {
+                continue;
+            }
+
+            $portalUser = isset($info['portalUser']) && is_array($info['portalUser']) ? $info['portalUser'] : [];
+            $portalUserCreate = !array_key_exists('create', $portalUser) || !empty($portalUser['create']);
+            if (!$portalUserCreate) {
+                continue;
+            }
+
+            $portalUserName = trim((string)($portalUser['username'] ?? ''));
+            $portalUserResolvedName = $portalUserName !== '' ? $portalUserName : ($slug !== '' ? self::buildPortalUsername($slug) : '');
+            if ($portalUserResolvedName === '') {
+                continue;
+            }
+
+            $portalUserPresetRaw = strtolower(trim((string)($portalUser['preset'] ?? 'match')));
+            $portalUserPreset = in_array($portalUserPresetRaw, ['match', 'view_download', 'view_upload', 'upload_only'], true)
+                ? $portalUserPresetRaw
+                : 'match';
+
+            $hasAllowDownload = array_key_exists('allowDownload', $info);
+            $uploadOnly        = !empty($info['uploadOnly']);
+            $allowDownload     = $hasAllowDownload ? !empty($info['allowDownload']) : true;
+            $allowUploadNormalized   = $hasAllowDownload ? $uploadOnly : true;
+            $allowDownloadNormalized = $hasAllowDownload ? $allowDownload : !$uploadOnly;
+
+            $portalUserAllowUpload = $allowUploadNormalized;
+            $portalUserAllowDownload = $allowDownloadNormalized;
+            switch ($portalUserPreset) {
+                case 'view_download':
+                    $portalUserAllowUpload = false;
+                    $portalUserAllowDownload = true;
+                    break;
+                case 'view_upload':
+                    $portalUserAllowUpload = true;
+                    $portalUserAllowDownload = true;
+                    break;
+                case 'upload_only':
+                    $portalUserAllowUpload = true;
+                    $portalUserAllowDownload = false;
+                    break;
+            }
+
+            $allowSubfolders = !empty($info['allowSubfolders']);
+            $caps = self::buildPortalUserCaps($portalUserAllowUpload, $portalUserAllowDownload, $allowSubfolders);
+            $sourceKey = self::normalizePortalSourceKey((string)($info['sourceId'] ?? ''), $sourcesEnabled);
+            self::recordPortalUserGrant($grants, $sourceKey, $portalUserResolvedName, $folder, $caps);
+        }
+        return $grants;
+    }
+
+    private static function syncPortalUserGrants(array $previous, array $desired, bool $sourcesEnabled): void
+    {
+        $sourceKeys = array_unique(array_merge(array_keys($previous), array_keys($desired)));
+        if (empty($sourceKeys)) {
+            return;
+        }
+
+        foreach ($sourceKeys as $sourceKey) {
+            $prevUsers = isset($previous[$sourceKey]) && is_array($previous[$sourceKey])
+                ? $previous[$sourceKey]
+                : [];
+            $desiredUsers = isset($desired[$sourceKey]) && is_array($desired[$sourceKey])
+                ? $desired[$sourceKey]
+                : [];
+            $users = array_unique(array_merge(array_keys($prevUsers), array_keys($desiredUsers)));
+            if (empty($users)) {
+                continue;
+            }
+
+            $runner = function () use ($users, $prevUsers, $desiredUsers): void {
+                foreach ($users as $user) {
+                    $user = (string)$user;
+                    if ($user === '') {
+                        continue;
+                    }
+                    $prevFolders = isset($prevUsers[$user]) && is_array($prevUsers[$user]) ? $prevUsers[$user] : [];
+                    $desiredFolders = isset($desiredUsers[$user]) && is_array($desiredUsers[$user]) ? $desiredUsers[$user] : [];
+                    $folders = array_unique(array_merge(array_keys($prevFolders), array_keys($desiredFolders)));
+                    if (empty($folders)) {
+                        continue;
+                    }
+                    $grantMap = [];
+                    foreach ($folders as $folder) {
+                        $caps = isset($desiredFolders[$folder]) && is_array($desiredFolders[$folder])
+                            ? $desiredFolders[$folder]
+                            : [];
+                        $grantMap[$folder] = $caps;
+                    }
+
+                    $res = ACL::applyUserGrantsAtomic($user, $grantMap);
+                    if (!is_array($res) || empty($res['ok'])) {
+                        throw new RuntimeException('Failed to apply portal user access.');
+                    }
+                }
+            };
+
+            if ($sourcesEnabled) {
+                $targetId = $sourceKey !== '' ? $sourceKey : 'local';
+                $prev = SourceContext::getActiveId();
+                SourceContext::setActiveId($targetId, false, true);
+                try {
+                    $runner();
+                } finally {
+                    SourceContext::setActiveId($prev, false);
+                }
+            } else {
+                $runner();
+            }
+        }
+    }
+
+    private static function isPortalExpired(string $expiresAt): bool
+    {
+        $expiresAt = trim($expiresAt);
+        if ($expiresAt === '') {
+            return false;
+        }
+        $ts = strtotime($expiresAt . ' 23:59:59');
+        if ($ts === false) {
+            return false;
+        }
+        return time() > $ts;
+    }
+
+    private static function buildPortalUsername(string $slug): string
+    {
+        $slug = trim($slug);
+        $clean = preg_replace('/[^A-Za-z0-9_-]+/', '-', $slug);
+        $clean = trim((string)$clean, '-_');
+        $cleanLower = strtolower($clean);
+        if (strpos($cleanLower, 'portal-') === 0) {
+            $cleanLower = substr($cleanLower, 7);
+        } elseif ($cleanLower === 'portal') {
+            $cleanLower = '';
+        }
+        if ($cleanLower === '') {
+            $cleanLower = 'user-' . substr(sha1($slug . bin2hex(random_bytes(4))), 0, 8);
+        }
+
+        $username = 'portal_' . $cleanLower;
+        if (!preg_match(REGEX_USER, $username)) {
+            $username = 'portal_' . substr(sha1($slug . bin2hex(random_bytes(6))), 0, 12);
+        }
+
+        return $username;
+    }
+
+    private static function deletePortalUserIfExists(string $username): void
+    {
+        $username = trim($username);
+        if ($username === '' || !preg_match(REGEX_USER, $username)) {
+            return;
+        }
+        $result = UserModel::removeUser($username);
+        if (isset($result['error']) && $result['error'] !== 'User not found') {
+            throw new RuntimeException('Failed to delete portal user ' . $username . ': ' . $result['error']);
+        }
+    }
+
+    private static function portalUserExists(string $username): bool
+    {
+        $info = UserModel::getUser($username);
+        return !empty($info);
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $plans
+     * @param array<int,string> $createdUsers
+     */
+    private static function createPortalUsers(array $plans, array &$createdUsers): void
+    {
+        foreach ($plans as $plan) {
+            $slug = trim((string)($plan['slug'] ?? ''));
+            if ($slug === '') {
+                continue;
+            }
+
+            $username = trim((string)($plan['username'] ?? ''));
+            $usernameExplicit = !empty($plan['usernameExplicit']);
+            if ($username === '') {
+                $username = self::buildPortalUsername($slug);
+            }
+            if ($username === '' || !preg_match(REGEX_USER, $username)) {
+                throw new RuntimeException('Invalid portal user name for ' . $slug . '.');
+            }
+            if (self::portalUserExists($username)) {
+                if ($usernameExplicit) {
+                    throw new RuntimeException('Portal user already exists: ' . $username);
+                }
+                continue;
+            }
+
+            $password = trim((string)($plan['password'] ?? ''));
+            if ($password === '') {
+                throw new RuntimeException('Portal user password is required for ' . $slug . '.');
+            }
+            $result = UserModel::addUser($username, $password, '0', false);
+            if (isset($result['error'])) {
+                throw new RuntimeException('Failed to create portal user for ' . $slug . ': ' . $result['error']);
+            }
+
+            $createdUsers[] = $username;
+
+            $folder = trim((string)($plan['folder'] ?? ''));
+            if ($folder !== '') {
+                self::applyPortalUserGrants(
+                    $username,
+                    $folder,
+                    !empty($plan['allowUpload']),
+                    !empty($plan['allowDownload']),
+                    !empty($plan['allowSubfolders']),
+                    (string)($plan['sourceId'] ?? '')
+                );
+            }
+        }
+    }
+
+    /**
+     * @param array<int,string> $users
+     */
+    private static function rollbackPortalUsers(array $users): void
+    {
+        foreach ($users as $user) {
+            $user = trim((string)$user);
+            if ($user === '') {
+                continue;
+            }
+            try {
+                UserModel::removeUser($user);
+            } catch (\Throwable $e) {
+                error_log('portal user rollback failed for ' . $user . ': ' . $e->getMessage());
+            }
+        }
+    }
+
+    private static function applyPortalUserGrants(
+        string $username,
+        string $folder,
+        bool $allowUpload,
+        bool $allowDownload,
+        bool $allowSubfolders,
+        string $sourceId
+    ): void {
+        $caps = [];
+        if ($allowDownload) {
+            $caps['view'] = true;
+        }
+        if ($allowUpload) {
+            $caps['upload'] = true;
+        }
+        if ($allowSubfolders) {
+            $caps['inherit'] = true;
+        }
+        if (empty($caps)) {
+            return;
+        }
+        $caps['explicit'] = true;
+
+        $runner = function () use ($username, $folder, $caps): void {
+            $res = ACL::applyUserGrantsAtomic($username, [$folder => $caps]);
+            if (!is_array($res) || empty($res['ok'])) {
+                throw new RuntimeException('Failed to apply portal user access.');
+            }
+        };
+
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $targetId = $sourceId !== '' ? $sourceId : 'local';
+            $prev = SourceContext::getActiveId();
+            SourceContext::setActiveId($targetId, false, true);
+            try {
+                $runner();
+            } finally {
+                SourceContext::setActiveId($prev, false);
+            }
+            return;
+        }
+
+        $runner();
     }
 
     public function getProGroups(): array
@@ -1772,6 +2334,8 @@ class AdminController
                 'customLogoUrl' => '',
                 'headerBgLight'   => '',
                 'headerBgDark'    => '',
+                'appBgLight'     => '',
+                'appBgDark'      => '',
                 'footerHtml'    => '',
             ],
             'clamav'              => [
@@ -2029,10 +2593,43 @@ if (isset($data['oidc']['allowDemote'])) {
                     'customLogoUrl'   => '',
                     'headerBgLight'   => '',
                     'headerBgDark'    => '',
-                    'footerHtml'      => '',
-                ];
+                    'metaDescription' => '',
+                    'faviconSvg'      => '',
+                    'faviconPng'      => '',
+                    'faviconIco'      => '',
+                    'appleTouchIcon'  => '',
+                    'maskIcon'        => '',
+                'maskIconColor'   => '',
+                'themeColorLight' => '',
+                'themeColorDark'  => '',
+                'loginBgLight'    => '',
+                'loginBgDark'     => '',
+                'appBgLight'      => '',
+                'appBgDark'       => '',
+                'loginTagline'    => '',
+                'footerHtml'      => '',
+            ];
             }
-            foreach (['customLogoUrl', 'headerBgLight', 'headerBgDark', 'footerHtml'] as $key) {
+            foreach ([
+                'customLogoUrl',
+                'headerBgLight',
+                'headerBgDark',
+                'metaDescription',
+                'faviconSvg',
+                'faviconPng',
+                'faviconIco',
+                'appleTouchIcon',
+                'maskIcon',
+                'maskIconColor',
+                'themeColorLight',
+                'themeColorDark',
+                'loginBgLight',
+                'loginBgDark',
+                'appBgLight',
+                'appBgDark',
+                'loginTagline',
+                'footerHtml'
+            ] as $key) {
                 if (array_key_exists($key, $data['branding'])) {
                     $merged['branding'][$key] = (string)$data['branding'][$key];
                 }

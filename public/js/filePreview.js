@@ -186,7 +186,7 @@ export function openShareModal(file, folder) {
       .then(res => res.json())
       .then(data => {
         if (data.token) {
-          const url = `${window.location.origin}${withBase(`/api/file/share.php?token=${encodeURIComponent(data.token)}`)}`;
+          const url = `${window.location.origin}${withBase(`/api/file/share.php?token=${encodeURIComponent(data.token)}&view=1`)}`;
           document.getElementById("shareLinkInput").value = url;
           document.getElementById("shareLinkDisplay").style.display = "block";
         } else {

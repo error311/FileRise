@@ -9,6 +9,8 @@ declare(strict_types=1);
  *   tags={"Shares"},
  *   @OA\Parameter(name="token", in="query", required=true, @OA\Schema(type="string"), description="Share token"),
  *   @OA\Parameter(name="pass", in="query", required=false, @OA\Schema(type="string"), description="Share password"),
+ *   @OA\Parameter(name="view", in="query", required=false, @OA\Schema(type="integer", enum={0,1}), description="Render share landing page when set to 1"),
+ *   @OA\Parameter(name="inline", in="query", required=false, @OA\Schema(type="integer", enum={0,1}), description="Allow inline rendering for safe types"),
  *   @OA\Response(
  *     response=200,
  *     description="File stream or password prompt",

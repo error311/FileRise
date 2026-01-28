@@ -56,6 +56,11 @@ export function openFolderShareModal(folder) {
           ${t("allow_uploads")}
         </label>
 
+        <label style="margin-top:6px;display:block;">
+          <input type="checkbox" id="folderShareAllowSubfolders" />
+          ${t("allow_subfolders")}
+        </label>
+
         <button
           id="generateFolderShareLinkBtn"
           class="btn btn-primary"
@@ -103,6 +108,7 @@ export function openFolderShareModal(folder) {
 
       const password    = document.getElementById("folderSharePassword").value;
       const allowUpload = document.getElementById("folderShareAllowUpload").checked ? 1 : 0;
+      const allowSubfolders = document.getElementById("folderShareAllowSubfolders").checked ? 1 : 0;
       const csrfToken   = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
       if (!csrfToken) {
         showToast(t("csrf_error"));
@@ -121,7 +127,8 @@ export function openFolderShareModal(folder) {
           expirationValue: value,
           expirationUnit: unit,
           password,
-          allowUpload
+          allowUpload,
+          allowSubfolders
         })
       })
       .then(r => r.json())
