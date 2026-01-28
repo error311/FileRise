@@ -1,0 +1,50 @@
+---
+name: Sync wiki docs
+
+on:
+  push:
+    paths:
+      - "docs/wiki/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-wiki-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync_wiki:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout FileRise
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Checkout wiki
+        uses: actions/checkout@v4
+        with:
+          repository: error311/FileRise.wiki
+          token: ${{ secrets.PAT_TOKEN }}
+          path: wiki-repo
+          fetch-depth: 0
+
+      - name: Sync docs/wiki to wiki repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -av --delete --exclude .git docs/wiki/ wiki-repo/
+          cd wiki-repo
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to sync"
+          else
+            git commit -m "docs: sync wiki from FileRise"
+            git push origin HEAD:master
+          fi
