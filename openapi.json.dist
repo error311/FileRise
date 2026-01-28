@@ -2,7 +2,7 @@
     "openapi": "3.0.0",
     "info": {
         "title": "FileRise API",
-        "version": "3.0.0"
+        "version": "3.2.2"
     },
     "servers": [
         {
@@ -1870,8 +1870,8 @@
                 "tags": [
                     "Files"
                 ],
-                "summary": "Download multiple files as a ZIP",
-                "description": "Requires view access (or own-only with ownership). May be gated by account flag.",
+                "summary": "Queue an archive download",
+                "description": "Queues a background archive build. Requires view access (or own-only with ownership). May be gated by account flag.",
                 "operationId": "downloadZip",
                 "parameters": [
                     {
@@ -1906,6 +1906,15 @@
                                             "a.jpg",
                                             "b.png"
                                         ]
+                                    },
+                                    "format": {
+                                        "description": "Archive format",
+                                        "type": "string",
+                                        "enum": [
+                                            "zip",
+                                            "7z"
+                                        ],
+                                        "example": "zip"
                                     }
                                 },
                                 "type": "object"
@@ -1915,12 +1924,26 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "ZIP archive",
+                        "description": "Archive job queued",
                         "content": {
-                            "application/zip": {
+                            "application/json": {
                                 "schema": {
-                                    "type": "string",
-                                    "format": "binary"
+                                    "properties": {
+                                        "ok": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "token": {
+                                            "type": "string"
+                                        },
+                                        "statusUrl": {
+                                            "type": "string"
+                                        },
+                                        "downloadUrl": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
                                 }
                             }
                         }
@@ -1950,8 +1973,8 @@
                 "tags": [
                     "Files"
                 ],
-                "summary": "Download a finished ZIP by token",
-                "description": "Streams the zip once; token is one-shot.",
+                "summary": "Download a finished archive by token",
+                "description": "Streams the archive once; token is one-shot.",
                 "operationId": "downloadZipFile",
                 "parameters": [
                     {
@@ -1975,7 +1998,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "ZIP stream"
+                        "description": "Archive stream"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -1996,8 +2019,8 @@
                 "tags": [
                     "Files"
                 ],
-                "summary": "Extract ZIP file(s) into a folder",
-                "description": "Requires write access on the target folder.",
+                "summary": "Extract archive file(s) into a folder",
+                "description": "Supports ZIP/7Z and RAR extraction via server tools. Requires write access on the target folder.",
                 "operationId": "extractZip",
                 "parameters": [
                     {
@@ -2029,7 +2052,8 @@
                                             "type": "string"
                                         },
                                         "example": [
-                                            "archive.zip"
+                                            "archive.zip",
+                                            "archive.7z"
                                         ]
                                     }
                                 },
@@ -2517,6 +2541,32 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    {
+                        "name": "view",
+                        "in": "query",
+                        "description": "Render share landing page when set to 1",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "enum": [
+                                0,
+                                1
+                            ]
+                        }
+                    },
+                    {
+                        "name": "inline",
+                        "in": "query",
+                        "description": "Allow inline rendering for safe types",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "enum": [
+                                0,
+                                1
+                            ]
+                        }
                     }
                 ],
                 "responses": {
@@ -2606,12 +2656,72 @@
                 ]
             }
         },
+        "/api/file/thumbnail.php": {
+            "get": {
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Get a video thumbnail image",
+                "description": "Returns a cached JPEG thumbnail for supported video files.",
+                "operationId": "getVideoThumbnail",
+                "parameters": [
+                    {
+                        "name": "folder",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "root"
+                    },
+                    {
+                        "name": "file",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "clip.mp4"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Thumbnail image",
+                        "content": {
+                            "image/jpeg": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid folder/file"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
         "/api/file/zipStatus.php": {
             "get": {
                 "tags": [
                     "Files"
                 ],
-                "summary": "Check status of a background ZIP build",
+                "summary": "Check status of a background archive build",
                 "description": "Returns status for the authenticated user's token.",
                 "operationId": "zipStatus",
                 "parameters": [
@@ -2810,6 +2920,14 @@
                                             1
                                         ],
                                         "example": 0
+                                    },
+                                    "allowSubfolders": {
+                                        "type": "integer",
+                                        "enum": [
+                                            0,
+                                            1
+                                        ],
+                                        "example": 0
                                     }
                                 },
                                 "type": "object"
@@ -2828,7 +2946,7 @@
                                             "type": "string",
                                             "example": "sf_abc123"
                                         },
-                                        "url": {
+                                        "link": {
                                             "type": "string",
                                             "example": "/api/folder/shareFolder.php?token=sf_abc123"
                                         },
@@ -3004,13 +3122,43 @@
                         }
                     },
                     {
+                        "name": "pass",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
                         "name": "file",
                         "in": "query",
-                        "required": true,
+                        "required": false,
                         "schema": {
                             "type": "string"
                         },
                         "example": "report.pdf"
+                    },
+                    {
+                        "name": "path",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "subfolder/report.pdf"
+                    },
+                    {
+                        "name": "inline",
+                        "in": "query",
+                        "description": "Allow inline rendering for safe types",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "enum": [
+                                0,
+                                1
+                            ]
+                        }
                     }
                 ],
                 "responses": {
@@ -3027,6 +3175,68 @@
                     },
                     "400": {
                         "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Password required"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                }
+            }
+        },
+        "/api/folder/downloadSharedFolder.php": {
+            "get": {
+                "tags": [
+                    "Shared Folders"
+                ],
+                "summary": "Download a shared folder as a ZIP",
+                "description": "Public endpoint; validates token/path and streams a ZIP archive.",
+                "operationId": "downloadSharedFolder",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "pass",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "path",
+                        "in": "query",
+                        "description": "Subfolder path within the shared folder",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ZIP archive",
+                        "content": {
+                            "application/zip": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "403": {
+                        "description": "Password required"
                     },
                     "404": {
                         "description": "Not found"
@@ -3880,6 +4090,15 @@
                         }
                     },
                     {
+                        "name": "path",
+                        "in": "query",
+                        "description": "Subfolder path within the shared folder",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
                         "name": "page",
                         "in": "query",
                         "required": false,
@@ -3926,6 +4145,14 @@
                                 "properties": {
                                     "token": {
                                         "description": "Share token",
+                                        "type": "string"
+                                    },
+                                    "pass": {
+                                        "description": "Share password (if required)",
+                                        "type": "string"
+                                    },
+                                    "path": {
+                                        "description": "Optional subfolder path within the shared folder",
                                         "type": "string"
                                     },
                                     "fileToUpload": {

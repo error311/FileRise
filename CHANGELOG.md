@@ -1,5 +1,20 @@
 # Changelog
 
+## Changees 01/28/2026 (v3.2.2)
+
+`release(v3.2.2): update OpenAPI spec to match shipped endpoints`
+
+- OpenAPI spec (openapi.json.dist) updated to reflect current behavior
+  - Archive downloads are queued jobs (JSON response) and support format: zip|7z
+  - downloadZipFile now documents “archive stream” (not zip-only wording)
+  - Extract endpoint docs now reflect ZIP/7Z/RAR support
+  - File share supports view=1 landing page + inline=1 for safe types
+  - Shared folder APIs documented for path= (subfolders) + new shared folder zip download endpoint
+  - New thumbnail endpoint documented (/api/file/thumbnail.php)
+- OpenAPI info.version bumped to 3.2.2
+
+---
+
 ## Changes 01/28/2026 (v3.2.0 & v3.2.1)
 
 `release(v3.2.1): fix asset stamper to stamp src/ templates + APP_QVER placeholders`
