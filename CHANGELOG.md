@@ -1,6 +1,11 @@
 # Changelog
 
-## Changes 01/28/2026 (v3.2.0)
+## Changes 01/28/2026 (v3.2.0 & v3.2.1)
+
+`release(v3.2.1): fix asset stamper to stamp src/ templates + APP_QVER placeholders`
+
+- stamp-assets: include src/ alongside public/ for stamping
+- stamp-assets: replace {{APP_QVER}} in HTML/CSS/PHP templates and validate no placeholders remain
 
 `release(v3.2.0): share pages revamp + portals browse/download-all + Pro branding upgrades`
 
