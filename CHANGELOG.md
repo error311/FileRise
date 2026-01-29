@@ -1,6 +1,56 @@
 # Changelog
 
-## Changees 01/28/2026 (v3.2.2)
+## Changes 01/29/2026 (v3.2.3)
+
+`release(v3.2.3): resumable upload UX fixes + stale chunk cleanup + folder re-upload conflict handling (closes #100, closes #101, closes #102)`
+
+**Commit message**  
+
+```text
+release(v3.2.3): resumable upload UX fixes + stale chunk cleanup + folder re-upload conflict handling (closes #100, closes #101, closes #102)
+
+- uploads: fix resumable resume banner layout for long filenames + improve dismiss behavior
+- uploads: add preflight check existing files flow for folder uploads (resume+skip+overwrite)
+- cleanup: add resumable TTL (Admin + env) + background sweeps + admin CLI cleanup tools
+- folders: allow deleting empty folders by cleaning resumable temp dirs first
+- docs: update OpenAPI (uploads config, checkExisting endpoint, cleanup endpoint)
+```
+
+**Fixed**  
+
+- **#100:** Resumable resume banner **Dismiss** button is now reliably visible even with very long filenames.
+  - Wrapped banner content and forced safe word wrapping so long names don’t push the button off-screen.
+- **#101:** You can now delete a folder that only contains unfinished resumable chunks (refresh → dismiss → folder looked empty but wouldn’t delete).
+  - Folder delete now cleans `resumable_*` temp dirs for that folder before the “is empty” check.
+- **#102:** Re-uploading a folder after an interruption no longer blindly re-uploads files that already exist.
+  - New “Existing files detected” modal lets users choose: **Resume** (skip same-size), **Skip existing**, or **Overwrite**.
+
+**Added**  
+
+- **Upload preflight endpoint:** `POST /api/upload/checkExisting.php`
+  - Checks a list of relative paths and reports which already exist (and whether size matches).
+  - Supports `sourceId` when Sources is enabled.
+- **Resumable cleanup controls**
+  - Admin setting: **Resumable cleanup age (hours)** (`uploads.resumableTtlHours`, default 6h)
+  - Admin action: **Run cleanup now** (`POST /api/admin/resumableCleanup.php`)
+  - CLI tool: `src/cli/resumable_cleanup.php` (supports `--all`, `--source`, `--respect-interval`)
+
+**Changed**  
+
+- **Resumable drafts banner UX**
+  - Banner copy now explains how to resume and that Dismiss clears partial uploads + temp files.
+  - Dismiss now attempts cleanup via `removeChunks` for all pending identifiers in the current folder.
+- **Resumable temp management**
+  - Tracks folders with pending resumable temp dirs via a small index (`resumable_pending.json`)
+  - Performs periodic TTL-based sweeps (rate-limited) to remove stale temp folders automatically.
+- **Admin config / siteConfig**
+  - `uploads.resumableTtlHours` is now included in config payloads.
+- **OpenAPI**
+  - Docs updated for uploads config, `checkExisting`, and admin cleanup endpoints.
+
+---
+
+## Changes 01/28/2026 (v3.2.2)
 
 `release(v3.2.2): update OpenAPI spec to match shipped endpoints`
 

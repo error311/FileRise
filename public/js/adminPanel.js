@@ -644,6 +644,71 @@ function wireClamavTestButton(scope = document) {
   });
 }
 
+function wireResumableCleanupButton(scope = document) {
+  const btn = scope.querySelector('#resumableCleanupNowBtn');
+  const statusEl = scope.querySelector('#resumableCleanupStatus');
+  if (!btn || !statusEl || btn.__wired) return;
+
+  btn.__wired = true;
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    statusEl.textContent = t('resumable_cleanup_running') || 'Running cleanup...';
+    statusEl.className = 'small text-muted';
+
+    try {
+      const res = await fetch('/api/admin/resumableCleanup.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.csrfToken || ''
+        },
+        body: JSON.stringify({ all: true, purgeAll: true })
+      });
+
+      const data = await safeJson(res);
+
+      if (!data || data.success !== true) {
+        const msg =
+          (data && (data.error || data.message)) ||
+          t('resumable_cleanup_failed') ||
+          'Resumable cleanup failed.';
+        statusEl.textContent = msg;
+        statusEl.className = 'small text-danger';
+        showToast(msg, 'error');
+        return;
+      }
+
+      const checked = parseInt(data.checked || 0, 10) || 0;
+      const removed = parseInt(data.removed || 0, 10) || 0;
+      const remaining = parseInt(data.remaining || 0, 10) || 0;
+      const sources = parseInt(data.sources || 1, 10) || 1;
+
+      const msg = sources > 1
+        ? (t('resumable_cleanup_done_sources', { removed, remaining, checked, sources })
+          || `Cleanup complete: removed ${removed}, remaining ${remaining}, checked ${checked} across ${sources} sources.`)
+        : (t('resumable_cleanup_done', { removed, remaining, checked })
+          || `Cleanup complete: removed ${removed}, remaining ${remaining}, checked ${checked}.`);
+
+      statusEl.textContent = msg;
+      statusEl.className = 'small text-success';
+      showToast(msg, 'success');
+    } catch (e) {
+      console.error('Resumable cleanup error', e);
+      const msg =
+        (e && e.message ? e.message : '') ||
+        t('resumable_cleanup_failed') ||
+        'Resumable cleanup failed.';
+      statusEl.textContent = msg;
+      statusEl.className = 'small text-danger';
+      showToast(msg, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 function wireIgnoreRegexPresetButton(scope = document) {
   const btn = scope.querySelector('#ignoreRegexSnapshotsPreset');
   const input = scope.querySelector('#ignoreRegex');
@@ -2534,6 +2599,7 @@ function captureInitialAdminConfig() {
     enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
     sharedMaxUploadSize: (document.getElementById("sharedMaxUploadSize")?.value || "").trim(),
     resumableChunkMb: (document.getElementById("resumableChunkMb")?.value || "").trim(),
+    resumableTtlHours: (document.getElementById("resumableTtlHours")?.value || "").trim(),
     globalOtpauthUrl: (document.getElementById("globalOtpauthUrl")?.value || "").trim(),
     brandingCustomLogoUrl: (document.getElementById("brandingCustomLogoUrl")?.value || "").trim(),
     brandingHeaderBgLight: (document.getElementById("brandingHeaderBgLight")?.value || "").trim(),
@@ -2595,6 +2661,7 @@ function hasUnsavedChanges() {
     getChk("enableWebDAV") !== o.enableWebDAV ||
     getVal("sharedMaxUploadSize") !== o.sharedMaxUploadSize ||
     getVal("resumableChunkMb") !== o.resumableChunkMb ||
+    getVal("resumableTtlHours") !== o.resumableTtlHours ||
     getVal("globalOtpauthUrl") !== o.globalOtpauthUrl ||
     getVal("brandingCustomLogoUrl") !== (o.brandingCustomLogoUrl || "") ||
     getVal("brandingHeaderBgLight") !== (o.brandingHeaderBgLight || "") ||
@@ -5112,6 +5179,59 @@ export function openAdminPanel() {
     </small>
   </div>
 
+  <div class="form-group" style="margin-top:10px;">
+    <label for="resumableTtlHours">
+      ${tf("resumable_cleanup_hours_label", "Resumable cleanup age (hours)")}
+    </label>
+    <input
+      type="number"
+      id="resumableTtlHours"
+      class="form-control"
+      min="0.5"
+      max="168"
+      step="0.5"
+    />
+    <small class="text-muted d-block mt-1">
+      ${tf(
+          "resumable_cleanup_hours_help",
+          "Deletes unfinished resumable uploads after this age. Applies to background sweeps and manual cleanup."
+        )}
+    </small>
+  </div>
+
+  <div class="mt-2">
+    <button
+      type="button"
+      id="resumableCleanupNowBtn"
+      class="btn btn-sm btn-secondary">
+      ${tf("resumable_cleanup_run_now", "Run cleanup now")}
+    </button>
+    <small class="text-muted d-block" style="margin-top:4px;">
+      ${tf(
+          "resumable_cleanup_run_now_help",
+          "Immediately sweeps expired resumable temp folders using the age above."
+        )}
+    </small>
+    <div id="resumableCleanupStatus" class="small text-muted" style="margin-top:4px;"></div>
+    <div class="small text-muted" style="margin-top:6px;">
+      <div style="font-weight:600;">
+        ${tf("resumable_cleanup_cron_title", "Cron example")}
+      </div>
+      <div>
+        ${tf(
+          "resumable_cleanup_cron_help",
+          "Example hourly job: <code>0 * * * * /usr/bin/php /path/to/FileRise/src/cli/resumable_cleanup.php --all --respect-interval</code>"
+        )}
+      </div>
+      <div>
+        ${tf(
+          "resumable_cleanup_cron_note",
+          "Replace /path/to/FileRise with your install path."
+        )}
+      </div>
+    </div>
+  </div>
+
   <hr class="admin-divider">
 
   <div class="admin-subsection-title" style="margin-top:2px;">
@@ -5300,6 +5420,7 @@ export function openAdminPanel() {
         const headerSettingsScope = document.getElementById("headerSettingsContent");
         wireIgnoreRegexPresetButton(headerSettingsScope);
         wireClamavTestButton(uploadScope);
+        wireResumableCleanupButton(uploadScope);
         initVirusLogUI({ isPro });
         // ONLYOFFICE section (moved into adminOnlyOffice.js)
         initOnlyOfficeUI({ config });
@@ -6450,6 +6571,13 @@ ${t("shared_max_upload_size_bytes")}
           const val = Number.isFinite(num) ? Math.min(100, Math.max(0.5, num)) : 1.5;
           chunkEl.value = val;
         }
+        const ttlEl = document.getElementById("resumableTtlHours");
+        if (ttlEl) {
+          const raw = uploadCfg.resumableTtlHours;
+          const num = parseFloat(raw);
+          const val = Number.isFinite(num) ? Math.min(168, Math.max(0.5, num)) : 6;
+          ttlEl.value = val;
+        }
 
         // Published URL (optional)
         const deploy = (config && config.deployment && typeof config.deployment === 'object') ? config.deployment : {};
@@ -6549,6 +6677,13 @@ ${t("shared_max_upload_size_bytes")}
           const val = Number.isFinite(num) ? Math.min(100, Math.max(0.5, num)) : 1.5;
           chunkEl2.value = val;
         }
+        const ttlEl2 = document.getElementById("resumableTtlHours");
+        if (ttlEl2) {
+          const raw = uploadCfg2.resumableTtlHours;
+          const num = parseFloat(raw);
+          const val = Number.isFinite(num) ? Math.min(168, Math.max(0.5, num)) : 6;
+          ttlEl2.value = val;
+        }
 
         // Published URL (optional)
         const deploy2 = (config && config.deployment && typeof config.deployment === 'object') ? config.deployment : {};
@@ -6634,6 +6769,7 @@ ${t("shared_max_upload_size_bytes")}
         const headerSettingsScope = document.getElementById("headerSettingsContent");
         wireIgnoreRegexPresetButton(headerSettingsScope);
         wireClamavTestButton(uploadScope);
+        wireResumableCleanupButton(uploadScope);
         initVirusLogUI({ isPro });
         renderAdminEncryptionSection({ config, dark });
         document.getElementById("oidcProviderUrl").value = window.currentOIDCConfig?.providerUrl || "";
@@ -6836,6 +6972,13 @@ function handleSave() {
         Math.min(
           100,
           parseFloat(document.getElementById("resumableChunkMb")?.value || "1.5") || 1.5
+        )
+      ),
+      resumableTtlHours: Math.max(
+        0.5,
+        Math.min(
+          168,
+          parseFloat(document.getElementById("resumableTtlHours")?.value || "6") || 6
         )
       ),
     },

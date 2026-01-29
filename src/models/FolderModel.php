@@ -9,6 +9,7 @@ require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 require_once PROJECT_ROOT . '/src/lib/StorageRegistry.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 require_once PROJECT_ROOT . '/src/models/FileModel.php';
+require_once PROJECT_ROOT . '/src/models/UploadModel.php';
 
 class FolderModel
 {
@@ -1559,6 +1560,10 @@ class FolderModel
         [$real, $relative, $err] = self::resolveFolderPath($folder, false);
         if ($err) return ["error" => $err];
         $storage = self::storage();
+
+        try {
+            UploadModel::cleanupResumableForFolder($relative);
+        } catch (\Throwable $e) { /* ignore */ }
 
         // Prevent deletion if not empty.
         if ($storage->isLocal()) {

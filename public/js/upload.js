@@ -8,6 +8,7 @@ import { withBase } from './basePath.js?v={{APP_QVER}}';
 
 const UPLOAD_URL = withBase('/api/upload/upload.php');
 const RESUMABLE_TARGET = UPLOAD_URL;
+const CHECK_EXISTING_URL = withBase('/api/upload/checkExisting.php');
 
 function getActiveUploadSourceId() {
   const paneKey = window.activePane === 'secondary' ? 'secondary' : 'primary';
@@ -385,6 +386,14 @@ function showResumableDraftBanner() {
     count === 1
       ? 'You have a partially uploaded file'
       : `You have ${count} partially uploaded files. Latest:`;
+  const resumeHint =
+    count === 1
+      ? 'Choose it again from your device to resume.'
+      : 'Choose them again from your device to resume.';
+  const dismissHint = 'Dismiss clears the partial uploads and temporary files.';
+  const cleanupIds = candidates
+    .map(entry => entry && entry.identifier)
+    .filter(Boolean);
 
   const banner = document.createElement('div');
   banner.id = 'resumableDraftBanner';
@@ -394,9 +403,10 @@ function showResumableDraftBanner() {
       <span class="material-icons" style="vertical-align:middle;margin-right:6px;">cloud_upload</span>
       <span class="upload-resume-text">
         ${countText}
-        <strong>${escapeHTML(latest.fileName)}</strong>
+        <strong class="upload-resume-name">${escapeHTML(latest.fileName)}</strong>
         (~${latest.lastPercent}%).
-        Choose it again from your device to resume.
+        ${resumeHint}
+        ${dismissHint}
       </span>
       <button type="button" class="upload-resume-dismiss-btn">Dismiss</button>
     </div>
@@ -407,6 +417,11 @@ function showResumableDraftBanner() {
     dismissBtn.addEventListener('click', () => {
       // Clear all resumable hints for this folder when the user dismisses.
       clearResumableDraftsForFolder(folder);
+      if (window.csrfToken && cleanupIds.length) {
+        cleanupIds.forEach(identifier => {
+          removeChunkFolderRepeatedly(identifier, window.csrfToken, folder, 2, 800);
+        });
+      }
       if (banner.parentNode) {
         banner.parentNode.removeChild(banner);
       }
@@ -592,9 +607,238 @@ function applyResumableRelativePath(file) {
   }
 }
 
+function normalizeUploadPath(raw) {
+  return String(raw || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .trim();
+}
+
+function getUploadPathForFile(file) {
+  if (!file || typeof file !== 'object') return '';
+  const raw =
+    file.customRelativePath ||
+    file.relativePath ||
+    file.webkitRelativePath ||
+    file.name ||
+    file.fileName ||
+    '';
+  return normalizeUploadPath(raw);
+}
+
+function ensureUploadConflictModal() {
+  let modal = document.getElementById('uploadConflictModal');
+  if (modal) return modal;
+
+  modal = document.createElement('div');
+  modal.id = 'uploadConflictModal';
+  modal.className = 'modal';
+  modal.style.display = 'none';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <h4 id="uploadConflictTitle"></h4>
+      <p id="uploadConflictMessage"></p>
+      <div class="button-container" style="flex-wrap: wrap; justify-content: flex-end;">
+        <button id="uploadConflictResume" class="btn btn-primary"></button>
+        <button id="uploadConflictSkip" class="btn btn-secondary"></button>
+        <button id="uploadConflictOverwrite" class="btn btn-danger"></button>
+        <button id="uploadConflictCancel" class="btn btn-secondary"></button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function showUploadConflictModal(stats) {
+  return new Promise((resolve) => {
+    const modal = ensureUploadConflictModal();
+    const titleEl = modal.querySelector('#uploadConflictTitle');
+    const msgEl = modal.querySelector('#uploadConflictMessage');
+    const resumeBtn = modal.querySelector('#uploadConflictResume');
+    const skipBtn = modal.querySelector('#uploadConflictSkip');
+    const overwriteBtn = modal.querySelector('#uploadConflictOverwrite');
+    const cancelBtn = modal.querySelector('#uploadConflictCancel');
+
+    const total = stats?.total || 0;
+    const existing = stats?.existing || 0;
+    const sameSize = stats?.sameSize || 0;
+    const diffSize = stats?.diffSize || 0;
+
+    const titleText = t('upload_conflict_title') || 'Existing files detected';
+    const msgText = t('upload_conflict_message', {
+      existing,
+      total,
+      same: sameSize,
+      diff: diffSize
+    }) || `Found ${existing} of ${total} files already in this folder.`;
+
+    titleEl.textContent = titleText;
+    msgEl.textContent = msgText;
+    resumeBtn.textContent = t('upload_conflict_resume') || 'Resume';
+    skipBtn.textContent = t('upload_conflict_skip') || 'Skip existing';
+    overwriteBtn.textContent = t('upload_conflict_overwrite') || 'Overwrite';
+    cancelBtn.textContent = t('cancel') || 'Cancel';
+
+    modal.style.display = 'block';
+
+    function cleanup(choice) {
+      modal.style.display = 'none';
+      resumeBtn.removeEventListener('click', onResume);
+      skipBtn.removeEventListener('click', onSkip);
+      overwriteBtn.removeEventListener('click', onOverwrite);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(choice);
+    }
+
+    function onResume() { cleanup('resume'); }
+    function onSkip() { cleanup('skip'); }
+    function onOverwrite() { cleanup('overwrite'); }
+    function onCancel() { cleanup('cancel'); }
+
+    resumeBtn.addEventListener('click', onResume);
+    skipBtn.addEventListener('click', onSkip);
+    overwriteBtn.addEventListener('click', onOverwrite);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+async function fetchExistingUploads(payload, retry = true) {
+  try {
+    const res = await fetch(CHECK_EXISTING_URL, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': window.csrfToken || ''
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => null);
+    if (data && data.csrf_expired && data.csrf_token && retry) {
+      window.csrfToken = data.csrf_token;
+      return fetchExistingUploads(payload, false);
+    }
+    if (!res.ok || !data || typeof data !== 'object' || data.error) {
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.warn('Upload existence check failed:', e);
+    return null;
+  }
+}
+
+async function filterExistingUploads(files) {
+  const result = { files, autoStart: false };
+  if (!Array.isArray(files) || files.length === 0) return result;
+  if (!hasFolderPaths(files)) return result;
+
+  const payloadFiles = [];
+  files.forEach(file => {
+    const path = getUploadPathForFile(file);
+    if (!path) return;
+    const size = typeof file.size === 'number'
+      ? file.size
+      : (file.file && typeof file.file.size === 'number' ? file.file.size : null);
+    payloadFiles.push({ path, size });
+  });
+
+  if (!payloadFiles.length) return result;
+
+  const payload = {
+    folder: window.currentFolder || 'root',
+    files: payloadFiles
+  };
+  const sourceId = getActiveUploadSourceId();
+  if (sourceId) payload.sourceId = sourceId;
+
+  const existingResult = await fetchExistingUploads(payload);
+  if (!existingResult || !Array.isArray(existingResult.existing) || existingResult.existing.length === 0) {
+    return result;
+  }
+
+  const existing = existingResult.existing;
+  const existingCount = existing.length;
+  const sameCount = existing.filter(e => e && e.sameSize === true).length;
+  const diffCount = existingCount - sameCount;
+
+  const choice = await showUploadConflictModal({
+    total: payloadFiles.length,
+    existing: existingCount,
+    sameSize: sameCount,
+    diffSize: diffCount
+  });
+
+  if (choice === 'cancel') return { files: [], autoStart: false };
+  if (choice === 'overwrite') return { files, autoStart: true };
+
+  const existingAny = new Set(existing.map(e => normalizeUploadPath(e.path)));
+  const existingSame = new Set(
+    existing.filter(e => e && e.sameSize === true).map(e => normalizeUploadPath(e.path))
+  );
+
+  const filtered = files.filter(file => {
+    const path = getUploadPathForFile(file);
+    if (!path) return true;
+    if (choice === 'skip') {
+      return !existingAny.has(path);
+    }
+    return !existingSame.has(path);
+  });
+
+  if (filtered.length === 0) {
+    showToast(t('upload_conflict_all_skipped') || 'All selected files already exist.', 'info');
+    return { files: filtered, autoStart: false };
+  }
+
+  const skipped = files.length - filtered.length;
+  if (skipped > 0) {
+    const msg = t('upload_conflict_skipped', { count: skipped }) || `Skipped ${skipped} existing file(s).`;
+    showToast(msg, 'info');
+  }
+
+  return { files: filtered, autoStart: true };
+}
+
+function startResumableUploadNow() {
+  if (!resumableInstance) return;
+  if (!Array.isArray(resumableInstance.files) || resumableInstance.files.length === 0) {
+    return;
+  }
+  if (typeof resumableInstance.isUploading === 'function' && resumableInstance.isUploading()) {
+    return;
+  }
+
+  setUploadButtonVisible(false);
+  showVirusScanNotice();
+  resumableInstance.opts.headers = resumableInstance.opts.headers || {};
+  resumableInstance.opts.headers['X-CSRF-Token'] = window.csrfToken;
+  if (typeof resumableInstance.opts.query !== 'function') {
+    resumableInstance.opts.query.folder = window.currentFolder || "root";
+    resumableInstance.opts.query.upload_token = window.csrfToken;
+    const sourceId = getActiveUploadSourceId();
+    if (sourceId) {
+      resumableInstance.opts.query.sourceId = sourceId;
+    } else {
+      delete resumableInstance.opts.query.sourceId;
+    }
+  }
+  resumableInstance.upload();
+  showToast(t('upload_resumable_started') || 'Resumable upload started...', 'info');
+}
+
 async function queueResumableFiles(files) {
+  const filteredResult = await filterExistingUploads(files);
+  const filtered = filteredResult && Array.isArray(filteredResult.files)
+    ? filteredResult.files
+    : [];
+  const autoStart = !!filteredResult?.autoStart;
+  if (!filtered || filtered.length === 0) return;
+
   if (!useResumable) {
-    processFiles(files);
+    processFiles(filtered);
     return;
   }
 
@@ -605,14 +849,27 @@ async function queueResumableFiles(files) {
   if (!_resumableReady) await initResumableUpload();
   if (!resumableInstance) {
     // If Resumable failed to load, fall back to XHR
-    processFiles(files);
+    processFiles(filtered);
     return;
   }
 
-  files.forEach(file => {
+  if (_autoStartResumableTimer) {
+    clearTimeout(_autoStartResumableTimer);
+    _autoStartResumableTimer = null;
+  }
+
+  filtered.forEach(file => {
     applyResumableRelativePath(file);
     resumableInstance.addFile(file);
   });
+
+  if (autoStart && resumableInstance) {
+    // Defer until chunks are bootstrapped (Resumable builds chunks async).
+    _autoStartResumableTimer = setTimeout(() => {
+      _autoStartResumableTimer = null;
+      startResumableUploadNow();
+    }, 0);
+  }
 }
 
 // Helper function to repeatedly call removeChunks.php
@@ -914,6 +1171,7 @@ let resumableInstance = null;
 let _pendingPickedFiles = [];   // files picked before library/instance ready
 let _resumableReady = false;
 let _currentResumableIds = new Set();
+let _autoStartResumableTimer = null;
 
 // Make init async-safe; it resolves when Resumable is constructed
 async function initResumableUpload() {

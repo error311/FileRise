@@ -1538,7 +1538,7 @@ function isFtpSource(sourceId = '') {
 function isSlowRemoteSource(sourceId = '') {
   const type = String(getSourceTypeById(sourceId || getGlobalActiveSourceId()) || '').toLowerCase();
   if (!type || type === 'local') return false;
-  return ['ftp', 'sftp', 'webdav', 'smb', 'gdrive', 'onedrive', 'dropbox'].includes(type);
+  return ['ftp', 'sftp', 'webdav'].includes(type);
 }
 
 function getSourceMetaById(sourceId) {

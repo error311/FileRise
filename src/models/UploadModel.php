@@ -16,6 +16,9 @@ class UploadModel
      * Log file for virus detections (JSONL; one JSON record per line).
      */
     private const VIRUS_LOG_MAX_BYTES  = 5242880; // 5 MB soft rotation
+    private const RESUMABLE_INDEX_FILE = 'resumable_pending.json';
+    private const RESUMABLE_SWEEP_INTERVAL = 1800;
+    private const RESUMABLE_INDEX_UPDATE_MIN = 120;
 
     private static function uploadRoot(): string
     {
@@ -54,6 +57,263 @@ class UploadModel
             @mkdir($base, 0775, true);
         }
         return $base;
+    }
+
+    private static function resumableTtlSeconds(): int
+    {
+        $hours = null;
+        $env = getenv('FR_RESUMABLE_TTL_HOURS');
+        if ($env !== false && trim((string)$env) !== '') {
+            $hours = (float)$env;
+        } elseif (defined('FR_RESUMABLE_TTL_HOURS')) {
+            $hours = (float)FR_RESUMABLE_TTL_HOURS;
+        } elseif (class_exists('AdminModel')) {
+            $cfg = AdminModel::getConfig();
+            if (is_array($cfg) && !isset($cfg['error'])) {
+                $raw = $cfg['uploads']['resumableTtlHours'] ?? null;
+                if (is_numeric($raw)) {
+                    $hours = (float)$raw;
+                }
+            }
+        }
+
+        if ($hours === null || $hours <= 0) {
+            $hours = 6.0;
+        }
+
+        $hours = max(0.5, min(168, $hours));
+
+        return (int)round($hours * 3600);
+    }
+
+    private static function resumableIndexPath(): string
+    {
+        $base = rtrim(self::metaRoot(), '/\\') . DIRECTORY_SEPARATOR;
+        if (!is_dir($base)) {
+            @mkdir($base, 0775, true);
+        }
+        return $base . self::RESUMABLE_INDEX_FILE;
+    }
+
+    private static function resumableFolderKey(string $folderSan): string
+    {
+        $folderSan = trim(str_replace('\\', '/', $folderSan), '/');
+        if ($folderSan === '' || $folderSan === 'root') {
+            return 'root';
+        }
+        return $folderSan;
+    }
+
+    private static function loadResumableIndex(): array
+    {
+        $path = self::resumableIndexPath();
+        if (!is_file($path)) {
+            return ['lastSweep' => 0, 'folders' => []];
+        }
+
+        $raw = @file_get_contents($path);
+        $data = is_string($raw) ? json_decode($raw, true) : null;
+        if (!is_array($data)) {
+            return ['lastSweep' => 0, 'folders' => []];
+        }
+
+        $folders = isset($data['folders']) && is_array($data['folders']) ? $data['folders'] : [];
+        $lastSweep = isset($data['lastSweep']) ? (int)$data['lastSweep'] : 0;
+
+        return ['lastSweep' => $lastSweep, 'folders' => $folders];
+    }
+
+    private static function saveResumableIndex(array $data): void
+    {
+        $path = self::resumableIndexPath();
+        $payload = json_encode($data, JSON_UNESCAPED_SLASHES);
+        if ($payload === false) {
+            return;
+        }
+        @file_put_contents($path, $payload, LOCK_EX);
+    }
+
+    private static function markResumablePending(string $folderSan): void
+    {
+        $folderKey = self::resumableFolderKey($folderSan);
+        $now = time();
+        $data = self::loadResumableIndex();
+        $folders = isset($data['folders']) && is_array($data['folders']) ? $data['folders'] : [];
+        $lastSeen = isset($folders[$folderKey]) ? (int)$folders[$folderKey] : 0;
+
+        if ($lastSeen !== 0 && ($now - $lastSeen) < self::RESUMABLE_INDEX_UPDATE_MIN) {
+            return;
+        }
+
+        $folders[$folderKey] = $now;
+        $data['folders'] = $folders;
+        if (!isset($data['lastSweep'])) {
+            $data['lastSweep'] = 0;
+        }
+        self::saveResumableIndex($data);
+    }
+
+    private static function cleanupResumableTempDirs(string $folderSan, bool $isLocal, bool $remove = true): bool
+    {
+        $baseDir = self::stagingRoot($isLocal);
+        if ($folderSan !== '') {
+            $baseDir = rtrim($baseDir, '/\\') . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
+        }
+        $baseDir = rtrim($baseDir, '/\\') . DIRECTORY_SEPARATOR;
+        if (!is_dir($baseDir)) {
+            return false;
+        }
+
+        $regex = "/^resumable_" . PATTERN_FOLDER_NAME . "$/u";
+        $entries = @scandir($baseDir);
+        if (!is_array($entries)) {
+            return false;
+        }
+
+        $found = false;
+        foreach ($entries as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            if (!preg_match($regex, $name)) {
+                continue;
+            }
+            $found = true;
+            if ($remove) {
+                self::rrmdir($baseDir . $name);
+            }
+        }
+
+        if (!$remove) {
+            return $found;
+        }
+
+        $entries = @scandir($baseDir);
+        if (!is_array($entries)) {
+            return false;
+        }
+        foreach ($entries as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            if (preg_match($regex, $name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function maybeSweepResumableExpired(bool $isLocal): void
+    {
+        self::sweepResumableExpiredInternal($isLocal, false);
+    }
+
+    public static function sweepResumableExpired(bool $force = true): array
+    {
+        $isLocal = self::isLocalSourceType();
+        return self::sweepResumableExpiredInternal($isLocal, $force);
+    }
+
+    /**
+     * Purge all resumable temp folders tracked in the index, ignoring TTL.
+     */
+    public static function purgeResumableAll(): array
+    {
+        $isLocal = self::isLocalSourceType();
+        return self::purgeResumableAllInternal($isLocal);
+    }
+
+    private static function sweepResumableExpiredInternal(bool $isLocal, bool $force): array
+    {
+        $ttl = self::resumableTtlSeconds();
+        if ($ttl <= 0) {
+            return ['checked' => 0, 'removed' => 0, 'remaining' => 0, 'skipped' => true];
+        }
+
+        $data = self::loadResumableIndex();
+        $folders = isset($data['folders']) && is_array($data['folders']) ? $data['folders'] : [];
+        if (!$folders) {
+            $data['lastSweep'] = time();
+            self::saveResumableIndex($data);
+            return ['checked' => 0, 'removed' => 0, 'remaining' => 0, 'skipped' => false];
+        }
+
+        $now = time();
+        $lastSweep = isset($data['lastSweep']) ? (int)$data['lastSweep'] : 0;
+        if (!$force && $lastSweep !== 0 && ($now - $lastSweep) < self::RESUMABLE_SWEEP_INTERVAL) {
+            return ['checked' => 0, 'removed' => 0, 'remaining' => count($folders), 'skipped' => true];
+        }
+
+        $checked = 0;
+        $removed = 0;
+        $remaining = 0;
+
+        foreach ($folders as $folderKey => $lastSeenRaw) {
+            $lastSeen = (int)$lastSeenRaw;
+            if ($lastSeen <= 0) {
+                unset($folders[$folderKey]);
+                continue;
+            }
+            $checked++;
+            if (($now - $lastSeen) < $ttl) {
+                $remaining++;
+                continue;
+            }
+            $folderSan = ($folderKey === 'root') ? '' : (string)$folderKey;
+            $hasRemaining = self::cleanupResumableTempDirs($folderSan, $isLocal, true);
+            if (!$hasRemaining) {
+                unset($folders[$folderKey]);
+                $removed++;
+            } else {
+                $remaining++;
+            }
+        }
+
+        $data['folders'] = $folders;
+        $data['lastSweep'] = $now;
+        self::saveResumableIndex($data);
+        return ['checked' => $checked, 'removed' => $removed, 'remaining' => $remaining, 'skipped' => false];
+    }
+
+    private static function purgeResumableAllInternal(bool $isLocal): array
+    {
+        $data = self::loadResumableIndex();
+        $folders = isset($data['folders']) && is_array($data['folders']) ? $data['folders'] : [];
+        $now = time();
+
+        if (!$folders) {
+            $data['lastSweep'] = $now;
+            self::saveResumableIndex($data);
+            return ['checked' => 0, 'removed' => 0, 'remaining' => 0, 'skipped' => false];
+        }
+
+        $checked = 0;
+        $removed = 0;
+        $remaining = 0;
+
+        foreach ($folders as $folderKey => $lastSeenRaw) {
+            $lastSeen = (int)$lastSeenRaw;
+            if ($lastSeen <= 0) {
+                unset($folders[$folderKey]);
+                continue;
+            }
+            $checked++;
+            $folderSan = ($folderKey === 'root') ? '' : (string)$folderKey;
+            $hasRemaining = self::cleanupResumableTempDirs($folderSan, $isLocal, true);
+            if (!$hasRemaining) {
+                unset($folders[$folderKey]);
+                $removed++;
+            } else {
+                $remaining++;
+            }
+        }
+
+        $data['folders'] = $folders;
+        $data['lastSweep'] = $now;
+        self::saveResumableIndex($data);
+        return ['checked' => $checked, 'removed' => $removed, 'remaining' => $remaining, 'skipped' => false];
     }
 
     private static function buildStorageDir(string $folderSan, string $relativeSubDir): string
@@ -412,6 +672,8 @@ class UploadModel
             }
 
             $folderSan = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+            self::markResumablePending($folderSan);
+            self::maybeSweepResumableExpired($isLocal);
 
             if (empty($files['file']) || !isset($files['file']['name'])) {
                 return ['error' => 'No files received'];
@@ -959,17 +1221,137 @@ class UploadModel
                 . str_replace('/', DIRECTORY_SEPARATOR, $targetFolder) . DIRECTORY_SEPARATOR;
         }
         $tempDir = $baseDir . $folder;
-        if (!is_dir($tempDir)) {
-            return ['success' => true, 'message' => 'Temporary folder already removed.'];
+        $hadDir = is_dir($tempDir);
+        if ($hadDir) {
+            self::rrmdir($tempDir);
+        }
+        if (is_dir($tempDir)) {
+            return ['error' => 'Failed to remove temporary folder.'];
         }
 
-        self::rrmdir($tempDir);
-
-        if (!is_dir($tempDir)) {
-            return ['success' => true, 'message' => 'Temporary folder removed.'];
+        $hasRemaining = self::cleanupResumableTempDirs($targetFolder, $isLocal, false);
+        if (!$hasRemaining) {
+            $data = self::loadResumableIndex();
+            $folderKey = self::resumableFolderKey($targetFolder);
+            if (isset($data['folders'][$folderKey])) {
+                unset($data['folders'][$folderKey]);
+                self::saveResumableIndex($data);
+            }
         }
 
-        return ['error' => 'Failed to remove temporary folder.'];
+        return [
+            'success' => true,
+            'message' => $hadDir ? 'Temporary folder removed.' : 'Temporary folder already removed.',
+        ];
+    }
+
+    /**
+     * Force-clean any resumable_* temp folders for a target folder.
+     */
+    public static function cleanupResumableForFolder(string $folder): void
+    {
+        $raw = trim($folder);
+        $folderSan = self::sanitizeFolder($raw === '' ? 'root' : $raw);
+        if ($folderSan === '' && $raw !== '' && strtolower($raw) !== 'root') {
+            return;
+        }
+
+        $isLocal = self::isLocalSourceType();
+        $hasRemaining = self::cleanupResumableTempDirs($folderSan, $isLocal, true);
+
+        if ($hasRemaining) {
+            return;
+        }
+
+        $data = self::loadResumableIndex();
+        $folderKey = self::resumableFolderKey($folderSan);
+        if (isset($data['folders'][$folderKey])) {
+            unset($data['folders'][$folderKey]);
+            self::saveResumableIndex($data);
+        }
+    }
+
+    /**
+     * Check which files already exist in the target folder.
+     *
+     * @param string $folder Normalized folder (e.g., "root" or "team/reports").
+     * @param array $files Array of ['path' => 'sub/file.txt', 'size' => 123].
+     * @return array
+     */
+    public static function checkExisting(string $folder, array $files): array
+    {
+        $storage = StorageRegistry::getAdapter();
+        $folderSan = self::sanitizeFolder($folder);
+        $existing = [];
+        $seen = [];
+
+        foreach ($files as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $rawPath = isset($entry['path']) ? (string)$entry['path'] : '';
+            if ($rawPath === '') {
+                continue;
+            }
+            $path = str_replace('\\', '/', trim($rawPath));
+            $path = ltrim($path, '/');
+            if ($path === '') {
+                continue;
+            }
+            if (isset($seen[$path])) {
+                continue;
+            }
+            $seen[$path] = true;
+
+            [$subDir, $fileName] = self::parseRelativePath($path);
+            if ($subDir === null || $fileName === '') {
+                continue;
+            }
+
+            $storagePath = self::buildStoragePath($folderSan, $subDir, $fileName);
+            $exists = false;
+            $existingSize = null;
+
+            if ($storage->isLocal()) {
+                if (is_file($storagePath)) {
+                    $exists = true;
+                    $size = @filesize($storagePath);
+                    $existingSize = ($size === false) ? null : (int)$size;
+                }
+            } else {
+                try {
+                    $stat = $storage->stat($storagePath);
+                    if ($stat && ($stat['type'] ?? '') === 'file') {
+                        $exists = true;
+                        $size = $stat['size'] ?? null;
+                        $existingSize = ($size === null) ? null : (int)$size;
+                    }
+                } catch (\Throwable $e) {
+                    // Best-effort: treat as non-existing on stat errors.
+                }
+            }
+
+            if (!$exists) {
+                continue;
+            }
+
+            $reqSize = null;
+            if (array_key_exists('size', $entry) && is_numeric($entry['size'])) {
+                $reqSize = (int)$entry['size'];
+            }
+            $sameSize = null;
+            if ($reqSize !== null && $existingSize !== null) {
+                $sameSize = ($reqSize === $existingSize);
+            }
+
+            $existing[] = [
+                'path' => ($subDir !== '' ? $subDir . '/' : '') . $fileName,
+                'size' => $existingSize,
+                'sameSize' => $sameSize,
+            ];
+        }
+
+        return ['existing' => $existing];
     }
 
     /**

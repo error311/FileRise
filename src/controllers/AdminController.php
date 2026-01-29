@@ -797,6 +797,94 @@ class AdminController
         ]);
     }
 
+    public static function resumableCleanup(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        self::requireAdmin();
+        self::requireCsrf();
+
+        if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed.']);
+            return;
+        }
+
+        require_once PROJECT_ROOT . '/src/models/UploadModel.php';
+
+        $raw = file_get_contents('php://input');
+        $payload = json_decode($raw ?: '{}', true);
+        if (!is_array($payload)) {
+            $payload = $_POST ?? [];
+        }
+
+        $all = !empty($payload['all']);
+        $purgeAll = !empty($payload['purgeAll']);
+        $sourceId = trim((string)($payload['sourceId'] ?? ''));
+
+        if ($sourceId !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid source id.']);
+            return;
+        }
+
+        $totals = ['checked' => 0, 'removed' => 0, 'remaining' => 0];
+        $sourcesProcessed = 0;
+        $activeId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
+
+        try {
+            if ($all && class_exists('SourceContext') && method_exists('SourceContext', 'listAllSources')) {
+                $sources = SourceContext::listAllSources();
+                foreach ($sources as $src) {
+                    $id = (string)($src['id'] ?? '');
+                    if ($id !== '') {
+                        SourceContext::setActiveId($id, false, true);
+                    }
+                    $res = $purgeAll
+                        ? UploadModel::purgeResumableAll()
+                        : UploadModel::sweepResumableExpired(true);
+                    $totals['checked'] += (int)($res['checked'] ?? 0);
+                    $totals['removed'] += (int)($res['removed'] ?? 0);
+                    $totals['remaining'] += (int)($res['remaining'] ?? 0);
+                    $sourcesProcessed++;
+                }
+            } else {
+                if ($sourceId !== '' && class_exists('SourceContext')) {
+                    SourceContext::setActiveId($sourceId, false, true);
+                }
+                $res = $purgeAll
+                    ? UploadModel::purgeResumableAll()
+                    : UploadModel::sweepResumableExpired(true);
+                $totals['checked'] = (int)($res['checked'] ?? 0);
+                $totals['removed'] = (int)($res['removed'] ?? 0);
+                $totals['remaining'] = (int)($res['remaining'] ?? 0);
+                $sourcesProcessed = 1;
+            }
+
+            if ($activeId !== '' && class_exists('SourceContext')) {
+                SourceContext::setActiveId($activeId, false, true);
+            }
+
+            if ($sourcesProcessed === 0) {
+                $sourcesProcessed = 1;
+            }
+
+            echo json_encode([
+                'success'   => true,
+                'checked'   => $totals['checked'],
+                'removed'   => $totals['removed'],
+                'remaining' => $totals['remaining'],
+                'sources'   => $sourcesProcessed,
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            if ($activeId !== '' && class_exists('SourceContext')) {
+                SourceContext::setActiveId($activeId, false, true);
+            }
+            http_response_code(500);
+            echo json_encode(['error' => 'Cleanup failed: ' . $e->getMessage()]);
+        }
+    }
+
     public function setLicense(): void
     {
         // Always respond JSON
@@ -2322,6 +2410,7 @@ class AdminController
             'ignoreRegex'         => '',
             'uploads'             => [
                 'resumableChunkMb' => 1.5,
+                'resumableTtlHours' => 6.0,
             ],
             'oidc'                => [
                 'providerUrl' => '',
@@ -2465,12 +2554,18 @@ class AdminController
             if (!isset($merged['uploads']) || !is_array($merged['uploads'])) {
                 $merged['uploads'] = [
                     'resumableChunkMb' => 1.5,
+                    'resumableTtlHours' => 6.0,
                 ];
             }
             if (array_key_exists('resumableChunkMb', $data['uploads'])) {
                 $raw = $data['uploads']['resumableChunkMb'];
                 $num = is_numeric($raw) ? (float)$raw : 1.5;
                 $merged['uploads']['resumableChunkMb'] = max(0.5, min(100, $num));
+            }
+            if (array_key_exists('resumableTtlHours', $data['uploads'])) {
+                $raw = $data['uploads']['resumableTtlHours'];
+                $num = is_numeric($raw) ? (float)$raw : 6.0;
+                $merged['uploads']['resumableTtlHours'] = max(0.5, min(168, $num));
             }
         }
 

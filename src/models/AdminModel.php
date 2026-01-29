@@ -205,8 +205,12 @@ class AdminModel
         $resumableChunkMb = (isset($uploadsCfg['resumableChunkMb']) && is_numeric($uploadsCfg['resumableChunkMb']))
             ? (float)$uploadsCfg['resumableChunkMb']
             : 1.5;
+        $resumableTtlHours = (isset($uploadsCfg['resumableTtlHours']) && is_numeric($uploadsCfg['resumableTtlHours']))
+            ? (float)$uploadsCfg['resumableTtlHours']
+            : 6.0;
         $public['uploads'] = [
             'resumableChunkMb' => max(0.5, min(100, $resumableChunkMb)),
+            'resumableTtlHours' => max(0.5, min(168, $resumableTtlHours)),
         ];
         $displayCfg = (isset($config['display']) && is_array($config['display']))
             ? $config['display']
@@ -454,11 +458,15 @@ class AdminModel
         if (!isset($configUpdate['uploads']) || !is_array($configUpdate['uploads'])) {
             $configUpdate['uploads'] = [
                 'resumableChunkMb' => 1.5,
+                'resumableTtlHours' => 6.0,
             ];
         } else {
             $raw = $configUpdate['uploads']['resumableChunkMb'] ?? 1.5;
             $num = is_numeric($raw) ? (float)$raw : 1.5;
             $configUpdate['uploads']['resumableChunkMb'] = max(0.5, min(100, $num));
+            $rawTtl = $configUpdate['uploads']['resumableTtlHours'] ?? 6.0;
+            $numTtl = is_numeric($rawTtl) ? (float)$rawTtl : 6.0;
+            $configUpdate['uploads']['resumableTtlHours'] = max(0.5, min(168, $numTtl));
         }
 
         // ---- ClamAV (upload scan toggle + exclude list) ----
@@ -878,11 +886,15 @@ class AdminModel
             if (!isset($config['uploads']) || !is_array($config['uploads'])) {
                 $config['uploads'] = [
                     'resumableChunkMb' => 1.5,
+                    'resumableTtlHours' => 6.0,
                 ];
             } else {
                 $raw = $config['uploads']['resumableChunkMb'] ?? 1.5;
                 $num = is_numeric($raw) ? (float)$raw : 1.5;
                 $config['uploads']['resumableChunkMb'] = max(0.5, min(100, $num));
+                $rawTtl = $config['uploads']['resumableTtlHours'] ?? 6.0;
+                $numTtl = is_numeric($rawTtl) ? (float)$rawTtl : 6.0;
+                $config['uploads']['resumableTtlHours'] = max(0.5, min(168, $numTtl));
             }
 
             // ---- Ensure ONLYOFFICE structure exists, sanitize values ----
@@ -1099,6 +1111,7 @@ class AdminModel
             'sharedMaxUploadSize'   => min(50 * 1024 * 1024, self::parseSize(TOTAL_UPLOAD_SIZE)),
             'uploads'               => [
                 'resumableChunkMb' => 1.5,
+                'resumableTtlHours' => 6.0,
             ],
             'onlyoffice'            => [
                 'enabled'      => false,

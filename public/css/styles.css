@@ -1748,17 +1748,24 @@ label{font-size: 0.9rem;}
     font-size: 16px !important;
     line-height: 1.2;
     margin-left: 8px;}
+.upload-drop-area{text-align: center;}
 .upload-instruction{margin-bottom: 10px;
-    font-size: 16px;}
+    font-size: 16px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;}
 .upload-file-row{display: flex;
     align-items: center;
     justify-content: center;
-    word-break: break-word;}
+    word-break: break-word;
+    flex-wrap: wrap;
+    max-width: 100%;}
 .file-info-wrapper{display: flex;
     flex-direction: column;
     justify-content: center !important;
     align-items: center !important;
-    margin-top: 10px;}
+    margin-top: 10px;
+    max-width: 100%;}
 .file-info-container{display: flex;
     flex-wrap: wrap !important;
     justify-content: center !important;
@@ -2671,12 +2678,21 @@ body.dark-mode :is(#fileList, #fileListSecondary) .folder-svg .enc-mark-keyhole{
 #resumableDraftBanner.upload-resume-banner{margin: 8px 12px 12px;}
 .upload-resume-banner-inner{display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px 12px;
   border-radius: 10px;
   background: rgba(255, 152, 0, 0.06);
   border: 1px solid rgba(255, 152, 0, 0.55);
   font-size: 0.9rem;}
+.upload-resume-text{flex: 1 1 240px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;}
+.upload-resume-text .upload-resume-name{overflow-wrap: anywhere;}
+.upload-resume-dismiss-btn{flex: 0 0 auto;
+  margin-left: auto;}
   .upload-resume-banner-inner .material-icons,
   .folder-badge .material-icons{font-size: 20px;
   margin-right: 6px;

@@ -2,7 +2,7 @@
     "openapi": "3.0.0",
     "info": {
         "title": "FileRise API",
-        "version": "3.2.2"
+        "version": "3.2.3"
     },
     "servers": [
         {
@@ -6239,6 +6239,118 @@
                 ]
             }
         },
+        "/api/upload/checkExisting.php": {
+            "post": {
+                "tags": [
+                    "Uploads"
+                ],
+                "summary": "Check for existing files before upload",
+                "description": "Checks whether the provided relative paths already exist in the target folder.",
+                "operationId": "checkUploadExisting",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "folder",
+                                    "files"
+                                ],
+                                "properties": {
+                                    "folder": {
+                                        "type": "string",
+                                        "example": "root"
+                                    },
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "path"
+                                            ],
+                                            "properties": {
+                                                "path": {
+                                                    "type": "string",
+                                                    "example": "team/reports/report.pdf"
+                                                },
+                                                "size": {
+                                                    "type": "integer",
+                                                    "format": "int64",
+                                                    "example": 123456
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Existing files",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "existing": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "path": {
+                                                        "type": "string"
+                                                    },
+                                                    "size": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "sameSize": {
+                                                        "type": "boolean",
+                                                        "nullable": true
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
         "/api/upload/removeChunks.php": {
             "post": {
                 "tags": [
@@ -6614,6 +6726,7 @@
                     "globalOtpauthUrl",
                     "enableWebDAV",
                     "sharedMaxUploadSize",
+                    "uploads",
                     "oidc"
                 ],
                 "properties": {
@@ -6633,6 +6746,26 @@
                     "sharedMaxUploadSize": {
                         "type": "integer",
                         "format": "int64"
+                    },
+                    "uploads": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "resumableChunkMb": {
+                                "type": "number",
+                                "format": "float",
+                                "minimum": 0.5,
+                                "maximum": 100,
+                                "example": 1.5
+                            },
+                            "resumableTtlHours": {
+                                "type": "number",
+                                "format": "float",
+                                "minimum": 0.5,
+                                "maximum": 168,
+                                "example": 6
+                            }
+                        }
                     },
                     "oidc": {
                         "$ref": "#/components/schemas/OIDCConfigPublic"
@@ -6711,6 +6844,26 @@
                         "format": "int64",
                         "minimum": 0,
                         "example": 52428800
+                    },
+                    "uploads": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "resumableChunkMb": {
+                                "type": "number",
+                                "format": "float",
+                                "minimum": 0.5,
+                                "maximum": 100,
+                                "example": 1.5
+                            },
+                            "resumableTtlHours": {
+                                "type": "number",
+                                "format": "float",
+                                "minimum": 0.5,
+                                "maximum": 168,
+                                "example": 6
+                            }
+                        }
                     },
                     "oidc": {
                         "description": "When disableOIDCLogin=false (OIDC enabled), providerUrl, redirectUri, and clientId are required.",

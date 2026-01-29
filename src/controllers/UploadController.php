@@ -267,4 +267,101 @@ class UploadController
 
         echo json_encode(UploadModel::removeChunks($folder));
     }
+
+    public function checkExisting(): void
+    {
+        header('Content-Type: application/json');
+
+        $raw = file_get_contents('php://input') ?: '';
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid JSON payload.']);
+            return;
+        }
+
+        $headersArr = array_change_key_case(getallheaders() ?: [], CASE_LOWER);
+        $received = '';
+        if (!empty($headersArr['x-csrf-token'])) {
+            $received = trim($headersArr['x-csrf-token']);
+        } elseif (!empty($payload['csrf_token'])) {
+            $received = trim((string)$payload['csrf_token']);
+        } elseif (!empty($payload['upload_token'])) {
+            $received = trim((string)$payload['upload_token']);
+        }
+
+        if (!isset($_SESSION['csrf_token']) || $received !== $_SESSION['csrf_token']) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            http_response_code(200);
+            echo json_encode([
+                'csrf_expired' => true,
+                'csrf_token'   => $_SESSION['csrf_token'],
+            ]);
+            return;
+        }
+
+        if (empty($_SESSION['authenticated'])) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+
+        $username  = (string)($_SESSION['username'] ?? '');
+        $userPerms = loadUserPermissions($username) ?: [];
+        $isAdmin   = ACL::isAdmin($userPerms);
+
+        if (!$isAdmin && !empty($userPerms['disableUpload'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Upload disabled for this user.']);
+            return;
+        }
+
+        $sourceId = trim((string)($payload['sourceId'] ?? ''));
+        if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid source id.']);
+                return;
+            }
+            $info = SourceContext::getSourceById($sourceId);
+            if (!$info) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid source.']);
+                return;
+            }
+            if (empty($info['enabled']) && !$isAdmin) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Source is disabled.']);
+                return;
+            }
+            SourceContext::setActiveId($sourceId, false, $isAdmin);
+        }
+
+        if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Source is read-only.']);
+            return;
+        }
+
+        $folderParam  = isset($payload['folder']) ? (string)$payload['folder'] : 'root';
+        $folderParam  = rawurldecode($folderParam);
+        $targetFolder = ACL::normalizeFolder($folderParam);
+
+        if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {
+            http_response_code(403);
+            echo json_encode([
+                'error' => 'Forbidden: no write access to folder "' . $targetFolder . '".',
+            ]);
+            return;
+        }
+
+        $files = $payload['files'] ?? null;
+        if (!is_array($files)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid files list.']);
+            return;
+        }
+
+        echo json_encode(UploadModel::checkExisting($targetFolder, $files));
+    }
 }

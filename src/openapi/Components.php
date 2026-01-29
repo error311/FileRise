@@ -120,12 +120,19 @@ use OpenApi\Annotations as OA;
  *   @OA\Schema(
  *     schema="AdminGetConfigPublic",
  *     type="object",
- *     required={"header_title","loginOptions","globalOtpauthUrl","enableWebDAV","sharedMaxUploadSize","oidc"},
+ *     required={"header_title","loginOptions","globalOtpauthUrl","enableWebDAV","sharedMaxUploadSize","uploads","oidc"},
  *     @OA\Property(property="header_title", type="string", example="FileRise"),
  *     @OA\Property(property="loginOptions", ref="#/components/schemas/LoginOptionsPublic"),
  *     @OA\Property(property="globalOtpauthUrl", type="string"),
  *     @OA\Property(property="enableWebDAV", type="boolean"),
  *     @OA\Property(property="sharedMaxUploadSize", type="integer", format="int64"),
+ *     @OA\Property(
+ *       property="uploads",
+ *       type="object",
+ *       additionalProperties=false,
+ *       @OA\Property(property="resumableChunkMb", type="number", format="float", minimum=0.5, maximum=100, example=1.5),
+ *       @OA\Property(property="resumableTtlHours", type="number", format="float", minimum=0.5, maximum=168, example=6)
+ *     ),
  *     @OA\Property(property="oidc", ref="#/components/schemas/OIDCConfigPublic")
  *   ),
  *   @OA\Schema(
@@ -169,6 +176,13 @@ use OpenApi\Annotations as OA;
  *     @OA\Property(property="globalOtpauthUrl", type="string", example="otpauth://totp/{label}?secret={secret}&issuer=FileRise"),
  *     @OA\Property(property="enableWebDAV", type="boolean", example=false),
  *     @OA\Property(property="sharedMaxUploadSize", type="integer", format="int64", minimum=0, example=52428800),
+ *     @OA\Property(
+ *       property="uploads",
+ *       type="object",
+ *       additionalProperties=false,
+ *       @OA\Property(property="resumableChunkMb", type="number", format="float", minimum=0.5, maximum=100, example=1.5),
+ *       @OA\Property(property="resumableTtlHours", type="number", format="float", minimum=0.5, maximum=168, example=6)
+ *     ),
  *     @OA\Property(
  *       property="oidc",
  *       type="object",
