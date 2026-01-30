@@ -89,6 +89,7 @@ Notes:
 |---|---|---|
 | `FR_OIDC_AUTO_CREATE` | `true` | Auto-create users on first OIDC login. |
 | `FR_OIDC_GROUP_CLAIM` | `groups` | Claim name for IdP groups. |
+| `FR_OIDC_EXTRA_SCOPES` | empty | Extra OIDC scopes to request (space/comma separated). |
 | `FR_OIDC_ADMIN_GROUP` | `filerise-admins` | IdP group that maps to FileRise admin. |
 | `FR_OIDC_PRO_GROUP_PREFIX` | empty | Optional prefix for mapping IdP groups to Pro groups. |
 | `FR_OIDC_ALLOW_DEMOTE` | unset | If set (`1/true`), allows IdP to demote admins. |

@@ -58,6 +58,9 @@ If a user is removed from the IdP admin group, FileRise can demote them on next 
 If Pro is active, FileRise can map IdP groups into Pro user groups.
 
 - `FR_OIDC_PRO_GROUP_PREFIX` (optional prefix filter)
+- If your IdP only returns groups when a custom scope is requested, add it via `FR_OIDC_EXTRA_SCOPES` (space/comma separated, e.g., `groups`) or the Admin → OIDC field.
+- If your group claim name differs, set `FR_OIDC_GROUP_CLAIM` (or the Admin → OIDC field) to match.
+- FileRise reads group claims from userinfo and falls back to ID token claims when available.
 
 Example:
 - IdP group: `frp_clients_acme`
