@@ -34,7 +34,8 @@ const DEFAULT_SUPPORTERS = [
   'Edisto Pirates of SC',
   '@jubnl',
   'Juozaitis S',
-  'Cocoseb31'
+  'Cocoseb31',
+  'nulltrope'
 ];
 
 /**

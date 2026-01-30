@@ -830,12 +830,14 @@ class AdminModel
                     'clientId'     => '',
                     'clientSecret' => '',
                     'redirectUri'  => '',
+                    'groupClaim'   => '',
+                    'extraScopes'  => '',
                     'debugLogging' => false,
                     'allowDemote'  => false,
                     'publicClient' => false,
                 ];
             } else {
-                foreach (['providerUrl', 'clientId', 'clientSecret', 'redirectUri'] as $k) {
+                foreach (['providerUrl', 'clientId', 'clientSecret', 'redirectUri', 'groupClaim', 'extraScopes'] as $k) {
                     if (!isset($config['oidc'][$k]) || !is_string($config['oidc'][$k])) {
                         $config['oidc'][$k] = '';
                     }
@@ -1097,6 +1099,8 @@ class AdminModel
                 'clientId'     => '',
                 'clientSecret' => '',
                 'redirectUri'  => 'https://yourdomain.com/api/auth/auth.php?oidc=callback',
+                'groupClaim'   => '',
+                'extraScopes'  => '',
                 'debugLogging' => false,
                 'allowDemote'  => false,
                 'publicClient' => false,

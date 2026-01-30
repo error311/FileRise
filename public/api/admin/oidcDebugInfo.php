@@ -69,6 +69,50 @@ try {
 
     $loginOptions = is_array($cfg['loginOptions'] ?? null) ? $cfg['loginOptions'] : [];
 
+    $envGroupClaim = getenv('FR_OIDC_GROUP_CLAIM');
+    $cfgGroupClaim = isset($oidcCfg['groupClaim']) ? trim((string)$oidcCfg['groupClaim']) : '';
+    $groupClaimSource = 'default';
+    $groupClaimEffective = (defined('FR_OIDC_GROUP_CLAIM') && trim((string)FR_OIDC_GROUP_CLAIM) !== '')
+        ? trim((string)FR_OIDC_GROUP_CLAIM)
+        : 'groups';
+    if ($envGroupClaim !== false && trim((string)$envGroupClaim) !== '') {
+        $groupClaimEffective = trim((string)$envGroupClaim);
+        $groupClaimSource = 'env';
+    } elseif ($cfgGroupClaim !== '') {
+        $groupClaimEffective = $cfgGroupClaim;
+        $groupClaimSource = 'config';
+    }
+
+    $envExtraScopes = getenv('FR_OIDC_EXTRA_SCOPES');
+    $cfgExtraScopes = isset($oidcCfg['extraScopes']) ? trim((string)$oidcCfg['extraScopes']) : '';
+    $extraScopesSource = 'none';
+    $extraScopesEffective = '';
+    if ($envExtraScopes !== false && trim((string)$envExtraScopes) !== '') {
+        $extraScopesEffective = trim((string)$envExtraScopes);
+        $extraScopesSource = 'env';
+    } elseif ($cfgExtraScopes !== '') {
+        $extraScopesEffective = $cfgExtraScopes;
+        $extraScopesSource = 'config';
+    }
+
+    $scopes = ['openid', 'profile', 'email'];
+    if ($extraScopesEffective !== '') {
+        foreach (preg_split('/[,\s]+/', $extraScopesEffective) ?: [] as $scope) {
+            $scope = trim($scope);
+            if ($scope !== '') {
+                $scopes[] = $scope;
+            }
+        }
+    }
+    $scopeSet = [];
+    foreach ($scopes as $scope) {
+        $key = strtolower($scope);
+        if (!isset($scopeSet[$key])) {
+            $scopeSet[$key] = $scope;
+        }
+    }
+    $scopes = array_values($scopeSet);
+
     $info = [
         'providerUrl' => $oidcCfg['providerUrl'] ?? ($cfg['oidc_provider_url'] ?? null),
         'redirectUri' => $oidcCfg['redirectUri'] ?? ($cfg['oidc_redirect_uri'] ?? null),
@@ -86,7 +130,11 @@ try {
         ],
 
         'tokenEndpointAuthMethod' => $tokenAuthMethod ?: '(library default)',
-        'scopes' => ['openid', 'profile', 'email'],
+        'groupClaim' => $groupClaimEffective,
+        'groupClaimSource' => $groupClaimSource,
+        'extraScopes' => $extraScopesEffective,
+        'extraScopesSource' => $extraScopesSource,
+        'scopes' => $scopes,
 
         'loginOptions' => [
             'disableFormLogin' => !empty($loginOptions['disableFormLogin']),

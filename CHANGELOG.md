@@ -1,5 +1,59 @@
 # Changelog
 
+## Changes 01/30/2026 (v3.2.4)
+
+`release(v3.2.4): OIDC group-claim mapping + extra scopes (Authentik & Keycloak-friendly) + sponsor list update`
+
+**Commit message**  
+
+```text
+release(v3.2.4): OIDC group-claim mapping + extra scopes (Authentik & Keycloak-friendly) + sponsor list update
+
+- OIDC: add configurable group claim + extra scopes (Admin + env overrides)
+- OIDC: extract group tags from both userinfo and ID token, supports dot-path claims (e.g. realm_access.roles)
+- Admin: surface effective & locked groupClaim + extraScopes values and include them in OIDC debug snapshot
+- Docs OpenAPI: document new OIDC config fields
+- Admin: add new Pro supporter name to thanks list
+```
+
+**Added**  
+
+- **OIDC: configurable group claim name**
+  - Admin setting: `oidc.groupClaim` (default behavior remains `groups`)
+  - Env override: `FR_OIDC_GROUP_CLAIM` (locks Admin field when set)
+  - Supports **dot-path claims** (example: `realm_access.roles`)
+- **OIDC: extra scopes**
+  - Admin setting: `oidc.extraScopes` (space/comma separated)
+  - Env override: `FR_OIDC_EXTRA_SCOPES` (locks Admin field when set)
+  - Effective scopes become: `openid profile email` + your extras
+- **OIDC debug snapshot improvements**
+  - `/api/admin/oidcDebugInfo.php` now shows:
+    - `groupClaim` + source (`env|config|default`)
+    - `extraScopes` + source (`env|config|none`)
+    - final `scopes[]` list
+
+**Changed**  
+
+- **Group mapping reads both claim sets**
+  - Group tags are extracted from:
+    - Userinfo response, and
+    - ID Token payload (when available from the OIDC library)
+  - This improves compatibility with IdPs that only place groups/roles in one of those.
+
+**Fixed**  
+
+- Group mapping reliability with IdPs like Authentik/Keycloak where:
+  - groups are not under the default `groups` claim, and/or
+  - groups require requesting an additional scope.
+
+**Security / Hardening**  
+
+- `groupClaim` and `extraScopes` inputs are sanitized on save (control chars stripped + length capped).
+- No user-controlled HTML is introduced; config values are escaped in the Admin UI.
+- No secrets are logged or echoed back.
+
+---
+
 ## Changes 01/29/2026 (v3.2.3)
 
 `release(v3.2.3): resumable upload UX fixes + stale chunk cleanup + folder re-upload conflict handling (closes #100, closes #101, closes #102)`

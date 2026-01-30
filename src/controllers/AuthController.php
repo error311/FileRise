@@ -114,6 +114,61 @@ class AuthController
         return $oidcAction ?: null;
     }
 
+    protected function resolveOidcGroupClaim(array $cfg = []): string
+    {
+        $envVal = getenv('FR_OIDC_GROUP_CLAIM');
+        if ($envVal !== false && trim((string)$envVal) !== '') {
+            return trim((string)$envVal);
+        }
+
+        $oidcCfg = is_array($cfg['oidc'] ?? null) ? $cfg['oidc'] : [];
+        $cfgVal = isset($oidcCfg['groupClaim']) ? trim((string)$oidcCfg['groupClaim']) : '';
+        if ($cfgVal !== '') {
+            return $cfgVal;
+        }
+
+        if (defined('FR_OIDC_GROUP_CLAIM') && trim((string)FR_OIDC_GROUP_CLAIM) !== '') {
+            return (string)FR_OIDC_GROUP_CLAIM;
+        }
+
+        return 'groups';
+    }
+
+    protected function resolveOidcExtraScopes(array $cfg = []): string
+    {
+        $envVal = getenv('FR_OIDC_EXTRA_SCOPES');
+        if ($envVal !== false && trim((string)$envVal) !== '') {
+            return trim((string)$envVal);
+        }
+
+        $oidcCfg = is_array($cfg['oidc'] ?? null) ? $cfg['oidc'] : [];
+        return isset($oidcCfg['extraScopes']) ? trim((string)$oidcCfg['extraScopes']) : '';
+    }
+
+    protected function getOidcScopes(array $cfg = []): array
+    {
+        $scopes = ['openid', 'profile', 'email'];
+        $extra = $this->resolveOidcExtraScopes($cfg);
+        if ($extra !== '') {
+            foreach (preg_split('/[,\s]+/', $extra) ?: [] as $scope) {
+                $scope = trim($scope);
+                if ($scope !== '') {
+                    $scopes[] = $scope;
+                }
+            }
+        }
+
+        $unique = [];
+        foreach ($scopes as $scope) {
+            $key = strtolower($scope);
+            if (!isset($unique[$key])) {
+                $unique[$key] = $scope;
+            }
+        }
+
+        return array_values($unique);
+    }
+
     protected function handleOidcFlow(): bool
     {
         $oidcAction = $this->getOidcAction();
@@ -190,7 +245,7 @@ class AuthController
         }
 
         $oidc->setRedirectURL($cfg['oidc']['redirectUri']);
-        $oidc->addScope(['openid', 'profile', 'email']);
+        $oidc->addScope($this->getOidcScopes($cfg));
 
         if ($oidcAction === 'callback') {
             try {
@@ -214,7 +269,13 @@ class AuthController
                 // Pull full userinfo once so we can inspect groups / roles
                 $userinfo = $oidc->requestUserInfo();
 
-                $normalizedTags = $this->extractOidcGroupTags($userinfo);
+                $groupClaim = $this->resolveOidcGroupClaim($cfg);
+                $idTokenClaims = null;
+                if (method_exists($oidc, 'getIdTokenPayload')) {
+                    $idTokenClaims = $oidc->getIdTokenPayload();
+                }
+
+                $normalizedTags = $this->extractOidcGroupTags($userinfo, $idTokenClaims, $groupClaim);
 
                 $this->logOidcDebug('OIDC userinfo summary', [
                     'username'      => $username,
@@ -326,10 +387,30 @@ class AuthController
         return true;
     }
 
-    protected function extractOidcGroupTags(object $userinfo): array
+    protected function extractOidcGroupTags($userinfo, $idTokenClaims = null, string $groupClaim = ''): array
     {
         // Collect groups/roles from various fields (same logic as before)
         $rawTags = [];
+
+        $readClaim = function ($root, string $path) {
+            if ($path === '') {
+                return null;
+            }
+            if (!is_object($root) && !is_array($root)) {
+                return null;
+            }
+            $cur = $root;
+            foreach (explode('.', $path) as $seg) {
+                if (is_object($cur) && isset($cur->$seg)) {
+                    $cur = $cur->$seg;
+                } elseif (is_array($cur) && array_key_exists($seg, $cur)) {
+                    $cur = $cur[$seg];
+                } else {
+                    return null;
+                }
+            }
+            return $cur;
+        };
 
         $addTags = function ($val) use (&$rawTags) {
             if (is_array($val)) {
@@ -351,24 +432,50 @@ class AuthController
         };
 
         // 1) Common flat claims (includes "usergroups" which you mentioned)
-        foreach (['groups', 'group', 'usergroups', 'user_groups', 'roles'] as $field) {
-            if (isset($userinfo->$field)) {
-                $addTags($userinfo->$field);
+        $customClaim = trim($groupClaim);
+        if ($customClaim === '' && defined('FR_OIDC_GROUP_CLAIM')) {
+            $customClaim = trim((string)FR_OIDC_GROUP_CLAIM);
+        }
+        $fields = [];
+        if ($customClaim !== '') {
+            $fields[] = $customClaim;
+        }
+        $fields = array_merge($fields, ['groups', 'group', 'usergroups', 'user_groups', 'roles']);
+        $fields = array_values(array_unique($fields));
+
+        $claimSets = [$userinfo];
+        if ($idTokenClaims !== null) {
+            $claimSets[] = $idTokenClaims;
+        }
+
+        foreach ($claimSets as $claims) {
+            foreach ($fields as $field) {
+                $value = $readClaim($claims, $field);
+                if ($value !== null) {
+                    $addTags($value);
+                }
             }
-        }
 
-        // 2) realm_access.roles (Keycloak realm roles)
-        if (isset($userinfo->realm_access) && is_object($userinfo->realm_access)
-            && isset($userinfo->realm_access->roles) && is_array($userinfo->realm_access->roles)
-        ) {
-            $addTags($userinfo->realm_access->roles);
-        }
+            // 2) realm_access.roles (Keycloak realm roles)
+            $realmRoles = $readClaim($claims, 'realm_access.roles');
+            if ($realmRoles !== null) {
+                $addTags($realmRoles);
+            }
 
-        // 3) resource_access.<client>.roles (Keycloak client roles)
-        if (isset($userinfo->resource_access) && is_object($userinfo->resource_access)) {
-            foreach (get_object_vars($userinfo->resource_access) as $clientObj) {
-                if (is_object($clientObj) && isset($clientObj->roles) && is_array($clientObj->roles)) {
-                    $addTags($clientObj->roles);
+            // 3) resource_access.<client>.roles (Keycloak client roles)
+            $resourceAccess = null;
+            if (is_object($claims) && isset($claims->resource_access) && is_object($claims->resource_access)) {
+                $resourceAccess = get_object_vars($claims->resource_access);
+            } elseif (is_array($claims) && isset($claims['resource_access']) && is_array($claims['resource_access'])) {
+                $resourceAccess = $claims['resource_access'];
+            }
+            if (is_array($resourceAccess)) {
+                foreach ($resourceAccess as $clientObj) {
+                    if (is_object($clientObj) && isset($clientObj->roles)) {
+                        $addTags($clientObj->roles);
+                    } elseif (is_array($clientObj) && isset($clientObj['roles'])) {
+                        $addTags($clientObj['roles']);
+                    }
                 }
             }
         }

@@ -309,6 +309,16 @@ class AdminController
             $ignoreCfg = (string)($config['ignoreRegex'] ?? '');
             $ignoreEffective = $ignoreLockedByEnv ? trim((string)$envIgnore) : $ignoreCfg;
 
+            $envGroupClaim = getenv('FR_OIDC_GROUP_CLAIM');
+            $groupClaimLockedByEnv = ($envGroupClaim !== false && trim((string)$envGroupClaim) !== '');
+            $groupClaimCfg = (string)($config['oidc']['groupClaim'] ?? '');
+            $groupClaimEffective = $groupClaimLockedByEnv ? trim((string)$envGroupClaim) : $groupClaimCfg;
+
+            $envExtraScopes = getenv('FR_OIDC_EXTRA_SCOPES');
+            $extraScopesLockedByEnv = ($envExtraScopes !== false && trim((string)$envExtraScopes) !== '');
+            $extraScopesCfg = (string)($config['oidc']['extraScopes'] ?? '');
+            $extraScopesEffective = $extraScopesLockedByEnv ? trim((string)$envExtraScopes) : $extraScopesCfg;
+
             $adminExtra = [
                 'loginOptions' => array_merge($public['loginOptions'], [
                     'authBypass'     => (bool)($config['loginOptions']['authBypass'] ?? false),
@@ -320,6 +330,12 @@ class AdminController
                     'debugLogging'    => !empty($config['oidc']['debugLogging']),
                     'allowDemote'     => !empty($config['oidc']['allowDemote']),
                     'publicClient'    => !empty($config['oidc']['publicClient']),
+                    'groupClaim'      => $groupClaimCfg,
+                    'groupClaimEffective' => $groupClaimEffective,
+                    'groupClaimLockedByEnv' => $groupClaimLockedByEnv,
+                    'extraScopes'     => $extraScopesCfg,
+                    'extraScopesEffective' => $extraScopesEffective,
+                    'extraScopesLockedByEnv' => $extraScopesLockedByEnv,
                 ]),
                 'onlyoffice' => [
                     'enabled'      => $effEnabled,
@@ -2417,6 +2433,8 @@ class AdminController
                 'clientId'    => '',
                 'clientSecret' => '',
                 'redirectUri' => '',
+                'groupClaim'  => '',
+                'extraScopes' => '',
                 'publicClient' => false,
             ],
             'branding'            => [
@@ -2567,6 +2585,29 @@ class AdminController
                 $num = is_numeric($raw) ? (float)$raw : 6.0;
                 $merged['uploads']['resumableTtlHours'] = max(0.5, min(168, $num));
             }
+        }
+
+        // OIDC group claim + extra scopes (env overrides lock these fields)
+        $envGroupClaim = getenv('FR_OIDC_GROUP_CLAIM');
+        $groupClaimLockedByEnv = ($envGroupClaim !== false && trim((string)$envGroupClaim) !== '');
+        if (!$groupClaimLockedByEnv && array_key_exists('groupClaim', $data['oidc'] ?? [])) {
+            $raw = trim((string)$data['oidc']['groupClaim']);
+            $raw = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
+            if (strlen($raw) > 200) {
+                $raw = substr($raw, 0, 200);
+            }
+            $merged['oidc']['groupClaim'] = $raw;
+        }
+
+        $envExtraScopes = getenv('FR_OIDC_EXTRA_SCOPES');
+        $extraScopesLockedByEnv = ($envExtraScopes !== false && trim((string)$envExtraScopes) !== '');
+        if (!$extraScopesLockedByEnv && array_key_exists('extraScopes', $data['oidc'] ?? [])) {
+            $raw = trim((string)$data['oidc']['extraScopes']);
+            $raw = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
+            if (strlen($raw) > 500) {
+                $raw = substr($raw, 0, 500);
+            }
+            $merged['oidc']['extraScopes'] = $raw;
         }
 
         // oidc: only overwrite non-empty inputs; validate when enabling OIDC

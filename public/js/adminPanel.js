@@ -2589,6 +2589,8 @@ function captureInitialAdminConfig() {
     oidcDebugLogging: !!document.getElementById("oidcDebugLogging")?.checked,
     oidcRedirectUri: (document.getElementById("oidcRedirectUri")?.value || "").trim(),
     oidcAllowDemote: !!document.getElementById("oidcAllowDemote")?.checked,
+    oidcGroupClaim: (document.getElementById("oidcGroupClaim")?.value || "").trim(),
+    oidcExtraScopes: (document.getElementById("oidcExtraScopes")?.value || "").trim(),
 
     // UI is now “enable” toggles
     enableFormLogin: !!document.getElementById("enableFormLogin")?.checked,
@@ -2651,6 +2653,8 @@ function hasUnsavedChanges() {
     getVal("oidcRedirectUri") !== o.oidcRedirectUri ||
     getChk("oidcAllowDemote") !== o.oidcAllowDemote ||
     getChk("oidcDebugLogging") !== o.oidcDebugLogging ||
+    getVal("oidcGroupClaim") !== (o.oidcGroupClaim || "") ||
+    getVal("oidcExtraScopes") !== (o.oidcExtraScopes || "") ||
 
     // new enable-toggles
     getChk("enableFormLogin") !== o.enableFormLogin ||
@@ -5430,6 +5434,40 @@ export function openAdminPanel() {
         const oidcDebugEnabled = !!(config.oidc && config.oidc.debugLogging);
         const oidcAllowDemote = !!(config.oidc && config.oidc.allowDemote);
         const oidcPublicClient = !!(config.oidc && config.oidc.publicClient);
+        const oidcGroupClaimCfg = (config.oidc && typeof config.oidc.groupClaim === 'string')
+          ? config.oidc.groupClaim
+          : '';
+        const oidcGroupClaimEffective = (config.oidc && typeof config.oidc.groupClaimEffective === 'string')
+          ? config.oidc.groupClaimEffective
+          : '';
+        const oidcGroupClaimLocked = !!(config.oidc && config.oidc.groupClaimLockedByEnv);
+        const oidcGroupClaimValue = oidcGroupClaimLocked ? oidcGroupClaimEffective : oidcGroupClaimCfg;
+        const oidcExtraScopesCfg = (config.oidc && typeof config.oidc.extraScopes === 'string')
+          ? config.oidc.extraScopes
+          : '';
+        const oidcExtraScopesEffective = (config.oidc && typeof config.oidc.extraScopesEffective === 'string')
+          ? config.oidc.extraScopesEffective
+          : '';
+        const oidcExtraScopesLocked = !!(config.oidc && config.oidc.extraScopesLockedByEnv);
+        const oidcExtraScopesValue = oidcExtraScopesLocked ? oidcExtraScopesEffective : oidcExtraScopesCfg;
+        const oidcGroupClaimHelpDefault = tf(
+          "oidc_group_claim_help",
+          "Claim name for IdP groups (supports dot paths like realm_access.roles). Leave blank to use \"groups\"."
+        );
+        const oidcGroupClaimHelpLocked = tf(
+          "oidc_group_claim_locked",
+          "Locked by FR_OIDC_GROUP_CLAIM env override."
+        );
+        const oidcGroupClaimHelp = oidcGroupClaimLocked ? oidcGroupClaimHelpLocked : oidcGroupClaimHelpDefault;
+        const oidcExtraScopesHelpDefault = tf(
+          "oidc_extra_scopes_help",
+          "Space/comma-separated scopes to request in addition to openid/profile/email (example: groups)."
+        );
+        const oidcExtraScopesHelpLocked = tf(
+          "oidc_extra_scopes_locked",
+          "Locked by FR_OIDC_EXTRA_SCOPES env override."
+        );
+        const oidcExtraScopesHelp = oidcExtraScopesLocked ? oidcExtraScopesHelpLocked : oidcExtraScopesHelpDefault;
 
         const oidcHtml = `
   <hr class="admin-divider">
@@ -5495,6 +5533,24 @@ export function openAdminPanel() {
     <small class="text-muted">
       This must exactly match the redirect/callback URL configured in your IdP application.
     </small>
+  </div>
+
+  <div class="form-group">
+    <label for="oidcGroupClaim">${tf("oidc_group_claim_label", "Group claim name")}:</label>
+    <input type="text" id="oidcGroupClaim" class="form-control"
+           placeholder="groups"
+           value="${escapeHTML(oidcGroupClaimValue || "")}"
+           ${oidcGroupClaimLocked ? "disabled data-locked='1'" : ""} />
+    <small class="text-muted">${escapeHTML(oidcGroupClaimHelp)}</small>
+  </div>
+
+  <div class="form-group">
+    <label for="oidcExtraScopes">${tf("oidc_extra_scopes_label", "Extra OIDC scopes")}:</label>
+    <input type="text" id="oidcExtraScopes" class="form-control"
+           placeholder="groups"
+           value="${escapeHTML(oidcExtraScopesValue || "")}"
+           ${oidcExtraScopesLocked ? "disabled data-locked='1'" : ""} />
+    <small class="text-muted">${escapeHTML(oidcExtraScopesHelp)}</small>
   </div>
 
   <hr class="admin-divider">
@@ -6792,6 +6848,36 @@ ${t("shared_max_upload_size_bytes")}
         if (ooCont) wireReplaceButtons(ooCont);
         document.getElementById("oidcClientSecret").value = window.currentOIDCConfig?.clientSecret || "";
         document.getElementById("oidcRedirectUri").value = window.currentOIDCConfig?.redirectUri || "";
+        const oidcGroupClaimEl = document.getElementById("oidcGroupClaim");
+        if (oidcGroupClaimEl) {
+          const locked = !!(config.oidc && config.oidc.groupClaimLockedByEnv);
+          const value = locked
+            ? (config.oidc.groupClaimEffective || "")
+            : (config.oidc.groupClaim || "");
+          oidcGroupClaimEl.value = value;
+          if (locked) {
+            oidcGroupClaimEl.disabled = true;
+            oidcGroupClaimEl.dataset.locked = "1";
+          } else {
+            oidcGroupClaimEl.disabled = false;
+            oidcGroupClaimEl.removeAttribute("data-locked");
+          }
+        }
+        const oidcExtraScopesEl = document.getElementById("oidcExtraScopes");
+        if (oidcExtraScopesEl) {
+          const locked = !!(config.oidc && config.oidc.extraScopesLockedByEnv);
+          const value = locked
+            ? (config.oidc.extraScopesEffective || "")
+            : (config.oidc.extraScopes || "");
+          oidcExtraScopesEl.value = value;
+          if (locked) {
+            oidcExtraScopesEl.disabled = true;
+            oidcExtraScopesEl.dataset.locked = "1";
+          } else {
+            oidcExtraScopesEl.disabled = false;
+            oidcExtraScopesEl.removeAttribute("data-locked");
+          }
+        }
         document.getElementById("globalOtpauthUrl").value = window.currentOIDCConfig?.globalOtpauthUrl || '';
         const oidcDebugEl = document.getElementById('oidcDebugLogging');
         if (oidcDebugEl) {
@@ -6915,6 +7001,8 @@ function handleSave() {
       debugLogging: !!document.getElementById("oidcDebugLogging")?.checked,
       allowDemote: !!document.getElementById("oidcAllowDemote")?.checked,
       publicClient: oidcPublicClient,
+      groupClaim: (document.getElementById("oidcGroupClaim")?.value || "").trim(),
+      extraScopes: (document.getElementById("oidcExtraScopes")?.value || "").trim(),
       // clientId/clientSecret added conditionally below
     },
     globalOtpauthUrl: document

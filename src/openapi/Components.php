@@ -191,7 +191,9 @@ use OpenApi\Annotations as OA;
  *       @OA\Property(property="providerUrl", type="string", format="uri", example="https://issuer.example.com"),
  *       @OA\Property(property="clientId", type="string", example="my-client-id"),
  *       @OA\Property(property="clientSecret", type="string", writeOnly=true, example="***"),
- *       @OA\Property(property="redirectUri", type="string", format="uri", example="https://app.example.com/auth/callback")
+ *       @OA\Property(property="redirectUri", type="string", format="uri", example="https://app.example.com/auth/callback"),
+ *       @OA\Property(property="groupClaim", type="string", example="groups", nullable=true),
+ *       @OA\Property(property="extraScopes", type="string", example="groups", nullable=true)
  *     )
  *   )
  * )

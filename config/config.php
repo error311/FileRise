@@ -83,6 +83,12 @@ if (!defined('FR_OIDC_GROUP_CLAIM')) {
     );
 }
 
+// Optional extra OIDC scopes to request (space/comma separated).
+if (!defined('FR_OIDC_EXTRA_SCOPES')) {
+    $envVal = getenv('FR_OIDC_EXTRA_SCOPES');
+    define('FR_OIDC_EXTRA_SCOPES', ($envVal !== false) ? trim((string)$envVal) : '');
+}
+
 // Name of an IdP group that should be treated as "FileRise admin".
 if (!defined('FR_OIDC_ADMIN_GROUP')) {
     $envVal = getenv('FR_OIDC_ADMIN_GROUP');
