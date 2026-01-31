@@ -4,6 +4,20 @@ import { t } from './i18n.js?v={{APP_QVER}}';
 import { fileData, setFileProgressBadge, setFileWatchedBadge } from './fileListView.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
 
+const DEFAULT_TAG_COLOR = '#777777';
+
+function isHexColor(value) {
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim());
+}
+
+function sanitizeTagColor(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return DEFAULT_TAG_COLOR;
+  if (isHexColor(raw)) return raw;
+  if (/^[a-zA-Z]{1,32}$/.test(raw)) return raw;
+  return DEFAULT_TAG_COLOR;
+}
+
 function resolvePreviewSourceId(sourceId, folder, name) {
   let sid = String(sourceId || '').trim();
   if (sid) return sid;
@@ -466,7 +480,7 @@ function setTitle(overlay, name) {
       fileObj.tags.forEach(tag => {
         const badge = document.createElement('span');
         badge.textContent = tag.name;
-        badge.style.backgroundColor = tag.color || '#444';
+        badge.style.backgroundColor = sanitizeTagColor(tag.color);
         badge.style.color = '#fff';
         badge.style.padding = '2px 6px';
         badge.style.borderRadius = '999px';

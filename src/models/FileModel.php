@@ -3084,9 +3084,12 @@ class FileModel
     {
         $metadataPath = self::metaRoot() . 'createdTags.json';
 
-        // Check if the metadata file exists and is readable.
-        if (!file_exists($metadataPath) || !is_readable($metadataPath)) {
-            error_log('Metadata file does not exist or is not readable: ' . $metadataPath);
+        // Missing file is normal (especially for new sources); unreadable is worth logging.
+        if (!file_exists($metadataPath)) {
+            return [];
+        }
+        if (!is_readable($metadataPath)) {
+            error_log('Metadata file is not readable: ' . $metadataPath);
             return [];
         }
 
@@ -3103,7 +3106,62 @@ class FileModel
             return [];
         }
 
-        return $jsonData;
+        if (!is_array($jsonData)) {
+            return [];
+        }
+
+        return self::sanitizeTags($jsonData);
+    }
+
+    private static function isValidTagColor($color): bool
+    {
+        $color = trim((string)$color);
+        if ($color === '') {
+            return false;
+        }
+        if (preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $color)) {
+            return true;
+        }
+        if (preg_match('/^[a-zA-Z]{1,32}$/', $color)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static function sanitizeTagColor($color): string
+    {
+        $color = trim((string)$color);
+        return self::isValidTagColor($color) ? $color : '#777777';
+    }
+
+    private static function sanitizeTags(array $tags): array
+    {
+        $clean = [];
+        foreach ($tags as $tag) {
+            if (is_string($tag)) {
+                $name = trim($tag);
+                if ($name === '') {
+                    continue;
+                }
+                $clean[] = [
+                    'name' => $name,
+                    'color' => self::sanitizeTagColor('')
+                ];
+                continue;
+            }
+            if (!is_array($tag)) {
+                continue;
+            }
+            $name = trim((string)($tag['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $tag['name'] = $name;
+            $tag['color'] = self::sanitizeTagColor($tag['color'] ?? '');
+            $clean[] = $tag;
+        }
+
+        return $clean;
     }
 
     /**
@@ -3127,6 +3185,9 @@ class FileModel
         if (!preg_match(REGEX_FILE_NAME, $file)) {
             return ["error" => "Invalid file name."];
         }
+
+        $tags = is_array($tags) ? $tags : [];
+        $tags = self::sanitizeTags($tags);
 
         // Determine the folder metadata file.
         $metadataFile = (strtolower($folder) === "root")
@@ -3158,6 +3219,7 @@ class FileModel
                 $globalTags = [];
             }
         }
+        $globalTags = self::sanitizeTags($globalTags);
 
         // If deleteGlobal is true and tagToDelete is provided, remove that tag.
         if ($deleteGlobal && !empty($tagToDelete)) {
@@ -3371,7 +3433,7 @@ class FileModel
                 'size'      => $fileSizeFormatted,
                 'sizeBytes' => $fileSizeBytes,            // ← numeric size for frontend logic
                 'uploader'  => $fileUploader,
-                'tags'      => isset($metadata[$metaKey]['tags']) ? $metadata[$metaKey]['tags'] : [],
+                'tags'      => [],
                 'mime'      => $mime,
                 'sourceId'  => $activeSourceId,
             ];
@@ -3401,6 +3463,12 @@ class FileModel
                 }
             }
 
+            $tags = [];
+            if (isset($metadata[$metaKey]['tags']) && is_array($metadata[$metaKey]['tags'])) {
+                $tags = self::sanitizeTags($metadata[$metaKey]['tags']);
+            }
+            $fileEntry['tags'] = $tags;
+
             $fileList[] = $fileEntry;
         }
 
@@ -3411,6 +3479,7 @@ class FileModel
         // Load global tags.
         $globalTagsFile = self::metaRoot() . "createdTags.json";
         $globalTags = file_exists($globalTagsFile) ? (json_decode(file_get_contents($globalTagsFile), true) ?: []) : [];
+        $globalTags = is_array($globalTags) ? self::sanitizeTags($globalTags) : [];
 
         return ["files" => $fileList, "globalTags" => $globalTags, "sourceId" => $activeSourceId];
     }

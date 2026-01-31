@@ -299,23 +299,36 @@ function getRedirectTarget() {
       }
     }
 
-      // 🔹 Portal logo: use logoFile from metadata if present
-  if (logoEl) {
-    let logoSrc = null;
+    // 🔹 Portal logo: use logoFile from metadata if present
+    if (logoEl) {
+    const buildPortalLogoUrl = (fileName) =>
+      fileName ? `/api/public/profilePic.php?file=${encodeURIComponent(fileName)}` : '';
+
+    let logoSrc = '';
 
     // If you ever decide to store a direct URL:
     if (portal.logoUrl && portal.logoUrl.trim()) {
       logoSrc = portal.logoUrl.trim();
     } else if (portal.logoFile && portal.logoFile.trim()) {
-      // Same convention as portal.html: files live in uploads/profile_pics
-      logoSrc = withBase('/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim()));
+      logoSrc = buildPortalLogoUrl(portal.logoFile.trim());
+    }
+
+    const legacyMatch = logoSrc.match(/\/uploads\/profile_pics\/([^?#]+)/);
+    if (legacyMatch && legacyMatch[1]) {
+      let legacyName = legacyMatch[1];
+      try { legacyName = decodeURIComponent(legacyName); } catch (e) {}
+      logoSrc = buildPortalLogoUrl(legacyName);
+    }
+
+    if (logoSrc && logoSrc.startsWith('/')) {
+      logoSrc = withBase(logoSrc);
     }
 
     if (logoSrc) {
       logoEl.src = logoSrc;
       logoEl.alt = title;
     }
-  }
+    }
   
     // Document title
     try {

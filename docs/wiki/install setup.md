@@ -136,6 +136,28 @@ sudo chmod 700 /var/www/sessions
 - If your proxy strips the prefix, set `FR_BASE_PATH` or send `X-Forwarded-Prefix`.
 - If you are behind a reverse proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER`.
 
+### Block direct access to /uploads, /users, /metadata (required)
+
+Uploaded file data and app metadata must go through the API. Do **not** expose `/uploads`, `/users`, or `/metadata` directly.
+
+Apache:
+
+```
+<LocationMatch "^/(uploads|users|metadata)(?:/|$)">
+    Require all denied
+</LocationMatch>
+```
+
+Nginx:
+
+```
+location ~* ^/(uploads|users|metadata)(/|$) {
+    return 403;
+}
+```
+
+If you previously added aliases for `/uploads`, `/users`, or `/metadata`, remove them.
+
 ### First-run security checklist
 
 - Set `PERSISTENT_TOKENS_KEY` to a strong value.

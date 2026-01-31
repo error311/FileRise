@@ -70,7 +70,7 @@ Use these fields to customize the portal page:
 - **Instructions**: short text for the client (what to upload, deadlines, etc.).
 - **Accent color**: UI highlight color (CSS hex).
 - **Footer text**: small text at the bottom of the portal.
-- **Portal logo**: upload a logo image (stored under `uploads/profile_pics`).
+- **Portal logo**: upload a logo image (stored under `uploads/profile_pics`, served via `/api/public/profilePic.php`).
 
 ---
 

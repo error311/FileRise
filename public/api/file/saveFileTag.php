@@ -16,7 +16,17 @@
  *       required={"folder","file"},
  *       @OA\Property(property="folder", type="string", example="root"),
  *       @OA\Property(property="file", type="string", example="doc.md"),
- *       @OA\Property(property="tags", type="array", @OA\Items(type="string"), example={"work","urgent"}),
+ *       @OA\Property(property="sourceId", type="string", example="local"),
+ *       @OA\Property(
+ *         property="tags",
+ *         type="array",
+ *         @OA\Items(
+ *           type="object",
+ *           @OA\Property(property="name", type="string", example="work"),
+ *           @OA\Property(property="color", type="string", example="#ff0000")
+ *         ),
+ *         example={{"name":"work","color":"#ff0000"},{"name":"urgent","color":"#00ff00"}}
+ *       ),
  *       @OA\Property(property="deleteGlobal", type="boolean", example=false),
  *       @OA\Property(property="tagToDelete", type="string", nullable=true, example=null)
  *     )

@@ -117,19 +117,10 @@ RUN cat <<'EOF' > /etc/apache2/sites-available/000-default.conf
       ExpiresByType application/javascript "access plus 3 hour"
     </IfModule>
 
-    # Protect uploads directory
-    Alias /uploads/ /var/www/uploads/
-    <Directory "/var/www/uploads/">
-        Options -Indexes
-        AllowOverride None
-        <IfModule mod_php7.c>
-           php_flag engine off
-        </IfModule>
-        <IfModule mod_php.c>
-           php_flag engine off
-        </IfModule>
-        Require all granted
-    </Directory>
+    # Block direct access to uploads/users/metadata (data must go through the API)
+    <LocationMatch "^/(uploads|users|metadata)(?:/|$)">
+        Require all denied
+    </LocationMatch>
 
     # Public directory
     <Directory "/var/www/public">

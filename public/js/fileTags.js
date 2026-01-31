@@ -7,12 +7,80 @@ import { renderFileTable, renderGalleryView } from './fileListView.js?v={{APP_QV
 let __singleInit = false;
 let __multiInit  = false;
 let currentFile = null;
+let currentTagSourceId = '';
+
+const DEFAULT_TAG_COLOR = '#777777';
+
+function sanitizeTagColor(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return DEFAULT_TAG_COLOR;
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw)) return raw;
+  if (/^[a-zA-Z]{1,32}$/.test(raw)) return raw;
+  return DEFAULT_TAG_COLOR;
+}
+
+function sanitizeTagList(tags) {
+  if (!Array.isArray(tags)) return [];
+  const clean = [];
+  tags.forEach(tag => {
+    if (!tag || typeof tag !== 'object') return;
+    const name = String(tag.name || '').trim();
+    if (!name) return;
+    clean.push({ ...tag, name, color: sanitizeTagColor(tag.color) });
+  });
+  return clean;
+}
+
+function getActiveSourceId() {
+  try {
+    if (typeof window.__frGetActiveSourceId === 'function') {
+      const v = window.__frGetActiveSourceId();
+      if (v) return String(v).trim();
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    const stored = localStorage.getItem('fr_active_source');
+    if (stored) return String(stored).trim();
+  } catch (e) { /* ignore */ }
+  const sel = document.getElementById('sourceSelector');
+  if (sel && sel.value) return String(sel.value).trim();
+  return '';
+}
+
+function resolveTagSourceId(sourceId = '') {
+  const sid = String(sourceId || '').trim();
+  if (sid) return sid;
+  if (currentTagSourceId) return currentTagSourceId;
+  return getActiveSourceId();
+}
+
+function getTagStorageKey(sourceId = '') {
+  const sid = String(sourceId || '').trim();
+  return sid ? `globalTags.${sid}` : 'globalTags';
+}
+
+function loadStoredTags(sourceId = '') {
+  const key = getTagStorageKey(sourceId);
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return sanitizeTagList(JSON.parse(raw));
+    if (key !== 'globalTags') {
+      const legacy = localStorage.getItem('globalTags');
+      if (legacy) return sanitizeTagList(JSON.parse(legacy));
+    }
+  } catch (e) { /* ignore */ }
+  return [];
+}
+
+function persistStoredTags(tags, sourceId = '') {
+  const key = getTagStorageKey(sourceId);
+  try { localStorage.setItem(key, JSON.stringify(tags)); } catch (e) { /* ignore */ }
+}
 
 // Global store (preserve existing behavior)
 window.globalTags = window.globalTags || [];
-if (localStorage.getItem('globalTags')) {
-  try { window.globalTags = JSON.parse(localStorage.getItem('globalTags')); } catch (e) {}
-}
+currentTagSourceId = resolveTagSourceId();
+window.globalTags = loadStoredTags(currentTagSourceId);
 
 // -------------------- ensure DOM (create-once-if-missing) --------------------
 function ensureSingleTagModal() {
@@ -108,7 +176,7 @@ function initSingleModalOnce() {
   // Save handler
   saveBtn?.addEventListener('click', () => {
     const tagName = (document.getElementById('tagNameInput')?.value || '').trim();
-    const tagColor = document.getElementById('tagColorInput')?.value || '#ff0000';
+    const tagColor = sanitizeTagColor(document.getElementById('tagColorInput')?.value || '#ff0000');
     if (!tagName) { alert(t('enter_tag_name') || 'Please enter a tag name.'); return; }
     if (!currentFile) return;
 
@@ -145,7 +213,7 @@ function initMultiModalOnce() {
 
   saveBtn?.addEventListener('click', () => {
     const tagName  = (document.getElementById('multiTagNameInput')?.value || '').trim();
-    const tagColor = document.getElementById('multiTagColorInput')?.value || '#ff0000';
+    const tagColor = sanitizeTagColor(document.getElementById('multiTagColorInput')?.value || '#ff0000');
     if (!tagName) { alert(t('enter_tag_name') || 'Please enter a tag name.'); return; }
 
     const files = (window.__multiTagFiles || []);
@@ -170,7 +238,10 @@ export function openTagModal(file) {
   const title = document.getElementById('tagModalTitle');
 
   currentFile = file || null;
-  if (title) title.textContent = `${t('tag_file')}: ${file ? escapeHTML(file.name) : ''}`;
+  if (title) title.textContent = `${t('tag_file')}: ${file ? String(file.name || '') : ''}`;
+  const sourceId = resolveTagSourceId(file?.sourceId);
+  if (sourceId) currentTagSourceId = sourceId;
+  loadGlobalTags(sourceId);
   updateCustomTagDropdown('');
   updateTagModalDisplay(file);
   modal.style.display = 'block';
@@ -187,6 +258,9 @@ export function openMultiTagModal(files) {
   const title = document.getElementById('multiTagTitle');
   window.__multiTagFiles = Array.isArray(files) ? files : [];
   if (title) title.textContent = `${t('tag_selected') || 'Tag Selected'} (${window.__multiTagFiles.length})`;
+  const sourceId = resolveTagSourceId(window.__multiTagFiles[0]?.sourceId);
+  if (sourceId) currentTagSourceId = sourceId;
+  loadGlobalTags(sourceId);
   updateMultiCustomTagDropdown('');
   modal.style.display = 'block';
 }
@@ -205,12 +279,13 @@ function updateMultiCustomTagDropdown(filterText = "") {
   if (filterText) tags = tags.filter(tag => tag.name.toLowerCase().includes(filterText.toLowerCase()));
   if (tags.length > 0) {
     tags.forEach(tag => {
+      const safeColor = sanitizeTagColor(tag.color);
       const item = document.createElement("div");
       item.style.cursor = "pointer";
       item.style.padding = "5px";
       item.style.borderBottom = "1px solid #eee";
       item.innerHTML = `
-        <span style="display:inline-block; width:16px; height:16px; background-color:${tag.color}; border:1px solid #ccc; margin-right:5px; vertical-align:middle;"></span>
+        <span style="display:inline-block; width:16px; height:16px; background-color:${safeColor}; border:1px solid #ccc; margin-right:5px; vertical-align:middle;"></span>
         ${escapeHTML(tag.name)}
         <span class="global-remove" style="color:red; font-weight:bold; margin-left:5px; cursor:pointer;">×</span>
       `;
@@ -219,7 +294,7 @@ function updateMultiCustomTagDropdown(filterText = "") {
         const n = document.getElementById("multiTagNameInput");
         const c = document.getElementById("multiTagColorInput");
         if (n) n.value = tag.name;
-        if (c) c.value = tag.color;
+        if (c) c.value = safeColor;
       });
       item.querySelector('.global-remove').addEventListener("click", function(e){
         e.stopPropagation();
@@ -240,12 +315,13 @@ function updateCustomTagDropdown(filterText = "") {
   if (filterText) tags = tags.filter(tag => tag.name.toLowerCase().includes(filterText.toLowerCase()));
   if (tags.length > 0) {
     tags.forEach(tag => {
+      const safeColor = sanitizeTagColor(tag.color);
       const item = document.createElement("div");
       item.style.cursor = "pointer";
       item.style.padding = "5px";
       item.style.borderBottom = "1px solid #eee";
       item.innerHTML = `
-        <span style="display:inline-block; width:16px; height:16px; background-color:${tag.color}; border:1px solid #ccc; margin-right:5px; vertical-align:middle;"></span>
+        <span style="display:inline-block; width:16px; height:16px; background-color:${safeColor}; border:1px solid #ccc; margin-right:5px; vertical-align:middle;"></span>
         ${escapeHTML(tag.name)}
         <span class="global-remove" style="color:red; font-weight:bold; margin-left:5px; cursor:pointer;">×</span>
       `;
@@ -254,7 +330,7 @@ function updateCustomTagDropdown(filterText = "") {
         const n = document.getElementById("tagNameInput");
         const c = document.getElementById("tagColorInput");
         if (n) n.value = tag.name;
-        if (c) c.value = tag.color;
+        if (c) c.value = safeColor;
       });
       item.querySelector('.global-remove').addEventListener("click", function(e){
         e.stopPropagation();
@@ -276,7 +352,7 @@ function updateTagModalDisplay(file) {
     file.tags.forEach(tag => {
       const tagElem = document.createElement('span');
       tagElem.textContent = tag.name;
-      tagElem.style.backgroundColor = tag.color;
+      tagElem.style.backgroundColor = sanitizeTagColor(tag.color);
       tagElem.style.color = '#fff';
       tagElem.style.padding = '2px 6px';
       tagElem.style.marginRight = '5px';
@@ -308,25 +384,34 @@ function removeTagFromFile(file, tagName) {
 }
 
 function removeGlobalTag(tagName) {
+  const sourceId = resolveTagSourceId();
   window.globalTags = (window.globalTags || []).filter(t => t.name.toLowerCase() !== tagName.toLowerCase());
-  localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
+  persistStoredTags(window.globalTags, sourceId);
   updateCustomTagDropdown();
   updateMultiCustomTagDropdown();
   saveGlobalTagRemoval(tagName);
 }
 
 function saveGlobalTagRemoval(tagName) {
+  const sourceId = resolveTagSourceId();
   fetch("/api/file/saveFileTag.php", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
-    body: JSON.stringify({ folder: "root", file: "global", deleteGlobal: true, tagToDelete: tagName, tags: [] })
+    body: JSON.stringify({
+      folder: "root",
+      file: "global",
+      deleteGlobal: true,
+      tagToDelete: tagName,
+      tags: [],
+      ...(sourceId ? { sourceId } : {})
+    })
   })
   .then(r => r.json())
   .then(data => {
     if (data.success && data.globalTags) {
-      window.globalTags = data.globalTags;
-      localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
+      window.globalTags = sanitizeTagList(data.globalTags);
+      persistStoredTags(window.globalTags, sourceId);
       updateCustomTagDropdown();
       updateMultiCustomTagDropdown();
     } else if (!data.success) {
@@ -337,33 +422,50 @@ function saveGlobalTagRemoval(tagName) {
 }
 
 // -------------------- exports kept from your original --------------------
-export function loadGlobalTags() {
-  fetch("/api/file/getFileTag.php", { credentials: "include" })
+export function loadGlobalTags(sourceId = '') {
+  const resolvedSourceId = resolveTagSourceId(sourceId);
+  const url = resolvedSourceId
+    ? `/api/file/getFileTag.php?sourceId=${encodeURIComponent(resolvedSourceId)}`
+    : "/api/file/getFileTag.php";
+  if (resolvedSourceId) currentTagSourceId = resolvedSourceId;
+  fetch(url, { credentials: "include" })
     .then(r => r.ok ? r.json() : [])
     .then(data => {
-      window.globalTags = data || [];
-      localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
+      window.globalTags = sanitizeTagList(data || []);
+      persistStoredTags(window.globalTags, resolvedSourceId);
       updateCustomTagDropdown();
       updateMultiCustomTagDropdown();
     })
     .catch(err => {
       console.error("Error loading global tags:", err);
-      window.globalTags = [];
+      window.globalTags = loadStoredTags(resolvedSourceId);
       updateCustomTagDropdown();
       updateMultiCustomTagDropdown();
     });
 }
 loadGlobalTags();
 
+try {
+  window.addEventListener('filerise:source-change', (e) => {
+    const nextId = String(e?.detail?.id || '').trim();
+    if (nextId) currentTagSourceId = nextId;
+    loadGlobalTags(nextId);
+  });
+} catch (e) { /* ignore */ }
+
 export function addTagToFile(file, tag) {
   if (!file.tags) file.tags = [];
-  const exists = file.tags.find(tg => tg.name.toLowerCase() === tag.name.toLowerCase());
-  if (exists) exists.color = tag.color; else file.tags.push(tag);
+  const safeName = String(tag.name || '').trim();
+  if (!safeName) return;
+  const safeColor = sanitizeTagColor(tag.color);
+  const sourceId = resolveTagSourceId(file?.sourceId);
+  const exists = file.tags.find(tg => tg.name.toLowerCase() === safeName.toLowerCase());
+  if (exists) exists.color = safeColor; else file.tags.push({ ...tag, name: safeName, color: safeColor });
 
-  const globalExists = (window.globalTags || []).find(tg => tg.name.toLowerCase() === tag.name.toLowerCase());
+  const globalExists = (window.globalTags || []).find(tg => tg.name.toLowerCase() === safeName.toLowerCase());
   if (!globalExists) {
-    window.globalTags.push(tag);
-    localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
+    window.globalTags.push({ ...tag, name: safeName, color: safeColor });
+    persistStoredTags(window.globalTags, sourceId);
   }
 }
 
@@ -384,7 +486,7 @@ export function updateFileRowTagDisplay(file) {
     (file.tags || []).forEach(tag => {
       const badge = document.createElement('span');
       badge.textContent = tag.name;
-      badge.style.backgroundColor = tag.color;
+      badge.style.backgroundColor = sanitizeTagColor(tag.color);
       badge.style.color = '#fff';
       badge.style.padding = '2px 4px';
       badge.style.marginRight = '2px';
@@ -417,7 +519,9 @@ export function initTagSearch() {
 export function filterFilesByTag(files) {
   const q = (window.currentTagFilter || '').trim().toLowerCase();
   if (!q) return files;
-  return files.filter(file => (file.tags || []).some(tag => tag.name.toLowerCase().includes(q)));
+  return files.filter(file =>
+    (file.tags || []).some(tag => String(tag?.name || '').toLowerCase().includes(q))
+  );
 }
 
 function updateGlobalTagList() {
@@ -433,13 +537,16 @@ function updateGlobalTagList() {
 
 export function saveFileTags(file, deleteGlobal = false, tagToDelete = null) {
   const folder = file.folder || "root";
+  const sourceId = resolveTagSourceId(file.sourceId);
+  const safeTags = sanitizeTagList(file.tags || []);
   const payload = deleteGlobal && tagToDelete ? {
     folder: "root",
     file: "global",
     deleteGlobal: true,
     tagToDelete,
-    tags: []
-  } : { folder, file: file.name, tags: file.tags };
+    tags: [],
+    ...(sourceId ? { sourceId } : {})
+  } : { folder, file: file.name, tags: safeTags, ...(sourceId ? { sourceId } : {}) };
 
   fetch("/api/file/saveFileTag.php", {
     method: "POST",
@@ -451,8 +558,8 @@ export function saveFileTags(file, deleteGlobal = false, tagToDelete = null) {
     .then(data => {
       if (data.success) {
         if (data.globalTags) {
-          window.globalTags = data.globalTags;
-          localStorage.setItem('globalTags', JSON.stringify(window.globalTags));
+          window.globalTags = sanitizeTagList(data.globalTags);
+          persistStoredTags(window.globalTags, sourceId);
           updateCustomTagDropdown();
           updateMultiCustomTagDropdown();
         }

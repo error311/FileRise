@@ -762,15 +762,15 @@ public function adminChangeUserPassword()
             exit;
         }
 
-        $fsPath = rtrim(UPLOAD_DIR, '/\\') . '/profile_pics/' . $filename;
-
-        // Remove the filesystem root (PROJECT_ROOT) so we get a web-relative path
-        $root   = rtrim(PROJECT_ROOT, '/\\');
-        $url    = preg_replace('#^' . preg_quote($root, '#') . '#', '', $fsPath);
-
-        // Ensure it starts with /
-        if ($url === '' || $url[0] !== '/') {
-            $url = '/' . $url;
+        $url = fr_profile_pic_url($filename);
+        if ($url === '') {
+            @unlink($dest);
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error'   => 'Failed to generate profile picture URL'
+            ]);
+            exit;
         }
 
         $result = UserModel::setProfilePicture($_SESSION['username'], $url);
@@ -843,15 +843,12 @@ public function adminChangeUserPassword()
         }
 
         
-        $fsPath = rtrim(UPLOAD_DIR, '/\\') . '/profile_pics/' . $filename;
-
-        // Remove the filesystem root (PROJECT_ROOT) so we get a web-relative path
-        $root   = rtrim(PROJECT_ROOT, '/\\');
-        $url    = preg_replace('#^' . preg_quote($root, '#') . '#', '', $fsPath);
-
-        // Ensure it starts with /
-        if ($url === '' || $url[0] !== '/') {
-            $url = '/' . $url;
+        $url = fr_profile_pic_url($filename);
+        if ($url === '') {
+            @unlink($dest);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to generate logo URL']);
+            exit;
         }
 
         echo json_encode(['success' => true, 'url' => $url]);
@@ -924,14 +921,12 @@ public function adminChangeUserPassword()
             exit;
         }
 
-        // Build a web path similar to uploadBrandLogo
-        $fsPath = $uploadDir . '/' . $filename;
-
-        $root = rtrim(PROJECT_ROOT, '/\\');
-        $url  = preg_replace('#^' . preg_quote($root, '#') . '#', '', $fsPath);
-
-        if ($url === '' || $url[0] !== '/') {
-            $url = '/' . ltrim($url, '/\\');
+        $url = fr_profile_pic_url($filename);
+        if ($url === '') {
+            @unlink($dest);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to generate logo URL']);
+            exit;
         }
 
         echo json_encode([
@@ -1007,6 +1002,21 @@ public function adminChangeUserPassword()
                 }
 
                 if (!$shouldRegenerate) {
+                    if (isset($data['branding']) && is_array($data['branding'])) {
+                        $keys = [
+                            'customLogoUrl',
+                            'faviconSvg',
+                            'faviconPng',
+                            'faviconIco',
+                            'appleTouchIcon',
+                            'maskIcon',
+                        ];
+                        foreach ($keys as $k) {
+                            if (!empty($data['branding'][$k])) {
+                                $data['branding'][$k] = fr_normalize_profile_pic_url((string)$data['branding'][$k]);
+                            }
+                        }
+                    }
                     echo json_encode($data);
                     return;
                 }

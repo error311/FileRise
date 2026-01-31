@@ -403,6 +403,13 @@ function updateHeaderLogoFromAdmin() {
         url = '/' + url;
       }
 
+      const legacyMatch = url.match(/\/uploads\/profile_pics\/([^?#]+)/);
+      if (legacyMatch && legacyMatch[1]) {
+        let legacyName = legacyMatch[1];
+        try { legacyName = decodeURIComponent(legacyName); } catch (e) {}
+        url = `/api/public/profilePic.php?file=${encodeURIComponent(legacyName)}`;
+      }
+
       // Strip any CR/LF just in case
       url = url.replace(/[\r\n]+/g, '');
 

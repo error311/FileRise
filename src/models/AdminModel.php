@@ -89,7 +89,7 @@ class AdminModel
         return ($scheme === 'http' || $scheme === 'https') ? $url : '';
     }
 
-    /** Allow logo URLs that are either site-relative (/uploads/…) or http(s). */
+    /** Allow logo URLs that are either site-relative or http(s). */
     private static function sanitizeLogoUrl($url): string
     {
         $url = trim((string)$url);
@@ -100,7 +100,7 @@ class AdminModel
             $url = '/' . ltrim($url, '/');
         }
 
-        // 1) Site-relative like "/uploads/profile_pics/branding_foo.png"
+        // 1) Site-relative (normalize legacy /uploads/profile_pics to the public API)
         if ($url[0] === '/') {
             // Strip CRLF just in case
             $url = preg_replace('~[\r\n]+~', '', $url);
@@ -108,7 +108,7 @@ class AdminModel
             if (strpos($url, '://') !== false) {
                 return '';
             }
-            return $url;
+            return fr_normalize_profile_pic_url($url);
         }
 
         // 2) Fallback to plain http(s) validation

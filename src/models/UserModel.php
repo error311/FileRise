@@ -923,9 +923,8 @@ public static function adminResetPassword($targetUsername, $newPassword)
             $totpEnabled = !empty($parts[3]);
             $pic         = isset($parts[4]) ? $parts[4] : '';
 
-            // Normalize to a leading slash (UI expects /uploads/…)
-            if ($pic !== '' && $pic[0] !== '/') {
-                $pic = '/' . $pic;
+            if ($pic !== '') {
+                $pic = fr_normalize_profile_pic_url($pic);
             }
 
             return [

@@ -5,9 +5,10 @@
  * @OA\Get(
  *   path="/api/file/getFileTag.php",
  *   summary="Get global file tags",
- *   description="Returns tag metadata (no auth in current implementation).",
+ *   description="Returns tag metadata for the authenticated session.",
  *   operationId="getFileTag",
  *   tags={"Tags"},
+ *   @OA\Parameter(name="sourceId", in="query", required=false, @OA\Schema(type="string"), description="Optional source id (Pro sources)."),
  *   @OA\Response(response=200, description="Tags map (model-defined JSON)")
  * )
  */

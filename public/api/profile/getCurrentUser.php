@@ -16,7 +16,7 @@
  *       @OA\Property(property="username", type="string", example="ryan"),
  *       @OA\Property(property="isAdmin", type="boolean"),
  *       @OA\Property(property="totp_enabled", type="boolean"),
- *       @OA\Property(property="profile_picture", type="string", example="/uploads/profile_pics/ryan.png")
+ *       @OA\Property(property="profile_picture", type="string", example="/api/public/profilePic.php?file=ryan.png")
  *     )
  *   ),
  *   @OA\Response(response=401, ref="#/components/responses/Unauthorized")

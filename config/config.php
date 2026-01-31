@@ -456,6 +456,45 @@ function fr_with_base_path($path)
     return $bp . $p;
 }
 
+function fr_profile_pic_url(string $filename): string
+{
+    $name = trim((string)$filename);
+    if ($name === '') return '';
+    $name = str_replace('\\', '/', $name);
+    $name = basename($name);
+    if ($name === '' || $name === '.' || $name === '..') return '';
+    return '/api/public/profilePic.php?file=' . rawurlencode($name);
+}
+
+function fr_normalize_profile_pic_url(string $url): string
+{
+    $raw = trim((string)$url);
+    if ($raw === '') return '';
+
+    // Leave absolute http(s) URLs unchanged.
+    if (preg_match('~^https?://~i', $raw)) return $raw;
+
+    // Ensure a leading slash for site-relative paths.
+    if ($raw[0] !== '/') $raw = '/' . ltrim($raw, '/');
+
+    $base = defined('FR_BASE_PATH') ? (string)FR_BASE_PATH : '';
+    $prefix = '';
+    if ($base !== '' && $raw !== $base && strpos($raw, $base . '/') === 0) {
+        $prefix = $base;
+        $raw = substr($raw, strlen($base));
+        if ($raw === '') $raw = '/';
+    }
+
+    if (preg_match('~^/uploads/profile_pics/([^/?#]+)~', $raw, $m)) {
+        return $prefix . fr_profile_pic_url($m[1]);
+    }
+    if (preg_match('~^/api/public/profilePic\.php\\?file=~', $raw)) {
+        return $prefix . $raw;
+    }
+
+    return $prefix . $raw;
+}
+
 if (strpos(BASE_URL, 'yourwebsite') !== false) {
     $defaultShare = "{$proto}://{$host}" . fr_with_base_path("/api/file/share.php");
 } else {

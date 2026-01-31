@@ -32,6 +32,11 @@ server {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
+    # Block direct access to uploads/users/metadata (serve files via API)
+    location ~* ^/(uploads|users|metadata)(/|$) {
+        return 403;
+    }
+
     location ~ \.php$ {
         include fastcgi_params;
         fastcgi_split_path_info ^(.+\.php)(/.+)$;
@@ -40,7 +45,7 @@ server {
         fastcgi_index index.php;
     }
 
-    location ~* /(users|metadata|\.git) {
+    location ~* ^/\.git {
         deny all;
     }
 
@@ -73,6 +78,11 @@ server {
 
     location /files/ {
         try_files $uri $uri/ /files/index.php?$query_string;
+    }
+
+    # Block direct access to uploads/users/metadata (serve files via API)
+    location ~* ^/(uploads|users|metadata)(/|$) {
+        return 403;
     }
 
     location ~ \.php$ {

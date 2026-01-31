@@ -1104,11 +1104,14 @@ function bindDarkMode() {
   
         // --- Header logo (branding) in BOTH phases ---
         try {
-          const customLogoUrl = branding.customLogoUrl || "";
+          const customLogoUrl = String(branding.customLogoUrl || "").trim();
+          const resolvedLogoUrl = customLogoUrl && customLogoUrl.startsWith('/') && !customLogoUrl.startsWith('//')
+            ? withBase(customLogoUrl)
+            : customLogoUrl;
           const logoImg = document.querySelector('.header-logo img');
           if (logoImg) {
-            if (customLogoUrl) {
-              logoImg.setAttribute('src', customLogoUrl);
+            if (resolvedLogoUrl) {
+              logoImg.setAttribute('src', resolvedLogoUrl);
               logoImg.setAttribute('alt', 'Site logo');
             } else {
               // fall back to default FileRise logo

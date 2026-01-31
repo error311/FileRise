@@ -2,7 +2,7 @@
     "openapi": "3.0.0",
     "info": {
         "title": "FileRise API",
-        "version": "3.2.3"
+        "version": "3.3.0"
     },
     "servers": [
         {
@@ -2146,6 +2146,17 @@
                 "summary": "Get global file tags",
                 "description": "Returns tag metadata (no auth in current implementation).",
                 "operationId": "getFileTag",
+                "parameters": [
+                    {
+                        "name": "sourceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Optional source id (Pro sources)."
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Tags map (model-defined JSON)"
@@ -2466,14 +2477,34 @@
                                         "type": "string",
                                         "example": "doc.md"
                                     },
+                                    "sourceId": {
+                                        "type": "string",
+                                        "example": "local"
+                                    },
                                     "tags": {
                                         "type": "array",
                                         "items": {
-                                            "type": "string"
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "work"
+                                                },
+                                                "color": {
+                                                    "type": "string",
+                                                    "example": "#ff0000"
+                                                }
+                                            }
                                         },
                                         "example": [
-                                            "work",
-                                            "urgent"
+                                            {
+                                                "name": "work",
+                                                "color": "#ff0000"
+                                            },
+                                            {
+                                                "name": "urgent",
+                                                "color": "#00ff00"
+                                            }
                                         ]
                                     },
                                     "deleteGlobal": {
@@ -5561,7 +5592,7 @@
                                         },
                                         "profile_picture": {
                                             "type": "string",
-                                            "example": "/uploads/profile_pics/ryan.png"
+                                        "example": "/api/public/profilePic.php?file=ryan.png"
                                         }
                                     },
                                     "type": "object"
@@ -5636,7 +5667,7 @@
                                         },
                                         "url": {
                                             "type": "string",
-                                            "example": "/uploads/profile_pics/alice_9f3c2e1a8bcd.png"
+                                            "example": "/api/public/profilePic.php?file=alice_9f3c2e1a8bcd.png"
                                         }
                                     },
                                     "type": "object"

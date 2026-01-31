@@ -1366,12 +1366,21 @@ function renderPortalInfo() {
     }
   }
 
+  const buildPortalLogoUrl = (fileName) =>
+    fileName ? `/api/public/profilePic.php?file=${encodeURIComponent(fileName)}` : '';
+
   let portalLogoUrl = '';
   if (portal.logoUrl && portal.logoUrl.trim()) {
     portalLogoUrl = portal.logoUrl.trim();
   } else if (portal.logoFile && portal.logoFile.trim()) {
-    // Fallback if backend only supplies logoFile
-    portalLogoUrl = '/uploads/profile_pics/' + encodeURIComponent(portal.logoFile.trim());
+    portalLogoUrl = buildPortalLogoUrl(portal.logoFile.trim());
+  }
+
+  const legacyMatch = portalLogoUrl.match(/\/uploads\/profile_pics\/([^?#]+)/);
+  if (legacyMatch && legacyMatch[1]) {
+    let legacyName = legacyMatch[1];
+    try { legacyName = decodeURIComponent(legacyName); } catch (e) {}
+    portalLogoUrl = buildPortalLogoUrl(legacyName);
   }
 
   if (logoImg && portalLogoUrl) {

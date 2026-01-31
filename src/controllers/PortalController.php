@@ -217,6 +217,12 @@ final class PortalController
         // Optional per-portal logo
         $logoFile = trim((string)($p['logoFile'] ?? ''));
         $logoUrl  = trim((string)($p['logoUrl']  ?? ''));
+        if ($logoUrl !== '') {
+            $logoUrl = fr_normalize_profile_pic_url($logoUrl);
+        }
+        if ($logoUrl === '' && $logoFile !== '') {
+            $logoUrl = fr_profile_pic_url($logoFile);
+        }
 
         // Upload rules / thank-you behavior
         $uploadMaxSizeMb    = isset($p['uploadMaxSizeMb']) ? (int)$p['uploadMaxSizeMb'] : 0;

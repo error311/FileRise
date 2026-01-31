@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 01/31/2026 (v3.3.0)
+
+`release(v3.3.0): security hardening (tag color sanitization + restrict direct uploads access)`
+
+**Security**  
+
+- Hardened tag color handling to prevent HTML/CSS injection:
+  - Tag colors are now sanitized server-side on save and on read.
+  - Allowed formats: `#RGB` / `#RRGGBB` and simple named colors.
+  - Invalid values fall back to a safe default.
+- Docker default now blocks direct `/uploads/*` access:
+  - File data should be accessed via authenticated API/download flows (and share links where applicable).
+  - Added a constrained public endpoint for profile pictures / portal logos:
+    - `GET /api/public/profilePic.php?file=<filename>`
+    - Locked to `UPLOAD_DIR/profile_pics/` with realpath boundary checks
+    - Image-only MIME allowlist + `X-Content-Type-Options: nosniff`
+
+**Changed**  
+
+- **Behavior change (security, Docker default):** Direct requests to `/uploads/...` are no longer served.
+  - If you intentionally need a public file host, use share links or a separate explicitly-public directory/vhost.
+- Tag APIs now accept optional `sourceId` and sanitize tags end-to-end for Sources.
+
+**Docs/OpenAPI**  
+
+- OpenAPI updated to reflect:
+  - tag objects (`{name,color}`)
+  - `sourceId` parameters for tag endpoints
+  - profile picture URLs served via `/api/public/profilePic.php`
+
+---
+
 ## Changes 01/30/2026 (v3.2.4)
 
 `release(v3.2.4): OIDC group-claim mapping + extra scopes (Authentik & Keycloak-friendly) + sponsor list update`

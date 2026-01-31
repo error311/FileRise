@@ -227,7 +227,7 @@
   function applyBranding(cfg) {
     if (!cfg || !cfg.pro || !cfg.pro.active) return;
     const branding = cfg.branding || {};
-    const logoUrl = (branding.customLogoUrl || '').trim();
+    const logoUrl = withBaseIfRelative(branding.customLogoUrl || '');
     const accent = (branding.headerBgLight || '').trim();
     const accentDark = (branding.headerBgDark || '').trim();
     const footerHtml = (branding.footerHtml || '').trim();

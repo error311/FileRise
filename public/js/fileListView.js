@@ -3856,6 +3856,14 @@ function _isHexColor(value) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim());
 }
 
+function sanitizeTagColor(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '#777777';
+  if (_isHexColor(raw)) return raw;
+  if (/^[a-zA-Z]{1,32}$/.test(raw)) return raw;
+  return '#777777';
+}
+
 function _resolveFolderColors(hostEl, fullPath) {
   const frontVar = String(hostEl?.style?.getPropertyValue('--filr-folder-front') || '').trim();
   const backVar = String(hostEl?.style?.getPropertyValue('--filr-folder-back') || '').trim();
@@ -6944,7 +6952,8 @@ const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
       if (file.tags && file.tags.length > 0) {
         tagBadgesHTML = '<div class="tag-badges" style="display:inline-block; margin-left:5px;">';
         file.tags.forEach(tag => {
-          tagBadgesHTML += `<span style="background-color: ${tag.color}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
+          const safeColor = sanitizeTagColor(tag.color);
+          tagBadgesHTML += `<span style="background-color: ${safeColor}; color: #fff; padding: 2px 4px; border-radius: 3px; margin-right: 2px; font-size: 0.8em;">${escapeHTML(tag.name)}</span>`;
         });
         tagBadgesHTML += "</div>";
       }
@@ -7494,7 +7503,8 @@ export function renderGalleryView(folder, container) {
     if (file.tags && file.tags.length) {
       tagBadgesHTML = `<div class="tag-badges" style="margin-top:4px;">`;
       file.tags.forEach(tag => {
-        tagBadgesHTML += `<span style="background-color:${tag.color};
+        const safeColor = sanitizeTagColor(tag.color);
+        tagBadgesHTML += `<span style="background-color:${safeColor};
                                      color:#fff;
                                      padding:2px 4px;
                                      border-radius:3px;

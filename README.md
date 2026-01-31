@@ -307,6 +307,7 @@ Notes:
 - Use HTTPS and set `SECURE="true"` when behind TLS/reverse proxy.
 - If behind a proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER`.
 - Set `FR_PUBLISHED_URL` (and `FR_BASE_PATH` if needed) so share links are correct.
+- Block direct HTTP access to `/uploads` (serve only `public/` and deny access to `/uploads`, `/users`, `/metadata`).
 
 ## Optional dependencies
 

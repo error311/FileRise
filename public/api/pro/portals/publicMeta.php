@@ -108,6 +108,15 @@ if (!empty($portal['expiresAt'])) {
 }
 
 // Only expose the bits the login page needs (no folder, email, etc.)
+$logoFile = (string)($portal['logoFile'] ?? '');
+$logoUrl = (string)($portal['logoUrl'] ?? '');
+if ($logoUrl !== '') {
+    $logoUrl = fr_normalize_profile_pic_url($logoUrl);
+}
+if ($logoUrl === '' && $logoFile !== '') {
+    $logoUrl = fr_profile_pic_url($logoFile);
+}
+
 $public = [
     'slug'       => $slug,
     'label'      => (string)($portal['label'] ?? ''),
@@ -115,7 +124,8 @@ $public = [
     'introText'  => (string)($portal['introText'] ?? ''),
     'brandColor' => (string)($portal['brandColor'] ?? ''),
     'footerText' => (string)($portal['footerText'] ?? ''),
-    'logoFile'   => (string)($portal['logoFile']    ?? ''),
+    'logoFile'   => $logoFile,
+    'logoUrl'    => $logoUrl,
 ];
 
 echo json_encode([

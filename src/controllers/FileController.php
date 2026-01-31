@@ -3993,9 +3993,49 @@ class FileController
     public function getFileTags(): void
     {
         header('Content-Type: application/json; charset=utf-8');
-        $tags = FileModel::getFileTags();
-        echo json_encode($tags);
-        exit;
+        if (!$this->_requireAuth()) {
+            return;
+        }
+        $sourceId = '';
+        $allowDisabled = false;
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $rawSourceId = trim((string)($_GET['sourceId'] ?? ''));
+            if ($rawSourceId !== '') {
+                $sourceId = $this->normalizeSourceId($rawSourceId);
+                if ($sourceId === '') {
+                    http_response_code(400);
+                    echo json_encode(["error" => "Invalid source id."]);
+                    exit;
+                }
+                $info = SourceContext::getSourceById($sourceId);
+                if (!$info) {
+                    http_response_code(400);
+                    echo json_encode(["error" => "Invalid source."]);
+                    exit;
+                }
+                $username = $_SESSION['username'] ?? '';
+                $perms = $username !== '' ? $this->loadPerms($username) : [];
+                $allowDisabled = $this->isAdmin($perms);
+                if (!$allowDisabled && empty($info['enabled'])) {
+                    http_response_code(403);
+                    echo json_encode(["error" => "Source is disabled."]);
+                    exit;
+                }
+            }
+        }
+
+        $runner = function () {
+            $tags = FileModel::getFileTags();
+            echo json_encode($tags);
+            exit;
+        };
+
+        if ($sourceId !== '') {
+            $this->withSourceContext($sourceId, $runner, $allowDisabled);
+            return;
+        }
+
+        $runner();
     }
 
     public function saveFileTag(): void
@@ -4029,34 +4069,66 @@ class FileController
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
 
-            // Need write (or ancestor-owner)
-            if (!(ACL::canWrite($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
-                $this->_jsonOut(["error" => "Forbidden: no full write access"], 403);
-                return;
-            }
-
-            // Folder scope: write
-            $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'write');
-            if ($dv) {
-                $this->_jsonOut(["error" => $dv], 403);
-                return;
-            }
-
-            // Ownership unless admin/folder-owner
-            $ignoreOwnership = $this->isAdmin($userPermissions)
-                || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false))
-                || ACL::isOwner($username, $userPermissions, $folder)
-                || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
-            if (!$ignoreOwnership) {
-                $meta = $this->loadFolderMetadata($folder);
-                if (!isset($meta[$file]['uploader']) || strcasecmp((string)$meta[$file]['uploader'], $username) !== 0) {
-                    $this->_jsonOut(["error" => "Forbidden: you are not the owner of this file."], 403);
-                    return;
+            $sourceId = '';
+            $allowDisabled = false;
+            if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                $rawSourceId = trim((string)($data['sourceId'] ?? ''));
+                if ($rawSourceId !== '') {
+                    $sourceId = $this->normalizeSourceId($rawSourceId);
+                    if ($sourceId === '') {
+                        $this->_jsonOut(["error" => "Invalid source id."], 400);
+                        return;
+                    }
+                    $info = SourceContext::getSourceById($sourceId);
+                    if (!$info) {
+                        $this->_jsonOut(["error" => "Invalid source."], 400);
+                        return;
+                    }
+                    $allowDisabled = $this->isAdmin($userPermissions);
+                    if (!$allowDisabled && empty($info['enabled'])) {
+                        $this->_jsonOut(["error" => "Source is disabled."], 403);
+                        return;
+                    }
                 }
             }
 
-            $result = FileModel::saveFileTag($folder, $file, $tags, $deleteGlobal, $tagToDelete);
-            $this->_jsonOut($result);
+            $runner = function () use ($file, $folder, $tags, $deleteGlobal, $tagToDelete, $username, $userPermissions) {
+                // Need write (or ancestor-owner)
+                if (!(ACL::canWrite($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
+                    $this->_jsonOut(["error" => "Forbidden: no full write access"], 403);
+                    return;
+                }
+
+                // Folder scope: write
+                $dv = $this->enforceFolderScope($folder, $username, $userPermissions, 'write');
+                if ($dv) {
+                    $this->_jsonOut(["error" => $dv], 403);
+                    return;
+                }
+
+                // Ownership unless admin/folder-owner
+                $ignoreOwnership = $this->isAdmin($userPermissions)
+                    || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false))
+                    || ACL::isOwner($username, $userPermissions, $folder)
+                    || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
+                if (!$ignoreOwnership) {
+                    $meta = $this->loadFolderMetadata($folder);
+                    if (!isset($meta[$file]['uploader']) || strcasecmp((string)$meta[$file]['uploader'], $username) !== 0) {
+                        $this->_jsonOut(["error" => "Forbidden: you are not the owner of this file."], 403);
+                        return;
+                    }
+                }
+
+                $result = FileModel::saveFileTag($folder, $file, $tags, $deleteGlobal, $tagToDelete);
+                $this->_jsonOut($result);
+            };
+
+            if ($sourceId !== '') {
+                $this->withSourceContext($sourceId, $runner, $allowDisabled);
+                return;
+            }
+
+            $runner();
         } catch (Throwable $e) {
             error_log('FileController::saveFileTag error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
             $this->_jsonOut(['error' => 'Internal server error while saving tags.'], 500);

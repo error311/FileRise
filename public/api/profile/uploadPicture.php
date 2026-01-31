@@ -43,7 +43,7 @@ require_once PROJECT_ROOT . '/src/controllers/UserController.php';
  *       type="object",
  *       required={"success","url"},
  *       @OA\Property(property="success", type="boolean", example=true),
- *       @OA\Property(property="url", type="string", example="/uploads/profile_pics/alice_9f3c2e1a8bcd.png")
+ *       @OA\Property(property="url", type="string", example="/api/public/profilePic.php?file=alice_9f3c2e1a8bcd.png")
  *     )
  *   ),
  *   @OA\Response(response=400, description="No file uploaded, invalid file type, or file too large."),
