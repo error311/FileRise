@@ -1,5 +1,36 @@
 # Changelog
 
+## Changes 02/01/2026 (v3.3.1)
+
+`release(v3.3.1): fix non-Pro sourceId validation for move+copy & update SECURITY policy wording`
+
+**Commit message**  
+
+```text
+release(v3.3.1): fix non-Pro sourceId validation for move+copy & update SECURITY policy wording
+
+- sources: only validate sourceId+destSourceId when Sources are enabled (prevents non-Pro move+copy failures)
+- docs(security): clarify supported versions policy wording and contact formatting
+- scripts: bump manual-sync helper version string to v3.3.1
+```
+
+**Fixed**  
+
+- **Non‑Pro move/copy “Invalid source id” bug**
+  - `FileController` and `FolderController` now only parse/validate `sourceId` / `destSourceId` when Sources are enabled.
+  - When Sources are disabled (Core-only installs), move/copy requests no longer fail due to stray/empty sourceId fields.
+
+**Changed**  
+
+- **SECURITY.md**
+  - Updated wording to “latest minor release line only” and simplified version support table.
+  - Normalized security contact URLs/emails and clarified the “upgrade to latest” guidance.
+  - Added acknowledgement mention for `@ByteTyson` alongside earlier disclosures.
+- **scripts/manual-sync.sh**
+  - Updated helper comment/version string to v3.3.1.
+
+---
+
 ## Changes 01/31/2026 (v3.3.0)
 
 `release(v3.3.0): security hardening (tag color sanitization + restrict direct uploads access)`

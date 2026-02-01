@@ -653,16 +653,17 @@ class FileController
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
 
-            $rawSourceId = $data['sourceId'] ?? '';
-            $rawDestId = $data['destSourceId'] ?? '';
-            $sourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+            $useSources = (class_exists('SourceContext') && SourceContext::sourcesEnabled());
+            $rawSourceId = $useSources ? ($data['sourceId'] ?? '') : '';
+            $rawDestId = $useSources ? ($data['destSourceId'] ?? '') : '';
+            $sourceId = $useSources
                 ? $this->normalizeSourceId($rawSourceId !== '' ? $rawSourceId : SourceContext::getActiveId())
                 : '';
-            $destSourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+            $destSourceId = $useSources
                 ? $this->normalizeSourceId($rawDestId !== '' ? $rawDestId : $sourceId)
                 : '';
 
-            if (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === '')) {
+            if ($useSources && (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === ''))) {
                 $this->_jsonOut(["error" => "Invalid source id."], 400);
                 return;
             }
@@ -972,16 +973,17 @@ class FileController
             $username         = $_SESSION['username'] ?? '';
             $userPermissions  = $this->loadPerms($username);
 
-            $rawSourceId = $data['sourceId'] ?? '';
-            $rawDestId = $data['destSourceId'] ?? '';
-            $sourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+            $useSources = (class_exists('SourceContext') && SourceContext::sourcesEnabled());
+            $rawSourceId = $useSources ? ($data['sourceId'] ?? '') : '';
+            $rawDestId = $useSources ? ($data['destSourceId'] ?? '') : '';
+            $sourceId = $useSources
                 ? $this->normalizeSourceId($rawSourceId !== '' ? $rawSourceId : SourceContext::getActiveId())
                 : '';
-            $destSourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+            $destSourceId = $useSources
                 ? $this->normalizeSourceId($rawDestId !== '' ? $rawDestId : $sourceId)
                 : '';
 
-            if (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === '')) {
+            if ($useSources && (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === ''))) {
                 $this->_jsonOut(["error" => "Invalid source id."], 400);
                 return;
             }

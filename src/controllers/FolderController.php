@@ -2106,15 +2106,16 @@ class FolderController
             return;
         }
 
-        $rawSourceId = $input['sourceId'] ?? '';
-        $rawDestId = $input['destSourceId'] ?? '';
-        $sourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+        $useSources = (class_exists('SourceContext') && SourceContext::sourcesEnabled());
+        $rawSourceId = $useSources ? ($input['sourceId'] ?? '') : '';
+        $rawDestId = $useSources ? ($input['destSourceId'] ?? '') : '';
+        $sourceId = $useSources
             ? $this->normalizeSourceId($rawSourceId !== '' ? $rawSourceId : SourceContext::getActiveId())
             : '';
-        $destSourceId = (class_exists('SourceContext') && SourceContext::sourcesEnabled())
+        $destSourceId = $useSources
             ? $this->normalizeSourceId($rawDestId !== '' ? $rawDestId : $sourceId)
             : '';
-        if (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === '')) {
+        if ($useSources && (($rawSourceId !== '' && $sourceId === '') || ($rawDestId !== '' && $destSourceId === ''))) {
             http_response_code(400);
             echo json_encode(['error' => 'Invalid source id.']);
             return;

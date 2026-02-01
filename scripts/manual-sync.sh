@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# === Update FileRise to v2.3.2 (safe rsync, no composer on demo) ===
+# === Update FileRise to v3.3.1 (safe rsync, no composer on demo) ===
 set -Eeuo pipefail
 
-VER="v2.13.0"
+VER="v3.3.1"
 ASSET="FileRise-${VER}.zip"      # matches GitHub release asset name
 
 WEBROOT="/var/www"
