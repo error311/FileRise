@@ -259,7 +259,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    const url = withBasePath('/api/siteConfig.php');
+    const url = withBasePath('/api/public/siteConfig.php');
     fetch(url, { credentials: 'include' })
       .then((res) => res.json())
       .then((cfg) => applyBranding(cfg))

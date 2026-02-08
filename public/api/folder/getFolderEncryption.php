@@ -17,7 +17,6 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/FolderController.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 $username = (string)($_SESSION['username'] ?? '');
@@ -32,7 +31,7 @@ $folder = isset($_GET['folder']) ? (string)$_GET['folder'] : 'root';
 $folder = str_replace('\\', '/', trim($folder));
 $folder = ($folder === '' || strcasecmp($folder, 'root') === 0) ? 'root' : trim($folder, '/');
 
-$caps = FolderController::capabilities($folder, $username);
+$caps = \FileRise\Http\Controllers\FolderController::capabilities($folder, $username);
 $enc  = (is_array($caps) && isset($caps['encryption']) && is_array($caps['encryption'])) ? $caps['encryption'] : [];
 
 echo json_encode([

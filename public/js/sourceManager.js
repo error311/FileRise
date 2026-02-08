@@ -9,7 +9,7 @@ async function loadSiteConfig() {
   }
 
   try {
-    const res = await fetch(withBase('/api/siteConfig.php'), { credentials: 'include' });
+    const res = await fetch(withBase('/api/public/siteConfig.php'), { credentials: 'include' });
     const cfg = await res.json().catch(() => ({}));
     window.__FR_SITE_CFG__ = cfg || {};
     return window.__FR_SITE_CFG__;
@@ -25,18 +25,37 @@ function getSourcesConfig(cfg) {
   return {};
 }
 
+function hasSourceId(candidate, sources) {
+  const key = String(candidate || '').trim();
+  if (!key) return false;
+  return sources.some(src => {
+    if (!src || typeof src !== 'object') return false;
+    const id = String(src.id || src.key || src.name || '').trim();
+    return id === key;
+  });
+}
+
 function pickActiveId(sourcesCfg, sources) {
+  try {
+    const stored = localStorage.getItem('fr_active_source') || '';
+    if (stored && hasSourceId(stored, sources)) return stored;
+  } catch (e) { /* ignore */ }
+
+  try {
+    const pane = localStorage.getItem('activePane') || '';
+    const paneKey = (pane === 'secondary') ? 'frPaneSourceSecondary' : 'frPaneSourcePrimary';
+    const paneSource = localStorage.getItem(paneKey) || '';
+    if (paneSource && hasSourceId(paneSource, sources)) return paneSource;
+  } catch (e) { /* ignore */ }
+
   const active =
     sourcesCfg.activeId ||
     sourcesCfg.active ||
     sourcesCfg.selected ||
     sourcesCfg.current ||
     '';
-  if (active) return active;
-  try {
-    const stored = localStorage.getItem('fr_active_source') || '';
-    if (stored) return stored;
-  } catch (e) { /* ignore */ }
+  if (active && hasSourceId(active, sources)) return active;
+
   return sources[0]?.id || sources[0]?.key || sources[0]?.name || '';
 }
 
@@ -260,7 +279,19 @@ export async function initSourceSelector(opts = {}) {
   select.value = nextId;
   select.setAttribute('data-prev', nextId);
 
-  if (apiData && !hasActive && nextId) {
+  if (nextId) {
+    try { localStorage.setItem('fr_active_source', nextId); } catch (e) { /* ignore */ }
+  }
+
+  const apiActive =
+    sourcesCfg.activeId ||
+    sourcesCfg.active ||
+    sourcesCfg.selected ||
+    sourcesCfg.current ||
+    '';
+  const needsSessionSync = apiData && nextId && apiActive && apiActive !== nextId;
+
+  if ((apiData && !hasActive && nextId) || needsSessionSync) {
     try {
       await applyActiveSourceId(nextId, { skipEvent: true, force: true, origin });
     } catch (e) { /* ignore */ }

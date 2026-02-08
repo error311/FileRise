@@ -20,7 +20,6 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/models/DiskUsageModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -46,8 +45,8 @@ $topFolders = isset($_GET['topFolders']) ? max(1, (int)$_GET['topFolders']) : 5;
 $sourceId   = isset($_GET['sourceId']) ? trim((string)$_GET['sourceId']) : '';
 
 try {
-    $summary = DiskUsageModel::getSummary($topFolders, $topFiles, $sourceId);
-    $logInfo = DiskUsageModel::readScanLogTail(4000, $sourceId);
+    $summary = \FileRise\Domain\DiskUsageModel::getSummary($topFolders, $topFiles, $sourceId);
+    $logInfo = \FileRise\Domain\DiskUsageModel::readScanLogTail(4000, $sourceId);
     if ($logInfo !== null) {
         $summary['scanLog'] = $logInfo;
     }

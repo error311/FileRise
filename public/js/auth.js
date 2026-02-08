@@ -33,7 +33,7 @@ const currentOIDCConfig = {
 window.currentOIDCConfig = currentOIDCConfig;
 
 // Shared permissions cache across modules (populated once per tab)
-const PERMISSIONS_URL = '/api/getUserPermissions.php';
+const PERMISSIONS_URL = '/api/profile/getUserPermissions.php';
 const DEFAULT_HEADER_TITLE = 'FileRise';
 const PRO_DEFAULT_HEADER_TITLE = 'FileRise Pro';
 
@@ -265,7 +265,7 @@ function updateLoginOptionsUIFromStorage() {
 
 export function loadAdminConfigFunc() {
   if (window.__FR_SITE_CFG_PROMISE) return window.__FR_SITE_CFG_PROMISE;
-  window.__FR_SITE_CFG_PROMISE = fetch("/api/siteConfig.php", { credentials: "include" })
+  window.__FR_SITE_CFG_PROMISE = fetch("/api/public/siteConfig.php", { credentials: "include" })
     .then(async (response) => {
       // If a proxy or some edge returns 204/empty, handle gracefully
       let config = {};
@@ -830,8 +830,8 @@ function closeRemoveUserModal() {
 }
 
 function loadUserList() {
-  // Updated path: from "getUsers.php" to "api/getUsers.php"
-  fetch("/api/getUsers.php", { credentials: "include" })
+  // Updated path: from "/api/getUsers.php" to "/api/admin/getUsers.php"
+  fetch("/api/admin/getUsers.php", { credentials: "include" })
     .then(response => response.json())
     .then(data => {
       // Assuming the endpoint returns an array of users.
@@ -894,7 +894,7 @@ function initAuth() {
       return;
     }
 
-    let url = "/api/addUser.php";
+    let url = "/api/admin/addUser.php";
     if (window.setupMode) url += "?setup=1";
 
     fetchWithCsrf(url, {
@@ -936,7 +936,7 @@ function initAuth() {
     }
     const confirmed = await showCustomConfirmModal("Are you sure you want to delete user " + usernameToRemove + "?");
     if (!confirmed) return;
-    fetchWithCsrf("/api/removeUser.php", {
+    fetchWithCsrf("/api/admin/removeUser.php", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -984,7 +984,7 @@ function initAuth() {
       return;
     }
     const data = { oldPassword, newPassword, confirmPassword };
-    fetchWithCsrf("/api/changePassword.php", {
+    fetchWithCsrf("/api/profile/changePassword.php", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

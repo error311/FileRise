@@ -26,7 +26,6 @@
  */
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/FileController.php';
 
 header('Content-Type: application/json');
 if (empty($_SESSION['authenticated'])) {
@@ -35,5 +34,5 @@ if (empty($_SESSION['authenticated'])) {
   exit;
 }
 
-$fc = new FileController();
+$fc = new \FileRise\Http\Controllers\FileController();
 $fc->createFile();

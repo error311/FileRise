@@ -26,7 +26,7 @@ export {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.6.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.7.0';
 const PRO_API_LEVELS = {
   diskUsage: 2,
   search: 3,
@@ -268,7 +268,13 @@ function normalizeLogoPath(raw) {
   return pic;
 }
 
-function getAdminTitle(isPro, proVersion, updatesExpired = false) {
+function getAdminTitle(
+  isPro,
+  proVersion,
+  updatesExpired = false,
+  proBundleLegacy = false,
+  proBundleLegacyFiles = []
+) {
   const corePill = `
     <span class="badge badge-pill badge-secondary admin-core-badge">
       Core ${version}
@@ -308,6 +314,28 @@ function getAdminTitle(isPro, proVersion, updatesExpired = false) {
     </span>
   `;
 
+  const legacyFiles = Array.isArray(proBundleLegacyFiles) ? proBundleLegacyFiles : [];
+  const legacyList = legacyFiles.length ? legacyFiles.join(', ') : '';
+  const legacyTitle = legacyList
+    ? `Legacy Pro bundle detected: ${legacyList}`
+    : 'Legacy Pro bundle detected';
+  const legacyLink = updatesExpired
+    ? 'https://filerise.net/pro/renew.php'
+    : 'https://filerise.net/pro/update.php';
+  const legacyHint = (isPro && proBundleLegacy)
+    ? `
+      <a
+        href="${legacyLink}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="badge badge-pill badge-danger admin-pro-badge"
+        style="cursor:pointer; text-decoration:none; margin-left:4px;"
+        title="${escapeHTML(legacyTitle)}">
+        Legacy Pro bundle
+      </a>
+    `
+    : '';
+
   const updateHint = hasUpdate
     ? (updatesExpired
         ? `
@@ -339,6 +367,7 @@ function getAdminTitle(isPro, proVersion, updatesExpired = false) {
     ${corePill}
     ${proPill}
     ${updateHint}
+    ${legacyHint}
   `;
 }
 
@@ -3443,7 +3472,7 @@ async function renderUserHubFlagsForSelected(modal) {
     const permissions = [getFlagsFromRow()];
     try {
       const res = await sendRequest(
-        "/api/updateUserPermissions.php",
+        "/api/admin/updateUserPermissions.php",
         "PUT",
         { permissions },
         { "X-CSRF-Token": window.csrfToken }
@@ -3781,7 +3810,7 @@ export function openAdminUserHubModal() {
         }
 
         try {
-          const resp = await fetch("/api/addUser.php", {
+          const resp = await fetch("/api/admin/addUser.php", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -3869,7 +3898,7 @@ export function openAdminUserHubModal() {
 
         try {
           const res = await sendRequest(
-            "/api/removeUser.php",
+            "/api/admin/removeUser.php",
             "POST",
             { username },
             { "X-CSRF-Token": window.csrfToken || "" }
@@ -4168,6 +4197,10 @@ export function openAdminPanel() {
       const proPlan = proInfo.plan || '';            // e.g. "early_supporter_1x", "personal_yearly"
       const proUpdatesUntil = proInfo.updatesUntil || proInfo.expiresAt || '';  // ISO timestamp string or ""
       const proInstanceId = proInfo.instanceId || '';
+      const proBundleLegacy = !!proInfo.bundleLegacy;
+      const proBundleLegacyFiles = Array.isArray(proInfo.bundleLegacyFiles)
+        ? proInfo.bundleLegacyFiles
+        : [];
       const proPrimaryAdmin = Object.prototype.hasOwnProperty.call(proInfo, 'primaryAdmin')
         ? !!proInfo.primaryAdmin
         : true;
@@ -4326,7 +4359,7 @@ export function openAdminPanel() {
           <div class="modal-content" style="${inner}">
             <div class="editor-close-btn" id="closeAdminPanel">&times;</div>
             <div class="admin-panel-header">
-              <h3>${getAdminTitle(isPro, proVersion, updatesExpired)}</h3>
+              <h3>${getAdminTitle(isPro, proVersion, updatesExpired, proBundleLegacy, proBundleLegacyFiles)}</h3>
               <div class="admin-panel-actions">
                 <button
                   type="button"
@@ -7162,7 +7195,7 @@ export async function closeAdminPanel() {
 }
 
 async function fetchAllUserFlags() {
-  const r = await fetch("/api/getUserPermissions.php", { credentials: "include" });
+  const r = await fetch("/api/profile/getUserPermissions.php", { credentials: "include" });
   const data = await r.json();
   if (data && typeof data === "object") {
     const map = data.allPermissions || data.permissions || data;
@@ -7302,7 +7335,7 @@ async function saveUserFlags() {
   });
 
   try {
-    const res = await sendRequest("/api/updateUserPermissions.php", "PUT",
+    const res = await sendRequest("/api/admin/updateUserPermissions.php", "PUT",
       { permissions },
       { "X-CSRF-Token": window.csrfToken }
     );
@@ -7327,7 +7360,7 @@ async function loadUserPermissionsList() {
   try {
     // Load users + groups together (folders separately)
     const [usersRes, groupsMap] = await Promise.all([
-      fetch("/api/getUsers.php", { credentials: "include" }).then(safeJson),
+      fetch("/api/admin/getUsers.php", { credentials: "include" }).then(safeJson),
       fetchAllGroups().catch(() => ({}))
     ]);
 

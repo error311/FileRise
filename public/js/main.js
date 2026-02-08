@@ -528,14 +528,14 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       urlPath.startsWith('/api/') &&
       [
         '/api/auth/checkAuth.php',
-        '/api/getUserPermissions.php',
+        '/api/profile/getUserPermissions.php',
         '/api/profile/getCurrentUser.php',
         '/api/folder/getFolderColors.php',
         '/api/folder/getFolderList.php',
         '/api/folder/listChildren.php',
         '/api/file/getFileList.php',
         '/api/file/getTrashItems.php',
-        '/api/siteConfig.php',
+        '/api/public/siteConfig.php',
         '/api/onlyoffice/status.php'
       ].some(p => urlPath.startsWith(p));
 
@@ -1247,7 +1247,7 @@ function bindDarkMode() {
     if (window.__FR_SITE_CFG_PROMISE) return window.__FR_SITE_CFG_PROMISE;
     window.__FR_SITE_CFG_PROMISE = (async () => {
     try {
-      const r = await fetch('/api/siteConfig.php', { credentials: 'include' });
+      const r = await fetch('/api/public/siteConfig.php', { credentials: 'include' });
       const j = await r.json().catch(() => ({}));
       window.__FR_SITE_CFG__ = j || {};
       window.__FR_DEMO__ = !!(window.__FR_SITE_CFG__.demoMode);
@@ -1459,7 +1459,7 @@ function bindDarkMode() {
     const headers = { 'Content-Type': 'application/json' };
     if (csrf) headers['X-CSRF-Token'] = csrf;
 
-    const res = await fetch('/api/addUser.php?setup=1', {
+    const res = await fetch('/api/admin/addUser.php?setup=1', {
       method: 'POST',
       credentials: 'include',
       headers,

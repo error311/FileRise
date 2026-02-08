@@ -19,17 +19,16 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
 
 try {
     if (session_status() !== PHP_SESSION_ACTIVE) {
         session_start();
     }
 
-    AdminController::requireAuth();
-    AdminController::requireAdmin();
+    \FileRise\Http\Controllers\AdminController::requireAuth();
+    \FileRise\Http\Controllers\AdminController::requireAdmin();
 
-    $ctrl    = new AdminController();
+    $ctrl    = new \FileRise\Http\Controllers\AdminController();
     $portals = $ctrl->getProPortals();
 
     echo json_encode([

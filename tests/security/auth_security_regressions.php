@@ -112,7 +112,6 @@ writeEncryptedJson($tokensFile, $tokens, $key);
 
 $_COOKIE['remember_me_token'] = $token;
 require_once $baseDir . '/config/config.php';
-require_once PROJECT_ROOT . '/src/models/AuthModel.php';
 
 $errors = [];
 
@@ -181,7 +180,7 @@ $expired = [
 ];
 writeEncryptedJson($tokensFile, $expired, $key);
 
-$validated = AuthModel::validateRememberToken($expiredToken);
+$validated = \FileRise\Domain\AuthModel::validateRememberToken($expiredToken);
 failIf($validated !== null, 'validateRememberToken: expired token should be rejected', $errors);
 
 if ($errors) {

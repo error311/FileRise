@@ -24,11 +24,21 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/models/DiskUsageModel.php';
 
 // Basic auth / admin check
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
+}
+
+// Enforce expected method (prevents accidental GET triggering via navigation / CSRF vectors).
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST');
+    echo json_encode([
+        'ok'    => false,
+        'error' => 'Method not allowed',
+    ]);
+    return;
 }
 
 $username = (string)($_SESSION['username'] ?? '');
@@ -39,6 +49,17 @@ if ($username === '' || !$isAdmin) {
     echo json_encode([
         'ok'    => false,
         'error' => 'Forbidden',
+    ]);
+    return;
+}
+
+// Require CSRF for this state-changing admin operation.
+$csrf = trim((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+if (empty($_SESSION['csrf_token']) || $csrf === '' || !hash_equals((string)$_SESSION['csrf_token'], $csrf)) {
+    http_response_code(403);
+    echo json_encode([
+        'ok'    => false,
+        'error' => 'Invalid CSRF token',
     ]);
     return;
 }
@@ -71,7 +92,7 @@ try {
     }
 
     if ($sourceId !== '') {
-        $ctx = DiskUsageModel::resolveSourceContext($sourceId);
+        $ctx = \FileRise\Domain\DiskUsageModel::resolveSourceContext($sourceId);
         if (empty($ctx['ok'])) {
             http_response_code(400);
             echo json_encode([
@@ -113,7 +134,7 @@ try {
         throw new RuntimeException('No working php CLI found.');
     }
 
-    $logFile = DiskUsageModel::scanLogPath($sourceId);
+    $logFile = \FileRise\Domain\DiskUsageModel::scanLogPath($sourceId);
 
     // nohup php disk_usage_scan.php >> log 2>&1 & echo $!
     $cmdStr =

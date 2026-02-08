@@ -1,5 +1,53 @@
 # Changelog
 
+## Changes 02/08/2026 (v3.3.2)
+
+`release(v3.3.2): PSR-4 backend migration + legacy shims`
+`chore(psr4): PSR-4 backend migration + legacy shims (WIP, no release)`
+
+**Commit message**  
+
+```text
+release(v3.3.2): PSR-4 backend migration + legacy shims
+
+- backend: migrate core PHP to Composer PSR-4 (FileRise\\) under src/FileRise/
+- entrypoints: update API/WebDAV/CLI/tests to use namespaced controllers/models (no shim includes)
+- compat: restore legacy src/controllers + src/models + src/lib shims (optional FR_SHIM_WARN logging)
+- api: canonical endpoints now live under /api/admin/* and /api/profile/*; legacy /api/*.php shims kept
+- openapi: generate spec from the PSR-4 OpenAPI directory
+- php: fix PHP 8.2+ nullable type deprecation in AuthModel::getClientIp()
+```
+
+**Highlights**  
+
+- Backend is now PSR-4 namespaced and Composer-autoloaded (`FileRise\\...`) with legacy shims kept for compatibility.
+- API endpoints are organized by scope (admin/profile/public) while preserving legacy URLs.
+
+**Changed**  
+
+- **PSR-4 backend layout**
+  - Introduced `FileRise\\` namespace with code moved under `src/FileRise/` (Domain, Controllers, Storage, Support, WebDAV).
+  - `config/config.php` now loads `vendor/autoload.php` when present (logs a warning if missing).
+- **Entrypoints updated**
+  - Public API endpoints, WebDAV (`public/webdav.php`), CLI scripts, and tests now instantiate namespaced controllers/models directly.
+- **OpenAPI generation**
+  - OpenAPI generator updated to scan the PSR-4 OpenAPI directory.
+
+**Compatibility**  
+
+- **Legacy backend shims remain**
+  - `src/controllers/*`, `src/models/*`, `src/lib/*`, `src/webdav/*` forward to PSR-4 classes via `class_alias`.
+  - Optional dev-only shim usage tracking via `FR_SHIM_WARN=1` (logs which shims were used per request).
+- **Legacy API endpoint shims**
+  - Old `/api/*.php` routes forward to canonical endpoints under `/api/admin/*` and `/api/profile/*`.
+
+**Fixed**  
+
+- **PHP deprecation warning**
+  - `AuthModel::getClientIp()` now uses an explicit nullable type for the `$server` arg.
+
+---
+
 ## Changes 02/01/2026 (v3.3.1)
 
 `release(v3.3.1): fix non-Pro sourceId validation for move+copy & update SECURITY policy wording`

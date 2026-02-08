@@ -76,7 +76,7 @@ export function openTOTPLoginModal() {
         showToast(t("please_enter_recovery_code"));
         return;
       }
-      fetch("/api/totp_recover.php", {
+      fetch("/api/profile/totp_recover.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -112,7 +112,7 @@ export function openTOTPLoginModal() {
       }
       window.csrfToken = (await tokenRes.json()).csrf_token;
 
-      const res = await fetch("/api/totp_verify.php", {
+      const res = await fetch("/api/profile/totp_verify.php", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -211,7 +211,7 @@ export function openTOTPModal() {
       const tokenRes = await fetch("/api/auth/token.php", { credentials: "include" });
       if (!tokenRes.ok) { showToast(t("error_verifying_totp_code")); return; }
       window.csrfToken = (await tokenRes.json()).csrf_token;
-      const verifyRes = await fetch("/api/totp_verify.php", {
+      const verifyRes = await fetch("/api/profile/totp_verify.php", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
         body: JSON.stringify({ totp_code: code })
@@ -220,7 +220,7 @@ export function openTOTPModal() {
       const result = await verifyRes.json();
       if (result.status !== "ok") { showToast(result.message || t("totp_verification_failed")); return; }
       showToast(t("totp_enabled_successfully"));
-      const saveRes = await fetch("/api/totp_saveCode.php", {
+      const saveRes = await fetch("/api/profile/totp_saveCode.php", {
         method: "POST", credentials: "include", headers: { "X-CSRF-Token": window.csrfToken }
       });
       if (!saveRes.ok) { showToast(t("error_generating_recovery_code")); closeTOTPModal(false); return; }
@@ -257,7 +257,7 @@ export function openTOTPModal() {
 }
 
 function loadTOTPQRCode() {
-  fetch("/api/totp_setup.php", {
+  fetch("/api/profile/totp_setup.php", {
     method: "GET",
     credentials: "include",
     headers: { "X-CSRF-Token": window.csrfToken }
@@ -285,7 +285,7 @@ export function closeTOTPModal(disable = true) {
       totpCheckbox.checked = false;
       localStorage.setItem("userTOTPEnabled", "false");
     }
-    fetch("/api/totp_disable.php", {
+    fetch("/api/profile/totp_disable.php", {
       method: "POST",
       credentials: "include",
       headers: {

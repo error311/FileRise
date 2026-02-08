@@ -7,7 +7,6 @@ declare(strict_types=1);
 // Build or refresh the disk usage snapshot used by the Admin "Storage / Disk Usage" view.
 
 require __DIR__ . '/../../config/config.php';
-require __DIR__ . '/../../src/models/DiskUsageModel.php';
 
 $start = microtime(true);
 $sourceId = $argv[1] ?? '';
@@ -18,7 +17,7 @@ if ($sourceId !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
 }
 
 try {
-    $snapshot = DiskUsageModel::buildSnapshot($sourceId);
+    $snapshot = \FileRise\Domain\DiskUsageModel::buildSnapshot($sourceId);
     $elapsed  = microtime(true) - $start;
 
     $bytes = (int)($snapshot['root_bytes'] ?? 0);
@@ -36,7 +35,7 @@ try {
     $label = $sourceId !== '' ? (" (source: " . $sourceId . ")") : '';
     $msg = sprintf(
         "Disk usage snapshot written to %s%s\nScanned %d files, total %s in %.2f seconds.\n",
-        DiskUsageModel::snapshotPath($sourceId),
+        \FileRise\Domain\DiskUsageModel::snapshotPath($sourceId),
         $label,
         $files,
         $human($bytes),

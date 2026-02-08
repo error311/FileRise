@@ -24,7 +24,6 @@
  */
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/models/UserModel.php';
 
 header('Content-Type: application/json');
 
@@ -35,5 +34,5 @@ if (empty($_SESSION['authenticated'])) {
 }
 
 $user = $_SESSION['username'];
-$data = UserModel::getUser($user);
+$data = \FileRise\Domain\UserModel::getUser($user);
 echo json_encode($data);

@@ -20,7 +20,6 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/FolderController.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 if (empty($_SESSION['authenticated'])) { http_response_code(401); echo json_encode(['error'=>'Unauthorized']); exit; }
@@ -48,5 +47,5 @@ if ($probeRaw !== null) {
   if ($pv === '0' || $pv === 'false' || $pv === 'no') $probe = false;
 }
 
-$res = FolderController::listChildren($folder, $username, $perms, $cursor, $limit, $probe);
+$res = \FileRise\Http\Controllers\FolderController::listChildren($folder, $username, $perms, $cursor, $limit, $probe);
 echo json_encode($res, JSON_UNESCAPED_SLASHES);

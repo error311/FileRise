@@ -41,6 +41,30 @@ jobs:
             echo "No PHP files found."
           fi
 
+  phpcs:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: Install Composer dependencies
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-interaction --prefer-dist --no-progress
+          fi
+      - name: PHPCS (PSR-12 scoped)
+        run: |
+          if [ -f vendor/bin/phpcs ] && [ -f phpcs.xml ]; then
+            ./vendor/bin/phpcs --standard=phpcs.xml src/FileRise
+          else
+            echo "PHPCS not configured."
+          fi
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:

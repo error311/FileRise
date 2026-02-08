@@ -1,0 +1,49 @@
+<?php
+// public/api/admin/removeUser.php
+
+    /**
+     * @OA\Delete(
+     *     path="/api/admin/removeUser.php",
+     *     summary="Remove a user",
+     *     description="Removes the specified user from the system. Cannot remove the currently logged-in user. Accepts DELETE or POST.",
+     *     operationId="removeUser",
+     *     tags={"Users"},
+     *     security={{"cookieAuth": {}}},
+     *     @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"username"},
+     *             @OA\Property(property="username", type="string", example="johndoe")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="User removed successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="string", example="User removed successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Bad Request"
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthorized"
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Invalid CSRF token"
+     *     ),
+     *     @OA\Response(
+     *         response=405,
+     *         description="Method not allowed"
+     *     )
+     * )
+     */
+
+require_once __DIR__ . '/../../../config/config.php';
+
+$userController = new \FileRise\Http\Controllers\UserController();
+$userController->removeUser();

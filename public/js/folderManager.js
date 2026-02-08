@@ -676,7 +676,7 @@ async function checkUserFolderPermission() {
     }
 
     window.__FR_PERMISSIONS_PROMISE = (async () => {
-      const res = await fetchWithCsrf("/api/getUserPermissions.php", {
+      const res = await fetchWithCsrf("/api/profile/getUserPermissions.php", {
         method: "GET",
         credentials: "include"
       });

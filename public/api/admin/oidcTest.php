@@ -22,7 +22,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
 
 try {
     $raw = file_get_contents('php://input') ?: '';
@@ -31,7 +30,7 @@ try {
         $body = [];
     }
 
-    $controller = new AdminController();
+    $controller = new \FileRise\Http\Controllers\AdminController();
     $result = $controller->testOidcConfig($body);
 
     echo json_encode(

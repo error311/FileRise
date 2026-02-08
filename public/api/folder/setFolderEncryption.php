@@ -31,8 +31,6 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/FolderController.php';
-require_once PROJECT_ROOT . '/src/models/FolderCrypto.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
@@ -161,7 +159,7 @@ $hasEncryptedFile = function (string $rootDir): bool {
 };
 
 // Permission gate via capabilities (keeps logic centralized)
-$caps = FolderController::capabilities($folder, $username);
+$caps = \FileRise\Http\Controllers\FolderController::capabilities($folder, $username);
 $encCaps = (is_array($caps) && isset($caps['encryption']) && is_array($caps['encryption'])) ? $caps['encryption'] : [];
 $canEncrypt = !empty($encCaps['canEncrypt']);
 $canDecrypt = !empty($encCaps['canDecrypt']);
@@ -193,7 +191,7 @@ if ($encrypted) {
 
 @session_write_close();
 
-$res = FolderCrypto::setEncrypted($folder, $encrypted, $username);
+$res = \FileRise\Domain\FolderCrypto::setEncrypted($folder, $encrypted, $username);
 if (empty($res['ok'])) {
     http_response_code(500);
     echo json_encode(['error' => $res['error'] ?? 'Failed to update encryption state.']);

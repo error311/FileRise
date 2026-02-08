@@ -11,6 +11,9 @@ Update your PHP config (php.ini or pool config) and restart PHP:
 - `max_execution_time`
 - `max_input_time`
 - `memory_limit`
+- `opcache.enable` (recommended for production)
+
+If you want a baseline, see `custom-php.ini` in the repo (Docker uses it by default).
 
 ## Nginx
 

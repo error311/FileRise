@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 // Define constants
 define('PROJECT_ROOT', dirname(__DIR__));
+$autoload = PROJECT_ROOT . '/vendor/autoload.php';
+if (is_file($autoload)) {
+    require_once $autoload;
+} else {
+    $shimWarn = getenv('FR_SHIM_WARN');
+    if ($shimWarn !== false && $shimWarn !== '' && $shimWarn !== '0') {
+        error_log('FileRise: missing vendor/autoload.php; run composer install or deploy vendor/.');
+    }
+}
 $testUploadDir = getenv('FR_TEST_UPLOAD_DIR');
 $testUsersDir  = getenv('FR_TEST_USERS_DIR');
 $testMetaDir   = getenv('FR_TEST_META_DIR');
@@ -298,8 +307,7 @@ if (empty($_SESSION['csrf_token'])) {
 
 // Auto-login via persistent token
 if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) {
-    require_once PROJECT_ROOT . '/src/models/AuthModel.php';
-    $payload = AuthModel::consumeRememberToken($_COOKIE['remember_me_token']);
+    $payload = \FileRise\Domain\AuthModel::consumeRememberToken($_COOKIE['remember_me_token']);
     if ($payload) {
         // NEW: mitigate session fixation
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -365,8 +373,7 @@ if (AUTH_BYPASS) {
         $_SESSION['username']      = $username;
 
         // ◾ lookup actual role instead of forcing admin
-        require_once PROJECT_ROOT . '/src/models/AuthModel.php';
-        $role = AuthModel::getUserRole($username);
+        $role = \FileRise\Domain\AuthModel::getUserRole($username);
         $_SESSION['isAdmin'] = ($role === '1');
 
         // carry over any folder/read/upload perms

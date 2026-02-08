@@ -29,8 +29,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
-require_once PROJECT_ROOT . '/src/models/FolderModel.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 // Pro-only gate
@@ -51,9 +49,9 @@ try {
         session_start();
     }
 
-    AdminController::requireAuth();
-    AdminController::requireAdmin();
-    AdminController::requireCsrf();
+    \FileRise\Http\Controllers\AdminController::requireAuth();
+    \FileRise\Http\Controllers\AdminController::requireAdmin();
+    \FileRise\Http\Controllers\AdminController::requireCsrf();
 
     $raw  = file_get_contents('php://input');
     $body = json_decode($raw, true);
@@ -97,7 +95,7 @@ try {
     }
 
     try {
-        $res = FolderModel::deleteFolderRecursiveAdmin($folder);
+        $res = \FileRise\Domain\FolderModel::deleteFolderRecursiveAdmin($folder);
     } finally {
         if ($prevSourceId !== null) {
             SourceContext::setActiveId($prevSourceId, false, true);

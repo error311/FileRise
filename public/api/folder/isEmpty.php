@@ -22,7 +22,6 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/FolderController.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 if (empty($_SESSION['authenticated'])) { http_response_code(401); echo json_encode(['error'=>'Unauthorized']); exit; }
@@ -72,4 +71,4 @@ if (isset($_GET['depth']) && $_GET['depth'] !== '') {
   }
 }
 
-echo json_encode(FolderController::stats($folder, $username, $perms, $deep, $depth), JSON_UNESCAPED_SLASHES);
+echo json_encode(\FileRise\Http\Controllers\FolderController::stats($folder, $username, $perms, $deep, $depth), JSON_UNESCAPED_SLASHES);

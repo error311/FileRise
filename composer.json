@@ -1,12 +1,21 @@
 {
-    "name": "error311/filerise",
-    "description": "FileRise – A lightweight self-hosted file manager",
-    "type": "project",
-    "require": {
-      "jumbojett/openid-connect-php": "^1.0.0",
-      "phpseclib/phpseclib": "~3.0.7",
-      "robthree/twofactorauth": "^3.0",
-      "endroid/qr-code": "^5.0",
-      "sabre/dav": "^4.4"
-    }
+  "name": "error311/filerise",
+  "description": "FileRise – A lightweight self-hosted file manager",
+  "type": "project",
+  "require": {
+    "jumbojett/openid-connect-php": "^1.0.0",
+    "phpseclib/phpseclib": "~3.0.7",
+    "robthree/twofactorauth": "^3.0",
+    "endroid/qr-code": "^5.0",
+    "sabre/dav": "^4.4"
+  },
+  "require-dev": {
+      "zircote/swagger-php": "^4.11",
+      "doctrine/annotations": "^2.0"
+  },
+  "autoload": {
+      "psr-4": {
+          "FileRise\\": "src/FileRise/"
+      }
   }
+}

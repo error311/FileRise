@@ -170,7 +170,7 @@ export async function openUserPanel() {
     totpCb.className = 'form-check-input fr-toggle-input';
     totpCb.checked = totp_enabled;
     totpCb.addEventListener('change', async function () {
-      const resp = await fetch(withBase('/api/updateUserPanel.php'), {
+      const resp = await fetch(withBase('/api/profile/updateUserPanel.php'), {
         method: 'POST', credentials: 'include',
         headers: {
           'Content-Type': 'application/json',

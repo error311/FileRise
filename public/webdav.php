@@ -16,13 +16,11 @@ if (
 // ─── 1) Bootstrap & load models ─────────────────────────────────────────────
 require_once __DIR__ . '/../config/config.php';        // UPLOAD_DIR, META_DIR, loadUserPermissions(), etc.
 require_once __DIR__ . '/../vendor/autoload.php';      // Composer & SabreDAV
-require_once __DIR__ . '/../src/models/AuthModel.php'; // AuthModel::authenticate(), getUserRole()
-require_once __DIR__ . '/../src/models/AdminModel.php';// AdminModel::getConfig()
 require_once __DIR__ . '/../src/lib/ACL.php';          // ACL checks
 require_once __DIR__ . '/../src/webdav/CurrentUser.php';
 
 // ─── 1.1) Global WebDAV feature toggle ──────────────────────────────────────
-$adminConfig  = AdminModel::getConfig();
+$adminConfig  = \FileRise\Domain\AdminModel::getConfig();
 $enableWebDAV = isset($adminConfig['enableWebDAV']) && $adminConfig['enableWebDAV'];
 if (!$enableWebDAV) {
     header('HTTP/1.1 403 Forbidden');
@@ -43,7 +41,7 @@ use FileRise\WebDAV\CurrentUser;
 
 // ─── 3) HTTP-Basic backend (delegates to your AuthModel) ────────────────────
 $authBackend = new BasicCallBack(function(string $user, string $pass) {
-    return \AuthModel::authenticate($user, $pass) !== false;
+    return \FileRise\Domain\AuthModel::authenticate($user, $pass) !== false;
 });
 $authPlugin = new AuthPlugin($authBackend, 'FileRise');
 
@@ -57,7 +55,7 @@ if ($user === '') {
 }
 
 $perms   = is_callable('loadUserPermissions') ? (loadUserPermissions($user) ?: []) : [];
-$isAdmin = (\AuthModel::getUserRole($user) === '1');
+$isAdmin = (\FileRise\Domain\AuthModel::getUserRole($user) === '1');
 
 // set for metadata attribution in WebDAV writes
 CurrentUser::set($user);

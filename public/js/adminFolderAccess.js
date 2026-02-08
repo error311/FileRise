@@ -774,7 +774,7 @@ function collectGrantsFrom(container, fallback = {}) {
 }
 
 export async function fetchAllUsers() {
-  const r = await fetch("/api/getUsers.php", { credentials: "include" });
+  const r = await fetch("/api/admin/getUsers.php", { credentials: "include" });
   return await r.json();
 }
 
@@ -1245,7 +1245,7 @@ async function loadUserPermissionsList() {
 
   try {
     const [usersRes, groupsMap] = await Promise.all([
-      fetch("/api/getUsers.php", { credentials: "include" }).then(safeJson),
+      fetch("/api/admin/getUsers.php", { credentials: "include" }).then(safeJson),
       fetchAllGroups().catch(() => ({}))
     ]);
 

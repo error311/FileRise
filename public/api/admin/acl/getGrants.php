@@ -26,7 +26,6 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AclAdminController.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 header('Content-Type: application/json');
@@ -55,7 +54,7 @@ if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesE
 
 $user = trim((string)($_GET['user'] ?? ''));
 try {
-  $ctrl   = new AclAdminController();
+  $ctrl   = new \FileRise\Http\Controllers\AclAdminController();
   $grants = $ctrl->getUserGrants($user);
   echo json_encode(['grants' => $grants], JSON_UNESCAPED_SLASHES);
 } catch (InvalidArgumentException $e) {

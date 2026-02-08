@@ -353,7 +353,7 @@ let portalSiteConfigPromise = null;
 async function fetchPortalSiteConfigOnce() {
   if (portalSiteConfig) return portalSiteConfig;
   if (portalSiteConfigPromise) return portalSiteConfigPromise;
-  portalSiteConfigPromise = fetch(withBase('/api/siteConfig.php'), { credentials: 'include' })
+  portalSiteConfigPromise = fetch(withBase('/api/public/siteConfig.php'), { credentials: 'include' })
     .then((res) => res.json().catch(() => ({})))
     .then((cfg) => {
       if (cfg && typeof cfg === 'object') {

@@ -2,7 +2,7 @@
     "openapi": "3.0.0",
     "info": {
         "title": "FileRise API",
-        "version": "3.3.0"
+        "version": "3.4.0"
     },
     "servers": [
         {
@@ -11,96 +11,6 @@
         }
     ],
     "paths": {
-        "/api/addUser.php": {
-            "post": {
-                "tags": [
-                    "Users"
-                ],
-                "summary": "Add a new user",
-                "description": "Adds a new user to the system. In setup mode (setup=1 with no users), auth/CSRF is not required and the new user is automatically made admin.",
-                "operationId": "addUser",
-                "parameters": [
-                    {
-                        "name": "setup",
-                        "in": "query",
-                        "description": "Use setup=1 to enable first-run bootstrap",
-                        "required": false,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "description": "Required outside setup mode",
-                        "required": false,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "username",
-                                    "password"
-                                ],
-                                "properties": {
-                                    "username": {
-                                        "type": "string",
-                                        "example": "johndoe"
-                                    },
-                                    "password": {
-                                        "type": "string",
-                                        "example": "securepassword"
-                                    },
-                                    "isAdmin": {
-                                        "type": "boolean",
-                                        "example": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "User added successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "string",
-                                            "example": "User added successfully"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
         "/api/admin/acl/getGrants.php": {
             "get": {
                 "tags": [
@@ -258,6 +168,96 @@
                     },
                     "500": {
                         "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/addUser.php": {
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Add a new user",
+                "description": "Adds a new user to the system. In setup mode (setup=1 with no users), auth/CSRF is not required and the new user is automatically made admin.",
+                "operationId": "addUser",
+                "parameters": [
+                    {
+                        "name": "setup",
+                        "in": "query",
+                        "description": "Use setup=1 to enable first-run bootstrap",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "description": "Required outside setup mode",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "username",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "username": {
+                                        "type": "string",
+                                        "example": "johndoe"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "example": "securepassword"
+                                    },
+                                    "isAdmin": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User added successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User added successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
                     }
                 },
                 "security": [
@@ -632,6 +632,49 @@
                 }
             }
         },
+        "/api/admin/getUsers.php": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Retrieve a list of users",
+                "description": "Returns a JSON array of users. Only available to authenticated admin users.",
+                "operationId": "getUsers",
+                "responses": {
+                    "200": {
+                        "description": "Successful response with an array of users",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "properties": {
+                                            "username": {
+                                                "type": "string",
+                                                "example": "johndoe"
+                                            },
+                                            "role": {
+                                                "type": "string",
+                                                "example": "admin"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized: the user is not authenticated or is not an admin"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
         "/api/admin/installProBundle.php": {
             "post": {
                 "tags": [
@@ -813,6 +856,169 @@
                 "security": [
                     {
                         "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/removeUser.php": {
+            "delete": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Remove a user",
+                "description": "Removes the specified user from the system. Cannot remove the currently logged-in user. Accepts DELETE or POST.",
+                "operationId": "removeUser",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "username"
+                                ],
+                                "properties": {
+                                    "username": {
+                                        "type": "string",
+                                        "example": "johndoe"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User removed successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User removed successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/resumableCleanup.php": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Run resumable upload cleanup sweep",
+                "description": "Deletes expired resumable upload temp folders using the configured TTL.",
+                "operationId": "adminResumableCleanup",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "all": {
+                                        "description": "Sweep all sources when supported",
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "purgeAll": {
+                                        "description": "Remove all resumable temp folders, ignoring TTL",
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "sourceId": {
+                                        "description": "Optional source id to sweep",
+                                        "type": "string",
+                                        "example": "local"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cleanup results",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "checked": {
+                                            "type": "integer",
+                                            "example": 12
+                                        },
+                                        "removed": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "remaining": {
+                                            "type": "integer",
+                                            "example": 2
+                                        },
+                                        "sources": {
+                                            "type": "integer",
+                                            "example": 1
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": [],
+                        "CsrfHeader": []
                     }
                 ]
             }
@@ -1013,6 +1219,100 @@
                     {
                         "cookieAuth": [],
                         "CsrfHeader": []
+                    }
+                ]
+            }
+        },
+        "/api/admin/updateUserPermissions.php": {
+            "put": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Update user permissions",
+                "description": "Updates permissions for users. Only available to authenticated admin users. Accepts PUT or POST.",
+                "operationId": "updateUserPermissions",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "permissions"
+                                ],
+                                "properties": {
+                                    "permissions": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "username": {
+                                                    "type": "string",
+                                                    "example": "johndoe"
+                                                },
+                                                "folderOnly": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "readOnly": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                },
+                                                "disableUpload": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User permissions updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User permissions updated successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
                     }
                 ]
             }
@@ -1305,90 +1605,6 @@
                         }
                     }
                 }
-            }
-        },
-        "/api/changePassword.php": {
-            "post": {
-                "tags": [
-                    "Users"
-                ],
-                "summary": "Change user password",
-                "description": "Allows an authenticated user to change their password by verifying the old password and updating to a new one.",
-                "operationId": "changePassword",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "oldPassword",
-                                    "newPassword",
-                                    "confirmPassword"
-                                ],
-                                "properties": {
-                                    "oldPassword": {
-                                        "type": "string",
-                                        "example": "oldpass123"
-                                    },
-                                    "newPassword": {
-                                        "type": "string",
-                                        "example": "newpass456"
-                                    },
-                                    "confirmPassword": {
-                                        "type": "string",
-                                        "example": "newpass456"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Password updated successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "string",
-                                            "example": "Password updated successfully."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "403": {
-                        "description": "Invalid CSRF token"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
             }
         },
         "/api/file/copyFiles.php": {
@@ -2144,17 +2360,17 @@
                     "Tags"
                 ],
                 "summary": "Get global file tags",
-                "description": "Returns tag metadata (no auth in current implementation).",
+                "description": "Returns tag metadata for the authenticated session.",
                 "operationId": "getFileTag",
                 "parameters": [
                     {
                         "name": "sourceId",
                         "in": "query",
+                        "description": "Optional source id (Pro sources).",
                         "required": false,
                         "schema": {
                             "type": "string"
-                        },
-                        "description": "Optional source id (Pro sources)."
+                        }
                     }
                 ],
                 "responses": {
@@ -2484,7 +2700,6 @@
                                     "tags": {
                                         "type": "array",
                                         "items": {
-                                            "type": "object",
                                             "properties": {
                                                 "name": {
                                                     "type": "string",
@@ -2494,7 +2709,8 @@
                                                     "type": "string",
                                                     "example": "#ff0000"
                                                 }
-                                            }
+                                            },
+                                            "type": "object"
                                         },
                                         "example": [
                                             {
@@ -4210,79 +4426,6 @@
                 }
             }
         },
-        "/api/getUserPermissions.php": {
-            "get": {
-                "tags": [
-                    "Users"
-                ],
-                "summary": "Retrieve user permissions",
-                "description": "Returns the permissions for the current user, or all permissions if the user is an admin.",
-                "operationId": "getUserPermissions",
-                "responses": {
-                    "200": {
-                        "description": "Successful response with user permissions",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/getUsers.php": {
-            "get": {
-                "tags": [
-                    "Users"
-                ],
-                "summary": "Retrieve a list of users",
-                "description": "Returns a JSON array of users. Only available to authenticated admin users.",
-                "operationId": "getUsers",
-                "responses": {
-                    "200": {
-                        "description": "Successful response with an array of users",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "properties": {
-                                            "username": {
-                                                "type": "string",
-                                                "example": "johndoe"
-                                            },
-                                            "role": {
-                                                "type": "string",
-                                                "example": "admin"
-                                            }
-                                        },
-                                        "type": "object"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized: the user is not authenticated or is not an admin"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
         "/api/media/getProgress.php": {
             "get": {
                 "tags": [
@@ -5561,6 +5704,90 @@
                 ]
             }
         },
+        "/api/profile/changePassword.php": {
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Change user password",
+                "description": "Allows an authenticated user to change their password by verifying the old password and updating to a new one.",
+                "operationId": "changePassword",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "oldPassword",
+                                    "newPassword",
+                                    "confirmPassword"
+                                ],
+                                "properties": {
+                                    "oldPassword": {
+                                        "type": "string",
+                                        "example": "oldpass123"
+                                    },
+                                    "newPassword": {
+                                        "type": "string",
+                                        "example": "newpass456"
+                                    },
+                                    "confirmPassword": {
+                                        "type": "string",
+                                        "example": "newpass456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Password updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "Password updated successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
         "/api/profile/getCurrentUser.php": {
             "get": {
                 "tags": [
@@ -5592,7 +5819,7 @@
                                         },
                                         "profile_picture": {
                                             "type": "string",
-                                        "example": "/api/public/profilePic.php?file=ryan.png"
+                                            "example": "/api/public/profilePic.php?file=ryan.png"
                                         }
                                     },
                                     "type": "object"
@@ -5602,6 +5829,425 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/profile/getUserPermissions.php": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Retrieve user permissions",
+                "description": "Returns the permissions for the current user, or all permissions if the user is an admin.",
+                "operationId": "getUserPermissions",
+                "responses": {
+                    "200": {
+                        "description": "Successful response with user permissions",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/profile/totp_disable.php": {
+            "put": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Disable TOTP for the authenticated user",
+                "description": "Clears the TOTP secret from the users file for the current user. Accepts PUT or POST.",
+                "operationId": "disableTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TOTP disabled successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "TOTP disabled successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing username"
+                    },
+                    "403": {
+                        "description": "Not authenticated or invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Failed to disable TOTP"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/profile/totp_recover.php": {
+            "post": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Recover TOTP",
+                "description": "Verifies a recovery code to disable TOTP and finalize login.",
+                "operationId": "recoverTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "recovery_code"
+                                ],
+                                "properties": {
+                                    "recovery_code": {
+                                        "type": "string",
+                                        "example": "ABC123DEF456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Recovery successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input or recovery code"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "429": {
+                        "description": "Too many attempts"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/profile/totp_saveCode.php": {
+            "post": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Generate and save a new TOTP recovery code",
+                "description": "Generates a new TOTP recovery code for the authenticated user, stores its hash, and returns the plain text recovery code.",
+                "operationId": "totpSaveCode",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Recovery code generated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        },
+                                        "recoveryCode": {
+                                            "type": "string",
+                                            "example": "ABC123DEF456"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token or unauthorized"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/profile/totp_setup.php": {
+            "get": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Set up TOTP and generate a QR code",
+                "description": "Generates (or retrieves) the TOTP secret for the user and builds a QR code image for scanning.",
+                "operationId": "setupTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "QR code image for TOTP setup",
+                        "content": {
+                            "image/png": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Missing username"
+                    },
+                    "403": {
+                        "description": "Not authorized or invalid CSRF token"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/profile/totp_verify.php": {
+            "post": {
+                "tags": [
+                    "TOTP"
+                ],
+                "summary": "Verify TOTP code",
+                "description": "Verifies a TOTP code and completes login for pending users or validates TOTP for setup verification.",
+                "operationId": "verifyTOTP",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "totp_code"
+                                ],
+                                "properties": {
+                                    "totp_code": {
+                                        "type": "string",
+                                        "example": "123456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "TOTP successfully verified",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Login successful"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (e.g., invalid input)"
+                    },
+                    "403": {
+                        "description": "Not authenticated or invalid CSRF token"
+                    },
+                    "429": {
+                        "description": "Too many attempts. Try again later."
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/profile/updateUserPanel.php": {
+            "put": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Update user panel settings",
+                "description": "Updates user panel settings. Accessible to authenticated users. Accepts PUT or POST.",
+                "operationId": "updateUserPanel",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "totp_enabled"
+                                ],
+                                "properties": {
+                                    "totp_enabled": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User panel updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "string",
+                                            "example": "User panel updated: TOTP disabled"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    },
+                    "400": {
+                        "description": "Bad Request"
                     }
                 },
                 "security": [
@@ -5695,81 +6341,7 @@
                 ]
             }
         },
-        "/api/removeUser.php": {
-            "delete": {
-                "tags": [
-                    "Users"
-                ],
-                "summary": "Remove a user",
-                "description": "Removes the specified user from the system. Cannot remove the currently logged-in user. Accepts DELETE or POST.",
-                "operationId": "removeUser",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "username"
-                                ],
-                                "properties": {
-                                    "username": {
-                                        "type": "string",
-                                        "example": "johndoe"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "User removed successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "string",
-                                            "example": "User removed successfully"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "403": {
-                        "description": "Invalid CSRF token"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/siteConfig.php": {
+        "/api/public/siteConfig.php": {
             "get": {
                 "tags": [
                     "Config"
@@ -5787,489 +6359,6 @@
                 }
             }
         },
-        "/api/totp_disable.php": {
-            "put": {
-                "tags": [
-                    "TOTP"
-                ],
-                "summary": "Disable TOTP for the authenticated user",
-                "description": "Clears the TOTP secret from the users file for the current user. Accepts PUT or POST.",
-                "operationId": "disableTOTP",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "TOTP disabled successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "TOTP disabled successfully."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Missing username"
-                    },
-                    "403": {
-                        "description": "Not authenticated or invalid CSRF token"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    },
-                    "500": {
-                        "description": "Failed to disable TOTP"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/totp_recover.php": {
-            "post": {
-                "tags": [
-                    "TOTP"
-                ],
-                "summary": "Recover TOTP",
-                "description": "Verifies a recovery code to disable TOTP and finalize login.",
-                "operationId": "recoverTOTP",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "recovery_code"
-                                ],
-                                "properties": {
-                                    "recovery_code": {
-                                        "type": "string",
-                                        "example": "ABC123DEF456"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Recovery successful",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "example": "ok"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid input or recovery code"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "403": {
-                        "description": "Invalid CSRF token"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    },
-                    "429": {
-                        "description": "Too many attempts"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/totp_saveCode.php": {
-            "post": {
-                "tags": [
-                    "TOTP"
-                ],
-                "summary": "Generate and save a new TOTP recovery code",
-                "description": "Generates a new TOTP recovery code for the authenticated user, stores its hash, and returns the plain text recovery code.",
-                "operationId": "totpSaveCode",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Recovery code generated successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "example": "ok"
-                                        },
-                                        "recoveryCode": {
-                                            "type": "string",
-                                            "example": "ABC123DEF456"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "403": {
-                        "description": "Invalid CSRF token or unauthorized"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    },
-                    "500": {
-                        "description": "Server error"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/totp_setup.php": {
-            "get": {
-                "tags": [
-                    "TOTP"
-                ],
-                "summary": "Set up TOTP and generate a QR code",
-                "description": "Generates (or retrieves) the TOTP secret for the user and builds a QR code image for scanning.",
-                "operationId": "setupTOTP",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "QR code image for TOTP setup",
-                        "content": {
-                            "image/png": {}
-                        }
-                    },
-                    "400": {
-                        "description": "Missing username"
-                    },
-                    "403": {
-                        "description": "Not authorized or invalid CSRF token"
-                    },
-                    "500": {
-                        "description": "Server error"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/totp_verify.php": {
-            "post": {
-                "tags": [
-                    "TOTP"
-                ],
-                "summary": "Verify TOTP code",
-                "description": "Verifies a TOTP code and completes login for pending users or validates TOTP for setup verification.",
-                "operationId": "verifyTOTP",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "totp_code"
-                                ],
-                                "properties": {
-                                    "totp_code": {
-                                        "type": "string",
-                                        "example": "123456"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "TOTP successfully verified",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "example": "ok"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Login successful"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request (e.g., invalid input)"
-                    },
-                    "403": {
-                        "description": "Not authenticated or invalid CSRF token"
-                    },
-                    "429": {
-                        "description": "Too many attempts. Try again later."
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/updateUserPanel.php": {
-            "put": {
-                "tags": [
-                    "Users"
-                ],
-                "summary": "Update user panel settings",
-                "description": "Updates user panel settings. Accessible to authenticated users. Accepts PUT or POST.",
-                "operationId": "updateUserPanel",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "totp_enabled"
-                                ],
-                                "properties": {
-                                    "totp_enabled": {
-                                        "type": "boolean",
-                                        "example": false
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "User panel updated successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "string",
-                                            "example": "User panel updated: TOTP disabled"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "403": {
-                        "description": "Invalid CSRF token"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    },
-                    "400": {
-                        "description": "Bad Request"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/updateUserPermissions.php": {
-            "put": {
-                "tags": [
-                    "Users"
-                ],
-                "summary": "Update user permissions",
-                "description": "Updates permissions for users. Only available to authenticated admin users. Accepts PUT or POST.",
-                "operationId": "updateUserPermissions",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "permissions"
-                                ],
-                                "properties": {
-                                    "permissions": {
-                                        "type": "array",
-                                        "items": {
-                                            "properties": {
-                                                "username": {
-                                                    "type": "string",
-                                                    "example": "johndoe"
-                                                },
-                                                "folderOnly": {
-                                                    "type": "boolean",
-                                                    "example": true
-                                                },
-                                                "readOnly": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                },
-                                                "disableUpload": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "User permissions updated successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "string",
-                                            "example": "User permissions updated successfully."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "403": {
-                        "description": "Invalid CSRF token"
-                    },
-                    "405": {
-                        "description": "Method not allowed"
-                    },
-                    "400": {
-                        "description": "Bad Request"
-                    }
-                },
-                "security": [
-                    {
-                        "cookieAuth": []
-                    }
-                ]
-            }
-        },
         "/api/upload/checkExisting.php": {
             "post": {
                 "tags": [
@@ -6278,16 +6367,6 @@
                 "summary": "Check for existing files before upload",
                 "description": "Checks whether the provided relative paths already exist in the target folder.",
                 "operationId": "checkUploadExisting",
-                "parameters": [
-                    {
-                        "name": "X-CSRF-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -6779,24 +6858,24 @@
                         "format": "int64"
                     },
                     "uploads": {
-                        "type": "object",
-                        "additionalProperties": false,
                         "properties": {
                             "resumableChunkMb": {
                                 "type": "number",
                                 "format": "float",
-                                "minimum": 0.5,
                                 "maximum": 100,
+                                "minimum": 0.5,
                                 "example": 1.5
                             },
                             "resumableTtlHours": {
                                 "type": "number",
                                 "format": "float",
-                                "minimum": 0.5,
                                 "maximum": 168,
+                                "minimum": 0.5,
                                 "example": 6
                             }
-                        }
+                        },
+                        "type": "object",
+                        "additionalProperties": false
                     },
                     "oidc": {
                         "$ref": "#/components/schemas/OIDCConfigPublic"
@@ -6877,24 +6956,24 @@
                         "example": 52428800
                     },
                     "uploads": {
-                        "type": "object",
-                        "additionalProperties": false,
                         "properties": {
                             "resumableChunkMb": {
                                 "type": "number",
                                 "format": "float",
-                                "minimum": 0.5,
                                 "maximum": 100,
+                                "minimum": 0.5,
                                 "example": 1.5
                             },
                             "resumableTtlHours": {
                                 "type": "number",
                                 "format": "float",
-                                "minimum": 0.5,
                                 "maximum": 168,
+                                "minimum": 0.5,
                                 "example": 6
                             }
-                        }
+                        },
+                        "type": "object",
+                        "additionalProperties": false
                     },
                     "oidc": {
                         "description": "When disableOIDCLogin=false (OIDC enabled), providerUrl, redirectUri, and clientId are required.",
@@ -6917,6 +6996,16 @@
                                 "type": "string",
                                 "format": "uri",
                                 "example": "https://app.example.com/auth/callback"
+                            },
+                            "groupClaim": {
+                                "type": "string",
+                                "example": "groups",
+                                "nullable": true
+                            },
+                            "extraScopes": {
+                                "type": "string",
+                                "example": "groups",
+                                "nullable": true
                             }
                         },
                         "type": "object",
@@ -7059,12 +7148,12 @@
             "description": "Pro"
         },
         {
-            "name": "Config",
-            "description": "Config"
-        },
-        {
             "name": "TOTP",
             "description": "TOTP"
+        },
+        {
+            "name": "Config",
+            "description": "Config"
         },
         {
             "name": "Uploads",

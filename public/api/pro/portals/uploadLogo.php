@@ -30,7 +30,6 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/UserController.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -45,7 +44,7 @@ if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
 }
 
 try {
-    $ctrl = new UserController();
+    $ctrl = new \FileRise\Http\Controllers\UserController();
     $ctrl->uploadPortalLogo();
 } catch (Throwable $e) {
     http_response_code(500);

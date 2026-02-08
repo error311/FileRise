@@ -28,7 +28,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -41,9 +40,9 @@ try {
         session_start();
     }
 
-    AdminController::requireAuth();
-    AdminController::requireAdmin();
-    AdminController::requireCsrf();
+    \FileRise\Http\Controllers\AdminController::requireAuth();
+    \FileRise\Http\Controllers\AdminController::requireAdmin();
+    \FileRise\Http\Controllers\AdminController::requireCsrf();
 
     $raw  = file_get_contents('php://input');
     $body = json_decode($raw, true);
@@ -60,7 +59,7 @@ try {
         return;
     }
 
-    $ctrl = new AdminController();
+    $ctrl = new \FileRise\Http\Controllers\AdminController();
     $ctrl->saveProGroups($groups);
 
     echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

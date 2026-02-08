@@ -18,7 +18,7 @@ async function resolveLocale() {
   const stored = getStoredLocale();
   if (stored) return stored;
   try {
-    const res = await fetch(withBase('/api/siteConfig.php'), { credentials: 'include' });
+    const res = await fetch(withBase('/api/public/siteConfig.php'), { credentials: 'include' });
     const cfg = await res.json().catch(() => ({}));
     const defaultLang = cfg && cfg.display && cfg.display.defaultLanguage
       ? String(cfg.display.defaultLanguage)

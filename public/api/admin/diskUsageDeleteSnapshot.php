@@ -26,7 +26,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/models/DiskUsageModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -67,7 +66,7 @@ try {
     }
 
     if ($sourceId !== '') {
-        $ctx = DiskUsageModel::resolveSourceContext($sourceId);
+        $ctx = \FileRise\Domain\DiskUsageModel::resolveSourceContext($sourceId);
         if (empty($ctx['ok'])) {
             http_response_code(400);
             echo json_encode([
@@ -79,12 +78,12 @@ try {
         }
     }
 
-    $deleted = DiskUsageModel::deleteSnapshot($sourceId);
+    $deleted = \FileRise\Domain\DiskUsageModel::deleteSnapshot($sourceId);
     http_response_code(200);
     echo json_encode([
         'ok'       => true,
         'deleted'  => $deleted,
-        'snapshot' => DiskUsageModel::snapshotPath($sourceId),
+        'snapshot' => \FileRise\Domain\DiskUsageModel::snapshotPath($sourceId),
         'sourceId' => $sourceId !== '' ? $sourceId : null,
     ], JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {

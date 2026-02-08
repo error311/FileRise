@@ -5,8 +5,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
-require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 require_once PROJECT_ROOT . '/src/lib/StorageFactory.php';
 
 try {
@@ -20,9 +18,9 @@ try {
         session_start();
     }
 
-    AdminController::requireAuth();
-    AdminController::requireAdmin();
-    AdminController::requireCsrf();
+    \FileRise\Http\Controllers\AdminController::requireAuth();
+    \FileRise\Http\Controllers\AdminController::requireAdmin();
+    \FileRise\Http\Controllers\AdminController::requireCsrf();
 
     if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProSources') || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SOURCES)) {
         http_response_code(403);
@@ -161,10 +159,10 @@ try {
         }
     }
 
-    $cfg = AdminModel::getConfig();
+    $cfg = \FileRise\Domain\AdminModel::getConfig();
     if (!isset($cfg['error'])) {
-        $public = AdminModel::buildPublicSubset($cfg);
-        AdminModel::writeSiteConfig($public);
+        $public = \FileRise\Domain\AdminModel::buildPublicSubset($cfg);
+        \FileRise\Domain\AdminModel::writeSiteConfig($public);
     }
 
     echo json_encode([

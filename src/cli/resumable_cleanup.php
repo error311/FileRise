@@ -7,7 +7,6 @@ declare(strict_types=1);
 // Sweep expired resumable_* upload temp folders based on configured TTL.
 
 require __DIR__ . '/../../config/config.php';
-require __DIR__ . '/../../src/models/UploadModel.php';
 require __DIR__ . '/../../src/lib/SourceContext.php';
 
 $sourceId = '';
@@ -50,7 +49,7 @@ try {
             if ($id !== '') {
                 SourceContext::setActiveId($id, false, true);
             }
-            $res = UploadModel::sweepResumableExpired($force);
+            $res = \FileRise\Domain\UploadModel::sweepResumableExpired($force);
             $totals['checked'] += (int)($res['checked'] ?? 0);
             $totals['removed'] += (int)($res['removed'] ?? 0);
             $totals['remaining'] += (int)($res['remaining'] ?? 0);
@@ -73,7 +72,7 @@ try {
         SourceContext::setActiveId($sourceId, false, true);
     }
 
-    $res = UploadModel::sweepResumableExpired($force);
+    $res = \FileRise\Domain\UploadModel::sweepResumableExpired($force);
     $msg = sprintf(
         "Resumable cleanup complete: checked=%d removed=%d remaining=%d\n",
         (int)($res['checked'] ?? 0),

@@ -18,7 +18,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/models/AdminModel.php';
 
 if (
     empty($_SESSION['authenticated'])
@@ -34,7 +33,7 @@ if (
 }
 
 try {
-    $cfg = AdminModel::getConfig();
+    $cfg = \FileRise\Domain\AdminModel::getConfig();
     if (isset($cfg['error'])) {
         throw new RuntimeException($cfg['error']);
     }

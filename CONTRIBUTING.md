@@ -31,6 +31,23 @@ Thank you for your interest in contributing to FileRise! We appreciate your help
 4. **Configuration**  
    Copy any example configuration files (if provided) and adjust them as needed for your local setup.
 
+## Backend Layout (PSR-4 + Legacy)
+
+FileRise is in a staged PSR-4 migration. The backend uses both the new namespaced
+structure and a legacy include-based layout. When contributing:
+
+- **PSR-4 root:** `composer.json` maps `FileRise\` to `src/FileRise/`.
+- **New code goes here:** Add new backend classes under `src/FileRise/**` using
+  proper namespaces.
+- **API entrypoints:** `public/api/**` files are thin scripts that load
+  `config.php` + `vendor/autoload.php` and then call a controller in
+  `FileRise\Http\Controllers`.
+- **Legacy paths:** `src/controllers`, `src/models`, and `src/lib` still exist
+  for compatibility. Avoid adding new code there unless you are extending an
+  existing legacy file.
+- **Bridging:** If you need to connect old and new code, prefer a small shim or
+  wrapper rather than duplicating logic.
+
 ## Reporting Bugs
 
 If you discover a bug, please open an issue on GitHub and include:

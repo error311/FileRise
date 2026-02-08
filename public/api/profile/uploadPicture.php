@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/UserController.php';
 
 
 /**
@@ -57,7 +56,7 @@ require_once PROJECT_ROOT . '/src/controllers/UserController.php';
 header('Content-Type: application/json');
 
 try {
-    $userController = new UserController();
+    $userController = new \FileRise\Http\Controllers\UserController();
     $userController->uploadPicture();
 } catch (\Throwable $e) {
     http_response_code(500);

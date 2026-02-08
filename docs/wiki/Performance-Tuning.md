@@ -24,6 +24,7 @@ Tips for large trees, heavy usage, and stable deployments.
 - Enable OPcache.
 - Increase `realpath_cache_size` and `realpath_cache_ttl`.
 - Set `upload_max_filesize` and `post_max_size` >= `TOTAL_UPLOAD_SIZE`.
+- Use `custom-php.ini` as a baseline (Docker already loads it); copy into your PHP conf.d and restart.
 
 ---
 

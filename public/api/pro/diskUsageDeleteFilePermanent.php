@@ -30,8 +30,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
-require_once PROJECT_ROOT . '/src/models/FileModel.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 // Pro-only gate: make sure Pro is really active
@@ -52,9 +50,9 @@ try {
         session_start();
     }
 
-    AdminController::requireAuth();
-    AdminController::requireAdmin();
-    AdminController::requireCsrf();
+    \FileRise\Http\Controllers\AdminController::requireAuth();
+    \FileRise\Http\Controllers\AdminController::requireAdmin();
+    \FileRise\Http\Controllers\AdminController::requireCsrf();
 
     $raw  = file_get_contents('php://input');
     $body = json_decode($raw, true);
@@ -93,7 +91,7 @@ try {
     }
 
     try {
-        $res = FileModel::deleteFilesPermanent($folder, [$name]);
+        $res = \FileRise\Domain\FileModel::deleteFilesPermanent($folder, [$name]);
     } finally {
         if ($prevSourceId !== null) {
             SourceContext::setActiveId($prevSourceId, false, true);

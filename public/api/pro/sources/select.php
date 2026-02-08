@@ -5,7 +5,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
@@ -20,8 +19,8 @@ try {
         session_start();
     }
 
-    AdminController::requireAuth();
-    AdminController::requireCsrf();
+    \FileRise\Http\Controllers\AdminController::requireAuth();
+    \FileRise\Http\Controllers\AdminController::requireCsrf();
 
     if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProSources') || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SOURCES)) {
         http_response_code(403);
@@ -63,8 +62,8 @@ try {
     if (function_exists('loadUserPermissions')) {
         $p = loadUserPermissions($username);
         $perms = is_array($p) ? $p : [];
-    } elseif (class_exists('userModel') && method_exists('userModel', 'getUserPermissions')) {
-        $all = userModel::getUserPermissions();
+    } elseif (class_exists(\FileRise\Domain\UserModel::class) && method_exists(\FileRise\Domain\UserModel::class, 'getUserPermissions')) {
+        $all = \FileRise\Domain\UserModel::getUserPermissions();
         if (is_array($all)) {
             if (isset($all[$username])) {
                 $perms = (array)$all[$username];

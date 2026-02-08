@@ -37,8 +37,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/PortalController.php';
-require_once PROJECT_ROOT . '/src/controllers/AdminController.php';
 
 function generatePortalSubmissionRef(): string
 {
@@ -71,8 +69,8 @@ try {
     }
 
     // For now, portal forms still require a logged-in user
-    AdminController::requireAuth();
-    AdminController::requireCsrf();
+    \FileRise\Http\Controllers\AdminController::requireAuth();
+    \FileRise\Http\Controllers\AdminController::requireCsrf();
 
     $raw  = file_get_contents('php://input');
     $body = json_decode($raw, true);
@@ -101,7 +99,7 @@ try {
     }
 
     // Make sure portal exists and is not expired
-    $portal = PortalController::getPortalBySlug($slug);
+    $portal = \FileRise\Http\Controllers\PortalController::getPortalBySlug($slug);
 
     if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
         throw new RuntimeException('FileRise Pro is not active.');

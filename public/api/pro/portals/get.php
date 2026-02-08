@@ -17,14 +17,13 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/controllers/PortalController.php';
 
 try {
     $slug = isset($_GET['slug']) ? (string)$_GET['slug'] : '';
 
     // For v1: we do NOT require auth here; this is just metadata,
     // real ACL/access control must still be enforced at upload/download endpoints.
-    $portal = PortalController::getPortalBySlug($slug);
+    $portal = \FileRise\Http\Controllers\PortalController::getPortalBySlug($slug);
 
     echo json_encode([
         'success' => true,
