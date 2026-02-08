@@ -1,1 +1,28 @@
 /data/
+.DS_Store
+
+# Editor/IDE
+.idea/
+.vscode/
+
+# Local env/secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data (avoid accidentally committing user files)
+/uploads/
+/users/
+/metadata/
+/sessions/
+
+# Tooling caches
+.phpunit.result.cache
+.phpcs-cache
+.php-cs-fixer.cache
+
+# Logs/temp
+*.log
+*.swp
+*.swo
+*~

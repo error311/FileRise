@@ -5,9 +5,13 @@ Contributions are welcome. See `CONTRIBUTING.md` for workflow and PR guidelines.
 ## Repo structure (core)
 
 - `public/` - frontend assets + entrypoints (`index.html`, `api.php`, `webdav.php`)
-- `src/controllers/` - request handlers
-- `src/models/` - data logic (users, auth, admin config)
-- `src/lib/` - shared utilities (ACL, crypto, storage)
+- `src/FileRise/` - PSR-4 backend tree (namespaced `FileRise\\...`)
+  - `src/FileRise/Http/Controllers/` - request handlers
+  - `src/FileRise/Domain/` - models / business logic (users, auth, admin config, etc.)
+  - `src/FileRise/Support/` - shared utilities (ACL, crypto, filesystem helpers)
+  - `src/FileRise/Storage/` - storage + sources
+  - `src/FileRise/WebDAV/` - WebDAV support
+- `src/controllers/`, `src/models/`, `src/lib/`, `src/webdav/` - legacy shims (compat layer via `class_alias`)
 - `scripts/` - CLI helpers (e.g., `scan_uploads.php`)
 
 ## Local dev quick start
@@ -27,7 +31,7 @@ FR_TEST_META_DIR=/tmp/filerise/metadata
 
 ## OpenAPI spec
 
-- Source: `src/openapi/` and `public/api/` annotations
+- Source: `src/FileRise/OpenApi/` and `public/api/` annotations
 - Generate spec:
 
 ```bash
