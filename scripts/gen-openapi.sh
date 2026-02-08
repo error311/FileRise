@@ -1,6 +1,26 @@
 #!/bin/sh
-set -euo pipefail
+set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export FR_ROOT="$ROOT"
 
-php -r 'require "'"$ROOT"'/vendor/autoload.php"; $openapi = OpenApi\Generator::scan(["'"$ROOT"'/src/FileRise/OpenApi","'"$ROOT"'/public/api"], ["analyser" => new OpenApi\Analysers\TokenAnalyser()]); if ($openapi) { $openapi->saveAs("'"$ROOT"'/openapi.json.dist", "json"); }'
+php <<'PHP'
+<?php
+
+$root = getenv('FR_ROOT') ?: '';
+if ($root === '') {
+    fwrite(STDERR, "FR_ROOT is not set.\n");
+    exit(1);
+}
+
+require $root . '/vendor/autoload.php';
+
+$openapi = OpenApi\Generator::scan(
+    [$root . '/src/FileRise/OpenApi', $root . '/public/api'],
+    ['analyser' => new OpenApi\Analysers\TokenAnalyser()]
+);
+
+if ($openapi) {
+    $openapi->saveAs($root . '/openapi.json.dist', 'json');
+}
+PHP

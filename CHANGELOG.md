@@ -41,6 +41,11 @@ release(v3.3.2): PSR-4 backend migration + legacy shims
 - **Legacy API endpoint shims**
   - Old `/api/*.php` routes forward to canonical endpoints under `/api/admin/*` and `/api/profile/*`.
 
+**CI**  
+
+- ShellCheck: `scripts/gen-openapi.sh` is POSIX-clean (no `pipefail`, no quote-expansion warnings).
+- PHPCS job runs on PHP 8.4 (current `swagger-php` dev dependency tree requires PHP >= 8.4).
+
 **Fixed**  
 
 - **PHP deprecation warning**
