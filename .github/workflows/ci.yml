@@ -54,8 +54,8 @@ jobs:
           coverage: none
       - name: Install Composer dependencies
         run: |
-          unset COMPOSER_NO_DEV
-          composer install --no-interaction --prefer-dist --no-progress
+          COMPOSER_NO_DEV=0 composer install --no-interaction --prefer-dist --no-progress
+          test -f vendor/bin/phpcs
       - name: PHPCS (PSR-12 scoped)
         run: |
           ./vendor/bin/phpcs --standard=phpcs.xml src/FileRise
