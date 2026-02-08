@@ -52,13 +52,10 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-      - name: Install Composer dependencies
-        run: |
-          COMPOSER_NO_DEV=0 composer install --no-interaction --prefer-dist --no-progress
-          test -f vendor/bin/phpcs
+          tools: phpcs:3.13.5
       - name: PHPCS (PSR-12 scoped)
         run: |
-          ./vendor/bin/phpcs --standard=phpcs.xml src/FileRise
+          phpcs --standard=phpcs.xml src/FileRise
 
   shellcheck:
     runs-on: ubuntu-latest
