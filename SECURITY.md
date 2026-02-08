@@ -51,6 +51,12 @@ If you follow these guidelines, we won’t pursue or support legal action.
 
 ## Published Advisories
 
+- **GHSA-hv99-77cw-hvpr** - `<= 3.2.3`: Unauthenticated File Read Due to Insufficient Access Control
+  **Fixed in: 3.3.0** and later. Thanks to **Marcel Graf (AWARE7 GmbH) [@ByteTyson](https://github.com/ByteTyson)** for responsible disclosure and verification of the fix.
+
+- **GHSA-h8fw-42v6-gfhv** - `<= 3.2.3`: HTML Injection using color property in file tags
+  **Fixed in: 3.3.0** and later. Thanks to **Marcel Graf (AWARE7 GmbH) [@ByteTyson](https://github.com/ByteTyson)** for responsible disclosure and verification of the fix.
+
 - **GHSA-35pp-ggh6-c59c** — `< 2.7.1`: Stored XSS via browser-rendered user uploads (SVG primary; HTML rendering via share links also documented).  
   **Fixed in:** **2.7.1**. Thanks to **[@x0root](https://github.com/x0root)** for responsible disclosure.  
   _Note: Related reports covering the same root cause and affected endpoint(s) were consolidated into this advisory to avoid duplicate tracking/CVEs._
@@ -61,7 +67,7 @@ If you follow these guidelines, we won’t pursue or support legal action.
 - **GHSA-jm96-2w52-5qjj** — `v1.4.0`: Insecure folder visibility via name-based mapping and incomplete ACL checks.  
   **Fixed in:** **1.5.0** and later.
 
-Thanks to **[@kiwi865](https://github.com/kiwi865)** & **[@ByteTyson](https://github.com/ByteTyson)** for responsible disclosure of issues.
+Thanks to **[@kiwi865](https://github.com/kiwi865)** & **[@ByteTyson](https://github.com/ByteTyson)** &  **[@x0root](https://github.com/x0root)** for responsible disclosure of issues.
 
 ## Questions
 
