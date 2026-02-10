@@ -183,6 +183,17 @@ class OnlyOfficeController
             }
             return ['', null];
         }
+
+        // "local" must remain valid even when Pro Sources are not available/enabled.
+        // The core UI includes sourceId="local" in file list payloads, and legacy Pro
+        // bundles (or non-Pro installs) do not provide ProSources at all.
+        if (
+            $sourceId === 'local'
+            && (!class_exists('SourceContext') || !SourceContext::sourcesEnabled())
+        ) {
+            return [$sourceId, null];
+        }
+
         if (!class_exists('SourceContext') || !SourceContext::sourcesEnabled()) {
             return ['', 'Invalid source.'];
         }

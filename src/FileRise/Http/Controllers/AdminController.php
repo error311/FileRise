@@ -2357,6 +2357,7 @@ class AdminController
             $origName = '';
 
             $downloadOk = false;
+            $downloadHint = '';
             $httpCode = null;
             $contentType = '';
             $headers = [];
@@ -2377,6 +2378,11 @@ class AdminController
                 curl_setopt($ch, CURLOPT_TIMEOUT, 120);
                 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
                 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+                // Cloudflare/bot protection can block default curl/PHP user agents; mimic a browser.
+                curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Accept: application/zip,application/octet-stream,*/*',
+                ]);
                 curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($ch, $header) use (&$headers): int {
                     $len = strlen($header);
                     $parts = explode(':', $header, 2);
@@ -2401,9 +2407,15 @@ class AdminController
                 $context = stream_context_create([
                     'http' => [
                         'method'  => 'POST',
-                        'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
+                        'header'  => implode("\r\n", [
+                            "Content-Type: application/x-www-form-urlencoded",
+                            "Accept: application/zip,application/octet-stream,*/*",
+                            "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        ]) . "\r\n",
                         'content' => http_build_query(['license' => $licenseRaw]),
                         'timeout' => 120,
+                        // Capture response bodies on non-200 statuses (useful for diagnosing CF challenges).
+                        'ignore_errors' => true,
                     ],
                 ]);
                 $data = @file_get_contents($remoteUrl, false, $context);
@@ -2431,21 +2443,40 @@ class AdminController
                 $origName = $m[1];
             }
 
+            // Sanity check: we expect a ZIP (starts with "PK"). Some proxies/bot filters return HTML.
+            if ($downloadOk && is_file($zipPath)) {
+                $sig = @file_get_contents($zipPath, false, null, 0, 4);
+                if (!is_string($sig) || substr($sig, 0, 2) !== 'PK') {
+                    $downloadOk = false;
+                    $downloadHint = 'Remote server did not return a ZIP bundle.';
+                }
+            }
+
             if (!$downloadOk) {
-                $msg = '';
-                if (is_file($zipPath)) {
-                    $snippet = @file_get_contents($zipPath, false, null, 0, 2048);
-                    if ($snippet !== false) {
-                        $msg = trim($snippet);
-                    }
+                $msg = $downloadHint;
+                $snippet = '';
+                if ($msg === '' && is_file($zipPath)) {
+                    $tmp = @file_get_contents($zipPath, false, null, 0, 2048);
+                    $snippet = is_string($tmp) ? trim($tmp) : '';
                 }
                 @unlink($zipPath);
                 @rmdir($workDir);
                 $label = $httpCode ? "HTTP {$httpCode}" : 'Download failed';
+                if ($msg === '') {
+                    // If we got HTML (common with Cloudflare "Just a moment..."), return a human message.
+                    $looksHtml = ($snippet !== '' && preg_match('/^\\s*<(?:!doctype|html|head|body)\\b/i', $snippet));
+                    $isHtmlContentType = ($contentType !== '' && stripos($contentType, 'text/html') !== false);
+                    if ($looksHtml || $isHtmlContentType) {
+                        $msg = 'Remote download blocked (received HTML instead of a ZIP bundle). If you see a Cloudflare \"Just a moment...\" page, use Manual upload (UI) to install the Pro ZIP.';
+                    } else {
+                        $msg = $label;
+                    }
+                }
                 http_response_code(502);
                 echo json_encode([
                     'success' => false,
-                    'error'   => $msg !== '' ? $msg : $label,
+                    'error'   => $msg,
+                    'httpCode' => $httpCode,
                 ]);
                 return;
             }

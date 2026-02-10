@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 02/10/2026 (v3.3.3)
+
+`release(v3.3.3): fix OnlyOffice local sourceId handling + improve Pro bundle download reliability (Cloudflare UA + ZIP sanity checks)`
+
+**Commit message**  
+
+```text
+release(v3.3.3): fix OnlyOffice local sourceId handling + improve Pro bundle download reliability
+
+- onlyoffice: treat sourceId=local as valid when Sources are disabled (non-Pro + legacy Pro bundles)
+- admin: make Pro bundle remote download more reliable (browser UA + Accept headers)
+- admin: detect HTML/CF challenge responses and return clearer install guidance + httpCode
+```
+
+**Fixed**  
+
+- **OnlyOffice “Invalid source” on non-Pro installs**
+  - `sourceId=local` is now accepted even when Pro Sources are not available/enabled.
+  - Prevents OnlyOffice open failures on core-only installs and legacy Pro bundles that don’t provide ProSources.
+
+**Changed**  
+
+- **Pro bundle “Download latest” installer is more resilient**
+  - Remote download requests now send a browser-like **User-Agent** and **Accept** headers (reduces Cloudflare/bot-block false negatives).
+  - When the remote response is HTML (common “Just a moment…” / challenge page), FileRise now:
+    - detects the mismatch (ZIP signature must start with `PK`)
+    - returns a clear error suggesting **Manual upload** of the Pro ZIP
+    - includes `httpCode` in the JSON response for troubleshooting
+  - Stream fallback now captures non-200 bodies (`ignore_errors=true`) to improve diagnostics.
+
+---
+
 ## Changes 02/09/2026 (v3.3.2)
 
 `release(v3.3.2): PSR-4 backend migration + legacy shims`
