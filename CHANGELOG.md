@@ -1,6 +1,6 @@
 # Changelog
 
-## Changes 02/08/2026 (v3.3.2)
+## Changes 02/09/2026 (v3.3.2)
 
 `release(v3.3.2): PSR-4 backend migration + legacy shims`
 `chore(psr4): PSR-4 backend migration + legacy shims (WIP, no release)`
@@ -16,6 +16,7 @@ release(v3.3.2): PSR-4 backend migration + legacy shims
 - api: canonical endpoints now live under /api/admin/* and /api/profile/*; legacy /api/*.php shims kept
 - openapi: generate spec from the PSR-4 OpenAPI directory
 - php: fix PHP 8.2+ nullable type deprecation in AuthModel::getClientIp()
+- ci: harden release/changelog workflows (safe version parsing + enable workflow_run trigger)
 ```
 
 **Highlights**  
@@ -32,6 +33,7 @@ release(v3.3.2): PSR-4 backend migration + legacy shims
   - Public API endpoints, WebDAV (`public/webdav.php`), CLI scripts, and tests now instantiate namespaced controllers/models directly.
 - **OpenAPI generation**
   - OpenAPI generator updated to scan the PSR-4 OpenAPI directory.
+  - Bump version
 
 **Compatibility**  
 
@@ -45,6 +47,7 @@ release(v3.3.2): PSR-4 backend migration + legacy shims
 
 - ShellCheck: `scripts/gen-openapi.sh` is POSIX-clean (no `pipefail`, no quote-expansion warnings).
 - PHPCS job runs on PHP 8.4 (current `swagger-php` dev dependency tree requires PHP >= 8.4).
+- ci: harden release/changelog workflows (safe version parsing + enable workflow_run trigger)
 
 **Fixed**  
 

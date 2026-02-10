@@ -30,8 +30,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MSG="${{ github.event.head_commit.message }}"
-          if [[ "$MSG" =~ release\((v[0-9]+\.[0-9]+\.[0-9]+)\) ]]; then
+          # Read from git to avoid Actions injecting raw commit messages into the shell
+          # (commit bodies can contain backticks / $() / quotes, which would otherwise be interpreted).
+          MSG="$(git log -1 --pretty=%s)"
+          if [[ "$MSG" =~ release\((v[0-9]+\.[0-9]+\.[0-9]+)\): ]]; then
             echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
             echo "Found version: ${BASH_REMATCH[1]}"
           else

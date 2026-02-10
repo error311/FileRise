@@ -22,8 +22,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     concurrency:
       group: release-${{ github.event_name }}-${{ github.run_id }}
@@ -46,6 +46,9 @@ jobs:
             else
               REF="$REF_IN"
             fi
+          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # Use the branch tip (includes the version.js bump commit created by the upstream workflow).
+            REF="${{ github.event.workflow_run.head_branch }}"
           else
             REF="${{ github.sha }}"
           fi
