@@ -66,14 +66,19 @@ Built for homelabs, teams, and client portals that need fast browsing, strict AC
   - Works with `X-Forwarded-*` headers and Kubernetes ingress setups
 - 👥 **Pro: user groups, client portals, global search, storage explorer & audit logs** –  
   Group-based ACLs, brandable client upload portals, **ACL-aware global search across files, folders, users, and permissions**, an ncdu-style storage explorer for identifying large folders/files and reclaiming disk space directly from the UI, and **Pro Audit Logs** (configurable activity logging with filters + CSV export for tracking key actions across web, WebDAV, shares, and portals).
-- 🌐 **Pro: Sources (multi-storage adapters)** –  
+- 🌐 **Sources (Core + Pro adapters)** –  
   Turn FileRise into a storage hub by connecting multiple backends and switching between them in the UI:
-  - Multiple local roots (additional local paths)
-  - **S3-compatible** (AWS S3 / MinIO / Wasabi / Backblaze B2 S3 / etc.)
-  - **SMB/CIFS**, **SFTP**, **FTP**
-  - **WebDAV** (Nextcloud / ownCloud / FileRise)
-  - **Google Drive**, **OneDrive**, **Dropbox**
+  - **Core:** Multiple local roots (additional local paths)
+  - **Core:** **WebDAV** sources (Nextcloud / ownCloud / FileRise)
+  - **Pro:** **S3-compatible** (AWS S3 / MinIO / Wasabi / Backblaze B2 S3 / etc.)
+  - **Pro:** **SMB/CIFS**, **SFTP**, **FTP**
+  - **Pro:** **Google Drive**, **OneDrive**, **Dropbox**
   - Works with **dual-pane** so you can copy/move via drag & drop or toolbar actions **between sources**, with **per-source Trash**
+- 🔌 **Pro: Gateway Shares (SFTP / S3 / MCP)** –  
+  Expose selected source roots through managed gateways for external clients and workflows:
+  - **SFTP gateway** for tools like FileZilla, WinSCP, and rclone
+  - **S3 gateway** for S3-compatible clients and automation
+  - **MCP gateway** for emerging AI/tool integrations
 
 Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
