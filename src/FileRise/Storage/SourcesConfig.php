@@ -85,7 +85,9 @@ final class SourcesConfig
     private static function decryptSecret(string $value): string
     {
         $value = trim($value);
-        if ($value === '') return '';
+        if ($value === '') {
+            return '';
+        }
         $plain = decryptData($value, $GLOBALS['encryptionKey']);
         return ($plain === false || $plain === null) ? '' : (string)$plain;
     }
@@ -93,7 +95,9 @@ final class SourcesConfig
     private static function encryptSecret(string $value): string
     {
         $value = (string)$value;
-        if ($value === '') return '';
+        if ($value === '') {
+            return '';
+        }
         return encryptData($value, $GLOBALS['encryptionKey']);
     }
 
@@ -412,7 +416,12 @@ final class SourcesConfig
 
             if ($password !== '') {
                 $cfgStore['passwordEnc'] = self::encryptSecret($password);
-            } elseif ($existingRaw && isset($existingRaw['config']) && is_array($existingRaw['config']) && isset($existingRaw['config']['passwordEnc'])) {
+            } elseif (
+                $existingRaw
+                && isset($existingRaw['config'])
+                && is_array($existingRaw['config'])
+                && isset($existingRaw['config']['passwordEnc'])
+            ) {
                 $cfgStore['passwordEnc'] = (string)$existingRaw['config']['passwordEnc'];
             }
 
@@ -478,11 +487,15 @@ final class SourcesConfig
     private static function saveRaw(array $cfg): bool
     {
         $path = self::filePath();
-        if ($path === '') return false;
+        if ($path === '') {
+            return false;
+        }
         self::ensureDir();
 
         $json = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        if ($json === false) return false;
+        if ($json === false) {
+            return false;
+        }
 
         $tmp = $path . '.tmp';
         if (@file_put_contents($tmp, $json, LOCK_EX) === false) {

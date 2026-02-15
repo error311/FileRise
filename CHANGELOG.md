@@ -1,6 +1,36 @@
 # Changelog
 
-## Changes 02/15/2026 (v3.4.0) FileRise 1 Year Anniversary
+## Changes 02/15/2026 (v3.4.1)
+
+`release(v3.4.1): PHPCS PSR-12 inline-control cleanup for storage adapters/config`
+
+**Commit message**  
+
+```text
+release(v3.4.1): PHPCS PSR-12 inline-control cleanup for storage adapters/config
+
+- style(psr12): replace inline control structures with block form in WebDavAdapter
+- style(psr12): replace inline control structures with block form in SourcesConfig
+- ci: keep phpcs --standard=phpcs.xml src/FileRise clean
+```
+
+**Changed**  
+
+- **PSR-12 style cleanup (no behavior change)**
+  - Refactored inline one-line control structures into block form in:
+    - `src/FileRise/Storage/WebDavAdapter.php`
+    - `src/FileRise/Storage/SourcesConfig.php`
+  - Reformatted one long conditional in `SourcesConfig` for readability/line-length consistency.
+
+**Fixed**  
+
+- **CI lint failures**
+  - Resolved PHPCS errors (`Inline control structures are not allowed`) reported in GitHub Actions for `WebDavAdapter` and `SourcesConfig`.
+  - `phpcs --standard=phpcs.xml src/FileRise` now passes for this scope.
+
+---
+
+## Changes 02/15/2026 (v3.4.0)
 
 `release(v3.4.0): Core Sources (Local + WebDAV), Pro Gateway Shares admin/API, pretheme CSP cleanup, and pagination fix (closes #104)`
 

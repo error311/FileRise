@@ -111,15 +111,21 @@ final class WebDavAdapter implements StorageAdapterInterface
     public function list(string $path): array
     {
         $props = $this->propFind($path, 1);
-        if (!$props) return [];
+        if (!$props) {
+            return [];
+        }
         $parentRel = trim($this->relativePath($path), '/');
         $items = [];
         $children = [];
         foreach ($props as $href => $prop) {
             $rel = trim($this->hrefToRelative((string)$href), '/');
-            if ($rel === '' || $rel === $parentRel) continue;
+            if ($rel === '' || $rel === $parentRel) {
+                continue;
+            }
             $name = basename($rel);
-            if ($name === '' || $name === '.' || $name === '..') continue;
+            if ($name === '' || $name === '.' || $name === '..') {
+                continue;
+            }
             $items[] = $name;
             $children[$name] = $this->propsToStat($prop);
         }
@@ -143,7 +149,9 @@ final class WebDavAdapter implements StorageAdapterInterface
         }
 
         $props = $this->propFind($path, 0);
-        if (!$props) return null;
+        if (!$props) {
+            return null;
+        }
 
         return $this->propsToStat($props);
     }
@@ -177,7 +185,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     public function openReadStream(string $path, ?int $length = null, int $offset = 0)
     {
         $url = $this->buildUrlForPath($path);
-        if ($url === '') return false;
+        if ($url === '') {
+            return false;
+        }
 
         $headers = [];
         if ($this->username !== '') {
@@ -210,19 +220,29 @@ final class WebDavAdapter implements StorageAdapterInterface
 
     public function write(string $path, string $data, int $flags = 0): bool
     {
-        if (!$this->ensureParentExists($path)) return false;
+        if (!$this->ensureParentExists($path)) {
+            return false;
+        }
         $url = $this->buildUrlForPath($path);
-        if ($url === '') return false;
+        if ($url === '') {
+            return false;
+        }
         $status = $this->request('PUT', $url, $data, []);
         return $status >= 200 && $status < 300;
     }
 
     public function writeStream(string $path, $stream, ?int $length = null, ?string $mimeType = null): bool
     {
-        if (!is_resource($stream)) return false;
-        if (!$this->ensureParentExists($path)) return false;
+        if (!is_resource($stream)) {
+            return false;
+        }
+        if (!$this->ensureParentExists($path)) {
+            return false;
+        }
         $url = $this->buildUrlForPath($path);
-        if ($url === '') return false;
+        if ($url === '') {
+            return false;
+        }
         $headers = [];
         if ($mimeType) {
             $headers['Content-Type'] = $mimeType;
@@ -262,7 +282,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     {
         $src = $this->buildUrlForPath($from);
         $dst = $this->buildUrlForPath($to);
-        if ($src === '' || $dst === '') return false;
+        if ($src === '' || $dst === '') {
+            return false;
+        }
         $status = $this->request('MOVE', $src, null, [
             'Destination' => $dst,
             'Overwrite' => 'T',
@@ -274,7 +296,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     {
         $src = $this->buildUrlForPath($from);
         $dst = $this->buildUrlForPath($to);
-        if ($src === '' || $dst === '') return false;
+        if ($src === '' || $dst === '') {
+            return false;
+        }
         $status = $this->request('COPY', $src, null, [
             'Destination' => $dst,
             'Overwrite' => 'T',
@@ -285,7 +309,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     public function delete(string $path): bool
     {
         $url = $this->buildUrlForPath($path);
-        if ($url === '') return false;
+        if ($url === '') {
+            return false;
+        }
         $status = $this->request('DELETE', $url, null, []);
         return $status >= 200 && $status < 300;
     }
@@ -293,14 +319,20 @@ final class WebDavAdapter implements StorageAdapterInterface
     public function mkdir(string $path, int $mode = 0775, bool $recursive = true): bool
     {
         $rel = trim($this->relativePath($path), '/');
-        if ($rel === '') return true;
+        if ($rel === '') {
+            return true;
+        }
         $parts = array_values(array_filter(explode('/', $rel), fn($p) => $p !== ''));
-        if (!$parts) return true;
+        if (!$parts) {
+            return true;
+        }
 
         $acc = '';
         foreach ($parts as $part) {
             $acc = ($acc === '') ? $part : ($acc . '/' . $part);
-            if (!$recursive && $acc !== $rel) continue;
+            if (!$recursive && $acc !== $rel) {
+                continue;
+            }
             $url = $this->buildUrlForRelative($acc);
             $status = $this->request('MKCOL', $url, null, []);
             if ($status >= 200 && $status < 300) {
@@ -338,7 +370,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     private static function encodePath(string $path): string
     {
         $trimmed = trim($path, '/');
-        if ($trimmed === '') return '';
+        if ($trimmed === '') {
+            return '';
+        }
         $parts = array_map('rawurlencode', explode('/', $trimmed));
         return implode('/', $parts);
     }
@@ -382,7 +416,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     private function propFind(string $path, int $depth): array
     {
         $url = $this->buildUrlForPath($path);
-        if ($url === '') return [];
+        if ($url === '') {
+            return [];
+        }
         try {
             return $this->client->propFind($url, [
                 '{DAV:}displayname',
@@ -485,7 +521,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     private function ensureParentExists(string $path): bool
     {
         $rel = trim($this->relativePath($path), '/');
-        if ($rel === '') return true;
+        if ($rel === '') {
+            return true;
+        }
         $parent = trim(str_replace('\\', '/', dirname($rel)), '/');
         if ($parent === '' || $parent === '.') {
             return true;
