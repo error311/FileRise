@@ -110,9 +110,40 @@ function getSourceTypeById(id) {
 }
 
 function getSourceMetaById(id) {
+  const key = String(id || '').trim();
+  if (!key) return { name: '', type: '', readOnly: false, disableTrash: false };
+
+  try {
+    const meta = window.__FR_SOURCE_META_MAP;
+    if (meta && Object.prototype.hasOwnProperty.call(meta, key)) {
+      const row = meta[key] || {};
+      return {
+        name: String(row.name || ''),
+        type: String(row.type || ''),
+        readOnly: !!row.readOnly,
+        disableTrash: !!row.disableTrash
+      };
+    }
+  } catch (e) { /* ignore */ }
+
+  const select = document.getElementById('sourceSelector');
+  if (select) {
+    const opt = Array.from(select.options).find(o => o.value === key);
+    if (opt) {
+      return {
+        name: String(opt.dataset?.sourceName || ''),
+        type: String(opt.dataset?.sourceType || ''),
+        readOnly: opt.dataset?.sourceReadOnly === '1',
+        disableTrash: opt.dataset?.sourceDisableTrash === '1'
+      };
+    }
+  }
+
   return {
-    name: getSourceNameById(id),
-    type: getSourceTypeById(id)
+    name: getSourceNameById(key),
+    type: getSourceTypeById(key),
+    readOnly: false,
+    disableTrash: false
   };
 }
 
@@ -260,8 +291,9 @@ export async function initSourceSelector(opts = {}) {
     opt.dataset.sourceName = name;
     opt.dataset.sourceType = type;
     opt.dataset.sourceReadOnly = src.readOnly ? '1' : '0';
+    opt.dataset.sourceDisableTrash = src.disableTrash ? '1' : '0';
     nameMap[id] = name;
-    metaMap[id] = { name, type, readOnly: !!src.readOnly };
+    metaMap[id] = { name, type, readOnly: !!src.readOnly, disableTrash: !!src.disableTrash };
     select.appendChild(opt);
   });
 

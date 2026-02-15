@@ -2301,6 +2301,7 @@ try {
 
 // Activate pane on click
 document.addEventListener('click', (e) => {
+  if (!window.dualPaneEnabled) return;
   const pane = e.target && e.target.closest
     ? e.target.closest('.file-list-pane')
     : null;
@@ -6892,6 +6893,13 @@ const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
     currentPage = totalPages;
     window.currentPage = currentPage;
   }
+  // Keep pane-local pagination state in sync so click-capture pane activation
+  // does not restore a stale page before pagination handlers run.
+  const tablePane = getPaneKeyForElement(fileListContent);
+  savePaneState(tablePane, {
+    currentPage,
+    currentSearchTerm: window.currentSearchTerm || ''
+  });
 
   const startRow = (currentPage - 1) * itemsPerPageSetting;
   const endRow   = Math.min(startRow + itemsPerPageSetting, totalRows);
@@ -7356,6 +7364,12 @@ export function renderGalleryView(folder, container) {
     currentPage = totalPages || 1;
     window.currentPage = currentPage;
   }
+  // Keep pane-local pagination state in sync for gallery mode as well.
+  const galleryPane = getPaneKeyForElement(fileListContent);
+  savePaneState(galleryPane, {
+    currentPage,
+    currentSearchTerm: window.currentSearchTerm || ''
+  });
 
   // --- Top controls: search + pagination + items-per-page ---
   let galleryHTML = buildSearchAndPaginationControls({

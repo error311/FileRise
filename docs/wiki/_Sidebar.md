@@ -46,6 +46,7 @@
 - [Sources onboarding](Sources-Onboarding)
 - [Search everywhere](Search-Everywhere)
 - [Pro sources](Pro-Sources)
+- [Pro gateway shares](Pro-Gateway-Shares)
 - [Instance IDs](Instance-IDs)
 
 ### Developer

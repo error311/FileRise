@@ -30,10 +30,12 @@ Each source has its own root and trash behavior. ACLs are enforced per source.
 
 - Source ID: unique slug used internally and in URLs.
 - Enabled / Read only: disable or lock a source without deleting it.
+- Delete permanently (skip trash): bypasses source trash and removes files immediately.
 - Root path or prefix: scope the source to a subfolder (optional).
 - Secrets: stored encrypted and never shown after save (leave blank to keep).
 
-Note: Google Drive sources do not support Trash; deletes are permanent.
+If trash is enabled, FileRise creates the source `trash` folder on demand during delete operations.
+Note: Google Drive sources do not support Trash; deletes are always permanent.
 
 ---
 

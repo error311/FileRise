@@ -26,7 +26,7 @@ export {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.7.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.8.0';
 const PRO_API_LEVELS = {
   diskUsage: 2,
   search: 3,
@@ -39,6 +39,8 @@ const PRO_API_MIN_VERSION_LABELS = {
   audit: '1.4.0',
   sources: '1.5.0'
 };
+const CORE_SOURCE_TYPES = ['local', 'webdav'];
+const ALL_SOURCE_TYPES = ['local', 's3', 'sftp', 'ftp', 'webdav', 'smb', 'gdrive', 'onedrive', 'dropbox'];
 const CORE_REQUIRED_PRO_API_LEVEL = Math.max(...Object.values(PRO_API_LEVELS));
 const DEFAULT_HEADER_TITLE = 'FileRise';
 const PRO_DEFAULT_HEADER_TITLE = 'FileRise Pro';
@@ -1171,111 +1173,36 @@ function initVirusLogSection({ isPro }) {
   })();
 }
 
-function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSourcesApiOk }) {
+function initSourcesSection({
+  modalEl,
+  sourcesEnabled,
+  sourcesCfg,
+  isPro,
+  proSourcesApiOk,
+  sourcesAllowedTypes = CORE_SOURCE_TYPES,
+  sourcesProExtended = false
+}) {
   const container = document.getElementById('sourcesContent');
   if (!container || container.__initialized) return;
   container.__initialized = true;
 
-  if (!isPro) {
-    const isDark = document.body.classList.contains('dark-mode');
-    const overlayBg = isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.92)';
-    const overlayText = isDark ? '#f8fafc' : '#111827';
-    const overlaySubtext = isDark ? 'rgba(226, 232, 240, 0.9)' : '#4b5563';
-    const overlayBorder = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)';
-    const overlayShadow = isDark ? '0 10px 28px rgba(0,0,0,0.5)' : '0 10px 24px rgba(0,0,0,0.18)';
-    const title = tf('sources_pro_locked_title', 'Sources are a Pro feature');
-    const body = tf(
-      'sources_pro_locked_body',
-      'Connect remote storage and manage it like local — switch sources, move/copy between them, and keep separate trash per source. Upgrade to FileRise Pro to add S3, SFTP, FTP, WebDAV, SMB, additional Local, Google Drive, Dropbox and OneDrive sources.'
-    );
-    const help = tf('sources_help', 'Sources are separate roots; users only see sources they can access.');
-    const adapterHint = tf(
-      'sources_adapter_hint',
-      'Adapters: local, S3, SFTP, FTP, WebDAV, SMB, Google Drive, Dropbox, OneDrive.'
-    );
-
-    container.innerHTML = `
-      <div class="card" style="border-radius: var(--menu-radius); overflow:hidden; position:relative;">
-        <div class="card-header py-2">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <strong>
-                ${escapeHTML(tf('sources', 'Sources'))}
-                <span class="badge bg-warning text-dark ms-1 align-middle">Pro</span>
-              </strong>
-              <div class="small text-muted">${escapeHTML(help)}</div>
-            </div>
-          </div>
-        </div>
-        <div class="card-body p-2">
-          <div style="filter:blur(3px);opacity:0.5;pointer-events:none;">
-            <div class="sources-admin">
-              <div class="form-group" style="margin-bottom:8px;">
-                <div class="form-check fr-toggle">
-                  <input type="checkbox" class="form-check-input fr-toggle-input" />
-                  <label class="form-check-label">${escapeHTML(tf('sources_enabled', 'Enable sources'))}</label>
-                </div>
-                <small class="text-muted d-block mt-1">${escapeHTML(help)}</small>
-              </div>
-
-              <div class="sources-toolbar">
-                <button type="button" class="btn btn-sm btn-primary">
-                  ${escapeHTML(tf('source_add', 'Add Source'))}
-                </button>
-                <button type="button" class="btn btn-sm btn-secondary">
-                  ${escapeHTML(tf('refresh', 'Refresh'))}
-                </button>
-              </div>
-
-              <div class="table-responsive" style="margin-top:6px;">
-                <table class="table table-sm mb-0">
-                  <thead class="thead-light">
-                    <tr>
-                      <th>${escapeHTML(tf('source_name', 'Source Name'))}</th>
-                      <th>${escapeHTML(tf('source_type', 'Type'))}</th>
-                      <th>${escapeHTML(tf('status', 'Status'))}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr><td>Local</td><td>local</td><td>${escapeHTML(tf('enabled', 'Enabled'))}</td></tr>
-                    <tr><td>Archive</td><td>s3</td><td>${escapeHTML(tf('disabled', 'Disabled'))}</td></tr>
-                    <tr><td>Media</td><td>smb</td><td>${escapeHTML(tf('enabled', 'Enabled'))}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="text-muted small" style="margin-top:6px;">
-                ${escapeHTML(adapterHint)}
-              </div>
-            </div>
-          </div>
-
-          <div
-            class="d-flex flex-column align-items-center justify-content-center text-center"
-            style="position:absolute; inset:0; padding:16px;">
-            <div style="background:${overlayBg}; color:${overlayText}; border:${overlayBorder}; box-shadow:${overlayShadow}; padding:10px 12px; border-radius:10px; max-width:520px;">
-              <div class="mb-1">
-                <span class="badge bg-warning text-dark me-1">Pro</span>
-                <span class="fw-semibold">${escapeHTML(title)}</span>
-              </div>
-              <div class="small mb-2" style="color:${overlaySubtext};">
-                ${escapeHTML(body)}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+  if (sourcesCfg && sourcesCfg.available === false) {
+    container.innerHTML = `<div class="text-muted">${escapeHTML(tf('sources_unavailable', 'Sources are unavailable on this build.'))}</div>`;
     return;
   }
-  if (!proSourcesApiOk) {
-    const msg = tf(
-      'sources_pro_bundle_outdated',
-      `Please upgrade to FileRise Pro v${PRO_API_MIN_VERSION_LABELS.sources}+ to use Sources.`
-    );
-    container.innerHTML = `<div class="text-muted">${escapeHTML(msg)}</div>`;
-    return;
-  }
+
+  const normalizedAllowedTypes = Array.isArray(sourcesAllowedTypes)
+    ? sourcesAllowedTypes.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+    : [];
+  const filteredAllowed = normalizedAllowedTypes.filter(type => ALL_SOURCE_TYPES.includes(type));
+  const effectiveAllowedTypes = filteredAllowed.length ? filteredAllowed : CORE_SOURCE_TYPES.slice();
+  const allowedTypeSet = new Set(effectiveAllowedTypes);
+  const limitedAdaptersHint = (!sourcesProExtended && effectiveAllowedTypes.length < ALL_SOURCE_TYPES.length)
+    ? tf(
+      'sources_core_types_hint',
+      'Core supports Local and WebDAV sources. Upgrade to FileRise Pro for S3, SFTP, FTP, SMB, Google Drive, Dropbox, and OneDrive.'
+    )
+    : '';
 
   container.innerHTML = `
     <div class="sources-admin">
@@ -1329,8 +1256,11 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
               <option value="onedrive">onedrive</option>
               <option value="dropbox">dropbox</option>
             </select>
+            <small id="sourceTypeAvailabilityHint" class="text-muted d-block mt-1"${limitedAdaptersHint ? '' : ' hidden'}>
+              ${escapeHTML(limitedAdaptersHint)}
+            </small>
           </div>
-          <div class="form-group sources-form-inline">
+          <div class="form-group sources-form-inline sources-flags-row">
             <div class="form-check fr-toggle">
               <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceEnabled" />
               <label class="form-check-label" for="sourceEnabled">
@@ -1343,12 +1273,21 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
                 ${t('read_only')}
               </label>
             </div>
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="sourceDisableTrash" />
+              <label class="form-check-label" for="sourceDisableTrash">
+                ${tf('source_disable_trash', 'Delete permanently')}
+              </label>
+            </div>
+            <small class="text-muted sources-inline-help">
+              ${tf('source_disable_trash_help', 'Delete permanently toggle: ON skips Trash and deletes immediately. OFF moves files to Trash (FileRise creates the trash folder on demand).')}
+            </small>
           </div>
         </div>
 
         <div class="sources-type-block" data-type="local">
           <div class="sources-hint-row">
-            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_local', 'Use an absolute server path. Leave blank to use the default uploads root. Ensure the web user can read/write this path; FileRise does not chown extra mounts.')}">!</button>
+            <button type="button" class="sources-hint-btn" aria-label="${tf('source_hint_button', 'Show setup hints')}" data-tooltip="${tf('source_hint_local', 'Use an absolute server path. Leave blank to use the default uploads root. Ensure the web user can read/write this path; FileRise does not chown extra mounts. If trash creation fails, enable Delete permanently for this source.')}">!</button>
           </div>
           <div class="form-group">
             <label for="sourceLocalPath">${tf('source_local_path', 'Local path')}:</label>
@@ -1678,6 +1617,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
   const sourceTypeEl = container.querySelector('#sourceType');
   const sourceEnabledEl = container.querySelector('#sourceEnabled');
   const sourceReadOnlyEl = container.querySelector('#sourceReadOnly');
+  const sourceDisableTrashEl = container.querySelector('#sourceDisableTrash');
   const localPathEl = container.querySelector('#sourceLocalPath');
   const s3BucketEl = container.querySelector('#sourceS3Bucket');
   const s3RegionEl = container.querySelector('#sourceS3Region');
@@ -1731,7 +1671,27 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
   const dropboxRootPathEl = container.querySelector('#sourceDropboxRootPath');
   const dropboxTeamMemberIdEl = container.querySelector('#sourceDropboxTeamMemberId');
   const dropboxRootNamespaceIdEl = container.querySelector('#sourceDropboxRootNamespaceId');
+  const sourceTypeHintEl = container.querySelector('#sourceTypeAvailabilityHint');
   const typeBlocks = Array.from(container.querySelectorAll('.sources-type-block'));
+  if (sourceTypeEl) {
+    Array.from(sourceTypeEl.options).forEach(opt => {
+      const type = String(opt.value || '').trim().toLowerCase();
+      if (!allowedTypeSet.has(type)) {
+        opt.remove();
+      }
+    });
+    if (!sourceTypeEl.options.length) {
+      const opt = document.createElement('option');
+      opt.value = 'local';
+      opt.textContent = 'local';
+      sourceTypeEl.appendChild(opt);
+      allowedTypeSet.add('local');
+    }
+  }
+
+  if (sourceTypeHintEl && !limitedAdaptersHint) {
+    sourceTypeHintEl.hidden = true;
+  }
 
   let editingId = '';
   let state = {
@@ -1816,11 +1776,29 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
   };
 
   const setType = (type) => {
-    const t = (type || 'local').toLowerCase();
+    let t = (type || 'local').toLowerCase();
+    if (!allowedTypeSet.has(t)) {
+      t = sourceTypeEl?.options?.[0]?.value
+        ? String(sourceTypeEl.options[0].value).toLowerCase()
+        : 'local';
+    }
     sourceTypeEl.value = t;
     typeBlocks.forEach(block => {
       block.hidden = block.getAttribute('data-type') !== t;
     });
+    if (sourceDisableTrashEl) {
+      const forcePermanentDelete = (t === 'gdrive');
+      sourceDisableTrashEl.disabled = forcePermanentDelete;
+      if (forcePermanentDelete) {
+        sourceDisableTrashEl.checked = true;
+        sourceDisableTrashEl.title = tf(
+          'source_gdrive_trash_note',
+          'Trash is not supported on Google Drive sources; deletes are permanent.'
+        );
+      } else {
+        sourceDisableTrashEl.removeAttribute('title');
+      }
+    }
   };
 
   const resetSecrets = () => {
@@ -1857,6 +1835,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
     if (sourceNameEl) sourceNameEl.value = '';
     if (sourceEnabledEl) sourceEnabledEl.checked = true;
     if (sourceReadOnlyEl) sourceReadOnlyEl.checked = false;
+    if (sourceDisableTrashEl) sourceDisableTrashEl.checked = false;
     if (localPathEl) localPathEl.value = '';
     if (s3BucketEl) s3BucketEl.value = '';
     if (s3RegionEl) s3RegionEl.value = '';
@@ -1935,6 +1914,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
     if (sourceNameEl) sourceNameEl.value = src.name || '';
     if (sourceEnabledEl) sourceEnabledEl.checked = src.enabled !== false;
     if (sourceReadOnlyEl) sourceReadOnlyEl.checked = !!src.readOnly;
+    if (sourceDisableTrashEl) sourceDisableTrashEl.checked = !!src.disableTrash;
     const type = (src.type || 'local').toLowerCase();
     setType(type);
     const cfg = src.config || {};
@@ -2012,7 +1992,8 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
       const enabledText = (src.enabled === false) ? tf('disabled', 'Disabled') : tf('enabled', 'Enabled');
       const flags = [
         enabledText,
-        (src.readOnly ? t('read_only') : '')
+        (src.readOnly ? t('read_only') : ''),
+        (src.disableTrash ? tf('source_trash_disabled_badge', 'Trash off') : '')
       ].filter(Boolean);
       const badges = flags.map(flag => `<span class="sources-badge">${esc(flag)}</span>`).join('');
       const badgeWrap = badges ? `<span class="sources-badges">${badges}</span>` : '';
@@ -2058,7 +2039,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
   };
 
   const loadSources = async () => {
-    if (!isPro || !proSourcesApiOk || window.__FR_IS_PRO === false) {
+    if (sourcesCfg && sourcesCfg.available === false) {
       return;
     }
     setStatus(tf('loading', 'Loading...'));
@@ -2235,6 +2216,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
       const type = (sourceTypeEl?.value || '').trim().toLowerCase();
       const enabled = !!sourceEnabledEl?.checked;
       const readOnly = !!sourceReadOnlyEl?.checked;
+      const disableTrash = !!sourceDisableTrashEl?.checked;
 
       if (!id || !name || !type) {
         showToast(t('admin_source_required_fields'), 'error');
@@ -2419,7 +2401,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
       }
 
       const payload = {
-        source: { id, name, type, enabled, readOnly, config }
+        source: { id, name, type, enabled, readOnly, disableTrash, config }
       };
 
       const existingIdx = (state.sources || []).findIndex(s => String(s.id || '') === id);
@@ -2427,7 +2409,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
       const optimisticEnabled = isNewSource
         ? false
         : ((state.sources[existingIdx]?.enabled) !== false);
-      const optimisticSource = { id, name, type, enabled: optimisticEnabled, readOnly };
+      const optimisticSource = { id, name, type, enabled: optimisticEnabled, readOnly, disableTrash };
 
       if (isNewSource) {
         state.sources = [...(state.sources || []), optimisticSource];
@@ -2470,7 +2452,7 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
         } else if (enabled) {
           const testOk = await runSourceTest({ id });
           if (testOk === false) {
-            const disablePayload = { source: { id, name, type, enabled: false, readOnly, config } };
+            const disablePayload = { source: { id, name, type, enabled: false, readOnly, disableTrash, config } };
             try {
               const disableRes = await fetch(withBase('/api/pro/sources/save.php'), {
                 method: 'POST',
@@ -2518,6 +2500,824 @@ function initSourcesSection({ modalEl, sourcesEnabled, sourcesCfg, isPro, proSou
 
   resetForm();
   loadSources();
+}
+
+function initGatewaysSection({ isPro }) {
+  const container = document.getElementById('gatewaysContent');
+  if (!container || container.__initialized) return;
+  container.__initialized = true;
+
+  if (!isPro) {
+    container.innerHTML = `
+      <div class="card" style="border-radius: var(--menu-radius); overflow:hidden;">
+        <div class="card-header py-2">
+          <strong>
+            ${escapeHTML(tf('gateway_shares', 'Gateway Shares'))}
+            <span class="badge bg-warning text-dark ms-1 align-middle">Pro</span>
+          </strong>
+        </div>
+        <div class="card-body p-2">
+          <div class="small text-muted">
+            ${escapeHTML(tf('gateway_locked_body', 'Expose a scoped source root over SFTP, S3, or MCP with generated start commands and safety checks.'))}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="sources-admin">
+      <div class="sources-toolbar">
+        <button type="button" id="gwAddBtn" class="btn btn-sm btn-primary">${escapeHTML(tf('gateway_add', 'Add Gateway'))}</button>
+        <button type="button" id="gwRefreshBtn" class="btn btn-sm btn-secondary">${escapeHTML(tf('refresh', 'Refresh'))}</button>
+      </div>
+
+      <div class="alert alert-info py-2 px-3 small" style="border-radius:8px; margin-bottom:8px;">
+        <div><strong>${escapeHTML(tf('gateway_runtime_title', 'Gateway runtime checklist'))}</strong></div>
+        <div>${escapeHTML(tf('gateway_runtime_line_1', '1) Install rclone on the gateway host/container.'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_2', '2) For Docker, recommended: run rclone as a sidecar from the docker-compose snippet.'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_3', '3) If you run rclone inside the FileRise container, publish the gateway port (example: -p 2022:2022).'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_4', '4) Use listen address 0.0.0.0 for LAN access, then connect to host IP:port.'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_5', '5) Test validates config only; it does not start or stop gateway services.'))}</div>
+        <a class="small" href="${escapeHTML(withBase('/docs/?page=pro-gateway-shares'))}" target="_blank" rel="noopener noreferrer">
+          ${escapeHTML(tf('gateway_runtime_docs', 'Open Gateway setup guide'))}
+        </a>
+      </div>
+
+      <div id="gwStatus" class="text-muted small" style="margin-bottom:6px;"></div>
+      <div id="gwList" class="sources-list"></div>
+
+      <hr class="admin-divider">
+
+      <div id="gwFormWrap" class="sources-form">
+        <div class="admin-subsection-title" id="gwFormTitle">${escapeHTML(tf('gateway_add', 'Add Gateway'))}</div>
+        <div class="sources-form-grid">
+          <div class="form-group">
+            <label for="gwName">${escapeHTML(tf('gateway_name', 'Name'))}:</label>
+            <input type="text" id="gwName" class="form-control" maxlength="120" placeholder="Client SFTP" />
+          </div>
+          <div class="form-group">
+            <label for="gwType">${escapeHTML(tf('gateway_type', 'Gateway Type'))}:</label>
+            <select id="gwType" class="form-control">
+              <option value="sftp">sftp</option>
+              <option value="s3">s3</option>
+              <option value="mcp">mcp</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="gwSourceId">${escapeHTML(tf('gateway_source_id', 'Source ID'))}:</label>
+            <select id="gwSourceId" class="form-control"></select>
+          </div>
+          <div class="form-group">
+            <label for="gwRootPath">${escapeHTML(tf('gateway_root_path', 'Root Path'))}:</label>
+            <input type="text" id="gwRootPath" class="form-control" value="root" placeholder="root or folder/subfolder" />
+          </div>
+          <div class="form-group">
+            <label for="gwMode">${escapeHTML(tf('gateway_mode', 'Mode'))}:</label>
+            <select id="gwMode" class="form-control">
+              <option value="ro">ro</option>
+              <option value="rw">rw</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="gwListenAddr">${escapeHTML(tf('gateway_listen_addr', 'Listen Address'))}:</label>
+            <input type="text" id="gwListenAddr" class="form-control" value="127.0.0.1" />
+          </div>
+          <div class="form-group">
+            <label for="gwPort">${escapeHTML(tf('gateway_port', 'Port'))}:</label>
+            <input type="number" id="gwPort" class="form-control" min="1024" max="65535" placeholder="auto/default" />
+          </div>
+          <div class="form-group sources-form-inline">
+            <div class="form-check fr-toggle">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="gwEnabled" checked />
+              <label class="form-check-label" for="gwEnabled">
+                ${escapeHTML(tf('source_enabled', 'Enabled'))}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="sources-type-block" data-gw-type="sftp">
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="gwSftpUser">${escapeHTML(tf('gateway_sftp_user', 'SFTP user'))}:</label>
+              <input type="text" id="gwSftpUser" class="form-control" maxlength="64" />
+            </div>
+            <div class="form-group">
+              <label for="gwSftpPass">${escapeHTML(tf('gateway_sftp_pass', 'SFTP password'))}:</label>
+              <input type="password" id="gwSftpPass" class="form-control" autocomplete="new-password" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="gwSftpAuthorizedKeys">${escapeHTML(tf('gateway_sftp_authorized_keys', 'Authorized keys'))}:</label>
+            <textarea id="gwSftpAuthorizedKeys" class="form-control" rows="3"></textarea>
+          </div>
+          <small class="text-muted d-block mt-1">${escapeHTML(tf('gateway_secret_note', 'Secrets are never shown after saving. Leave secret fields blank to keep existing values.'))}</small>
+        </div>
+
+        <div class="sources-type-block" data-gw-type="s3" hidden>
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="gwS3AccessKey">${escapeHTML(tf('gateway_s3_access_key', 'S3 access key'))}:</label>
+              <input type="text" id="gwS3AccessKey" class="form-control" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label for="gwS3SecretKey">${escapeHTML(tf('gateway_s3_secret_key', 'S3 secret key'))}:</label>
+              <input type="password" id="gwS3SecretKey" class="form-control" autocomplete="new-password" />
+            </div>
+          </div>
+          <small class="text-muted d-block mt-1">${escapeHTML(tf('gateway_secret_note', 'Secrets are never shown after saving. Leave secret fields blank to keep existing values.'))}</small>
+        </div>
+
+        <div class="sources-type-block" data-gw-type="mcp" hidden>
+          <div class="form-group">
+            <label for="gwMcpToken">${escapeHTML(tf('gateway_mcp_token', 'MCP token (optional)'))}:</label>
+            <input type="text" id="gwMcpToken" class="form-control" autocomplete="off" />
+          </div>
+          <small class="text-muted d-block mt-1">${escapeHTML(tf('gateway_mcp_token_hint', 'Leave blank to keep existing token or auto-generate on create.'))}</small>
+        </div>
+
+        <div class="sources-actions">
+          <button type="button" id="gwSaveBtn" class="btn btn-sm btn-success">${escapeHTML(tf('gateway_save', 'Save Gateway'))}</button>
+          <button type="button" id="gwResetBtn" class="btn btn-sm btn-light">${escapeHTML(tf('reset', 'Reset'))}</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="d-flex align-items-center justify-content-between mb-1" style="gap:8px;">
+          <label class="small text-muted mb-0">${escapeHTML(tf('gateway_snippets', 'Gateway snippets'))}</label>
+          <div class="d-flex align-items-center" style="gap:8px;">
+            <select id="gwSnippetType" class="form-control form-control-sm" style="max-width:220px;">
+              <option value="command">${escapeHTML(tf('gateway_start_command', 'Start command'))}</option>
+              <option value="docker">${escapeHTML(tf('gateway_docker_compose', 'docker-compose snippet'))}</option>
+              <option value="systemd">${escapeHTML(tf('gateway_systemd_unit', 'systemd unit snippet'))}</option>
+            </select>
+            <button type="button" id="gwCopySnippetBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('copy', 'Copy'))}</button>
+          </div>
+        </div>
+        <pre id="gwSnippetPreview" style="margin:0; max-height:180px; overflow:auto; font-size:12px; background:#0b1020; color:#dbeafe; border-radius:8px; padding:10px;"></pre>
+      </div>
+
+      <div style="margin-top:8px;">
+        <div class="d-flex align-items-center justify-content-between mb-1" style="gap:8px;">
+          <label class="small text-muted mb-0">${escapeHTML(tf('gateway_test_output', 'Test output'))}</label>
+          <div class="d-flex align-items-center" style="gap:8px;">
+            <div class="form-check fr-toggle" style="margin:0;">
+              <input type="checkbox" class="form-check-input fr-toggle-input" id="gwIncludeSecrets" />
+              <label class="form-check-label" for="gwIncludeSecrets">${escapeHTML(tf('gateway_include_secrets', 'Include secrets on test'))}</label>
+            </div>
+            <button type="button" id="gwCopyTestBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('copy', 'Copy'))}</button>
+          </div>
+        </div>
+        <pre id="gwTestOutput" style="margin:0; max-height:180px; overflow:auto; font-size:12px; background:#111827; color:#e5e7eb; border-radius:8px; padding:10px;"></pre>
+      </div>
+    </div>
+  `;
+
+  const state = {
+    gateways: [],
+    editingId: '',
+    previewGatewayId: '',
+    sourceOptions: [],
+    lastTestResult: null,
+  };
+
+  const getCsrf = () =>
+    (document.querySelector('meta[name="csrf-token"]')?.content || window.csrfToken || '');
+
+  const statusEl = container.querySelector('#gwStatus');
+  const listEl = container.querySelector('#gwList');
+  const formTitleEl = container.querySelector('#gwFormTitle');
+  const commandEl = container.querySelector('#gwSnippetPreview');
+  const snippetTypeEl = container.querySelector('#gwSnippetType');
+  const copySnippetBtn = container.querySelector('#gwCopySnippetBtn');
+  const testOutEl = container.querySelector('#gwTestOutput');
+  const includeSecretsEl = container.querySelector('#gwIncludeSecrets');
+  const copyTestBtn = container.querySelector('#gwCopyTestBtn');
+  const nameEl = container.querySelector('#gwName');
+  const typeEl = container.querySelector('#gwType');
+  const sourceIdEl = container.querySelector('#gwSourceId');
+  const rootPathEl = container.querySelector('#gwRootPath');
+  const modeEl = container.querySelector('#gwMode');
+  const listenEl = container.querySelector('#gwListenAddr');
+  const portEl = container.querySelector('#gwPort');
+  const enabledEl = container.querySelector('#gwEnabled');
+  const sftpUserEl = container.querySelector('#gwSftpUser');
+  const sftpPassEl = container.querySelector('#gwSftpPass');
+  const sftpKeysEl = container.querySelector('#gwSftpAuthorizedKeys');
+  const s3AccessEl = container.querySelector('#gwS3AccessKey');
+  const s3SecretEl = container.querySelector('#gwS3SecretKey');
+  const mcpTokenEl = container.querySelector('#gwMcpToken');
+  const saveBtn = container.querySelector('#gwSaveBtn');
+  const resetBtn = container.querySelector('#gwResetBtn');
+  const refreshBtn = container.querySelector('#gwRefreshBtn');
+  const addBtn = container.querySelector('#gwAddBtn');
+
+  const setStatus = (msg, tone = 'muted') => {
+    if (!statusEl) return;
+    statusEl.classList.remove('text-muted', 'text-danger', 'text-success', 'text-warning');
+    if (tone === 'danger') statusEl.classList.add('text-danger');
+    else if (tone === 'success') statusEl.classList.add('text-success');
+    else if (tone === 'warning') statusEl.classList.add('text-warning');
+    else statusEl.classList.add('text-muted');
+    statusEl.textContent = msg || '';
+  };
+
+  const setCommand = (text) => {
+    if (!commandEl) return;
+    commandEl.textContent = String(text || '');
+  };
+
+  const setTestOutput = (text) => {
+    if (!testOutEl) return;
+    testOutEl.textContent = String(text || '');
+  };
+
+  const selectedSnippetKind = () => {
+    return String(snippetTypeEl?.value || 'command');
+  };
+
+  const snippetFromGateway = (gw, kind = selectedSnippetKind(), includeSecrets = false) => {
+    if (!gw || typeof gw !== 'object') return '';
+    const k = String(kind || 'command').toLowerCase();
+    const defaultSnippets = gw?.snippets && typeof gw.snippets === 'object' ? gw.snippets : {};
+    const secretsSnippets = gw?.snippetsWithSecrets && typeof gw.snippetsWithSecrets === 'object'
+      ? gw.snippetsWithSecrets
+      : {};
+    const pick = includeSecrets ? secretsSnippets : defaultSnippets;
+
+    if (k === 'docker') {
+      return String(
+        pick.dockerCompose
+        || (includeSecrets ? gw.dockerComposeWithSecrets : '')
+        || defaultSnippets.dockerCompose
+        || gw.dockerCompose
+        || ''
+      );
+    }
+    if (k === 'systemd') {
+      return String(
+        pick.systemd
+        || (includeSecrets ? gw.systemdWithSecrets : '')
+        || defaultSnippets.systemd
+        || gw.systemd
+        || ''
+      );
+    }
+    return String(
+      pick.startCommand
+      || (includeSecrets ? gw.startCommandWithSecrets : '')
+      || defaultSnippets.startCommand
+      || gw.startCommand
+      || ''
+    );
+  };
+
+  const copyText = async (value) => {
+    const text = String(value || '');
+    if (!text) return false;
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', 'readonly');
+    ta.style.position = 'absolute';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      return document.execCommand('copy');
+    } finally {
+      document.body.removeChild(ta);
+    }
+  };
+
+  const activeGateway = () => {
+    const id = state.editingId || state.previewGatewayId;
+    if (!id) return null;
+    return (state.gateways || []).find((x) => String(x.id || '') === id) || null;
+  };
+
+  const refreshSnippetPreview = () => {
+    const includeSecrets = !!includeSecretsEl?.checked;
+    const payload = state.lastTestResult || activeGateway();
+    setCommand(snippetFromGateway(payload, selectedSnippetKind(), includeSecrets));
+  };
+
+  const ensureSourceOption = (id, label = '') => {
+    const sourceId = String(id || '').trim();
+    if (!sourceId) return;
+    const existing = (state.sourceOptions || []).find((s) => String(s.id || '') === sourceId);
+    if (existing) return;
+    const sourceLabel = String(label || sourceId);
+    state.sourceOptions = [...(state.sourceOptions || []), { id: sourceId, label: sourceLabel }];
+  };
+
+  const renderSourceOptions = (preferredId = '') => {
+    if (!sourceIdEl) return;
+    let options = Array.isArray(state.sourceOptions) ? state.sourceOptions.slice() : [];
+    if (!options.length) {
+      options = [{ id: 'local', label: 'local - Local' }];
+    }
+    if (!options.some((s) => String(s.id || '') === 'local')) {
+      options.unshift({ id: 'local', label: 'local - Local' });
+    }
+
+    sourceIdEl.innerHTML = '';
+    options.forEach((src) => {
+      const id = String(src?.id || '').trim();
+      if (!id) return;
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = String(src?.label || id);
+      sourceIdEl.appendChild(option);
+    });
+
+    const chosen = String(preferredId || sourceIdEl.value || 'local').trim() || 'local';
+    const hasChosen = options.some((s) => String(s.id || '') === chosen);
+    sourceIdEl.value = hasChosen ? chosen : 'local';
+  };
+
+  const loadSourceOptions = async () => {
+    try {
+      const res = await fetch(withBase('/api/pro/sources/list.php'), {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+      const data = await safeJson(res);
+      if (!data || data.ok !== true) {
+        throw new Error(data?.error || 'Failed to load sources.');
+      }
+
+      const sources = Array.isArray(data.sources) ? data.sources : [];
+      const options = [];
+      sources.forEach((src) => {
+        const id = String(src?.id || '').trim();
+        if (!id) return;
+        const name = String(src?.name || id).trim() || id;
+        const type = String(src?.type || '').trim();
+        const enabled = src?.enabled !== false;
+        const status = enabled ? '' : ` (${tf('disabled', 'Disabled')})`;
+        const typePart = type ? ` [${type}]` : '';
+        options.push({ id, label: `${id} - ${name}${typePart}${status}` });
+      });
+      if (!options.some((s) => s.id === 'local')) {
+        options.unshift({ id: 'local', label: 'local - Local' });
+      }
+      state.sourceOptions = options;
+      renderSourceOptions(sourceIdEl?.value || 'local');
+    } catch (err) {
+      state.sourceOptions = [{ id: 'local', label: 'local - Local' }];
+      renderSourceOptions(sourceIdEl?.value || 'local');
+    }
+  };
+
+  const setType = (type) => {
+    const t = String(type || 'sftp').toLowerCase();
+    container.querySelectorAll('[data-gw-type]').forEach((el) => {
+      el.hidden = el.getAttribute('data-gw-type') !== t;
+    });
+  };
+
+  const resetForm = () => {
+    state.editingId = '';
+    state.previewGatewayId = '';
+    state.lastTestResult = null;
+    if (formTitleEl) formTitleEl.textContent = tf('gateway_add', 'Add Gateway');
+    if (nameEl) nameEl.value = '';
+    if (typeEl) typeEl.value = 'sftp';
+    renderSourceOptions('local');
+    if (rootPathEl) rootPathEl.value = 'root';
+    if (modeEl) modeEl.value = 'ro';
+    if (listenEl) listenEl.value = '127.0.0.1';
+    if (portEl) portEl.value = '';
+    if (enabledEl) enabledEl.checked = true;
+    if (sftpUserEl) sftpUserEl.value = '';
+    if (sftpPassEl) sftpPassEl.value = '';
+    if (sftpKeysEl) sftpKeysEl.value = '';
+    if (s3AccessEl) s3AccessEl.value = '';
+    if (s3SecretEl) s3SecretEl.value = '';
+    if (mcpTokenEl) mcpTokenEl.value = '';
+    setType('sftp');
+    refreshSnippetPreview();
+  };
+
+  const fillForm = (gw) => {
+    if (!gw || typeof gw !== 'object') return;
+    state.editingId = String(gw.id || '');
+    state.previewGatewayId = state.editingId;
+    state.lastTestResult = null;
+    if (formTitleEl) formTitleEl.textContent = tf('gateway_edit', 'Edit Gateway');
+    if (nameEl) nameEl.value = String(gw.name || '');
+    if (typeEl) typeEl.value = String(gw.gatewayType || 'sftp').toLowerCase();
+    ensureSourceOption(gw.sourceId, `${String(gw.sourceId || 'local')} - ${String(gw.sourceId || 'local')}`);
+    renderSourceOptions(String(gw.sourceId || 'local'));
+    if (rootPathEl) rootPathEl.value = String(gw.rootPath || 'root');
+    if (modeEl) modeEl.value = String(gw.mode || 'ro').toLowerCase() === 'rw' ? 'rw' : 'ro';
+    if (listenEl) listenEl.value = String(gw.listenAddr || '127.0.0.1');
+    if (portEl) portEl.value = gw.port ? String(gw.port) : '';
+    if (enabledEl) enabledEl.checked = !!gw.enabled;
+
+    if (sftpUserEl) sftpUserEl.value = String(gw?.sftp?.user || '');
+    if (sftpPassEl) sftpPassEl.value = '';
+    if (sftpKeysEl) sftpKeysEl.value = '';
+    if (s3AccessEl) s3AccessEl.value = '';
+    if (s3SecretEl) s3SecretEl.value = '';
+    if (mcpTokenEl) mcpTokenEl.value = '';
+
+    setType(gw.gatewayType || 'sftp');
+    refreshSnippetPreview();
+    setTestOutput('');
+  };
+
+  const renderList = () => {
+    if (!listEl) return;
+    const rows = Array.isArray(state.gateways) ? state.gateways : [];
+    if (!rows.length) {
+      listEl.innerHTML = `<div class="small text-muted">${escapeHTML(tf('gateway_list_empty', 'No gateway shares configured yet.'))}</div>`;
+      return;
+    }
+
+    const statusText = (row) => row.enabled ? tf('enabled', 'Enabled') : tf('disabled', 'Disabled');
+    const modeText = (row) => (String(row.mode || 'ro').toLowerCase() === 'rw' ? 'rw' : 'ro');
+    const bindText = (row) => `${String(row.listenAddr || '127.0.0.1')}:${String(row.port || '')}`;
+    const actions = (row) => `
+      <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn btn-outline-secondary" data-action="edit" data-id="${escapeHTML(String(row.id || ''))}">${escapeHTML(tf('edit', 'Edit'))}</button>
+        <button type="button" class="btn btn-outline-primary" data-action="test" data-id="${escapeHTML(String(row.id || ''))}">${escapeHTML(tf('source_test', 'Test'))}</button>
+        <button type="button" class="btn btn-outline-info" data-action="command" data-id="${escapeHTML(String(row.id || ''))}">${escapeHTML(tf('gateway_command', 'Command'))}</button>
+        <button type="button" class="btn btn-outline-danger" data-action="delete" data-id="${escapeHTML(String(row.id || ''))}">${escapeHTML(tf('delete', 'Delete'))}</button>
+      </div>
+    `;
+
+    listEl.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th>${escapeHTML(tf('gateway_name', 'Name'))}</th>
+              <th>${escapeHTML(tf('gateway_type', 'Gateway Type'))}</th>
+              <th>${escapeHTML(tf('gateway_source_id', 'Source ID'))}</th>
+              <th>${escapeHTML(tf('gateway_root_path', 'Root Path'))}</th>
+              <th>${escapeHTML(tf('gateway_mode', 'Mode'))}</th>
+              <th>${escapeHTML(tf('gateway_bind', 'Bind'))}</th>
+              <th>${escapeHTML(tf('status', 'Status'))}</th>
+              <th>${escapeHTML(tf('actions', 'Actions'))}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>${escapeHTML(String(row.name || row.id || ''))}</td>
+                <td>${escapeHTML(String(row.gatewayType || ''))}</td>
+                <td>${escapeHTML(String(row.sourceId || ''))}</td>
+                <td>${escapeHTML(String(row.rootPath || 'root'))}</td>
+                <td>${escapeHTML(modeText(row))}</td>
+                <td>${escapeHTML(bindText(row))}</td>
+                <td>${escapeHTML(statusText(row))}</td>
+                <td>${actions(row)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const buildPayload = () => {
+    const name = String(nameEl?.value || '').trim();
+    const gatewayType = String(typeEl?.value || 'sftp').trim().toLowerCase();
+    const sourceId = String(sourceIdEl?.value || 'local').trim() || 'local';
+    const rootPath = String(rootPathEl?.value || 'root').trim() || 'root';
+    const mode = String(modeEl?.value || 'ro').trim().toLowerCase() === 'rw' ? 'rw' : 'ro';
+    const listenAddr = String(listenEl?.value || '127.0.0.1').trim() || '127.0.0.1';
+    const enabled = !!enabledEl?.checked;
+
+    if (!name) {
+      throw new Error(tf('gateway_name_required', 'Gateway name is required.'));
+    }
+    if (!gatewayType || !['sftp', 's3', 'mcp'].includes(gatewayType)) {
+      throw new Error(tf('gateway_type_required', 'Gateway type is required.'));
+    }
+
+    const payload = {
+      name,
+      gatewayType,
+      sourceId,
+      rootPath,
+      mode,
+      listenAddr,
+      enabled,
+    };
+
+    const portRaw = String(portEl?.value || '').trim();
+    if (portRaw !== '') {
+      const p = parseInt(portRaw, 10);
+      if (!Number.isFinite(p) || p < 1024 || p > 65535) {
+        throw new Error(tf('gateway_port_invalid', 'Port must be between 1024 and 65535.'));
+      }
+      payload.port = p;
+    }
+
+    if (state.editingId) {
+      payload.id = state.editingId;
+    }
+
+    if (gatewayType === 'sftp') {
+      const user = String(sftpUserEl?.value || '').trim();
+      const pass = String(sftpPassEl?.value || '').trim();
+      const authorizedKeys = String(sftpKeysEl?.value || '').trim();
+      if (!user) {
+        throw new Error(tf('gateway_sftp_user_required', 'SFTP user is required.'));
+      }
+      if (!state.editingId && !pass && !authorizedKeys) {
+        throw new Error(tf('gateway_sftp_auth_required', 'Provide SFTP password or authorized keys.'));
+      }
+      payload.sftp = { user };
+      if (pass) payload.sftp.pass = pass;
+      if (authorizedKeys) payload.sftp.authorizedKeys = authorizedKeys;
+    } else if (gatewayType === 's3') {
+      const accessKey = String(s3AccessEl?.value || '').trim();
+      const secretKey = String(s3SecretEl?.value || '').trim();
+      if (!state.editingId && (!accessKey || !secretKey)) {
+        throw new Error(tf('gateway_s3_keys_required', 'S3 access key and secret key are required.'));
+      }
+      if (accessKey || secretKey) {
+        if (!accessKey || !secretKey) {
+          throw new Error(tf('gateway_s3_keys_pair_required', 'Provide both S3 access key and secret key.'));
+        }
+        payload.s3 = { keys: [{ accessKey, secretKey }] };
+      }
+    } else if (gatewayType === 'mcp') {
+      const token = String(mcpTokenEl?.value || '').trim();
+      if (token) {
+        payload.mcp = { token };
+      }
+    }
+
+    return payload;
+  };
+
+  const loadGateways = async () => {
+    try {
+      setStatus(tf('loading', 'Loading…'));
+      const res = await fetch(withBase('/api/pro/gateways/list.php'), {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data || data.ok !== true) {
+        throw new Error(data?.error || tf('gateway_list_failed', 'Failed to load gateway shares.'));
+      }
+      state.gateways = Array.isArray(data.gateways) ? data.gateways : [];
+      renderList();
+      if (state.editingId || state.previewGatewayId) {
+        const current = activeGateway();
+        if (!current) {
+          state.previewGatewayId = '';
+          state.lastTestResult = null;
+        }
+        refreshSnippetPreview();
+      }
+      const countMsg = tf('gateway_count', '{count} gateway share(s).').replace('{count}', String(state.gateways.length));
+      setStatus(countMsg, 'muted');
+    } catch (err) {
+      console.warn('Gateway list failed', err);
+      state.gateways = [];
+      renderList();
+      setStatus(err?.message || tf('gateway_list_failed', 'Failed to load gateway shares.'), 'danger');
+    }
+  };
+
+  const runGatewayTest = async (id) => {
+    if (!id) return;
+    try {
+      setTestOutput(tf('source_test_running', 'Testing...'));
+      const includeSecrets = !!includeSecretsEl?.checked;
+      const res = await fetch(withBase('/api/pro/gateways/test.php'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrf(),
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ id, includeSecrets }),
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data) {
+        throw new Error(data?.error || tf('gateway_test_failed', 'Gateway test failed.'));
+      }
+
+      const lines = [];
+      if (data.ok === true) {
+        lines.push(tf('gateway_test_ok', 'Gateway test passed.'));
+      } else {
+        lines.push(tf('gateway_test_failed', 'Gateway test failed.'));
+      }
+      const errors = Array.isArray(data.errors) ? data.errors : [];
+      const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      if (errors.length) {
+        lines.push('');
+        lines.push('Errors:');
+        errors.forEach((e) => lines.push(`- ${String(e)}`));
+      }
+      if (warnings.length) {
+        lines.push('');
+        lines.push('Warnings:');
+        warnings.forEach((w) => lines.push(`- ${String(w)}`));
+      }
+      if (includeSecrets) {
+        lines.push('');
+        lines.push(tf('gateway_secrets_warning', 'Warning: snippets may include secrets. Handle output carefully.'));
+      }
+      setTestOutput(lines.join('\n'));
+      state.previewGatewayId = String(id);
+      state.lastTestResult = data;
+      refreshSnippetPreview();
+      if (data.ok === true) {
+        showToast(tf('gateway_test_ok', 'Gateway test passed.'));
+      } else {
+        showToast((errors[0] || tf('gateway_test_failed', 'Gateway test failed.')), 'error');
+      }
+    } catch (err) {
+      const msg = err?.message || tf('gateway_test_failed', 'Gateway test failed.');
+      setTestOutput(msg);
+      showToast(msg, 'error');
+    }
+  };
+
+  const saveGateway = async () => {
+    try {
+      const gateway = buildPayload();
+      setStatus(tf('gateway_saving', 'Saving gateway...'));
+      const res = await fetch(withBase('/api/pro/gateways/save.php'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrf(),
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ gateway }),
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data || data.ok !== true) {
+        throw new Error(data?.error || tf('gateway_save_failed', 'Failed to save gateway share.'));
+      }
+      state.lastTestResult = null;
+      state.previewGatewayId = String(data?.gateway?.id || state.previewGatewayId || '');
+      setCommand(snippetFromGateway(data, selectedSnippetKind(), false));
+      setTestOutput('');
+      showToast(tf('gateway_saved', 'Gateway share saved.'));
+      setStatus(tf('gateway_saved', 'Gateway share saved.'), 'success');
+      await loadGateways();
+      resetForm();
+    } catch (err) {
+      const msg = err?.message || tf('gateway_save_failed', 'Failed to save gateway share.');
+      setStatus(msg, 'danger');
+      showToast(msg, 'error');
+    }
+  };
+
+  const deleteGateway = async (gw) => {
+    if (!gw || !gw.id) return;
+    const label = String(gw.name || gw.id);
+    const ok = window.confirm(
+      tf('gateway_delete_confirm', 'Delete gateway "{name}"?').replace('{name}', label)
+    );
+    if (!ok) return;
+
+    try {
+      const res = await fetch(withBase('/api/pro/gateways/delete.php'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrf(),
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ id: gw.id }),
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data || data.ok !== true) {
+        throw new Error(data?.error || tf('gateway_delete_failed', 'Failed to delete gateway share.'));
+      }
+      if (state.editingId && state.editingId === String(gw.id)) {
+        resetForm();
+      } else if (state.previewGatewayId && state.previewGatewayId === String(gw.id)) {
+        state.previewGatewayId = '';
+        state.lastTestResult = null;
+      }
+      refreshSnippetPreview();
+      setTestOutput('');
+      showToast(tf('gateway_deleted', 'Gateway share deleted.'));
+      await loadGateways();
+    } catch (err) {
+      showToast(err?.message || tf('gateway_delete_failed', 'Failed to delete gateway share.'), 'error');
+    }
+  };
+
+  if (typeEl) {
+    typeEl.addEventListener('change', () => setType(typeEl.value));
+  }
+  if (snippetTypeEl) {
+    snippetTypeEl.addEventListener('change', refreshSnippetPreview);
+  }
+  if (includeSecretsEl) {
+    includeSecretsEl.addEventListener('change', refreshSnippetPreview);
+  }
+  if (copySnippetBtn) {
+    copySnippetBtn.addEventListener('click', async () => {
+      try {
+        const ok = await copyText(commandEl?.textContent || '');
+        if (!ok) {
+          throw new Error(tf('copy_failed', 'Copy failed.'));
+        }
+        showToast(tf('copied_to_clipboard', 'Copied to clipboard.'));
+      } catch (err) {
+        showToast(err?.message || tf('copy_failed', 'Copy failed.'), 'error');
+      }
+    });
+  }
+  if (copyTestBtn) {
+    copyTestBtn.addEventListener('click', async () => {
+      try {
+        const ok = await copyText(testOutEl?.textContent || '');
+        if (!ok) {
+          throw new Error(tf('copy_failed', 'Copy failed.'));
+        }
+        showToast(tf('copied_to_clipboard', 'Copied to clipboard.'));
+      } catch (err) {
+        showToast(err?.message || tf('copy_failed', 'Copy failed.'), 'error');
+      }
+    });
+  }
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      Promise.allSettled([
+        loadSourceOptions(),
+        loadGateways(),
+      ]);
+    });
+  }
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      resetForm();
+    });
+  }
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      resetForm();
+    });
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      saveGateway();
+    });
+  }
+  if (listEl) {
+    listEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = String(btn.getAttribute('data-id') || '');
+      const action = String(btn.getAttribute('data-action') || '');
+      const gw = (state.gateways || []).find((x) => String(x.id || '') === id);
+      if (!gw) return;
+
+      if (action === 'edit') {
+        fillForm(gw);
+        return;
+      }
+      if (action === 'command') {
+        state.previewGatewayId = String(gw.id || '');
+        state.lastTestResult = null;
+        refreshSnippetPreview();
+        setTestOutput('');
+        return;
+      }
+      if (action === 'test') {
+        runGatewayTest(id);
+        return;
+      }
+      if (action === 'delete') {
+        deleteGateway(gw);
+      }
+    });
+  }
+
+  resetForm();
+  setCommand('');
+  setTestOutput('');
+  Promise.allSettled([
+    loadSourceOptions(),
+    loadGateways(),
+  ]);
 }
 
 function onShareFolderToggle(row, checked) {
@@ -4249,7 +5049,13 @@ export function openAdminPanel() {
         ? config.storageSources
         : {};
       const sourcesEnabled = !!sourcesCfg.enabled;
-      const showSourcesSection = true;
+      const sourcesAvailable = (sourcesCfg.available !== false);
+      const sourcesProExtended = !!sourcesCfg.proExtended || proSourcesApiOk;
+      const sourcesAllowedTypes = Array.isArray(sourcesCfg.allowedTypes) && sourcesCfg.allowedTypes.length
+        ? sourcesCfg.allowedTypes.map(v => String(v || '').trim().toLowerCase()).filter(Boolean)
+        : (sourcesProExtended ? ALL_SOURCE_TYPES.slice() : CORE_SOURCE_TYPES.slice());
+      const showSourcesSection = !!sourcesAvailable;
+      const showGatewaysSection = true;
       const brandingCfg = config.branding || {};
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
@@ -4344,10 +5150,14 @@ export function openAdminPanel() {
           { id: "storage", label: tf("storage_usage", "Storage / Disk Usage") }
         ];
         if (showSourcesSection) {
-          const sourcesLabel = !isPro
-            ? `<span style="display:inline-flex; align-items:center; gap:6px;">${tf("sources", "Sources")}<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span></span>`
-            : tf("sources", "Sources");
+          const sourcesLabel = tf("sources", "Sources");
           sections.push({ id: "sources", label: sourcesLabel });
+        }
+        if (showGatewaysSection) {
+          const gatewaysLabel = !isPro
+            ? `<span style="display:inline-flex; align-items:center; gap:6px;">${tf("gateway_shares", "Gateway Shares")}<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span></span>`
+            : tf("gateway_shares", "Gateway Shares");
+          sections.push({ id: "gateways", label: gatewaysLabel });
         }
         sections.push(
           { id: "proFeatures", label: "Pro Features" },
@@ -4485,7 +5295,14 @@ export function openAdminPanel() {
             sourcesEnabled,
             sourcesCfg,
             isPro,
-            proSourcesApiOk
+            proSourcesApiOk,
+            sourcesAllowedTypes,
+            sourcesProExtended
+          });
+        }
+        if (showGatewaysSection) {
+          initGatewaysSection({
+            isPro
           });
         }
 
@@ -6141,11 +6958,32 @@ ${t("shared_max_upload_size_bytes")}
                   return;
                 }
 
-                showToast(t('admin_license_saved'));
+                const autoBind = (data && typeof data.autoBind === 'object' && data.autoBind)
+                  ? data.autoBind
+                  : {};
+                const autoBindAttempted = autoBind.attempted === true;
+                const autoBindBound = autoBind.bound === true;
+                const autoBindMessage = String(autoBind.message || '').trim();
+
+                if (autoBindAttempted) {
+                  if (autoBindBound) {
+                    const msg = autoBindMessage || t('admin_license_saved');
+                    showToast(msg);
+                    setStatus(msg, 'success');
+                  } else {
+                    const msg = autoBindMessage || 'License saved, but instance auto-bind was not completed.';
+                    showToast(msg, 'error');
+                    setStatus(msg, 'warning');
+                  }
+                } else {
+                  showToast(t('admin_license_saved'));
+                }
 
                 if (!isPro) {
                   const ok = await showCustomConfirmModal(
-                    'Download and install the latest Pro bundle now?'
+                    (autoBindAttempted && !autoBindBound)
+                      ? 'License saved, but instance binding was not completed automatically. Download and install the latest Pro bundle now anyway?'
+                      : 'Download and install the latest Pro bundle now?'
                   );
                   if (ok) {
                     setStatus('Downloading and installing latest Pro bundle...', 'muted');
@@ -6199,6 +7037,10 @@ ${t("shared_max_upload_size_bytes")}
                       return;
                     }
                   }
+                }
+
+                if (autoBindAttempted && !autoBindBound && isPro) {
+                  return;
                 }
 
                 window.location.reload();

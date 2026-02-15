@@ -1,11 +1,10 @@
 <?php
-// public/api/pro/sources/delete.php
+// public/api/pro/gateways/delete.php
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -22,6 +21,12 @@ try {
     \FileRise\Http\Controllers\AdminController::requireAdmin();
     \FileRise\Http\Controllers\AdminController::requireCsrf();
 
+    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProGateways')) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'Pro is not active']);
+        exit;
+    }
+
     $raw = file_get_contents('php://input');
     $body = json_decode($raw, true);
     if (!is_array($body)) {
@@ -30,28 +35,23 @@ try {
         exit;
     }
 
-    $id = trim((string)($body['id'] ?? ''));
+    $id = strtolower(trim((string)($body['id'] ?? '')));
     if ($id === '') {
         http_response_code(400);
-        echo json_encode(['ok' => false, 'error' => 'Missing source id']);
+        echo json_encode(['ok' => false, 'error' => 'Missing gateway id']);
         exit;
     }
 
-    $res = SourcesConfig::deleteSource($id);
-    if (empty($res['ok'])) {
-        http_response_code(400);
-        echo json_encode(['ok' => false, 'error' => $res['error'] ?? 'Failed to delete source']);
+    $ok = ProGateways::deleteGateway($id);
+    if (!$ok) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'Failed to delete gateway share']);
         exit;
-    }
-
-    $cfg = \FileRise\Domain\AdminModel::getConfig();
-    if (!isset($cfg['error'])) {
-        $public = \FileRise\Domain\AdminModel::buildPublicSubset($cfg);
-        \FileRise\Domain\AdminModel::writeSiteConfig($public);
     }
 
     echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Error deleting source'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode(['ok' => false, 'error' => 'Error deleting gateway share'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
+

@@ -26,7 +26,7 @@ ONLYOFFICE requires additional CSP rules. The admin panel provides a copy-ready 
 
 .htaccess edit (change url or copy directly from admin panel)
 ```
-Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM=' https://your-onlyoffice-server.example.com https://your-onlyoffice-server.example.com/web-apps/apps/api/documents/api.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://your-onlyoffice-server.example.com; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' https://your-onlyoffice-server.example.com"
+Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' https://your-onlyoffice-server.example.com https://your-onlyoffice-server.example.com/web-apps/apps/api/documents/api.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://your-onlyoffice-server.example.com; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' https://your-onlyoffice-server.example.com"
 ```
 
 Nginx
@@ -36,7 +36,7 @@ proxy_hide_header X-Frame-Options;
 proxy_hide_header Content-Security-Policy;
 
 # Replace with an ONLYOFFICE-aware CSP at the proxy
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM=' https://your-onlyoffice-server.example.com https://your-onlyoffice-server.example.com/web-apps/apps/api/documents/api.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://your-onlyoffice-server.example.com; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' https://your-onlyoffice-server.example.com" always;
+add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' https://your-onlyoffice-server.example.com https://your-onlyoffice-server.example.com/web-apps/apps/api/documents/api.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://your-onlyoffice-server.example.com; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' https://your-onlyoffice-server.example.com" always;
 ```
 
 ---

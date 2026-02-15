@@ -6,6 +6,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../../../config/config.php';
 require_once PROJECT_ROOT . '/src/lib/StorageFactory.php';
+require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -22,12 +23,6 @@ try {
     \FileRise\Http\Controllers\AdminController::requireAdmin();
     \FileRise\Http\Controllers\AdminController::requireCsrf();
 
-    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProSources') || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SOURCES)) {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => 'Pro is not active']);
-        exit;
-    }
-
     $raw = file_get_contents('php://input');
     $body = json_decode($raw, true);
     if (!is_array($body)) {
@@ -41,7 +36,7 @@ try {
 
     if (array_key_exists('enabled', $body)) {
         $enabled = (bool)$body['enabled'];
-        $ok = ProSources::saveEnabled($enabled);
+        $ok = SourcesConfig::saveEnabled($enabled);
         if (!$ok) {
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Failed to save sources setting']);
@@ -51,7 +46,7 @@ try {
     }
 
     if (isset($body['source']) && is_array($body['source'])) {
-        $res = ProSources::upsertSource($body['source']);
+        $res = SourcesConfig::upsertSource($body['source']);
         if (empty($res['ok'])) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $res['error'] ?? 'Failed to save source']);
@@ -76,7 +71,7 @@ try {
     if ($resultSource && !empty($resultSource['enabled'])) {
         $autoTested = true;
         $sourceId = trim((string)($resultSource['id'] ?? ''));
-        $sourceForTest = $sourceId !== '' ? ProSources::getSource($sourceId) : null;
+        $sourceForTest = $sourceId !== '' ? SourcesConfig::getSource($sourceId) : null;
         $autoTestOk = false;
 
         if (!$sourceForTest) {
@@ -146,7 +141,7 @@ try {
             }
             if (is_array($disableSource)) {
                 $disableSource['enabled'] = false;
-                $resDisable = ProSources::upsertSource($disableSource);
+                $resDisable = SourcesConfig::upsertSource($disableSource);
                 if (empty($resDisable['ok'])) {
                     $autoDisableFailed = true;
                 } else {

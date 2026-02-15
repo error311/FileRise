@@ -4,8 +4,8 @@
 /**
  * @OA\Post(
  *   path="/api/file/deleteFiles.php",
- *   summary="Delete files to Trash",
- *   description="Requires write access on the folder and (for non-admins) ownership of the files.",
+ *   summary="Delete files (Trash or permanent)",
+ *   description="Requires write access on the folder and (for non-admins) ownership of the files. Sources with Trash disabled (or Google Drive) delete permanently.",
  *   operationId="deleteFiles",
  *   tags={"Files"},
  *   security={{"cookieAuth": {}}},

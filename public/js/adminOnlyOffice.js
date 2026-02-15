@@ -369,12 +369,10 @@ function attachOnlyOfficeCspHelper(container) {
   `;
   container.appendChild(cspHelp);
 
-  const INLINE_SHA = "sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM=";
-
   function buildCspApache(originRaw) {
     const o = (originRaw || 'https://your-onlyoffice-server.example.com').replace(/\/+$/, '');
     const api = `${o}/web-apps/apps/api/documents/api.js`;
-    return `Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' '${INLINE_SHA}' ${o} ${api}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${o}; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' ${o}"`;
+    return `Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' ${o} ${api}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${o}; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'; frame-src 'self' ${o}"`;
   }
 
   function buildCspNginx(originRaw) {
@@ -386,7 +384,7 @@ function attachOnlyOfficeCspHelper(container) {
       `base-uri 'self'; ` +
       `frame-ancestors 'self'; ` +
       `object-src 'none'; ` +
-      `script-src 'self' '${INLINE_SHA}' ${o} ${api}; ` +
+      `script-src 'self' ${o} ${api}; ` +
       `style-src 'self' 'unsafe-inline'; ` +
       `img-src 'self' data: blob:; ` +
       `font-src 'self'; ` +

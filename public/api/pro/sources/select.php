@@ -7,6 +7,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../../../../config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -21,12 +22,6 @@ try {
 
     \FileRise\Http\Controllers\AdminController::requireAuth();
     \FileRise\Http\Controllers\AdminController::requireCsrf();
-
-    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProSources') || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SOURCES)) {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => 'Pro is not active']);
-        exit;
-    }
 
     $raw = file_get_contents('php://input');
     $body = json_decode($raw, true);
@@ -43,14 +38,14 @@ try {
         exit;
     }
 
-    $cfg = ProSources::getConfig();
+    $cfg = SourcesConfig::getConfig();
     if (empty($cfg['enabled'])) {
         http_response_code(400);
         echo json_encode(['ok' => false, 'error' => 'Sources are not enabled']);
         exit;
     }
 
-    $source = ProSources::getSource($id);
+    $source = SourcesConfig::getSource($id);
     if (!$source || empty($source['enabled'])) {
         http_response_code(404);
         echo json_encode(['ok' => false, 'error' => 'Source not found']);

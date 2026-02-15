@@ -7,6 +7,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../../../../config/config.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
 
 try {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -35,21 +36,7 @@ try {
     } catch (Throwable $e) { /* ignore */ }
 
     $activeId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
-    $proActive = defined('FR_PRO_ACTIVE')
-        && FR_PRO_ACTIVE
-        && class_exists('ProSources')
-        && fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SOURCES);
-    if (!$proActive) {
-        echo json_encode([
-            'ok' => true,
-            'enabled' => false,
-            'sources' => [],
-            'activeId' => $activeId,
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        exit;
-    }
-
-    $cfg = ProSources::getPublicConfig();
+    $cfg = SourcesConfig::getPublicConfig();
     $enabled = !empty($cfg['enabled']);
     $sources = isset($cfg['sources']) && is_array($cfg['sources']) ? $cfg['sources'] : [];
 
@@ -59,6 +46,11 @@ try {
             'enabled' => (bool)$enabled,
             'sources' => [],
             'activeId' => $activeId,
+            'available' => !empty($cfg['available']),
+            'proExtended' => !empty($cfg['proExtended']),
+            'allowedTypes' => $cfg['allowedTypes'] ?? [],
+            'coreTypes' => $cfg['coreTypes'] ?? [],
+            'proTypes' => $cfg['proTypes'] ?? [],
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
@@ -86,6 +78,11 @@ try {
         'enabled' => (bool)$enabled,
         'sources' => $visible,
         'activeId' => $activeId,
+        'available' => !empty($cfg['available']),
+        'proExtended' => !empty($cfg['proExtended']),
+        'allowedTypes' => $cfg['allowedTypes'] ?? [],
+        'coreTypes' => $cfg['coreTypes'] ?? [],
+        'proTypes' => $cfg['proTypes'] ?? [],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(500);

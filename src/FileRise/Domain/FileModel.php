@@ -823,16 +823,7 @@ class FileModel
         $errors = [];
         $storage = self::storage();
         $isLocal = $storage->isLocal();
-        $skipTrash = false;
-        if (!$isLocal && class_exists('SourceContext')) {
-            $src = SourceContext::getActiveSource();
-            if (is_array($src)) {
-                $type = strtolower((string)($src['type'] ?? ''));
-                if ($type === 'gdrive') {
-                    $skipTrash = true;
-                }
-            }
-        }
+        $skipTrash = class_exists('SourceContext') ? SourceContext::isTrashDisabled() : false;
 
         list($uploadDir, $err) = self::resolveFolderPath($folder, false);
         if ($err) {
@@ -847,7 +838,13 @@ class FileModel
         if (!$skipTrash) {
             $trashDir = rtrim(self::trashRoot(), '/\\') . DIRECTORY_SEPARATOR;
             if ($storage->stat($trashDir) === null) {
-                $storage->mkdir($trashDir, 0755, true);
+                if (!$storage->mkdir($trashDir, 0755, true)) {
+                    $detail = self::adapterErrorDetail($storage);
+                    $msg = $detail !== ''
+                        ? ("Failed to create Trash folder: " . $detail)
+                        : "Failed to create Trash folder. Check source permissions or enable delete permanently (skip trash) for this source.";
+                    return ["error" => $msg];
+                }
             }
             $trashMetadataFile = $trashDir . "trash.json";
             $trashJson = $storage->read($trashMetadataFile);

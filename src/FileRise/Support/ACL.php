@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace FileRise\Support;
 
 use FileRise\Storage\SourceContext;
+use FileRise\Storage\SourcesConfig;
 use RuntimeException;
-use ProSources;
 
 // src/lib/ACL.php
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
 
 class ACL
 {
@@ -80,8 +81,8 @@ class ACL
     {
         $user = (string)$user;
 
-        if (class_exists('SourceContext') && SourceContext::sourcesEnabled() && class_exists('ProSources')) {
-            $cfg = ProSources::getConfig();
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $cfg = SourcesConfig::getConfig();
             $sources = isset($cfg['sources']) && is_array($cfg['sources']) ? $cfg['sources'] : [];
             $changedAny = false;
             foreach ($sources as $src) {

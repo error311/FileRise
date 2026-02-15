@@ -183,6 +183,28 @@ function getSourceTypeById(sourceId) {
   return '';
 }
 
+function isTrashDisabledForSource(sourceId = '') {
+  const id = String(sourceId || getActiveSourceId() || '').trim();
+  if (!id) return false;
+
+  try {
+    if (typeof window.__frGetSourceMetaById === 'function') {
+      const meta = window.__frGetSourceMetaById(id);
+      if (meta && typeof meta === 'object' && Object.prototype.hasOwnProperty.call(meta, 'disableTrash')) {
+        return !!meta.disableTrash;
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  const sel = document.getElementById('sourceSelector');
+  if (sel) {
+    const opt = Array.from(sel.options).find(o => o.value === id);
+    if (opt) return opt.dataset?.sourceDisableTrash === '1';
+  }
+
+  return false;
+}
+
 function isFtpSourceId(sourceId = '') {
   const type = String(getSourceTypeById(sourceId || getActiveSourceId()) || '').toLowerCase();
   return type === 'ftp';
@@ -1836,6 +1858,8 @@ function placeRecycleBinNode() {
 
   const isAdmin = localStorage.getItem('isAdmin') === '1' || localStorage.getItem('isAdmin') === 'true';
   if (!isAdmin) return;
+
+  if (isTrashDisabledForSource()) return;
 
   renderRecycleBinNode(window.recycleBinHasItems || false);
 }

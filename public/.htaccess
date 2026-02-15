@@ -29,6 +29,8 @@ RewriteRule - - [L]
 RewriteCond %{REQUEST_URI} !^/webdav\.php/ [NC]
 RewriteRule "(^|/)\.(?!well-known/)" - [F]
 RewriteRule ^portal/([A-Za-z0-9_-]+)$ portal.html?slug=$1 [L,QSA]
+# Keep entrypoint consistent: serve /index.html through index.php.
+RewriteRule ^index\.html$ index.php [L,QSA]
 
 # 2) Deny direct access to PHP except the API endpoints and WebDAV front controller
 #    - allow /api/*.php (API endpoints)
@@ -84,8 +86,8 @@ RewriteRule ^ - [E=IS_VER:1]
   # HSTS only when HTTPS (safe for .htaccess)
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" env=HTTPS
 
-  # CSP — keep this SHA-256 in sync with your inline pre-theme script
-  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'sha256-ajmGY+5VJOY6+8JHgzCqsqI8w9dCQfAmqIkFesOKItM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'"
+  # CSP baseline (pretheme bootstrap is external JS, so no inline script hash is required).
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; form-action 'self'"
 </IfModule>
 
 # ---------------- Caching ----------------

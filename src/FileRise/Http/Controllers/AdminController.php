@@ -992,6 +992,190 @@ class AdminController
         }
     }
 
+    private static function decodeFrpPayload(string $license): ?array
+    {
+        $license = trim($license);
+        if ($license === '' || stripos($license, 'FRP1.') !== 0) {
+            return null;
+        }
+
+        $parts = explode('.', $license, 3);
+        if (count($parts) !== 3) {
+            return null;
+        }
+
+        $payloadPart = (string)$parts[1];
+        if ($payloadPart === '') {
+            return null;
+        }
+
+        $base64 = strtr($payloadPart, '-_', '+/');
+        $pad = strlen($base64) % 4;
+        if ($pad > 0) {
+            $base64 .= str_repeat('=', 4 - $pad);
+        }
+
+        $json = base64_decode($base64, true);
+        if (!is_string($json) || $json === '') {
+            return null;
+        }
+
+        $payload = json_decode($json, true);
+        return is_array($payload) ? $payload : null;
+    }
+
+    private static function normalizeFrpInstances(array $payload): array
+    {
+        $out = [];
+        if (isset($payload['instances']) && is_array($payload['instances'])) {
+            foreach ($payload['instances'] as $entry) {
+                $id = strtolower(trim((string)$entry));
+                if ($id !== '' && preg_match('/^[a-f0-9]{32}$/', $id)) {
+                    $out[] = $id;
+                }
+            }
+        }
+        if (!$out) {
+            return [];
+        }
+        return array_values(array_unique($out));
+    }
+
+    private static function tryAutoBindInstance(string $license, string $instanceId): array
+    {
+        $result = [
+            'attempted' => false,
+            'bound' => false,
+            'changed' => false,
+            'message' => '',
+            'license' => $license,
+        ];
+
+        $license = trim($license);
+        $instanceId = strtolower(trim($instanceId));
+        if ($license === '' || $instanceId === '' || !preg_match('/^[a-f0-9]{32}$/', $instanceId)) {
+            return $result;
+        }
+
+        $payload = self::decodeFrpPayload($license);
+        if (!is_array($payload)) {
+            return $result;
+        }
+
+        $plan = strtolower(trim((string)($payload['plan'] ?? '')));
+        if (!in_array($plan, ['personal_yearly', 'business_yearly'], true)) {
+            return $result;
+        }
+
+        $result['attempted'] = true;
+        $instances = self::normalizeFrpInstances($payload);
+        if (in_array($instanceId, $instances, true)) {
+            $result['bound'] = true;
+            $result['message'] = 'Instance ID already bound to this license.';
+            return $result;
+        }
+
+        $endpoint = defined('FR_PRO_BIND_INSTANCE_URL')
+            ? trim((string)FR_PRO_BIND_INSTANCE_URL)
+            : 'https://filerise.net/pro/bind_instance.php';
+        if ($endpoint === '') {
+            $result['message'] = 'Auto-bind endpoint is not configured.';
+            return $result;
+        }
+
+        $postData = http_build_query([
+            'license' => $license,
+            'instanceId' => $instanceId,
+        ]);
+
+        $status = 0;
+        $bodyText = '';
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($endpoint);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: application/json',
+            ]);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'FileRise-Core/1.0 (+https://filerise.net)');
+            $resp = curl_exec($ch);
+            if (is_string($resp)) {
+                $bodyText = $resp;
+            }
+            $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+        } else {
+            $ctx = stream_context_create([
+                'http' => [
+                    'method' => 'POST',
+                    'header' => implode("\r\n", [
+                        'Content-Type: application/x-www-form-urlencoded',
+                        'Accept: application/json',
+                        'User-Agent: FileRise-Core/1.0 (+https://filerise.net)',
+                    ]) . "\r\n",
+                    'content' => $postData,
+                    'timeout' => 15,
+                    'ignore_errors' => true,
+                ],
+            ]);
+            $resp = @file_get_contents($endpoint, false, $ctx);
+            if (is_string($resp)) {
+                $bodyText = $resp;
+            }
+            if (isset($http_response_header) && is_array($http_response_header)) {
+                foreach ($http_response_header as $line) {
+                    if (preg_match('/^HTTP\/\S+\s+(\d{3})/', $line, $m)) {
+                        $status = (int)$m[1];
+                        break;
+                    }
+                }
+            }
+        }
+
+        $body = null;
+        if ($bodyText !== '') {
+            $decoded = json_decode($bodyText, true);
+            if (is_array($decoded)) {
+                $body = $decoded;
+            }
+        }
+
+        if ($status !== 200 || !is_array($body) || empty($body['ok'])) {
+            $code = is_array($body) ? trim((string)($body['code'] ?? '')) : '';
+            if ($code === 'instance_limit_reached') {
+                $result['message'] = 'License instance limit reached. Use filerise.net/pro/instances.php to manage IDs.';
+                return $result;
+            }
+            if ($code === 'license_superseded') {
+                $result['message'] = 'This license key has been superseded. Use your latest issued key.';
+                return $result;
+            }
+            $err = is_array($body) ? trim((string)($body['error'] ?? '')) : '';
+            $result['message'] = $err !== '' ? $err : 'Instance auto-bind was not completed.';
+            return $result;
+        }
+
+        $nextLicense = trim((string)($body['license'] ?? ''));
+        if ($nextLicense !== '' && stripos($nextLicense, 'FRP1.') === 0) {
+            $result['license'] = $nextLicense;
+            $result['changed'] = ($nextLicense !== $license);
+        }
+        $result['bound'] = !empty($body['bound']) || $result['changed'];
+        $msg = trim((string)($body['message'] ?? ''));
+        if ($msg === '') {
+            $msg = $result['changed']
+                ? 'Instance ID was bound to this license automatically.'
+                : 'License saved.';
+        }
+        $result['message'] = $msg;
+        return $result;
+    }
+
     public function setLicense(): void
     {
         // Always respond JSON
@@ -1012,6 +1196,11 @@ class AdminController
             }
 
             $license = isset($data['license']) ? trim((string)$data['license']) : '';
+            $instanceId = self::getInstanceId();
+            $autoBind = self::tryAutoBindInstance($license, $instanceId);
+            if (!empty($autoBind['changed']) && !empty($autoBind['license']) && is_string($autoBind['license'])) {
+                $license = trim((string)$autoBind['license']);
+            }
 
             // Store license + updatedAt in JSON file
             if (!defined('PRO_LICENSE_FILE')) {
@@ -1038,7 +1227,15 @@ class AdminController
                 return;
             }
 
-            echo json_encode(['success' => true]);
+            echo json_encode([
+                'success' => true,
+                'autoBind' => [
+                    'attempted' => !empty($autoBind['attempted']),
+                    'bound' => !empty($autoBind['bound']),
+                    'changed' => !empty($autoBind['changed']),
+                    'message' => (string)($autoBind['message'] ?? ''),
+                ],
+            ]);
         } catch (Throwable $e) {
             http_response_code(500);
             echo json_encode([
@@ -2462,6 +2659,12 @@ class AdminController
                 @unlink($zipPath);
                 @rmdir($workDir);
                 $label = $httpCode ? "HTTP {$httpCode}" : 'Download failed';
+                if ($msg === '') {
+                    if ($snippet !== '' && preg_match('/^Invalid license:\\s*(.+)$/i', $snippet, $m)) {
+                        $detail = trim((string)$m[1]);
+                        $msg = $detail !== '' ? $detail : 'Invalid license for bundle download.';
+                    }
+                }
                 if ($msg === '') {
                     // If we got HTML (common with Cloudflare "Just a moment..."), return a human message.
                     $looksHtml = ($snippet !== '' && preg_match('/^\\s*<(?:!doctype|html|head|body)\\b/i', $snippet));

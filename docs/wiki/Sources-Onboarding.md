@@ -24,6 +24,7 @@ Google Drive, OneDrive, and Dropbox require an OAuth app plus a refresh token.
 - Use a dedicated service account for each source.
 - Start with a small folder path for the first test.
 - If Test fails, verify credentials, host/endpoint, and firewall rules.
+- If your source root cannot host a `trash` folder, enable "Delete permanently (skip trash)" for that source.
 
 ## Related
 

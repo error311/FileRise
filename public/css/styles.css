@@ -4239,6 +4239,8 @@ margin-bottom: 20px;
 #adminPanelModal .sources-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
 #adminPanelModal .sources-form-inline{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:20px;}
 #adminPanelModal .sources-form-inline .form-check{margin:0;}
+#adminPanelModal .sources-flags-row{grid-column:1 / -1;align-items:flex-start;margin-top:6px;}
+#adminPanelModal .sources-inline-help{flex:1 1 100%;margin:0;line-height:1.35;}
 #adminPanelModal .sources-type-block{margin-top:8px;padding:8px;border:1px dashed var(--fr-border-light,#d8d8d8);border-radius:8px;background:#fff;}
 #adminPanelModal .sources-hint-row{display:flex;justify-content:flex-end;margin:0 0 6px;}
 #adminPanelModal .sources-hint-btn{position:relative;width:18px;height:18px;border-radius:999px;border:1px solid rgba(0,0,0,0.18);background:rgba(0,0,0,0.04);color:#475569;font-size:12px;font-weight:700;line-height:1;padding:0;cursor:pointer;}

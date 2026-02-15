@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace FileRise\Storage;
 
-use ProSources;
+use FileRise\Storage\SourcesConfig;
 
 // src/lib/SourceContext.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
 
 final class SourceContext
 {
@@ -39,21 +40,19 @@ final class SourceContext
             $sessionId = (string)$_SESSION['active_source'];
         }
 
-        if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE && class_exists('ProSources')) {
-            $cfg = ProSources::getConfig();
-            $enabled = !empty($cfg['enabled']);
-            if ($enabled) {
-                $source = ProSources::getSource($sessionId);
-                if (!$source || (empty($source['enabled']) && !$allowDisabled)) {
-                    $source = ProSources::getFirstEnabledSource();
-                }
-                if (!$source) {
-                    $source = ProSources::getDefaultSource();
-                }
-                self::$activeSource = $source;
-                self::$activeId = (string)($source['id'] ?? self::DEFAULT_ID);
-                return;
+        $cfg = SourcesConfig::getConfig();
+        $enabled = !empty($cfg['enabled']);
+        if ($enabled) {
+            $source = SourcesConfig::getSource($sessionId);
+            if (!$source || (empty($source['enabled']) && !$allowDisabled)) {
+                $source = SourcesConfig::getFirstEnabledSource();
             }
+            if (!$source) {
+                $source = SourcesConfig::getDefaultSource();
+            }
+            self::$activeSource = $source;
+            self::$activeId = (string)($source['id'] ?? self::DEFAULT_ID);
+            return;
         }
 
         self::$activeId = self::DEFAULT_ID;
@@ -63,6 +62,7 @@ final class SourceContext
             'type' => 'local',
             'enabled' => true,
             'readOnly' => false,
+            'disableTrash' => false,
             'config' => [
                 'path' => (string)UPLOAD_DIR,
             ],
@@ -72,11 +72,7 @@ final class SourceContext
 
     public static function sourcesEnabled(): bool
     {
-        if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE && class_exists('ProSources')) {
-            $cfg = ProSources::getConfig();
-            return !empty($cfg['enabled']);
-        }
-        return false;
+        return SourcesConfig::sourcesEnabled();
     }
 
     public static function getActiveId(): string
@@ -105,22 +101,22 @@ final class SourceContext
 
     public static function getSourceById(?string $id): ?array
     {
-        if (!self::sourcesEnabled() || !class_exists('ProSources')) {
+        if (!self::sourcesEnabled()) {
             return null;
         }
         $id = trim((string)$id);
         if ($id === '') {
             return null;
         }
-        return ProSources::getSource($id);
+        return SourcesConfig::getSource($id);
     }
 
     public static function listAllSources(): array
     {
-        if (!self::sourcesEnabled() || !class_exists('ProSources')) {
+        if (!self::sourcesEnabled()) {
             return [self::getActiveSource()];
         }
-        $cfg = ProSources::getConfig();
+        $cfg = SourcesConfig::getConfig();
         $sources = isset($cfg['sources']) && is_array($cfg['sources']) ? $cfg['sources'] : [];
         return $sources ?: [self::getActiveSource()];
     }
@@ -129,6 +125,19 @@ final class SourceContext
     {
         $src = self::getActiveSource();
         return !empty($src['readOnly']);
+    }
+
+    public static function isTrashDisabled(): bool
+    {
+        $src = self::getActiveSource();
+        if (!is_array($src)) {
+            return false;
+        }
+        if (!empty($src['disableTrash'])) {
+            return true;
+        }
+        $type = strtolower((string)($src['type'] ?? ''));
+        return $type === 'gdrive';
     }
 
     public static function uploadRoot(): string

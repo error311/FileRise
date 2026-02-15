@@ -8,6 +8,8 @@ use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\LocalFsAdapter;
 use FileRise\Storage\ReadOnlyAdapter;
 use FileRise\Storage\SourceContext;
+use FileRise\Storage\SourcesConfig;
+use FileRise\Storage\WebDavAdapter;
 use ProDropboxAdapter;
 use ProFtpAdapter;
 use ProGDriveAdapter;
@@ -15,7 +17,6 @@ use ProOneDriveAdapter;
 use ProS3Adapter;
 use ProSftpAdapter;
 use ProSmbAdapter;
-use ProSources;
 use ProWebDavAdapter;
 
 // src/lib/StorageFactory.php
@@ -23,6 +24,8 @@ use ProWebDavAdapter;
 require_once PROJECT_ROOT . '/src/lib/StorageAdapterInterface.php';
 require_once PROJECT_ROOT . '/src/lib/LocalFsAdapter.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
+require_once PROJECT_ROOT . '/src/lib/WebDavAdapter.php';
 require_once PROJECT_ROOT . '/src/lib/ReadOnlyAdapter.php';
 
 final class StorageFactory
@@ -85,13 +88,15 @@ final class StorageFactory
                 $adapter = ProFtpAdapter::fromConfig($cfg, $root);
             }
         } elseif ($type === 'webdav') {
-            if (!class_exists('ProWebDavAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
+            if (class_exists(WebDavAdapter::class)) {
+                $adapter = WebDavAdapter::fromConfig($cfg, $root);
+            } elseif (!class_exists('ProWebDavAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
                 $adapterPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . DIRECTORY_SEPARATOR . 'ProWebDavAdapter.php';
                 if (is_file($adapterPath)) {
                     require_once $adapterPath;
                 }
             }
-            if (class_exists('ProWebDavAdapter')) {
+            if (!$adapter && class_exists('ProWebDavAdapter')) {
                 $adapter = ProWebDavAdapter::fromConfig($cfg, $root);
             }
         } elseif ($type === 'smb') {
@@ -155,16 +160,12 @@ final class StorageFactory
             return self::createDefaultAdapter();
         }
 
-        if (!class_exists('ProSources')) {
-            return self::createDefaultAdapter();
-        }
-
-        $source = ProSources::getSource($sourceId);
+        $source = SourcesConfig::getSource($sourceId);
         if (!$source || empty($source['enabled'])) {
-            $source = ProSources::getFirstEnabledSource();
+            $source = SourcesConfig::getFirstEnabledSource();
         }
         if (!$source) {
-            $source = ProSources::getDefaultSource();
+            $source = SourcesConfig::getDefaultSource();
         }
         $type = strtolower((string)($source['type'] ?? 'local'));
 
@@ -208,13 +209,16 @@ final class StorageFactory
                 $adapter = ProFtpAdapter::fromConfig($source['config'] ?? [], $root);
             }
         } elseif ($type === 'webdav') {
-            if (!class_exists('ProWebDavAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
+            if (class_exists(WebDavAdapter::class)) {
+                $root = SourceContext::uploadRootForId((string)($source['id'] ?? ''));
+                $adapter = WebDavAdapter::fromConfig($source['config'] ?? [], $root);
+            } elseif (!class_exists('ProWebDavAdapter') && defined('FR_PRO_BUNDLE_DIR') && FR_PRO_BUNDLE_DIR) {
                 $adapterPath = rtrim((string)FR_PRO_BUNDLE_DIR, "/\\") . DIRECTORY_SEPARATOR . 'ProWebDavAdapter.php';
                 if (is_file($adapterPath)) {
                     require_once $adapterPath;
                 }
             }
-            if (class_exists('ProWebDavAdapter')) {
+            if (!$adapter && class_exists('ProWebDavAdapter')) {
                 $root = SourceContext::uploadRootForId((string)($source['id'] ?? ''));
                 $adapter = ProWebDavAdapter::fromConfig($source['config'] ?? [], $root);
             }

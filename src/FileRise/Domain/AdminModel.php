@@ -3,12 +3,13 @@
 namespace FileRise\Domain;
 
 use FileRise\Http\Controllers\AdminController;
+use FileRise\Storage\SourcesConfig;
 use ProAudit;
-use ProSources;
 
 // src/models/AdminModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
 
 class AdminModel
 {
@@ -338,14 +339,7 @@ class AdminModel
             'lockedByEnv'  => $proSearchLockedByEnv,
         ];
 
-        if ($isProActive && class_exists('ProSources') && fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_SOURCES)) {
-            $public['storageSources'] = ProSources::getPublicConfig();
-        } else {
-            $public['storageSources'] = [
-                'enabled' => false,
-                'sources' => [],
-            ];
-        }
+        $public['storageSources'] = SourcesConfig::getPublicConfig();
 
         $proAuditCfg = (isset($config['proAudit']) && is_array($config['proAudit']))
             ? $config['proAudit']

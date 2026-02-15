@@ -1,5 +1,79 @@
 # Changelog
 
+## Changes 02/15/2026 (v3.4.0) FileRise 1 Year Anniversary
+
+`release(v3.4.0): Core Sources (Local + WebDAV), Pro Gateway Shares admin/API, pretheme CSP cleanup, and pagination fix (closes #104)`
+
+**Commit message**  
+
+```text
+release(v3.4.0): Core Sources (Local + WebDAV), Pro Gateway Shares admin/API, pretheme CSP cleanup, and pagination fix (closes #104)
+
+- sources(core): add SourcesConfig + core WebDAV adapter (Local + WebDAV without Pro)
+- sources(api/ui): migrate /api/pro/sources/* to SourcesConfig and expose capability metadata (allowedTypes/proExtended)
+- admin: add per-source delete-permanently toggle + trash-off badges/hints
+- pro: add Gateway Shares admin section + /api/pro/gateways/{list,save,test,delete}
+- ui: fix pagination getting stuck on page 2 in table/gallery (pane state sync)
+- frontend/security: move pretheme to external js/pretheme.js and remove inline CSP hash requirement
+- licensing: attempt yearly-plan instance auto-bind on license save with clearer autoBind responses
+```
+
+**Added**  
+
+- **Core Sources support (without Pro)**
+  - Added `SourcesConfig` to provide a unified source config layer for Core + Pro.
+  - Core now supports **Local** and **WebDAV** source types directly.
+  - Added capability metadata in sources responses: `available`, `proExtended`, `allowedTypes`, `coreTypes`, `proTypes`.
+- **Core WebDAV adapter**
+  - Added `WebDavAdapter` in core storage layer and wired it through `StorageFactory`.
+  - Added legacy shims: `src/lib/SourcesConfig.php`, `src/lib/WebDavAdapter.php`.
+- **Pro Gateway Shares API surface (Core integration for Pro)**
+  - Added admin API endpoints:
+    - `/api/pro/gateways/list.php`
+    - `/api/pro/gateways/save.php`
+    - `/api/pro/gateways/test.php`
+    - `/api/pro/gateways/delete.php`
+  - Added admin UI section for Gateway Shares (SFTP/S3/MCP) with snippet preview/copy + validation output.
+- **Pre-theme bootstrap script**
+  - Added `public/js/pretheme.js` to apply theme before full app load and reduce first-paint flash.
+
+**Changed**  
+
+- **Sources APIs now run through `SourcesConfig`**
+  - `/api/pro/sources/{list,save,select,delete,test,visible}` migrated from direct `ProSources` checks to `SourcesConfig`.
+  - Source endpoints no longer hard-fail with `Pro is not active` for Core-supported source workflows.
+- **Source-aware delete/trash behavior**
+  - Added per-source `disableTrash` support end-to-end (API/UI/storage metadata).
+  - `FileModel` now respects source trash mode and returns clearer errors when Trash directory creation fails.
+  - Recycle Bin node is hidden for sources with trash disabled.
+- **Admin + i18n updates**
+  - Updated source wording/hints for the delete-permanently toggle and trash behavior.
+  - Added gateway-share translation keys and UI strings.
+- **CSP / bootstrap flow**
+  - Replaced inline pre-theme script with external `js/pretheme.js`.
+  - Updated `.htaccess` CSP baseline to remove inline script hash requirement.
+  - Added rewrite rule to serve `/index.html` via `index.php` for consistent bootstrapping.
+- **License save flow**
+  - Admin license save now attempts automatic Instance-ID bind for yearly plans and returns `autoBind` result details.
+
+**Fixed**  
+
+- **Pagination stuck on page 2 (Issue #104)**
+  - Fixed pane-local pagination state sync for both table and gallery views so Prev/Next works reliably after page changes.
+- **Dual-pane activation guard**
+  - Prevented pane activation click handling when dual-pane mode is disabled.
+- **OnlyOffice CSP helper text**
+  - Updated generated Apache/Nginx CSP helper examples to remove obsolete inline script hash guidance.
+
+**Docs**  
+
+- Added/updated documentation for:
+  - Sources onboarding and admin notes
+  - Core/Pro source behavior
+  - Pro Gateway Shares
+
+---
+
 ## Changes 02/10/2026 (v3.3.3)
 
 `release(v3.3.3): fix OnlyOffice local sourceId handling + improve Pro bundle download reliability (Cloudflare UA + ZIP sanity checks)`

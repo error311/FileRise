@@ -73,7 +73,7 @@ The Admin Panel is where you manage users, folder access, authentication, integr
 
 ### Sources
 
-- Enable Sources, add/edit/test connections, and set source read-only.
+- Enable Sources, add/edit/test connections, set source read-only, and optionally bypass trash (permanent delete).
 - See [Pro Sources](https://github.com/error311/FileRise/wiki/Pro-Sources) for details.
 
 ### Pro Features
