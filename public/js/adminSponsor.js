@@ -35,7 +35,8 @@ const DEFAULT_SUPPORTERS = [
   '@jubnl',
   'Juozaitis S',
   'Cocoseb31',
-  'nulltrope'
+  'nulltrope',
+  'Stefan'
 ];
 
 /**

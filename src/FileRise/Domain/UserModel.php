@@ -420,7 +420,7 @@ class UserModel
             }
         }
 
-        return new stdClass();
+        return new \stdClass();
     }
 
     /**

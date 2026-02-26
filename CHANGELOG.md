@@ -1,5 +1,31 @@
 # Changelog
 
+## Changes 02/26/2026 (v3.5.2)
+
+`release(v3.5.2): relax username validation + stdClass namespace fix`
+
+**Commit message**  
+
+```text
+release(v3.5.2): relax username validation + stdClass namespace fix
+
+- users(core): allow dots/@ in usernames and block "." / ".." to prevent path-like edge cases
+- php(core): namespace stdClass return to \stdClass for consistency under FileRise\Domain
+- admin: update sponsor list (add Stefan)
+```
+
+**Changed**  
+
+- **Username validation**
+  - Updated `REGEX_USER` to allow `.` and `@` in usernames (and spaces/underscores/dashes as before).
+  - Added a negative lookahead to reject `.` and `..` as standalone usernames.
+- **PHP namespace correctness**
+  - `UserModel::getUserPermissions()` now returns `\stdClass` (global) instead of `stdClass` to avoid namespace resolution issues under `FileRise\Domain`.
+- **Admin sponsor page**
+  - Added “Stefan” to the sponsors list in `public/js/adminSponsor.js`.
+
+---
+
 ## Changes 02/19/2026 (v3.5.1)
 
 `release(v3.5.1): authenticated Link File deep links + shared file request mode`
