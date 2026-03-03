@@ -8,13 +8,20 @@
 [![Release](https://img.shields.io/github/v/release/error311/FileRise?include_prereleases&sort=semver)](https://github.com/error311/FileRise/releases)
 [![License](https://img.shields.io/github/license/error311/FileRise)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-join_chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/7WN6f56X2e)
+
+**FileRise** is a self-hosted web file manager and storage hub with WebDAV, sharing, and per-folder ACLs.
+Drag & drop uploads, OnlyOffice integration, and **optional folder-level encryption at rest** — all in one PHP app you control.
+
+Quick links: [Website](https://filerise.net) • [Docs](https://filerise.net/docs/) • [Live demo](https://demo.filerise.net) • [Install](#install-docker--recommended) • [FileRise Pro](https://filerise.net/pro/)
+
+- **Built for:** anyone who wants a fast, self-hosted file manager / storage hub
+- **Core (MIT):** full open-source FileRise feature set (ACLs, sharing, uploads, tags/search, and more), plus multiple local roots and WebDAV sources for storage-hub workflows.
+- **Pro:** adds user groups, client portals, automation, additional source adapters, gateway shares, and  search everywhere/audit tooling.
+
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-❤-red)](https://github.com/sponsors/error311)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
 
-**FileRise** is a self-hosted web file manager with WebDAV, sharing, and per-folder ACLs.  
-Drag & drop uploads, OnlyOffice integration, and **optional folder-level encryption at rest** — all in one PHP app you control.
-
-Built for homelabs, teams, and client portals that need fast browsing, strict ACLs, and zero-database simplicity.
+![Sources](https://raw.githubusercontent.com/error311/FileRise/master/resources/FileRisePro-Sources.gif)
 
 ## Table of contents
 
@@ -89,8 +96,6 @@ Built for homelabs, teams, and client portals that need fast browsing, strict AC
 Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
 ![FileRise](https://raw.githubusercontent.com/error311/FileRise/master/resources/filerise-v3.0.0.png)
-
-![Sources](https://raw.githubusercontent.com/error311/FileRise/master/resources/FileRisePro-Sources.gif)
 
 > 💡 Looking for **FileRise Pro** (brandable header, **user groups**, **client upload portals**, license handling)?
 > Check out [filerise.net](https://filerise.net) – FileRise Core stays fully open-source (MIT).
