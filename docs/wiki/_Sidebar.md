@@ -36,6 +36,7 @@
 
 ### Deployments
 - [Kubernetes (k8s)](kubernetes-k8s)
+- [Helm (k8s)](Helm)
 
 ### Pro
 - [Pro install and update](Pro-Install-and-Update)
