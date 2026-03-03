@@ -1,28 +1,75 @@
 # Changelog
 
-## Changes 02/26/2026 (v3.5.2)
+## Changes 03/02/2026 (v3.6.0)
 
-`release(v3.5.2): relax username validation + stdClass namespace fix`
+`release(v3.6.0): Gateway Shares v2 + Automation APIs, MCP core seam, and runtime hardening`
 
-**Commit message**  
+**Commit message**
 
 ```text
-release(v3.5.2): relax username validation + stdClass namespace fix
+release(v3.6.0): Gateway Shares v2 + Automation APIs, MCP core seam, and runtime hardening
 
-- users(core): allow dots/@ in usernames and block "." / ".." to prevent path-like edge cases
-- php(core): namespace stdClass return to \stdClass for consistency under FileRise\Domain
-- admin: update sponsor list (add Stefan)
+- pro(api): add managed gateway + MCP service/user/job endpoints and Automation wrappers via Domain services
+- mcp(core): add McpOpsContext + McpCoreOpsService seam with ACL-scoped operations and fast-list paging/cache path
+- api(refactor): centralize Pro endpoint guards/emit helpers and move gateway/automation orchestration into src/FileRise/Domain
+- runtime/security: add gnupg to Docker runtime image for managed rclone signature verification support
+- style/docs: targeted PSR-12 cleanup in new core seam files and docs refresh for Gateway Shares + Automation
 ```
 
-**Changed**  
+**Added**
 
-- **Username validation**
-  - Updated `REGEX_USER` to allow `.` and `@` in usernames (and spaces/underscores/dashes as before).
-  - Added a negative lookahead to reject `.` and `..` as standalone usernames.
-- **PHP namespace correctness**
-  - `UserModel::getUserPermissions()` now returns `\stdClass` (global) instead of `stdClass` to avoid namespace resolution issues under `FileRise\Domain`.
-- **Admin sponsor page**
-  - Added “Stefan” to the sponsors list in `public/js/adminSponsor.js`.
+- **Gateway Shares v2 + MCP API surface (Core integration for Pro)**
+  - Added managed runtime endpoints:
+    - `/api/pro/gateways/managed/status.php`
+    - `/api/pro/gateways/managed/action.php`
+    - `/api/pro/gateways/managed/rcloneInstall.php`
+    - `/api/pro/gateways/managed/rcloneCheck.php`
+    - `/api/pro/gateways/managed/rcloneUpload.php`
+  - Added MCP service/user/job endpoints:
+    - `/api/pro/gateways/mcp/service/{status,action}.php`
+    - `/api/pro/gateways/mcp/users/{list,save,delete}.php`
+    - `/api/pro/gateways/jobs/{cleanup,autotag}.php`
+- **Automation API surface (Core integration for Pro)**
+  - Added endpoint wrappers under:
+    - `/api/pro/automation/webhooks/*`
+    - `/api/pro/automation/jobs/*`
+    - `/api/pro/automation/worker/*`
+    - `/api/pro/automation/scans/*`
+    - `/api/pro/automation/security/*`
+    - `/api/pro/automation/metrics.php`
+- **Core service seam for Pro orchestration**
+  - Added:
+    - `src/FileRise/Domain/ProGatewayApiService.php`
+    - `src/FileRise/Domain/ProAutomationApiService.php`
+    - `src/FileRise/Domain/McpOpsContext.php`
+    - `src/FileRise/Domain/McpCoreOpsService.php`
+  - Added shared helpers:
+    - `public/api/pro/_common.php`
+    - `public/api/pro/gateways/_common.php`
+    - `public/api/pro/automation/_common.php`
+
+**Changed**
+
+- **Gateway admin UX**
+  - Gateway Shares now includes Shares/MCP tabs with managed status/actions, logs, rclone install/update/upload controls, and job queue actions.
+  - MCP tab now includes `AI Integration Templates` with copy/download snippets for OpenAI, Claude, Gemini, and direct curl testing.
+- **Runtime image prerequisites**
+  - Added `gnupg` to `Dockerfile` package install list to support managed rclone signature verification in container deployments.
+- **Version hint alignment**
+  - Updated admin latest Pro bundle UI hint to `v1.9.0`.
+
+**Fixed**
+
+- **Core bootstrap/order and API guard regressions**
+  - Fixed Pro API bootstrap ordering edge cases around `PROJECT_ROOT`/shared guard bootstrap usage.
+- **Gateway admin runtime regressions**
+  - Fixed managed gateway admin UI helper scope issues (`setManagedStatus`/`setManagedLog`).
+- **Style/lint**
+  - Applied targeted PSR-12 declaration/brace/EOF fixes in newly added Core seam files.
+
+**Docs**
+
+- Updated admin/wiki docs for Gateway Shares v2 + Automation coverage.
 
 ---
 

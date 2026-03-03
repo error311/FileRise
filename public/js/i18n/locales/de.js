@@ -182,6 +182,7 @@ export default {
 
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:
     "admin_panel": "Administrationsbereich",
+    "admin_search_audit_logging": "Suche überall & Audit-Protokollierung",
     "user_panel": "Benutzerbereich",
     "trash_restore_delete": "Papierkorb wiederherstellen/löschen",
     "totp_settings": "TOTP-Einstellungen",

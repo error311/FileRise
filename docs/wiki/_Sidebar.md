@@ -46,7 +46,9 @@
 - [Sources onboarding](Sources-Onboarding)
 - [Search everywhere](Search-Everywhere)
 - [Pro sources](Pro-Sources)
+- [Pro automation](Pro-Automation)
 - [Pro gateway shares](Pro-Gateway-Shares)
+- [Pro MCP AI quickstart](Pro-MCP-AI-Quickstart)
 - [Instance IDs](Instance-IDs)
 
 ### Developer

@@ -1,4 +1,5 @@
 <?php
+
 // public/api/pro/uploadBrandLogo.php
 /**
  * @OA\Post(
@@ -26,27 +27,23 @@
  * )
  */
 
-require_once __DIR__ . '/../../../config/config.php';
+declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/_common.php';
+require_once PROJECT_ROOT . '/src/FileRise/Domain/ProPortalsApiService.php';
 
-// Pro-only gate
 if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE) {
-    http_response_code(403);
-    echo json_encode([
+    fr_pro_json(403, [
         'success' => false,
-        'error'   => 'FileRise Pro is not active on this instance.'
+        'error' => 'FileRise Pro is not active on this instance.',
     ]);
-    exit;
 }
 
 try {
-    $ctrl = new \FileRise\Http\Controllers\UserController();
-    $ctrl->uploadBrandLogo();
+    \FileRise\Domain\ProPortalsApiService::uploadBrandLogo();
 } catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode([
+    fr_pro_json(500, [
         'success' => false,
-        'error'   => 'Exception: ' . $e->getMessage(),
+        'error' => 'Exception: ' . $e->getMessage(),
     ]);
 }

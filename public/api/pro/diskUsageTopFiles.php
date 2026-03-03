@@ -1,4 +1,5 @@
 <?php
+
 // public/api/pro/diskUsageTopFiles.php
 /**
  * @OA\Get(
@@ -16,62 +17,28 @@
  *   @OA\Response(response=500, description="Server error")
  * )
  */
+
 declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
-
-require_once __DIR__ . '/../../../config/config.php';
-
-// Basic auth / admin check
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-
-$username = (string)($_SESSION['username'] ?? '');
-$isAdmin  = !empty($_SESSION['isAdmin']) || (!empty($_SESSION['admin']) && $_SESSION['admin'] === '1');
-
-if ($username === '' || !$isAdmin) {
-    http_response_code(403);
-    echo json_encode([
-        'ok'    => false,
-        'error' => 'Forbidden',
-    ]);
-    return;
-}
-
-@session_write_close();
-
-// Pro-only gate: require Pro active AND ProDiskUsage class
-if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !class_exists('ProDiskUsage') || !fr_pro_api_level_at_least(FR_PRO_API_REQUIRE_DISK_USAGE)) {
-    http_response_code(403);
-    echo json_encode([
-        'ok'    => false,
-        'error' => 'FileRise Pro is not active on this instance.',
-    ]);
-    return;
-}
-
-$limit = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 100;
-$sourceId = isset($_GET['sourceId']) ? trim((string)$_GET['sourceId']) : '';
+require_once __DIR__ . '/_common.php';
+require_once PROJECT_ROOT . '/src/FileRise/Domain/ProDiskUsageApiService.php';
 
 try {
-    $result = ProDiskUsage::getTopFiles($limit, $sourceId);
-    if (empty($result['ok'])) {
-        $err = (string)($result['error'] ?? '');
-        if ($err === 'invalid_source' || $err === 'unsupported_source') {
-            http_response_code(400);
-        } else {
-            http_response_code(404);
-        }
-    } else {
-        http_response_code(200);
+    fr_pro_guard_method('GET');
+
+    fr_pro_start_session();
+    $ctx = fr_pro_current_user_context();
+    if ($ctx['username'] === '' || !$ctx['isAdmin']) {
+        fr_pro_json(403, ['ok' => false, 'error' => 'Forbidden']);
     }
-    echo json_encode($result, JSON_UNESCAPED_SLASHES);
+    @session_write_close();
+
+    fr_pro_require_active(
+        ['ProDiskUsage', \FileRise\Domain\ProDiskUsageApiService::class],
+        defined('FR_PRO_API_REQUIRE_DISK_USAGE') ? (int)FR_PRO_API_REQUIRE_DISK_USAGE : null
+    );
+
+    fr_pro_emit_result(\FileRise\Domain\ProDiskUsageApiService::topFiles($_GET));
 } catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode([
-        'ok'      => false,
-        'error'   => 'internal_error',
-        'message' => $e->getMessage(),
-    ]);
+    fr_pro_emit_result(\FileRise\Domain\ProDiskUsageApiService::fromThrowable($e, 'Internal error'));
 }

@@ -9,6 +9,8 @@ import { initAdminStorageSection } from './adminStorage.js?v={{APP_QVER}}';
 import { initAdminSponsorSection } from './adminSponsor.js?v={{APP_QVER}}';
 import { initOnlyOfficeUI, collectOnlyOfficeSettingsForSave } from './adminOnlyOffice.js?v={{APP_QVER}}';
 import { openClientPortalsModal } from './adminPortals.js?v={{APP_QVER}}';
+import { loadShareLinksSection } from './adminShareLinks.js?v={{APP_QVER}}';
+import { initAdminAutomationSection } from './adminAutomation.js?v={{APP_QVER}}';
 import {
   openUserPermissionsModal,
   openUserGroupsModal,
@@ -26,7 +28,7 @@ export {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.8.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.9.0';
 const PRO_API_LEVELS = {
   diskUsage: 2,
   search: 3,
@@ -2666,12 +2668,12 @@ function initGatewaysSection({ isPro }) {
       </div>
 
       <div class="alert alert-info py-2 px-3 small" style="border-radius:8px; margin-bottom:8px;">
-        <div><strong>${escapeHTML(tf('gateway_runtime_title', 'Gateway runtime checklist'))}</strong></div>
-        <div>${escapeHTML(tf('gateway_runtime_line_1', '1) Install rclone on the gateway host/container.'))}</div>
-        <div>${escapeHTML(tf('gateway_runtime_line_2', '2) For Docker, recommended: run rclone as a sidecar from the docker-compose snippet.'))}</div>
-        <div>${escapeHTML(tf('gateway_runtime_line_3', '3) If you run rclone inside the FileRise container, publish the gateway port (example: -p 2022:2022).'))}</div>
-        <div>${escapeHTML(tf('gateway_runtime_line_4', '4) Use listen address 0.0.0.0 for LAN access, then connect to host IP:port.'))}</div>
-        <div>${escapeHTML(tf('gateway_runtime_line_5', '5) Test validates config only; it does not start or stop gateway services.'))}</div>
+        <div><strong>${escapeHTML(tf('gateway_runtime_title', 'Gateway runtime setup (managed recommended)'))}</strong></div>
+        <div>${escapeHTML(tf('gateway_runtime_line_1', '1) Managed Mode can install, start, stop, and restart rclone from this panel.'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_2', '2) If rclone is missing, use Download + install or upload a custom binary.'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_3', '3) In Docker/container setups, publish each gateway port (example: -p 2022:2022).'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_4', '4) Use listen address 0.0.0.0 for LAN access; use 127.0.0.1 for local-only.'))}</div>
+        <div>${escapeHTML(tf('gateway_runtime_line_5', '5) Manual snippets are advanced fallback; Test validates config only.'))}</div>
         <a class="small" href="${escapeHTML(withBase('/docs/?page=pro-gateway-shares'))}" target="_blank" rel="noopener noreferrer">
           ${escapeHTML(tf('gateway_runtime_docs', 'Open Gateway setup guide'))}
         </a>
@@ -2704,6 +2706,10 @@ function initGatewaysSection({ isPro }) {
           <div class="form-group">
             <label for="gwRootPath">${escapeHTML(tf('gateway_root_path', 'Root Path'))}:</label>
             <input type="text" id="gwRootPath" class="form-control" value="root" placeholder="root or folder/subfolder" />
+          </div>
+          <div class="form-group">
+            <label for="gwManagedTarget">${escapeHTML(tf('gateway_managed_target', 'Managed Target (optional)'))}:</label>
+            <input type="text" id="gwManagedTarget" class="form-control" value="" placeholder="/srv/files or remote:path" />
           </div>
           <div class="form-group">
             <label for="gwMode">${escapeHTML(tf('gateway_mode', 'Mode'))}:</label>
@@ -2771,41 +2777,226 @@ function initGatewaysSection({ isPro }) {
         </div>
 
         <div class="sources-actions">
-          <button type="button" id="gwSaveBtn" class="btn btn-sm btn-success">${escapeHTML(tf('gateway_save', 'Save Gateway'))}</button>
-          <button type="button" id="gwResetBtn" class="btn btn-sm btn-light">${escapeHTML(tf('reset', 'Reset'))}</button>
+          <button type="button" id="gwSaveBtn" class="btn btn-success" style="min-width:140px;">${escapeHTML(tf('gateway_save', 'Save Gateway'))}</button>
+          <button type="button" id="gwResetBtn" class="btn btn-light" style="min-width:140px;">${escapeHTML(tf('reset', 'Reset'))}</button>
         </div>
       </div>
 
-      <div style="margin-top:10px;">
-        <div class="d-flex align-items-center justify-content-between mb-1" style="gap:8px;">
-          <label class="small text-muted mb-0">${escapeHTML(tf('gateway_snippets', 'Gateway snippets'))}</label>
-          <div class="d-flex align-items-center" style="gap:8px;">
-            <select id="gwSnippetType" class="form-control form-control-sm" style="max-width:220px;">
-              <option value="command">${escapeHTML(tf('gateway_start_command', 'Start command'))}</option>
-              <option value="docker">${escapeHTML(tf('gateway_docker_compose', 'docker-compose snippet'))}</option>
-              <option value="systemd">${escapeHTML(tf('gateway_systemd_unit', 'systemd unit snippet'))}</option>
-            </select>
-            <button type="button" id="gwCopySnippetBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('copy', 'Copy'))}</button>
-          </div>
-        </div>
-        <pre id="gwSnippetPreview" style="margin:0; max-height:180px; overflow:auto; font-size:12px; background:#0b1020; color:#dbeafe; border-radius:8px; padding:10px;"></pre>
-      </div>
-
-      <div style="margin-top:8px;">
-        <div class="d-flex align-items-center justify-content-between mb-1" style="gap:8px;">
-          <label class="small text-muted mb-0">${escapeHTML(tf('gateway_test_output', 'Test output'))}</label>
-          <div class="d-flex align-items-center" style="gap:8px;">
-            <div class="form-check fr-toggle" style="margin:0;">
-              <input type="checkbox" class="form-check-input fr-toggle-input" id="gwIncludeSecrets" />
-              <label class="form-check-label" for="gwIncludeSecrets">${escapeHTML(tf('gateway_include_secrets', 'Include secrets on test'))}</label>
+      <details id="gwManualFallbackDetails" style="margin-top:10px;">
+        <summary class="small text-muted" style="cursor:pointer;">
+          ${escapeHTML(tf('gateway_manual_fallback_toggle', 'Manual fallback snippets + test (advanced)'))}
+        </summary>
+        <div style="margin-top:8px;">
+          <div class="d-flex align-items-center justify-content-between mb-1" style="gap:8px;">
+            <label class="small text-muted mb-0">${escapeHTML(tf('gateway_snippets', 'Manual fallback snippets (advanced)'))}</label>
+            <div class="d-flex align-items-center" style="gap:8px;">
+              <select id="gwSnippetType" class="form-control form-control-sm" style="max-width:220px;">
+                <option value="command">${escapeHTML(tf('gateway_start_command', 'Start command'))}</option>
+                <option value="docker">${escapeHTML(tf('gateway_docker_compose', 'docker-compose snippet'))}</option>
+                <option value="systemd">${escapeHTML(tf('gateway_systemd_unit', 'systemd unit snippet'))}</option>
+              </select>
+              <button type="button" id="gwCopySnippetBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('copy', 'Copy'))}</button>
             </div>
-            <button type="button" id="gwCopyTestBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('copy', 'Copy'))}</button>
           </div>
+          <pre id="gwSnippetPreview" style="margin:0; max-height:180px; overflow:auto; font-size:12px; background:#0b1020; color:#dbeafe; border-radius:8px; padding:10px;"></pre>
         </div>
-        <pre id="gwTestOutput" style="margin:0; max-height:180px; overflow:auto; font-size:12px; background:#111827; color:#e5e7eb; border-radius:8px; padding:10px;"></pre>
-      </div>
+
+        <div style="margin-top:8px;">
+          <div class="d-flex align-items-center justify-content-between mb-1" style="gap:8px;">
+            <label class="small text-muted mb-0">${escapeHTML(tf('gateway_test_output', 'Test output'))}</label>
+            <div class="d-flex align-items-center" style="gap:8px;">
+              <div class="form-check fr-toggle" style="margin:0;">
+                <input type="checkbox" class="form-check-input fr-toggle-input" id="gwIncludeSecrets" />
+                <label class="form-check-label" for="gwIncludeSecrets">${escapeHTML(tf('gateway_include_secrets', 'Include secrets on test'))}</label>
+              </div>
+              <button type="button" id="gwCopyTestBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('copy', 'Copy'))}</button>
+            </div>
+          </div>
+          <pre id="gwTestOutput" style="margin:0; max-height:180px; overflow:auto; font-size:12px; background:#111827; color:#e5e7eb; border-radius:8px; padding:10px;"></pre>
+        </div>
+      </details>
     </div>
   `;
+
+  const adminRoot = container.querySelector('.sources-admin');
+  if (adminRoot) {
+    const existing = Array.from(adminRoot.childNodes);
+    adminRoot.textContent = '';
+    adminRoot.innerHTML = `
+      <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Gateway tabs">
+        <button type="button" class="btn btn-outline-primary active" id="gwTabSharesBtn">${escapeHTML(tf('gateway_tab_shares', 'Shares'))}</button>
+        <button type="button" class="btn btn-outline-primary" id="gwTabMcpBtn">${escapeHTML(tf('gateway_tab_mcp', 'MCP'))}</button>
+      </div>
+      <div id="gwTabSharesPanel"></div>
+      <div id="gwTabMcpPanel" hidden>
+        <div class="card mb-2" style="border-radius:8px;">
+          <div class="card-header py-2"><strong>${escapeHTML(tf('gateway_mcp_service_title', 'MCP Managed Service'))}</strong></div>
+          <div class="card-body py-2">
+            <div class="sources-form-grid">
+              <div class="form-group">
+                <label for="mcpSvcListenAddr">${escapeHTML(tf('gateway_listen_addr', 'Listen Address'))}:</label>
+                <input type="text" id="mcpSvcListenAddr" class="form-control" value="127.0.0.1" />
+              </div>
+              <div class="form-group">
+                <label for="mcpSvcPort">${escapeHTML(tf('gateway_port', 'Port'))}:</label>
+                <input type="number" id="mcpSvcPort" class="form-control" min="1024" max="65535" value="3030" />
+              </div>
+              <div class="form-group sources-form-inline">
+                <div class="form-check fr-toggle">
+                  <input type="checkbox" class="form-check-input fr-toggle-input" id="mcpSvcAllowPublic" />
+                  <label class="form-check-label" for="mcpSvcAllowPublic">${escapeHTML(tf('gateway_allow_public_bind', 'Allow 0.0.0.0 bind'))}</label>
+                </div>
+              </div>
+              <div class="form-group sources-form-inline">
+                <div class="form-check fr-toggle">
+                  <input type="checkbox" class="form-check-input fr-toggle-input" id="mcpSvcAutostart" />
+                  <label class="form-check-label" for="mcpSvcAutostart">${escapeHTML(tf('gateway_autostart', 'Autostart'))}</label>
+                </div>
+              </div>
+            </div>
+            <div class="sources-actions">
+              <button type="button" id="mcpSvcSaveBtn" class="btn btn-sm btn-secondary">${escapeHTML(tf('save', 'Save'))}</button>
+              <button type="button" id="mcpSvcStartBtn" class="btn btn-sm btn-success">${escapeHTML(tf('start', 'Start'))}</button>
+              <button type="button" id="mcpSvcStopBtn" class="btn btn-sm btn-warning">${escapeHTML(tf('stop', 'Stop'))}</button>
+              <button type="button" id="mcpSvcRestartBtn" class="btn btn-sm btn-primary">${escapeHTML(tf('restart', 'Restart'))}</button>
+              <button type="button" id="mcpSvcLogsBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('logs', 'Logs'))}</button>
+            </div>
+            <div id="mcpSvcStatus" class="small text-muted mt-1"></div>
+            <pre id="mcpSvcLog" style="margin:8px 0 0; max-height:160px; overflow:auto; font-size:12px; background:#111827; color:#e5e7eb; border-radius:8px; padding:10px;"></pre>
+          </div>
+        </div>
+        <div class="card mb-2" style="border-radius:8px;">
+          <div class="card-header py-2"><strong>${escapeHTML(tf('gateway_mcp_users_title', 'MCP Users'))}</strong></div>
+          <div class="card-body py-2">
+            <input type="hidden" id="mcpUserId" />
+            <div class="sources-form-grid">
+              <div class="form-group">
+                <label for="mcpUserName">${escapeHTML(tf('name', 'Name'))}:</label>
+                <input type="text" id="mcpUserName" class="form-control" maxlength="120" />
+              </div>
+              <div class="form-group">
+                <label for="mcpUserFileRiseUser">${escapeHTML(tf('gateway_mcp_map_user', 'FileRise user'))}:</label>
+                <input type="text" id="mcpUserFileRiseUser" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label for="mcpUserSourceId">${escapeHTML(tf('gateway_source_id', 'Source ID'))}:</label>
+                <input type="text" id="mcpUserSourceId" class="form-control" value="local" />
+              </div>
+              <div class="form-group">
+                <label for="mcpUserRootPath">${escapeHTML(tf('gateway_root_path', 'Root Path'))}:</label>
+                <input type="text" id="mcpUserRootPath" class="form-control" value="root" />
+              </div>
+              <div class="form-group sources-form-inline">
+                <div class="form-check fr-toggle">
+                  <input type="checkbox" class="form-check-input fr-toggle-input" id="mcpUserEnabled" checked />
+                  <label class="form-check-label" for="mcpUserEnabled">${escapeHTML(tf('source_enabled', 'Enabled'))}</label>
+                </div>
+              </div>
+              <div class="form-group sources-form-inline">
+                <div class="form-check fr-toggle">
+                  <input type="checkbox" class="form-check-input fr-toggle-input" id="mcpUserRotateToken" />
+                  <label class="form-check-label" for="mcpUserRotateToken">${escapeHTML(tf('gateway_mcp_rotate_token', 'Rotate token'))}</label>
+                </div>
+              </div>
+            </div>
+            <div class="sources-actions">
+              <button type="button" id="mcpUserSaveBtn" class="btn btn-sm btn-success">${escapeHTML(tf('save', 'Save'))}</button>
+              <button type="button" id="mcpUserResetBtn" class="btn btn-sm btn-light">${escapeHTML(tf('reset', 'Reset'))}</button>
+            </div>
+            <pre id="mcpUserTokenOutput" style="margin:8px 0 0; max-height:120px; overflow:auto; font-size:12px; background:#0b1020; color:#dbeafe; border-radius:8px; padding:10px;"></pre>
+            <div id="mcpUsersList" class="sources-list mt-2"></div>
+          </div>
+        </div>
+        <div class="card mb-2" style="border-radius:8px;">
+          <div class="card-header py-2"><strong>${escapeHTML(tf('gateway_mcp_ai_templates', 'AI Integration Templates'))}</strong></div>
+          <div class="card-body py-2">
+            <div class="small text-muted mb-2">
+              ${escapeHTML(tf('gateway_mcp_ai_templates_help', 'Generate copy-ready starter templates for OpenAI, Claude, Gemini, and direct MCP curl tests.'))}
+            </div>
+            <div class="sources-form-grid">
+              <div class="form-group">
+                <label for="mcpTplBaseUrl">${escapeHTML(tf('gateway_mcp_url', 'MCP URL'))}:</label>
+                <input type="text" id="mcpTplBaseUrl" class="form-control" placeholder="http://127.0.0.1:3030" />
+              </div>
+              <div class="form-group">
+                <label for="mcpTplToken">${escapeHTML(tf('gateway_mcp_token', 'MCP token (optional)'))}:</label>
+                <input type="text" id="mcpTplToken" class="form-control" autocomplete="off" placeholder="paste MCP token" />
+              </div>
+              <div class="form-group">
+                <label for="mcpTplFolder">${escapeHTML(tf('folder', 'Folder'))}:</label>
+                <input type="text" id="mcpTplFolder" class="form-control" value="root" />
+              </div>
+              <div class="form-group">
+                <label for="mcpTplOpenAiModel">${escapeHTML(tf('gateway_mcp_openai_model', 'OpenAI model'))}:</label>
+                <input type="text" id="mcpTplOpenAiModel" class="form-control" value="gpt-4.1-mini" />
+              </div>
+              <div class="form-group">
+                <label for="mcpTplKind">${escapeHTML(tf('gateway_mcp_template_type', 'Template type'))}:</label>
+                <select id="mcpTplKind" class="form-control">
+                  <option value="openai">${escapeHTML(tf('gateway_mcp_template_openai', 'OpenAI (Node.js)'))}</option>
+                  <option value="claude">${escapeHTML(tf('gateway_mcp_template_claude', 'Claude (Node.js)'))}</option>
+                  <option value="gemini">${escapeHTML(tf('gateway_mcp_template_gemini', 'Gemini (tool schema)'))}</option>
+                  <option value="curl">${escapeHTML(tf('gateway_mcp_template_curl', 'curl test'))}</option>
+                </select>
+              </div>
+              <div class="form-group sources-form-inline">
+                <button type="button" id="mcpTplUseLatestTokenBtn" class="btn btn-sm btn-outline-secondary">
+                  ${escapeHTML(tf('gateway_mcp_use_latest_token', 'Use latest issued token'))}
+                </button>
+              </div>
+            </div>
+            <div class="sources-actions">
+              <button type="button" id="mcpTplCopyBtn" class="btn btn-sm btn-primary">${escapeHTML(tf('copy', 'Copy'))}</button>
+              <button type="button" id="mcpTplDownloadBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('download', 'Download'))}</button>
+            </div>
+            <div id="mcpTplStatus" class="small text-muted mt-1"></div>
+            <pre id="mcpTplPreview" style="margin:8px 0 0; max-height:220px; overflow:auto; font-size:12px; background:#0b1020; color:#dbeafe; border-radius:8px; padding:10px;"></pre>
+          </div>
+        </div>
+        <div class="card" style="border-radius:8px;">
+          <div class="card-header py-2"><strong>${escapeHTML(tf('gateway_agent_jobs', 'Agent Jobs'))}</strong></div>
+          <div class="card-body py-2">
+            <div class="sources-actions">
+              <button type="button" id="mcpJobCleanupBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('gateway_job_cleanup', 'Queue cleanup job'))}</button>
+            </div>
+            <div class="sources-form-grid mt-1">
+              <div class="form-group">
+                <label for="mcpAutotagUser">${escapeHTML(tf('gateway_mcp_user', 'MCP User'))}:</label>
+                <select id="mcpAutotagUser" class="form-control"></select>
+              </div>
+              <div class="form-group">
+                <label for="mcpAutotagFolder">${escapeHTML(tf('folder', 'Folder'))}:</label>
+                <input type="text" id="mcpAutotagFolder" class="form-control" value="root" />
+              </div>
+              <div class="form-group">
+                <label for="mcpAutotagFile">${escapeHTML(tf('file', 'File'))}:</label>
+                <input type="text" id="mcpAutotagFile" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label for="mcpAutotagTagName">${escapeHTML(tf('tag', 'Tag'))}:</label>
+                <input type="text" id="mcpAutotagTagName" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label for="mcpAutotagTagColor">${escapeHTML(tf('color', 'Color'))}:</label>
+                <input type="text" id="mcpAutotagTagColor" class="form-control" placeholder="#22c55e" />
+              </div>
+              <div class="form-group sources-form-inline">
+                <button type="button" id="mcpAutotagQueueBtn" class="btn btn-sm btn-primary">${escapeHTML(tf('gateway_job_autotag', 'Queue autotag job'))}</button>
+              </div>
+            </div>
+            <div id="mcpJobsStatus" class="small text-muted mt-1"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const sharesPanel = adminRoot.querySelector('#gwTabSharesPanel');
+    if (sharesPanel) {
+      existing.forEach((node) => {
+        sharesPanel.appendChild(node);
+      });
+    }
+  }
 
   const state = {
     gateways: [],
@@ -2813,6 +3004,11 @@ function initGatewaysSection({ isPro }) {
     previewGatewayId: '',
     sourceOptions: [],
     lastTestResult: null,
+    managedByGatewayId: {},
+    managedRuntime: null,
+    mcpService: null,
+    mcpUsers: [],
+    showRcloneInstallControls: false,
   };
 
   const getCsrf = () =>
@@ -2831,6 +3027,7 @@ function initGatewaysSection({ isPro }) {
   const typeEl = container.querySelector('#gwType');
   const sourceIdEl = container.querySelector('#gwSourceId');
   const rootPathEl = container.querySelector('#gwRootPath');
+  const managedTargetEl = container.querySelector('#gwManagedTarget');
   const modeEl = container.querySelector('#gwMode');
   const listenEl = container.querySelector('#gwListenAddr');
   const portEl = container.querySelector('#gwPort');
@@ -2845,6 +3042,154 @@ function initGatewaysSection({ isPro }) {
   const resetBtn = container.querySelector('#gwResetBtn');
   const refreshBtn = container.querySelector('#gwRefreshBtn');
   const addBtn = container.querySelector('#gwAddBtn');
+  const tabSharesBtn = container.querySelector('#gwTabSharesBtn');
+  const tabMcpBtn = container.querySelector('#gwTabMcpBtn');
+  const tabSharesPanel = container.querySelector('#gwTabSharesPanel');
+  const tabMcpPanel = container.querySelector('#gwTabMcpPanel');
+
+  const mcpSvcListenEl = container.querySelector('#mcpSvcListenAddr');
+  const mcpSvcPortEl = container.querySelector('#mcpSvcPort');
+  const mcpSvcAllowPublicEl = container.querySelector('#mcpSvcAllowPublic');
+  const mcpSvcAutostartEl = container.querySelector('#mcpSvcAutostart');
+  const mcpSvcSaveBtn = container.querySelector('#mcpSvcSaveBtn');
+  const mcpSvcStartBtn = container.querySelector('#mcpSvcStartBtn');
+  const mcpSvcStopBtn = container.querySelector('#mcpSvcStopBtn');
+  const mcpSvcRestartBtn = container.querySelector('#mcpSvcRestartBtn');
+  const mcpSvcLogsBtn = container.querySelector('#mcpSvcLogsBtn');
+  const mcpSvcStatusEl = container.querySelector('#mcpSvcStatus');
+  const mcpSvcLogEl = container.querySelector('#mcpSvcLog');
+
+  const mcpUserIdEl = container.querySelector('#mcpUserId');
+  const mcpUserNameEl = container.querySelector('#mcpUserName');
+  const mcpUserFileRiseEl = container.querySelector('#mcpUserFileRiseUser');
+  const mcpUserSourceIdEl = container.querySelector('#mcpUserSourceId');
+  const mcpUserRootPathEl = container.querySelector('#mcpUserRootPath');
+  const mcpUserEnabledEl = container.querySelector('#mcpUserEnabled');
+  const mcpUserRotateTokenEl = container.querySelector('#mcpUserRotateToken');
+  const mcpUserSaveBtn = container.querySelector('#mcpUserSaveBtn');
+  const mcpUserResetBtn = container.querySelector('#mcpUserResetBtn');
+  const mcpUsersListEl = container.querySelector('#mcpUsersList');
+  const mcpUserTokenOutputEl = container.querySelector('#mcpUserTokenOutput');
+  const mcpTplBaseUrlEl = container.querySelector('#mcpTplBaseUrl');
+  const mcpTplTokenEl = container.querySelector('#mcpTplToken');
+  const mcpTplFolderEl = container.querySelector('#mcpTplFolder');
+  const mcpTplOpenAiModelEl = container.querySelector('#mcpTplOpenAiModel');
+  const mcpTplKindEl = container.querySelector('#mcpTplKind');
+  const mcpTplUseLatestTokenBtn = container.querySelector('#mcpTplUseLatestTokenBtn');
+  const mcpTplCopyBtn = container.querySelector('#mcpTplCopyBtn');
+  const mcpTplDownloadBtn = container.querySelector('#mcpTplDownloadBtn');
+  const mcpTplStatusEl = container.querySelector('#mcpTplStatus');
+  const mcpTplPreviewEl = container.querySelector('#mcpTplPreview');
+
+  const mcpJobCleanupBtn = container.querySelector('#mcpJobCleanupBtn');
+  const mcpAutotagUserEl = container.querySelector('#mcpAutotagUser');
+  const mcpAutotagFolderEl = container.querySelector('#mcpAutotagFolder');
+  const mcpAutotagFileEl = container.querySelector('#mcpAutotagFile');
+  const mcpAutotagTagNameEl = container.querySelector('#mcpAutotagTagName');
+  const mcpAutotagTagColorEl = container.querySelector('#mcpAutotagTagColor');
+  const mcpAutotagQueueBtn = container.querySelector('#mcpAutotagQueueBtn');
+  const mcpJobsStatusEl = container.querySelector('#mcpJobsStatus');
+
+  if (tabSharesPanel) {
+    const managedWrap = document.createElement('div');
+    managedWrap.innerHTML = `
+      <div class="card mb-2" style="border-radius:8px;">
+        <div class="card-header py-2"><strong>${escapeHTML(tf('gateway_managed_title', 'Managed Mode'))}</strong></div>
+        <div class="card-body py-2">
+          <div class="sources-form-grid">
+            <div class="form-group">
+              <label for="gwManagedGatewaySelect">${escapeHTML(tf('gateway_name', 'Name'))}:</label>
+              <select id="gwManagedGatewaySelect" class="form-control"></select>
+            </div>
+            <div class="form-group sources-form-inline">
+              <div class="form-check fr-toggle">
+                <input type="checkbox" class="form-check-input fr-toggle-input" id="gwManagedAutostart" />
+                <label class="form-check-label" for="gwManagedAutostart">${escapeHTML(tf('gateway_autostart', 'Autostart'))}</label>
+              </div>
+            </div>
+            <div class="form-group sources-form-inline">
+              <div class="form-check fr-toggle">
+                <input type="checkbox" class="form-check-input fr-toggle-input" id="gwManagedAllowPublic" />
+                <label class="form-check-label" for="gwManagedAllowPublic">${escapeHTML(tf('gateway_allow_public_bind', 'Allow 0.0.0.0 bind'))}</label>
+              </div>
+            </div>
+          </div>
+          <div class="sources-actions">
+            <button type="button" id="gwManagedRefreshBtn" class="btn btn-sm btn-secondary">${escapeHTML(tf('refresh', 'Refresh'))}</button>
+            <button type="button" id="gwManagedStartBtn" class="btn btn-sm btn-success">${escapeHTML(tf('start', 'Start'))}</button>
+            <button type="button" id="gwManagedStopBtn" class="btn btn-sm btn-warning">${escapeHTML(tf('stop', 'Stop'))}</button>
+            <button type="button" id="gwManagedRestartBtn" class="btn btn-sm btn-primary">${escapeHTML(tf('restart', 'Restart'))}</button>
+            <button type="button" id="gwManagedDeleteBtn" class="btn btn-sm btn-outline-danger">${escapeHTML(tf('delete', 'Delete'))}</button>
+            <button type="button" id="gwManagedLogsBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('logs', 'Logs'))}</button>
+          </div>
+          <div id="gwManagedStatus" class="small text-muted mt-1"></div>
+          <div id="gwManagedRuntimeHelp" class="small text-muted mt-1"></div>
+          <div class="sources-actions" style="margin-top:8px; gap:8px; align-items:center;">
+            <label for="gwDockerPortLine" class="small text-muted mb-0">${escapeHTML(tf('gateway_docker_ports_line', 'Docker ports line'))}:</label>
+            <input type="text" id="gwDockerPortLine" class="form-control form-control-sm" readonly style="max-width:240px;" />
+            <button type="button" id="gwCopyDockerPortLineBtn" class="btn btn-sm btn-outline-secondary">${escapeHTML(tf('copy', 'Copy'))}</button>
+          </div>
+          <div id="gwRcloneVersionInfo" class="small text-muted mt-1"></div>
+          <div class="sources-actions" style="margin-top:8px;">
+            <button type="button" id="gwRcloneAutoInstallBtn" class="btn btn-sm btn-primary">
+              ${escapeHTML(tf('gateway_install_rclone_auto', 'Download + install rclone'))}
+            </button>
+            <button type="button" id="gwRcloneCheckUpdateBtn" class="btn btn-sm btn-outline-secondary">
+              ${escapeHTML(tf('gateway_check_rclone_update', 'Check rclone update'))}
+            </button>
+            <button type="button" id="gwRcloneManageToggleBtn" class="btn btn-sm btn-outline-secondary" hidden>
+              ${escapeHTML(tf('gateway_show_replace_options', 'Show replace/update options'))}
+            </button>
+          </div>
+          <div id="gwRcloneInstallControls" class="sources-actions" style="margin-top:6px;" hidden>
+            <a id="gwRcloneDownloadLink" class="btn btn-sm btn-outline-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>
+              ${escapeHTML(tf('gateway_download_rclone', 'Download rclone (external)'))}
+            </a>
+            <input type="file" id="gwRcloneUploadInput" class="form-control form-control-sm" style="max-width:320px;" />
+            <button type="button" id="gwRcloneUploadBtn" class="btn btn-sm btn-outline-secondary">
+              ${escapeHTML(tf('gateway_upload_rclone', 'Upload custom rclone'))}
+            </button>
+          </div>
+          <div id="gwRcloneInstallHint" class="sources-actions" style="margin-top:8px;" hidden>
+            <div class="small text-muted">
+            ${escapeHTML(tf('gateway_upload_rclone_hint', 'Upload target: users/pro/gateway_runtime/bin/rclone (chmod 0755).'))}
+            </div>
+          </div>
+          <pre id="gwManagedLog" style="margin:8px 0 0; max-height:160px; overflow:auto; font-size:12px; background:#111827; color:#e5e7eb; border-radius:8px; padding:10px;"></pre>
+        </div>
+      </div>
+    `;
+    const firstEl = tabSharesPanel.firstElementChild;
+    if (firstEl) {
+      tabSharesPanel.insertBefore(managedWrap.firstElementChild, firstEl);
+    } else {
+      tabSharesPanel.appendChild(managedWrap.firstElementChild);
+    }
+  }
+
+  const managedGatewaySelectEl = container.querySelector('#gwManagedGatewaySelect');
+  const managedAutostartEl = container.querySelector('#gwManagedAutostart');
+  const managedAllowPublicEl = container.querySelector('#gwManagedAllowPublic');
+  const managedRefreshBtn = container.querySelector('#gwManagedRefreshBtn');
+  const managedStartBtn = container.querySelector('#gwManagedStartBtn');
+  const managedStopBtn = container.querySelector('#gwManagedStopBtn');
+  const managedRestartBtn = container.querySelector('#gwManagedRestartBtn');
+  const managedDeleteBtn = container.querySelector('#gwManagedDeleteBtn');
+  const managedLogsBtn = container.querySelector('#gwManagedLogsBtn');
+  const managedStatusEl = container.querySelector('#gwManagedStatus');
+  const managedRuntimeHelpEl = container.querySelector('#gwManagedRuntimeHelp');
+  const dockerPortLineEl = container.querySelector('#gwDockerPortLine');
+  const copyDockerPortLineBtn = container.querySelector('#gwCopyDockerPortLineBtn');
+  const rcloneVersionInfoEl = container.querySelector('#gwRcloneVersionInfo');
+  const rcloneAutoInstallBtn = container.querySelector('#gwRcloneAutoInstallBtn');
+  const rcloneCheckUpdateBtn = container.querySelector('#gwRcloneCheckUpdateBtn');
+  const rcloneManageToggleBtn = container.querySelector('#gwRcloneManageToggleBtn');
+  const rcloneInstallControlsEl = container.querySelector('#gwRcloneInstallControls');
+  const rcloneInstallHintEl = container.querySelector('#gwRcloneInstallHint');
+  const rcloneDownloadLinkEl = container.querySelector('#gwRcloneDownloadLink');
+  const rcloneUploadInputEl = container.querySelector('#gwRcloneUploadInput');
+  const rcloneUploadBtn = container.querySelector('#gwRcloneUploadBtn');
+  const managedLogEl = container.querySelector('#gwManagedLog');
 
   const setStatus = (msg, tone = 'muted') => {
     if (!statusEl) return;
@@ -2854,6 +3199,21 @@ function initGatewaysSection({ isPro }) {
     else if (tone === 'warning') statusEl.classList.add('text-warning');
     else statusEl.classList.add('text-muted');
     statusEl.textContent = msg || '';
+  };
+
+  const setManagedStatus = (msg, tone = 'muted') => {
+    if (!managedStatusEl) return;
+    managedStatusEl.classList.remove('text-muted', 'text-danger', 'text-success', 'text-warning');
+    if (tone === 'danger') managedStatusEl.classList.add('text-danger');
+    else if (tone === 'success') managedStatusEl.classList.add('text-success');
+    else if (tone === 'warning') managedStatusEl.classList.add('text-warning');
+    else managedStatusEl.classList.add('text-muted');
+    managedStatusEl.textContent = msg || '';
+  };
+
+  const setManagedLog = (text) => {
+    if (!managedLogEl) return;
+    managedLogEl.textContent = String(text || '');
   };
 
   const setCommand = (text) => {
@@ -2925,6 +3285,393 @@ function initGatewaysSection({ isPro }) {
     } finally {
       document.body.removeChild(ta);
     }
+  };
+
+  const apiGet = async (url) => {
+    const res = await fetch(withBase(url), {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' },
+    });
+    const data = await safeJson(res);
+    if (!res.ok || !data) {
+      throw new Error(data?.error || tf('error', 'Error'));
+    }
+    if (data.ok !== true) {
+      throw new Error(data?.error || tf('error', 'Error'));
+    }
+    return data;
+  };
+
+  const apiPost = async (url, payload = {}) => {
+    const res = await fetch(withBase(url), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrf(),
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await safeJson(res);
+    if (!res.ok || !data) {
+      throw new Error(data?.error || tf('error', 'Error'));
+    }
+    if (data.ok !== true) {
+      throw new Error(data?.error || tf('error', 'Error'));
+    }
+    return data;
+  };
+
+  const setGatewayTab = (tab) => {
+    const t = String(tab || 'shares').toLowerCase() === 'mcp' ? 'mcp' : 'shares';
+    if (tabSharesPanel) tabSharesPanel.hidden = t !== 'shares';
+    if (tabMcpPanel) tabMcpPanel.hidden = t !== 'mcp';
+    if (tabSharesBtn) tabSharesBtn.classList.toggle('active', t === 'shares');
+    if (tabMcpBtn) tabMcpBtn.classList.toggle('active', t === 'mcp');
+  };
+
+  const setMcpServiceStatus = (msg, tone = 'muted') => {
+    if (!mcpSvcStatusEl) return;
+    mcpSvcStatusEl.classList.remove('text-muted', 'text-danger', 'text-success', 'text-warning');
+    if (tone === 'danger') mcpSvcStatusEl.classList.add('text-danger');
+    else if (tone === 'success') mcpSvcStatusEl.classList.add('text-success');
+    else if (tone === 'warning') mcpSvcStatusEl.classList.add('text-warning');
+    else mcpSvcStatusEl.classList.add('text-muted');
+    mcpSvcStatusEl.textContent = msg || '';
+  };
+
+  const setMcpJobsStatus = (msg, tone = 'muted') => {
+    if (!mcpJobsStatusEl) return;
+    mcpJobsStatusEl.classList.remove('text-muted', 'text-danger', 'text-success', 'text-warning');
+    if (tone === 'danger') mcpJobsStatusEl.classList.add('text-danger');
+    else if (tone === 'success') mcpJobsStatusEl.classList.add('text-success');
+    else if (tone === 'warning') mcpJobsStatusEl.classList.add('text-warning');
+    else mcpJobsStatusEl.classList.add('text-muted');
+    mcpJobsStatusEl.textContent = msg || '';
+  };
+
+  const setMcpTemplateStatus = (msg, tone = 'muted') => {
+    if (!mcpTplStatusEl) return;
+    mcpTplStatusEl.classList.remove('text-muted', 'text-danger', 'text-success', 'text-warning');
+    if (tone === 'danger') mcpTplStatusEl.classList.add('text-danger');
+    else if (tone === 'success') mcpTplStatusEl.classList.add('text-success');
+    else if (tone === 'warning') mcpTplStatusEl.classList.add('text-warning');
+    else mcpTplStatusEl.classList.add('text-muted');
+    mcpTplStatusEl.textContent = msg || '';
+  };
+
+  const normalizeMcpUrl = (raw) => {
+    const cleaned = String(raw || '').trim().replace(/\/+$/, '');
+    if (!cleaned) return '';
+    if (/^https?:\/\//i.test(cleaned)) return cleaned;
+    return `http://${cleaned}`;
+  };
+
+  const inferMcpTemplateUrl = () => {
+    const protocol = String(window.location.protocol || 'http:') === 'https:' ? 'https' : 'http';
+    const listenRaw = String(mcpSvcListenEl?.value || '').trim();
+    const listenLower = listenRaw.toLowerCase();
+    const useWindowHost =
+      !listenRaw
+      || listenLower === '127.0.0.1'
+      || listenLower === 'localhost'
+      || listenLower === '::1'
+      || listenLower === '0.0.0.0'
+      || listenLower === '::';
+    const host = useWindowHost ? String(window.location.hostname || '127.0.0.1') : listenRaw;
+    const portRaw = parseInt(String(mcpSvcPortEl?.value || '3030'), 10);
+    const port = Number.isFinite(portRaw) && portRaw > 0 ? portRaw : 3030;
+    return `${protocol}://${host}:${port}`;
+  };
+
+  const readLatestIssuedMcpToken = () => {
+    const raw = String(mcpUserTokenOutputEl?.textContent || '').trim();
+    if (!raw) return '';
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (!lines.length) return '';
+    const lastLine = String(lines[lines.length - 1] || '').trim();
+    if (!lastLine || /\s/.test(lastLine)) return '';
+    return lastLine;
+  };
+
+  const mcpTemplateContext = () => {
+    const mcpUrl = normalizeMcpUrl(mcpTplBaseUrlEl?.value || inferMcpTemplateUrl());
+    const token = String(mcpTplTokenEl?.value || '').trim();
+    const folder = String(mcpTplFolderEl?.value || 'root').trim() || 'root';
+    const openAiModel = String(mcpTplOpenAiModelEl?.value || 'gpt-4.1-mini').trim() || 'gpt-4.1-mini';
+    return { mcpUrl, token, folder, openAiModel };
+  };
+
+  const q = (val) => JSON.stringify(String(val || ''));
+
+  const mcpTemplateFileMeta = (kind) => {
+    const t = String(kind || 'openai').toLowerCase();
+    if (t === 'claude') {
+      return { name: 'claude_mcp_demo.mjs', mime: 'application/javascript;charset=utf-8' };
+    }
+    if (t === 'gemini') {
+      return { name: 'gemini_mcp_tooling_example.js', mime: 'application/javascript;charset=utf-8' };
+    }
+    if (t === 'curl') {
+      return { name: 'filerise_mcp_test.sh', mime: 'text/x-shellscript;charset=utf-8' };
+    }
+    return { name: 'openai_mcp_demo.mjs', mime: 'application/javascript;charset=utf-8' };
+  };
+
+  const downloadText = ({ filename, text, mime = 'text/plain;charset=utf-8' }) => {
+    const blob = new Blob([String(text || '')], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const buildMcpTemplateSnippets = ({ mcpUrl, token, folder, openAiModel }) => {
+    const safeToken = token || 'PASTE_MCP_TOKEN';
+    const safeUrl = mcpUrl || 'http://127.0.0.1:3030';
+
+    const openAi = [
+      'import OpenAI from "openai";',
+      '',
+      `const MCP_URL = ${q(safeUrl)};`,
+      `const MCP_TOKEN = ${q(safeToken)};`,
+      `const MODEL = ${q(openAiModel)};`,
+      `const TARGET_FOLDER = ${q(folder)};`,
+      '',
+      'const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });',
+      '',
+      'async function fileriseMcpOp(operation, payload = {}) {',
+      '  const res = await fetch(`${MCP_URL}/v1/ops`, {',
+      '    method: "POST",',
+      '    headers: {',
+      '      Authorization: `Bearer ${MCP_TOKEN}`,',
+      '      "Content-Type": "application/json"',
+      '    },',
+      '    body: JSON.stringify({ operation, payload })',
+      '  });',
+      '  return await res.json();',
+      '}',
+      '',
+      'const tools = [{',
+      '  type: "function",',
+      '  name: "filerise_mcp_op",',
+      '  description: "Call FileRise MCP operation",',
+      '  parameters: {',
+      '    type: "object",',
+      '    properties: {',
+      '      operation: { type: "string" },',
+      '      payload: { type: "object" }',
+      '    },',
+      '    required: ["operation", "payload"],',
+      '    additionalProperties: false',
+      '  }',
+      '}];',
+      '',
+      'let response = await client.responses.create({',
+      '  model: MODEL,',
+      '  tools,',
+      '  input: `Find duplicate image candidates in ${TARGET_FOLDER}. Use list_files and group by sizeBytes.`',
+      '});',
+      '',
+      'while (true) {',
+      '  const calls = (response.output || []).filter((item) => item.type === "function_call");',
+      '  if (!calls.length) break;',
+      '',
+      '  const outputs = [];',
+      '  for (const call of calls) {',
+      '    const args = JSON.parse(call.arguments || "{}");',
+      '    const result = await fileriseMcpOp(args.operation, args.payload || {});',
+      '    outputs.push({',
+      '      type: "function_call_output",',
+      '      call_id: call.call_id,',
+      '      output: JSON.stringify(result)',
+      '    });',
+      '  }',
+      '',
+      '  response = await client.responses.create({',
+      '    model: MODEL,',
+      '    previous_response_id: response.id,',
+      '    input: outputs',
+      '  });',
+      '}',
+      '',
+      'console.log(response.output_text);',
+    ].join('\n');
+
+    const claude = [
+      'import Anthropic from "@anthropic-ai/sdk";',
+      '',
+      `const MCP_URL = ${q(safeUrl)};`,
+      `const MCP_TOKEN = ${q(safeToken)};`,
+      `const MODEL = ${q('claude-sonnet-4-5')};`,
+      `const TARGET_FOLDER = ${q(folder)};`,
+      '',
+      'const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });',
+      '',
+      'async function fileriseMcpOp(operation, payload = {}) {',
+      '  const res = await fetch(`${MCP_URL}/v1/ops`, {',
+      '    method: "POST",',
+      '    headers: {',
+      '      Authorization: `Bearer ${MCP_TOKEN}`,',
+      '      "Content-Type": "application/json"',
+      '    },',
+      '    body: JSON.stringify({ operation, payload })',
+      '  });',
+      '  return await res.json();',
+      '}',
+      '',
+      'const tools = [{',
+      '  name: "filerise_mcp_op",',
+      '  description: "Call FileRise MCP operation",',
+      '  input_schema: {',
+      '    type: "object",',
+      '    properties: {',
+      '      operation: { type: "string" },',
+      '      payload: { type: "object" }',
+      '    },',
+      '    required: ["operation", "payload"]',
+      '  }',
+      '}];',
+      '',
+      'let messages = [{',
+      '  role: "user",',
+      '  content: `Find duplicate image candidates in ${TARGET_FOLDER}. Use list_files and group by sizeBytes.`',
+      '}];',
+      '',
+      'while (true) {',
+      '  const response = await anthropic.messages.create({',
+      '    model: MODEL,',
+      '    max_tokens: 1400,',
+      '    tools,',
+      '    messages',
+      '  });',
+      '',
+      '  const toolUse = (response.content || []).find((item) => item.type === "tool_use");',
+      '  if (!toolUse) {',
+      '    const text = (response.content || [])',
+      '      .filter((item) => item.type === "text")',
+      '      .map((item) => item.text)',
+      '      .join("\\n");',
+      '    console.log(text);',
+      '    break;',
+      '  }',
+      '',
+      '  const args = toolUse.input || {};',
+      '  const result = await fileriseMcpOp(args.operation, args.payload || {});',
+      '',
+      '  messages = [',
+      '    ...messages,',
+      '    { role: "assistant", content: response.content },',
+      '    {',
+      '      role: "user",',
+      '      content: [{',
+      '        type: "tool_result",',
+      '        tool_use_id: toolUse.id,',
+      '        content: JSON.stringify(result)',
+      '      }]',
+      '    }',
+      '  ];',
+      '}',
+    ].join('\n');
+
+    const gemini = [
+      `const MCP_URL = ${q(safeUrl)};`,
+      `const MCP_TOKEN = ${q(safeToken)};`,
+      `const TARGET_FOLDER = ${q(folder)};`,
+      '',
+      'const functionDeclaration = {',
+      '  name: "filerise_mcp_op",',
+      '  description: "Call FileRise MCP operation",',
+      '  parameters: {',
+      '    type: "object",',
+      '    properties: {',
+      '      operation: { type: "string" },',
+      '      payload: { type: "object" }',
+      '    },',
+      '    required: ["operation", "payload"]',
+      '  }',
+      '};',
+      '',
+      'async function fileriseMcpOp(operation, payload = {}) {',
+      '  const res = await fetch(`${MCP_URL}/v1/ops`, {',
+      '    method: "POST",',
+      '    headers: {',
+      '      Authorization: `Bearer ${MCP_TOKEN}`,',
+      '      "Content-Type": "application/json"',
+      '    },',
+      '    body: JSON.stringify({ operation, payload })',
+      '  });',
+      '  return await res.json();',
+      '}',
+      '',
+      '// Gemini starter flow (SDK-agnostic):',
+      '// 1) Send prompt + functionDeclaration to Gemini.',
+      '// 2) When Gemini requests filerise_mcp_op, call fileriseMcpOp(operation, payload).',
+      '// 3) Return tool result to Gemini as a function response.',
+      '// 4) Repeat until Gemini returns final text output.',
+      '',
+      'const prompt = `Find duplicate image candidates in ${TARGET_FOLDER}. Use list_files and group by sizeBytes.`;',
+      '',
+      'console.log("Wire prompt + functionDeclaration into your Gemini SDK tool-calling loop.");',
+    ].join('\n');
+
+    const curl = [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      '',
+      `export MCP_URL=${q(safeUrl)}`,
+      `export MCP_TOKEN=${q(safeToken)}`,
+      '',
+      'curl -s "$MCP_URL/v1/ops" \\',
+      '  -H "Authorization: Bearer $MCP_TOKEN" \\',
+      '  -H "Content-Type: application/json" \\',
+      `  -d '{"operation":"list_files","payload":{"folder":${q(folder)},"mode":"fast","limit":200}}'`,
+    ].join('\n');
+
+    return {
+      openai: openAi,
+      claude,
+      gemini,
+      curl,
+    };
+  };
+
+  const renderMcpTemplatePreview = () => {
+    if (!mcpTplPreviewEl || !mcpTplKindEl) return;
+    const kind = String(mcpTplKindEl.value || 'openai');
+    const context = mcpTemplateContext();
+    const snippets = buildMcpTemplateSnippets(context);
+    mcpTplPreviewEl.textContent = snippets[kind] || snippets.openai;
+    if (!context.token) {
+      setMcpTemplateStatus(
+        tf('gateway_mcp_template_no_token', 'Token is empty. Template uses PASTE_MCP_TOKEN placeholder.'),
+        'warning'
+      );
+      return;
+    }
+    setMcpTemplateStatus(tf('gateway_mcp_template_ready', 'Template ready to copy or download.'), 'success');
+  };
+
+  const seedMcpTemplateDefaults = () => {
+    if (mcpTplBaseUrlEl && String(mcpTplBaseUrlEl.value || '').trim() === '') {
+      mcpTplBaseUrlEl.value = inferMcpTemplateUrl();
+    }
+    if (mcpTplTokenEl && String(mcpTplTokenEl.value || '').trim() === '') {
+      const issuedToken = readLatestIssuedMcpToken();
+      if (issuedToken) {
+        mcpTplTokenEl.value = issuedToken;
+      }
+    }
+    renderMcpTemplatePreview();
   };
 
   const activeGateway = () => {
@@ -3024,6 +3771,7 @@ function initGatewaysSection({ isPro }) {
     if (typeEl) typeEl.value = 'sftp';
     renderSourceOptions('local');
     if (rootPathEl) rootPathEl.value = 'root';
+    if (managedTargetEl) managedTargetEl.value = '';
     if (modeEl) modeEl.value = 'ro';
     if (listenEl) listenEl.value = '127.0.0.1';
     if (portEl) portEl.value = '';
@@ -3036,6 +3784,8 @@ function initGatewaysSection({ isPro }) {
     if (mcpTokenEl) mcpTokenEl.value = '';
     setType('sftp');
     refreshSnippetPreview();
+    renderManagedGatewayOptions();
+    renderManagedStatus();
   };
 
   const fillForm = (gw) => {
@@ -3049,6 +3799,7 @@ function initGatewaysSection({ isPro }) {
     ensureSourceOption(gw.sourceId, `${String(gw.sourceId || 'local')} - ${String(gw.sourceId || 'local')}`);
     renderSourceOptions(String(gw.sourceId || 'local'));
     if (rootPathEl) rootPathEl.value = String(gw.rootPath || 'root');
+    if (managedTargetEl) managedTargetEl.value = String(gw.managedTarget || '');
     if (modeEl) modeEl.value = String(gw.mode || 'ro').toLowerCase() === 'rw' ? 'rw' : 'ro';
     if (listenEl) listenEl.value = String(gw.listenAddr || '127.0.0.1');
     if (portEl) portEl.value = gw.port ? String(gw.port) : '';
@@ -3064,6 +3815,8 @@ function initGatewaysSection({ isPro }) {
     setType(gw.gatewayType || 'sftp');
     refreshSnippetPreview();
     setTestOutput('');
+    if (managedGatewaySelectEl) managedGatewaySelectEl.value = String(gw.id || '');
+    renderManagedStatus();
   };
 
   const renderList = () => {
@@ -3095,6 +3848,7 @@ function initGatewaysSection({ isPro }) {
               <th>${escapeHTML(tf('gateway_type', 'Gateway Type'))}</th>
               <th>${escapeHTML(tf('gateway_source_id', 'Source ID'))}</th>
               <th>${escapeHTML(tf('gateway_root_path', 'Root Path'))}</th>
+              <th>${escapeHTML(tf('gateway_managed_target', 'Managed Target (optional)'))}</th>
               <th>${escapeHTML(tf('gateway_mode', 'Mode'))}</th>
               <th>${escapeHTML(tf('gateway_bind', 'Bind'))}</th>
               <th>${escapeHTML(tf('status', 'Status'))}</th>
@@ -3108,6 +3862,7 @@ function initGatewaysSection({ isPro }) {
                 <td>${escapeHTML(String(row.gatewayType || ''))}</td>
                 <td>${escapeHTML(String(row.sourceId || ''))}</td>
                 <td>${escapeHTML(String(row.rootPath || 'root'))}</td>
+                <td>${escapeHTML(String(row.managedTarget || ''))}</td>
                 <td>${escapeHTML(modeText(row))}</td>
                 <td>${escapeHTML(bindText(row))}</td>
                 <td>${escapeHTML(statusText(row))}</td>
@@ -3120,11 +3875,478 @@ function initGatewaysSection({ isPro }) {
     `;
   };
 
+  const managedSelectedGatewayId = () => {
+    const id = String(managedGatewaySelectEl?.value || '').trim();
+    if (id) return id;
+    if (state.editingId) return state.editingId;
+    const first = (state.gateways || [])[0];
+    return String(first?.id || '').trim();
+  };
+
+  const managedStatusFor = (gatewayId) => {
+    const id = String(gatewayId || '').trim();
+    if (!id) return null;
+    return state.managedByGatewayId?.[id] || null;
+  };
+
+  const renderManagedGatewayOptions = () => {
+    if (!managedGatewaySelectEl) return;
+    const selected = managedSelectedGatewayId();
+    managedGatewaySelectEl.innerHTML = '';
+    (state.gateways || []).forEach((gw) => {
+      const id = String(gw?.id || '').trim();
+      if (!id) return;
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = String(gw?.name || id);
+      managedGatewaySelectEl.appendChild(option);
+    });
+    if (selected) {
+      managedGatewaySelectEl.value = selected;
+    }
+  };
+
+  const renderManagedRuntimeHelp = (selectedGateway = null) => {
+    if (!managedRuntimeHelpEl) return;
+    const runtime = state.managedRuntime && typeof state.managedRuntime === 'object' ? state.managedRuntime : null;
+    const gw = selectedGateway && typeof selectedGateway === 'object' ? selectedGateway : null;
+    const port = String(gw?.port || '2022');
+    const publishHint = `- "${port}:${port}"`;
+
+    if (dockerPortLineEl) {
+      dockerPortLineEl.value = publishHint;
+    }
+
+    if (!runtime) {
+      managedRuntimeHelpEl.textContent =
+        `Docker/container note: publish the gateway port on the host (${publishHint}).`;
+      if (rcloneVersionInfoEl) {
+        rcloneVersionInfoEl.textContent = '';
+      }
+      if (rcloneAutoInstallBtn) {
+        rcloneAutoInstallBtn.hidden = false;
+      }
+      if (rcloneManageToggleBtn) {
+        rcloneManageToggleBtn.hidden = false;
+        rcloneManageToggleBtn.textContent = state.showRcloneInstallControls
+          ? tf('gateway_hide_optional_rclone_options', 'Hide optional rclone options')
+          : tf('gateway_show_optional_rclone_options', 'Show optional rclone options');
+      }
+      if (rcloneInstallControlsEl) {
+        rcloneInstallControlsEl.hidden = !state.showRcloneInstallControls;
+      }
+      if (rcloneInstallHintEl) {
+        rcloneInstallHintEl.hidden = !state.showRcloneInstallControls;
+      }
+      if (rcloneDownloadLinkEl) {
+        rcloneDownloadLinkEl.hidden = true;
+        rcloneDownloadLinkEl.removeAttribute('href');
+      }
+      return;
+    }
+
+    const arch = String(runtime.arch || 'linux-amd64');
+    const source = String(runtime.source || 'missing');
+    const path = String(runtime.path || '').trim();
+    const managedBinPath = String(runtime.managedBinPath || '').trim();
+    const available = runtime.available === true;
+    const runtimeError = String(runtime.error || '').trim();
+    const recommendedDownloadUrl = String(runtime.recommendedDownloadUrl || '').trim();
+    const currentVersion = String(runtime.currentVersion || '').trim();
+    const latestVersion = String(runtime.latestVersion || '').trim();
+    const updateAvailable = runtime.updateAvailable === true;
+    const updateCheckError = String(runtime.updateCheckError || '').trim();
+    const updateCheckedAt = String(runtime.updateCheckedAt || '').trim();
+    const statusLabel = (() => {
+      if (!available) return tf('gateway_rclone_status_not_installed', 'Status: Not installed in FileRise Pro');
+      if (source === 'managed_bin') return tf('gateway_rclone_status_installed', 'Status: Installed in FileRise Pro');
+      if (source === 'bundle_binary') return tf('gateway_rclone_status_bundled', 'Status: Using bundled rclone in FileRise Pro');
+      if (source === 'env_override') return tf('gateway_rclone_status_env_override', 'Status: Using FR_PRO_RCLONE_BINARY (external path)');
+      if (source === 'system_path') return tf('gateway_rclone_status_system_path', 'Status: Using system rclone on PATH');
+      return tf('gateway_rclone_status_unknown', 'Status: Runtime state unknown');
+    })();
+
+    const lines = [];
+    lines.push(`Docker/container note: publish the gateway port on the host (${publishHint}).`);
+    if (available) {
+      const pathPart = path !== '' ? ` (${path})` : '';
+      lines.push(`rclone runtime: ${source}${pathPart}.`);
+    } else if (runtimeError !== '') {
+      lines.push(`rclone runtime: ${runtimeError}`);
+    }
+    if (!available && managedBinPath !== '') {
+      lines.push(`rclone is not installed at managed path: ${managedBinPath}`);
+    } else if (managedBinPath !== '') {
+      lines.push(`Managed runtime binary path: ${managedBinPath}`);
+    }
+    lines.push('Manual fallback snippets remain available below for externally supervised rclone.');
+
+    managedRuntimeHelpEl.textContent = lines.join(' ');
+
+    if (rcloneVersionInfoEl) {
+      const versionParts = [];
+      versionParts.push(statusLabel);
+      if (currentVersion !== '') {
+        versionParts.push(`Current: ${currentVersion}`);
+      }
+      if (latestVersion !== '') {
+        if (!available) {
+          versionParts.push(`Latest: ${latestVersion} available for download and install`);
+        } else {
+          versionParts.push(`Latest: ${latestVersion}`);
+        }
+      } else if (updateCheckedAt === '') {
+        versionParts.push('Latest: not checked');
+      }
+      if (updateAvailable) {
+        versionParts.push('Update available');
+      } else if (currentVersion !== '' && latestVersion !== '') {
+        versionParts.push('Up to date');
+      }
+      if (updateCheckError !== '') {
+        versionParts.push(`Update check: ${updateCheckError}`);
+      }
+      rcloneVersionInfoEl.textContent = versionParts.join(' • ');
+    }
+
+    if (rcloneAutoInstallBtn) {
+      rcloneAutoInstallBtn.hidden = available;
+    }
+    if (rcloneManageToggleBtn) {
+      rcloneManageToggleBtn.hidden = false;
+      rcloneManageToggleBtn.textContent = state.showRcloneInstallControls
+        ? tf('gateway_hide_optional_rclone_options', 'Hide optional rclone options')
+        : tf('gateway_show_optional_rclone_options', 'Show optional rclone options');
+    }
+    if (rcloneInstallControlsEl) {
+      rcloneInstallControlsEl.hidden = !state.showRcloneInstallControls;
+    }
+    if (rcloneInstallHintEl) {
+      rcloneInstallHintEl.hidden = !state.showRcloneInstallControls;
+    }
+
+    if (rcloneDownloadLinkEl) {
+      if (recommendedDownloadUrl !== '') {
+        const archLabel = arch === 'linux-arm64' ? 'linux-arm64' : 'linux-amd64';
+        rcloneDownloadLinkEl.hidden = false;
+        rcloneDownloadLinkEl.setAttribute('href', recommendedDownloadUrl);
+        rcloneDownloadLinkEl.textContent = `Download rclone for ${archLabel} (external)`;
+      } else {
+        rcloneDownloadLinkEl.hidden = true;
+        rcloneDownloadLinkEl.removeAttribute('href');
+      }
+    }
+  };
+
+  const renderManagedStatus = () => {
+    const gatewayId = managedSelectedGatewayId();
+    const runtime = state.managedRuntime && typeof state.managedRuntime === 'object' ? state.managedRuntime : null;
+    const runtimeWarning = runtime && runtime.available === false ? String(runtime.error || '').trim() : '';
+    const runtimeAvailable = !(runtime && runtime.available === false);
+    if (!gatewayId) {
+      const suffix = runtimeWarning ? ` • ${runtimeWarning}` : '';
+      setManagedStatus(`${tf('gateway_select_required', 'Select a gateway to manage.')}${suffix}`, runtimeWarning ? 'danger' : 'warning');
+      if (managedAutostartEl) managedAutostartEl.checked = false;
+      if (managedStartBtn) managedStartBtn.disabled = true;
+      if (managedStopBtn) managedStopBtn.disabled = true;
+      if (managedRestartBtn) managedRestartBtn.disabled = true;
+      if (managedDeleteBtn) managedDeleteBtn.disabled = true;
+      if (managedLogsBtn) managedLogsBtn.disabled = true;
+      if (managedAutostartEl) managedAutostartEl.disabled = true;
+      if (managedAllowPublicEl) managedAllowPublicEl.disabled = true;
+      renderManagedRuntimeHelp(null);
+      return;
+    }
+    const gw = (state.gateways || []).find((x) => String(x?.id || '') === gatewayId);
+    const managed = managedStatusFor(gatewayId);
+    if (!gw || !managed) {
+      setManagedStatus(tf('gateway_managed_unknown', 'Managed status not loaded yet.'), 'muted');
+      if (managedStartBtn) managedStartBtn.disabled = true;
+      if (managedStopBtn) managedStopBtn.disabled = true;
+      if (managedRestartBtn) managedRestartBtn.disabled = true;
+      if (managedDeleteBtn) managedDeleteBtn.disabled = true;
+      if (managedLogsBtn) managedLogsBtn.disabled = true;
+      if (managedAutostartEl) managedAutostartEl.disabled = true;
+      if (managedAllowPublicEl) managedAllowPublicEl.disabled = true;
+      renderManagedRuntimeHelp(null);
+      return;
+    }
+    if (managedAutostartEl) managedAutostartEl.checked = !!managed.autostart;
+    if (managedAllowPublicEl) managedAllowPublicEl.checked = !!managed.allowPublicBind;
+    if (managedStartBtn) {
+      managedStartBtn.disabled = !runtimeAvailable || !!managed.running;
+    }
+    if (managedStopBtn) {
+      managedStopBtn.disabled = !managed.running;
+    }
+    if (managedRestartBtn) {
+      managedRestartBtn.disabled = !runtimeAvailable;
+    }
+    if (managedDeleteBtn) {
+      managedDeleteBtn.disabled = false;
+    }
+    if (managedLogsBtn) {
+      managedLogsBtn.disabled = false;
+    }
+    if (managedAutostartEl) {
+      managedAutostartEl.disabled = false;
+    }
+    if (managedAllowPublicEl) {
+      managedAllowPublicEl.disabled = false;
+    }
+    const statusText = managed.running ? tf('gateway_running', 'Running') : tf('gateway_stopped', 'Stopped');
+    const bindText = `${String(gw.listenAddr || '127.0.0.1')}:${String(gw.port || '')}`;
+    const pidText = managed.pid ? ` pid=${managed.pid}` : '';
+    const runtimeText = runtimeWarning ? ` • ${runtimeWarning}` : '';
+    const tone = runtimeWarning ? 'danger' : (managed.running ? 'success' : 'warning');
+    setManagedStatus(`${String(gw.name || gw.id)} • ${statusText} • ${bindText}${pidText}${runtimeText}`, tone);
+    renderManagedRuntimeHelp(gw);
+  };
+
+  const mergeManagedStatuses = (rows) => {
+    const map = {};
+    (rows || []).forEach((gw) => {
+      const id = String(gw?.id || '').trim();
+      if (!id) return;
+      if (gw?.managed && typeof gw.managed === 'object') {
+        map[id] = gw.managed;
+      }
+    });
+    state.managedByGatewayId = map;
+  };
+
+  const loadManagedStatuses = async () => {
+    try {
+      const data = await apiGet('/api/pro/gateways/managed/status.php');
+      const rows = Array.isArray(data.gateways) ? data.gateways : [];
+      state.managedRuntime = data?.runtime && typeof data.runtime === 'object' ? data.runtime : null;
+      mergeManagedStatuses(rows);
+      renderManagedGatewayOptions();
+      renderManagedStatus();
+    } catch (err) {
+      state.managedRuntime = null;
+      setManagedStatus(err?.message || tf('gateway_list_failed', 'Failed to load gateway shares.'), 'danger');
+      renderManagedRuntimeHelp(null);
+    }
+  };
+
+  const runManagedAction = async (action, extra = {}) => {
+    const gatewayId = managedSelectedGatewayId();
+    if (!gatewayId) {
+      throw new Error(tf('gateway_select_required', 'Select a gateway to manage.'));
+    }
+    const payload = {
+      action,
+      id: gatewayId,
+      ...extra,
+    };
+    const data = await apiPost('/api/pro/gateways/managed/action.php', payload);
+    if (action === 'logs') {
+      setManagedLog(String(data?.log || ''));
+    }
+    await loadManagedStatuses();
+    return data;
+  };
+
+  const loadMcpServiceStatus = async () => {
+    try {
+      const data = await apiGet('/api/pro/gateways/mcp/service/status.php');
+      const svc = data?.service || {};
+      state.mcpService = svc;
+      if (mcpSvcListenEl) mcpSvcListenEl.value = String(svc.listenAddr || '127.0.0.1');
+      if (mcpSvcPortEl) mcpSvcPortEl.value = String(svc.port || 3030);
+      if (mcpSvcAllowPublicEl) mcpSvcAllowPublicEl.checked = !!svc.allowPublicBind;
+      if (mcpSvcAutostartEl) mcpSvcAutostartEl.checked = !!svc.autostart;
+      const statusText = svc.running ? tf('gateway_running', 'Running') : tf('gateway_stopped', 'Stopped');
+      const pidText = svc.pid ? ` pid=${svc.pid}` : '';
+      const runtimeMode = String(svc.runtimeMode || '').trim();
+      const runtimeText = runtimeMode ? ` • ${runtimeMode}` : '';
+      const runtimeWarning = String(svc.runtimeWarning || '').trim();
+      const warningText = runtimeWarning ? ` • ${runtimeWarning}` : '';
+      const tone = runtimeWarning ? 'warning' : (svc.running ? 'success' : 'warning');
+      setMcpServiceStatus(`${statusText}${pidText} • ${String(svc.listenAddr || '127.0.0.1')}:${String(svc.port || 3030)}${runtimeText}${warningText}`, tone);
+      seedMcpTemplateDefaults();
+    } catch (err) {
+      setMcpServiceStatus(err?.message || tf('error', 'Error'), 'danger');
+    }
+  };
+
+  const runMcpServiceAction = async (action, extra = {}) => {
+    const data = await apiPost('/api/pro/gateways/mcp/service/action.php', { action, ...extra });
+    if (action === 'logs') {
+      if (mcpSvcLogEl) mcpSvcLogEl.textContent = String(data?.log || '');
+    }
+    await loadMcpServiceStatus();
+    return data;
+  };
+
+  const resetMcpUserForm = () => {
+    if (mcpUserIdEl) mcpUserIdEl.value = '';
+    if (mcpUserNameEl) mcpUserNameEl.value = '';
+    if (mcpUserFileRiseEl) mcpUserFileRiseEl.value = '';
+    if (mcpUserSourceIdEl) mcpUserSourceIdEl.value = 'local';
+    if (mcpUserRootPathEl) mcpUserRootPathEl.value = 'root';
+    if (mcpUserEnabledEl) mcpUserEnabledEl.checked = true;
+    if (mcpUserRotateTokenEl) mcpUserRotateTokenEl.checked = false;
+    if (mcpUserTokenOutputEl) mcpUserTokenOutputEl.textContent = '';
+  };
+
+  const fillMcpUserForm = (row) => {
+    if (!row || typeof row !== 'object') return;
+    if (mcpUserIdEl) mcpUserIdEl.value = String(row.id || '');
+    if (mcpUserNameEl) mcpUserNameEl.value = String(row.name || '');
+    if (mcpUserFileRiseEl) mcpUserFileRiseEl.value = String(row.fileRiseUser || '');
+    if (mcpUserSourceIdEl) mcpUserSourceIdEl.value = String(row.sourceId || 'local');
+    if (mcpUserRootPathEl) mcpUserRootPathEl.value = String(row.rootPath || 'root');
+    if (mcpUserEnabledEl) mcpUserEnabledEl.checked = !!row.enabled;
+    if (mcpUserRotateTokenEl) mcpUserRotateTokenEl.checked = false;
+  };
+
+  const renderMcpUsers = () => {
+    const rows = Array.isArray(state.mcpUsers) ? state.mcpUsers : [];
+    if (mcpAutotagUserEl) {
+      mcpAutotagUserEl.innerHTML = '';
+      rows.forEach((row) => {
+        const id = String(row?.id || '').trim();
+        if (!id) return;
+        const option = document.createElement('option');
+        option.value = id;
+        option.textContent = String(row?.name || id);
+        mcpAutotagUserEl.appendChild(option);
+      });
+    }
+
+    if (!mcpUsersListEl) return;
+    if (!rows.length) {
+      mcpUsersListEl.innerHTML = `<div class="small text-muted">${escapeHTML(tf('gateway_mcp_users_empty', 'No MCP users configured yet.'))}</div>`;
+      return;
+    }
+    mcpUsersListEl.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>${escapeHTML(tf('name', 'Name'))}</th>
+              <th>${escapeHTML(tf('gateway_mcp_map_user', 'FileRise user'))}</th>
+              <th>${escapeHTML(tf('gateway_source_id', 'Source ID'))}</th>
+              <th>${escapeHTML(tf('gateway_root_path', 'Root Path'))}</th>
+              <th>${escapeHTML(tf('status', 'Status'))}</th>
+              <th>${escapeHTML(tf('actions', 'Actions'))}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>${escapeHTML(String(row.name || row.id || ''))}</td>
+                <td>${escapeHTML(String(row.fileRiseUser || ''))}</td>
+                <td>${escapeHTML(String(row.sourceId || 'local'))}</td>
+                <td>${escapeHTML(String(row.rootPath || 'root'))}</td>
+                <td>${escapeHTML(row.enabled ? tf('enabled', 'Enabled') : tf('disabled', 'Disabled'))}</td>
+                <td>
+                  <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-secondary" data-action="edit" data-id="${escapeHTML(String(row.id || ''))}">${escapeHTML(tf('edit', 'Edit'))}</button>
+                    <button type="button" class="btn btn-outline-primary" data-action="rotate" data-id="${escapeHTML(String(row.id || ''))}">${escapeHTML(tf('gateway_mcp_rotate_token', 'Rotate token'))}</button>
+                    <button type="button" class="btn btn-outline-danger" data-action="delete" data-id="${escapeHTML(String(row.id || ''))}">${escapeHTML(tf('delete', 'Delete'))}</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const loadMcpUsers = async () => {
+    try {
+      const data = await apiGet('/api/pro/gateways/mcp/users/list.php');
+      state.mcpUsers = Array.isArray(data.users) ? data.users : [];
+      renderMcpUsers();
+    } catch (err) {
+      state.mcpUsers = [];
+      renderMcpUsers();
+      showToast(err?.message || tf('error', 'Error'), 'error');
+    }
+  };
+
+  const saveMcpUser = async () => {
+    const payload = {
+      id: String(mcpUserIdEl?.value || '').trim(),
+      name: String(mcpUserNameEl?.value || '').trim(),
+      fileRiseUser: String(mcpUserFileRiseEl?.value || '').trim(),
+      sourceId: String(mcpUserSourceIdEl?.value || 'local').trim() || 'local',
+      rootPath: String(mcpUserRootPathEl?.value || 'root').trim() || 'root',
+      enabled: !!mcpUserEnabledEl?.checked,
+      rotateToken: !!mcpUserRotateTokenEl?.checked,
+    };
+    if (!payload.fileRiseUser) {
+      throw new Error(tf('gateway_mcp_map_user_required', 'FileRise user is required.'));
+    }
+    const data = await apiPost('/api/pro/gateways/mcp/users/save.php', { user: payload });
+    if (mcpUserTokenOutputEl) {
+      if (data?.token) {
+        mcpUserTokenOutputEl.textContent = `${tf('gateway_mcp_new_token', 'New token (save now):')}\n${String(data.token)}`;
+      } else {
+        mcpUserTokenOutputEl.textContent = '';
+      }
+    }
+    seedMcpTemplateDefaults();
+    await loadMcpUsers();
+    fillMcpUserForm(data?.user || payload);
+    if (mcpUserRotateTokenEl) mcpUserRotateTokenEl.checked = false;
+  };
+
+  const deleteMcpUser = async (id) => {
+    const uid = String(id || '').trim();
+    if (!uid) return;
+    const ok = window.confirm(tf('gateway_mcp_delete_confirm', 'Delete this MCP user?'));
+    if (!ok) return;
+    await apiPost('/api/pro/gateways/mcp/users/delete.php', { id: uid });
+    await loadMcpUsers();
+    if (String(mcpUserIdEl?.value || '') === uid) {
+      resetMcpUserForm();
+    }
+  };
+
+  const queueGatewayCleanupJob = async () => {
+    const data = await apiPost('/api/pro/gateways/jobs/cleanup.php', {});
+    setMcpJobsStatus(
+      tf('gateway_job_queued', 'Job queued: {id}').replace('{id}', String(data?.jobId || '0')),
+      'success'
+    );
+  };
+
+  const queueMcpAutotagJob = async () => {
+    const mcpUserId = String(mcpAutotagUserEl?.value || '').trim();
+    const folder = String(mcpAutotagFolderEl?.value || 'root').trim() || 'root';
+    const file = String(mcpAutotagFileEl?.value || '').trim();
+    const tagName = String(mcpAutotagTagNameEl?.value || '').trim();
+    const tagColor = String(mcpAutotagTagColorEl?.value || '').trim();
+    if (!mcpUserId) {
+      throw new Error(tf('gateway_mcp_user_required', 'MCP user is required.'));
+    }
+    if (!file || !tagName) {
+      throw new Error(tf('gateway_autotag_fields_required', 'File and tag are required.'));
+    }
+    const tags = [{ name: tagName, color: tagColor }];
+    const data = await apiPost('/api/pro/gateways/jobs/autotag.php', {
+      mcpUserId,
+      folder,
+      file,
+      tags,
+    });
+    setMcpJobsStatus(
+      tf('gateway_job_queued', 'Job queued: {id}').replace('{id}', String(data?.jobId || '0')),
+      'success'
+    );
+  };
+
   const buildPayload = () => {
     const name = String(nameEl?.value || '').trim();
     const gatewayType = String(typeEl?.value || 'sftp').trim().toLowerCase();
     const sourceId = String(sourceIdEl?.value || 'local').trim() || 'local';
     const rootPath = String(rootPathEl?.value || 'root').trim() || 'root';
+    const managedTarget = String(managedTargetEl?.value || '').trim();
     const mode = String(modeEl?.value || 'ro').trim().toLowerCase() === 'rw' ? 'rw' : 'ro';
     const listenAddr = String(listenEl?.value || '127.0.0.1').trim() || '127.0.0.1';
     const enabled = !!enabledEl?.checked;
@@ -3141,6 +4363,7 @@ function initGatewaysSection({ isPro }) {
       gatewayType,
       sourceId,
       rootPath,
+      managedTarget,
       mode,
       listenAddr,
       enabled,
@@ -3208,6 +4431,7 @@ function initGatewaysSection({ isPro }) {
       }
       state.gateways = Array.isArray(data.gateways) ? data.gateways : [];
       renderList();
+      renderManagedGatewayOptions();
       if (state.editingId || state.previewGatewayId) {
         const current = activeGateway();
         if (!current) {
@@ -3216,12 +4440,15 @@ function initGatewaysSection({ isPro }) {
         }
         refreshSnippetPreview();
       }
+      renderManagedStatus();
       const countMsg = tf('gateway_count', '{count} gateway share(s).').replace('{count}', String(state.gateways.length));
       setStatus(countMsg, 'muted');
     } catch (err) {
       console.warn('Gateway list failed', err);
       state.gateways = [];
       renderList();
+      renderManagedGatewayOptions();
+      renderManagedStatus();
       setStatus(err?.message || tf('gateway_list_failed', 'Failed to load gateway shares.'), 'danger');
     }
   };
@@ -3390,11 +4617,67 @@ function initGatewaysSection({ isPro }) {
       }
     });
   }
+  if (mcpTplUseLatestTokenBtn) {
+    mcpTplUseLatestTokenBtn.addEventListener('click', () => {
+      const issuedToken = readLatestIssuedMcpToken();
+      if (!issuedToken) {
+        setMcpTemplateStatus(
+          tf('gateway_mcp_latest_token_missing', 'No issued token found. Save or rotate an MCP user token first.'),
+          'warning'
+        );
+        return;
+      }
+      if (mcpTplTokenEl) {
+        mcpTplTokenEl.value = issuedToken;
+      }
+      renderMcpTemplatePreview();
+    });
+  }
+  if (mcpTplCopyBtn) {
+    mcpTplCopyBtn.addEventListener('click', async () => {
+      try {
+        const kind = String(mcpTplKindEl?.value || 'openai');
+        const snippets = buildMcpTemplateSnippets(mcpTemplateContext());
+        const text = snippets[kind] || snippets.openai;
+        const ok = await copyText(text);
+        if (!ok) {
+          throw new Error(tf('copy_failed', 'Copy failed.'));
+        }
+        showToast(tf('copied_to_clipboard', 'Copied to clipboard.'));
+      } catch (err) {
+        showToast(err?.message || tf('copy_failed', 'Copy failed.'), 'error');
+      }
+    });
+  }
+  if (mcpTplDownloadBtn) {
+    mcpTplDownloadBtn.addEventListener('click', () => {
+      try {
+        const kind = String(mcpTplKindEl?.value || 'openai');
+        const snippets = buildMcpTemplateSnippets(mcpTemplateContext());
+        const text = snippets[kind] || snippets.openai;
+        const fileMeta = mcpTemplateFileMeta(kind);
+        downloadText({
+          filename: fileMeta.name,
+          text,
+          mime: fileMeta.mime,
+        });
+        showToast(tf('gateway_mcp_template_download_ok', 'Template downloaded.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  [mcpTplBaseUrlEl, mcpTplTokenEl, mcpTplFolderEl, mcpTplOpenAiModelEl, mcpTplKindEl].forEach((el) => {
+    if (!el) return;
+    el.addEventListener('input', () => renderMcpTemplatePreview());
+    el.addEventListener('change', () => renderMcpTemplatePreview());
+  });
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
       Promise.allSettled([
         loadSourceOptions(),
         loadGateways(),
+        loadManagedStatuses(),
       ]);
     });
   }
@@ -3443,12 +4726,383 @@ function initGatewaysSection({ isPro }) {
     });
   }
 
+  if (tabSharesBtn) {
+    tabSharesBtn.addEventListener('click', () => setGatewayTab('shares'));
+  }
+  if (tabMcpBtn) {
+    tabMcpBtn.addEventListener('click', async () => {
+      setGatewayTab('mcp');
+      await Promise.allSettled([loadMcpServiceStatus(), loadMcpUsers()]);
+    });
+  }
+
+  if (managedGatewaySelectEl) {
+    managedGatewaySelectEl.addEventListener('change', () => {
+      setManagedLog('');
+      renderManagedStatus();
+    });
+  }
+  if (managedRefreshBtn) {
+    managedRefreshBtn.addEventListener('click', () => {
+      Promise.allSettled([loadManagedStatuses(), loadGateways()]);
+    });
+  }
+  if (managedStartBtn) {
+    managedStartBtn.addEventListener('click', async () => {
+      try {
+        await runManagedAction('start', { allowPublicBind: !!managedAllowPublicEl?.checked });
+        showToast(tf('gateway_started', 'Gateway started.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (managedStopBtn) {
+    managedStopBtn.addEventListener('click', async () => {
+      try {
+        await runManagedAction('stop');
+        showToast(tf('gateway_stopped', 'Gateway stopped.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (managedRestartBtn) {
+    managedRestartBtn.addEventListener('click', async () => {
+      try {
+        await runManagedAction('restart', { allowPublicBind: !!managedAllowPublicEl?.checked });
+        showToast(tf('gateway_restarted', 'Gateway restarted.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (managedDeleteBtn) {
+    managedDeleteBtn.addEventListener('click', async () => {
+      try {
+        const ok = window.confirm(tf('gateway_delete_runtime_confirm', 'Delete managed runtime state/logs for this gateway?'));
+        if (!ok) return;
+        await runManagedAction('delete_runtime');
+        setManagedLog('');
+        showToast(tf('gateway_runtime_deleted', 'Gateway runtime deleted.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (managedLogsBtn) {
+    managedLogsBtn.addEventListener('click', async () => {
+      try {
+        await runManagedAction('logs', { maxBytes: 65536 });
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (managedAutostartEl) {
+    managedAutostartEl.addEventListener('change', async () => {
+      try {
+        await runManagedAction('autostart', { enabled: !!managedAutostartEl.checked });
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (copyDockerPortLineBtn) {
+    copyDockerPortLineBtn.addEventListener('click', async () => {
+      try {
+        const ok = await copyText(dockerPortLineEl?.value || '');
+        if (!ok) {
+          throw new Error(tf('copy_failed', 'Copy failed.'));
+        }
+        showToast(tf('copied_to_clipboard', 'Copied to clipboard.'));
+      } catch (err) {
+        showToast(err?.message || tf('copy_failed', 'Copy failed.'), 'error');
+      }
+    });
+  }
+  if (rcloneManageToggleBtn) {
+    rcloneManageToggleBtn.addEventListener('click', () => {
+      state.showRcloneInstallControls = !state.showRcloneInstallControls;
+      renderManagedStatus();
+    });
+  }
+  if (rcloneAutoInstallBtn) {
+    rcloneAutoInstallBtn.addEventListener('click', async () => {
+      const withRcloneInstallHint = (rawMsg) => {
+        const msg = String(rawMsg || '').trim();
+        if (!msg) return 'Failed to install rclone binary.';
+        if (/gpg is required/i.test(msg)) {
+          return `${msg} Install gnupg in the FileRise container (rebuild/redeploy) or temporarily set FR_PRO_RCLONE_SKIP_SIGNATURE_VERIFY=1 to bypass signature verification.`;
+        }
+        return msg;
+      };
+
+      const runtime = state.managedRuntime && typeof state.managedRuntime === 'object'
+        ? state.managedRuntime
+        : {};
+      const runtimeArch = String(runtime.arch || '').trim().toLowerCase();
+      const fallbackDownloadUrl = runtimeArch === 'linux-arm64'
+        ? 'https://downloads.rclone.org/rclone-current-linux-arm64.zip'
+        : 'https://downloads.rclone.org/rclone-current-linux-amd64.zip';
+      const downloadUrl = String(runtime.recommendedDownloadUrl || fallbackDownloadUrl).trim();
+      const installTarget = 'users/pro/gateway_runtime/bin/rclone';
+      const ok = await showCustomConfirmModal(
+        `Download and install rclone from ${downloadUrl}? This will place the binary at ${installTarget} and overwrite the managed runtime binary.`
+      );
+      if (!ok) return;
+
+      let progress = null;
+      try {
+        rcloneAutoInstallBtn.disabled = true;
+        progress = startProBundleProgress({
+          action: 'Installing rclone',
+          title: 'Downloading and installing rclone',
+          subText: `Source: ${downloadUrl} • Target: ${installTarget}`
+        });
+
+        const res = await fetch(withBase('/api/pro/gateways/managed/rcloneInstall.php'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCsrf(),
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            arch: String(state.managedRuntime?.arch || ''),
+          }),
+        });
+        const data = await safeJson(res);
+        if (!data || data.ok !== true) {
+          const msg = withRcloneInstallHint((data && (data.error || data.message)) || 'Failed to install rclone binary.');
+          finishProBundleProgress(progress, false, msg);
+          showToast(msg, 'error');
+          return;
+        }
+        state.showRcloneInstallControls = false;
+        finishProBundleProgress(progress, true);
+        const signatureWarning = String(data && data.signatureWarning ? data.signatureWarning : '').trim();
+        if (signatureWarning) {
+          showToast(`rclone installed (signature warning: ${signatureWarning})`);
+        } else {
+          showToast('rclone installed.');
+        }
+        await loadManagedStatuses();
+      } catch (err) {
+        const msg = withRcloneInstallHint(err?.message || tf('error', 'Error'));
+        finishProBundleProgress(progress, false, msg);
+        showToast(msg, 'error');
+      } finally {
+        rcloneAutoInstallBtn.disabled = false;
+      }
+    });
+  }
+  if (rcloneCheckUpdateBtn) {
+    rcloneCheckUpdateBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(withBase('/api/pro/gateways/managed/rcloneCheck.php'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCsrf(),
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ force: true }),
+        });
+        const data = await safeJson(res);
+        if (!data || data.ok !== true || !data.runtime) {
+          throw new Error((data && (data.error || data.message)) || 'Failed to check rclone update.');
+        }
+        state.managedRuntime = data.runtime;
+        renderManagedStatus();
+        if (data.runtime.updateAvailable === true) {
+          showToast('rclone update is available.');
+        } else if (String(data.runtime.latestVersion || '').trim() !== '') {
+          showToast('rclone is up to date.');
+        } else if (String(data.runtime.updateCheckError || '').trim() !== '') {
+          showToast(String(data.runtime.updateCheckError), 'error');
+        }
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (rcloneUploadBtn) {
+    rcloneUploadBtn.addEventListener('click', async () => {
+      try {
+        const file = rcloneUploadInputEl?.files && rcloneUploadInputEl.files[0]
+          ? rcloneUploadInputEl.files[0]
+          : null;
+        if (!file) {
+          throw new Error('Select an rclone binary file first.');
+        }
+        const form = new FormData();
+        form.append('rcloneBinary', file);
+
+        const res = await fetch(withBase('/api/pro/gateways/managed/rcloneUpload.php'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'X-CSRF-Token': getCsrf(),
+            'Accept': 'application/json',
+          },
+          body: form,
+        });
+        const data = await safeJson(res);
+        if (!data || data.ok !== true) {
+          throw new Error((data && (data.error || data.message)) || 'Failed to upload rclone binary.');
+        }
+        if (rcloneUploadInputEl) {
+          rcloneUploadInputEl.value = '';
+        }
+        state.showRcloneInstallControls = false;
+        showToast('rclone uploaded.');
+        await loadManagedStatuses();
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+
+  if (mcpSvcSaveBtn) {
+    mcpSvcSaveBtn.addEventListener('click', async () => {
+      try {
+        await runMcpServiceAction('save_config', {
+          listenAddr: String(mcpSvcListenEl?.value || '127.0.0.1').trim() || '127.0.0.1',
+          port: parseInt(String(mcpSvcPortEl?.value || '3030'), 10) || 3030,
+          autostart: !!mcpSvcAutostartEl?.checked,
+          allowPublicBind: !!mcpSvcAllowPublicEl?.checked,
+        });
+        showToast(tf('saved', 'Saved.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (mcpSvcStartBtn) {
+    mcpSvcStartBtn.addEventListener('click', async () => {
+      try {
+        await runMcpServiceAction('start', { allowPublicBind: !!mcpSvcAllowPublicEl?.checked });
+        showToast(tf('gateway_started', 'Gateway started.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (mcpSvcStopBtn) {
+    mcpSvcStopBtn.addEventListener('click', async () => {
+      try {
+        await runMcpServiceAction('stop');
+        showToast(tf('gateway_stopped', 'Gateway stopped.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (mcpSvcRestartBtn) {
+    mcpSvcRestartBtn.addEventListener('click', async () => {
+      try {
+        await runMcpServiceAction('restart', { allowPublicBind: !!mcpSvcAllowPublicEl?.checked });
+        showToast(tf('gateway_restarted', 'Gateway restarted.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (mcpSvcLogsBtn) {
+    mcpSvcLogsBtn.addEventListener('click', async () => {
+      try {
+        await runMcpServiceAction('logs', { maxBytes: 65536 });
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+
+  if (mcpUserSaveBtn) {
+    mcpUserSaveBtn.addEventListener('click', async () => {
+      try {
+        await saveMcpUser();
+        showToast(tf('saved', 'Saved.'));
+      } catch (err) {
+        showToast(err?.message || tf('error', 'Error'), 'error');
+      }
+    });
+  }
+  if (mcpUserResetBtn) {
+    mcpUserResetBtn.addEventListener('click', () => resetMcpUserForm());
+  }
+  if (mcpUsersListEl) {
+    mcpUsersListEl.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = String(btn.getAttribute('data-id') || '');
+      const action = String(btn.getAttribute('data-action') || '');
+      const row = (state.mcpUsers || []).find((x) => String(x?.id || '') === id);
+      if (!row) return;
+      if (action === 'edit') {
+        fillMcpUserForm(row);
+        return;
+      }
+      if (action === 'rotate') {
+        try {
+          const data = await apiPost('/api/pro/gateways/mcp/users/save.php', { user: { id, rotateToken: true } });
+          if (mcpUserTokenOutputEl) {
+            mcpUserTokenOutputEl.textContent = data?.token
+              ? `${tf('gateway_mcp_new_token', 'New token (save now):')}\n${String(data.token)}`
+              : '';
+          }
+          seedMcpTemplateDefaults();
+          await loadMcpUsers();
+          showToast(tf('saved', 'Saved.'));
+        } catch (err) {
+          showToast(err?.message || tf('error', 'Error'), 'error');
+        }
+        return;
+      }
+      if (action === 'delete') {
+        try {
+          await deleteMcpUser(id);
+          showToast(tf('deleted', 'Deleted.'));
+        } catch (err) {
+          showToast(err?.message || tf('error', 'Error'), 'error');
+        }
+      }
+    });
+  }
+
+  if (mcpJobCleanupBtn) {
+    mcpJobCleanupBtn.addEventListener('click', async () => {
+      try {
+        await queueGatewayCleanupJob();
+      } catch (err) {
+        setMcpJobsStatus(err?.message || tf('error', 'Error'), 'danger');
+      }
+    });
+  }
+  if (mcpAutotagQueueBtn) {
+    mcpAutotagQueueBtn.addEventListener('click', async () => {
+      try {
+        await queueMcpAutotagJob();
+      } catch (err) {
+        setMcpJobsStatus(err?.message || tf('error', 'Error'), 'danger');
+      }
+    });
+  }
+
   resetForm();
+  resetMcpUserForm();
+  seedMcpTemplateDefaults();
   setCommand('');
   setTestOutput('');
+  setManagedLog('');
+  setGatewayTab('shares');
   Promise.allSettled([
     loadSourceOptions(),
     loadGateways(),
+    loadManagedStatuses(),
   ]);
 }
 
@@ -4958,213 +6612,6 @@ export function openAdminUserHubModal() {
   }
 }
 
-function loadShareLinksSection() {
-  const container =
-    document.getElementById("shareLinksList") ||
-    document.getElementById("shareLinksContent");
-  if (!container) return;
-
-  container.textContent = t("loading") + "...";
-
-  function fetchMeta(fileName) {
-    return fetch(`/api/admin/readMetadata.php?file=${encodeURIComponent(fileName)}`, {
-      credentials: "include"
-    })
-      .then(resp => (resp.ok ? resp.json() : {}))
-      .catch(() => ({}));
-  }
-
-  Promise.all([
-    fetchMeta("share_folder_links.json"),
-    fetchMeta("share_links.json")
-  ])
-    .then(([folders, files]) => {
-      const esc = (val) => escapeHTML(val == null ? "" : String(val));
-      const asMap = (obj) => (obj && typeof obj === "object" && !Array.isArray(obj)) ? obj : {};
-      const folderMap = asMap(folders);
-      const fileMap = asMap(files);
-
-      const truthy = (v) => {
-        if (v === true || v === 1) return true;
-        const s = String(v ?? "").trim().toLowerCase();
-        return s === "1" || s === "true" || s === "yes" || s === "on";
-      };
-      const isFileRequest = (record) => {
-        if (!record || typeof record !== "object") return false;
-        const mode = String(record.mode || "").toLowerCase();
-        return mode === "drop" || truthy(record.fileDrop) || truthy(record.fileDropMode) || truthy(record.hideListing);
-      };
-      const creatorOf = (record) => {
-        if (!record || typeof record !== "object") return "";
-        const candidates = [record.createdBy, record.created_by, record.startedBy, record.user, record.username];
-        for (const val of candidates) {
-          if (typeof val === "string" && val.trim() !== "") {
-            return val.trim();
-          }
-        }
-        return "";
-      };
-      const sourceHtmlFor = (record) => {
-        const sourceLabel = record?.sourceName || record?.sourceId || "";
-        if (!sourceLabel || sourceLabel.toLowerCase() === "local") {
-          return "";
-        }
-        return ` <small class="text-muted">[${esc(sourceLabel)}]</small>`;
-      };
-      const creatorHtmlFor = (record) => {
-        const creator = creatorOf(record);
-        if (!creator) {
-          return "";
-        }
-        return ` <small class="text-muted">${esc(t("shared_created_by", { user: creator }))}</small>`;
-      };
-      const expiryHtmlFor = (record) => {
-        const expires = Number(record?.expires || 0);
-        if (!Number.isFinite(expires) || expires <= 0) {
-          return "";
-        }
-        return ` <small>(${esc(new Date(expires * 1000).toLocaleString())})</small>`;
-      };
-
-      const folderEntries = Object.entries(folderMap).filter(([, o]) => o && typeof o === "object");
-      const fileEntries = Object.entries(fileMap).filter(([, o]) => o && typeof o === "object");
-      const folderShareEntries = [];
-      const fileRequestEntries = [];
-      folderEntries.forEach((entry) => {
-        if (isFileRequest(entry[1])) {
-          fileRequestEntries.push(entry);
-        } else {
-          folderShareEntries.push(entry);
-        }
-      });
-
-      const hasAny = folderShareEntries.length || fileRequestEntries.length || fileEntries.length;
-      if (!hasAny) {
-        container.innerHTML = `<p>${t("no_shared_links_available")}</p>`;
-        return;
-      }
-
-      const emptyItem = `<li><small class="text-muted">${esc(t("none"))}</small></li>`;
-      let html = `<h5>${esc(t("folder_shares"))}</h5><ul>`;
-      if (folderShareEntries.length === 0) {
-        html += emptyItem;
-      }
-      folderShareEntries.forEach(([token, o]) => {
-        const lock = o.password ? "🔒 " : "";
-        const tokenValue = o.token || token;
-        const folderLabel = esc(o.folder || "root");
-        html += `
-          <li>
-            ${lock}<strong>${folderLabel}</strong>${sourceHtmlFor(o)}${creatorHtmlFor(o)}${expiryHtmlFor(o)}
-            <button type="button"
-                    data-key="${esc(tokenValue)}"
-                    data-source-id="${esc(o.sourceId || "")}"
-                    data-type="folder"
-                    class="btn btn-sm btn-link delete-share">🗑️</button>
-          </li>`;
-      });
-
-      html += `</ul><h5 style="margin-top:1em;">${esc(t("file_requests"))}</h5><ul>`;
-      if (fileRequestEntries.length === 0) {
-        html += emptyItem;
-      }
-      fileRequestEntries.forEach(([token, o]) => {
-        const lock = o.password ? "🔒 " : "";
-        const tokenValue = o.token || token;
-        const folderLabel = esc(o.folder || "root");
-        html += `
-          <li>
-            ${lock}<strong>${folderLabel}</strong>${sourceHtmlFor(o)}${creatorHtmlFor(o)}${expiryHtmlFor(o)}
-            <button type="button"
-                    data-key="${esc(tokenValue)}"
-                    data-source-id="${esc(o.sourceId || "")}"
-                    data-type="folder"
-                    class="btn btn-sm btn-link delete-share">🗑️</button>
-          </li>`;
-      });
-
-      html += `</ul><h5 style="margin-top:1em;">${esc(t("file_shares"))}</h5><ul>`;
-      if (fileEntries.length === 0) {
-        html += emptyItem;
-      }
-      fileEntries.forEach(([token, o]) => {
-        const lock = o.password ? "🔒 " : "";
-        const tokenValue = o.token || token;
-        const folderLabel = esc(o.folder || "root");
-        const fileLabel = esc(o.file || "");
-        const pathLabel = fileLabel ? `${folderLabel}/${fileLabel}` : folderLabel;
-        html += `
-          <li>
-            ${lock}<strong>${pathLabel}</strong>${sourceHtmlFor(o)}${creatorHtmlFor(o)}${expiryHtmlFor(o)}
-            <button type="button"
-                    data-key="${esc(tokenValue)}"
-                    data-source-id="${esc(o.sourceId || "")}"
-                    data-type="file"
-                    class="btn btn-sm btn-link delete-share">🗑️</button>
-          </li>`;
-      });
-      html += `</ul>`;
-
-      container.innerHTML = html;
-
-      container.querySelectorAll(".delete-share").forEach(btn => {
-        btn.addEventListener("click", evt => {
-          evt.preventDefault();
-          const token = btn.dataset.key;
-          const sourceId = btn.dataset.sourceId || "";
-          const isFolder = btn.dataset.type === "folder";
-          const endpoint = isFolder
-            ? "/api/folder/deleteShareFolderLink.php"
-            : "/api/file/deleteShareLink.php";
-
-          const csrfToken =
-            (document.querySelector('meta[name="csrf-token"]')?.content || window.csrfToken || "");
-
-          const body = new URLSearchParams({ token });
-          if (sourceId) {
-            body.set("sourceId", sourceId);
-          }
-
-          fetch(endpoint, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              "X-CSRF-Token": csrfToken
-            },
-            body
-          })
-            .then(res => {
-              if (!res.ok) {
-                if (res.status === 403) {
-                  // Optional: nicer message when CSRF/session is bad
-                  showToast(t('admin_share_delete_forbidden'), 'error');
-                }
-                return Promise.reject(res);
-              }
-              return res.json();
-            })
-            .then(json => {
-              if (json.success) {
-                showToast(t("share_deleted_successfully"));
-                loadShareLinksSection();
-              } else {
-                showToast(t("error_deleting_share") + ": " + (json.error || ""), "error");
-              }
-            })
-            .catch(err => {
-              console.error("Delete error:", err);
-              showToast(t("error_deleting_share"), "error");
-            });
-        });
-      });
-    })
-    .catch(err => {
-      console.error("loadShareLinksSection error:", err);
-      container.textContent = t("error_loading_share_links");
-    });
-}
-
 export function openAdminPanel() {
   fetch("/api/admin/getConfig.php", { credentials: "include" })
     .then(r => r.json())
@@ -5262,6 +6709,38 @@ export function openAdminPanel() {
         : (sourcesProExtended ? ALL_SOURCE_TYPES.slice() : CORE_SOURCE_TYPES.slice());
       const showSourcesSection = !!sourcesAvailable;
       const showGatewaysSection = true;
+      const sectionProPillHtml = '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span>';
+      const sectionNewPillHtml = '<span class="badge badge-pill badge-info" style="font-size:10px; line-height:1.2; padding:2px 6px;">New</span>';
+      const buildSectionLabelHtml = (title, { showPro = false, showNew = false } = {}) => {
+        const text = escapeHTML(String(title || '').trim());
+        const proPill = showPro ? sectionProPillHtml : '';
+        const newPill = showNew ? sectionNewPillHtml : '';
+        return `<span style="display:inline-flex; align-items:center; gap:6px;">${text}${proPill}${newPill}</span>`;
+      };
+      const setSectionHeaderLabel = (sectionId, labelHtml) => {
+        const headerEl = document.getElementById(sectionId + 'Header');
+        if (!headerEl) return;
+        const iconHtml = '<i class="material-icons">expand_more</i>';
+        const html = `${labelHtml} ${iconHtml}`;
+        const innerEl = headerEl.querySelector('.section-header-inner');
+        if (innerEl) {
+          innerEl.innerHTML = html;
+          return;
+        }
+        headerEl.innerHTML = `<div class="section-header-inner">${html}</div>`;
+      };
+      const gatewaysSectionLabelHtml = buildSectionLabelHtml(tf('gateway_shares', 'Gateway Shares'), {
+        showPro: !isPro,
+        showNew: true,
+      });
+      const automationSectionLabelHtml = buildSectionLabelHtml(tf('automation', 'Automation'), {
+        showPro: !isPro,
+        showNew: true,
+      });
+      const proFeaturesSectionLabelHtml = buildSectionLabelHtml(
+        tf('admin_search_audit_logging', 'Search Everywhere & Audit Logging'),
+        { showPro: !isPro || !proSearchApiOk || !proAuditAvailable }
+      );
       const brandingCfg = config.branding || {};
       const brandingCustomLogoUrl = brandingCfg.customLogoUrl || "";
       const brandingHeaderBgLight = brandingCfg.headerBgLight || "";
@@ -5360,13 +6839,11 @@ export function openAdminPanel() {
           sections.push({ id: "sources", label: sourcesLabel });
         }
         if (showGatewaysSection) {
-          const gatewaysLabel = !isPro
-            ? `<span style="display:inline-flex; align-items:center; gap:6px;">${tf("gateway_shares", "Gateway Shares")}<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span></span>`
-            : tf("gateway_shares", "Gateway Shares");
-          sections.push({ id: "gateways", label: gatewaysLabel });
+          sections.push({ id: "gateways", label: gatewaysSectionLabelHtml });
         }
         sections.push(
-          { id: "proFeatures", label: "Pro Features" },
+          { id: "automation", label: automationSectionLabelHtml },
+          { id: "proFeatures", label: proFeaturesSectionLabelHtml },
           { id: "pro", label: "FileRise Pro" },
           { id: "sponsor", label: (typeof tf === 'function' ? tf("sponsor_donations", "Thanks / Sponsor / Donations") : "Thanks / Sponsor / Donations") }
         );
@@ -7264,21 +8741,10 @@ ${t("shared_max_upload_size_bytes")}
         // --- end FileRise Pro section ---
 
         // Pro features (Search Everywhere + Audit Logs)
+        setSectionHeaderLabel('gateways', gatewaysSectionLabelHtml);
+        setSectionHeaderLabel('automation', automationSectionLabelHtml);
+        setSectionHeaderLabel('proFeatures', proFeaturesSectionLabelHtml);
         const proFeaturesContainer = document.getElementById('proFeaturesContent');
-        const proFeaturesHeaderEl = document.getElementById('proFeaturesHeader');
-        if (proFeaturesHeaderEl) {
-          const iconHtml = '<i class="material-icons">expand_more</i>';
-          const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
-            ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span>'
-            : '';
-          const labelHtml = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
-          const inner = proFeaturesHeaderEl.querySelector('.section-header-inner');
-          if (inner) {
-            inner.innerHTML = labelHtml;
-          } else {
-            proFeaturesHeaderEl.innerHTML = `<div class="section-header-inner">${labelHtml}</div>`;
-          }
-        }
         if (proFeaturesContainer) {
           const proSearchBlockedReason = !isPro ? 'pro' : (!proSearchApiOk ? 'api' : null);
           const needsUpgradeText = (!isPro)
@@ -7618,6 +9084,18 @@ ${t("shared_max_upload_size_bytes")}
           if (pfHeader && !pfHeader.__wired) {
             pfHeader.__wired = true;
             pfHeader.addEventListener('click', () => toggleSection('proFeatures'));
+          }
+        }
+
+        const automationContainer = document.getElementById('automationContent');
+        if (automationContainer) {
+          try {
+            initAdminAutomationSection({
+              container: automationContainer,
+              isPro
+            });
+          } catch (e) {
+            console.error('Failed to init Pro automation section', e);
           }
         }
 
@@ -7979,21 +9457,10 @@ ${t("shared_max_upload_size_bytes")}
           wireOidcDebugSnapshotButton(oidcScope);
         }
 
-        // Refresh Pro features section when reopening
-        const pfHeader = document.getElementById('proFeaturesHeader');
-        if (pfHeader) {
-          const iconHtml = '<i class="material-icons">expand_more</i>';
-          const pill = (!isPro || !proSearchApiOk || !proAuditAvailable)
-            ? '<span class="btn-pro-pill" style="position:static; display:inline-flex; align-items:center; margin:0;">Pro</span>'
-            : '';
-          const labelHtml = `<span style="display:inline-flex;align-items:center;gap:6px;">Pro Features${pill}</span> ${iconHtml}`;
-          const inner = pfHeader.querySelector('.section-header-inner');
-          if (inner) {
-            inner.innerHTML = labelHtml;
-          } else {
-            pfHeader.innerHTML = `<div class="section-header-inner">${labelHtml}</div>`;
-          }
-        }
+        // Refresh section badges/labels when reopening
+        setSectionHeaderLabel('gateways', gatewaysSectionLabelHtml);
+        setSectionHeaderLabel('automation', automationSectionLabelHtml);
+        setSectionHeaderLabel('proFeatures', proFeaturesSectionLabelHtml);
         const psToggle = document.getElementById("proSearchEnabled");
         const psLimit = document.getElementById("proSearchLimit");
         if (psToggle) {
@@ -8017,6 +9484,14 @@ ${t("shared_max_upload_size_bytes")}
           psToggle.addEventListener("change", syncPs);
         }
         syncPs();
+        try {
+          initAdminAutomationSection({
+            container: document.getElementById('automationContent'),
+            isPro
+          });
+        } catch (e) {
+          console.error('Failed to refresh Pro automation section', e);
+        }
         captureInitialAdminConfig();
       }
       try {

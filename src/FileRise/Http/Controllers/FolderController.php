@@ -5,6 +5,7 @@ namespace FileRise\Http\Controllers;
 use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
+use FileRise\Support\EventBus;
 use FileRise\Support\FS;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -1423,6 +1424,18 @@ class FolderController
                 'folder' => $newFolder,
                 'path'   => $newFolder,
             ]);
+            $eventPayload = [
+                'user' => $username,
+                'parent' => $parent,
+                'folder' => $newFolder,
+            ];
+            if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                $activeSourceId = $this->normalizeSourceId(SourceContext::getActiveId());
+                if ($activeSourceId !== '') {
+                    $eventPayload['sourceId'] = $activeSourceId;
+                }
+            }
+            EventBus::emit('folder.create', $eventPayload);
 
             echo json_encode($result);
         } catch (Throwable $e) {
@@ -1511,6 +1524,14 @@ class FolderController
                 'folder' => $folder,
                 'path'   => $folder,
             ]);
+            $eventPayload = [
+                'user' => $username,
+                'folder' => $folder,
+            ];
+            if ($sourceId !== '') {
+                $eventPayload['sourceId'] = $sourceId;
+            }
+            EventBus::emit('folder.delete', $eventPayload);
         }
         echo json_encode($result);
         exit;
@@ -1583,6 +1604,11 @@ class FolderController
                 'folder' => $newFolder,
                 'from'   => $oldFolder,
                 'to'     => $newFolder,
+            ]);
+            EventBus::emit('folder.rename', [
+                'user' => $username,
+                'from' => $oldFolder,
+                'to' => $newFolder,
             ]);
         }
         echo json_encode($result);
@@ -2619,6 +2645,16 @@ class FolderController
                     'token' => $res['token'],
                 ],
             ]);
+            EventBus::emit('share.link.create', [
+                'user' => $username,
+                'shareType' => 'folder',
+                'folder' => $folder,
+                'hasPassword' => ($password !== ''),
+                'expirationSeconds' => $seconds,
+                'allowUpload' => ($allowUpload === 1),
+                'allowSubfolders' => ($allowSubfolders === 1),
+                'mode' => $mode,
+            ]);
         }
         echo json_encode($res);
         exit;
@@ -2926,6 +2962,14 @@ class FolderController
                     'token' => $token,
                 ],
             ]);
+            $eventPayload = [
+                'user' => $_SESSION['username'] ?? 'Unknown',
+                'shareType' => 'folder',
+            ];
+            if ($sourceId !== '') {
+                $eventPayload['sourceId'] = $sourceId;
+            }
+            EventBus::emit('share.link.delete', $eventPayload);
             echo json_encode(['success' => true]);
         } else {
             http_response_code(404);
@@ -3222,6 +3266,19 @@ class FolderController
                     'from'   => $source,
                     'to'     => $target,
                 ]);
+                $eventPayload = [
+                    'user' => $username,
+                    'from' => $source,
+                    'to' => $target,
+                    'mode' => $mode,
+                ];
+                if ($sourceId !== '') {
+                    $eventPayload['sourceId'] = $sourceId;
+                }
+                if ($destSourceId !== '') {
+                    $eventPayload['destSourceId'] = $destSourceId;
+                }
+                EventBus::emit($event, $eventPayload);
             }
 
             echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -3313,6 +3370,19 @@ class FolderController
                     'from'   => $source,
                     'to'     => $target,
                 ]);
+                $eventPayload = [
+                    'user' => $username,
+                    'from' => $source,
+                    'to' => $target,
+                    'mode' => 'move',
+                ];
+                if ($sourceId !== '') {
+                    $eventPayload['sourceId'] = $sourceId;
+                }
+                if ($destSourceId !== '') {
+                    $eventPayload['destSourceId'] = $destSourceId;
+                }
+                EventBus::emit('folder.move', $eventPayload);
             }
 
             // migrate ACL subtree (best-effort; never block the move)

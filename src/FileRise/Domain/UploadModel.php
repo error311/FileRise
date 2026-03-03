@@ -5,6 +5,7 @@ namespace FileRise\Domain;
 use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
+use FileRise\Support\EventBus;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -456,6 +457,54 @@ class UploadModel
         return ['portal' => $slug];
     }
 
+    private static function normalizeEventSource($value): string
+    {
+        $source = strtolower(trim((string)$value));
+        if ($source === '') {
+            return 'upload';
+        }
+        if (!preg_match('/^[a-z0-9_-]{1,32}$/', $source)) {
+            return 'upload';
+        }
+        return $source;
+    }
+
+    /**
+     * @param array<string,mixed> $post
+     */
+    private static function emitUploadEvent(string $user, string $folder, string $filename, array $post): void
+    {
+        $folder = ACL::normalizeFolder($folder);
+        if ($folder === '') {
+            $folder = 'root';
+        }
+
+        $path = ($folder === 'root') ? $filename : ($folder . '/' . $filename);
+        $source = self::normalizeEventSource($post['source'] ?? '');
+
+        $payload = [
+            'user' => $user,
+            'folder' => $folder,
+            'path' => $path,
+            'source' => $source,
+        ];
+
+        $sourceId = trim((string)($post['sourceId'] ?? ''));
+        if ($sourceId !== '' && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
+            $payload['sourceId'] = $sourceId;
+        }
+
+        if ($source === 'portal') {
+            $portal = trim((string)($post['portal'] ?? ''));
+            if ($portal !== '') {
+                $portal = str_replace(["\r", "\n"], '', $portal);
+                $payload['portal'] = $portal;
+            }
+        }
+
+        EventBus::emit('file.upload', $payload);
+    }
+
     private static function isVirusScanEnabled(): bool
     {
         // 1) Container env override (most explicit)
@@ -868,6 +917,7 @@ class UploadModel
                 'path'   => ($folderForLog === 'root') ? $resumableFilename : ($folderForLog . '/' . $resumableFilename),
                 'meta'   => self::portalMetaFromRequest(),
             ]);
+            self::emitUploadEvent($uploader, $folderForLog, $resumableFilename, $post);
 
             $cleanupChunk();
 
@@ -1028,6 +1078,7 @@ class UploadModel
                     'path'   => ($folderForLog === 'root') ? $safeFileName : ($folderForLog . '/' . $safeFileName),
                     'meta'   => self::portalMetaFromRequest(),
                 ]);
+                self::emitUploadEvent($uploader, $folderForLog, $safeFileName, $post);
 
                 $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
                 $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';

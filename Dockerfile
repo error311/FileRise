@@ -53,7 +53,7 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
     apt-get install -y --no-install-recommends \
       apache2 \
       php php-json php-curl php-zip php-mbstring php-gd php-xml \
-      ca-certificates curl openssl \
+      ca-certificates curl openssl gnupg \
       ${extra_pkgs} \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 

@@ -66,9 +66,11 @@ Built for homelabs, teams, and client portals that need fast browsing, strict AC
   - If the proxy strips the prefix, set `FR_BASE_PATH` or send `X-Forwarded-Prefix`
   - Explicit “Published URL” setting for proxy / firewall environments
   - Works with `X-Forwarded-*` headers and Kubernetes ingress setups
-- 👥 **Pro: user groups, client portals, global search, storage explorer & audit logs** –  
+- 👥 **Pro: user groups, client portals, global search, storage explorer & audit logs** –
   Group-based ACLs, brandable client upload portals, **ACL-aware global search across files, folders, users, and permissions**, an ncdu-style storage explorer for identifying large folders/files and reclaiming disk space directly from the UI, and **Pro Audit Logs** (configurable activity logging with filters + CSV export for tracking key actions across web, WebDAV, shares, and portals).
-- 🌐 **Sources (Core + Pro adapters)** –  
+- ⚙️ **Pro: Automation (Webhooks + Jobs)** –
+  Send FileRise events to other apps/services using managed webhook endpoints with async delivery, retries, queue visibility, and job history from Admin.
+- 🌐 **Sources (Core + Pro adapters)** –
   Turn FileRise into a storage hub by connecting multiple backends and switching between them in the UI:
   - **Core:** Multiple local roots (additional local paths)
   - **Core:** **WebDAV** sources (Nextcloud / ownCloud / FileRise)
@@ -76,11 +78,13 @@ Built for homelabs, teams, and client portals that need fast browsing, strict AC
   - **Pro:** **SMB/CIFS**, **SFTP**, **FTP**
   - **Pro:** **Google Drive**, **OneDrive**, **Dropbox**
   - Works with **dual-pane** so you can copy/move via drag & drop or toolbar actions **between sources**, with **per-source Trash**
-- 🔌 **Pro: Gateway Shares (SFTP / S3 / MCP)** –  
+- 🔌 **Pro: Gateway Shares v2 (SFTP / S3 / MCP)** –
   Expose selected source roots through managed gateways for external clients and workflows:
+  - Managed **start/stop/restart/status/log** controls from Admin
   - **SFTP gateway** for tools like FileZilla, WinSCP, and rclone
   - **S3 gateway** for S3-compatible clients and automation
-  - **MCP gateway** for emerging AI/tool integrations
+  - **Scoped MCP users/tokens** mapped to FileRise user + source/root scope
+  - AI/tool integrations stay **ACL-scoped and auditable**
 
 Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/wiki/Features)
 
@@ -107,6 +111,7 @@ Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/
   - [Common env vars](https://github.com/error311/FileRise/wiki/Common-Env-Variables)
   - [Env vars (full reference)](https://github.com/error311/FileRise/wiki/Environment-Variables-Full-Reference)
   - [Admin Panel](https://github.com/error311/FileRise/wiki/Admin-Panel)
+  - [Pro MCP AI quickstart](https://github.com/error311/FileRise/wiki/Pro-MCP-AI-Quickstart)
   - [ACL & permissions](https://github.com/error311/FileRise/wiki/ACL-and-Permissions)
   - [ACL recipes](https://github.com/error311/FileRise/wiki/ACL-Recipes)
   - [WebDAV (mount)](https://github.com/error311/FileRise/wiki/WebDAV)

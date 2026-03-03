@@ -175,6 +175,7 @@ export default {
 
     // NEW KEYS ADDED FOR ADMIN, USER PANELS, AND TOTP MODALS:
     "admin_panel": "Panel de Administración",
+    "admin_search_audit_logging": "Buscar en todas partes y registro de auditoría",
     "user_panel": "Panel de Usuario",
     "totp_settings": "Configuración TOTP",
     "enable_totp": "Activar TOTP",

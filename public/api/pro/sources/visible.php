@@ -3,66 +3,27 @@
 // public/api/pro/sources/visible.php
 declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
-
-require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
-require_once PROJECT_ROOT . '/src/lib/SourcesConfig.php';
-require_once PROJECT_ROOT . '/src/FileRise/Domain/SourceAccessService.php';
+require_once __DIR__ . '/../_common.php';
+require_once PROJECT_ROOT . '/src/FileRise/Domain/ProSourcesApiService.php';
 
 try {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    fr_pro_guard_auth(false, false);
 
-    \FileRise\Http\Controllers\AdminController::requireAuth();
-
-    $username = (string)($_SESSION['username'] ?? '');
-    $perms = \FileRise\Domain\SourceAccessService::loadUserPermissions($username);
-
-    $activeId = class_exists('SourceContext') ? SourceContext::getActiveId() : '';
-    $cfg = SourcesConfig::getPublicConfig();
-    $enabled = !empty($cfg['enabled']);
-    $sources = isset($cfg['sources']) && is_array($cfg['sources']) ? $cfg['sources'] : [];
-
-    if (!$enabled || !$sources) {
-        echo json_encode([
-            'ok' => true,
-            'enabled' => (bool)$enabled,
-            'sources' => [],
-            'activeId' => $activeId,
-            'available' => !empty($cfg['available']),
-            'proExtended' => !empty($cfg['proExtended']),
-            'allowedTypes' => $cfg['allowedTypes'] ?? [],
-            'coreTypes' => $cfg['coreTypes'] ?? [],
-            'proTypes' => $cfg['proTypes'] ?? [],
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        exit;
-    }
-
-    $visible = \FileRise\Domain\SourceAccessService::filterVisibleSources($sources, $username, $perms);
-
-    echo json_encode([
-        'ok' => true,
-        'enabled' => (bool)$enabled,
-        'sources' => $visible,
-        'activeId' => $activeId,
-        'available' => !empty($cfg['available']),
-        'proExtended' => !empty($cfg['proExtended']),
-        'allowedTypes' => $cfg['allowedTypes'] ?? [],
-        'coreTypes' => $cfg['coreTypes'] ?? [],
-        'proTypes' => $cfg['proTypes'] ?? [],
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $ctx = fr_pro_current_user_context();
+    fr_pro_emit_result(
+        \FileRise\Domain\ProSourcesApiService::visibleSources(
+            $ctx['username'],
+            $ctx['permissions']
+        )
+    );
 } catch (Throwable $e) {
-    $code = (int)$e->getCode();
-    if ($code >= 400 && $code <= 599) {
-        http_response_code($code);
-    } else {
-        http_response_code(500);
+    $status = (int)$e->getCode();
+    if ($status < 400 || $status > 599) {
+        $status = 500;
     }
 
-    echo json_encode([
+    fr_pro_json($status, [
         'ok' => false,
         'error' => 'Error loading sources',
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ]);
 }

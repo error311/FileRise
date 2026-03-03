@@ -16,29 +16,22 @@
  *   @OA\Response(response=500, description="Server error")
  * )
  */
+
 declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
-
-require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/FileRise/Domain/PortalPublicMetaService.php';
+require_once __DIR__ . '/../_common.php';
+require_once PROJECT_ROOT . '/src/FileRise/Domain/ProPortalsApiService.php';
 
 try {
     $slug = isset($_GET['slug']) ? (string)$_GET['slug'] : '';
-    $public = \FileRise\Domain\PortalPublicMetaService::getPublicPortalMeta($slug);
-
-    echo json_encode([
-        'success' => true,
-        'portal' => $public,
-    ]);
+    fr_pro_emit_result(\FileRise\Domain\ProPortalsApiService::publicMeta($slug));
 } catch (Throwable $e) {
-    $code = (int)$e->getCode();
-    if ($code < 400 || $code > 599) {
-        $code = 500;
+    $status = (int)$e->getCode();
+    if ($status < 400 || $status > 599) {
+        $status = 500;
     }
 
-    http_response_code($code);
-    echo json_encode([
+    fr_pro_json($status, [
         'success' => false,
         'error' => $e->getMessage(),
     ]);

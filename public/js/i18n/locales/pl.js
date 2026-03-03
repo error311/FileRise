@@ -362,6 +362,7 @@ export default {
     "enabled": "Włączone",
     "disabled": "Wyłączone",
     "admin_panel": "Panel administratora",
+    "admin_search_audit_logging": "Wyszukiwanie globalne i rejestrowanie audytu",
     "user_settings": "Ustawienia użytkownika",
     "save_profile_picture": "Zapisz zdjęcie profilowe",
     "please_select_picture": "Wybierz zdjęcie",

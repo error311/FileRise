@@ -3,55 +3,20 @@
 // public/api/pro/sources/save.php
 declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
-
-require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/FileRise/Domain/SourceAdminService.php';
+require_once __DIR__ . '/../_common.php';
+require_once PROJECT_ROOT . '/src/FileRise/Domain/ProSourcesApiService.php';
 
 try {
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
-        http_response_code(405);
-        echo json_encode(['ok' => false, 'error' => 'Method not allowed']);
-        exit;
-    }
-
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-
-    \FileRise\Http\Controllers\AdminController::requireAuth();
-    \FileRise\Http\Controllers\AdminController::requireAdmin();
-    \FileRise\Http\Controllers\AdminController::requireCsrf();
-
-    $raw = file_get_contents('php://input');
-    $body = json_decode($raw, true);
-    if (!is_array($body)) {
-        http_response_code(400);
-        echo json_encode(['ok' => false, 'error' => 'Invalid JSON body']);
-        exit;
-    }
-
-    $result = \FileRise\Domain\SourceAdminService::save($body);
-
-    echo json_encode([
-        'ok' => true,
-        'source' => $result['source'] ?? null,
-        'autoTested' => $result['autoTested'] ?? false,
-        'autoTestOk' => $result['autoTestOk'] ?? null,
-        'autoTestLimited' => $result['autoTestLimited'] ?? false,
-        'autoTestError' => $result['autoTestError'] ?? '',
-        'autoTest' => $result['autoTest'] ?? null,
-        'autoDisabled' => $result['autoDisabled'] ?? false,
-        'autoDisableFailed' => $result['autoDisableFailed'] ?? false,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    fr_pro_guard_method('POST');
+    fr_pro_guard_auth(true, true);
+    fr_pro_emit_result(\FileRise\Domain\ProSourcesApiService::saveSources(fr_pro_read_json()));
 } catch (RuntimeException $e) {
     $status = (int)$e->getCode();
     if ($status < 400 || $status > 599) {
         $status = 500;
     }
-    http_response_code($status);
-    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    fr_pro_json($status, ['ok' => false, 'error' => $e->getMessage()]);
 } catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Error saving source'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    fr_pro_json(500, ['ok' => false, 'error' => 'Error saving source']);
 }

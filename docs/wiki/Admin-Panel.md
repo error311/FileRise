@@ -76,10 +76,23 @@ The Admin Panel is where you manage users, folder access, authentication, integr
 - Enable Sources, add/edit/test connections, set source read-only, and optionally bypass trash (permanent delete).
 - See [Pro Sources](https://github.com/error311/FileRise/wiki/Pro-Sources) for details.
 
-### Pro Features
+### Gateway Shares
 
-- **Search Everywhere**: enable/disable and default limit (env-locked when set).
-- **Audit logs**: enable, level, and size caps.
+- Build and manage SFTP/S3/MCP gateway records.
+- Managed runtime controls are available in-panel (start/stop/restart, logs, autostart, rclone install/update checks).
+- Includes MCP service/user/job tooling and AI starter template generation in the MCP tab.
+- See [Pro gateway shares](https://github.com/error311/FileRise/wiki/Pro-Gateway-Shares) for full setup and runtime details.
+
+### Automation
+
+- **Webhooks tab**: endpoint CRUD, event filters, test sends, recent delivery history, and webhook security controls (global enable, allowlist, hard public-target mode).
+- **Jobs tab**: queue ClamAV scans, start worker, set recurring scan interval override, filter/inspect/retry/cancel jobs, and cleanup history/worker heartbeats.
+- See [Pro automation](https://github.com/error311/FileRise/wiki/Pro-Automation) for flow details and operator guidance.
+
+### Search Everywhere & Audit Logging
+
+- **Search Everywhere**: enable/disable and default result limit (env-locked when set).
+- **Audit logging**: enable/disable, level, and rotation caps; includes activity history view + CSV export.
 
 ### FileRise Pro
 

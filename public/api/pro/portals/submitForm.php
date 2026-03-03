@@ -33,69 +33,33 @@
  *   @OA\Response(response=500, description="Server error")
  * )
  */
+
 declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
-
-require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/FileRise/Domain/PortalSubmissionsService.php';
+require_once __DIR__ . '/../_common.php';
+require_once PROJECT_ROOT . '/src/FileRise/Domain/ProPortalsApiService.php';
 
 try {
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
-        http_response_code(405);
-        echo json_encode(['success' => false, 'error' => 'Method not allowed']);
-        return;
-    }
-
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-
-    \FileRise\Http\Controllers\AdminController::requireAuth();
-    \FileRise\Http\Controllers\AdminController::requireCsrf();
-
-    $raw = file_get_contents('php://input');
-    $body = json_decode($raw, true);
-    if (!is_array($body)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid JSON body']);
-        return;
-    }
-
-    $slug = isset($body['slug']) ? trim((string)$body['slug']) : '';
-    if ($slug === '') {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Missing portal slug']);
-        return;
-    }
-
-    // Make sure portal exists and is not expired
-    $portal = \FileRise\Http\Controllers\PortalController::getPortalBySlug($slug);
+    fr_pro_guard_method('POST');
+    fr_pro_guard_auth(false, true);
 
     $submittedBy = (string)($_SESSION['username'] ?? '');
-    $built = \FileRise\Domain\PortalSubmissionsService::buildSubmissionPayload(
-        $slug,
-        $portal,
-        $body,
-        $submittedBy,
-        $_SERVER
+    fr_pro_emit_result(
+        \FileRise\Domain\ProPortalsApiService::submitForm(
+            fr_pro_read_json(),
+            $submittedBy,
+            $_SERVER
+        )
     );
-
-    \FileRise\Domain\PortalSubmissionsService::storeSubmission($slug, $built['payload']);
-
-    echo json_encode([
-        'success' => true,
-        'submissionRef' => $built['submissionRef'],
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
-    $code = $e instanceof InvalidArgumentException ? 400 : 500;
-    if ((int)$e->getCode() >= 400 && (int)$e->getCode() <= 599) {
-        $code = (int)$e->getCode();
+    $status = $e instanceof InvalidArgumentException ? 400 : 500;
+    $code = (int)$e->getCode();
+    if ($code >= 400 && $code <= 599) {
+        $status = $code;
     }
 
-    http_response_code($code);
-    echo json_encode([
+    fr_pro_json($status, [
         'success' => false,
         'error' => $e->getMessage(),
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ]);
 }

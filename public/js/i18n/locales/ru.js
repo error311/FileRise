@@ -362,6 +362,7 @@ export default {
     "enabled": "Включено",
     "disabled": "Отключено",
     "admin_panel": "Панель администратора",
+    "admin_search_audit_logging": "Глобальный поиск и журналирование аудита",
     "user_settings": "Настройки пользователя",
     "save_profile_picture": "Сохранить фото профиля",
     "please_select_picture": "Выберите изображение",

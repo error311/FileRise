@@ -5,6 +5,7 @@ namespace FileRise\Http\Controllers;
 use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
+use FileRise\Support\EventBus;
 use FileRise\Support\FS;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
@@ -1199,6 +1200,21 @@ class FileController
                         'path'   => $path,
                     ]);
                 }
+                $sampleFiles = array_slice(array_values($files), 0, 20);
+                $eventPayload = [
+                    'user' => $username,
+                    'folder' => $folder,
+                    'count' => count($files),
+                    'files' => $sampleFiles,
+                    'truncated' => count($files) > count($sampleFiles),
+                ];
+                if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+                    $activeSourceId = $this->normalizeSourceId(SourceContext::getActiveId());
+                    if ($activeSourceId !== '') {
+                        $eventPayload['sourceId'] = $activeSourceId;
+                    }
+                }
+                EventBus::emit('file.delete', $eventPayload);
             }
             $this->jsonOut($result);
         } catch (Throwable $e) {
@@ -1386,6 +1402,22 @@ class FileController
                             'to'     => $to,
                         ]);
                     }
+                    $sampleFiles = array_slice(array_values($files), 0, 20);
+                    $eventPayload = [
+                        'user' => $username,
+                        'sourceFolder' => $sourceFolder,
+                        'destinationFolder' => $destinationFolder,
+                        'count' => count($files),
+                        'files' => $sampleFiles,
+                        'truncated' => count($files) > count($sampleFiles),
+                    ];
+                    if ($sourceId !== '') {
+                        $eventPayload['sourceId'] = $sourceId;
+                    }
+                    if ($destSourceId !== '') {
+                        $eventPayload['destSourceId'] = $destSourceId;
+                    }
+                    EventBus::emit('file.move', $eventPayload);
                 }
                 $this->jsonOut($result);
                 return;
@@ -1487,6 +1519,22 @@ class FileController
                         'to'     => $to,
                     ]);
                 }
+                $sampleFiles = array_slice(array_values($files), 0, 20);
+                $eventPayload = [
+                    'user' => $username,
+                    'sourceFolder' => $sourceFolder,
+                    'destinationFolder' => $destinationFolder,
+                    'count' => count($files),
+                    'files' => $sampleFiles,
+                    'truncated' => count($files) > count($sampleFiles),
+                ];
+                if ($sourceId !== '') {
+                    $eventPayload['sourceId'] = $sourceId;
+                }
+                if ($destSourceId !== '') {
+                    $eventPayload['destSourceId'] = $destSourceId;
+                }
+                EventBus::emit('file.move', $eventPayload);
             }
             $this->jsonOut($result);
         } catch (Throwable $e) {
@@ -4633,6 +4681,14 @@ class FileController
                         'token' => $result['token'],
                     ],
                 ]);
+                EventBus::emit('share.link.create', [
+                    'user' => $username,
+                    'shareType' => 'file',
+                    'folder' => $folder,
+                    'file' => $file,
+                    'hasPassword' => ($password !== ''),
+                    'expirationSeconds' => $expirationSeconds,
+                ]);
             }
             $this->jsonOut($result);
         } catch (Throwable $e) {
@@ -5192,6 +5248,10 @@ class FileController
                 'meta' => [
                     'token' => $token,
                 ],
+            ]);
+            EventBus::emit('share.link.delete', [
+                'user' => $username,
+                'shareType' => 'file',
             ]);
         }
         echo json_encode($deleted ? ['success' => true] : ['success' => false, 'error' => 'Not found']);

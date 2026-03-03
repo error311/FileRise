@@ -187,6 +187,7 @@ export default {
     "no_shared_links_available": "暂无可用的分享链接",
 
     "admin_panel": "管理员面板",
+    "admin_search_audit_logging": "全局搜索与审计日志记录",
     "user_panel": "用户面板",
     "user_settings": "用户设置",
     "save_profile_picture": "保存头像",

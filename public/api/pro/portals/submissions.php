@@ -18,65 +18,33 @@
 
 declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
-
-require_once __DIR__ . '/../../../../config/config.php';
-require_once PROJECT_ROOT . '/src/FileRise/Domain/PortalSubmissionsService.php';
+require_once __DIR__ . '/../_common.php';
+require_once PROJECT_ROOT . '/src/FileRise/Domain/ProPortalsApiService.php';
 
 try {
-    @session_start();
+    fr_pro_guard_method('GET');
+    fr_pro_start_session();
 
-    $username = (string)($_SESSION['username'] ?? '');
-    $isAdmin = !empty($_SESSION['isAdmin']) || (!empty($_SESSION['admin']) && $_SESSION['admin'] === '1');
-
-    if ($username === '' || !$isAdmin) {
-        http_response_code(403);
-        echo json_encode([
-            'success' => false,
-            'error' => 'Forbidden',
-        ]);
-        return;
-    }
-
+    $ctx = fr_pro_current_user_context();
     @session_write_close();
 
-    if (!defined('FR_PRO_ACTIVE') || !FR_PRO_ACTIVE || !defined('FR_PRO_BUNDLE_DIR') || !FR_PRO_BUNDLE_DIR) {
-        throw new RuntimeException('FileRise Pro is not active.');
-    }
-
-    $slug = isset($_GET['slug']) ? trim((string)$_GET['slug']) : '';
-    if ($slug === '') {
-        throw new InvalidArgumentException('Missing slug.');
-    }
-
-    $submissions = \FileRise\Domain\PortalSubmissionsService::listSubmissions($slug, 200);
-    $downloads = \FileRise\Domain\PortalSubmissionsService::loadDownloadEvents($slug, 400);
-    $submissions = \FileRise\Domain\PortalSubmissionsService::attachDownloads($submissions, $downloads);
-
-    echo json_encode([
-        'success' => true,
-        'slug' => $slug,
-        'submissions' => $submissions,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-} catch (InvalidArgumentException $e) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'error' => $e->getMessage(),
-    ]);
+    fr_pro_emit_result(
+        \FileRise\Domain\ProPortalsApiService::submissions(
+            $_GET,
+            $ctx['username'],
+            $ctx['isAdmin']
+        )
+    );
 } catch (Throwable $e) {
     $code = (int)$e->getCode();
     if ($code >= 400 && $code <= 499) {
-        http_response_code($code);
-        echo json_encode([
+        fr_pro_json($code, [
             'success' => false,
             'error' => $e->getMessage(),
         ]);
-        return;
     }
 
-    http_response_code(500);
-    echo json_encode([
+    fr_pro_json(500, [
         'success' => false,
         'error' => 'Server error: ' . $e->getMessage(),
     ]);

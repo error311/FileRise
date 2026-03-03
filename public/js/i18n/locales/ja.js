@@ -362,6 +362,7 @@ export default {
     "enabled": "有効",
     "disabled": "無効",
     "admin_panel": "管理パネル",
+    "admin_search_audit_logging": "全体検索と監査ログ",
     "user_settings": "ユーザー設定",
     "save_profile_picture": "プロフィール画像を保存",
     "please_select_picture": "画像を選択してください",

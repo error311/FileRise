@@ -199,6 +199,9 @@ if ($envKey === false || $envKey === '') {
 } else {
     $encryptionKey = $envKey;
 }
+// Ensure encryption key is always available via $GLOBALS, even when this file
+// is required from function scope (e.g. API helper bootstrap wrappers).
+$GLOBALS['encryptionKey'] = $encryptionKey;
 
 // Optional: ignore regex for indexing/listing (env wins; admin config as fallback)
 if (!defined('FR_IGNORE_REGEX')) {
@@ -528,7 +531,9 @@ function fr_read_admin_config_raw(): array
         if (!is_file($configFile)) return [];
         $encryptedContent = @file_get_contents($configFile);
         if (!is_string($encryptedContent) || $encryptedContent === '') return [];
-        $dec = decryptData($encryptedContent, $GLOBALS['encryptionKey']);
+        $key = isset($GLOBALS['encryptionKey']) ? (string)$GLOBALS['encryptionKey'] : '';
+        if ($key === '') return [];
+        $dec = decryptData($encryptedContent, $key);
         if ($dec === false) return [];
         $cfg = json_decode($dec, true);
         return is_array($cfg) ? $cfg : [];
@@ -591,6 +596,55 @@ if ($proDir === false || $proDir === '') {
 $proDir = rtrim($proDir, "/\\");
 if (!defined('FR_PRO_BUNDLE_DIR')) {
     define('FR_PRO_BUNDLE_DIR', $proDir);
+}
+
+// Optional core event-bus seam for guarded Pro registration.
+if (!function_exists('fr_eventbus_register')) {
+    function fr_eventbus_register(callable $listener): void
+    {
+        if (!class_exists(\FileRise\Support\EventBus::class)) {
+            return;
+        }
+        \FileRise\Support\EventBus::register($listener);
+    }
+}
+
+// Guarded Core MCP ops seam for Pro runtimes.
+if (!function_exists('fr_mcp_core_ops_dispatch')) {
+    function fr_mcp_core_ops_dispatch(string $operation, array $payload = [], array $authContext = []): array
+    {
+        if (!class_exists(\FileRise\Domain\McpCoreOpsService::class)) {
+            return [
+                'ok' => false,
+                'error' => 'Core MCP ops service unavailable.',
+                'status' => 500,
+            ];
+        }
+        return \FileRise\Domain\McpCoreOpsService::dispatch($operation, $payload, $authContext);
+    }
+}
+
+// ------------------------------------------------------------
+// Early Pro/Core API-level guards for bootstrap-time calls
+// ------------------------------------------------------------
+if (!defined('FR_PRO_API_REQUIRE_DISK_USAGE')) {
+    define('FR_PRO_API_REQUIRE_DISK_USAGE', 2);
+}
+if (!defined('FR_PRO_API_REQUIRE_SEARCH')) {
+    define('FR_PRO_API_REQUIRE_SEARCH', 3);
+}
+if (!defined('FR_PRO_API_REQUIRE_AUDIT')) {
+    define('FR_PRO_API_REQUIRE_AUDIT', 4);
+}
+if (!defined('FR_PRO_API_REQUIRE_SOURCES')) {
+    define('FR_PRO_API_REQUIRE_SOURCES', 5);
+}
+if (!function_exists('fr_pro_api_level_at_least')) {
+    function fr_pro_api_level_at_least(int $required): bool
+    {
+        $current = defined('FR_PRO_API_LEVEL') ? (int)FR_PRO_API_LEVEL : 0;
+        return $current >= $required;
+    }
 }
 
 // Try to load Pro bootstrap if enabled + present
