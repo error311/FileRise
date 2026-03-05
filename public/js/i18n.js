@@ -583,6 +583,8 @@ const translations = {
     "folder_actions": "Folder Actions",
     "disable_hover_preview": "Disable hover preview in file list",
     "show_hover_preview": "Show hover preview in file list",
+    "hover_preview_delay_ms": "Hover preview delay (ms)",
+    "hover_preview_delay_help": "Wait before showing hover preview. Set 0 for instant preview (range: 0-2500 ms).",
     "view_options": "View Options",
     "zoom_in": "Zoom In",
     "zoom_out": "Zoom Out",

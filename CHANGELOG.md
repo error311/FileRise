@@ -1,5 +1,31 @@
 # Changelog
 
+## Changes 03/05/2026 (v3.6.1)
+
+`release(v3.6.1): iPad hover preview pointer compatibility + configurable hover delay (refs #105)`
+
+**Commit message**
+
+```text
+release(v3.6.1): iPad hover preview pointer compatibility + configurable hover delay (refs #105)
+
+- file-list(ux): add per-user hover preview delay setting in User Panel (0-2500ms, default 180ms)
+- file-list(fix): allow hover preview on hybrid pointer devices (iPadOS + Magic Keyboard/trackpad) while keeping touch-only devices disabled
+- i18n: add hover delay label/help strings
+```
+
+**Changed**
+
+- **File-list hover preview UX**
+  - Added per-user hover preview delay control in User Panel -> Display (`0`-`2500` ms, default `180` ms).
+
+**Fixed**
+
+- **Hover preview device-compatibility regression**
+  - Fixed hover preview being incorrectly disabled on iPadOS pointer setups (for example Magic Keyboard/trackpad) by allowing hover-capable hybrid pointer devices while keeping touch-only devices disabled.
+
+---
+
 ## Changes 03/02/2026 (v3.6.0)
 
 `release(v3.6.0): Gateway Shares v2 + Automation APIs, MCP core seam, and runtime hardening`

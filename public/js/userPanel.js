@@ -4,6 +4,11 @@ import { updateAuthenticatedUI } from './auth.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
 import { openTOTPModal } from './authModals.js?v={{APP_QVER}}';
 
+const HOVER_PREVIEW_DELAY_STORAGE_KEY = 'hoverPreviewDelayMs';
+const DEFAULT_HOVER_PREVIEW_DELAY_MS = 180;
+const MIN_HOVER_PREVIEW_DELAY_MS = 0;
+const MAX_HOVER_PREVIEW_DELAY_MS = 2500;
+
 /**
  * Fetch current user info (username, profile_picture, totp_enabled)
  */
@@ -37,11 +42,37 @@ function normalizePicUrl(raw) {
   return pic ? withBase(pic) : '';
 }
 
+function normalizeHoverPreviewDelayMs(value) {
+  const parsed = parseInt(value, 10);
+  const delay = Number.isFinite(parsed) ? parsed : DEFAULT_HOVER_PREVIEW_DELAY_MS;
+  return Math.max(MIN_HOVER_PREVIEW_DELAY_MS, Math.min(MAX_HOVER_PREVIEW_DELAY_MS, delay));
+}
+
+function readHoverPreviewDelayMs() {
+  let stored = null;
+  try {
+    stored = localStorage.getItem(HOVER_PREVIEW_DELAY_STORAGE_KEY);
+  } catch (e) {
+    stored = null;
+  }
+  return normalizeHoverPreviewDelayMs(stored);
+}
+
+function persistHoverPreviewDelayMs(value) {
+  const normalized = normalizeHoverPreviewDelayMs(value);
+  try {
+    localStorage.setItem(HOVER_PREVIEW_DELAY_STORAGE_KEY, String(normalized));
+  } catch (e) { /* ignore */ }
+  window.hoverPreviewDelayMs = normalized;
+  return normalized;
+}
+
 export async function openUserPanel() {
   // 1) load data
   const { username = 'User', profile_picture = '', totp_enabled = false } = await fetchCurrentUser();
   const raw = profile_picture;
   const picUrl = normalizePicUrl(raw) || withBase('/assets/default-avatar.png');
+  const hoverDelayMs = persistHoverPreviewDelayMs(readHoverPreviewDelayMs());
 
   // 2) dark‐mode helpers
   const isDark = document.body.classList.contains('dark-mode');
@@ -51,7 +82,7 @@ export async function openUserPanel() {
     color:      ${isDark ? '#e0e0e0' : '#000'};
     padding: 20px;
     max-width: 600px; width:90%;
-    overflow-y: auto; height: 555px; max-height: 555px;
+    overflow-y: auto; height: 655px; max-height: 655px;
     display: flex; flex-direction: column; gap: 16px;
     margin: 0;
     scrollbar-gutter: stable both-edges;
@@ -359,6 +390,7 @@ export async function openUserPanel() {
 
     const hoverRow = document.createElement('div');
     hoverRow.className = 'form-check fr-toggle';
+    hoverRow.style.marginBottom = '6px';
     const hoverLabel = document.createElement('label');
     hoverLabel.className = 'form-check-label';
     hoverLabel.htmlFor = 'disableHoverPreview';
@@ -368,16 +400,73 @@ export async function openUserPanel() {
     hoverRow.appendChild(hoverLabel);
     dispFs.appendChild(hoverRow);
 
+    const hoverDelayWrap = document.createElement('div');
+    hoverDelayWrap.style.marginBottom = '8px';
+
+    const hoverDelayLabel = document.createElement('label');
+    hoverDelayLabel.className = 'form-label';
+    hoverDelayLabel.style.margin = '0 0 4px 0';
+    hoverDelayLabel.htmlFor = 'hoverPreviewDelayMs';
+    hoverDelayLabel.setAttribute('data-i18n-key', 'hover_preview_delay_ms');
+    hoverDelayLabel.textContent = t('hover_preview_delay_ms');
+
+    const hoverDelayInput = document.createElement('input');
+    hoverDelayInput.type = 'number';
+    hoverDelayInput.id = 'hoverPreviewDelayMs';
+    hoverDelayInput.className = 'form-control form-control-sm';
+    hoverDelayInput.style.width = '190px';
+    hoverDelayInput.style.maxWidth = '100%';
+    hoverDelayInput.min = String(MIN_HOVER_PREVIEW_DELAY_MS);
+    hoverDelayInput.max = String(MAX_HOVER_PREVIEW_DELAY_MS);
+    hoverDelayInput.step = '50';
+    hoverDelayInput.value = String(hoverDelayMs);
+
+    const hoverDelayHelp = document.createElement('div');
+    hoverDelayHelp.id = 'hoverPreviewDelayHelp';
+    hoverDelayHelp.className = 'form-text';
+    hoverDelayHelp.style.fontSize = '0.8rem';
+    hoverDelayHelp.style.lineHeight = '1.3';
+    hoverDelayHelp.style.opacity = '0.85';
+    hoverDelayHelp.setAttribute('data-i18n-key', 'hover_preview_delay_help');
+    hoverDelayHelp.textContent = t('hover_preview_delay_help');
+
+    hoverDelayWrap.appendChild(hoverDelayLabel);
+    hoverDelayWrap.appendChild(hoverDelayInput);
+    hoverDelayWrap.appendChild(hoverDelayHelp);
+    dispFs.appendChild(hoverDelayWrap);
+
+    const syncHoverDelayControlState = () => {
+      const enabled = !!hoverCb.checked;
+      hoverDelayInput.disabled = !enabled;
+      hoverDelayHelp.style.opacity = enabled ? '0.85' : '0.7';
+    };
+    syncHoverDelayControlState();
+
     // Handler: toggle hover preview
     hoverCb.addEventListener('change', () => {
       const disabled = !hoverCb.checked;
       localStorage.setItem('disableHoverPreview', disabled ? 'true' : 'false');
       window.disableHoverPreview = disabled;
+      syncHoverDelayControlState();
 
       // Hide any currently-visible preview right away
       const preview = document.getElementById('hoverPreview');
       if (preview) {
         preview.style.display = 'none';
+      }
+    });
+
+    const applyHoverDelay = () => {
+      const normalized = persistHoverPreviewDelayMs(hoverDelayInput.value);
+      hoverDelayInput.value = String(normalized);
+    };
+
+    hoverDelayInput.addEventListener('change', applyHoverDelay);
+    hoverDelayInput.addEventListener('blur', applyHoverDelay);
+    hoverDelayInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyHoverDelay();
       }
     });
 
@@ -470,6 +559,18 @@ export async function openUserPanel() {
     const isDisabled = storedHover === 'true';
     hoverCb.checked = !isDisabled;
     window.disableHoverPreview = isDisabled;
+  }
+
+  const hoverDelayInput = modal.querySelector('#hoverPreviewDelayMs');
+  const hoverDelayHelp = modal.querySelector('#hoverPreviewDelayHelp');
+  if (hoverDelayInput) {
+    const normalizedDelay = persistHoverPreviewDelayMs(readHoverPreviewDelayMs());
+    hoverDelayInput.value = String(normalizedDelay);
+    const enabled = hoverCb ? !!hoverCb.checked : true;
+    hoverDelayInput.disabled = !enabled;
+    if (hoverDelayHelp) {
+      hoverDelayHelp.style.opacity = enabled ? '0.85' : '0.7';
+    }
   }
 
   // show

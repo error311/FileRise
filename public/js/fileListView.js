@@ -493,6 +493,10 @@ const MAX_HOVER_PREVIEW_MAX_MB = 50;
 const DEFAULT_HOVER_PREVIEW_MAX_VIDEO_MB = 200;
 const MIN_HOVER_PREVIEW_MAX_VIDEO_MB = 1;
 const MAX_HOVER_PREVIEW_MAX_VIDEO_MB = 2048;
+const DEFAULT_HOVER_PREVIEW_DELAY_MS = 180;
+const MIN_HOVER_PREVIEW_DELAY_MS = 0;
+const MAX_HOVER_PREVIEW_DELAY_MS = 2500;
+const HOVER_PREVIEW_DELAY_STORAGE_KEY = 'hoverPreviewDelayMs';
 const DEFAULT_FILE_LIST_SUMMARY_DEPTH = 2;
 const MIN_FILE_LIST_SUMMARY_DEPTH = 0;
 const MAX_FILE_LIST_SUMMARY_DEPTH = 10;
@@ -1038,10 +1042,25 @@ export function cancelHoverPreview() {
 function isHoverPreviewDisabled() {
   if (window.disableHoverPreview === true) return true;
 
-  // Disable on touch / coarse pointer devices
+  // Keep disabled on touch-only/coarse-only devices, but allow hybrid devices
+  // (for example iPad + trackpad/mouse) that expose any hover-capable pointer.
   try {
-    const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
-    if (coarse) return true;
+    if (window.matchMedia) {
+      const hasHoverPointer =
+        window.matchMedia('(any-hover: hover)').matches ||
+        window.matchMedia('(hover: hover)').matches ||
+        window.matchMedia('(any-pointer: fine)').matches ||
+        window.matchMedia('(pointer: fine)').matches;
+      const touchOnlyLikely =
+        (
+          window.matchMedia('(pointer: coarse)').matches ||
+          window.matchMedia('(any-pointer: coarse)').matches ||
+          window.matchMedia('(hover: none)').matches ||
+          window.matchMedia('(any-hover: none)').matches
+        ) &&
+        !hasHoverPointer;
+      if (touchOnlyLikely) return true;
+    }
   } catch (e) {}
 
   try {
@@ -1049,6 +1068,34 @@ function isHoverPreviewDisabled() {
   } catch (e) {
     return false;
   }
+}
+
+function normalizeHoverPreviewDelayMs(value) {
+  const parsed = parseInt(value, 10);
+  const delay = Number.isFinite(parsed) ? parsed : DEFAULT_HOVER_PREVIEW_DELAY_MS;
+  return Math.max(MIN_HOVER_PREVIEW_DELAY_MS, Math.min(MAX_HOVER_PREVIEW_DELAY_MS, delay));
+}
+
+function getHoverPreviewDelayMs() {
+  const runtimeValue = parseInt(window.hoverPreviewDelayMs, 10);
+  if (Number.isFinite(runtimeValue)) {
+    return normalizeHoverPreviewDelayMs(runtimeValue);
+  }
+
+  try {
+    const stored = localStorage.getItem(HOVER_PREVIEW_DELAY_STORAGE_KEY);
+    if (stored !== null && stored !== '') {
+      const normalized = normalizeHoverPreviewDelayMs(stored);
+      window.hoverPreviewDelayMs = normalized;
+      return normalized;
+    }
+  } catch (e) {}
+
+  const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
+  const display = (cfg && typeof cfg.display === 'object') ? cfg.display : {};
+  const normalized = normalizeHoverPreviewDelayMs(display.hoverPreviewDelayMs);
+  window.hoverPreviewDelayMs = normalized;
+  return normalized;
 }
 
 function ensureHoverPreviewEl() {
@@ -7516,14 +7563,15 @@ if (window.showInlineFolders !== false && pageFolders.length) {
 // Now wire 3-dot ellipsis so it also picks up folder rows
 wireEllipsisContextMenu(fileListContent);
 
-// Hover preview (desktop only, and only if user didn’t disable it)
-if (window.innerWidth >= 768 && !isHoverPreviewDisabled()) {
+// Hover preview (hover-capable pointer devices only, and only if user didn’t disable it)
+if (!isHoverPreviewDisabled()) {
   fileListContent.querySelectorAll("tbody tr").forEach(row => {
     if (row.classList.contains("folder-strip-row")) return;
 
     row.addEventListener("mouseenter", (e) => {
       hoverPreviewActiveRow = row;
       clearTimeout(hoverPreviewTimer);
+      const delayMs = getHoverPreviewDelayMs();
       hoverPreviewTimer = setTimeout(() => {
         if (hoverPreviewActiveRow === row && !isHoverPreviewDisabled()) {
           fillHoverPreviewForRow(row);
@@ -7531,7 +7579,7 @@ if (window.innerWidth >= 768 && !isHoverPreviewDisabled()) {
           el.style.display = "block";
           positionHoverPreview(e.clientX, e.clientY);
         }
-      }, 180);
+      }, delayMs);
     });
 
     row.addEventListener("mouseleave", () => {
