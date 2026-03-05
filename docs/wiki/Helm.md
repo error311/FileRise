@@ -1,25 +1,19 @@
 # Helm Chart
 
-There's an unofficial helm chart that may be used to deploy FileRise
+There's an unofficial [helm chart](https://github.com/dofevine/charts/tree/main/filerise) that may be used to deploy FileRise
 
 ## Installation
-
-### Add repository
-
-```bash
-helm repo add dofevine https://dofevine.github.io/charts/
-```
 
 ### Basic Installation
 
 ```bash
-helm install filerise dofevine/FileRise
+helm install filerise oci://ghcr.io/dofevine/charts/filerise
 ```
 
 ### Install with custom values
 
 ```bash
-helm install filerise dofevine/FileRise -f values
+helm install filerise oci://ghcr.io/dofevine/charts/filerise -f values
 ```
 
 ### Remove installed release
