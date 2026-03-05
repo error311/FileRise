@@ -132,6 +132,7 @@ Full list of features: [Full Feature Wiki](https://github.com/error311/FileRise/
 - 🐳 **Docker image:**  
   - Docker Hub: [Docker](https://hub.docker.com/r/error311/filerise-docker)
   - Build pipeline / tags: [Workflow](https://github.com/error311/filerise-docker)
+- ⎈ **Community Helm chart (unofficial):** [dofevine/charts/filerise](https://github.com/dofevine/charts/tree/main/filerise) *(community-maintained, not maintained by FileRise core)*
 - 💬 **Discord:** [Discord](https://discord.gg/7WN6f56X2e)
 - 📝 **Changelog:** [Changelog](https://github.com/error311/FileRise/blob/master/CHANGELOG.md)
 
