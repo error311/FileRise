@@ -2316,6 +2316,9 @@ class FolderModel
     {
         $hideListing = self::boolFromMixed($record['hideListing'] ?? false);
         $mode = self::normalizeShareModeValue($record['mode'] ?? '', $hideListing);
+        $aiEnabled = array_key_exists('aiEnabled', $record)
+            ? self::boolFromMixed($record['aiEnabled'])
+            : false;
 
         $allowUpload = self::boolFromMixed($record['allowUpload'] ?? 0) ? 1 : 0;
         if ($mode === 'drop') {
@@ -2326,6 +2329,7 @@ class FolderModel
         $record['mode'] = $mode;
         $record['allowUpload'] = $allowUpload;
         $record['hideListing'] = $hideListing ? 1 : 0;
+        $record['aiEnabled'] = $aiEnabled ? 1 : 0;
         $record['allowSubfolders'] = self::boolFromMixed($record['allowSubfolders'] ?? 0) ? 1 : 0;
         $record['preserveFolderStructure'] = self::boolFromMixed($record['preserveFolderStructure'] ?? 1) ? 1 : 0;
         $record['maxFileSizeMb'] = self::intFromMixed($record['maxFileSizeMb'] ?? 0, 0, 102400);
@@ -2614,6 +2618,7 @@ class FolderModel
             "allowSubfolders" => $allowSubfolders ? 1 : 0,
             "mode"          => (string)($record['mode'] ?? 'browse'),
             "hideListing"   => $hideListing ? 1 : 0,
+            "aiEnabled"     => !empty($record['aiEnabled']) ? 1 : 0,
             "preserveFolderStructure" => !empty($record['preserveFolderStructure']) ? 1 : 0,
         ];
     }
@@ -2709,6 +2714,9 @@ class FolderModel
         $hideListing = array_key_exists('hideListing', $options)
             ? self::boolFromMixed($options['hideListing'])
             : ($mode === 'drop');
+        $aiEnabled = array_key_exists('aiEnabled', $options)
+            ? self::boolFromMixed($options['aiEnabled'])
+            : false;
         if ($mode === 'drop') {
             $allowUpload = 1;
             $hideListing = true;
@@ -2751,6 +2759,7 @@ class FolderModel
             "allowSubfolders" => $allowSubfolders ? 1 : 0,
             "mode" => $mode,
             "hideListing" => $hideListing ? 1 : 0,
+            "aiEnabled" => $aiEnabled ? 1 : 0,
             "preserveFolderStructure" => $preserveFolderStructure ? 1 : 0,
             "maxFileSizeMb" => $maxFileSizeMb,
             "allowedTypes" => $allowedTypes,

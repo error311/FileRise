@@ -37,6 +37,7 @@ ARG INSTALL_CLAMAV=1
 ARG INSTALL_7ZIP=1
 ARG INSTALL_UNAR=1
 ARG INSTALL_SMBCLIENT=1
+ARG INSTALL_POPPLER=1
 
 # Install Apache, PHP, and required extensions
 RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
@@ -50,6 +51,7 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
     if [ "${INSTALL_7ZIP}" = "1" ]; then extra_pkgs="${extra_pkgs} 7zip"; fi; \
     if [ "${INSTALL_UNAR}" = "1" ]; then extra_pkgs="${extra_pkgs} unar"; fi; \
     if [ "${INSTALL_SMBCLIENT}" = "1" ]; then extra_pkgs="${extra_pkgs} smbclient"; fi; \
+    if [ "${INSTALL_POPPLER}" = "1" ]; then extra_pkgs="${extra_pkgs} poppler-utils"; fi; \
     apt-get install -y --no-install-recommends \
       apache2 \
       php php-json php-curl php-zip php-mbstring php-gd php-xml \

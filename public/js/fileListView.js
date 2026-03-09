@@ -525,6 +525,15 @@ function getMaxVideoPreviewBytes() {
   return clamped * 1024 * 1024;
 }
 
+function arePdfThumbnailsEnabled() {
+  const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
+  const display = (cfg && typeof cfg.display === 'object') ? cfg.display : {};
+  if (!Object.prototype.hasOwnProperty.call(display, 'enablePdfThumbnails')) {
+    return false;
+  }
+  return !!display.enablePdfThumbnails;
+}
+
 function getFileListSummaryDepth() {
   const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
   const display = (cfg && typeof cfg.display === 'object') ? cfg.display : {};
@@ -1635,6 +1644,13 @@ function getSourceTypeById(sourceId) {
 function isFtpSource(sourceId = '') {
   const type = String(getSourceTypeById(sourceId || getGlobalActiveSourceId()) || '').toLowerCase();
   return type === 'ftp';
+}
+
+function isLocalSourceLike(sourceId = '') {
+  const id = String(sourceId || '').trim().toLowerCase();
+  if (!id || id === 'local') return true;
+  const type = String(getSourceTypeById(sourceId) || '').toLowerCase();
+  return type === 'local';
 }
 
 function isSlowRemoteSource(sourceId = '') {
@@ -3377,7 +3393,7 @@ async function fetchFolderPeek(folder, sourceId = '') {
     return withBase(`/api/file/download.php?${q.toString()}`);
 	  }
 
-  function apiVideoThumbUrl(folder, name, sourceId = "") {
+  function apiMediaThumbUrl(folder, name, sourceId = "") {
     const fParam = folder && folder !== "root" ? folder : "root";
     const q = new URLSearchParams({
       folder: fParam,
@@ -3932,7 +3948,7 @@ fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
       };
 
       const sourceType = String(getSourceTypeById(sourceId || getActivePaneSourceId()) || '').toLowerCase();
-      const isRemoteSource = sourceId !== '' && sourceType !== 'local';
+      const isRemoteSource = sourceId !== '' && !isLocalSourceLike(sourceId);
       const canStreamRemotePreview = isRemoteSource
         && !isFtpSource(sourceId)
         && bytes != null
@@ -3992,7 +4008,7 @@ fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
           renderVideoFallbackMessage();
         }
       } else {
-        const thumbUrl = apiVideoThumbUrl(folder, file.name, sourceId);
+        const thumbUrl = apiMediaThumbUrl(folder, file.name, sourceId);
 
         if (bytes == null || bytes <= maxVideoPreviewBytes) {
           thumbEl.style.minHeight = "140px";
@@ -4029,12 +4045,78 @@ fetchFolderPeek(folderPath, getActivePaneSourceId()).then(result => {
           renderVideoFallbackMessage();
         }
       }
+    } else if (isPdf) {
+      if (!arePdfThumbnailsEnabled()) {
+        thumbEl.innerHTML = `
+          <div style="
+            padding:6px 8px;
+            border-radius:6px;
+            font-size:0.8rem;
+            text-align:center;
+            background-color:rgba(15,23,42,0.92);
+            color:#e5e7eb;
+            max-width:100%;
+          ">
+            ${escapeHTML(t("no_preview_available") || "No preview available")}
+          </div>
+        `;
+      } else {
+      const sourceType = String(getSourceTypeById(sourceId || getActivePaneSourceId()) || '').toLowerCase();
+      const isRemoteSource = sourceId !== '' && !isLocalSourceLike(sourceId);
+      const renderPdfFallbackMessage = () => {
+        thumbEl.innerHTML = `
+          <div style="
+            padding:6px 8px;
+            border-radius:6px;
+            font-size:0.8rem;
+            text-align:center;
+            background-color:rgba(15,23,42,0.92);
+            color:#e5e7eb;
+            max-width:100%;
+          ">
+            ${escapeHTML(t("no_preview_available") || "No preview available")}
+          </div>
+        `;
+      };
+
+      if (isRemoteSource) {
+        renderPdfFallbackMessage();
+      } else {
+        const thumbUrl = apiMediaThumbUrl(folder, file.name, sourceId);
+        thumbEl.style.minHeight = "140px";
+        thumbEl.style.position = "relative";
+
+        const img = document.createElement("img");
+        img.src = thumbUrl;
+        img.alt = file.name;
+        img.style.maxWidth = "200px";
+        img.style.maxHeight = "120px";
+        img.style.display = "block";
+        img.style.borderRadius = "6px";
+        img.addEventListener("error", renderPdfFallbackMessage, { once: true });
+        thumbEl.appendChild(img);
+
+        const overlay = document.createElement("span");
+        overlay.className = "material-icons";
+        overlay.textContent = "picture_as_pdf";
+        overlay.style.position = "absolute";
+        overlay.style.left = "50%";
+        overlay.style.top = "50%";
+        overlay.style.transform = "translate(-50%, -50%)";
+        overlay.style.fontSize = "1.6rem";
+        overlay.style.opacity = "0.9";
+        overlay.style.color = "rgba(255,255,255,0.95)";
+        overlay.style.textShadow = "0 2px 6px rgba(0,0,0,0.55)";
+        overlay.style.pointerEvents = "none";
+        thumbEl.appendChild(overlay);
+      }
+      }
     }
 
         // Text snippet (left) for smaller text/code files
         if (canTextPreview || isOfficeSnippet) {
           fillFileSnippet(file, snippetEl);
-        } else if (!isImage && !isVideo) {
+        } else if (!isImage && !isVideo && !isPdf) {
           // Non-image, non-video, non-text → explicit "No preview"
           const msg = t("no_preview_available") || "No preview available";
           thumbEl.innerHTML = `
@@ -8046,7 +8128,7 @@ export function renderGalleryView(folder, container) {
           getActivePaneSourceId() ||
           ""
         ).trim();
-        const thumbUrl = apiVideoThumbUrl(folder, file.name, sourceId);
+        const thumbUrl = apiMediaThumbUrl(folder, file.name, sourceId);
         const cacheKey = thumbUrl;
         const src = (window.imageCache && window.imageCache[cacheKey]) || thumbUrl;
         thumbnail = `
@@ -8078,6 +8160,56 @@ export function renderGalleryView(folder, container) {
             ">play_circle</span>
           </div>
         `;
+      }
+    } else if (/\.pdf$/i.test(file.name)) {
+      if (!arePdfThumbnailsEnabled()) {
+        thumbnail = `<span class="material-icons gallery-icon">picture_as_pdf</span>`;
+      } else {
+      const sourceId = String(
+        file.sourceId ||
+        getPaneSourceIdForElement(container) ||
+        getActivePaneSourceId() ||
+        ""
+      ).trim();
+      const sourceType = String(getSourceTypeById(sourceId || getActivePaneSourceId()) || '').toLowerCase();
+      const isRemoteSource = sourceId !== '' && !isLocalSourceLike(sourceId);
+      if (isRemoteSource) {
+        thumbnail = `<span class="material-icons gallery-icon">picture_as_pdf</span>`;
+      } else {
+        const maxHeight = getMaxImageHeight();
+        const thumbUrl = apiMediaThumbUrl(folder, file.name, sourceId);
+        const cacheKey = thumbUrl;
+        const src = (window.imageCache && window.imageCache[cacheKey]) || thumbUrl;
+        thumbnail = `
+          <div class="gallery-video-thumb" style="
+            position:relative;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            min-height:${maxHeight}px;
+            background:rgba(0,0,0,0.04);
+            border-radius:8px;
+          ">
+            <img
+              src="${src}"
+              class="gallery-thumbnail gallery-pdf-thumb-img"
+              data-cache-key="${cacheKey}"
+              alt="${escapeHTML(file.name)}"
+              loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+              style="max-width:100%; max-height:${maxHeight}px; display:block; border-radius:8px; pointer-events:none;"
+            >
+            <span class="material-icons" style="
+              position:absolute;
+              font-size:32px;
+              color:rgba(255,255,255,0.92);
+              text-shadow:0 2px 6px rgba(0,0,0,0.55);
+              pointer-events:none;
+            ">picture_as_pdf</span>
+          </div>
+        `;
+      }
       }
     } else if (/\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i.test(file.name)) {
       thumbnail = `<span class="material-icons gallery-icon">audiotrack</span>`;
@@ -8261,6 +8393,12 @@ export function renderGalleryView(folder, container) {
     img.addEventListener('error', () => {
       const wrapper = img.closest('.gallery-video-thumb');
       if (wrapper) wrapper.innerHTML = `<span class="material-icons gallery-icon">movie</span>`;
+    }, { once: true });
+  });
+  fileListContent.querySelectorAll('.gallery-pdf-thumb-img').forEach(img => {
+    img.addEventListener('error', () => {
+      const wrapper = img.closest('.gallery-video-thumb');
+      if (wrapper) wrapper.innerHTML = `<span class="material-icons gallery-icon">picture_as_pdf</span>`;
     }, { once: true });
   });
 

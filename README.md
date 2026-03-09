@@ -14,9 +14,12 @@ Drag & drop uploads, OnlyOffice integration, and **optional folder-level encrypt
 
 Quick links: [Website](https://filerise.net) • [Docs](https://filerise.net/docs/) • [Live demo](https://demo.filerise.net) • [Install](#install-docker--recommended) • [FileRise Pro](https://filerise.net/pro/)
 
-- **Built for:** anyone who wants a fast, self-hosted file manager / storage hub
-- **Core (MIT):** full open-source FileRise feature set (ACLs, sharing, uploads, tags/search, and more), plus multiple local roots and WebDAV sources for storage-hub workflows.
-- **Pro:** adds user groups, client portals, automation, additional source adapters, gateway shares, and  search everywhere/audit tooling.
+- **Built for:** anyone who wants a fast, self-hosted file manager, storage hub, client portal, and AI workflow workspace on their own infrastructure.
+- **Core (MIT):** full open-source FileRise feature set (ACLs, folder and file sharing, uploads, tags/search, PDF previews, and more), plus multiple local roots and WebDAV sources for storage-hub workflows.
+- **Pro:** adds user groups, client portals, automation, additional source adapters, gateway shares, search everywhere/audit tooling, and a permissions-aware AI workspace for structured extraction, organization, approvals, and scoped copilots.
+
+- [FileRise Pro AI Chat: Organize Files By Type](https://youtu.be/zoM7LudY934)
+- [FileRise Pro AI Chat: Extract Invoice Fields to JSON and CSV](https://youtu.be/HhY__X695KM)
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-❤-red)](https://github.com/sponsors/error311)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-orange)](https://ko-fi.com/error311)
@@ -46,7 +49,9 @@ Quick links: [Website](https://filerise.net) • [Docs](https://filerise.net/doc
 - 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external database required.
 - 🔐 **Granular per-folder ACLs** – Manage View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share, and more — all enforced consistently across the UI, API, and WebDAV.
 - 🔗 **Link File (authenticated deep links)** – Generate internal links to specific files, require login + ACL checks, and open directly to the target in the app.
+- 🤝 **Folder and file sharing** – Share folders for browsing or upload-only file requests, protect links with passwords/expiration, and share individual files with generated links.
 - 📥 **File Request links (upload-only)** – Share upload-only links so external users can submit files into a folder without browsing existing files.
+- 📄 **PDF viewing + optional local PDF thumbnails** – View PDFs inline in the preview modal, and optionally enable first-page PDF thumbnails for gallery cards and hover previews using `pdftoppm`.
 - 🔐 **Folder-level encryption at rest (optional)** – Encrypt entire folders (and all descendants) on disk using modern authenticated encryption.
   - Opt-in per folder with inherited protection for subfolders
   - Files are stored encrypted on disk and transparently decrypted on download
@@ -77,6 +82,8 @@ Quick links: [Website](https://filerise.net) • [Docs](https://filerise.net/doc
   Group-based ACLs, brandable client upload portals, **ACL-aware global search across files, folders, users, and permissions**, an ncdu-style storage explorer for identifying large folders/files and reclaiming disk space directly from the UI, and **Pro Audit Logs** (configurable activity logging with filters + CSV export for tracking key actions across web, WebDAV, shares, and portals).
 - ⚙️ **Pro: Automation (Webhooks + Jobs)** –
   Send FileRise events to other apps/services using managed webhook endpoints with async delivery, retries, queue visibility, and job history from Admin.
+- 🤖 **Pro: AI workflows + workspace** –
+  Use a permissions-aware AI workspace for structured extraction, folder organization, watched-folder workflows, approval-gated bulk actions, and scoped share/portal copilots with cited answers and admin controls.
 - 🌐 **Sources (Core + Pro adapters)** –
   Turn FileRise into a storage hub by connecting multiple backends and switching between them in the UI:
   - **Core:** Multiple local roots (additional local paths)

@@ -31,6 +31,9 @@ final class ProAutomationApiService
             'status' => isset($query['status']) ? (string)$query['status'] : '',
             'type' => isset($query['type']) ? (string)$query['type'] : '',
             'limit' => isset($query['limit']) ? (int)$query['limit'] : 100,
+            'search' => isset($query['search']) ? (string)$query['search'] : '',
+            'triggerRuleId' => isset($query['triggerRuleId']) ? (int)$query['triggerRuleId'] : 0,
+            'watchedRuleOnly' => !empty($query['watchedRuleOnly']),
         ];
 
         $result = \ProAutomation::listJobs($filters);
@@ -290,6 +293,73 @@ final class ProAutomationApiService
         }
 
         $result = \ProAutomation::cleanupWorkers($maxAgeSeconds);
+        return self::response(!empty($result['ok']) ? 200 : 400, $result);
+    }
+
+    /**
+     * @return array{status:int,payload:array<string,mixed>}
+     */
+    public static function listAiWatchRules(): array
+    {
+        $result = \ProAutomation::listAiWatchRules();
+        return self::response(200, $result);
+    }
+
+    /**
+     * @param array<string,mixed> $body
+     * @return array{status:int,payload:array<string,mixed>}
+     */
+    public static function saveAiWatchRule(array $body): array
+    {
+        $payload = $body['rule'] ?? $body;
+        if (!is_array($payload)) {
+            return self::response(400, ['ok' => false, 'error' => 'Invalid watched rule payload']);
+        }
+
+        try {
+            $result = \ProAutomation::saveAiWatchRule($payload);
+        } catch (\InvalidArgumentException $e) {
+            return self::response(400, ['ok' => false, 'error' => $e->getMessage()]);
+        }
+
+        return self::response(!empty($result['ok']) ? 200 : 400, $result);
+    }
+
+    /**
+     * @param array<string,mixed> $body
+     * @return array{status:int,payload:array<string,mixed>}
+     */
+    public static function deleteAiWatchRule(array $body): array
+    {
+        $id = isset($body['id']) ? (int)$body['id'] : 0;
+        $result = \ProAutomation::deleteAiWatchRule($id);
+        return self::response(!empty($result['ok']) ? 200 : 400, $result);
+    }
+
+    /**
+     * @param array<string,mixed> $query
+     * @return array{status:int,payload:array<string,mixed>}
+     */
+    public static function listAiApprovals(array $query): array
+    {
+        $filters = [
+            'status' => isset($query['status']) ? (string)$query['status'] : '',
+            'limit' => isset($query['limit']) ? (int)$query['limit'] : 100,
+            'search' => isset($query['search']) ? (string)$query['search'] : '',
+        ];
+        $result = \ProAutomation::listAiApprovals($filters);
+        return self::response(200, $result);
+    }
+
+    /**
+     * @param array<string,mixed> $body
+     * @return array{status:int,payload:array<string,mixed>}
+     */
+    public static function decideAiApproval(array $body, string $actor = ''): array
+    {
+        $id = isset($body['id']) ? (int)$body['id'] : 0;
+        $decision = isset($body['decision']) ? (string)$body['decision'] : '';
+        $result = \ProAutomation::decideAiApproval($id, $decision, $actor);
         return self::response(!empty($result['ok']) ? 200 : 400, $result);
     }
 }

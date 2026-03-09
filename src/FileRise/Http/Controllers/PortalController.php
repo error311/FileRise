@@ -148,6 +148,7 @@ final class PortalController
         $label       = trim((string)($p['label'] ?? $slug));
         $folder      = trim((string)($p['folder'] ?? ''));
         $clientEmail = trim((string)($p['clientEmail'] ?? ''));
+        $aiEnabled   = !empty($p['aiEnabled']);
 
         $expiresAt = trim((string)($p['expiresAt'] ?? ''));
 
@@ -311,6 +312,7 @@ final class PortalController
             'label'              => $label,
             'folder'             => $folder,
             'clientEmail'        => $clientEmail,
+            'aiEnabled'          => $aiEnabled,
             'sourceId'           => $sourceId,
             // Store flags as-is so old code / JSON stay compatible
             'uploadOnly'         => (bool)$rawUploadOnly,

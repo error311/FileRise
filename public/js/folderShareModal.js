@@ -1,6 +1,46 @@
 // js/folderShareModal.js
 import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { t } from './i18n.js?v={{APP_QVER}}';
+import { withBase } from './basePath.js?v={{APP_QVER}}';
+
+let publicAiConfigPromise = null;
+
+function ti(key, fallback) {
+  const value = t(key);
+  return value === key ? fallback : value;
+}
+
+async function loadPublicAiConfig() {
+  if (window.__FR_IS_PRO !== true) {
+    return { enabled: false };
+  }
+  if (publicAiConfigPromise) {
+    return publicAiConfigPromise;
+  }
+  publicAiConfigPromise = fetch(withBase('/api/pro/ai/config/public.php'), {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json'
+    }
+  })
+    .then(async (res) => {
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = JSON.parse(raw || '{}');
+      } catch (e) {
+        data = {};
+      }
+      const settings = (data && data.settings && typeof data.settings === 'object') ? data.settings : {};
+      const providers = Array.isArray(settings.providers) ? settings.providers : [];
+      return {
+        enabled: !!settings.chatEnabled && providers.length > 0
+      };
+    })
+    .catch(() => ({ enabled: false }));
+  return publicAiConfigPromise;
+}
 
 async function copyTextToClipboard(text) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -164,6 +204,15 @@ export function openFolderShareModal(folder) {
           <div class="share-check-helper">${t("allow_subfolders_helper")}</div>
         </div>
 
+        <div class="share-modal-section" id="folderShareAiSection" hidden>
+          <p class="share-section-title">${ti("share_ai_heading", "AI Assistant")}</p>
+          <label class="share-check">
+            <input type="checkbox" id="folderShareAiEnabled" checked />
+            <span>${ti("share_ai_enabled_label", "Enable AI Assistant for this share")}</span>
+          </label>
+          <div class="share-check-helper">${ti("share_ai_enabled_help", "Allow public share viewers to use the read-only AI assistant for visible files in this share.")}</div>
+        </div>
+
         <button
           id="generateFolderShareLinkBtn"
           class="btn btn-primary"
@@ -193,6 +242,8 @@ export function openFolderShareModal(folder) {
   const browseModeBtn = document.getElementById("folderShareBrowseModeBtn");
   const requestModeBtn = document.getElementById("folderShareRequestModeBtn");
   const modeNoticeEl = document.getElementById("folderShareModeNotice");
+  const aiSectionEl = document.getElementById("folderShareAiSection");
+  const aiEnabledEl = document.getElementById("folderShareAiEnabled");
 
   const syncModeVisuals = () => {
     if (!dropModeEl) return;
@@ -239,6 +290,12 @@ export function openFolderShareModal(folder) {
     syncDropMode();
   }
 
+  loadPublicAiConfig().then((cfg) => {
+    if (!aiSectionEl || !aiEnabledEl) return;
+    aiSectionEl.hidden = !cfg.enabled;
+    aiEnabledEl.checked = !!cfg.enabled;
+  });
+
   // Generate link
   document.getElementById("generateFolderShareLinkBtn")
     .addEventListener("click", () => {
@@ -262,6 +319,20 @@ export function openFolderShareModal(folder) {
         return;
       }
 
+      const payload = {
+        folder,
+        expirationValue: value,
+        expirationUnit: unit,
+        password,
+        allowUpload,
+        allowSubfolders,
+        mode: dropMode ? "drop" : "browse",
+        fileDrop: dropMode
+      };
+      if (aiSectionEl && !aiSectionEl.hidden && aiEnabledEl) {
+        payload.aiEnabled = aiEnabledEl.checked ? 1 : 0;
+      }
+
       fetch("/api/folder/createShareFolderLink.php", {
         method: "POST",
         credentials: "include",
@@ -269,16 +340,7 @@ export function openFolderShareModal(folder) {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken
         },
-        body: JSON.stringify({
-          folder,
-          expirationValue: value,
-          expirationUnit: unit,
-          password,
-          allowUpload,
-          allowSubfolders,
-          mode: dropMode ? "drop" : "browse",
-          fileDrop: dropMode
-        })
+        body: JSON.stringify(payload)
       })
       .then(r => r.json())
       .then(data => {

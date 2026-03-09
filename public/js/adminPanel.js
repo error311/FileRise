@@ -28,7 +28,7 @@ export {
 const version = window.APP_VERSION || "dev";
 // Hard-coded *FOR NOW* latest FileRise Pro bundle version for UI hints only.
 // Update this when I cut a new Pro ZIP.
-const PRO_LATEST_BUNDLE_VERSION = 'v1.9.0';
+const PRO_LATEST_BUNDLE_VERSION = 'v1.10.0';
 const PRO_API_LEVELS = {
   diskUsage: 2,
   search: 3,
@@ -5246,6 +5246,7 @@ function captureInitialAdminConfig() {
     defaultLanguage: (document.getElementById("defaultLanguage")?.value || "").trim(),
     hoverPreviewMaxImageMb: (document.getElementById("hoverPreviewMaxImageMb")?.value || "").trim(),
     hoverPreviewMaxVideoMb: (document.getElementById("hoverPreviewMaxVideoMb")?.value || "").trim(),
+    enablePdfThumbnails: !!document.getElementById("enablePdfThumbnails")?.checked,
     ffmpegPath: (document.getElementById("ffmpegPath")?.value || "").trim(),
     fileListSummaryDepth: (document.getElementById("fileListSummaryDepth")?.value || "").trim(),
     ignoreRegex: (document.getElementById("ignoreRegex")?.value || "").trim(),
@@ -5310,6 +5311,7 @@ function hasUnsavedChanges() {
     getVal("defaultLanguage") !== (o.defaultLanguage || "") ||
     getVal("hoverPreviewMaxImageMb") !== (o.hoverPreviewMaxImageMb || "") ||
     getVal("hoverPreviewMaxVideoMb") !== (o.hoverPreviewMaxVideoMb || "") ||
+    getChk("enablePdfThumbnails") !== !!o.enablePdfThumbnails ||
     getVal("ffmpegPath") !== (o.ffmpegPath || "") ||
     getVal("fileListSummaryDepth") !== (o.fileListSummaryDepth || "") ||
     getVal("ignoreRegex") !== (o.ignoreRegex || "") ||
@@ -6797,6 +6799,7 @@ export function openAdminPanel() {
         1,
         Math.min(2048, parseInt(displayCfg.hoverPreviewMaxVideoMb || 200, 10) || 200)
       );
+      const enablePdfThumbnails = !!displayCfg.enablePdfThumbnails;
       const rawSummaryDepth = parseInt(displayCfg.fileListSummaryDepth, 10);
       const fileListSummaryDepth = Math.max(
         0,
@@ -6806,7 +6809,7 @@ export function openAdminPanel() {
       const inner = `
         background:${dark ? "#2c2c2c" : "#fff"};
         color:${dark ? "#e0e0e0" : "#000"};
-        padding:20px; max-width:1100px; width:50%;
+        padding:20px; width:min(1160px, 90vw);
         position:relative;
         max-height:90vh; overflow:auto;
         border:1px solid ${dark ? "#555" : "#ccc"};
@@ -7395,6 +7398,23 @@ export function openAdminPanel() {
       step="1"
       value="${hoverPreviewMaxVideoMb}"
     />
+  </div>
+
+  <div class="form-group" style="margin-top:16px;">
+    <div class="form-check fr-toggle">
+      <input
+        type="checkbox"
+        class="form-check-input fr-toggle-input"
+        id="enablePdfThumbnails"
+        ${enablePdfThumbnails ? 'checked' : ''}
+      />
+      <label class="form-check-label" for="enablePdfThumbnails">
+        ${tf("enable_pdf_thumbnails", "Enable PDF thumbnails")}
+      </label>
+    </div>
+    <small class="text-muted d-block mt-1">
+      ${tf("enable_pdf_thumbnails_help", "Uses Poppler to rasterize local PDF first pages for hover previews and gallery thumbnails. Disable to fall back to the old icon/no-preview behavior.")}
+    </small>
   </div>
 
   <!-- Display: FFmpeg path -->
@@ -8880,6 +8900,9 @@ ${t("shared_max_upload_size_bytes")}
                       <th>Time</th>
                       <th>User</th>
                       <th>Action</th>
+                      <th>Severity</th>
+                      <th>Result</th>
+                      <th>Interaction ID</th>
                       <th>Source</th>
                       <th>Storage</th>
                       <th>Folder</th>
@@ -8977,7 +9000,7 @@ ${t("shared_max_upload_size_bytes")}
             if (!rows || !rows.length) {
               const tr = document.createElement('tr');
               const td = document.createElement('td');
-              td.colSpan = 12;
+              td.colSpan = 15;
               td.className = 'text-muted';
               td.textContent = 'No audit entries found for this filter.';
               tr.appendChild(td);
@@ -8994,9 +9017,12 @@ ${t("shared_max_upload_size_bytes")}
                 storageLabel = `${storageName} (${storageId})`;
               }
               const cols = [
-                row.ts || '',
+                row.eventTs || row.ts || '',
                 row.user || '',
                 row.action || '',
+                row.severity || '',
+                row.result || '',
+                row.interactionId || '',
                 row.source || '',
                 storageLabel,
                 row.folder || '',
@@ -9011,14 +9037,18 @@ ${t("shared_max_upload_size_bytes")}
               cols.forEach((val, idx) => {
                 const td = document.createElement('td');
                 let text = val;
-                if (idx === 11 && val && typeof val === 'object') {
+                if (idx === 14 && val && typeof val === 'object') {
                   try { text = JSON.stringify(val); } catch (e) { text = ''; }
                 }
-                if (idx === 10 && typeof text === 'string' && text.length > 30) {
+                if (idx === 5 && typeof text === 'string' && text.length > 24) {
+                  td.title = text;
+                  text = text.slice(0, 24) + '...';
+                }
+                if (idx === 13 && typeof text === 'string' && text.length > 30) {
                   td.title = text;
                   text = text.slice(0, 30) + '...';
                 }
-                if (idx === 11 && typeof text === 'string' && text.length > 160) {
+                if (idx === 14 && typeof text === 'string' && text.length > 160) {
                   td.title = text;
                   text = text.slice(0, 160) + '...';
                 }
@@ -9607,6 +9637,7 @@ function handleSave() {
           parseInt(document.getElementById("hoverPreviewMaxVideoMb")?.value || "200", 10) || 200
         )
       ),
+      enablePdfThumbnails: !!document.getElementById("enablePdfThumbnails")?.checked,
       fileListSummaryDepth: Math.max(
         0,
         Math.min(

@@ -63,6 +63,11 @@ Additional system packages bundled in the Docker image:
   **Source:** Linux distribution package repositories.  
   **Note:** Installed for video thumbnail generation.
 
+- **Poppler utils (`pdftoppm`)** — GPL-2.0-or-later  
+  **Home:** <https://poppler.freedesktop.org/>  
+  **Source:** Linux distribution package repositories.  
+  **Note:** Installed for optional local PDF thumbnail generation and AI document rasterization workflows.
+
 - **7-Zip (p7zip)** — LGPL-2.1+ with unRAR restriction  
   **Home:** <https://www.7-zip.org/>  
   **Source:** Linux distribution package repositories.

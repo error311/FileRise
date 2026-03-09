@@ -4,9 +4,9 @@
 /**
  * @OA\Get(
  *   path="/api/file/thumbnail.php",
- *   summary="Get a video thumbnail image",
- *   description="Returns a cached JPEG thumbnail for supported video files.",
- *   operationId="getVideoThumbnail",
+ *   summary="Get a cached media thumbnail image",
+ *   description="Returns a cached JPEG thumbnail for supported local video and PDF files.",
+ *   operationId="getMediaThumbnail",
  *   tags={"Files"},
  *   security={{"cookieAuth": {}}},
  *   @OA\Parameter(name="folder", in="query", required=true, @OA\Schema(type="string"), example="root"),

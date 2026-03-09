@@ -1,6 +1,45 @@
 import { t } from './i18n.js?v={{APP_QVER}}';
-import { showToast } from './domUtils.js?v={{APP_QVER}}';
+import { escapeHTML, showToast } from './domUtils.js?v={{APP_QVER}}';
 import { withBase } from './basePath.js?v={{APP_QVER}}';
+
+let publicAiConfigPromise = null;
+
+function ti(key, fallback) {
+  const value = t(key);
+  return value === key ? fallback : value;
+}
+
+async function loadPublicAiConfig() {
+  if (window.__FR_IS_PRO !== true) {
+    return { enabled: false };
+  }
+  if (publicAiConfigPromise) {
+    return publicAiConfigPromise;
+  }
+  publicAiConfigPromise = fetch(withBase('/api/pro/ai/config/public.php'), {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json'
+    }
+  })
+    .then(async (res) => {
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = JSON.parse(raw || '{}');
+      } catch (e) {
+        data = {};
+      }
+      const settings = (data && data.settings && typeof data.settings === 'object') ? data.settings : {};
+      const providers = Array.isArray(settings.providers) ? settings.providers : [];
+      return {
+        enabled: !!settings.chatEnabled && providers.length > 0
+      };
+    })
+    .catch(() => ({ enabled: false }));
+  return publicAiConfigPromise;
+}
 
 // ─────────────────────────────
 //  Portal intake presets
@@ -638,7 +677,7 @@ function renderPortalSourceOptions(selectedId) {
   return __portalSources.map(src => {
     const label = src.name || src.id;
     const disabledTag = src.enabled ? '' : ' (disabled)';
-    return `<option value="${src.id}"${src.id === active ? ' selected' : ''}>${label}${disabledTag}</option>`;
+    return `<option value="${escapeHTML(src.id)}"${src.id === active ? ' selected' : ''}>${escapeHTML(label)}${escapeHTML(disabledTag)}</option>`;
   }).join('');
 }
 
@@ -817,6 +856,7 @@ async function loadClientPortalsList(useCacheOnly) {
 
   try {
     await loadPortalSources();
+    const publicAiConfig = await loadPublicAiConfig();
     let portals;
     if (useCacheOnly && __portalsCache && Object.keys(__portalsCache).length) {
       portals = __portalsCache;
@@ -843,6 +883,7 @@ async function loadClientPortalsList(useCacheOnly) {
       const sourceId = normalizePortalSourceId(p.sourceId) || getPortalSourceFallbackId();
       const sourceOptions = renderPortalSourceOptions(sourceId);
       const clientEmail = p.clientEmail || '';
+      const aiEnabled = Object.prototype.hasOwnProperty.call(p, 'aiEnabled') ? p.aiEnabled !== false : false;
       const uploadOnly = !!p.uploadOnly;
       const allowSubfolders = !!p.allowSubfolders;
 
@@ -941,14 +982,21 @@ async function loadClientPortalsList(useCacheOnly) {
       const title = p.title || '';
       const introText = p.introText || '';
       const requireForm = !!p.requireForm;
+      const safeSlug = escapeHTML(slug);
+      const safeLabel = escapeHTML(label);
+      const safeFolder = escapeHTML(folder);
+      const safePortalPath = escapeHTML(portalPath);
+      const safePortalUrl = escapeHTML(portalUrl);
+      const safeClientEmail = escapeHTML(clientEmail);
+      const safeExpiresAt = escapeHTML(expiresAt);
 
       html += `
-        <div class="card portal-card" data-portal-slug="${slug}" data-portal-new="${isNewPortal ? '1' : '0'}">
+        <div class="card portal-card" data-portal-slug="${safeSlug}" data-portal-new="${isNewPortal ? '1' : '0'}">
           <div class="portal-card-header" tabindex="0" role="button" aria-expanded="true">
             <span class="portal-card-caret">▸</span>
             <div class="portal-card-header-main">
-              <strong>${label}</strong>
-              <span class="portal-card-slug">${slug}</span>
+              <strong>${safeLabel}</strong>
+              <span class="portal-card-slug">${safeSlug}</span>
             </div>
           </div>
 
@@ -968,7 +1016,7 @@ async function loadClientPortalsList(useCacheOnly) {
                 <input type="text"
                        class="form-control form-control-sm"
                        data-portal-field="slug"
-                       value="${slug}"
+                       value="${safeSlug}"
                        style="display:inline-block; width:160px; margin-left:4px;">
               </label>
               <label>
@@ -976,7 +1024,7 @@ async function loadClientPortalsList(useCacheOnly) {
                 <input type="text"
                        class="form-control form-control-sm"
                        data-portal-field="label"
-                       value="${label}"
+                       value="${safeLabel}"
                        style="display:inline-block; width:220px; margin-left:4px;">
               </label>
             </div>
@@ -996,7 +1044,7 @@ async function loadClientPortalsList(useCacheOnly) {
                   <input type="text"
                          class="form-control form-control-sm portal-folder-input"
                          data-portal-field="folder"
-                         value="${folder}"
+                         value="${safeFolder}"
                          placeholder="e.g. Clients/Smith-Law-1234"
                          style="display:inline-block; width:260px; margin-left:4px;">
                 </label>
@@ -1007,8 +1055,8 @@ async function loadClientPortalsList(useCacheOnly) {
               </div>
               <small class="text-muted" style="font-size:0.8rem;">
                 URL:
-                <a href="${portalPath}" target="_blank" rel="noopener">
-                  ${portalUrl}
+                <a href="${safePortalPath}" target="_blank" rel="noopener">
+                  ${safePortalUrl}
                 </a>
               </small>
             </div>
@@ -1019,18 +1067,18 @@ async function loadClientPortalsList(useCacheOnly) {
                 <input type="email"
                        class="form-control form-control-sm"
                        data-portal-field="clientEmail"
-                       value="${clientEmail}"
+                       value="${safeClientEmail}"
                        style="display:inline-block; width:220px; margin-left:4px;" />
               </label>
 
               <div class="portal-expires-group">
-                <label for="portal-exp-${slug}" class="mb-0">Expires:</label>
+                <label for="portal-exp-${safeSlug}" class="mb-0">Expires:</label>
                 <input
-                  id="portal-exp-${slug}"
+                  id="portal-exp-${safeSlug}"
                   type="date"
                   class="form-control form-control-sm portal-expiry-input"
                   data-portal-field="expiresAt"
-                  value="${expiresAt}"
+                  value="${safeExpiresAt}"
                 />
               </div>
             </div>
@@ -1056,6 +1104,19 @@ async function loadClientPortalsList(useCacheOnly) {
                   <span>Allow subfolders</span>
                 </label>
               </div>
+
+              ${publicAiConfig.enabled ? `
+              <div class="portal-meta-row">
+                <label style="display:flex; align-items:center; gap:4px;">
+                  <input type="checkbox"
+                         data-portal-field="aiEnabled"
+                         ${aiEnabled ? 'checked' : ''} />
+                  <span>${ti('portal_ai_enabled_label', 'Enable AI Assistant')}</span>
+                </label>
+                <small class="text-muted" style="font-size:0.75rem;">
+                  ${ti('portal_ai_enabled_help', 'Show the public read-only AI assistant on this portal.')}
+                </small>
+              </div>` : ''}
 
               <div class="text-muted" style="font-size:0.75rem; margin-top:4px;">
                 Any user with access to the portal folder can sign in to the portal view.
@@ -2435,6 +2496,7 @@ async function saveClientPortalsFromUI() {
     const uploadOnlyEl    = card.querySelector('[data-portal-field="uploadOnly"]');
     const allowDownloadEl = card.querySelector('[data-portal-field="allowDownload"]');
     const allowSubfoldersEl = card.querySelector('[data-portal-field="allowSubfolders"]');
+    const aiEnabledEl = card.querySelector('[data-portal-field="aiEnabled"]');
     const requireFormEl   = card.querySelector('[data-portal-field="requireForm"]');
 
     const uploadOnly    = uploadOnlyEl ? !!uploadOnlyEl.checked : true;
@@ -2562,12 +2624,16 @@ async function saveClientPortalsFromUI() {
       username: portalUserName,
       passwordSet: portalUserPasswordSet
     };
+    const aiEnabled = aiEnabledEl
+      ? !!aiEnabledEl.checked
+      : (Object.prototype.hasOwnProperty.call(existingPortal, 'aiEnabled') ? existingPortal.aiEnabled !== false : false);
 
     const portalData = {
       label,
       folder,
       sourceId,
       clientEmail,
+      aiEnabled,
       uploadOnly,
       allowDownload,
       allowSubfolders,

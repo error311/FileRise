@@ -26,10 +26,41 @@ final class McpCoreOpsService
     private const DEFAULT_FAST_SCAN_CAP = 5000;
     private const MAX_FAST_SCAN_CAP = 20000;
     private const FAST_LIST_CACHE_TTL_SECONDS = 20;
+    private const DEFAULT_READ_FILE_PREVIEW_BYTES = 8192;
+    private const MAX_READ_FILE_PREVIEW_BYTES = 65536;
+    private const MAX_READ_FILE_SIZE_BYTES = 2097152;
     private const MAX_BULK_FILES = 200;
     private const MAX_TAGS_PER_FILE = 50;
     private const MAX_TAG_NAME_CHARS = 64;
     private const MAX_TAG_COLOR_CHARS = 32;
+
+    /**
+     * @return array<string,array<string,mixed>>
+     */
+    public static function describeOperations(): array
+    {
+        $ops = [];
+        foreach (self::operationRegistry() as $name => $meta) {
+            $ops[$name] = [
+                'name' => $name,
+                'title' => (string)($meta['title'] ?? $name),
+                'description' => (string)($meta['description'] ?? ''),
+                'mutating' => !empty($meta['mutating']),
+                'bulk' => !empty($meta['bulk']),
+                'scopeFields' => isset($meta['scopeFields']) && is_array($meta['scopeFields'])
+                    ? array_values($meta['scopeFields'])
+                    : [],
+                'args' => isset($meta['args']) && is_array($meta['args'])
+                    ? array_values($meta['args'])
+                    : [],
+                'examples' => isset($meta['examples']) && is_array($meta['examples'])
+                    ? array_values($meta['examples'])
+                    : [],
+            ];
+        }
+
+        return $ops;
+    }
 
     /**
      * Dispatch one guarded operation.
@@ -51,8 +82,18 @@ final class McpCoreOpsService
                     return self::opListFolders($ctx, $payload);
                 case 'list_files':
                     return self::opListFiles($ctx, $payload);
+                case 'read_file':
+                    return self::opReadFile($ctx, $payload);
+                case 'create_file':
+                    return self::opCreateFile($ctx, $payload);
+                case 'create_folder':
+                    return self::opCreateFolder($ctx, $payload);
+                case 'copy_files':
+                    return self::opCopyFiles($ctx, $payload);
                 case 'move_files':
                     return self::opMoveFiles($ctx, $payload);
+                case 'rename_file':
+                    return self::opRenameFile($ctx, $payload);
                 case 'move_folder':
                 case 'move_folders':
                     return self::opMoveFolder($ctx, $payload);
@@ -65,7 +106,10 @@ final class McpCoreOpsService
                 case 'get_file_tags':
                     return self::opGetFileTags($ctx, $payload);
                 default:
-                    throw new RuntimeException('Unsupported MCP core operation.', 400);
+                    throw new RuntimeException(
+                        'Unsupported MCP core operation. raw=' . trim($operation) . ' normalized=' . $op,
+                        400
+                    );
             }
         } catch (RuntimeException $e) {
             $status = (int)$e->getCode();
@@ -641,6 +685,341 @@ final class McpCoreOpsService
      * @param array<string,mixed> $payload
      * @return array<string,mixed>
      */
+    private static function opReadFile(McpOpsContext $ctx, array $payload): array
+    {
+        return self::withSourceContext($ctx, $payload, false, function () use ($ctx, $payload): array {
+            $folder = self::normalizeFolder((string)($payload['folder'] ?? 'root'));
+            $file = self::normalizeFileName((string)($payload['file'] ?? ($payload['filename'] ?? '')));
+            $maxBytes = self::boundedInt(
+                $payload['maxBytes'] ?? self::DEFAULT_READ_FILE_PREVIEW_BYTES,
+                256,
+                self::MAX_READ_FILE_PREVIEW_BYTES,
+                self::DEFAULT_READ_FILE_PREVIEW_BYTES
+            );
+
+            $username = $ctx->username();
+            $perms = $ctx->permissions();
+
+            $fullView = ACL::canRead($username, $perms, $folder)
+                || ACL::ownsFolderOrAncestor($username, $perms, $folder);
+            $ownOnlyGrant = ACL::hasGrant($username, $folder, 'read_own');
+            if (!$fullView && !$ownOnlyGrant) {
+                throw new RuntimeException('Forbidden: no view access to this folder.', 403);
+            }
+
+            self::assertFolderScope($ctx, $folder, $fullView ? 'read' : 'read_own');
+
+            if (
+                !$ctx->canBypassOwnership()
+                && !$fullView
+                && $ownOnlyGrant
+            ) {
+                self::assertFilesOwnedByUser($folder, [$file], $username);
+            }
+
+            $storage = StorageRegistry::getAdapter();
+            $baseDir = rtrim(SourceContext::uploadRoot(), '/\\');
+            $dir = ($folder === 'root')
+                ? $baseDir
+                : $baseDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+
+            $stat = $storage->stat($path);
+            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+                throw new RuntimeException('File not found.', 404);
+            }
+
+            $size = max(0, (int)($stat['size'] ?? 0));
+            if ($size > self::MAX_READ_FILE_SIZE_BYTES) {
+                throw new RuntimeException('File is too large for AI text preview.', 413);
+            }
+
+            $raw = $storage->read($path, $maxBytes, 0);
+            if (!is_string($raw)) {
+                throw new RuntimeException('Failed to read file.', 500);
+            }
+            if ($raw !== '' && strpos($raw, "\0") !== false) {
+                throw new RuntimeException('File appears to be binary; text preview is unavailable.', 415);
+            }
+
+            $content = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $raw);
+            if (!is_string($content)) {
+                $content = $raw;
+            }
+            $truncated = ($size > strlen($raw));
+
+            return [
+                'ok' => true,
+                'folder' => $folder,
+                'file' => $file,
+                'content' => $content,
+                'size' => $size,
+                'maxBytes' => $maxBytes,
+                'truncated' => $truncated,
+            ];
+        });
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private static function opCreateFile(McpOpsContext $ctx, array $payload): array
+    {
+        return self::withSourceContext($ctx, $payload, true, function () use ($ctx, $payload): array {
+            self::assertWritableAccount($ctx, false);
+
+            $folder = self::normalizeFolder((string)($payload['folder'] ?? 'root'));
+            $fileName = self::normalizeFileName(
+                (string)($payload['name'] ?? ($payload['file'] ?? ($payload['filename'] ?? '')))
+            );
+
+            $username = $ctx->username();
+            $perms = $ctx->permissions();
+
+            $canCreate = ACL::canCreate($username, $perms, $folder)
+                || ACL::ownsFolderOrAncestor($username, $perms, $folder);
+            if (!$canCreate) {
+                throw new RuntimeException('Forbidden: no create permission.', 403);
+            }
+
+            self::assertFolderScope($ctx, $folder, 'create');
+
+            $result = FileModel::createFile($folder, $fileName, $username);
+            if (!is_array($result)) {
+                throw new RuntimeException('Failed to create file.', 500);
+            }
+            if (empty($result['success'])) {
+                $status = (int)($result['code'] ?? 400);
+                if ($status < 400 || $status > 599) {
+                    $status = 400;
+                }
+                throw new RuntimeException((string)($result['error'] ?? 'Failed to create file.'), $status);
+            }
+
+            return [
+                'ok' => true,
+                'folder' => $folder,
+                'file' => $fileName,
+                'result' => $result,
+            ];
+        });
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private static function opCreateFolder(McpOpsContext $ctx, array $payload): array
+    {
+        return self::withSourceContext($ctx, $payload, true, function () use ($ctx, $payload): array {
+            self::assertWritableAccount($ctx, false);
+
+            $parent = self::normalizeFolder((string)($payload['parent'] ?? 'root'));
+            $folderName = trim((string)($payload['folderName'] ?? ($payload['name'] ?? '')));
+            if ($folderName === '' || !preg_match((string)REGEX_FOLDER_NAME, $folderName)) {
+                throw new RuntimeException('Invalid folder name.', 400);
+            }
+
+            $username = $ctx->username();
+            $perms = $ctx->permissions();
+
+            $canCreate = ACL::canCreateFolder($username, $perms, $parent)
+                || ACL::ownsFolderOrAncestor($username, $perms, $parent);
+            if (!$canCreate) {
+                throw new RuntimeException('Forbidden: manager/owner required on parent.', 403);
+            }
+
+            self::assertFolderScope($ctx, $parent, 'manage');
+
+            $result = FolderModel::createFolder($folderName, $parent, $username);
+            if (!is_array($result)) {
+                throw new RuntimeException('Failed to create folder.', 500);
+            }
+            if (empty($result['success'])) {
+                throw new RuntimeException((string)($result['error'] ?? 'Failed to create folder.'), 400);
+            }
+
+            $newFolder = ($parent === 'root') ? $folderName : ($parent . '/' . $folderName);
+
+            return [
+                'ok' => true,
+                'parent' => $parent,
+                'folder' => $newFolder,
+                'name' => $folderName,
+                'result' => $result,
+            ];
+        });
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private static function opCopyFiles(McpOpsContext $ctx, array $payload): array
+    {
+        self::assertWritableAccount($ctx, true);
+
+        $sourceFolder = self::normalizeFolder((string)($payload['source'] ?? 'root'));
+        $destinationFolder = self::normalizeFolder((string)($payload['destination'] ?? 'root'));
+        $files = self::normalizeFileList($payload['files'] ?? []);
+
+        $sourcePair = self::resolveSourcePair($payload);
+        $sourceId = $sourcePair['sourceId'];
+        $destSourceId = $sourcePair['destSourceId'];
+        $crossSource = $sourcePair['crossSource'];
+
+        if ($crossSource && (!class_exists(SourceContext::class) || !SourceContext::sourcesEnabled())) {
+            throw new RuntimeException('Cross-source operations require sources to be enabled.', 400);
+        }
+
+        if ($crossSource) {
+            if ($sourceId === '' || $destSourceId === '') {
+                throw new RuntimeException('Cross-source copy requires both source ids.', 400);
+            }
+
+            $username = $ctx->username();
+            $perms = $ctx->permissions();
+
+            self::withSourceContext(
+                $ctx,
+                ['sourceId' => $sourceId],
+                true,
+                function () use ($ctx, $sourceFolder, $files, $username, $perms): array {
+                    $hasSourceView = ACL::canReadOwn($username, $perms, $sourceFolder)
+                        || ACL::ownsFolderOrAncestor($username, $perms, $sourceFolder);
+                    if (!$hasSourceView) {
+                        throw new RuntimeException('Forbidden: no read access to source.', 403);
+                    }
+
+                    $needScope = ACL::canRead($username, $perms, $sourceFolder) ? 'read' : 'read_own';
+                    self::assertFolderScope($ctx, $sourceFolder, $needScope);
+
+                    if (
+                        !$ctx->canBypassOwnership()
+                        && !ACL::canRead($username, $perms, $sourceFolder)
+                        && ACL::hasGrant($username, $sourceFolder, 'read_own')
+                    ) {
+                        self::assertFilesOwnedByUser($sourceFolder, $files, $username);
+                    }
+
+                    return ['ok' => true];
+                }
+            );
+
+            self::withSourceContext(
+                $ctx,
+                ['sourceId' => $destSourceId],
+                true,
+                function () use ($ctx, $destinationFolder, $username, $perms): array {
+                    $hasDestCopy = ACL::canCopy($username, $perms, $destinationFolder)
+                        || ACL::ownsFolderOrAncestor($username, $perms, $destinationFolder);
+                    if (!$hasDestCopy) {
+                        throw new RuntimeException('Forbidden: no copy permission on destination.', 403);
+                    }
+
+                    self::assertFolderScope($ctx, $destinationFolder, 'copy');
+                    return ['ok' => true];
+                }
+            );
+
+            $encErr = self::crossSourceEncryptedError(
+                $ctx,
+                $sourceId,
+                $sourceFolder,
+                $destSourceId,
+                $destinationFolder
+            );
+            if ($encErr !== null) {
+                throw new RuntimeException($encErr, 400);
+            }
+
+            $result = FileModel::copyFilesAcrossSources(
+                $sourceId,
+                $destSourceId,
+                $sourceFolder,
+                $destinationFolder,
+                $files
+            );
+            if (!is_array($result)) {
+                throw new RuntimeException('Failed to copy files across sources.', 500);
+            }
+            if (isset($result['error'])) {
+                throw new RuntimeException((string)$result['error'], 400);
+            }
+
+            return [
+                'ok' => true,
+                'source' => $sourceFolder,
+                'destination' => $destinationFolder,
+                'files' => $files,
+                'sourceId' => $sourceId,
+                'destSourceId' => $destSourceId,
+                'crossSource' => true,
+                'result' => $result,
+            ];
+        }
+
+        $singlePayload = $payload;
+        if ($sourceId !== '') {
+            $singlePayload['sourceId'] = $sourceId;
+        }
+
+        return self::withSourceContext(
+            $ctx,
+            $singlePayload,
+            true,
+            function () use ($ctx, $sourceFolder, $destinationFolder, $files): array {
+                $username = $ctx->username();
+                $perms = $ctx->permissions();
+
+                $hasSourceView = ACL::canReadOwn($username, $perms, $sourceFolder)
+                    || ACL::ownsFolderOrAncestor($username, $perms, $sourceFolder);
+                if (!$hasSourceView) {
+                    throw new RuntimeException('Forbidden: no read access to source.', 403);
+                }
+
+                $hasDestCopy = ACL::canCopy($username, $perms, $destinationFolder)
+                    || ACL::ownsFolderOrAncestor($username, $perms, $destinationFolder);
+                if (!$hasDestCopy) {
+                    throw new RuntimeException('Forbidden: no copy permission on destination.', 403);
+                }
+
+                $needScope = ACL::canRead($username, $perms, $sourceFolder) ? 'read' : 'read_own';
+                self::assertFolderScope($ctx, $sourceFolder, $needScope);
+                self::assertFolderScope($ctx, $destinationFolder, 'copy');
+
+                if (
+                    !$ctx->canBypassOwnership()
+                    && !ACL::canRead($username, $perms, $sourceFolder)
+                    && ACL::hasGrant($username, $sourceFolder, 'read_own')
+                ) {
+                    self::assertFilesOwnedByUser($sourceFolder, $files, $username);
+                }
+
+                $result = FileModel::copyFiles($sourceFolder, $destinationFolder, $files);
+                if (!is_array($result)) {
+                    throw new RuntimeException('Failed to copy files.', 500);
+                }
+                if (isset($result['error'])) {
+                    throw new RuntimeException((string)$result['error'], 400);
+                }
+
+                return [
+                    'ok' => true,
+                    'source' => $sourceFolder,
+                    'destination' => $destinationFolder,
+                    'files' => $files,
+                    'result' => $result,
+                ];
+            }
+        );
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
     private static function opMoveFiles(McpOpsContext $ctx, array $payload): array
     {
         self::assertWritableAccount($ctx, true);
@@ -831,6 +1210,64 @@ final class McpCoreOpsService
             'crossSource' => true,
             'result' => $result,
         ];
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private static function opRenameFile(McpOpsContext $ctx, array $payload): array
+    {
+        return self::withSourceContext($ctx, $payload, true, function () use ($ctx, $payload): array {
+            self::assertWritableAccount($ctx, false);
+
+            $folder = self::normalizeFolder((string)($payload['folder'] ?? 'root'));
+            $oldName = self::normalizeFileName((string)($payload['oldName'] ?? ($payload['old_name'] ?? '')));
+            $newName = self::normalizeFileName((string)($payload['newName'] ?? ($payload['new_name'] ?? '')));
+            if (strcasecmp($oldName, $newName) === 0) {
+                throw new RuntimeException('Old and new file names are the same.', 400);
+            }
+
+            $username = $ctx->username();
+            $perms = $ctx->permissions();
+
+            $hasRename = ACL::canRename($username, $perms, $folder)
+                || ACL::ownsFolderOrAncestor($username, $perms, $folder);
+            if (!$hasRename) {
+                throw new RuntimeException('Forbidden: no rename permission.', 403);
+            }
+
+            self::assertFolderScope($ctx, $folder, 'rename');
+
+            if (
+                !$ctx->canBypassOwnership()
+                && !ACL::canRead($username, $perms, $folder)
+                && ACL::hasGrant($username, $folder, 'read_own')
+            ) {
+                self::assertFilesOwnedByUser($folder, [$oldName], $username);
+            }
+
+            $result = FileModel::renameFile($folder, $oldName, $newName);
+            if (!is_array($result)) {
+                throw new RuntimeException('Failed to rename file.', 500);
+            }
+            if (isset($result['error'])) {
+                throw new RuntimeException((string)$result['error'], 400);
+            }
+
+            $resolvedNewName = trim((string)($result['newName'] ?? $newName));
+            if ($resolvedNewName === '') {
+                $resolvedNewName = $newName;
+            }
+
+            return [
+                'ok' => true,
+                'folder' => $folder,
+                'oldName' => $oldName,
+                'newName' => $resolvedNewName,
+                'result' => $result,
+            ];
+        });
     }
 
     /**
@@ -1829,12 +2266,209 @@ final class McpCoreOpsService
 
     private static function normalizeOperation(string $operation): string
     {
-        $op = strtolower(trim($operation));
+        $op = trim($operation);
         if ($op === '') {
             return '';
         }
+
+        $op = preg_replace('/([a-z0-9])([A-Z])/', '$1_$2', $op) ?? $op;
+        $op = strtolower($op);
         $op = str_replace(['.', '-', ' '], '_', $op);
-        return preg_replace('/_+/', '_', $op) ?? $op;
+        $op = preg_replace('/_+/', '_', $op) ?? $op;
+
+        $aliases = [
+            'listfolders' => 'list_folders',
+            'listchildren' => 'list_children',
+            'listfiles' => 'list_files',
+            'readfile' => 'read_file',
+            'createfile' => 'create_file',
+            'createfolder' => 'create_folder',
+            'copyfiles' => 'copy_files',
+            'movefiles' => 'move_files',
+            'renamefile' => 'rename_file',
+            'movefolder' => 'move_folder',
+            'movefolders' => 'move_folders',
+            'deletefiles' => 'delete_files',
+            'deletefolder' => 'delete_folder',
+            'savefiletag' => 'save_file_tag',
+            'getfiletags' => 'get_file_tags',
+        ];
+
+        return $aliases[$op] ?? $op;
+    }
+
+    /**
+     * @return array<string,array<string,mixed>>
+     */
+    private static function operationRegistry(): array
+    {
+        return [
+            'list_files' => [
+                'title' => 'List Files',
+                'description' => 'List files in a folder within the active scope.',
+                'mutating' => false,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'limit', 'pageSize', 'cursor', 'sortBy', 'sortDir', 'scanCap'],
+                'examples' => [
+                    '/op list_files {"folder":"root"}',
+                ],
+            ],
+            'list_folders' => [
+                'title' => 'List Folders',
+                'description' => 'List child folders in a folder within the active scope.',
+                'mutating' => false,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'limit', 'cursor'],
+                'examples' => [
+                    '/op list_folders {"folder":"root"}',
+                ],
+            ],
+            'list_children' => [
+                'title' => 'List Children',
+                'description' => 'List child folders in a folder within the active scope.',
+                'mutating' => false,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'limit', 'cursor'],
+                'examples' => [
+                    '/op list_children {"folder":"root"}',
+                ],
+            ],
+            'read_file' => [
+                'title' => 'Read File',
+                'description' => 'Read a text preview from one file.',
+                'mutating' => false,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'file', 'maxBytes'],
+                'examples' => [
+                    '/op read_file {"folder":"root","file":"notes.txt"}',
+                ],
+            ],
+            'create_file' => [
+                'title' => 'Create File',
+                'description' => 'Create an empty file in a folder.',
+                'mutating' => true,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'name'],
+                'examples' => [
+                    '/op create_file {"folder":"root","name":"notes.txt"}',
+                ],
+            ],
+            'create_folder' => [
+                'title' => 'Create Folder',
+                'description' => 'Create one folder under a parent folder.',
+                'mutating' => true,
+                'bulk' => false,
+                'scopeFields' => ['parent'],
+                'args' => ['parent', 'folderName'],
+                'examples' => [
+                    '/op create_folder {"parent":"root","folderName":"invoices"}',
+                ],
+            ],
+            'copy_files' => [
+                'title' => 'Copy Files',
+                'description' => 'Copy one or more files from a source folder to a destination folder.',
+                'mutating' => true,
+                'bulk' => true,
+                'scopeFields' => ['source', 'destination'],
+                'args' => ['source', 'destination', 'files'],
+                'examples' => [
+                    '/op copy_files {"source":"root","destination":"archive","files":["notes.txt"]}',
+                ],
+            ],
+            'move_files' => [
+                'title' => 'Move Files',
+                'description' => 'Move one or more files from a source folder to a destination folder.',
+                'mutating' => true,
+                'bulk' => true,
+                'scopeFields' => ['source', 'destination'],
+                'args' => ['source', 'destination', 'files'],
+                'examples' => [
+                    '/op move_files {"source":"root","destination":"archive","files":["notes.txt"]}',
+                ],
+            ],
+            'move_folder' => [
+                'title' => 'Move Folder',
+                'description' => 'Move one folder into another destination folder.',
+                'mutating' => true,
+                'bulk' => false,
+                'scopeFields' => ['source', 'destination'],
+                'args' => ['source', 'destination'],
+                'examples' => [
+                    '/op move_folder {"source":"invoices/2025","destination":"archive"}',
+                ],
+            ],
+            'move_folders' => [
+                'title' => 'Move Folder',
+                'description' => 'Alias of move_folder for compatibility.',
+                'mutating' => true,
+                'bulk' => false,
+                'scopeFields' => ['source', 'destination'],
+                'args' => ['source', 'destination'],
+                'examples' => [
+                    '/op move_folders {"source":"invoices/2025","destination":"archive"}',
+                ],
+            ],
+            'rename_file' => [
+                'title' => 'Rename File',
+                'description' => 'Rename one file inside a folder.',
+                'mutating' => true,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'oldName', 'newName'],
+                'examples' => [
+                    '/op rename_file {"folder":"root","oldName":"a.txt","newName":"b.txt"}',
+                ],
+            ],
+            'delete_files' => [
+                'title' => 'Delete Files',
+                'description' => 'Delete one or more files from a folder.',
+                'mutating' => true,
+                'bulk' => true,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'files'],
+                'examples' => [
+                    '/op delete_files {"folder":"root","files":["notes.txt"]}',
+                ],
+            ],
+            'delete_folder' => [
+                'title' => 'Delete Folder',
+                'description' => 'Delete one folder.',
+                'mutating' => true,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder'],
+                'examples' => [
+                    '/op delete_folder {"folder":"invoices/2024"}',
+                ],
+            ],
+            'save_file_tag' => [
+                'title' => 'Update File Tags',
+                'description' => 'Add, replace, or remove tags on one file.',
+                'mutating' => true,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder', 'file', 'tags', 'tagToDelete'],
+                'examples' => [
+                    '/op save_file_tag {"folder":"root","file":"notes.txt","tags":[{"name":"important","color":""}]}',
+                ],
+            ],
+            'get_file_tags' => [
+                'title' => 'List Tags',
+                'description' => 'List available file tags.',
+                'mutating' => false,
+                'bulk' => false,
+                'scopeFields' => ['folder'],
+                'args' => ['folder'],
+                'examples' => [
+                    '/op get_file_tags {"folder":"root"}',
+                ],
+            ],
+        ];
     }
 
     private static function ensureBootstrap(): void

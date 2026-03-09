@@ -1972,6 +1972,18 @@ function bindDarkMode() {
         wireModalEnterDefault();
         wireModalA11y();
 
+        if (!window.__FR_FLAGS.wired.aiChat && window.__FR_IS_PRO === true) {
+          try {
+            const ai = await import(withBase('/js/aiChat.js?v={{APP_QVER}}'));
+            if (typeof ai.initAiChat === 'function') {
+              await ai.initAiChat();
+            }
+          } catch (e) {
+            // Ignore when Pro AI endpoints are unavailable.
+          }
+          window.__FR_FLAGS.wired.aiChat = true;
+        }
+
 
       } catch (e) {
         console.error('[main] heavy boot failed', e && e.message ? e.message : e, e && e.sourceURL, e && e.line, e && e.stack);

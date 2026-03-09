@@ -235,6 +235,9 @@ class AdminModel
         $hoverPreviewMaxVideoMb = isset($displayCfg['hoverPreviewMaxVideoMb'])
             ? (int)$displayCfg['hoverPreviewMaxVideoMb']
             : 200;
+        $enablePdfThumbnails = array_key_exists('enablePdfThumbnails', $displayCfg)
+            ? !empty($displayCfg['enablePdfThumbnails'])
+            : false;
         $fileListSummaryDepth = isset($displayCfg['fileListSummaryDepth'])
             ? (int)$displayCfg['fileListSummaryDepth']
             : 2;
@@ -244,6 +247,7 @@ class AdminModel
         $public['display'] = [
             'hoverPreviewMaxImageMb' => max(1, min(50, $hoverPreviewMaxImageMb)),
             'hoverPreviewMaxVideoMb' => max(1, min(2048, $hoverPreviewMaxVideoMb)),
+            'enablePdfThumbnails' => $enablePdfThumbnails,
             'fileListSummaryDepth' => max(0, min(10, $fileListSummaryDepth)),
             'defaultLanguage' => $defaultLanguage,
         ];
@@ -575,6 +579,7 @@ class AdminModel
             $configUpdate['display'] = [
                 'hoverPreviewMaxImageMb' => 8,
                 'hoverPreviewMaxVideoMb' => 200,
+                'enablePdfThumbnails' => false,
                 'fileListSummaryDepth' => 2,
             ];
         } else {
@@ -586,6 +591,9 @@ class AdminModel
                 ? (int)$configUpdate['display']['hoverPreviewMaxVideoMb']
                 : 200;
             $configUpdate['display']['hoverPreviewMaxVideoMb'] = max(1, min(2048, $hoverPreviewMaxVideoMb));
+            $configUpdate['display']['enablePdfThumbnails'] = array_key_exists('enablePdfThumbnails', $configUpdate['display'])
+                ? !empty($configUpdate['display']['enablePdfThumbnails'])
+                : false;
             $fileListSummaryDepth = isset($configUpdate['display']['fileListSummaryDepth'])
                 ? (int)$configUpdate['display']['fileListSummaryDepth']
                 : 2;
@@ -976,6 +984,7 @@ class AdminModel
                 $config['display'] = [
                     'hoverPreviewMaxImageMb' => 8,
                     'hoverPreviewMaxVideoMb' => 200,
+                    'enablePdfThumbnails' => false,
                     'fileListSummaryDepth' => 2,
                     'defaultLanguage' => 'en',
                 ];
@@ -988,6 +997,9 @@ class AdminModel
                     ? (int)$config['display']['hoverPreviewMaxVideoMb']
                     : 200;
                 $config['display']['hoverPreviewMaxVideoMb'] = max(1, min(2048, $hoverPreviewMaxVideoMb));
+                $config['display']['enablePdfThumbnails'] = array_key_exists('enablePdfThumbnails', $config['display'])
+                    ? !empty($config['display']['enablePdfThumbnails'])
+                    : false;
                 $fileListSummaryDepth = isset($config['display']['fileListSummaryDepth'])
                     ? (int)$config['display']['fileListSummaryDepth']
                     : 2;
@@ -1154,6 +1166,7 @@ class AdminModel
             'display'               => [
                 'hoverPreviewMaxImageMb' => 8,
                 'hoverPreviewMaxVideoMb' => 200,
+                'enablePdfThumbnails' => false,
                 'fileListSummaryDepth' => 2,
                 'defaultLanguage' => 'en',
             ],

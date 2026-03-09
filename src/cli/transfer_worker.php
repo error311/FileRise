@@ -361,6 +361,11 @@ if ($jobUser === '') {
     exit(0);
 }
 
+if (!isset($_SESSION) || !is_array($_SESSION)) {
+    $_SESSION = [];
+}
+$_SESSION['username'] = $jobUser;
+
 $perms = $loadPerms($jobUser);
 $isAdmin = $isAdminUser($jobUser, $perms);
 if ($isAdmin) {

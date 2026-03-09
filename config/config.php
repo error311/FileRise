@@ -624,6 +624,16 @@ if (!function_exists('fr_mcp_core_ops_dispatch')) {
     }
 }
 
+if (!function_exists('fr_mcp_core_ops_describe')) {
+    function fr_mcp_core_ops_describe(): array
+    {
+        if (!class_exists(\FileRise\Domain\McpCoreOpsService::class)) {
+            return [];
+        }
+        return \FileRise\Domain\McpCoreOpsService::describeOperations();
+    }
+}
+
 // ------------------------------------------------------------
 // Early Pro/Core API-level guards for bootstrap-time calls
 // ------------------------------------------------------------
@@ -647,7 +657,6 @@ if (!function_exists('fr_pro_api_level_at_least')) {
     }
 }
 
-// Try to load Pro bootstrap if enabled + present
 $proBootstrap = FR_PRO_BUNDLE_DIR . '/bootstrap_pro.php';
 if (@is_file($proBootstrap)) {
     require_once $proBootstrap;

@@ -3109,9 +3109,9 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
 }
 
  /* Modal sizing */
- #adminPanelModal .modal-content {
-  max-width: 1100px;
-  width: 64% !important;
+#adminPanelModal .modal-content {
+  max-width: 1160px !important;
+  width: min(1160px, 90vw) !important;
   background: #fff !important;
   color: #000 !important;
   border: 1px solid #ccc !important;
@@ -4464,6 +4464,37 @@ body.dark-mode #adminPanelModal .sources-hint-btn::after{background:var(--fr-sur
 /* Give every admin section a little breathing room at the top */
 #adminPanelModal .section-content {
   padding-top: 12px;
+}
+#adminPanelModal #automationContent.section-content {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+#adminPanelModal #automationContent .card {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+#adminPanelModal :is(
+  #sponsorContent,
+  #proContent,
+  #proFeaturesContent,
+  #gatewaysContent,
+  #storageContent,
+  #encryptionContent
+) .card,
+#adminPanelModal :is(
+  #sponsorContent,
+  #proContent,
+  #proFeaturesContent,
+  #gatewaysContent,
+  #storageContent,
+  #encryptionContent
+) .pro-card {
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 #adminPanelModal .admin-subsection-title {
   font-weight: 600;

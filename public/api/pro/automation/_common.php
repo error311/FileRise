@@ -45,6 +45,29 @@ if (!function_exists('fr_automation_read_json')) {
 }
 
 if (!function_exists('fr_automation_guard')) {
+    function fr_automation_require_admin_controller(): void
+    {
+        if (class_exists('\FileRise\Http\Controllers\AdminController')) {
+            return;
+        }
+
+        $candidates = [
+            PROJECT_ROOT . '/src/FileRise/Http/Controllers/AdminController.php',
+            PROJECT_ROOT . '/src/controllers/AdminController.php',
+        ];
+        foreach ($candidates as $path) {
+            if (!is_file($path)) {
+                continue;
+            }
+            require_once $path;
+            if (class_exists('\FileRise\Http\Controllers\AdminController')) {
+                return;
+            }
+        }
+
+        fr_automation_json(500, ['ok' => false, 'error' => 'Admin controller is unavailable']);
+    }
+
     function fr_automation_guard(string $method, bool $requireCsrf = false): void
     {
         fr_automation_bootstrap();
@@ -57,6 +80,7 @@ if (!function_exists('fr_automation_guard')) {
             session_start();
         }
 
+        fr_automation_require_admin_controller();
         \FileRise\Http\Controllers\AdminController::requireAuth();
         \FileRise\Http\Controllers\AdminController::requireAdmin();
         if ($requireCsrf) {

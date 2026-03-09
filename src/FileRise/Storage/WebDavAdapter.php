@@ -56,8 +56,9 @@ final class WebDavAdapter implements StorageAdapterInterface
             $this->client->addCurlSetting(CURLOPT_SSL_VERIFYHOST, 0);
         }
         if ($timeout > 0) {
-            $this->client->addCurlSetting(CURLOPT_TIMEOUT, $timeout);
             $this->client->addCurlSetting(CURLOPT_CONNECTTIMEOUT, min(10, $timeout));
+            $this->client->addCurlSetting(CURLOPT_LOW_SPEED_LIMIT, 1);
+            $this->client->addCurlSetting(CURLOPT_LOW_SPEED_TIME, $timeout);
         }
     }
 
@@ -197,25 +198,25 @@ final class WebDavAdapter implements StorageAdapterInterface
             $end = ($length !== null && $length > 0) ? ($offset + $length - 1) : '';
             $headers[] = 'Range: bytes=' . $offset . '-' . $end;
         }
-
-        $opts = [
-            'http' => [
-                'method' => 'GET',
-                'header' => implode("\r\n", $headers),
-                'ignore_errors' => true,
-                'timeout' => $this->timeout,
-            ],
-        ];
-        if (!$this->verifyTls) {
-            $opts['ssl'] = [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            ];
+        $connectTimeout = $this->timeout > 0 ? min(10, $this->timeout) : 10;
+        $stream = CurlReadStream::open(
+            $url,
+            $headers,
+            $this->verifyTls,
+            $connectTimeout,
+            $this->timeout,
+            function (string $message): void {
+                $this->lastError = $message;
+            }
+        );
+        if ($stream === false) {
+            if ($this->lastError === '') {
+                $this->lastError = 'Unable to open WebDAV read stream.';
+            }
+            return false;
         }
 
-        $context = stream_context_create($opts);
-        $fp = @fopen($url, 'rb', false, $context);
-        return $fp ?: false;
+        return $stream;
     }
 
     public function write(string $path, string $data, int $flags = 0): bool

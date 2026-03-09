@@ -228,6 +228,7 @@ const IMG_RE = /\.(jpg|jpeg|png|gif|bmp|webp|ico)$/i;
 // SVG handled separately so we *don’t* inline it
 const SVG_RE = /\.svg$/i;
 
+const PDF_RE = /\.pdf$/i;
 const VID_RE = /\.(mp4|mkv|webm|mov|ogv)$/i;
 const AUD_RE = /\.(mp3|wav|m4a|ogg|flac|aac|wma|opus)$/i;
 const ARCH_RE = /\.(zip|rar|7z|gz|bz2|xz|tar)$/i;
@@ -246,6 +247,15 @@ function getIconForFile(name) {
   return 'insert_drive_file';
 }
 
+function arePdfThumbnailsEnabled() {
+  const cfg = window.__FR_SITE_CFG__ || window.siteConfig || {};
+  const display = (cfg && typeof cfg.display === 'object') ? cfg.display : {};
+  if (!Object.prototype.hasOwnProperty.call(display, 'enablePdfThumbnails')) {
+    return false;
+  }
+  return !!display.enablePdfThumbnails;
+}
+
 function ensureMediaModal() {
   let overlay = document.getElementById("filePreviewModal");
   if (overlay) return overlay;
@@ -258,7 +268,7 @@ function ensureMediaModal() {
     width: "100vw",
     height: "100vh",
     backgroundColor: "rgba(0,0,0,0.7)",
-    display: "flex",
+    display: "none",
     justifyContent: "center",
     alignItems: "center",
     zIndex: "1000"
@@ -740,12 +750,82 @@ const navigate = (dir) => {
     return;
   }
 
-  /* -------------------- PDF => new tab -------------------- */
-  if (lower.endsWith('.pdf')) {
-    const separator = fileUrl.includes('?') ? '&' : '?';
-    const urlWithTs = fileUrl + separator + 't=' + Date.now();
-    window.open(urlWithTs, "_blank");
-    overlay.remove();
+  /* -------------------- PDFs -------------------- */
+  if (PDF_RE.test(lower)) {
+    if (!arePdfThumbnailsEnabled()) {
+      overlay.style.display = "none";
+      setPreviewLoading(overlay, false);
+      try {
+        window.open(fileUrl, '_blank', 'noopener');
+      } catch (e) {
+        window.location.href = fileUrl;
+      }
+      return;
+    }
+
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", name);
+    frame.setAttribute("referrerpolicy", "no-referrer");
+    frame.style.width = "88vw";
+    frame.style.height = "88vh";
+    frame.style.maxWidth = "88vw";
+    frame.style.maxHeight = "88vh";
+    frame.style.border = "none";
+    frame.style.borderRadius = "8px";
+    frame.style.background = "#fff";
+    frame.addEventListener("load", () => {
+      setPreviewLoading(overlay, false);
+    });
+    container.appendChild(frame);
+
+    let currentName = name;
+    const downloadBtn = makeDownloadButton(folder, () => currentName);
+    actionWrap.appendChild(downloadBtn);
+
+    const pdfs = (Array.isArray(fileData) ? fileData : []).filter(f => PDF_RE.test(String(f?.name || '')));
+    overlay.mediaType  = 'pdf';
+    overlay.mediaList  = pdfs;
+    overlay.mediaIndex = Math.max(0, pdfs.findIndex(f => f.name === name));
+    setNavVisibility(overlay, pdfs.length > 1, pdfs.length > 1);
+
+    const setPdfSrc = (nm) => {
+      currentName = nm;
+      setTitle(overlay, nm);
+      setPreviewLoading(overlay, true, t('loading') || 'Loading...');
+      frame.src = siblingPreviewUrl(nm);
+    };
+
+    if (pdfs.length > 1) {
+      prevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        overlay.mediaIndex = (overlay.mediaIndex - 1 + pdfs.length) % pdfs.length;
+        setPdfSrc(pdfs[overlay.mediaIndex].name);
+      });
+      nextBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        overlay.mediaIndex = (overlay.mediaIndex + 1) % pdfs.length;
+        setPdfSrc(pdfs[overlay.mediaIndex].name);
+      });
+      const onKey = (e) => {
+        if (!document.body.contains(overlay)) { window.removeEventListener("keydown", onKey); return; }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          overlay.mediaIndex = (overlay.mediaIndex - 1 + pdfs.length) % pdfs.length;
+          setPdfSrc(pdfs[overlay.mediaIndex].name);
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          overlay.mediaIndex = (overlay.mediaIndex + 1) % pdfs.length;
+          setPdfSrc(pdfs[overlay.mediaIndex].name);
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      overlay._onKey = onKey;
+    }
+
+    setPreviewLoading(overlay, true, t('loading') || 'Loading...');
+    frame.src = fileUrl;
+    overlay.style.display = "flex";
     return;
   }
 

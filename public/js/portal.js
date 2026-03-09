@@ -19,6 +19,8 @@ let portalPage = 1;
 let portalFilesTotalEntries = 0;
 let portalFilesTotalFiles = 0;
 let portalFilesTotalPages = 1;
+let portalCopilotSection = null;
+let publicAiConfigPromise = null;
 const portalFilesPerPage = 50;
 const portalSubmissionRefKey = 'fr_portal_submission_ref:';
 let portalSubmissionRef = '';
@@ -35,6 +37,24 @@ function generatePortalSubmissionRef() {
   const stamp = Date.now().toString(36).toUpperCase();
   const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
   return 'PRT-' + stamp + '-' + rand;
+}
+
+async function loadPublicAiConfig() {
+  const siteCfg = await fetchPortalSiteConfigOnce();
+  if (!siteCfg || !siteCfg.pro || siteCfg.pro.active !== true) {
+    return { enabled: false };
+  }
+  if (publicAiConfigPromise) return publicAiConfigPromise;
+  publicAiConfigPromise = sendRequest(withBase('/api/pro/ai/config/public.php'), 'GET')
+    .then((data) => {
+      const settings = data && data.settings && typeof data.settings === 'object' ? data.settings : {};
+      const providers = Array.isArray(settings.providers) ? settings.providers : [];
+      return {
+        enabled: !!settings.chatEnabled && providers.length > 0
+      };
+    })
+    .catch(() => ({ enabled: false }));
+  return publicAiConfigPromise;
 }
 
 function getPortalSubmissionRef() {
@@ -1477,6 +1497,286 @@ function renderPortalInfo() {
   }
 
   renderPortalBreadcrumbs();
+  mountPortalCopilot();
+}
+
+function buildPortalCopilotSubtitle() {
+  if (!portal) return '';
+  if (portalCanDownload()) {
+    return portalPath
+      ? ('Ask AI about files in this folder: ' + portalPath)
+      : (t('portal_copilot_downloads_hint') || 'Ask AI about files visible in this portal, including summaries and search.');
+  }
+  if (portalCanUpload()) {
+    return t('portal_copilot_upload_hint') || 'Ask about uploads, limits, or what this portal is for.';
+  }
+  return t('portal_copilot_access_hint') || 'Ask about this portal and what access it currently allows.';
+}
+
+function buildPortalCopilotSuggestions() {
+  if (portalCanDownload()) {
+    return ['Summarize the visible files here', 'Which file mentions pricing?', 'Compare intro.txt and faq.txt'];
+  }
+  if (portalCanUpload()) {
+    return ['What can I upload here?', 'What file types are allowed?', 'What is this portal for?'];
+  }
+  return ['What is this portal for?', 'What access is enabled here?'];
+}
+
+function createPortalCopilotSection() {
+  const card = document.createElement('div');
+  card.id = 'portalCopilotSection';
+  card.className = 'portal-ai-launcher';
+  card.innerHTML = [
+    '<div class="portal-ai-launcher-copy">',
+    '<div class="portal-files-count">AI Assistant</div>',
+    '<div class="portal-copilot-title">Ask AI about this portal</div>',
+    '<div class="portal-ai-launcher-subtitle"></div>',
+    '</div>',
+    '<button type="button" class="portal-file-action portal-file-action-primary portal-ai-open">Ask AI</button>',
+    '<div class="portal-ai-backdrop" hidden>',
+    '<div class="portal-copilot-section portal-ai-dialog" role="dialog" aria-modal="true" aria-labelledby="portalAiDialogTitle">',
+    '<div class="portal-copilot-head">',
+    '<div>',
+    '<div class="portal-files-count">AI Assistant</div>',
+    '<div class="portal-copilot-title" id="portalAiDialogTitle">Ask about this portal</div>',
+    '<div class="portal-copilot-subtitle"></div>',
+    '</div>',
+    '<button type="button" class="portal-file-action portal-ai-close">Close</button>',
+    '</div>',
+    '<div class="portal-copilot-suggestions" hidden></div>',
+    '<div class="portal-copilot-log" aria-live="polite"></div>',
+    '<form class="portal-copilot-form">',
+    '<textarea class="portal-copilot-input" rows="3" placeholder="Ask about files, uploads, or access in this portal"></textarea>',
+    '<div class="portal-copilot-actions">',
+    '<div class="portal-copilot-meta"></div>',
+    '<button type="submit" class="btn btn-sm portal-btn-primary">Send</button>',
+    '</div>',
+    '</form>',
+    '</div>',
+    '</div>'
+  ].join('');
+  return card;
+}
+
+function unmountPortalCopilot() {
+  if (!portalCopilotSection) return;
+  portalCopilotSection.remove();
+  portalCopilotSection = null;
+}
+
+async function mountPortalCopilot() {
+  if (!portal) return;
+  if (portal.aiEnabled === false) {
+    unmountPortalCopilot();
+    return;
+  }
+  const publicAiConfig = await loadPublicAiConfig();
+  if (!publicAiConfig.enabled) {
+    unmountPortalCopilot();
+    return;
+  }
+  const card = document.querySelector('.portal-card');
+  const filesSection = qs('portalFilesSection');
+  if (!card) return;
+
+  if (!portalCopilotSection) {
+    portalCopilotSection = createPortalCopilotSection();
+    if (filesSection && filesSection.parentNode === card) {
+      card.insertBefore(portalCopilotSection, filesSection);
+    } else {
+      card.appendChild(portalCopilotSection);
+    }
+
+    const launcherSubtitleEl = portalCopilotSection.querySelector('.portal-ai-launcher-subtitle');
+    const openBtn = portalCopilotSection.querySelector('.portal-ai-open');
+    const backdropEl = portalCopilotSection.querySelector('.portal-ai-backdrop');
+    const closeBtn = portalCopilotSection.querySelector('.portal-ai-close');
+    const logEl = portalCopilotSection.querySelector('.portal-copilot-log');
+    const formEl = portalCopilotSection.querySelector('.portal-copilot-form');
+    const inputEl = portalCopilotSection.querySelector('.portal-copilot-input');
+    const submitBtn = formEl ? formEl.querySelector('button[type="submit"]') : null;
+    const metaEl = portalCopilotSection.querySelector('.portal-copilot-meta');
+    const suggestionsEl = portalCopilotSection.querySelector('.portal-copilot-suggestions');
+    const subtitleEl = portalCopilotSection.querySelector('.portal-copilot-subtitle');
+
+    const setLauncherSubtitle = () => {
+      if (!launcherSubtitleEl) return;
+      launcherSubtitleEl.textContent = portalCanDownload()
+        ? 'Useful for quick lookups, summaries, and “which file mentions X?” questions.'
+        : 'Best for upload rules, access questions, and basic portal guidance.';
+    };
+
+    const openModal = () => {
+      if (!backdropEl) return;
+      backdropEl.hidden = false;
+      document.body.classList.add('portal-ai-modal-open');
+      if (inputEl) {
+        window.setTimeout(() => {
+          inputEl.focus();
+        }, 0);
+      }
+    };
+
+    const closeModal = () => {
+      if (!backdropEl) return;
+      backdropEl.hidden = true;
+      document.body.classList.remove('portal-ai-modal-open');
+    };
+
+    const appendMessage = (role, text, muted = false) => {
+      if (!logEl) return;
+      const row = document.createElement('div');
+      row.className = 'portal-copilot-msg ' + (role === 'user' ? 'is-user' : 'is-assistant') + (muted ? ' is-muted' : '');
+
+      const label = document.createElement('div');
+      label.className = 'portal-copilot-msg-label';
+      label.textContent = role === 'user' ? 'You' : 'AI Assistant';
+
+      const body = document.createElement('div');
+      body.className = 'portal-copilot-msg-body';
+      body.textContent = String(text || '').trim();
+
+      row.appendChild(label);
+      row.appendChild(body);
+      logEl.appendChild(row);
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    const setSuggestions = (items) => {
+      if (!suggestionsEl) return;
+      suggestionsEl.textContent = '';
+      const list = Array.isArray(items) ? items.filter(Boolean).slice(0, 4) : [];
+      if (!list.length) {
+        suggestionsEl.hidden = true;
+        return;
+      }
+      suggestionsEl.hidden = false;
+      list.forEach((item) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'portal-file-action';
+        btn.textContent = String(item);
+        btn.addEventListener('click', () => {
+          if (inputEl) inputEl.value = String(item);
+          if (inputEl) inputEl.focus();
+        });
+        suggestionsEl.appendChild(btn);
+      });
+    };
+
+    const sendMessage = async (message) => {
+      const text = String(message || '').trim();
+      if (!text) return;
+      appendMessage('user', text, false);
+      if (submitBtn) submitBtn.disabled = true;
+      if (inputEl) inputEl.disabled = true;
+      if (metaEl) metaEl.textContent = 'Thinking...';
+
+      try {
+        const data = await sendRequest(withBase('/api/pro/ai/portal/chat.php'), 'POST', {
+          slug: getPortalSlug(),
+          path: portalPath || '',
+          message: text
+        });
+
+        const assistant = String(data.assistant || 'No response.').trim() || 'No response.';
+        appendMessage('assistant', assistant, false);
+
+        const packet = data.meta && data.meta.contextPacket && typeof data.meta.contextPacket === 'object'
+          ? data.meta.contextPacket
+          : null;
+        const examples = packet && Array.isArray(packet.examples) ? packet.examples : buildPortalCopilotSuggestions();
+        const hints = packet && Array.isArray(packet.uiHints) ? packet.uiHints.filter(Boolean) : [];
+        const warnings = packet && Array.isArray(packet.warnings) ? packet.warnings.filter(Boolean) : [];
+
+        setSuggestions(examples);
+        if (subtitleEl) {
+          const lines = [];
+          if (hints.length) lines.push(String(hints[0]));
+          if (warnings.length) lines.push(String(warnings[0]));
+          subtitleEl.textContent = lines.length ? lines.join(' ') : buildPortalCopilotSubtitle();
+        }
+        if (metaEl) {
+          metaEl.textContent = 'Portal AI assistant';
+        }
+      } catch (err) {
+        const msg = (err && err.error) ? String(err.error) : 'Portal AI request failed.';
+        appendMessage('assistant', msg, true);
+        if (metaEl) metaEl.textContent = '';
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+        if (inputEl) inputEl.disabled = false;
+        if (inputEl) inputEl.focus();
+      }
+    };
+
+    if (formEl && inputEl) {
+      formEl.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const text = inputEl.value.trim();
+        if (!text) return;
+        inputEl.value = '';
+        sendMessage(text);
+      });
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        openModal();
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        closeModal();
+      });
+    }
+    if (backdropEl) {
+      backdropEl.addEventListener('click', (event) => {
+        if (event.target === backdropEl) {
+          closeModal();
+        }
+      });
+    }
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && backdropEl && !backdropEl.hidden) {
+        closeModal();
+      }
+    });
+
+    setLauncherSubtitle();
+    appendMessage('assistant', buildPortalCopilotSubtitle(), true);
+    setSuggestions(buildPortalCopilotSuggestions());
+  }
+
+  const launcherSubtitleEl = portalCopilotSection.querySelector('.portal-ai-launcher-subtitle');
+  const subtitleEl = portalCopilotSection.querySelector('.portal-copilot-subtitle');
+  const suggestionsEl = portalCopilotSection.querySelector('.portal-copilot-suggestions');
+  if (launcherSubtitleEl) {
+    launcherSubtitleEl.textContent = portalCanDownload()
+      ? 'Useful for quick lookups, summaries, and “which file mentions X?” questions.'
+      : 'Best for upload rules, access questions, and basic portal guidance.';
+  }
+  if (subtitleEl) {
+    subtitleEl.textContent = buildPortalCopilotSubtitle();
+  }
+  if (suggestionsEl) {
+    suggestionsEl.textContent = '';
+    const list = buildPortalCopilotSuggestions();
+    list.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'portal-file-action';
+      btn.textContent = String(item);
+      btn.addEventListener('click', () => {
+        const inputEl = portalCopilotSection.querySelector('.portal-copilot-input');
+        if (inputEl) inputEl.value = String(item);
+        if (inputEl) inputEl.focus();
+      });
+      suggestionsEl.appendChild(btn);
+    });
+    suggestionsEl.hidden = list.length === 0;
+  }
 }
 
 // ----------------- File helpers for gallery -----------------

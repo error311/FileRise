@@ -2568,6 +2568,9 @@ class FileController
             'wma'  => 'audio/x-ms-wma',
             'opus' => 'audio/opus',
             ];
+            $inlineDocMime = [
+            'pdf'  => 'application/pdf',
+            ];
 
         // Default mime if not provided
             if (empty($mimeType)) {
@@ -2591,6 +2594,9 @@ class FileController
                     } elseif (isset($inlineAudioMime[$ext])) {
                         $inline = true;
                         $mimeType = $inlineAudioMime[$ext];
+                    } elseif (isset($inlineDocMime[$ext])) {
+                        $inline = true;
+                        $mimeType = $inlineDocMime[$ext];
                     }
                 }
             }
@@ -2971,7 +2977,9 @@ class FileController
             $realFilePath = $downloadInfo['filePath'];
             $ext = strtolower(pathinfo($realFilePath, PATHINFO_EXTENSION));
             $videoExts = ['mp4', 'm4v', 'mkv', 'webm', 'mov', 'ogv'];
-            if (!in_array($ext, $videoExts, true)) {
+            $isPdf = ($ext === 'pdf');
+            $isVideo = in_array($ext, $videoExts, true);
+            if (!$isVideo && !$isPdf) {
                 $fail(415, "Unsupported media type.");
             }
 
@@ -2985,23 +2993,32 @@ class FileController
                 $fail(404, "Thumbnail unavailable.");
             }
 
-            $maxMb = 200;
+            $maxMb = $isPdf ? 50 : 200;
             try {
                 $cfg = AdminModel::getConfig();
                 if (is_array($cfg) && !isset($cfg['error'])) {
                     $display = (isset($cfg['display']) && is_array($cfg['display'])) ? $cfg['display'] : [];
-                    if (isset($display['hoverPreviewMaxVideoMb'])) {
+                    if ($isPdf && (!array_key_exists('enablePdfThumbnails', $display) || empty($display['enablePdfThumbnails']))) {
+                        $fail(404, "Thumbnail unavailable.");
+                    }
+                    if ($isVideo && isset($display['hoverPreviewMaxVideoMb'])) {
                         $maxMb = (int)$display['hoverPreviewMaxVideoMb'];
                     }
                 }
             } catch (\Throwable $e) {
 /* best-effort only */
             }
+            if ($isPdf) {
+                $envPdfMaxMb = getenv('FR_PDF_THUMB_MAX_MB');
+                if ($envPdfMaxMb !== false && $envPdfMaxMb !== '') {
+                    $maxMb = (int)$envPdfMaxMb;
+                }
+            }
             $maxMb = max(1, min(2048, $maxMb));
             $maxBytes = $maxMb * 1024 * 1024;
             $size = @filesize($realFilePath);
             if ($size !== false && $maxBytes > 0 && $size > $maxBytes) {
-                $fail(413, "Video too large for thumbnail.");
+                $fail(413, $isPdf ? "PDF too large for thumbnail." : "Video too large for thumbnail.");
             }
 
             $metaRoot = class_exists('SourceContext')
@@ -3025,50 +3042,23 @@ class FileController
             if ($envH !== false && $envH !== '') {
                 $maxH = (int)$envH;
             }
+            if ($isPdf) {
+                $envPdfW = getenv('FR_PDF_THUMB_MAX_W');
+                if ($envPdfW !== false && $envPdfW !== '') {
+                    $maxW = (int)$envPdfW;
+                }
+                $envPdfH = getenv('FR_PDF_THUMB_MAX_H');
+                if ($envPdfH !== false && $envPdfH !== '') {
+                    $maxH = (int)$envPdfH;
+                }
+            }
             $maxW = max(64, min(2048, $maxW));
             $maxH = max(64, min(2048, $maxH));
-            $hash = hash('sha256', $realFilePath . '|' . $mtime . '|' . $fsize . '|' . $maxW . 'x' . $maxH);
-            $thumbPath = $thumbDir . 'vthumb_' . $hash . '.jpg';
+            $hash = hash('sha256', $realFilePath . '|' . $mtime . '|' . $fsize . '|' . $maxW . 'x' . $maxH . '|' . ($isPdf ? 'pdf' : 'video'));
+            $thumbPath = $thumbDir . ($isPdf ? 'pthumb_' : 'vthumb_') . $hash . '.jpg';
 
             if (!is_file($thumbPath) || @filesize($thumbPath) === 0) {
                 if (!function_exists('exec')) {
-                    $fail(501, "Thumbnail generator unavailable.");
-                }
-
-                $ffmpeg = trim((string)getenv('FR_FFMPEG_PATH'));
-                if ($ffmpeg === '') {
-                    try {
-                        $cfg = AdminModel::getConfig();
-                        if (is_array($cfg) && empty($cfg['error'])) {
-                            $ffmpeg = trim((string)($cfg['ffmpegPath'] ?? ''));
-                        }
-                    } catch (\Throwable $e) {
-                        // best-effort only
-                    }
-                }
-                if ($ffmpeg === '') {
-                    $ffmpeg = 'ffmpeg';
-                }
-                if ($ffmpeg === '') {
-                    $fail(501, "Thumbnail generator unavailable.");
-                }
-                if (strpos($ffmpeg, '/') === false) {
-                    foreach (['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/bin/ffmpeg'] as $cand) {
-                        if (is_file($cand) && is_executable($cand)) {
-                            $ffmpeg = $cand;
-                            break;
-                        }
-                    }
-                }
-                if (strpos($ffmpeg, '/') === false) {
-                    $which = [];
-                    $rc = 1;
-                    @exec('command -v ' . escapeshellarg($ffmpeg) . ' 2>/dev/null', $which, $rc);
-                    if ($rc === 0 && !empty($which[0])) {
-                        $ffmpeg = trim($which[0]);
-                    }
-                }
-                if (strpos($ffmpeg, '/') !== false && (!is_file($ffmpeg) || !is_executable($ffmpeg))) {
                     $fail(501, "Thumbnail generator unavailable.");
                 }
 
@@ -3081,23 +3071,99 @@ class FileController
                     $suffix = str_replace('.', '', uniqid('t', true));
                 }
                 $tmp = $thumbPath . '.' . $suffix . '.tmp.jpg';
-                $scale = "scale={$maxW}:{$maxH}:force_original_aspect_ratio=decrease";
-                $run = function (string $seek) use ($ffmpeg, $realFilePath, $tmp, $scale): bool {
+                $ok = false;
+
+                if ($isPdf) {
+                    $pdfThumbBinary = trim((string)getenv('FR_PDF_THUMB_BINARY'));
+                    if ($pdfThumbBinary === '') {
+                        $pdfThumbBinary = 'pdftoppm';
+                    }
+                    if (strpos($pdfThumbBinary, '/') === false) {
+                        foreach (['/usr/bin/pdftoppm', '/usr/local/bin/pdftoppm', '/bin/pdftoppm'] as $cand) {
+                            if (is_file($cand) && is_executable($cand)) {
+                                $pdfThumbBinary = $cand;
+                                break;
+                            }
+                        }
+                    }
+                    if (strpos($pdfThumbBinary, '/') === false) {
+                        $which = [];
+                        $rc = 1;
+                        @exec('command -v ' . escapeshellarg($pdfThumbBinary) . ' 2>/dev/null', $which, $rc);
+                        if ($rc === 0 && !empty($which[0])) {
+                            $pdfThumbBinary = trim($which[0]);
+                        }
+                    }
+                    if (strpos($pdfThumbBinary, '/') !== false && (!is_file($pdfThumbBinary) || !is_executable($pdfThumbBinary))) {
+                        $fail(501, "Thumbnail generator unavailable.");
+                    }
+
+                    $tmpPrefix = preg_replace('/\.jpg$/', '', $tmp);
                     $cmd = sprintf(
-                        '%s -hide_banner -loglevel error -y -ss %s -i %s -frames:v 1 -vf %s -an -q:v 4 %s',
-                        escapeshellarg($ffmpeg),
-                        escapeshellarg($seek),
+                        '%s -jpeg -f 1 -singlefile -scale-to %d %s %s',
+                        escapeshellarg($pdfThumbBinary),
+                        max($maxW, $maxH),
                         escapeshellarg($realFilePath),
-                        escapeshellarg($scale),
-                        escapeshellarg($tmp)
+                        escapeshellarg((string)$tmpPrefix)
                     );
                     @exec($cmd . ' 2>&1', $out, $code);
-                    return $code === 0 && is_file($tmp) && @filesize($tmp) > 0;
-                };
+                    $ok = $code === 0 && is_file($tmp) && @filesize($tmp) > 0;
+                } else {
+                    $ffmpeg = trim((string)getenv('FR_FFMPEG_PATH'));
+                    if ($ffmpeg === '') {
+                        try {
+                            $cfg = AdminModel::getConfig();
+                            if (is_array($cfg) && empty($cfg['error'])) {
+                                $ffmpeg = trim((string)($cfg['ffmpegPath'] ?? ''));
+                            }
+                        } catch (\Throwable $e) {
+                            // best-effort only
+                        }
+                    }
+                    if ($ffmpeg === '') {
+                        $ffmpeg = 'ffmpeg';
+                    }
+                    if ($ffmpeg === '') {
+                        $fail(501, "Thumbnail generator unavailable.");
+                    }
+                    if (strpos($ffmpeg, '/') === false) {
+                        foreach (['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/bin/ffmpeg'] as $cand) {
+                            if (is_file($cand) && is_executable($cand)) {
+                                $ffmpeg = $cand;
+                                break;
+                            }
+                        }
+                    }
+                    if (strpos($ffmpeg, '/') === false) {
+                        $which = [];
+                        $rc = 1;
+                        @exec('command -v ' . escapeshellarg($ffmpeg) . ' 2>/dev/null', $which, $rc);
+                        if ($rc === 0 && !empty($which[0])) {
+                            $ffmpeg = trim($which[0]);
+                        }
+                    }
+                    if (strpos($ffmpeg, '/') !== false && (!is_file($ffmpeg) || !is_executable($ffmpeg))) {
+                        $fail(501, "Thumbnail generator unavailable.");
+                    }
 
-                $ok = $run('00:00:01');
-                if (!$ok) {
-                    $ok = $run('00:00:00');
+                    $scale = "scale={$maxW}:{$maxH}:force_original_aspect_ratio=decrease";
+                    $run = function (string $seek) use ($ffmpeg, $realFilePath, $tmp, $scale): bool {
+                        $cmd = sprintf(
+                            '%s -hide_banner -loglevel error -y -ss %s -i %s -frames:v 1 -vf %s -an -q:v 4 %s',
+                            escapeshellarg($ffmpeg),
+                            escapeshellarg($seek),
+                            escapeshellarg($realFilePath),
+                            escapeshellarg($scale),
+                            escapeshellarg($tmp)
+                        );
+                        @exec($cmd . ' 2>&1', $out, $code);
+                        return $code === 0 && is_file($tmp) && @filesize($tmp) > 0;
+                    };
+
+                    $ok = $run('00:00:01');
+                    if (!$ok) {
+                        $ok = $run('00:00:00');
+                    }
                 }
 
                 if ($ok) {

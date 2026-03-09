@@ -50,6 +50,7 @@
 - [Pro automation](Pro-Automation)
 - [Pro gateway shares](Pro-Gateway-Shares)
 - [Pro MCP AI quickstart](Pro-MCP-AI-Quickstart)
+- [Pro AI chat](Pro-AI-Chat)
 - [Instance IDs](Instance-IDs)
 
 ### Developer

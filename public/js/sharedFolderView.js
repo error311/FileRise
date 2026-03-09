@@ -31,9 +31,14 @@ document.addEventListener('DOMContentLoaded', async function () {
   const entries = Array.isArray(payload.entries) ? payload.entries : [];
   const shareRoot = String(payload.shareRoot || 'root');
   const currentPath = String(payload.path || '');
+  const shareAiEnabled = !Object.prototype.hasOwnProperty.call(payload, 'aiEnabled') || !!payload.aiEnabled;
   const allowSubfolders = !!payload.allowSubfolders;
   const canDownloadAll = !!payload.canDownloadAll;
+  const hideListing = !!payload.hideListing;
+  const shareMode = String(payload.mode || 'browse');
   const totalEntries = Number.isFinite(payload.totalEntries) ? payload.totalEntries : entries.length;
+  let publicAiConfigPromise = null;
+  let publicSiteConfigPromise = null;
 
   const listEl = document.getElementById('shareListView');
   const galleryEl = document.getElementById('shareGalleryView');
@@ -326,6 +331,301 @@ document.addEventListener('DOMContentLoaded', async function () {
     return withBasePath('/api/folder/downloadSharedFolder.php?token=' + encodeURIComponent(token) + passParam + p);
   }
 
+  function buildShareAiChatUrl() {
+    return withBasePath('/api/pro/ai/share/chat.php');
+  }
+
+  async function loadPublicSiteConfig() {
+    if (publicSiteConfigPromise) return publicSiteConfigPromise;
+    publicSiteConfigPromise = fetch(withBasePath('/api/public/siteConfig.php'), {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json'
+      }
+    })
+      .then(async function (res) {
+        return res.json().catch(function () { return {}; });
+      })
+      .catch(function () {
+        return {};
+      });
+    return publicSiteConfigPromise;
+  }
+
+  async function loadPublicAiConfig() {
+    const siteCfg = await loadPublicSiteConfig();
+    if (!siteCfg || !siteCfg.pro || siteCfg.pro.active !== true) {
+      return { enabled: false };
+    }
+    if (publicAiConfigPromise) return publicAiConfigPromise;
+    publicAiConfigPromise = fetch(withBasePath('/api/pro/ai/config/public.php'), {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json'
+      }
+    })
+      .then(async function (res) {
+        const raw = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(raw || '{}');
+        } catch (e) {
+          data = {};
+        }
+        const settings = data && data.settings && typeof data.settings === 'object' ? data.settings : {};
+        const providers = Array.isArray(settings.providers) ? settings.providers : [];
+        return {
+          enabled: !!settings.chatEnabled && providers.length > 0
+        };
+      })
+      .catch(function () {
+        return { enabled: false };
+      });
+    return publicAiConfigPromise;
+  }
+
+  function createShareCopilotCard() {
+    const host = document.createElement('section');
+    host.className = 'fr-share-ai-launcher';
+    host.innerHTML = [
+      '<div class="fr-share-ai-launcher-copy">',
+      '<div class="fr-share-kicker">AI Assistant</div>',
+      '<div class="fr-share-ai-launcher-title">Ask AI about this share</div>',
+      '<div class="fr-share-ai-launcher-subtitle"></div>',
+      '</div>',
+      '<button type="button" class="fr-share-btn fr-share-ai-open">Ask AI</button>',
+      '<div class="fr-share-ai-backdrop" hidden>',
+      '<section class="fr-share-card fr-share-copilot fr-share-ai-dialog" role="dialog" aria-modal="true" aria-labelledby="frShareAiDialogTitle">',
+      '<div class="fr-share-copilot-head">',
+      '<div>',
+      '<div class="fr-share-kicker">AI Assistant</div>',
+      '<div class="fr-share-title fr-share-copilot-title" id="frShareAiDialogTitle">Ask about this share</div>',
+      '<div class="fr-share-subtitle fr-share-copilot-subtitle"></div>',
+      '</div>',
+      '<button type="button" class="fr-share-btn fr-share-btn-ghost fr-share-ai-close">Close</button>',
+      '</div>',
+      '<div class="fr-share-copilot-suggestions" hidden></div>',
+      '<div class="fr-share-copilot-log" aria-live="polite"></div>',
+      '<form class="fr-share-copilot-form">',
+      '<textarea class="fr-share-copilot-input" rows="3" placeholder="Ask about files, uploads, or access in this share"></textarea>',
+      '<div class="fr-share-copilot-actions">',
+      '<div class="fr-share-copilot-meta"></div>',
+      '<button type="submit" class="fr-share-btn">Send</button>',
+      '</div>',
+      '</form>',
+      '</section>',
+      '</div>'
+    ].join('');
+    return host;
+  }
+
+  async function mountShareCopilot() {
+    if (!token || !shareAiEnabled) return;
+    const publicAiConfig = await loadPublicAiConfig();
+    if (!publicAiConfig.enabled) return;
+
+    const card = createShareCopilotCard();
+    const launcherSubtitleEl = card.querySelector('.fr-share-ai-launcher-subtitle');
+    const openBtn = card.querySelector('.fr-share-ai-open');
+    const backdropEl = card.querySelector('.fr-share-ai-backdrop');
+    const closeBtn = card.querySelector('.fr-share-ai-close');
+    const subtitleEl = card.querySelector('.fr-share-copilot-subtitle');
+    const suggestionsEl = card.querySelector('.fr-share-copilot-suggestions');
+    const logEl = card.querySelector('.fr-share-copilot-log');
+    const formEl = card.querySelector('.fr-share-copilot-form');
+    const inputEl = card.querySelector('.fr-share-copilot-input');
+    const submitBtn = formEl ? formEl.querySelector('button[type="submit"]') : null;
+    const metaEl = card.querySelector('.fr-share-copilot-meta');
+
+    const mountTarget = uploadForm && uploadForm.closest('.fr-share-card')
+      ? uploadForm.closest('.fr-share-card')
+      : document.querySelector('.fr-share-toolbar') || document.querySelector('.fr-share-card-wide');
+    if (mountTarget && mountTarget.parentNode) {
+      if (mountTarget.nextSibling) {
+        mountTarget.parentNode.insertBefore(card, mountTarget.nextSibling);
+      } else {
+        mountTarget.parentNode.appendChild(card);
+      }
+    }
+
+    const defaultSubtitle = hideListing || shareMode === 'drop'
+      ? 'Ask about uploads, access, or what this share is for.'
+      : 'Ask AI to explain this share, search visible text files, summarize them, or compare two files.';
+    const launcherSubtitle = hideListing || shareMode === 'drop'
+      ? 'Upload-only and hidden-listing shares work best for access and upload questions.'
+      : 'Useful for quick lookups, “which file mentions X?” questions, and summaries without manual clicking.';
+    if (launcherSubtitleEl) launcherSubtitleEl.textContent = launcherSubtitle;
+    if (subtitleEl) subtitleEl.textContent = defaultSubtitle;
+
+    const defaultSuggestions = hideListing || shareMode === 'drop'
+      ? ['What is this share for?', 'How do I upload files here?']
+      : ['Summarize the visible files here', 'Which file mentions backup?', 'Compare test.md and notes.md'];
+
+    function openModal() {
+      if (!backdropEl) return;
+      backdropEl.hidden = false;
+      document.body.classList.add('fr-share-ai-modal-open');
+      if (inputEl) {
+        window.setTimeout(function () {
+          inputEl.focus();
+        }, 0);
+      }
+    }
+
+    function closeModal() {
+      if (!backdropEl) return;
+      backdropEl.hidden = true;
+      document.body.classList.remove('fr-share-ai-modal-open');
+    }
+
+    function appendMessage(role, text, muted) {
+      if (!logEl) return;
+      const row = document.createElement('div');
+      row.className = 'fr-share-copilot-msg ' + (role === 'user' ? 'is-user' : 'is-assistant') + (muted ? ' is-muted' : '');
+
+      const label = document.createElement('div');
+      label.className = 'fr-share-copilot-msg-label';
+      label.textContent = role === 'user' ? 'You' : 'AI Assistant';
+
+      const body = document.createElement('div');
+      body.className = 'fr-share-copilot-msg-body';
+      body.textContent = String(text || '').trim();
+
+      row.appendChild(label);
+      row.appendChild(body);
+      logEl.appendChild(row);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setSuggestions(items) {
+      if (!suggestionsEl) return;
+      suggestionsEl.textContent = '';
+      const list = Array.isArray(items) ? items.filter(Boolean).slice(0, 4) : [];
+      if (!list.length) {
+        suggestionsEl.hidden = true;
+        return;
+      }
+      suggestionsEl.hidden = false;
+      list.forEach((item) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'fr-share-pill';
+        btn.textContent = String(item);
+        btn.addEventListener('click', function () {
+          if (inputEl) inputEl.value = String(item);
+          if (inputEl) inputEl.focus();
+        });
+        suggestionsEl.appendChild(btn);
+      });
+    }
+
+    async function sendMessage(message) {
+      const text = String(message || '').trim();
+      if (!text) return;
+      appendMessage('user', text, false);
+      if (submitBtn) submitBtn.disabled = true;
+      if (inputEl) inputEl.disabled = true;
+      if (metaEl) metaEl.textContent = 'Thinking...';
+
+      try {
+        const res = await fetch(buildShareAiChatUrl(), {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            token,
+            pass,
+            path: currentPath || '',
+            message: text
+          })
+        });
+
+        const raw = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(raw || '{}');
+        } catch (e) {
+          data = {};
+        }
+
+        if (!res.ok || data.ok === false) {
+          const err = String(data.error || 'Share AI request failed.').trim();
+          appendMessage('assistant', err, true);
+          if (metaEl) metaEl.textContent = '';
+          return;
+        }
+
+        const assistant = String(data.assistant || 'No response.').trim() || 'No response.';
+        appendMessage('assistant', assistant, false);
+
+        const packet = data.meta && data.meta.contextPacket && typeof data.meta.contextPacket === 'object'
+          ? data.meta.contextPacket
+          : null;
+        const examples = packet && Array.isArray(packet.examples) ? packet.examples : defaultSuggestions;
+        const hints = packet && Array.isArray(packet.uiHints) ? packet.uiHints.filter(Boolean) : [];
+        const warnings = packet && Array.isArray(packet.warnings) ? packet.warnings.filter(Boolean) : [];
+
+        setSuggestions(examples);
+        if (subtitleEl) {
+          const lines = [];
+          if (hints.length) lines.push(String(hints[0]));
+          if (warnings.length) lines.push(String(warnings[0]));
+          subtitleEl.textContent = lines.length ? lines.join(' ') : defaultSubtitle;
+        }
+        if (metaEl) {
+          metaEl.textContent = 'Share AI assistant';
+        }
+      } catch (e) {
+        appendMessage('assistant', 'Network error talking to the share AI assistant.', true);
+        if (metaEl) metaEl.textContent = '';
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+        if (inputEl) inputEl.disabled = false;
+        if (inputEl) inputEl.focus();
+      }
+    }
+
+    setSuggestions(defaultSuggestions);
+    appendMessage('assistant', defaultSubtitle, true);
+
+    if (openBtn) {
+      openBtn.addEventListener('click', function () {
+        openModal();
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () {
+        closeModal();
+      });
+    }
+    if (backdropEl) {
+      backdropEl.addEventListener('click', function (event) {
+        if (event.target === backdropEl) {
+          closeModal();
+        }
+      });
+    }
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && backdropEl && !backdropEl.hidden) {
+        closeModal();
+      }
+    });
+
+    if (formEl && inputEl) {
+      formEl.addEventListener('submit', function (event) {
+        event.preventDefault();
+        const text = inputEl.value.trim();
+        if (!text) return;
+        inputEl.value = '';
+        sendMessage(text);
+      });
+    }
+  }
+
   function formatBytes(bytes) {
     if (bytes === null || typeof bytes === 'undefined') return '-';
     const n = Number(bytes);
@@ -616,6 +916,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
   }
 
+  await mountShareCopilot();
   renderBreadcrumbs();
   renderAll();
 });

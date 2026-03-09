@@ -260,6 +260,168 @@ body.portal-body {
   margin-top: 16px;
 }
 
+.portal-ai-launcher {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--portal-border);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.portal-ai-launcher-copy {
+  min-width: 0;
+}
+
+.portal-ai-launcher-subtitle {
+  margin-top: 4px;
+  font-size: 0.88rem;
+  color: var(--portal-muted);
+  line-height: 1.45;
+}
+
+.portal-ai-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portal-ai-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+body.portal-ai-modal-open {
+  overflow: hidden;
+}
+
+.portal-copilot-section {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--portal-border);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.portal-copilot-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portal-copilot-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--portal-text);
+}
+
+.portal-copilot-subtitle {
+  margin-top: 4px;
+  font-size: 0.88rem;
+  color: var(--portal-muted);
+}
+
+.portal-copilot-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.portal-copilot-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.portal-copilot-msg {
+  border: 1px solid var(--portal-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--portal-surface);
+}
+
+.portal-copilot-msg.is-user {
+  background: rgba(11, 94, 215, 0.08);
+}
+
+.portal-copilot-msg.is-muted {
+  opacity: 0.92;
+}
+
+.portal-copilot-msg-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--portal-muted);
+  margin-bottom: 6px;
+}
+
+.portal-copilot-msg-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  color: var(--portal-text);
+}
+
+.portal-copilot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.portal-copilot-input {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border-radius: 14px;
+  border: 1px solid var(--portal-border);
+  background: var(--portal-surface);
+  color: var(--portal-text);
+  padding: 12px 14px;
+  font: inherit;
+}
+
+.portal-copilot-input:focus {
+  outline: none;
+  border-color: var(--portal-accent);
+  box-shadow: 0 0 0 3px rgba(11, 94, 215, 0.12);
+}
+
+.portal-copilot-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.portal-copilot-meta {
+  font-size: 0.82rem;
+  color: var(--portal-muted);
+}
+
+.portal-ai-close {
+  flex: 0 0 auto;
+}
+
 .portal-files-header {
   display: flex;
   align-items: center;
@@ -635,6 +797,16 @@ body.portal-body {
 }
 
 @media (max-width: 760px) {
+  .portal-ai-launcher {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .portal-ai-backdrop {
+    padding: 12px;
+  }
+  .portal-ai-dialog {
+    max-height: calc(100vh - 24px);
+  }
   .portal-file-row {
     grid-template-columns: 1fr;
   }

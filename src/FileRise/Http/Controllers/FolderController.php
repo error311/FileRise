@@ -2285,6 +2285,7 @@ class FolderController
             $totalEntries = 0;
         }
         $hideListing = $isDropMode || !empty($data['hideListing']);
+        $aiEnabled = !empty($record['aiEnabled']);
         $preserveFolderStructure = !isset($record['preserveFolderStructure']) || !empty($record['preserveFolderStructure']);
 
         $displayName = $isDropMode ? 'Upload files' : 'Shared Folder';
@@ -2484,6 +2485,7 @@ class FolderController
                 'totalPages' => $totalPages,
                 'mode' => $isDropMode ? 'drop' : 'browse',
                 'hideListing' => $hideListing ? 1 : 0,
+                'aiEnabled' => $aiEnabled ? 1 : 0,
                 'allowUpload' => $allowUpload ? 1 : 0,
                 'preserveFolderStructure' => $preserveFolderStructure ? 1 : 0,
                 'maxFileSizeMb' => $effectiveMaxFileSizeMb,
@@ -2536,6 +2538,9 @@ class FolderController
         $hideListing = array_key_exists('hideListing', $in)
             ? ($this->truthy($in['hideListing']) ? 1 : 0)
             : ($mode === 'drop' ? 1 : 0);
+        $aiEnabled = array_key_exists('aiEnabled', $in)
+            ? ($this->truthy($in['aiEnabled']) ? 1 : 0)
+            : 0;
         $preserveFolderStructure = array_key_exists('preserveFolderStructure', $in)
             ? ($this->truthy($in['preserveFolderStructure']) ? 1 : 0)
             : 1;
@@ -2627,6 +2632,7 @@ class FolderController
                 'mode' => $mode,
                 'fileDrop' => $fileDrop ? 1 : 0,
                 'hideListing' => $hideListing,
+                'aiEnabled' => $aiEnabled,
                 'preserveFolderStructure' => $preserveFolderStructure,
                 'maxFileSizeMb' => $maxFileSizeMb,
                 'allowedTypes' => $allowedTypes,
@@ -2654,6 +2660,7 @@ class FolderController
                 'allowUpload' => ($allowUpload === 1),
                 'allowSubfolders' => ($allowSubfolders === 1),
                 'mode' => $mode,
+                'aiEnabled' => ($aiEnabled === 1),
             ]);
         }
         echo json_encode($res);

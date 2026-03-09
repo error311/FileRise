@@ -1365,6 +1365,9 @@ class AdminController
             $hasAllowDownload = array_key_exists('allowDownload', $info);
             $uploadOnly        = !empty($info['uploadOnly']);
             $allowDownload     = $hasAllowDownload ? !empty($info['allowDownload']) : true;
+            $aiEnabled         = array_key_exists('aiEnabled', $info)
+                ? !empty($info['aiEnabled'])
+                : !empty($existingPortal['aiEnabled']);
             // Normalize legacy semantics for portal-user ACLs
             $allowUploadNormalized   = $hasAllowDownload ? $uploadOnly : true;
             $allowDownloadNormalized = $hasAllowDownload ? $allowDownload : !$uploadOnly;
@@ -1572,6 +1575,7 @@ class AdminController
                 'folder'             => $folder,
                 'sourceId'           => $sourceId,
                 'clientEmail'        => $clientEmail,
+                'aiEnabled'          => $aiEnabled,
                 'uploadOnly'         => $uploadOnly,
                 'allowDownload'      => $allowDownload,
                 'expiresAt'          => $expiresAt,
@@ -3196,6 +3200,7 @@ class AdminController
                 $merged['display'] = [
                     'hoverPreviewMaxImageMb' => 8,
                     'hoverPreviewMaxVideoMb' => 200,
+                    'enablePdfThumbnails' => false,
                     'fileListSummaryDepth' => 2,
                 ];
             }
@@ -3206,6 +3211,9 @@ class AdminController
             if (array_key_exists('hoverPreviewMaxVideoMb', $data['display'])) {
                 $lim = filter_var($data['display']['hoverPreviewMaxVideoMb'], FILTER_VALIDATE_INT);
                 $merged['display']['hoverPreviewMaxVideoMb'] = max(1, min(2048, $lim !== false ? $lim : 200));
+            }
+            if (array_key_exists('enablePdfThumbnails', $data['display'])) {
+                $merged['display']['enablePdfThumbnails'] = !empty($data['display']['enablePdfThumbnails']);
             }
             if (array_key_exists('fileListSummaryDepth', $data['display'])) {
                 $lim = filter_var($data['display']['fileListSummaryDepth'], FILTER_VALIDATE_INT);

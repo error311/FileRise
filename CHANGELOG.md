@@ -1,5 +1,101 @@
 # Changelog
 
+## Changes 03/08/2026 (v3.7.0)
+
+**Demo videos**  
+
+- [FileRise Pro AI Chat: Organize Files By Type](https://youtu.be/zoM7LudY934)
+- [FileRise Pro AI Chat: Extract Invoice Fields to JSON and CSV](https://youtu.be/HhY__X695KM)
+
+`release(v3.7.0): AI chat admin workspace, public share/portal copilots, PDF previews, and WebDAV read-stream hardening`
+
+**Commit message**  
+
+```text
+release(v3.7.0): AI chat admin workspace, public share/portal copilots, PDF previews, and WebDAV read-stream hardening
+
+- pro(ai): add core AI API wrappers, admin AI workspace hooks, and public share/portal copilot integration seams
+- files(pdf): add opt-in local PDF thumbnails and inline PDF preview support
+- mcp(core): extend scoped operation catalog for AI file/folder actions and metadata discovery
+- automation(core): expose AI watched-rule and approval actions through ProAutomationApiService
+- storage(webdav): switch remote reads to curl-backed streaming with low-speed timeout handling
+- security: keep public AI explicitly opt-in per share/portal and preserve scoped public guards
+```
+
+**Added**  
+
+- **Core AI API surface for Pro integration**
+  - Added AI endpoint wrappers under:
+    - `/api/pro/ai/chat.php`
+    - `/api/pro/ai/config/{get,save,public}.php`
+    - `/api/pro/ai/share/chat.php`
+    - `/api/pro/ai/portal/chat.php`
+    - `/api/pro/ai/agents/{list,save,delete}.php`
+    - `/api/pro/ai/recipes/{list,save,delete}.php`
+    - `/api/pro/ai/jobs/queue.php`
+- **Automation AI workflow endpoints**
+  - Added endpoint wrappers under:
+    - `/api/pro/automation/ai-rules/{list,save,delete}.php`
+    - `/api/pro/automation/approvals/{list,decide}.php`
+    - `/api/pro/automation/agent/inbound.php`
+    - `/api/pro/automation/jobs/output.php`
+- **Admin AI workspace UI**
+  - Added the in-app AI chat/admin shell and AI-specific admin controls in:
+    - `public/js/aiChat.js`
+    - `public/js/adminAutomation.js`
+
+**Changed**  
+
+- **Public share + portal AI UX**
+  - Shared-folder and portal public views now expose scoped AI copilot entrypoints, prompt examples, and dedicated styling for public AI interactions.
+  - Share and portal admin/settings flows now support per-link or per-portal AI enablement controls.
+- **PDF preview support**
+  - Gallery cards and desktop hover previews can now show rasterized first-page thumbnails for local PDF files.
+  - Added a Core admin toggle under `Appearance, UI & Indexing` so PDF thumbnails remain opt-in and can be disabled to restore the old icon/no-preview behavior.
+  - PDF files can now open inline in the existing file preview modal when the feature is enabled.
+- **Core MCP operation seam for AI**
+  - Extended `src/FileRise/Domain/McpCoreOpsService.php` with additional scoped operations used by AI flows:
+    - `read_file`
+    - `create_file`
+    - `create_folder`
+    - `copy_files`
+    - `rename_file`
+  - Added operation metadata/catalog helpers so AI/admin surfaces can describe allowed operations without duplicating rules.
+- **Automation API service coverage**
+  - Extended `src/FileRise/Domain/ProAutomationApiService.php` to expose AI watched-rule and approval actions through the existing core service seam.
+- **Share/portal metadata**
+  - Shared-folder and portal records now carry `aiEnabled` metadata so public AI can be explicitly enabled or disabled per surface.
+- **Runtime image**
+  - Updated `Dockerfile` for the AI-enabled runtime prerequisites used by this release branch, including `poppler-utils` for local PDF thumbnailing and AI document workflows.
+
+**Fixed**  
+
+- **Public AI share default regression**
+  - Fixed newly created shares defaulting to `aiEnabled=0` when older or hidden UI paths omitted the field.
+  - The share modal now only sends `aiEnabled` when the control is visible, preserving backward-compatible defaults.
+- **Public AI config endpoint guard**
+  - Fixed `/api/pro/ai/config/public.php` using the authenticated AI guard instead of the public guard, which could block unauthenticated share/portal pages from loading AI availability correctly.
+- **PDF preview regressions**
+  - Fixed authenticated PDF inline viewing so PDFs no longer download instead of rendering in the preview modal.
+  - Fixed the PDF thumbnail toggle save path and disabled-state behavior so the old outside-the-modal PDF behavior is restored when the toggle is off.
+- **WebDAV source streaming**
+  - Updated the WebDAV adapter read path to use the curl-backed read stream helper with clearer low-speed timeout handling and better read-stream failure reporting.
+
+**Security**  
+
+- **Scoped public AI enforcement**
+  - Public share and portal AI routes stay bounded to the current share/portal scope, reuse existing access checks, and continue sending `Cache-Control: no-store` plus `X-Content-Type-Options: nosniff`.
+- **External provider disclosure**
+  - Admin AI Settings and the in-app AI Chat now warn when enabled providers are external, so operators are explicitly reminded that prompts and visible file excerpts may leave the instance.
+- **Admin/API guard consistency**
+  - New authenticated AI and automation wrappers use centralized bootstrap/guard helpers instead of duplicating auth/admin/CSRF logic across endpoints.
+
+**Docs**  
+
+- Added wiki coverage for Pro AI chat/admin features and linked it in the docs sidebar.
+
+---
+
 ## Changes 03/05/2026 (v3.6.1)
 
 `release(v3.6.1): iPad hover preview pointer compatibility + configurable hover delay (refs #105)`
