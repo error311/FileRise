@@ -64,7 +64,7 @@ Bind `/var/www/uploads` to a **dedicated folder** (not the root of a massive sha
 
 - PHP **8.3+**
 - Web server (Apache / Nginx / Caddy + PHP-FPM)
-- PHP extensions: `json`, `curl`, `zip`, and standard defaults
+- PHP extensions: `json`, `curl`, `zip`, `openssl`, and standard defaults
 - No database required
 
 ### Recommended layout (default paths)
@@ -130,6 +130,92 @@ sudo chown -R www-data:www-data /var/www/sessions
 sudo chmod 700 /var/www/sessions
 ```
 
+### Set `PERSISTENT_TOKENS_KEY` for manual installs (required)
+
+FileRise reads the persistent tokens encryption key from the `PERSISTENT_TOKENS_KEY` environment variable. On manual installs, you must set this yourself so "remember me" tokens are not encrypted with the default fallback key.
+
+Generate a strong key:
+
+```bash
+openssl rand -base64 32
+```
+
+Example output:
+
+```text
+m2A6L0x3WnRjYzN6cVhYV3Q2dHhXc0xkQ0V0Q0VjU0RvWm5Qd1E9
+```
+
+Use that generated value in one of the setups below.
+
+#### Apache
+
+If you run FileRise through Apache with PHP as an Apache module, set the environment variable in the vhost:
+
+```apache
+<VirtualHost *:80>
+    ServerName example.com
+    DocumentRoot /var/www/filerise/public
+
+    SetEnv PERSISTENT_TOKENS_KEY "paste_your_generated_key_here"
+</VirtualHost>
+```
+
+Then reload Apache:
+
+```bash
+sudo systemctl reload apache2
+```
+
+#### Nginx + PHP-FPM
+
+For PHP-FPM, set the environment variable in the pool config:
+
+```ini
+; /etc/php/8.3/fpm/pool.d/www.conf
+clear_env = no
+env[PERSISTENT_TOKENS_KEY] = paste_your_generated_key_here
+```
+
+Then restart PHP-FPM and reload Nginx:
+
+```bash
+sudo systemctl restart php8.3-fpm
+sudo systemctl reload nginx
+```
+
+#### systemd override for PHP-FPM (optional alternative)
+
+If you prefer, you can set it at the service level instead of inside the pool file:
+
+```bash
+sudo systemctl edit php8.3-fpm
+```
+
+Add:
+
+```ini
+[Service]
+Environment="PERSISTENT_TOKENS_KEY=paste_your_generated_key_here"
+```
+
+Then restart PHP-FPM:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart php8.3-fpm
+```
+
+#### Caddy + PHP-FPM
+
+Caddy typically passes requests to PHP-FPM, so set the variable in PHP-FPM using one of the methods above.
+
+### Important note about changing the key later
+
+Set your `PERSISTENT_TOKENS_KEY` **before users start using remember-me tokens** and keep it stable.
+
+If you change this key later, previously issued persistent login tokens can no longer be decrypted, so users with remembered sessions will need to log in again.
+
 ### Proxy / subpath notes
 
 - Set `FR_PUBLISHED_URL` to the public URL (e.g. `https://example.com/files`).
@@ -142,7 +228,7 @@ Uploaded file data and app metadata must go through the API. Do **not** expose `
 
 Apache:
 
-```
+```apache
 <LocationMatch "^/(uploads|users|metadata)(?:/|$)">
     Require all denied
 </LocationMatch>
@@ -150,7 +236,7 @@ Apache:
 
 Nginx:
 
-```
+```nginx
 location ~* ^/(uploads|users|metadata)(/|$) {
     return 403;
 }
