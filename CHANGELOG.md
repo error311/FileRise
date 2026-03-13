@@ -1,5 +1,56 @@
 # Changelog
 
+## Changes 03/12/2026 (v3.8.0)
+
+`release(v3.8.0): share-link admin guards and centralized safe-upload policy`
+
+**Commit message**  
+
+```text
+release(v3.8.0): share-link admin guards and centralized safe-upload policy
+
+- shares(security): require authenticated admin + CSRF for file share link listing and deletion
+- uploads(policy): add centralized safe-upload policy with strict default and code-friendly admin override
+- webdav(policy): enforce the shared write-name policy for WebDAV file and folder creation paths
+- admin(ui): expose safe upload policy in Admin Panel and persist the normalized config value
+- admin(fix): guard partial config updates that omit oidc payloads
+```
+
+**Added**  
+
+- **Centralized safe-upload policy**
+  - Added `src/FileRise/Support/UploadNamePolicy.php` to centralize write-path filename policy decisions.
+  - Added admin-configurable policy modes:
+    - `strict` (default)
+    - `code_friendly`
+
+**Changed**  
+
+- **File share admin endpoints**
+  - `getShareLinks.php` now requires an authenticated admin session.
+  - `deleteShareLink.php` now requires an authenticated admin session and a valid CSRF token.
+  - Updated the generated OpenAPI spec to reflect the authenticated share-link route behavior.
+- **Write-path filename enforcement**
+  - Normal uploads, file create/save flows, selected folder write paths, and WebDAV now use the shared write-name policy instead of relying only on the generic filename regex.
+  - Added an Admin Panel control under upload settings so operators can switch between `strict` and `code_friendly` behavior.
+
+**Fixed**  
+
+- **Partial admin config saves**
+  - Fixed admin config updates failing when the submitted payload omits the `oidc` object during narrower settings changes.
+- **WebDAV folder-name validation**
+  - WebDAV folder creation now rejects invalid path-like names such as empty names, `.` / `..`, and names containing path separators.
+
+**Security**  
+
+- **Safe-upload defaults**
+  - New write operations default to `strict` mode.
+  - `.htaccess`, `.user.ini`, and `web.config` remain blocked in all policy modes.
+- **Share-link guard consistency**
+  - File share-link listing and deletion now use the same authenticated admin expectations as the rest of the admin share management surface.
+
+---
+
 ## Changes 03/08/2026 (v3.7.0)
 
 **Demo videos**  

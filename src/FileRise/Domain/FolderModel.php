@@ -5,6 +5,7 @@ namespace FileRise\Domain;
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
+use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -3041,6 +3042,9 @@ class FolderModel
         // New safe filename
         $safeBase   = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $uploadedName);
         $newFilename = uniqid('', true) . "_" . $safeBase;
+        if (!UploadNamePolicy::isAllowedForWrite($newFilename)) {
+            return ["error" => "Invalid file name."];
+        }
         $targetPath = $targetDir . DIRECTORY_SEPARATOR . $newFilename;
 
         if ($storage->isLocal()) {

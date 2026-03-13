@@ -4,6 +4,7 @@ namespace FileRise\WebDAV;
 
 use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
+use FileRise\Support\UploadNamePolicy;
 use FileRise\Domain\FileModel;
 use FileRise\Domain\FolderCrypto;
 use FileRise\WebDAV\CurrentUser;
@@ -105,9 +106,13 @@ class FileRiseFile implements IFile, INode
     public function put($data): ?string
     {
         [$folderKey, $fileName] = $this->split();
+        $fileName = basename(trim($fileName));
 
         if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
             throw new Forbidden('WebDAV is disabled inside encrypted folders');
+        }
+        if (!self::isAllowedWebDavFileName($fileName)) {
+            throw new Forbidden('Invalid file name.');
         }
 
         $exists = is_file($this->path);
@@ -286,5 +291,10 @@ class FileRiseFile implements IFile, INode
             'uploader' => $uploader,
         ];
         $this->saveMeta($folderKey, $meta);
+    }
+
+    public static function isAllowedWebDavFileName(string $fileName): bool
+    {
+        return UploadNamePolicy::isAllowedForWrite($fileName);
     }
 }

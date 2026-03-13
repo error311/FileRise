@@ -6,6 +6,7 @@ namespace FileRise\Http\Controllers;
 
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
+use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\SourceContext;
 use FileRise\Domain\AdminModel;
 use FileRise\Domain\FolderCrypto;
@@ -2768,6 +2769,7 @@ class AdminController
             ],
             'globalOtpauthUrl'    => '',
             'enableWebDAV'        => false,
+            'safeUploadPolicy'    => UploadNamePolicy::MODE_STRICT,
             'sharedMaxUploadSize' => 0,
             'ignoreRegex'         => '',
             'uploads'             => [
@@ -2894,6 +2896,9 @@ class AdminController
         if (array_key_exists('enableWebDAV', $data)) {
             $merged['enableWebDAV'] = filter_var($data['enableWebDAV'], FILTER_VALIDATE_BOOLEAN);
         }
+        if (array_key_exists('safeUploadPolicy', $data)) {
+            $merged['safeUploadPolicy'] = UploadNamePolicy::normalizeMode($data['safeUploadPolicy']);
+        }
 
         // sharedMaxUploadSize
         if (array_key_exists('sharedMaxUploadSize', $data)) {
@@ -2933,11 +2938,13 @@ class AdminController
             }
         }
 
+        $oidcPayload = (isset($data['oidc']) && is_array($data['oidc'])) ? $data['oidc'] : [];
+
         // OIDC group claim + extra scopes (env overrides lock these fields)
         $envGroupClaim = getenv('FR_OIDC_GROUP_CLAIM');
         $groupClaimLockedByEnv = ($envGroupClaim !== false && trim((string)$envGroupClaim) !== '');
-        if (!$groupClaimLockedByEnv && array_key_exists('groupClaim', $data['oidc'] ?? [])) {
-            $raw = trim((string)$data['oidc']['groupClaim']);
+        if (!$groupClaimLockedByEnv && array_key_exists('groupClaim', $oidcPayload)) {
+            $raw = trim((string)$oidcPayload['groupClaim']);
             $raw = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
             if (strlen($raw) > 200) {
                 $raw = substr($raw, 0, 200);
@@ -2947,8 +2954,8 @@ class AdminController
 
         $envExtraScopes = getenv('FR_OIDC_EXTRA_SCOPES');
         $extraScopesLockedByEnv = ($envExtraScopes !== false && trim((string)$envExtraScopes) !== '');
-        if (!$extraScopesLockedByEnv && array_key_exists('extraScopes', $data['oidc'] ?? [])) {
-            $raw = trim((string)$data['oidc']['extraScopes']);
+        if (!$extraScopesLockedByEnv && array_key_exists('extraScopes', $oidcPayload)) {
+            $raw = trim((string)$oidcPayload['extraScopes']);
             $raw = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
             if (strlen($raw) > 500) {
                 $raw = substr($raw, 0, 500);
@@ -2958,8 +2965,8 @@ class AdminController
 
         // oidc: only overwrite non-empty inputs; validate when enabling OIDC
         foreach (['providerUrl', 'clientId', 'clientSecret', 'redirectUri'] as $f) {
-            if (!empty($data['oidc'][$f])) {
-                $val = trim((string)$data['oidc'][$f]);
+            if (!empty($oidcPayload[$f])) {
+                $val = trim((string)$oidcPayload[$f]);
                 if ($f === 'providerUrl' || $f === 'redirectUri') {
                     $val = filter_var($val, FILTER_SANITIZE_URL);
                 }
@@ -2968,8 +2975,8 @@ class AdminController
         }
 
         // OIDC public client flag (and optional secret wipe)
-        if (array_key_exists('publicClient', $data['oidc'])) {
-            $isPublic = filter_var($data['oidc']['publicClient'], FILTER_VALIDATE_BOOLEAN);
+        if (array_key_exists('publicClient', $oidcPayload)) {
+            $isPublic = filter_var($oidcPayload['publicClient'], FILTER_VALIDATE_BOOLEAN);
             $merged['oidc']['publicClient'] = $isPublic;
             if ($isPublic) {
                 // Ensure secret is cleared when switching to public client mode
@@ -2978,17 +2985,17 @@ class AdminController
         }
 
         // OIDC debug logging toggle
-        if (isset($data['oidc']['debugLogging'])) {
+        if (isset($oidcPayload['debugLogging'])) {
             $merged['oidc']['debugLogging'] = filter_var(
-                $data['oidc']['debugLogging'],
+                $oidcPayload['debugLogging'],
                 FILTER_VALIDATE_BOOLEAN
             );
         }
 
 // OIDC admin demotion toggle
-        if (isset($data['oidc']['allowDemote'])) {
+        if (isset($oidcPayload['allowDemote'])) {
             $merged['oidc']['allowDemote'] = filter_var(
-                $data['oidc']['allowDemote'],
+                $oidcPayload['allowDemote'],
                 FILTER_VALIDATE_BOOLEAN
             );
         }

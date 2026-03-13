@@ -196,6 +196,7 @@ class FileRiseDirectory implements ICollection, INode
     public function createFile($name, $data = null): INode
     {
         $folderKey = $this->folderKeyForPath($this->path);
+        $name = basename(trim((string)$name));
 
         if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
             throw new Forbidden('WebDAV is disabled inside encrypted folders');
@@ -206,6 +207,9 @@ class FileRiseDirectory implements ICollection, INode
         }
         if (!empty($this->perms['disableUpload']) && !$this->isAdmin) {
             throw new Forbidden('Uploads are disabled for your account');
+        }
+        if (!FileRiseFile::isAllowedWebDavFileName($name)) {
+            throw new Forbidden('Invalid file name.');
         }
 
         // Write directly to FS, then ensure metadata via FileRiseFile::put()
@@ -221,11 +225,22 @@ class FileRiseDirectory implements ICollection, INode
     public function createDirectory($name): INode
     {
         $parentKey = $this->folderKeyForPath($this->path);
+        $name = trim((string)$name);
         if (FolderCrypto::isEncryptedOrAncestor($parentKey)) {
             throw new Forbidden('WebDAV is disabled inside encrypted folders');
         }
         if (!$this->isAdmin && !ACL::canManage($this->user, $this->perms, $parentKey)) {
                         throw new Forbidden('No permission to create subfolders here');
+        }
+        if (
+            $name === '' ||
+            $name === '.' ||
+            $name === '..' ||
+            strpos($name, '/') !== false ||
+            strpos($name, '\\') !== false ||
+            !preg_match(REGEX_FOLDER_NAME, $name)
+        ) {
+            throw new Forbidden('Invalid folder name.');
         }
 
         $full = $this->path . DIRECTORY_SEPARATOR . $name;

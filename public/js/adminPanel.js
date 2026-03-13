@@ -5221,6 +5221,7 @@ function captureInitialAdminConfig() {
     authBypass: !!document.getElementById("authBypass")?.checked,
 
     enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
+    safeUploadPolicy: (document.getElementById("safeUploadPolicy")?.value || "strict").trim(),
     sharedMaxUploadSize: (document.getElementById("sharedMaxUploadSize")?.value || "").trim(),
     resumableChunkMb: (document.getElementById("resumableChunkMb")?.value || "").trim(),
     resumableTtlHours: (document.getElementById("resumableTtlHours")?.value || "").trim(),
@@ -5286,6 +5287,7 @@ function hasUnsavedChanges() {
     getChk("authBypass") !== o.authBypass ||
 
     getChk("enableWebDAV") !== o.enableWebDAV ||
+    getVal("safeUploadPolicy") !== (o.safeUploadPolicy || "strict") ||
     getVal("sharedMaxUploadSize") !== o.sharedMaxUploadSize ||
     getVal("resumableChunkMb") !== o.resumableChunkMb ||
     getVal("resumableTtlHours") !== o.resumableTtlHours ||
@@ -7724,6 +7726,22 @@ export function openAdminPanel() {
   </div>
 
   <div class="form-group" style="margin-top:10px;">
+    <label for="safeUploadPolicy">
+      ${tf("safe_upload_policy_label", "Safe upload policy")}
+    </label>
+    <select id="safeUploadPolicy" class="form-control">
+      <option value="strict">${tf("safe_upload_policy_strict", "Strict (recommended)")}</option>
+      <option value="code_friendly">${tf("safe_upload_policy_code_friendly", "Code-friendly")}</option>
+    </select>
+    <small class="text-muted d-block mt-1">
+      ${tf(
+          "safe_upload_policy_help",
+          "Strict blocks executable and script-style filenames on new writes. Code-friendly allows them for editor workflows, but .htaccess, .user.ini, and web.config are always blocked."
+        )}
+    </small>
+  </div>
+
+  <div class="form-group" style="margin-top:10px;">
     <label for="resumableChunkMb">
       ${tf("resumable_chunk_size_label", "Resumable chunk size (MB)")}
     </label>
@@ -9214,6 +9232,7 @@ ${t("shared_max_upload_size_bytes")}
         }
 
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
+        document.getElementById("safeUploadPolicy").value = config.safeUploadPolicy || "strict";
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         const uploadCfg = (config.uploads && typeof config.uploads === "object") ? config.uploads : {};
         const chunkEl = document.getElementById("resumableChunkMb");
@@ -9320,6 +9339,7 @@ ${t("shared_max_upload_size_bytes")}
         }
 
         document.getElementById("enableWebDAV").checked = config.enableWebDAV === true;
+        document.getElementById("safeUploadPolicy").value = config.safeUploadPolicy || "strict";
         document.getElementById("sharedMaxUploadSize").value = config.sharedMaxUploadSize || "";
         const uploadCfg2 = (config.uploads && typeof config.uploads === "object") ? config.uploads : {};
         const chunkEl2 = document.getElementById("resumableChunkMb");
@@ -9582,6 +9602,7 @@ function handleSave() {
       authHeaderName,
     },
     enableWebDAV: !!document.getElementById("enableWebDAV")?.checked,
+    safeUploadPolicy: (document.getElementById("safeUploadPolicy")?.value || "strict").trim(),
     sharedMaxUploadSize: parseInt(
       document.getElementById("sharedMaxUploadSize").value || "0",
       10

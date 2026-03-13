@@ -1914,7 +1914,7 @@
                     "Shares"
                 ],
                 "summary": "Delete a share link by token",
-                "description": "Deletes a share token. NOTE: Current implementation does not require authentication.",
+                "description": "Deletes a share token. Requires an authenticated admin session and a valid CSRF token.",
                 "operationId": "deleteShareLink",
                 "requestBody": {
                     "required": true,
@@ -1938,8 +1938,19 @@
                 "responses": {
                     "200": {
                         "description": "Deletion result (success or not found)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/file/deleteTrashFiles.php": {
@@ -2386,13 +2397,24 @@
                     "Shares"
                 ],
                 "summary": "Get (raw) share links file",
-                "description": "Returns the full share links JSON (no auth in current implementation).",
+                "description": "Returns the full share links JSON. Requires an authenticated admin session.",
                 "operationId": "getShareLinks",
                 "responses": {
                     "200": {
                         "description": "Share links (model-defined JSON)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ]
             }
         },
         "/api/file/getTrashItems.php": {

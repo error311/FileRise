@@ -5,7 +5,7 @@
  * @OA\Post(
  *   path="/api/file/deleteShareLink.php",
  *   summary="Delete a share link by token",
- *   description="Deletes a share token. NOTE: Current implementation does not require authentication.",
+ *   description="Deletes a share token. Requires an authenticated admin session and a valid CSRF token.",
  *   operationId="deleteShareLink",
  *   tags={"Shares"},
  *   @OA\RequestBody(
@@ -18,7 +18,9 @@
  *       )
  *     )
  *   ),
- *   @OA\Response(response=200, description="Deletion result (success or not found)")
+ *   @OA\Response(response=200, description="Deletion result (success or not found)"),
+ *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=403, description="Forbidden")
  * )
  */
 

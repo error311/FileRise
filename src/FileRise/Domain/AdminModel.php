@@ -3,6 +3,7 @@
 namespace FileRise\Domain;
 
 use FileRise\Http\Controllers\AdminController;
+use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\SourcesConfig;
 use ProAudit;
 
@@ -152,6 +153,7 @@ class AdminModel
             ],
             'globalOtpauthUrl'    => $config['globalOtpauthUrl'] ?? '',
             'enableWebDAV'        => (bool)($config['enableWebDAV'] ?? false),
+            'safeUploadPolicy'    => UploadNamePolicy::normalizeMode($config['safeUploadPolicy'] ?? UploadNamePolicy::MODE_STRICT),
             'sharedMaxUploadSize' => (int)($config['sharedMaxUploadSize'] ?? 0),
             'oidc' => [
                 'providerUrl' => (string)($config['oidc']['providerUrl'] ?? ''),
@@ -440,6 +442,9 @@ class AdminModel
         $configUpdate['enableWebDAV'] = isset($configUpdate['enableWebDAV'])
             ? (bool)$configUpdate['enableWebDAV']
             : false;
+        $configUpdate['safeUploadPolicy'] = UploadNamePolicy::normalizeMode(
+            $configUpdate['safeUploadPolicy'] ?? UploadNamePolicy::MODE_STRICT
+        );
 
         // Validate sharedMaxUploadSize if provided
         if (array_key_exists('sharedMaxUploadSize', $configUpdate)) {
@@ -902,6 +907,9 @@ class AdminModel
             if (!isset($config['enableWebDAV'])) {
                 $config['enableWebDAV'] = false;
             }
+            $config['safeUploadPolicy'] = UploadNamePolicy::normalizeMode(
+                $config['safeUploadPolicy'] ?? UploadNamePolicy::MODE_STRICT
+            );
 
             // sharedMaxUploadSize: default if missing; clamp if present
             $maxBytes = self::parseSize(TOTAL_UPLOAD_SIZE);

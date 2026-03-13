@@ -6,6 +6,7 @@ use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
+use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -427,7 +428,7 @@ class UploadModel
         }
 
         $file = basename($raw);
-        if ($file === '' || !preg_match(REGEX_FILE_NAME, $file)) {
+        if (!UploadNamePolicy::isAllowedForWrite($file)) {
             return [null, null];
         }
 
@@ -733,7 +734,7 @@ class UploadModel
                 $relativeSubDir = $subDir;
             }
 
-            if (!preg_match(REGEX_FILE_NAME, $resumableFilename)) {
+            if (!UploadNamePolicy::isAllowedForWrite($resumableFilename)) {
                 return ['error' => "Invalid file name: $resumableFilename"];
             }
 
@@ -938,7 +939,6 @@ class UploadModel
                 return ['error' => 'Failed to create upload directory'];
             }
 
-            $safeFileNamePattern = REGEX_FILE_NAME;
             $metadataCollection  = [];
             $metadataChanged     = [];
 
@@ -981,7 +981,7 @@ class UploadModel
                             . str_replace('/', DIRECTORY_SEPARATOR, $relativeSubDir) . DIRECTORY_SEPARATOR;
                     }
                 }
-                if (!preg_match($safeFileNamePattern, $safeFileName)) {
+                if (!UploadNamePolicy::isAllowedForWrite($safeFileName)) {
                     return ['error' => 'Invalid file name: ' . $fileName];
                 }
 

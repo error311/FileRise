@@ -5,6 +5,7 @@ namespace FileRise\Domain;
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
+use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -1165,7 +1166,7 @@ class FileModel
         $newName = basename(trim($newName));
 
         // Validate file names using REGEX_FILE_NAME.
-        if (!preg_match(REGEX_FILE_NAME, $oldName) || !preg_match(REGEX_FILE_NAME, $newName)) {
+        if (!preg_match(REGEX_FILE_NAME, $oldName) || !UploadNamePolicy::isAllowedForWrite($newName)) {
             return ["error" => "Invalid file name."];
         }
 
@@ -1220,7 +1221,7 @@ class FileModel
         if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
             return ["error" => "Invalid folder name"];
         }
-        if (!preg_match(REGEX_FILE_NAME, $fileName)) {
+        if (!UploadNamePolicy::isAllowedForWrite($fileName)) {
             return ["error" => "Invalid file name"];
         }
 
@@ -1996,7 +1997,7 @@ class FileModel
             return '';
         };
 
-        $stampExtractedFiles = function (array $allowedFiles) use ($folderPathReal, $folderNorm, $safeFileNamePattern, $stampMeta, &$extractedFiles): int {
+        $stampExtractedFiles = function (array $allowedFiles) use ($folderPathReal, $folderNorm, $stampMeta, &$extractedFiles): int {
             $found = 0;
             foreach ($allowedFiles as $entryName) {
                 // Normalize entry path for filesystem checks
@@ -2009,7 +2010,7 @@ class FileModel
                 }
 
                 $basename = basename($entryFsRel);
-                if ($basename === '' || !preg_match($safeFileNamePattern, $basename)) {
+                if (!UploadNamePolicy::isAllowedForWrite($basename)) {
                     continue;
                 }
 
@@ -3954,7 +3955,7 @@ class FileModel
     {
         // 1) basic validation
         $filename = basename(trim($filename));
-        if (!preg_match(REGEX_FILE_NAME, $filename)) {
+        if (!UploadNamePolicy::isAllowedForWrite($filename)) {
             return ['success' => false, 'error' => 'Invalid filename', 'code' => 400];
         }
 

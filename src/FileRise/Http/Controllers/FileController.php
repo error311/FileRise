@@ -5248,9 +5248,26 @@ class FileController
 
     public function getShareLinks()
     {
-        header('Content-Type: application/json');
-        $shareFile = FileModel::getAllShareLinks();
-        echo json_encode($shareFile, JSON_PRETTY_PRINT);
+        $this->jsonStart();
+        try {
+            if (!$this->requireAuth()) {
+                return;
+            }
+
+            $perms = $this->loadPerms($_SESSION['username'] ?? '');
+            if (!$this->isAdmin($perms)) {
+                $this->jsonOut(['error' => 'Admin only'], 403);
+                return;
+            }
+
+            $shareFile = FileModel::getAllShareLinks();
+            $this->jsonOut($shareFile);
+        } catch (Throwable $e) {
+            error_log('FileController::getShareLinks error: ' . $e->getMessage());
+            $this->jsonOut(['error' => 'Internal server error while fetching share links.'], 500);
+        } finally {
+            $this->jsonEnd();
+        }
     }
 
     public function getAllShareLinks(): void
@@ -5282,45 +5299,65 @@ class FileController
 
     public function deleteShareLink()
     {
-        header('Content-Type: application/json');
-        $token = $_POST['token'] ?? '';
-        if (!$token) {
-            echo json_encode(['success' => false, 'error' => 'No token provided']);
-            return;
-        }
+        $this->jsonStart();
+        try {
+            if (!$this->checkCsrf()) {
+                return;
+            }
+            if (!$this->requireAuth()) {
+                return;
+            }
 
-        $deleted = null;
-        $sourceId = $this->normalizeSourceId($_POST['sourceId'] ?? '');
-        if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
-            $perms = $this->loadPerms($_SESSION['username'] ?? '');
-            if ($this->isAdmin($perms)) {
+            $username = $_SESSION['username'] ?? '';
+            $perms = $this->loadPerms($username);
+            if (!$this->isAdmin($perms)) {
+                $this->jsonOut(['success' => false, 'error' => 'Admin only'], 403);
+                return;
+            }
+
+            $token = $_POST['token'] ?? '';
+            if (!$token) {
+                $this->jsonOut(['success' => false, 'error' => 'No token provided'], 400);
+                return;
+            }
+
+            $deleted = null;
+            $sourceId = $this->normalizeSourceId($_POST['sourceId'] ?? '');
+            if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
                 $info = SourceContext::getSourceById($sourceId);
                 if (!$info) {
-                    echo json_encode(['success' => false, 'error' => 'Invalid source id']);
+                    $this->jsonOut(['success' => false, 'error' => 'Invalid source id'], 400);
                     return;
                 }
                 $deleted = $this->withSourceContext($sourceId, function () use ($token) {
                     return FileModel::deleteShareLink($token);
                 }, true);
             }
+
+            if ($deleted === null) {
+                $deleted = FileModel::deleteShareLink($token);
+            }
+
+            if ($deleted) {
+                AuditHook::log('share.link.delete', [
+                    'user' => $username !== '' ? $username : 'Unknown',
+                    'meta' => [
+                        'token' => $token,
+                    ],
+                ]);
+                EventBus::emit('share.link.delete', [
+                    'user' => $username !== '' ? $username : 'Unknown',
+                    'shareType' => 'file',
+                ]);
+            }
+
+            $this->jsonOut($deleted ? ['success' => true] : ['success' => false, 'error' => 'Not found']);
+        } catch (Throwable $e) {
+            error_log('FileController::deleteShareLink error: ' . $e->getMessage());
+            $this->jsonOut(['success' => false, 'error' => 'Internal server error while deleting share link.'], 500);
+        } finally {
+            $this->jsonEnd();
         }
-        if ($deleted === null) {
-            $deleted = FileModel::deleteShareLink($token);
-        }
-        if ($deleted) {
-            $username = $_SESSION['username'] ?? 'Unknown';
-            AuditHook::log('share.link.delete', [
-                'user' => $username,
-                'meta' => [
-                    'token' => $token,
-                ],
-            ]);
-            EventBus::emit('share.link.delete', [
-                'user' => $username,
-                'shareType' => 'file',
-            ]);
-        }
-        echo json_encode($deleted ? ['success' => true] : ['success' => false, 'error' => 'Not found']);
     }
 
     public function createFile(): void
