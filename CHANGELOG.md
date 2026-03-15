@@ -1,5 +1,27 @@
 # Changelog
 
+## Changes 03/15/2026 (v3.9.3)
+
+`release(v3.9.3): legacy fallback worker-env fix after persistent-token key rotation`
+
+**Commit message**  
+
+```text
+release(v3.9.3): legacy fallback worker-env fix after persistent-token key rotation
+
+- crypto(startup): stop exporting the legacy fallback key as a process-wide env value on compatibility-path installs
+- crypto(resolve): prefer the persisted key file over legacy_default source hints once a rotation has written metadata/persistent_tokens.key
+- admin(ui): eliminate post-rotation getConfig/siteConfig failures caused by workers still decrypting with the inherited legacy fallback
+```
+
+**Fixed**  
+
+- **Post-rotation request consistency**
+  - Fixed a case where some Apache workers could keep using the legacy fallback persistent-token key immediately after an in-app rotation, causing transient `getConfig.php` / `siteConfig.php` `500` responses until a refresh or restart.
+  - Compatibility-path installs no longer export the legacy fallback key as a worker-wide env value, and the key resolver now prefers the persisted key file once rotation has written `metadata/persistent_tokens.key`.
+
+---
+
 ## Changes 03/15/2026 (v3.9.2)
 
 `release(v3.9.2): admin config decrypt retry after persistent-token key transitions`

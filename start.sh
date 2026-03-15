@@ -88,7 +88,7 @@ elif [ -s "${PERSISTENT_TOKENS_KEY_FILE}" ]; then
   export PERSISTENT_TOKENS_KEY_SOURCE="file"
   echo "[startup] Loaded persistent tokens key from metadata/persistent_tokens.key."
 elif has_existing_persistent_key_state; then
-  export PERSISTENT_TOKENS_KEY="${LEGACY_PERSISTENT_TOKENS_KEY}"
+  unset PERSISTENT_TOKENS_KEY || true
   export PERSISTENT_TOKENS_KEY_SOURCE="legacy_default"
   echo "WARNING: No explicit persistent tokens key is configured, but existing encrypted state was found. Continuing with the legacy built-in key for backward compatibility."
 else
@@ -106,7 +106,7 @@ else
   fi
 fi
 
-if [ "${PERSISTENT_TOKENS_KEY}" = "default_please_change_this_key" ] || [ "${PERSISTENT_TOKENS_KEY}" = "please_change_this_@@" ]; then
+if [ "${PERSISTENT_TOKENS_KEY:-}" = "default_please_change_this_key" ] || [ "${PERSISTENT_TOKENS_KEY:-}" = "please_change_this_@@" ]; then
   echo "WARNING: PERSISTENT_TOKENS_KEY matches a published placeholder value. Replace it with a unique secret and plan a controlled rotation."
 fi
 

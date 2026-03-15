@@ -223,7 +223,7 @@ function fr_resolve_persistent_tokens_key(): array
 
     $source = 'legacy_default';
     $key = $defaultKey;
-    if ($envKey !== '') {
+    if ($envKey !== '' && !($sourceHint === 'legacy_default' && $fileKey !== '')) {
         $key = $envKey;
         if (in_array($sourceHint, ['env', 'file', 'generated_file', 'legacy_default'], true)) {
             $source = $sourceHint;
