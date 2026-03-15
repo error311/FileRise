@@ -1,5 +1,26 @@
 # Changelog
 
+## Changes 03/15/2026 (v3.9.2)
+
+`release(v3.9.2): admin config decrypt retry after persistent-token key transitions`
+
+**Commit message**  
+
+```text
+release(v3.9.2): admin config decrypt retry after persistent-token key transitions
+
+- admin(config): retry adminConfig.json reads once before surfacing decrypt errors after key changes
+- admin(ui): avoid transient getConfig failures on the first Admin Panel open after key transitions
+```
+
+**Fixed**  
+
+- **Admin Panel first-open stability after key changes**
+  - Fixed a transient `getConfig.php` failure where the first Admin Panel open after a persistent-token key transition could return `Failed to decrypt configuration.` even though a manual refresh succeeded.
+  - `AdminModel::getConfig()` now rereads `adminConfig.json` once and retries decryption before surfacing a real decrypt error.
+
+---
+
 ## Changes 03/15/2026 (v3.9.1)
 
 `release(v3.9.1): post-rotation bootstrap fix and startup script cleanup`

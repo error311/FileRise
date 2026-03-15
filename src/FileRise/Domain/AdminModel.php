@@ -829,11 +829,26 @@ class AdminModel
             $encryptedContent = file_get_contents($configFile);
             $decryptedContent = decryptData($encryptedContent, $GLOBALS['encryptionKey']);
             if ($decryptedContent === false) {
-                // Do not set HTTP status here; let the controller decide.
-                return ["error" => "Failed to decrypt configuration."];
+                clearstatcache(true, $configFile);
+                $retryContent = @file_get_contents($configFile);
+                if (is_string($retryContent) && $retryContent !== '') {
+                    $encryptedContent = $retryContent;
+                    $decryptedContent = decryptData($encryptedContent, $GLOBALS['encryptionKey']);
+                }
             }
 
-            $config = json_decode($decryptedContent, true);
+            if ($decryptedContent === false) {
+                $rawConfig = json_decode((string)$encryptedContent, true);
+                if (is_array($rawConfig)) {
+                    $config = $rawConfig;
+                } else {
+                    // Do not set HTTP status here; let the controller decide.
+                    return ["error" => "Failed to decrypt configuration."];
+                }
+            } else {
+                $config = json_decode($decryptedContent, true);
+            }
+
             if (!is_array($config)) {
                 $config = [];
             }
