@@ -83,7 +83,8 @@ mkdir -p /var/www/users /var/www/metadata
 if [ -n "${PERSISTENT_TOKENS_KEY:-}" ]; then
   export PERSISTENT_TOKENS_KEY_SOURCE="${PERSISTENT_TOKENS_KEY_SOURCE:-env}"
 elif [ -s "${PERSISTENT_TOKENS_KEY_FILE}" ]; then
-  export PERSISTENT_TOKENS_KEY="$(tr -d '\r\n' < "${PERSISTENT_TOKENS_KEY_FILE}")"
+  PERSISTENT_TOKENS_KEY="$(tr -d '\r\n' < "${PERSISTENT_TOKENS_KEY_FILE}")"
+  export PERSISTENT_TOKENS_KEY
   export PERSISTENT_TOKENS_KEY_SOURCE="file"
   echo "[startup] Loaded persistent tokens key from metadata/persistent_tokens.key."
 elif has_existing_persistent_key_state; then

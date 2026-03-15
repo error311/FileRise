@@ -1,5 +1,31 @@
 # Changelog
 
+## Changes 03/15/2026 (v3.9.1)
+
+`release(v3.9.1): post-rotation bootstrap fix and startup script cleanup`
+
+**Commit message**  
+
+```text
+release(v3.9.1): post-rotation bootstrap fix and startup script cleanup
+
+- admin(startup): tolerate transient adminConfig decrypt fallback during persistent-token key rotation bootstrap
+- docker(startup): split persistent-token key file export assignment to satisfy shellcheck
+```
+
+**Fixed**  
+
+- **Post-rotation bootstrap stability**
+  - Fixed a bootstrap path that could white-page the app if `adminConfig.json` was re-read during a persistent-token key rotation transition and decryption temporarily returned a non-string value.
+  - The startup config path now falls back safely instead of fataling during `json_decode(...)`.
+
+**Changed**  
+
+- **Startup script shell hygiene**
+  - Adjusted the persistent-token key file load/export sequence in `start.sh` so CI shell linting passes without changing runtime behavior.
+
+---
+
 ## Changes 03/14/2026 (v3.9.0)
 
 `release(v3.9.0): persistent-token key lifecycle updates and admin rotation workflow`
