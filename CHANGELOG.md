@@ -1,5 +1,32 @@
 # Changelog
 
+## Changes 03/15/2026 (v3.9.4)
+
+`release(v3.9.4): preserve legacy compatibility path while keeping post-rotation key-file preference`
+
+**Commit message**  
+
+```text
+release(v3.9.4): preserve legacy compatibility path while keeping post-rotation key-file preference
+
+- crypto(compat): keep legacy default-key fallback behavior for existing installs with encrypted state and no explicit key
+- crypto(resolve): continue preferring metadata/persistent_tokens.key after rotation so follow-up requests stop drifting back to the legacy fallback
+- docs(changelog): clarify that legacy installs remain supported while the post-rotation request-consistency fix stays in place
+```
+
+**Changed**  
+
+- **Legacy compatibility path**
+  - Clarified that existing installs without an explicit `PERSISTENT_TOKENS_KEY` still retain the historical legacy fallback behavior for encrypted state compatibility.
+  - The legacy fallback remains resolver-driven in `config.php`, while rotated installs continue preferring `metadata/persistent_tokens.key` for post-rotation consistency.
+
+**Fixed**  
+
+- **Release note accuracy**
+  - Clarified the persistent-token key compatibility story so the legacy-install behavior and the post-rotation fix are documented together.
+
+---
+
 ## Changes 03/15/2026 (v3.9.3)
 
 `release(v3.9.3): legacy fallback worker-env fix after persistent-token key rotation`

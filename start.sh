@@ -75,7 +75,6 @@ fi
 
 # ──────────────────────────────────────────────────────────────
 # 1) Resolve persistent tokens key with backward compatibility.
-LEGACY_PERSISTENT_TOKENS_KEY="default_please_change_this_key"
 PERSISTENT_TOKENS_KEY_FILE="/var/www/metadata/persistent_tokens.key"
 
 mkdir -p /var/www/users /var/www/metadata
