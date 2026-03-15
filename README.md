@@ -162,6 +162,14 @@ The easiest way to run FileRise is the official Docker image.
 
 ### Option A – Quick start (docker run)
 
+Pristine Docker installs can omit `PERSISTENT_TOKENS_KEY`. FileRise will generate a unique key on first start and persist it in `metadata/persistent_tokens.key`.
+
+If you prefer to manage the key yourself, set one before first start:
+
+```bash
+export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
+```
+
 ```bash
 docker run -d \
   --name filerise \
@@ -169,7 +177,6 @@ docker run -d \
   -e TIMEZONE="America/New_York" \
   -e TOTAL_UPLOAD_SIZE="10G" \
   -e SECURE="false" \
-  -e PERSISTENT_TOKENS_KEY="default_please_change_this_key" \
   -e SCAN_ON_START="true" \
   -e CHOWN_ON_START="true" \
   -v ~/filerise/uploads:/var/www/uploads \
@@ -194,6 +201,13 @@ On first launch you’ll be guided through creating the **initial admin user**.
 > (for example `~/filerise/uploads` or `/mnt/user/appdata/FileRise/uploads`),
 > not the root of a huge media share.
 >
+> 🔐 **Persistent tokens key note**
+>
+> Keep `/var/www/metadata` persistent. On a pristine install, FileRise writes the
+> generated persistent tokens key to `metadata/persistent_tokens.key`. If you
+> choose to manage the key via env instead, keep that value stable for the life
+> of the instance.
+>
 > If you really want FileRise to sit “on top of” an existing share, use a
 > subfolder (e.g. `/mnt/user/media/filerise_root`) instead of the share root,
 > so scans and permission changes stay scoped to that folder.
@@ -211,7 +225,7 @@ services:
       TIMEZONE: "America/New_York"
       TOTAL_UPLOAD_SIZE: "10G"
       SECURE: "false"
-      PERSISTENT_TOKENS_KEY: "default_please_change_this_key"
+      PERSISTENT_TOKENS_KEY: "${PERSISTENT_TOKENS_KEY:-}" # optional; blank = pristine installs auto-generate and persist a key in metadata
       SCAN_ON_START: "true"   # auto-index existing files on startup
       CHOWN_ON_START: "true"  # fix permissions on uploads/metadata on startup
     volumes:
@@ -226,6 +240,12 @@ Bring it up with:
 docker compose up -d
 ```
 
+You can leave `PERSISTENT_TOKENS_KEY` blank for pristine installs, or set it in your shell / `.env` if you want to manage the key yourself:
+
+```bash
+export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
+```
+
 ### Common environment variables
 
 | Variable                | Required | Example                          | What it does |
@@ -233,7 +253,7 @@ docker compose up -d
 | `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone. |
 | `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request; also used to set PHP/Apache upload limits. |
 | `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / a reverse proxy, else `false`. |
-| `PERSISTENT_TOKENS_KEY` | ✅       | `change_me_super_secret`         | Secret used to encrypt stored secrets (tokens, permissions, admin config). **Do not leave this at the default.** |
+| `PERSISTENT_TOKENS_KEY` | Optional | `openssl rand -hex 32`           | Secret used to encrypt stored secrets (tokens, permissions, admin config). If omitted on a pristine Docker install, FileRise auto-generates and persists one in `metadata/persistent_tokens.key`; existing installs without an explicit key stay on the legacy compatibility path until rotated. |
 | `SCAN_ON_START`         | Optional | `true`                           | If `true`, runs a scan once on container start to index existing files. |
 | `CHOWN_ON_START`        | Optional | `true`                           | If `true`, recursively normalizes ownership/permissions on `uploads/` + `metadata/`. |
 | `PUID`                  | Optional | `99`                             | If running as root, remap `www-data` user to this UID (e.g. Unraid’s 99).                             |
@@ -324,11 +344,13 @@ Back up these paths (Docker volumes or host directories):
 
 Notes:
 - Logs live in `/var/www/metadata/log` and can be rotated or pruned.
-- Keep your `PERSISTENT_TOKENS_KEY` consistent when restoring backups.
+- If you use the auto-generated key path, back up `/var/www/metadata/persistent_tokens.key` with the rest of `metadata/`.
+- If you manage the key via env, keep your `PERSISTENT_TOKENS_KEY` consistent when restoring backups.
 
 ## First-run security checklist
 
-- Set a strong `PERSISTENT_TOKENS_KEY` (encrypts tokens, permissions, admin config).
+- Persist `/var/www/metadata` so the generated persistent tokens key survives container recreation.
+- Either set your own strong `PERSISTENT_TOKENS_KEY` or let a pristine install generate one and then back up `metadata/persistent_tokens.key`.
 - Use HTTPS and set `SECURE="true"` when behind TLS/reverse proxy.
 - If behind a proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER`.
 - Set `FR_PUBLISHED_URL` (and `FR_BASE_PATH` if needed) so share links are correct.

@@ -25,11 +25,12 @@ RUN composer install --no-dev --optimize-autoloader  # production-ready autoload
 FROM ubuntu:24.04
 LABEL by=error311
 
+# No baked-in PERSISTENT_TOKENS_KEY default is shipped in the image.
+# Pristine installs generate and persist one at runtime in /var/www/metadata.
 ENV DEBIAN_FRONTEND=noninteractive \
     HOME=/root \
     LC_ALL=C.UTF-8 LANG=en_US.UTF-8 LANGUAGE=en_US.UTF-8 TERM=xterm \
     UPLOAD_MAX_FILESIZE=5G POST_MAX_SIZE=5G TOTAL_UPLOAD_SIZE=5G \
-    PERSISTENT_TOKENS_KEY=default_please_change_this_key \
     PUID=99 PGID=100
 
 ARG INSTALL_FFMPEG=0

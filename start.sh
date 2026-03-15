@@ -26,6 +26,23 @@ safe_truncate() {
   : > "$1" 2>&1 || echo "[startup] could not write: $1"
 }
 
+has_nonempty_file() {
+  [ -s "$1" ]
+}
+
+users_file_has_entries() {
+  [ -f /var/www/users/users.txt ] && grep -q '[^[:space:]]' /var/www/users/users.txt 2>/dev/null
+}
+
+has_existing_persistent_key_state() {
+  users_file_has_entries && return 0
+  has_nonempty_file /var/www/users/adminConfig.json && return 0
+  has_nonempty_file /var/www/users/userPermissions.json && return 0
+  has_nonempty_file /var/www/users/persistent_tokens.json && return 0
+  has_nonempty_file /var/www/metadata/sources.json && return 0
+  return 1
+}
+
 # ──────────────────────────────────────────────────────────────
 # 0) If NOT root, we can't remap/chown. Log a hint and skip those parts.
 #    If root, remap www-data to PUID/PGID and (optionally) chown data dirs.
@@ -57,9 +74,39 @@ else
 fi
 
 # ──────────────────────────────────────────────────────────────
-# 1) Token‐key warning (guarded for -u)
-if [ "${PERSISTENT_TOKENS_KEY:-}" = "default_please_change_this_key" ] || [ -z "${PERSISTENT_TOKENS_KEY:-}" ]; then
-  echo "⚠️ WARNING: Using default/empty persistent tokens key—override for production."
+# 1) Resolve persistent tokens key with backward compatibility.
+LEGACY_PERSISTENT_TOKENS_KEY="default_please_change_this_key"
+PERSISTENT_TOKENS_KEY_FILE="/var/www/metadata/persistent_tokens.key"
+
+mkdir -p /var/www/users /var/www/metadata
+
+if [ -n "${PERSISTENT_TOKENS_KEY:-}" ]; then
+  export PERSISTENT_TOKENS_KEY_SOURCE="${PERSISTENT_TOKENS_KEY_SOURCE:-env}"
+elif [ -s "${PERSISTENT_TOKENS_KEY_FILE}" ]; then
+  export PERSISTENT_TOKENS_KEY="$(tr -d '\r\n' < "${PERSISTENT_TOKENS_KEY_FILE}")"
+  export PERSISTENT_TOKENS_KEY_SOURCE="file"
+  echo "[startup] Loaded persistent tokens key from metadata/persistent_tokens.key."
+elif has_existing_persistent_key_state; then
+  export PERSISTENT_TOKENS_KEY="${LEGACY_PERSISTENT_TOKENS_KEY}"
+  export PERSISTENT_TOKENS_KEY_SOURCE="legacy_default"
+  echo "WARNING: No explicit persistent tokens key is configured, but existing encrypted state was found. Continuing with the legacy built-in key for backward compatibility."
+else
+  generated_key="$(openssl rand -hex 32)"
+  if printf '%s' "${generated_key}" > "${PERSISTENT_TOKENS_KEY_FILE}"; then
+    safe_chown www-data:www-data "${PERSISTENT_TOKENS_KEY_FILE}"
+    safe_chmod 600 "${PERSISTENT_TOKENS_KEY_FILE}"
+    export PERSISTENT_TOKENS_KEY="${generated_key}"
+    export PERSISTENT_TOKENS_KEY_SOURCE="generated_file"
+    echo "[startup] Generated a unique persistent tokens key for this pristine install and saved it to metadata/persistent_tokens.key."
+  else
+    export PERSISTENT_TOKENS_KEY="${generated_key}"
+    export PERSISTENT_TOKENS_KEY_SOURCE="env"
+    echo "WARNING: Generated a unique persistent tokens key for this pristine install, but could not persist metadata/persistent_tokens.key. Set PERSISTENT_TOKENS_KEY explicitly before restarting."
+  fi
+fi
+
+if [ "${PERSISTENT_TOKENS_KEY}" = "default_please_change_this_key" ] || [ "${PERSISTENT_TOKENS_KEY}" = "please_change_this_@@" ]; then
+  echo "WARNING: PERSISTENT_TOKENS_KEY matches a published placeholder value. Replace it with a unique secret and plan a controlled rotation."
 fi
 
 # 1.5) Log virus-scan configuration (purely informational)

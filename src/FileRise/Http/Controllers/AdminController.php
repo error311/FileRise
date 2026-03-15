@@ -6,6 +6,7 @@ namespace FileRise\Http\Controllers;
 
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
+use FileRise\Support\PersistentTokensKeyRotation;
 use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\SourceContext;
 use FileRise\Domain\AdminModel;
@@ -28,6 +29,7 @@ require_once dirname(__DIR__, 4) . '/config/config.php';
 require_once PROJECT_ROOT . '/src/lib/CryptoAtRest.php';
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/FileRise/Support/PersistentTokensKeyRotation.php';
 
 class AdminController
 {
@@ -452,6 +454,7 @@ class AdminController
                     'envPresent'  => (bool)$envEncPresent,
                     'filePresent' => (bool)$filePresent,
                 ],
+                'persistentTokensKeyStatus' => fr_get_persistent_tokens_key_status(),
                 'proSearch' => (function () use ($config) {
                     $raw = isset($config['proSearch']) && is_array($config['proSearch'])
                         ? $config['proSearch']
@@ -614,6 +617,54 @@ class AdminController
         } catch (Throwable $e) {
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'exception', 'message' => $e->getMessage()]);
+        }
+    }
+
+    public function rotatePersistentTokensKey(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            self::requireAuth();
+            self::requireAdmin();
+            self::requireCsrf();
+
+            $input = self::readJson();
+            if (empty($input['confirmRememberMeExpiry']) || empty($input['confirmMaintenanceWindow'])) {
+                http_response_code(400);
+                echo json_encode([
+                    'ok' => false,
+                    'error' => 'confirmation_required',
+                    'message' => 'Confirm remember-me invalidation and maintenance-window guidance before rotating the persistent tokens key.',
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+
+            $result = PersistentTokensKeyRotation::rotateToGeneratedKey();
+
+            $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+            setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
+
+            echo json_encode([
+                'ok' => true,
+                'message' => 'Persistent tokens key rotated successfully. Stored secrets were re-encrypted and all remember-me sessions were expired.',
+                'details' => $result,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (RuntimeException $e) {
+            http_response_code(409);
+            echo json_encode([
+                'ok' => false,
+                'error' => 'persistent_tokens_key_rotation_failed',
+                'message' => $e->getMessage(),
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode([
+                'ok' => false,
+                'error' => 'persistent_tokens_key_rotation_failed',
+                'message' => 'Persistent tokens key rotation failed.',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            error_log('Persistent tokens key rotation failed: ' . $e->getMessage());
         }
     }
 

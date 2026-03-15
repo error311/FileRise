@@ -4,7 +4,7 @@ This page lists all known environment variables read by FileRise core and the Do
 
 Notes:
 - Defaults reflect current code. Your deployment may override them.
-- Docker sets some defaults via the image (see `Dockerfile`/`start.sh`).
+- Docker sets some defaults via the image and startup script (see `Dockerfile` / `start.sh`). `PERSISTENT_TOKENS_KEY` can be omitted for pristine Docker installs, in which case FileRise auto-generates and persists one in `metadata/persistent_tokens.key`.
 
 ---
 
@@ -16,7 +16,7 @@ Notes:
 | `DATE_TIME_FORMAT` | `m/d/y  h:iA` | UI date/time format. |
 | `TOTAL_UPLOAD_SIZE` | `5G` | Max total upload size per request; used to set PHP upload limits and Apache `LimitRequestBody` in Docker. |
 | `SECURE` | auto | Set `true` when behind HTTPS to generate secure cookies/links. |
-| `PERSISTENT_TOKENS_KEY` | `default_please_change_this_key` | Encrypts stored secrets (tokens, permissions, admin config). Always change in production. |
+| `PERSISTENT_TOKENS_KEY` | empty | Encrypts stored secrets (tokens, permissions, admin config). Pristine Docker installs auto-generate one in `metadata/persistent_tokens.key`; back up that file or set a managed env key before migrating the instance. Legacy installs without an explicit key continue using the historical fallback until rotated deliberately. |
 | `FR_IGNORE_REGEX` | empty | Newline-separated regex patterns to ignore entries in listings/indexing; env overrides admin config. |
 
 ---

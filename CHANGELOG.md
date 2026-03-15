@@ -1,5 +1,48 @@
 # Changelog
 
+## Changes 03/14/2026 (v3.9.0)
+
+`release(v3.9.0): persistent-token key lifecycle updates and admin rotation workflow`
+
+**Commit message**  
+
+```text
+release(v3.9.0): persistent-token key lifecycle updates and admin rotation workflow
+
+- docker(startup): remove baked persistent-token key defaults and auto-generate a unique key for pristine installs
+- admin(ui): warn when the instance is still using a legacy or placeholder persistent-token key and expose guided rotation for compatible installs
+- admin(crypto): add persistent-token key rotation that re-encrypts stored secrets and expires remember-me sessions
+- docs(docker): refresh docker run / compose guidance so metadata-backed generated keys are documented as the default path
+```
+
+**Added**  
+
+- **Admin rotation workflow for persistent-token keys**
+  - Added an admin-only rotation action that generates a new persistent-token key, re-encrypts stored secret-bearing data, writes `metadata/persistent_tokens.key`, and intentionally expires remember-me sessions.
+  - Added an admin warning card with rotation guidance for instances still using a legacy or placeholder persistent-token key.
+
+**Changed**  
+
+- **Docker startup behavior**
+  - Pristine Docker installs now auto-generate and persist a unique persistent-token key in `metadata/persistent_tokens.key`.
+  - Existing installs without an explicit key continue on the legacy compatibility path until the operator rotates them.
+- **Docker examples and env reference**
+  - Updated `docker run`, compose, and env-reference guidance so `PERSISTENT_TOKENS_KEY` is optional by default and no published placeholder value is documented.
+
+**Fixed**  
+
+- **Persistent-token key lifecycle**
+  - Existing installs can now move off the legacy compatibility key without losing admin config, user-permissions, stored TOTP secrets, or source credentials.
+  - Remember-me sessions are explicitly expired during rotation instead of being left in a mixed-key state.
+
+**Security**  
+
+- **Install defaults**
+  - The runtime image no longer ships a baked-in persistent-token key default.
+  - New Docker installs now start with instance-unique key material by default as long as `metadata/` is persistent.
+
+---
+
 ## Changes 03/12/2026 (v3.8.0)
 
 `release(v3.8.0): share-link admin guards and centralized safe-upload policy`

@@ -23,7 +23,9 @@ services:
       DATE_TIME_FORMAT: "${DATE_TIME_FORMAT:-m/d/y  h:iA}"
       TOTAL_UPLOAD_SIZE: "${TOTAL_UPLOAD_SIZE:-5G}"
       SECURE: "${SECURE:-false}"
-      PERSISTENT_TOKENS_KEY: "${PERSISTENT_TOKENS_KEY:-please_change_this_@@}"
+      # Optional: leave blank for pristine installs to auto-generate and persist
+      # a unique key in ./data/metadata/persistent_tokens.key.
+      PERSISTENT_TOKENS_KEY: "${PERSISTENT_TOKENS_KEY:-}"
       PUID: "${PUID:-1000}"
       PGID: "${PGID:-1000}"
       CHOWN_ON_START: "${CHOWN_ON_START:-true}"
