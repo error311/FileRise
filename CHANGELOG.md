@@ -1,5 +1,40 @@
 # Changelog
 
+## Changes 03/16/2026 (v3.10.0)
+
+`release(v3.10.0): resumable upload hardening and ONLYOFFICE callback authorization tightening`
+
+**Commit message**  
+
+```text
+release(v3.10.0): resumable upload hardening and ONLYOFFICE callback authorization tightening
+
+- upload(resumable): stop deriving temporary chunk directories from raw client identifiers and switch to hashed internal temp-folder names
+- upload(cleanup): require authenticated upload access for resumable temp-folder removal and keep recursive cleanup bounded to the intended staging root
+- upload(compat): preserve normal resumable upload flow while making temp-path resolution consistent across probe, write, and cleanup paths
+- onlyoffice(callback): issue save callbacks only for editable sessions, bind callbacks to the authorized actor/file, and stop trusting body-supplied editor identities
+- onlyoffice(origin): restrict callback fetch URLs to the configured Document Server origin while keeping callback JWT validation compatible with existing deployments
+```
+
+**Changed**  
+
+- **Resumable temp-folder naming**
+  - Resumable upload staging now maps client identifiers to hashed internal temp-folder names instead of using raw identifier values directly in filesystem paths.
+  - The same temp-folder mapping is now used consistently for chunk probe, chunk staging, and resumable cleanup operations.
+
+**Fixed**  
+
+- **Resumable cleanup guardrails**
+  - Tightened resumable temp-folder cleanup so recursive deletion stays bounded to the expected staging area.
+  - The resumable cleanup endpoint now requires an authenticated session with upload permission for the target folder before removing chunk temp data.
+
+- **ONLYOFFICE save authorization**
+  - View-only ONLYOFFICE sessions no longer receive save-capable callback URLs.
+  - ONLYOFFICE save callbacks are now bound to the authorized actor and file, and no longer trust body-supplied editor identities.
+  - Save fetches are restricted to the configured ONLYOFFICE Document Server origin before FileRise downloads updated content and writes it back to disk.
+
+---
+
 ## Changes 03/15/2026 (v3.9.4)
 
 `release(v3.9.4): preserve legacy compatibility path while keeping post-rotation key-file preference`

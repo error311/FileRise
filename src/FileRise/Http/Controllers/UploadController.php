@@ -240,6 +240,22 @@ class UploadController
             return;
         }
 
+        if (empty($_SESSION['authenticated'])) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+
+        $username  = (string)($_SESSION['username'] ?? '');
+        $userPerms = loadUserPermissions($username) ?: [];
+        $isAdmin   = ACL::isAdmin($userPerms);
+
+        if (!$isAdmin && !empty($userPerms['disableUpload'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Upload disabled for this user.']);
+            return;
+        }
+
         $sourceId = trim((string)($_POST['sourceId'] ?? ''));
         if ($sourceId !== '' && class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
             if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sourceId)) {
@@ -262,14 +278,23 @@ class UploadController
             return;
         }
 
+        $targetFolderRaw = isset($_POST['targetFolder']) ? (string)$_POST['targetFolder'] : 'root';
+        $targetFolder = ACL::normalizeFolder(rawurldecode($targetFolderRaw));
+        if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {
+            http_response_code(403);
+            echo json_encode([
+                'error' => 'Forbidden: no write access to folder "' . $targetFolder . '".',
+            ]);
+            return;
+        }
+
         if (!isset($_POST['folder'])) {
             http_response_code(400);
             echo json_encode(['error' => 'No folder specified']);
             return;
         }
 
-        $folderRaw = (string)$_POST['folder'];
-        $folder    = ACL::normalizeFolder(rawurldecode($folderRaw));
+        $folder = rawurldecode((string)$_POST['folder']);
 
         echo json_encode(UploadModel::removeChunks($folder));
     }

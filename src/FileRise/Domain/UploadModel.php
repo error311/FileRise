@@ -119,6 +119,53 @@ class UploadModel
         return $folderSan;
     }
 
+    private static function normalizeResumableIdentifier($identifier): ?string
+    {
+        $identifier = trim((string)$identifier);
+        if ($identifier === '') {
+            return null;
+        }
+        if (strlen($identifier) > 512) {
+            return null;
+        }
+        if (preg_match('/[\x00-\x1F\x7F]/', $identifier)) {
+            return null;
+        }
+        return $identifier;
+    }
+
+    private static function resumableTempFolderName($identifier): ?string
+    {
+        $normalized = self::normalizeResumableIdentifier($identifier);
+        if ($normalized === null) {
+            return null;
+        }
+        return 'resumable_' . hash('sha256', $normalized);
+    }
+
+    private static function resumableTempDir(string $baseUploadDir, $identifier): ?string
+    {
+        $folderName = self::resumableTempFolderName($identifier);
+        if ($folderName === null) {
+            return null;
+        }
+        return rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR . $folderName . DIRECTORY_SEPARATOR;
+    }
+
+    private static function isPathWithinRoot(string $path, string $root): bool
+    {
+        $rootReal = realpath($root);
+        $pathReal = realpath($path);
+        if ($rootReal === false || $pathReal === false) {
+            return false;
+        }
+
+        $rootNorm = rtrim(str_replace('\\', '/', $rootReal), '/') . '/';
+        $pathNorm = rtrim(str_replace('\\', '/', $pathReal), '/') . '/';
+
+        return strpos($pathNorm, $rootNorm) === 0;
+    }
+
     private static function loadResumableIndex(): array
     {
         $path = self::resumableIndexPath();
@@ -700,8 +747,12 @@ class UploadModel
             && isset($post['resumableChunkNumber'], $post['resumableIdentifier'])
         ) {
             $chunkNumber         = (int)($post['resumableChunkNumber'] ?? 0);
-            $resumableIdentifier = $post['resumableIdentifier'] ?? '';
+            $resumableIdentifier = self::normalizeResumableIdentifier($post['resumableIdentifier'] ?? '');
             $folderSan           = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+
+            if ($chunkNumber < 1 || $resumableIdentifier === null) {
+                return ['error' => 'Invalid resumable upload request'];
+            }
 
             $baseUploadDir = self::stagingRoot($isLocal);
             if ($folderSan !== '') {
@@ -709,7 +760,10 @@ class UploadModel
                     . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
             }
 
-            $tempDir   = $baseUploadDir . 'resumable_' . $resumableIdentifier . DIRECTORY_SEPARATOR;
+            $tempDir = self::resumableTempDir($baseUploadDir, $resumableIdentifier);
+            if ($tempDir === null) {
+                return ['error' => 'Invalid resumable upload request'];
+            }
             $chunkFile = $tempDir . $chunkNumber;
 
             return ['status' => file_exists($chunkFile) ? 'found' : 'not found'];
@@ -719,9 +773,13 @@ class UploadModel
         if (isset($post['resumableChunkNumber'])) {
             $chunkNumber         = (int)$post['resumableChunkNumber'];
             $totalChunks         = (int)$post['resumableTotalChunks'];
-            $resumableIdentifier = $post['resumableIdentifier'] ?? '';
+            $resumableIdentifier = self::normalizeResumableIdentifier($post['resumableIdentifier'] ?? '');
             $resumableFilename   = urldecode(basename($post['resumableFilename'] ?? ''));
             $relativeSubDir      = '';
+
+            if ($chunkNumber < 1 || $totalChunks < 1 || $chunkNumber > $totalChunks || $resumableIdentifier === null) {
+                return ['error' => 'Invalid resumable upload request'];
+            }
 
             if (!empty($post['resumableRelativePath'])) {
                 [$subDir, $relFile] = self::parseRelativePath((string)$post['resumableRelativePath']);
@@ -757,7 +815,10 @@ class UploadModel
                 return ['error' => 'Failed to create upload directory'];
             }
 
-            $tempDir = $baseUploadDir . 'resumable_' . $resumableIdentifier . DIRECTORY_SEPARATOR;
+            $tempDir = self::resumableTempDir($baseUploadDir, $resumableIdentifier);
+            if ($tempDir === null) {
+                return ['error' => 'Invalid resumable upload request'];
+            }
             if (!self::ensureDir($tempDir, $createdDirs)) {
                 return ['error' => 'Failed to create temporary chunk directory'];
             }
@@ -780,8 +841,10 @@ class UploadModel
                 }
             }
 
-            $cleanupChunk = function () use ($tempDir, $createdDirs, $stagingRoot, $isLocal): void {
-                self::rrmdir($tempDir);
+            $cleanupChunk = function () use ($tempDir, $baseUploadDir, $createdDirs, $stagingRoot, $isLocal): void {
+                if (self::isPathWithinRoot($tempDir, $baseUploadDir)) {
+                    self::rrmdir($tempDir);
+                }
                 if (!$isLocal) {
                     self::cleanupCreatedDirs($createdDirs, $stagingRoot);
                 }
@@ -1279,10 +1342,13 @@ class UploadModel
     public static function removeChunks(string $folder): array
     {
         $folder = urldecode($folder);
-        // The folder name should exactly match the "resumable_" pattern.
-        $regex = "/^resumable_" . PATTERN_FOLDER_NAME . "$/u";
-        if (!preg_match($regex, $folder)) {
-            return ['error' => 'Invalid folder name'];
+        if (strpos($folder, 'resumable_') === 0) {
+            $folder = substr($folder, strlen('resumable_'));
+        }
+
+        $tempFolderName = self::resumableTempFolderName($folder);
+        if ($tempFolderName === null) {
+            return ['error' => 'Invalid resumable identifier'];
         }
 
         $isLocal = self::isLocalSourceType();
@@ -1292,9 +1358,12 @@ class UploadModel
             $baseDir = rtrim($baseDir, '/\\') . DIRECTORY_SEPARATOR
                 . str_replace('/', DIRECTORY_SEPARATOR, $targetFolder) . DIRECTORY_SEPARATOR;
         }
-        $tempDir = $baseDir . $folder;
+        $tempDir = rtrim($baseDir, '/\\') . DIRECTORY_SEPARATOR . $tempFolderName;
         $hadDir = is_dir($tempDir);
         if ($hadDir) {
+            if (!self::isPathWithinRoot($tempDir, $baseDir)) {
+                return ['error' => 'Invalid temporary folder'];
+            }
             self::rrmdir($tempDir);
         }
         if (is_dir($tempDir)) {

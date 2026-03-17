@@ -8,6 +8,7 @@ use FileRise\Support\ACL;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
 use FileRise\Domain\AdminModel;
+use FileRise\Domain\AuthModel;
 use FileRise\Domain\FileModel;
 
 // src/controllers/OnlyOfficeController.php
@@ -160,6 +161,143 @@ class OnlyOfficeController
     private function b64uEnc(string $s): string
     {
         return rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
+    }
+
+    private function decodeJwtPayload(string $jwt, string $secret): ?array
+    {
+        $parts = explode('.', $jwt, 3);
+        if (count($parts) !== 3) {
+            return null;
+        }
+
+        [$b64Header, $b64Payload, $b64Sig] = $parts;
+        $headerJson = $this->b64uDec($b64Header);
+        $payloadJson = $this->b64uDec($b64Payload);
+        $sig = $this->b64uDec($b64Sig);
+        if ($headerJson === false || $payloadJson === false || $sig === false) {
+            return null;
+        }
+
+        $header = json_decode($headerJson, true);
+        if (!is_array($header) || strtoupper((string)($header['alg'] ?? '')) !== 'HS256') {
+            return null;
+        }
+
+        $calc = hash_hmac('sha256', $b64Header . '.' . $b64Payload, $secret, true);
+        if (!hash_equals($calc, $sig)) {
+            return null;
+        }
+
+        $payload = json_decode($payloadJson, true);
+        return is_array($payload) ? $payload : null;
+    }
+
+    private function createSignedPayloadToken(array $payload, string $secret): string
+    {
+        $data = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        if (!is_string($data) || $data === '') {
+            return '';
+        }
+        $sig = hash_hmac('sha256', $data, $secret, true);
+        return $this->b64uEnc($data) . '.' . $this->b64uEnc($sig);
+    }
+
+    private function decodeSignedPayloadToken(string $token, string $secret): ?array
+    {
+        if ($token === '' || strpos($token, '.') === false) {
+            return null;
+        }
+        [$b64Data, $b64Sig] = explode('.', $token, 2);
+        $data = $this->b64uDec($b64Data);
+        $sig = $this->b64uDec($b64Sig);
+        if ($data === false || $sig === false) {
+            return null;
+        }
+        $calc = hash_hmac('sha256', $data, $secret, true);
+        if (!hash_equals($calc, $sig)) {
+            return null;
+        }
+        $payload = json_decode($data, true);
+        return is_array($payload) ? $payload : null;
+    }
+
+    private function effectiveAclPermsForUser(string $username): array
+    {
+        $perms = loadUserPermissions($username) ?: [];
+        if (AuthModel::getUserRole($username) === '1') {
+            $perms['admin'] = true;
+        }
+        return is_array($perms) ? $perms : [];
+    }
+
+    private function callbackJwtTokenFromRequest(array $rawBody): string
+    {
+        $bodyToken = (string)($rawBody['token'] ?? '');
+        if ($bodyToken !== '') {
+            return trim($bodyToken);
+        }
+
+        $headers = array_change_key_case(getallheaders() ?: [], CASE_LOWER);
+        $auth = trim((string)($headers['authorization'] ?? ''));
+        if ($auth !== '' && preg_match('/^Bearer\s+(.+)$/i', $auth, $m)) {
+            return trim((string)$m[1]);
+        }
+
+        return '';
+    }
+
+    private function trustedCallbackBody(array $rawBody, string $secret): ?array
+    {
+        $jwt = $this->callbackJwtTokenFromRequest($rawBody);
+        if ($jwt === '') {
+            return $rawBody;
+        }
+
+        $payload = $this->decodeJwtPayload($jwt, $secret);
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        if (isset($payload['payload']) && is_array($payload['payload'])) {
+            return $payload['payload'];
+        }
+
+        return $payload;
+    }
+
+    private function normalizeOrigin(string $url): ?array
+    {
+        $url = trim($url);
+        if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $scheme = strtolower((string)(parse_url($url, PHP_URL_SCHEME) ?: ''));
+        $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?: ''));
+        if (($scheme !== 'http' && $scheme !== 'https') || $host === '') {
+            return null;
+        }
+
+        $port = (int)(parse_url($url, PHP_URL_PORT) ?: ($scheme === 'https' ? 443 : 80));
+
+        return [
+            'scheme' => $scheme,
+            'host' => $host,
+            'port' => $port,
+        ];
+    }
+
+    private function isAllowedOnlyOfficeUrl(string $url): bool
+    {
+        $target = $this->normalizeOrigin($url);
+        $docs = $this->normalizeOrigin($this->effectiveDocsOrigin());
+        if ($target === null || $docs === null) {
+            return false;
+        }
+
+        return $target['scheme'] === $docs['scheme']
+            && $target['host'] === $docs['host']
+            && $target['port'] === $docs['port'];
     }
 
     private function normalizeSourceId($id): string
@@ -316,7 +454,7 @@ class OnlyOfficeController
 
         @session_start();
         $user   = $_SESSION['username'] ?? 'anonymous';
-        $perms  = [];
+        $perms  = $this->effectiveAclPermsForUser((string)$user);
         $isAdmin = \ACL::isAdmin($perms);
 
         $enabled     = $this->effectiveEnabled();
@@ -426,21 +564,31 @@ class OnlyOfficeController
         $tok  = $this->b64uEnc($data) . '.' . $this->b64uEnc($sig);
         $fileUrl = $fileOriginForDocs . '/api/onlyoffice/signed-download.php?tok=' . rawurlencode($tok);
 
-        $cbExp = time() + 10 * 60;
-        $cbSigBase = ($sourceId !== '')
-        ? ($folder . '|' . $file . '|' . $sourceId . '|' . $cbExp)
-        : ($folder . '|' . $file . '|' . $cbExp);
-        $cbSig = hash_hmac('sha256', $cbSigBase, $secret);
-        $callbackUrl = $fileOriginForDocs . '/api/onlyoffice/callback.php'
-          . '?folder=' . rawurlencode($folder)
-          . '&file='   . rawurlencode($file)
-          . '&exp='    . $cbExp
-          . '&sig='    . $cbSig;
-        if ($sourceId !== '') {
-            $callbackUrl .= '&sourceId=' . rawurlencode($sourceId);
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION) ?: 'docx');
+        $canSave = $canEdit && !in_array($ext, self::OO_NEVER_EDIT, true);
+        $callbackUrl = null;
+        if ($canSave) {
+            $cbExp = time() + 10 * 60;
+            $cbPayload = [
+                'f' => $folder,
+                'n' => $file,
+                'u' => $user,
+                'edit' => true,
+                'op' => 'onlyoffice_save',
+                'exp' => $cbExp,
+            ];
+            if ($sourceId !== '') {
+                $cbPayload['sid'] = $sourceId;
+            }
+            $cbTok = $this->createSignedPayloadToken($cbPayload, $secret);
+            if ($cbTok === '') {
+                http_response_code(500);
+                echo '{"error":"Failed to generate ONLYOFFICE callback token"}';
+                return;
+            }
+            $callbackUrl = $fileOriginForDocs . '/api/onlyoffice/callback.php?tok=' . rawurlencode($cbTok);
         }
 
-        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION) ?: 'docx');
         $docType = in_array($ext, ['xls','xlsx','ods','csv'], true) ? 'cell'
             : (in_array($ext, ['ppt','pptx','odp'], true) ? 'slide' : 'word');
         $filePath = $downloadInfo['filePath'] ?? '';
@@ -467,17 +615,20 @@ class OnlyOfficeController
         'permissions' => [
           'download' => true,
           'print'    => true,
-          'edit'     => $canEdit && !in_array($ext, self::OO_NEVER_EDIT, true),
+          'edit'     => $canSave,
         ],
           ],
           'documentType' => $docType,
           'editorConfig' => [
-            'callbackUrl' => $callbackUrl,
             'user'        => ['id' => $user, 'name' => $user],
             'lang'        => 'en',
           ],
           'type' => 'desktop',
         ];
+
+        if ($callbackUrl !== null) {
+            $cfgOut['editorConfig']['callbackUrl'] = $callbackUrl;
+        }
 
         // JWT sign cfg
         $h = $this->b64uEnc(json_encode(['alg' => 'HS256','typ' => 'JWT']));
@@ -510,51 +661,33 @@ class OnlyOfficeController
             return;
         }
 
-        $folderRaw   = (string)($_GET['folder'] ?? 'root');
-        $fileRaw     = (string)($_GET['file']   ?? '');
-        $exp         = (int)($_GET['exp']       ?? 0);
-        $sig         = (string)($_GET['sig']    ?? '');
-        $sourceIdRaw = (string)($_GET['sourceId'] ?? ($_GET['sid'] ?? ''));
-        $sourceId    = $this->normalizeSourceId($sourceIdRaw);
-        if ($sourceIdRaw !== '' && $sourceId === '') {
-            $this->ooLog('error', "invalid source id in callback");
+        $callbackToken = trim((string)($_GET['tok'] ?? ''));
+        $callbackPayload = $this->decodeSignedPayloadToken($callbackToken, $secret);
+        if (!is_array($callbackPayload)) {
+            $this->ooLog('error', 'invalid callback token');
             echo '{"error":6}';
             return;
-        }
-        $calcBase = ($sourceId !== '')
-        ? "$folderRaw|$fileRaw|$sourceId|$exp"
-        : "$folderRaw|$fileRaw|$exp";
-        $calc      = hash_hmac('sha256', $calcBase, $secret);
-
-    // Debug-only preflight (no secrets; show short sigs)
-        if ($this->ooDebug()) {
-            $this->ooLog('debug', sprintf(
-                "PRE f='%s' n='%s' sid='%s' exp=%d sig[8]=%s calc[8]=%s",
-                $folderRaw,
-                $fileRaw,
-                $sourceId,
-                $exp,
-                substr($sig, 0, 8),
-                substr($calc, 0, 8)
-            ));
         }
 
-        $folder = \ACL::normalizeFolder($folderRaw);
-        $file   = basename($fileRaw);
-        if (!$exp || time() > $exp) {
-            $this->ooLog('error', "expired exp for $folder/$file");
+        $folder = \ACL::normalizeFolder((string)($callbackPayload['f'] ?? 'root'));
+        $file = basename((string)($callbackPayload['n'] ?? ''));
+        $actor = (string)($callbackPayload['u'] ?? '');
+        $allowEdit = !empty($callbackPayload['edit']);
+        $op = (string)($callbackPayload['op'] ?? '');
+        $exp = (int)($callbackPayload['exp'] ?? 0);
+        $sourceIdRaw = (string)($callbackPayload['sid'] ?? ($callbackPayload['sourceId'] ?? ''));
+        $sourceId = '';
+
+        if ($file === '' || $actor === '' || !$allowEdit || $op !== 'onlyoffice_save' || !$exp || time() > $exp) {
+            $this->ooLog('error', "expired or invalid callback token for $folder/$file");
             echo '{"error":6}';
             return;
         }
-        if (!hash_equals($calc, $sig)) {
-            $this->ooLog('error', "sig mismatch for $folder/$file");
-            echo '{"error":6}';
-            return;
-        }
-        if ($sourceId !== '') {
-            [$sourceId, $sourceErr] = $this->resolveSourceId($sourceId, true);
+
+        if ($sourceIdRaw !== '') {
+            [$sourceId, $sourceErr] = $this->resolveSourceId($sourceIdRaw, true);
             if ($sourceErr !== null) {
-                $this->ooLog('error', "invalid source for callback: $sourceId");
+                $this->ooLog('error', "invalid source for callback: $sourceIdRaw");
                 echo '{"error":6}';
                 return;
             }
@@ -565,17 +698,25 @@ class OnlyOfficeController
             $this->ooLog('debug', 'BODY len=' . strlen($raw));
         }
 
-        $body   = json_decode($raw, true) ?: [];
-        $status = (int)($body['status'] ?? 0);
-        $actor  = (string)($body['actions'][0]['userid'] ?? '');
+        $rawBody = json_decode($raw, true);
+        $rawBody = is_array($rawBody) ? $rawBody : [];
+        $jwt = $this->callbackJwtTokenFromRequest($rawBody);
+        $body = $this->trustedCallbackBody($rawBody, $secret);
+        if (!is_array($body)) {
+            $this->ooLog('error', "missing or invalid callback JWT for $folder/$file");
+            echo '{"error":6}';
+            return;
+        }
+        if ($jwt === '') {
+            $this->ooLog('warn', "callback JWT missing; falling back to signed callback token only for $folder/$file");
+        }
 
-        $actorIsAdmin = (defined('DEFAULT_ADMIN_USER') && $actor !== '' && strcasecmp($actor, (string)DEFAULT_ADMIN_USER) === 0)
-                 || (strcasecmp($actor, 'admin') === 0);
-        $perms = $actorIsAdmin ? ['admin' => true] : [];
+        $status = (int)($body['status'] ?? 0);
+        $perms = $this->effectiveAclPermsForUser($actor);
 
     // Save-on statuses: 2/6/7
         if (in_array($status, [2,6,7], true)) {
-            if (!$actor || !\ACL::canEdit($actor, $perms, $folder)) {
+            if (!\ACL::canEdit($actor, $perms, $folder)) {
                 $this->ooLog('error', "ACL deny edit: actor='$actor' folder='$folder'");
                 echo '{"error":6}';
                 return;
@@ -583,6 +724,11 @@ class OnlyOfficeController
             $saveUrl = (string)($body['url'] ?? '');
             if ($saveUrl === '') {
                 $this->ooLog('error', "no url for status=$status");
+                echo '{"error":6}';
+                return;
+            }
+            if (!$this->isAllowedOnlyOfficeUrl($saveUrl)) {
+                $this->ooLog('error', "disallowed save url for $folder/$file");
                 echo '{"error":6}';
                 return;
             }
@@ -595,7 +741,7 @@ class OnlyOfficeController
                 $ch = curl_init($saveUrl);
                 curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_CONNECTTIMEOUT => 10,
                 CURLOPT_TIMEOUT        => 45,
                 CURLOPT_HTTPHEADER     => ['Accept: */*','User-Agent: FileRise-ONLYOFFICE-Callback'],
