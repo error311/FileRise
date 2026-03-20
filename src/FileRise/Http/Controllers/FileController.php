@@ -3752,11 +3752,10 @@ class FileController
         }
 
         $user  = (string)($_SESSION['username'] ?? '');
-        $perms = [
-            'role'    => $_SESSION['role']    ?? null,
-            'admin'   => $_SESSION['admin']   ?? null,
-            'isAdmin' => $_SESSION['isAdmin'] ?? null,
-        ];
+        $perms = loadUserPermissions($user) ?: [];
+        $perms['role'] = $_SESSION['role'] ?? ($perms['role'] ?? null);
+        $perms['admin'] = $_SESSION['admin'] ?? ($perms['admin'] ?? null);
+        $perms['isAdmin'] = $_SESSION['isAdmin'] ?? ($perms['isAdmin'] ?? null);
 
         @session_write_close();
 
@@ -3777,14 +3776,13 @@ class FileController
         // ---- ACL ----
         if (class_exists('ACL')) {
             $folderNorm = ACL::normalizeFolder($folder);
-            $canRead = ACL::canRead($user, $perms, $folderNorm)
-                || ACL::canReadOwn($user, $perms, $folderNorm);
-
-            if (!$canRead) {
+            $accessErr = $this->enforceSingleFileReadAccess($folderNorm, $file, $user, $perms);
+            if ($accessErr !== null) {
                 http_response_code(403);
-                echo json_encode(['error' => 'Forbidden']);
+                echo json_encode(['error' => $accessErr]);
                 return;
             }
+            $folder = $folderNorm;
         }
 
         // ---- Resolve file via model ----

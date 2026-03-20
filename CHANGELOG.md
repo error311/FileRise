@@ -1,5 +1,32 @@
 # Changelog
 
+## Changes 03/20/2026 (v3.11.0)
+
+`release(v3.11.0): snippet ownership enforcement and phpseclib security update`
+
+**Commit message**  
+
+```text
+release(v3.11.0): snippet ownership enforcement and phpseclib security update
+
+- file(snippet): enforce per-file read_own ownership checks before returning hover-preview snippet content
+- file(snippet): align snippet access with the existing single-file read authorization helper path
+- deps(composer): upgrade phpseclib/phpseclib to 3.0.50 to pick up the latest upstream security patch
+```
+
+**Fixed**  
+
+- **Snippet access control for own-only folders**
+  - The file snippet / hover-preview endpoint now enforces the same per-file ownership check already used by other single-file read paths when access comes only from `read_own`.
+  - Users with own-only visibility can no longer retrieve snippet content from files uploaded by other users in the same folder.
+
+**Changed**  
+
+- **Dependency security maintenance**
+  - Updated `phpseclib/phpseclib` to `3.0.50` in Composer dependencies to pick up the current upstream security fix in the locked dependency set.
+
+---
+
 ## Changes 03/16/2026 (v3.10.0)
 
 `release(v3.10.0): resumable upload hardening and ONLYOFFICE callback authorization tightening`
