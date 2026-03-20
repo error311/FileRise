@@ -67,7 +67,22 @@ If you follow these guidelines, we won’t pursue or support legal action.
 - **GHSA-jm96-2w52-5qjj** — `v1.4.0`: Insecure folder visibility via name-based mapping and incomplete ACL checks.  
   **Fixed in:** **1.5.0** and later.
 
-Thanks to **[@kiwi865](https://github.com/kiwi865)** & **[@ByteTyson](https://github.com/ByteTyson)** &  **[@x0root](https://github.com/x0root)** for responsible disclosure of issues.
+- **GHSA-vh5m-w36c-99xv** / **CVE-2026-33070** — `< 3.8.0`: Unauthenticated Share Link Deletion.  
+  **Fixed in:** **3.8.0** and later. Thanks to **n0rv-TvT** for responsible disclosure.
+
+- **GHSA-46gv-gf5f-wvr2** / **CVE-2026-33071** — `< 3.8.0`: WebDAV upload path bypasses filename validation enforced by regular uploads.  
+  **Fixed in:** **3.8.0** and later. Thanks to **n0rv-TvT** for responsible disclosure.
+
+- **GHSA-f4xx-57cv-mg3x** / **CVE-2026-33072** — `< 3.9.0`: Default Encryption Key Enables Token Forgery and Config Decryption.  
+  **Fixed in:** **3.9.0** and later. Thanks to **n0rv-Tv** for responsible disclosure.
+
+- **GHSA-c2jm-4wp9-5vrh** / **CVE-2026-33329** — `< 3.10.0`: Path Traversal in `resumableIdentifier` Leading to Arbitrary File Write, Recursive Directory Deletion, and Limited Existence Oracle.  
+  **Fixed in:** **3.10.0** and later. Thanks to **kq5y** for responsible disclosure.
+
+- **GHSA-6c3j-f4x4-36m3** / **CVE-2026-33330** — `< 3.10.0`: FileRise ONLYOFFICE integration allows read-only users to overwrite files via forged save callback.  
+  **Fixed in:** **3.10.0** and later. Thanks to **bg0d-glitch** for responsible disclosure.
+
+Thanks to **[@kiwi865](https://github.com/kiwi865)**, **[@ByteTyson](https://github.com/ByteTyson)**, **[@x0root](https://github.com/x0root)**, **n0rv-TvT**, **n0rv-Tv**, **kq5y**, and **bg0d-glitch** for responsible disclosure of issues.
 
 ## Questions
 
