@@ -82,6 +82,9 @@ If you follow these guidelines, we won’t pursue or support legal action.
 - **GHSA-6c3j-f4x4-36m3** / **CVE-2026-33330** — `< 3.10.0`: FileRise ONLYOFFICE integration allows read-only users to overwrite files via forged save callback.  
   **Fixed in:** **3.10.0** and later. Thanks to **bg0d-glitch** for responsible disclosure.
 
+- **GHSA-62wx-vp78-2p83** / **CVE-2026-33477** - `< 3.11.0`: Incorrect authorization in /api/file/snippet.php allows read_own users to read other users’ file content
+  **Fixed in: 3.11.0** and later. Thanks to **bg0d-glitch** for responsible disclosure.
+
 Thanks to **[@kiwi865](https://github.com/kiwi865)**, **[@ByteTyson](https://github.com/ByteTyson)**, **[@x0root](https://github.com/x0root)**, **n0rv-TvT**, **kq5y**, and **bg0d-glitch** for responsible disclosure of issues.
 
 ## Questions
