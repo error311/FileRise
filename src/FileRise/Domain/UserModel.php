@@ -324,6 +324,10 @@ class UserModel
             return ["error" => "Failed to update users file"];
         }
 
+        if (class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
+            AuthModel::revokeRememberTokensForUser($usernameToRemove);
+        }
+
     // Update encrypted userPermissions.json — remove any key matching case-insensitively
         $permissionsFile = USERS_DIR . "userPermissions.json";
         if (file_exists($permissionsFile)) {

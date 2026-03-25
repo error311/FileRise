@@ -8,6 +8,7 @@ use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\PersistentTokensKeyRotation;
 use FileRise\Support\UploadNamePolicy;
+use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\SourceContext;
 use FileRise\Domain\AdminModel;
 use FileRise\Domain\FolderCrypto;
@@ -908,10 +909,21 @@ class AdminController
 
         $cmd = defined('VIRUS_SCAN_CMD') ? VIRUS_SCAN_CMD : 'clamscan';
 
+        if (!WorkerLauncher::canRunForeground()) {
+            http_response_code(200);
+            echo json_encode([
+                'success' => false,
+                'error' => 'ClamAV test is unavailable on this host because PHP command execution (exec) is disabled.',
+                'command' => $cmd,
+                'engine' => null,
+                'details' => 'Enable exec() or run FileRise on a host that allows foreground command execution for ClamAV tests.',
+            ]);
+            return;
+        }
+
         // engine version (non-fatal)
-        $versionOutput = [];
-        $versionCode   = 0;
-        @exec(escapeshellcmd($cmd) . ' --version 2>&1', $versionOutput, $versionCode);
+        $versionRun = WorkerLauncher::runCommand(escapeshellcmd($cmd) . ' --version 2>&1');
+        $versionOutput = is_array($versionRun['output'] ?? null) ? $versionRun['output'] : [];
         $engineLine = trim($versionOutput[0] ?? '');
         $engineInfo = $engineLine ?: null;
 
@@ -925,14 +937,14 @@ class AdminController
 
         file_put_contents($tmpFile, "FileRise ClamAV connectivity test\n");
 
-        $scanOutput = [];
-        $scanCode   = 0;
         $scanCmd = escapeshellcmd($cmd)
             . ' --stdout --no-summary '
             . escapeshellarg($tmpFile)
             . ' 2>&1';
 
-        @exec($scanCmd, $scanOutput, $scanCode);
+        $scanRun = WorkerLauncher::runCommand($scanCmd);
+        $scanOutput = is_array($scanRun['output'] ?? null) ? $scanRun['output'] : [];
+        $scanCode = (int)($scanRun['exitCode'] ?? 1);
         @unlink($tmpFile);
 
         if ($scanCode === 0) {

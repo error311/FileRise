@@ -7,6 +7,7 @@ use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
 use FileRise\Support\FS;
+use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
 use FileRise\Domain\AdminModel;
@@ -685,8 +686,42 @@ class FolderController
                 return ['error' => 'Failed to create transfer job.'];
             }
 
+            if (WorkerLauncher::prefersSync() && WorkerLauncher::allowsForegroundFallback() && TransferJobManager::canRunWorkerForeground()) {
+                $run = TransferJobManager::runWorkerForeground($jobId);
+                if (empty($run['ok'])) {
+                    $job = TransferJobManager::load($jobId) ?: [];
+                    $job['status'] = 'error';
+                    $job['phase'] = 'error';
+                    $job['error'] = 'Worker foreground run failed: ' . (string)($run['error'] ?? 'Unknown error');
+                    $job['endedAt'] = time();
+                    TransferJobManager::save($jobId, $job);
+                    return ['error' => 'Failed to run transfer worker: ' . (string)($run['error'] ?? 'Unknown error')];
+                }
+
+                $fresh = TransferJobManager::load($jobId) ?: [];
+                return [
+                    'ok' => true,
+                    'jobId' => $jobId,
+                    'status' => (string)($fresh['status'] ?? 'done'),
+                    'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
+                ];
+            }
+
             $spawn = TransferJobManager::spawnWorker($jobId);
             if (empty($spawn['ok'])) {
+                if (WorkerLauncher::allowsForegroundFallback() && TransferJobManager::canRunWorkerForeground()) {
+                    $run = TransferJobManager::runWorkerForeground($jobId);
+                    if (!empty($run['ok'])) {
+                        $fresh = TransferJobManager::load($jobId) ?: [];
+                        return [
+                            'ok' => true,
+                            'jobId' => $jobId,
+                            'status' => (string)($fresh['status'] ?? 'done'),
+                            'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
+                        ];
+                    }
+                }
+
                 $job = TransferJobManager::load($jobId) ?: [];
                 $job['status'] = 'error';
                 $job['phase'] = 'error';

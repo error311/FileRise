@@ -7,6 +7,7 @@ use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
 use FileRise\Support\FS;
+use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -373,25 +374,7 @@ class FileController
             return ['ok' => false, 'error' => 'zip_worker.php not found'];
         }
 
-        // Find a PHP CLI binary that actually works
-        $candidates = array_values(array_filter([
-            PHP_BINARY ?: null,
-            '/usr/local/bin/php',
-            '/usr/bin/php',
-            '/bin/php'
-        ]));
-        $php = null;
-        foreach ($candidates as $bin) {
-            if (!$bin) {
-                continue;
-            }
-            $rc = 1;
-            @exec(escapeshellcmd($bin) . ' -v >/dev/null 2>&1', $o, $rc);
-            if ($rc === 0) {
-                $php = $bin;
-                break;
-            }
-        }
+        $php = WorkerLauncher::resolvePhpCli();
         if (!$php) {
             return ['ok' => false, 'error' => 'No working php CLI found'];
         }
@@ -412,8 +395,8 @@ class FileController
             ($sourceId !== '' ? (' ' . escapeshellarg($sourceId)) : '') .
             ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
 
-        $pid = @shell_exec('/bin/sh -c ' . escapeshellarg($cmdStr));
-        $pid = is_string($pid) ? (int)trim($pid) : 0;
+        $spawn = WorkerLauncher::spawnBackgroundShell($cmdStr);
+        $pid = !empty($spawn['ok']) ? (int)($spawn['pid'] ?? 0) : 0;
 
         // Persist spawn metadata into token (best-effort)
         $job = json_decode((string)@file_get_contents($tokFile), true) ?: [];
@@ -421,11 +404,58 @@ class FileController
             'ts'  => time(),
             'php' => $php,
             'pid' => $pid,
-            'log' => $logFile
+            'log' => $logFile,
+            'method' => (string)($spawn['method'] ?? ''),
         ];
         @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
 
-        return $pid > 0 ? ['ok' => true] : ['ok' => false, 'error' => 'spawn returned no PID'];
+        return !empty($spawn['ok'])
+            ? ['ok' => true]
+            : [
+                'ok' => false,
+                'error' => (string)($spawn['error'] ?? 'spawn returned no PID'),
+                'reason' => (string)($spawn['reason'] ?? ''),
+            ];
+    }
+
+    private function runZipWorkerForeground(string $token, string $tokFile, string $logDir, string $sourceId = ''): array
+    {
+        $worker = realpath(PROJECT_ROOT . '/src/cli/zip_worker.php');
+        if (!$worker || !is_file($worker)) {
+            return ['ok' => false, 'error' => 'zip_worker.php not found'];
+        }
+
+        $php = WorkerLauncher::resolvePhpCli();
+        if (!$php) {
+            return ['ok' => false, 'error' => 'No working php CLI found'];
+        }
+
+        $logFile = $logDir . DIRECTORY_SEPARATOR . 'WORKER-' . $token . '.log';
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $tmpDir = rtrim($metaRoot, '/\\') . '/ziptmp';
+        @mkdir($tmpDir, 0775, true);
+
+        $cmd =
+            'TMPDIR=' . escapeshellarg($tmpDir) . ' ' .
+            escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' ' . escapeshellarg($token) .
+            ($sourceId !== '' ? (' ' . escapeshellarg($sourceId)) : '') .
+            ' >> ' . escapeshellarg($logFile) . ' 2>&1';
+
+        $run = WorkerLauncher::runForegroundCommand($cmd);
+
+        $job = json_decode((string)@file_get_contents($tokFile), true) ?: [];
+        $job['spawn'] = [
+            'ts'  => time(),
+            'php' => $php,
+            'pid' => 0,
+            'log' => $logFile,
+            'method' => 'foreground_exec',
+        ];
+        @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+
+        return $run;
     }
 
     // --- small helpers ---
@@ -559,8 +589,42 @@ class FileController
                 return ['error' => 'Failed to create transfer job.'];
             }
 
+            if (WorkerLauncher::prefersSync() && WorkerLauncher::allowsForegroundFallback() && TransferJobManager::canRunWorkerForeground()) {
+                $run = TransferJobManager::runWorkerForeground($jobId);
+                if (empty($run['ok'])) {
+                    $job = TransferJobManager::load($jobId) ?: [];
+                    $job['status'] = 'error';
+                    $job['phase'] = 'error';
+                    $job['error'] = 'Worker foreground run failed: ' . (string)($run['error'] ?? 'Unknown error');
+                    $job['endedAt'] = time();
+                    TransferJobManager::save($jobId, $job);
+                    return ['error' => 'Failed to run transfer worker: ' . (string)($run['error'] ?? 'Unknown error')];
+                }
+
+                $fresh = TransferJobManager::load($jobId) ?: [];
+                return [
+                    'ok' => true,
+                    'jobId' => $jobId,
+                    'status' => (string)($fresh['status'] ?? 'done'),
+                    'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
+                ];
+            }
+
             $spawn = TransferJobManager::spawnWorker($jobId);
             if (empty($spawn['ok'])) {
+                if (WorkerLauncher::allowsForegroundFallback() && TransferJobManager::canRunWorkerForeground()) {
+                    $run = TransferJobManager::runWorkerForeground($jobId);
+                    if (!empty($run['ok'])) {
+                        $fresh = TransferJobManager::load($jobId) ?: [];
+                        return [
+                            'ok' => true,
+                            'jobId' => $jobId,
+                            'status' => (string)($fresh['status'] ?? 'done'),
+                            'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
+                        ];
+                    }
+                }
+
                 $job = TransferJobManager::load($jobId) ?: [];
                 $job['status'] = 'error';
                 $job['phase'] = 'error';
@@ -3639,20 +3703,45 @@ class FileController
                     return;
                 }
 
-            // Robust spawn (detect php CLI, log, record PID)
-                $spawn = $this->spawnZipWorker($token, $tokFile, $logDir, $activeSourceId);
-                if (!$spawn['ok']) {
-                    $job['status'] = 'error';
-                    $job['error']  = 'Spawn failed: ' . $spawn['error'];
-                    @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
-                    $this->jsonOut(["error" => "Failed to enqueue archive: " . $spawn['error']], 500);
-                    return;
+            // Robust spawn (detect php CLI, log, record PID) with shared-hosting fallback.
+                if (WorkerLauncher::prefersSync() && WorkerLauncher::allowsForegroundFallback()) {
+                    $run = $this->runZipWorkerForeground($token, $tokFile, $logDir, $activeSourceId);
+                    if (empty($run['ok'])) {
+                        $job['status'] = 'error';
+                        $job['error']  = 'Foreground zip failed: ' . (string)($run['error'] ?? 'Unknown error');
+                        @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+                        $this->jsonOut(["error" => "Failed to build archive: " . (string)($run['error'] ?? 'Unknown error')], 500);
+                        return;
+                    }
+                } else {
+                    $spawn = $this->spawnZipWorker($token, $tokFile, $logDir, $activeSourceId);
+                    if (!$spawn['ok']) {
+                        if (WorkerLauncher::allowsForegroundFallback()) {
+                            $run = $this->runZipWorkerForeground($token, $tokFile, $logDir, $activeSourceId);
+                            if (!empty($run['ok'])) {
+                                $this->jsonOut([
+                                    'ok'          => true,
+                                    'token'       => $token,
+                                    'status'      => 'done',
+                                    'statusUrl'   => '/api/file/zipStatus.php?k=' . urlencode($token),
+                                    'downloadUrl' => '/api/file/downloadZipFile.php?k=' . urlencode($token)
+                                ]);
+                                return;
+                            }
+                        }
+
+                        $job['status'] = 'error';
+                        $job['error']  = 'Spawn failed: ' . $spawn['error'];
+                        @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+                        $this->jsonOut(["error" => "Failed to enqueue archive: " . $spawn['error']], 500);
+                        return;
+                    }
                 }
 
                 $this->jsonOut([
                 'ok'          => true,
                 'token'       => $token,
-                'status'      => 'queued',
+                'status'      => WorkerLauncher::prefersSync() ? 'done' : 'queued',
                 'statusUrl'   => '/api/file/zipStatus.php?k=' . urlencode($token),
                 'downloadUrl' => '/api/file/downloadZipFile.php?k=' . urlencode($token)
                 ]);

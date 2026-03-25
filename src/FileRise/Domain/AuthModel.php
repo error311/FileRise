@@ -15,6 +15,11 @@ class AuthModel
     private const FAIL2BAN_LOG_MAX_BYTES = 50 * 1024 * 1024;
     private const FAIL2BAN_LOG_MAX_FILES = 5;
 
+    public static function userExists(string $username): bool
+    {
+        return UserModel::getUserRole($username) !== null;
+    }
+
     public static function isOidcDemoteAllowed(): bool
     {
     // 1) Container / env always wins if set
@@ -586,6 +591,13 @@ class AuthModel
             return null;
         }
 
+        $username = (string)($payload['username'] ?? '');
+        if ($username === '' || !self::userExists($username)) {
+            unset($all[$hash], $all[$token]);
+            self::saveRememberTokenStore($all);
+            return null;
+        }
+
         return $payload;
     }
 
@@ -624,6 +636,15 @@ class AuthModel
 
         $username = (string)($payload['username'] ?? '');
         if ($username === '') {
+            unset($all[$hash]);
+            if ($legacyKey !== null) {
+                unset($all[$legacyKey]);
+            }
+            self::saveRememberTokenStore($all);
+            return null;
+        }
+
+        if (!self::userExists($username)) {
             unset($all[$hash]);
             if ($legacyKey !== null) {
                 unset($all[$legacyKey]);
@@ -706,6 +727,27 @@ class AuthModel
         if (isset($all[$token])) {
             unset($all[$token]);
             $changed = true;
+        }
+
+        if ($changed) {
+            self::saveRememberTokenStore($all);
+        }
+    }
+
+    public static function revokeRememberTokensForUser(string $username): void
+    {
+        $all = self::loadRememberTokenStore();
+        if (!$all) {
+            return;
+        }
+
+        $changed = false;
+        foreach ($all as $key => $payload) {
+            $storedUser = is_array($payload) ? (string)($payload['username'] ?? '') : '';
+            if ($storedUser !== '' && strcasecmp($storedUser, $username) === 0) {
+                unset($all[$key]);
+                $changed = true;
+            }
         }
 
         if ($changed) {

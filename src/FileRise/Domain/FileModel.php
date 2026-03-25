@@ -6,6 +6,7 @@ use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
 use FileRise\Support\UploadNamePolicy;
+use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -1850,10 +1851,17 @@ class FileModel
             return ['name' => '', 'type' => null, 'mapped' => null];
         };
 
+        $archiveExecAvailable = WorkerLauncher::canRunForeground();
+        $archiveExecError = 'Archive operations for this format are unavailable on this host because PHP command execution (exec) is disabled.';
+
         $sevenZipBin = null;
-        $findSevenZip = function () use (&$sevenZipBin): ?string {
+        $findSevenZip = function () use (&$sevenZipBin, $archiveExecAvailable): ?string {
             if ($sevenZipBin !== null) {
                 return $sevenZipBin ?: null;
+            }
+            if (!$archiveExecAvailable) {
+                $sevenZipBin = '';
+                return null;
             }
             $candidates = [
                 '7zz',
@@ -1889,9 +1897,13 @@ class FileModel
         };
 
         $unarBin = null;
-        $findUnar = function () use (&$unarBin): ?string {
+        $findUnar = function () use (&$unarBin, $archiveExecAvailable): ?string {
             if ($unarBin !== null) {
                 return $unarBin ?: null;
+            }
+            if (!$archiveExecAvailable) {
+                $unarBin = '';
+                return null;
             }
             $candidates = [
                 'unar',
@@ -2355,7 +2367,9 @@ class FileModel
 
             $sevenZip = $findSevenZip();
             if (!$sevenZip) {
-                $errors[] = "7z is not available on the server; cannot extract $archiveBase.";
+                $errors[] = !$archiveExecAvailable
+                    ? "$archiveBase blocked: {$archiveExecError}"
+                    : "7z is not available on the server; cannot extract $archiveBase.";
                 $allSuccess = false;
                 continue;
             }

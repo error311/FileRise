@@ -155,6 +155,18 @@ if (!defined('FR_WEBDAV_MAX_UPLOAD_BYTES')) {
         define('FR_WEBDAV_MAX_UPLOAD_BYTES', 0);
     }
 }
+// Background worker mode for transfer / zip / scan jobs.
+// auto  = prefer background workers, fallback when unavailable
+// async = require background workers
+// sync  = force foreground execution where supported
+if (!defined('FR_WORKER_MODE')) {
+    $envVal = getenv('FR_WORKER_MODE');
+    $mode = strtolower(trim($envVal === false ? '' : (string)$envVal));
+    if (!in_array($mode, ['auto', 'async', 'sync'], true)) {
+        $mode = 'auto';
+    }
+    define('FR_WORKER_MODE', $mode);
+}
 // Antivirus / ClamAV (optional)
 // If VIRUS_SCAN_ENABLED is set in the environment, it overrides the admin setting.
 // If it is not set, we don't define the constant and the admin checkbox controls scanning.
@@ -342,6 +354,38 @@ function loadUserPermissions($username)
     return is_array($row) ? $row : false;
 }
 
+function fr_local_user_exists($username): bool
+{
+    $username = trim((string)$username);
+    if ($username === '') {
+        return false;
+    }
+
+    return \FileRise\Domain\UserModel::getUserRole($username) !== null;
+}
+
+function fr_forget_authenticated_user(bool $clearRememberCookie = false): void
+{
+    if ($clearRememberCookie && !empty($_COOKIE['remember_me_token']) && class_exists(\FileRise\Domain\AuthModel::class)) {
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        \FileRise\Domain\AuthModel::revokeRememberToken((string)$_COOKIE['remember_me_token']);
+        setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
+        unset($_COOKIE['remember_me_token']);
+    }
+
+    unset(
+        $_SESSION['authenticated'],
+        $_SESSION['username'],
+        $_SESSION['isAdmin'],
+        $_SESSION['folderOnly'],
+        $_SESSION['readOnly'],
+        $_SESSION['disableUpload'],
+        $_SESSION['pending_login_user'],
+        $_SESSION['pending_login_secret'],
+        $_SESSION['pending_login_remember_me']
+    );
+}
+
 // Determine HTTPS usage
 $envSecure = getenv('SECURE');
 $secure = ($envSecure !== false)
@@ -392,6 +436,10 @@ if (session_status() === PHP_SESSION_NONE) {
 // CSRF token
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+if (!empty($_SESSION['authenticated']) && !fr_local_user_exists((string)($_SESSION['username'] ?? ''))) {
+    fr_forget_authenticated_user(true);
 }
 
 // Auto-login via persistent token

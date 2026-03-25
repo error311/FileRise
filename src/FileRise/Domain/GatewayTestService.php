@@ -6,6 +6,7 @@ namespace FileRise\Domain;
 
 use FileRise\Storage\SourceContext;
 use FileRise\Support\FS;
+use FileRise\Support\WorkerLauncher;
 use RuntimeException;
 
 require_once PROJECT_ROOT . '/config/config.php';
@@ -105,8 +106,8 @@ final class GatewayTestService
     private static function findRclonePath(): string
     {
         $rclonePath = '';
-        if (function_exists('shell_exec')) {
-            $out = @shell_exec('command -v rclone 2>/dev/null');
+        $out = WorkerLauncher::captureCommand('command -v rclone 2>/dev/null');
+        if (is_string($out)) {
             $rclonePath = is_string($out) ? trim($out) : '';
         }
 

@@ -7,6 +7,7 @@ use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
 use FileRise\Support\UploadNamePolicy;
+use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -1269,6 +1270,11 @@ class UploadModel
 
         if (self::isVirusScanExcluded($context)) {
             return null; // excluded path
+        }
+
+        if (!WorkerLauncher::canRunForeground()) {
+            error_log('ClamAV scan skipped: PHP command execution is unavailable on this host.');
+            return null;
         }
 
         $cmd = defined('VIRUS_SCAN_CMD') ? VIRUS_SCAN_CMD : 'clamscan';

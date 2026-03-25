@@ -1,5 +1,37 @@
 # Changelog
 
+## Changes 03/24/2026 (v3.11.1)
+
+`release(v3.11.1): shared-hosting worker fallback and deleted-user session invalidation (closes #110)`
+
+**Commit message**  
+
+```text
+release(v3.11.1): shared-hosting worker fallback and deleted-user session invalidation (closes #110)
+
+- transfer(shared-hosting): fall back from shell_exec to exec or foreground workers so move/copy/zip jobs stay usable on restrictive hosts (#110)
+- compat(shell): degrade ClamAV, archive, and admin diagnostics paths cleanly when PHP command execution is unavailable
+- auth(delete-user): invalidate deleted-account sessions and revoke remember-me tokens so removed users cannot regain access on subsequent requests
+```
+
+**Fixed**  
+
+- **Shared-hosting transfer compatibility**
+  - Fixed a case where move/copy jobs could fail with `500` on hosts that disable `proc_open()` / `shell_exec()` and similar process-launch functions, leaving folder operations unusable.
+  - FileRise now falls back to safer worker-launch paths and foreground execution where appropriate so transfer and ZIP workflows remain usable on more restrictive shared-hosting environments.
+
+- **Deleted-account session invalidation**
+  - Fixed a case where a deleted account could continue using an already-established session until the PHP session expired or the web service was restarted.
+  - Deleted users can no longer regain access through remember-me restoration, and user deletion now revokes stored remember-me tokens for that account.
+
+**Changed**  
+
+- **Shell-dependent feature degradation**
+  - Shell-backed features now report clearer host limitations when PHP command execution is unavailable instead of failing with less actionable worker or command errors.
+  - ClamAV diagnostics, archive operations, and related admin/runtime checks now degrade more cleanly on locked-down hosts.
+
+---
+
 ## Changes 03/20/2026 (v3.11.0)
 
 `release(v3.11.0): snippet ownership enforcement and phpseclib security update`

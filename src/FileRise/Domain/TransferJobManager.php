@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FileRise\Domain;
 
+use FileRise\Support\WorkerLauncher;
+
 /**
  * Lightweight job persistence/spawn helper for async transfer operations.
  */
@@ -205,22 +207,7 @@ class TransferJobManager
             return ['ok' => false, 'error' => 'transfer_worker.php not found'];
         }
 
-        $candidates = array_values(array_filter([
-            PHP_BINARY ?: null,
-            '/usr/local/bin/php',
-            '/usr/bin/php',
-            '/bin/php',
-        ]));
-
-        $php = null;
-        foreach ($candidates as $bin) {
-            $rc = 1;
-            @exec(escapeshellcmd($bin) . ' -v >/dev/null 2>&1', $o, $rc);
-            if ($rc === 0) {
-                $php = $bin;
-                break;
-            }
-        }
+        $php = WorkerLauncher::resolvePhpCli();
         if (!$php) {
             return ['ok' => false, 'error' => 'No working php CLI found'];
         }
@@ -231,8 +218,8 @@ class TransferJobManager
             'nohup ' . escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' ' . escapeshellarg($jobId) .
             ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
 
-        $pid = @shell_exec('/bin/sh -c ' . escapeshellarg($cmdStr));
-        $pid = is_string($pid) ? (int)trim($pid) : 0;
+        $spawn = WorkerLauncher::spawnBackgroundShell($cmdStr);
+        $pid = !empty($spawn['ok']) ? (int)($spawn['pid'] ?? 0) : 0;
 
         $job = self::load($jobId) ?: [];
         $job['spawn'] = [
@@ -240,11 +227,58 @@ class TransferJobManager
             'pid' => $pid,
             'php' => $php,
             'log' => $logFile,
+            'method' => (string)($spawn['method'] ?? ''),
         ];
         self::save($jobId, $job);
 
-        return $pid > 0
+        return !empty($spawn['ok'])
             ? ['ok' => true, 'pid' => $pid]
-            : ['ok' => false, 'error' => 'Worker spawn returned no PID'];
+            : [
+                'ok' => false,
+                'error' => (string)($spawn['error'] ?? 'Worker spawn returned no PID'),
+                'reason' => (string)($spawn['reason'] ?? ''),
+            ];
+    }
+
+    public static function canRunWorkerForeground(): bool
+    {
+        return WorkerLauncher::canRunForeground();
+    }
+
+    public static function runWorkerForeground(string $jobId): array
+    {
+        self::ensureDirs();
+        if (!self::isValidId($jobId)) {
+            return ['ok' => false, 'error' => 'Invalid job id'];
+        }
+
+        $worker = realpath(PROJECT_ROOT . '/src/cli/transfer_worker.php');
+        if (!$worker || !is_file($worker)) {
+            return ['ok' => false, 'error' => 'transfer_worker.php not found'];
+        }
+
+        $php = WorkerLauncher::resolvePhpCli();
+        if (!$php) {
+            return ['ok' => false, 'error' => 'No working php CLI found'];
+        }
+
+        $logFile = self::logPathFor($jobId);
+        $cmd =
+            escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' ' . escapeshellarg($jobId) .
+            ' >> ' . escapeshellarg($logFile) . ' 2>&1';
+
+        $run = WorkerLauncher::runForegroundCommand($cmd);
+
+        $job = self::load($jobId) ?: [];
+        $job['spawn'] = [
+            'ts' => time(),
+            'pid' => 0,
+            'php' => $php,
+            'log' => $logFile,
+            'method' => 'foreground_exec',
+        ];
+        self::save($jobId, $job);
+
+        return $run;
     }
 }
