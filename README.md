@@ -46,7 +46,7 @@ Quick links: [Website](https://filerise.net) • [Docs](https://filerise.net/doc
 
 ## Highlights
 
-- 💾 **Self-hosted “cloud drive”** – Runs anywhere with PHP (or via Docker). No external database required.
+- 💾 **Self-hosted “cloud drive”** – Runs on Docker (recommended) or on a standard PHP web server. No external database required.
 - 🔐 **Granular per-folder ACLs** – Manage View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share, and more — all enforced consistently across the UI, API, and WebDAV.
 - 🔗 **Link File (authenticated deep links)** – Generate internal links to specific files, require login + ACL checks, and open directly to the target in the app.
 - 🤝 **Folder and file sharing** – Share folders for browsing or upload-only file requests, protect links with passwords/expiration, and share individual files with generated links.
@@ -283,6 +283,8 @@ export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
 ## Manual install (PHP web server)
 
 Short version: FileRise expects data at `/var/www/{uploads,users,metadata}` and your web server must point to the **public/** folder (for example `DocumentRoot /var/www/filerise/public`).
+
+Docker is the recommended deployment path. Manual installs on a standard PHP web server are supported, but more restrictive shared-hosting environments are best-effort and may not support every feature or background-worker workflow.
 
 Full guide + troubleshooting:  
 [Installation & setup](https://github.com/error311/FileRise/wiki/Installation-Setup) • [Upgrade & migration](https://github.com/error311/FileRise/wiki/Upgrade-and-Migration) • [Reverse proxy & subpath](https://github.com/error311/FileRise/wiki/Reverse-Proxy-and-Subpath)

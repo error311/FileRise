@@ -1,6 +1,6 @@
 # FileRise Wiki
 
-FileRise is a self-hosted web file manager with WebDAV, sharing, and per-folder ACLs. It runs without a database and supports Docker or manual installs.
+FileRise is a self-hosted web file manager with WebDAV, sharing, and per-folder ACLs. It runs without a database and supports Docker or standard PHP web-server installs. Docker is the recommended deployment path; restrictive shared-hosting environments are best-effort.
 
 ## Project philosophy
 

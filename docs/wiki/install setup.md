@@ -60,6 +60,8 @@ Bind `/var/www/uploads` to a **dedicated folder** (not the root of a massive sha
 
 ## 2) Manual install (PHP web server)
 
+Docker is the recommended deployment path. Manual installs on a standard PHP web server are supported, but more restrictive shared-hosting environments are best-effort and may not support every feature or background-worker workflow.
+
 ### Requirements
 
 - PHP **8.3+**

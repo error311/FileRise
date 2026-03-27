@@ -17,6 +17,91 @@ In the **Shares** tab, you can:
 
 Gateway records remain reusable across both managed and manual mode.
 
+## Share fields: what they mean
+
+The main fields on a gateway share are:
+
+- `gatewayType`
+  - Managed mode currently supports `sftp` and `s3`.
+- `sourceId`
+  - The FileRise source the share is associated with.
+  - Use `local` for the default local storage root, or another configured source id such as an SMB source.
+- `rootPath`
+  - The FileRise logical scope inside that source.
+  - Use `root` to represent the whole source.
+  - Use a subfolder path such as `projects/acme` to scope the share to that folder inside the source.
+- `managedTarget` (optional, but important)
+  - The actual filesystem path that the managed `rclone serve ...` runtime will expose.
+  - If set, managed mode uses this value directly.
+  - If blank, managed mode tries to derive the target path automatically from the source/root settings.
+- `mode`
+  - `ro` = read only
+  - `rw` = read/write
+- `listenAddr` / `port`
+  - The bind address and port for the managed runtime.
+
+## `rootPath` vs `managedTarget`
+
+These two fields do different jobs:
+
+- `rootPath`
+  - FileRise logical scope/path inside the selected source.
+  - This is how the share is scoped from the FileRise side.
+- `managedTarget`
+  - Actual mounted path that the managed runtime serves on disk.
+  - This is what `rclone serve sftp ... <target>` or `rclone serve s3 ... <target>` will use.
+
+### Local sources
+
+For `local` sources, managed mode can usually derive the target path automatically:
+
+- `sourceId = local`
+- `rootPath = root`
+  - serves the local source root
+- `rootPath = Documentation`
+  - serves the `Documentation` subfolder under that local source root
+
+In those normal local-source cases, `managedTarget` can usually be left blank.
+
+### Non-local sources such as SMB / CIFS
+
+For non-local sources, managed mode requires `managedTarget`.
+
+Current behavior in managed mode is:
+
+- if `managedTarget` is set, it is used directly
+- if `managedTarget` is blank and the source is not `local`, managed mode errors
+
+That means SMB/CIFS, SFTP-source, FTP-source, WebDAV-source, and similar non-local source ids need an explicit mounted target path for managed mode.
+
+### SMB example
+
+If your SMB share is mounted on the host/container at:
+
+`/mnt/client-share`
+
+and you want the gateway to expose:
+
+`/mnt/client-share/projects`
+
+then use:
+
+- `sourceId = <your SMB source id>`
+- `rootPath = projects`
+- `managedTarget = /mnt/client-share/projects`
+
+If you want the whole mounted SMB share, use:
+
+- `sourceId = <your SMB source id>`
+- `rootPath = root`
+- `managedTarget = /mnt/client-share`
+
+Important:
+
+- `managedTarget` does not mount SMB by itself
+- it only tells the managed runtime which already-mounted path to serve
+- the path must exist and be visible from the FileRise / managed-runtime environment
+
 ## rclone runtime in Managed Mode
 
 Managed mode resolves a runtime `rclone` binary in this order:
@@ -33,6 +118,8 @@ From the admin panel you can:
 - **Check rclone update** (current/latest + update status)
 
 If the bundled file is a placeholder wrapper, Managed status reports that clearly and asks you to install/upload a real binary.
+
+When a managed share starts successfully, the runtime command ends with the resolved target path described above.
 
 ## Docker / container networking notes
 
