@@ -2149,7 +2149,7 @@ class FolderController
         }
 
         // Ensure enough free space (best-effort)
-        $free = @disk_free_space($work);
+        $free = function_exists('disk_free_space') ? @disk_free_space($work) : false;
         if ($free !== false && $totalBytes > 0) {
             $needed = (int)ceil($totalBytes * 1.05) + (20 * 1024 * 1024);
             if ($free < $needed) {
