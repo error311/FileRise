@@ -563,6 +563,88 @@ class FileController
             || $this->truthy($payload['queue'] ?? false)
             || $this->truthy($payload['asyncJob'] ?? false);
     }
+
+    /**
+     * Execute a transfer job synchronously in-request as a last resort,
+     * when no worker (background or foreground) can be spawned.
+     * Updates the job file to 'done' or 'error' and returns a job-envelope.
+     *
+     * @return array{ok:bool,jobId?:string,status?:string,error?:string}
+     */
+    private function runJobInRequest(string $jobId, array $jobSpec): array
+    {
+        $kind = strtolower((string)($jobSpec['kind'] ?? ''));
+        $mode = strtolower((string)($jobSpec['mode'] ?? ''));
+        $sourceFolder      = (string)($jobSpec['sourceFolder'] ?? '');
+        $destinationFolder = (string)($jobSpec['destinationFolder'] ?? '');
+        $files             = (array)($jobSpec['files'] ?? []);
+        $crossSource       = !empty($jobSpec['crossSource']);
+        $sourceId          = (string)($jobSpec['sourceId'] ?? '');
+        $destSourceId      = (string)($jobSpec['destSourceId'] ?? '');
+
+        try {
+            if ($kind === 'file_move' || $kind === 'file_copy') {
+                if ($crossSource) {
+                    $result = $kind === 'file_copy'
+                        ? FileModel::copyFilesAcrossSources($sourceId, $destSourceId, $sourceFolder, $destinationFolder, $files)
+                        : FileModel::moveFilesAcrossSources($sourceId, $destSourceId, $sourceFolder, $destinationFolder, $files);
+                } elseif ($kind === 'file_copy') {
+                    $result = FileModel::copyFiles($sourceFolder, $destinationFolder, $files);
+                } else {
+                    $result = FileModel::moveFiles($sourceFolder, $destinationFolder, $files);
+                }
+            } elseif ($kind === 'folder_move' || $kind === 'folder_copy') {
+                // FolderModel has no simple move/copy entry point; route through
+                // FolderController which already handles ACLs and all edge cases.
+                $payload = ['source' => $sourceFolder, 'destination' => $destinationFolder,
+                            'mode' => $mode === 'copy' ? 'copy' : 'move'];
+                if ($sourceId !== '')   { $payload['sourceId']     = $sourceId; }
+                if ($destSourceId !== '') { $payload['destSourceId'] = $destSourceId; }
+                ob_start();
+                $fc = new FolderController();
+                $fc->setJsonBodyOverride($payload);
+                $fc->moveFolder();
+                $raw = ob_get_clean();
+                $result = json_decode((string)$raw, true) ?: [];
+            } else {
+                return ['ok' => false, 'error' => 'Unsupported job kind for in-request execution.'];
+            }
+        } catch (\Throwable $e) {
+            $job = TransferJobManager::load($jobId) ?: [];
+            $job['status'] = 'error';
+            $job['phase']  = 'error';
+            $job['error']  = $e->getMessage();
+            $job['endedAt'] = time();
+            TransferJobManager::save($jobId, $job);
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        if (isset($result['error'])) {
+            $job = TransferJobManager::load($jobId) ?: [];
+            $job['status'] = 'error';
+            $job['phase']  = 'error';
+            $job['error']  = (string)$result['error'];
+            $job['endedAt'] = time();
+            TransferJobManager::save($jobId, $job);
+            return ['ok' => false, 'error' => (string)$result['error']];
+        }
+
+        $job = TransferJobManager::load($jobId) ?: [];
+        $job['status']   = 'done';
+        $job['phase']    = 'done';
+        $job['pct']      = 100;
+        $job['endedAt']  = time();
+        $job['error']    = null;
+        TransferJobManager::save($jobId, $job);
+
+        return [
+            'ok'        => true,
+            'jobId'     => $jobId,
+            'status'    => 'done',
+            'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
+        ];
+    }
+
     private function enqueueTransferJob(array $jobSpec): array
     {
         try {
@@ -610,6 +692,22 @@ class FileController
                 ];
             }
 
+            // If no shell execution is available at all, skip the spawn attempt
+            // entirely - spawnWorker() would hang waiting for a CLI that can't run.
+            if (!WorkerLauncher::canSpawnBackground() && !WorkerLauncher::canRunForeground()) {
+                $syncResult = $this->runJobInRequest($jobId, $jobSpec);
+                if (!empty($syncResult['ok'])) {
+                    return $syncResult;
+                }
+                $job = TransferJobManager::load($jobId) ?: [];
+                $job['status'] = 'error';
+                $job['phase']  = 'error';
+                $job['error']  = (string)($syncResult['error'] ?? 'In-request execution failed');
+                $job['endedAt'] = time();
+                TransferJobManager::save($jobId, $job);
+                return ['error' => $job['error']];
+            }
+
             $spawn = TransferJobManager::spawnWorker($jobId);
             if (empty($spawn['ok'])) {
                 if (WorkerLauncher::allowsForegroundFallback() && TransferJobManager::canRunWorkerForeground()) {
@@ -623,6 +721,11 @@ class FileController
                             'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
                         ];
                     }
+                }
+
+                $syncResult = $this->runJobInRequest($jobId, $jobSpec);
+                if (!empty($syncResult['ok'])) {
+                    return $syncResult;
                 }
 
                 $job = TransferJobManager::load($jobId) ?: [];
@@ -3122,8 +3225,11 @@ class FileController
             $thumbPath = $thumbDir . ($isPdf ? 'pthumb_' : 'vthumb_') . $hash . '.jpg';
 
             if (!is_file($thumbPath) || @filesize($thumbPath) === 0) {
-                if (!function_exists('exec')) {
-                    $fail(501, "Thumbnail generator unavailable.");
+                if (!WorkerLauncher::canRunForeground()) {
+                    // exec unavailable - return 204 No Content so the browser
+                    // silently skips the thumbnail without showing an error.
+                    http_response_code(204);
+                    return;
                 }
 
                 @session_write_close();
@@ -3703,7 +3809,40 @@ class FileController
                     return;
                 }
 
-            // Robust spawn (detect php CLI, log, record PID) with shared-hosting fallback.
+            // If no exec is available, fall back to synchronous ZipArchive for zip format.
+            // 7z requires exec and cannot be supported in this environment.
+                if (!WorkerLauncher::canSpawnBackground() && !WorkerLauncher::canRunForeground()) {
+                    if ($format !== 'zip') {
+                        $job['status'] = 'error';
+                        $job['error']  = 'Archive format not supported: exec() is unavailable on this host.';
+                        @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+                        $this->jsonOut(["error" => "Archive format '$format' is not supported on this host (exec disabled). Use ZIP instead."], 501);
+                        return;
+                    }
+
+                    // ZIP: run synchronously via ZipArchive (pure PHP, no exec needed)
+                    $zipResult = FileModel::createZipArchive($folder, $files);
+                    if (isset($zipResult['error'])) {
+                        $job['status'] = 'error';
+                        $job['error']  = $zipResult['error'];
+                        @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+                        $this->jsonOut(["error" => $zipResult['error']], 500);
+                        return;
+                    }
+
+                    $job['status']  = 'done';
+                    $job['zipPath'] = $zipResult['zipPath'];
+                    @file_put_contents($tokFile, json_encode($job, JSON_PRETTY_PRINT), LOCK_EX);
+                    $this->jsonOut([
+                        'ok'          => true,
+                        'token'       => $token,
+                        'status'      => 'done',
+                        'statusUrl'   => '/api/file/zipStatus.php?k=' . urlencode($token),
+                        'downloadUrl' => '/api/file/downloadZipFile.php?k=' . urlencode($token),
+                    ]);
+                    return;
+                }
+
                 if (WorkerLauncher::prefersSync() && WorkerLauncher::allowsForegroundFallback()) {
                     $run = $this->runZipWorkerForeground($token, $tokFile, $logDir, $activeSourceId);
                     if (empty($run['ok'])) {
