@@ -660,6 +660,62 @@ class FolderController
             || $this->truthy($payload['asyncJob'] ?? false);
     }
 
+    /**
+     * Execute a folder transfer job synchronously in-request.
+     * Routes through moveFolder() which handles all ACLs and edge cases.
+     *
+     * @return array{ok:bool,jobId?:string,status?:string,error?:string}
+     */
+    private function runJobInRequest(string $jobId, array $jobSpec): array
+    {
+        $kind         = strtolower((string)($jobSpec['kind'] ?? ''));
+        $mode         = strtolower((string)($jobSpec['mode'] ?? ($kind === 'folder_copy' ? 'copy' : 'move')));
+        $source       = (string)($jobSpec['sourceFolder'] ?? '');
+        $destination  = (string)($jobSpec['destinationFolder'] ?? '');
+        $sourceId     = (string)($jobSpec['sourceId'] ?? '');
+        $destSourceId = (string)($jobSpec['destSourceId'] ?? '');
+
+        $payload = [
+            'source'      => $source,
+            'destination' => $destination,
+            'mode'        => $mode,
+        ];
+        if ($sourceId !== '')     { $payload['sourceId']     = $sourceId; }
+        if ($destSourceId !== '') { $payload['destSourceId'] = $destSourceId; }
+
+        ob_start();
+        $this->setJsonBodyOverride($payload);
+        $this->moveFolder();
+        $this->setJsonBodyOverride(null);
+        $raw = ob_get_clean();
+        $result = json_decode((string)$raw, true) ?: [];
+
+        if (isset($result['error'])) {
+            $job = TransferJobManager::load($jobId) ?: [];
+            $job['status'] = 'error';
+            $job['phase']  = 'error';
+            $job['error']  = (string)$result['error'];
+            $job['endedAt'] = time();
+            TransferJobManager::save($jobId, $job);
+            return ['ok' => false, 'error' => (string)$result['error']];
+        }
+
+        $job = TransferJobManager::load($jobId) ?: [];
+        $job['status']  = 'done';
+        $job['phase']   = 'done';
+        $job['pct']     = 100;
+        $job['endedAt'] = time();
+        $job['error']   = null;
+        TransferJobManager::save($jobId, $job);
+
+        return [
+            'ok'        => true,
+            'jobId'     => $jobId,
+            'status'    => 'done',
+            'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
+        ];
+    }
+
     private function enqueueTransferJob(array $jobSpec): array
     {
         try {
@@ -707,6 +763,22 @@ class FolderController
                 ];
             }
 
+            // If no shell execution is available at all, skip the spawn attempt
+            // entirely - spawnWorker() would hang waiting for a CLI that can't run.
+            if (!WorkerLauncher::canSpawnBackground() && !WorkerLauncher::canRunForeground()) {
+                $syncResult = $this->runJobInRequest($jobId, $jobSpec);
+                if (!empty($syncResult['ok'])) {
+                    return $syncResult;
+                }
+                $job = TransferJobManager::load($jobId) ?: [];
+                $job['status'] = 'error';
+                $job['phase']  = 'error';
+                $job['error']  = (string)($syncResult['error'] ?? 'In-request execution failed');
+                $job['endedAt'] = time();
+                TransferJobManager::save($jobId, $job);
+                return ['error' => $job['error']];
+            }
+
             $spawn = TransferJobManager::spawnWorker($jobId);
             if (empty($spawn['ok'])) {
                 if (WorkerLauncher::allowsForegroundFallback() && TransferJobManager::canRunWorkerForeground()) {
@@ -720,6 +792,11 @@ class FolderController
                             'statusUrl' => '/api/file/transferJobStatus.php?jobId=' . urlencode($jobId),
                         ];
                     }
+                }
+
+                $syncResult = $this->runJobInRequest($jobId, $jobSpec);
+                if (!empty($syncResult['ok'])) {
+                    return $syncResult;
                 }
 
                 $job = TransferJobManager::load($jobId) ?: [];
@@ -3368,7 +3445,7 @@ class FolderController
                     echo json_encode(['error' => 'Source and destination must have the same owner']);
                     return;
                 }
-            } catch (\Throwable $e) { /* ignore – fall through */
+            } catch (\Throwable $e) { /* ignore - fall through */
             }
         }
 
