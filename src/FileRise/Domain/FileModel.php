@@ -1616,7 +1616,7 @@ class FileModel
                 $totalSize += (int)$sz;
             }
         }
-        $free = @disk_free_space($work);
+        $free = function_exists('disk_free_space') ? @disk_free_space($work) : false;
         // Add ~20MB overhead and a 5% cushion
         if ($free !== false && $totalSize > 0) {
             $needed = (int)ceil($totalSize * 1.05) + (20 * 1024 * 1024);
