@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 04/16/2026 (v3.11.2)
+
+`release(v3.11.2): phpseclib security dependency update`
+
+**Commit message**  
+
+```text
+release(v3.11.2): phpseclib security dependency update
+
+- deps(composer): upgrade phpseclib/phpseclib to 3.0.51 to pick up the latest upstream security fix
+```
+
+**Changed**  
+
+- **Dependency security maintenance**
+  - Updated `phpseclib/phpseclib` to `3.0.51` in Composer dependencies to pick up the current upstream security fix in the locked dependency set.
+  - This release addresses the upstream advisory covering variable-time HMAC comparison in `SSH2::get_binary_packet()`.
+
+---
+
 ## Changes 03/24/2026 (v3.11.1)
 
 `release(v3.11.1): shared-hosting worker fallback and deleted-user session invalidation (closes #110)`
