@@ -1,5 +1,32 @@
 # Changelog
 
+## Changes 04/29/2026 (v3.12.0)
+
+`release(v3.12.0): TOTP setup flow hardening`
+
+**Commit message**  
+
+```text
+release(v3.12.0): TOTP setup flow hardening
+
+- auth(totp): tighten setup QR access to fully authenticated profile sessions
+- auth(totp): avoid reusing existing TOTP enrollment data during setup
+```
+
+**Fixed**  
+
+- **TOTP setup flow hardening**
+  - Tightened TOTP setup so enrollment QR generation is only available from a fully authenticated profile session.
+  - Accounts that already have TOTP configured are no longer offered a setup QR for the existing enrollment.
+  - Existing TOTP sign-in, recovery-code, disable, and first-time setup flows remain supported.
+
+**Changed**  
+
+- **Authenticator re-enrollment behavior**
+  - Users who need to enroll a replacement authenticator should disable TOTP and enable it again to generate a fresh enrollment.
+
+---
+
 ## Changes 04/16/2026 (v3.11.2)
 
 `release(v3.11.2): phpseclib security dependency update`

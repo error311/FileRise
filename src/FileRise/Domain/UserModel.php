@@ -809,19 +809,29 @@ class UserModel
         global $encryptionKey;
         $usersFile = USERS_DIR . USERS_FILE;
 
+        if (!preg_match(REGEX_USER, $username)) {
+            return ['error' => 'Invalid username', 'statusCode' => 400];
+        }
+
         if (!file_exists($usersFile)) {
             return ['error' => 'Users file not found'];
         }
 
         $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $totpSecret = null;
+        $userExists = false;
 
         foreach ($lines as $line) {
             $parts = explode(':', trim($line));
-            if (count($parts) >= 4 && strcasecmp($parts[0], $username) === 0 && !empty($parts[3])) {
-                $totpSecret = decryptData($parts[3], $encryptionKey);
+            if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
+                $userExists = true;
+                if (count($parts) >= 4 && !empty($parts[3])) {
+                    return ['error' => 'TOTP is already configured for this account', 'statusCode' => 409];
+                }
                 break;
             }
+        }
+        if (!$userExists) {
+            return ['error' => 'User not found', 'statusCode' => 404];
         }
 
         $tfa = new \RobThree\Auth\TwoFactorAuth(
@@ -832,25 +842,25 @@ class UserModel
             \RobThree\Auth\Algorithm::Sha1
         );
 
-        if (!$totpSecret) {
-            $totpSecret = $tfa->createSecret();
-            $encryptedSecret = encryptData($totpSecret, $encryptionKey);
+        $totpSecret = $tfa->createSecret();
+        $encryptedSecret = encryptData($totpSecret, $encryptionKey);
 
-            $newLines = [];
-            foreach ($lines as $line) {
-                $parts = explode(':', trim($line));
-                if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
-                    if (count($parts) >= 4) {
-                        $parts[3] = $encryptedSecret;
-                    } else {
-                        $parts[] = $encryptedSecret;
-                    }
-                    $newLines[] = implode(':', $parts);
+        $newLines = [];
+        foreach ($lines as $line) {
+            $parts = explode(':', trim($line));
+            if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
+                if (count($parts) >= 4) {
+                    $parts[3] = $encryptedSecret;
                 } else {
-                    $newLines[] = $line;
+                    $parts[] = $encryptedSecret;
                 }
+                $newLines[] = implode(':', $parts);
+            } else {
+                $newLines[] = $line;
             }
-            file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL, LOCK_EX);
+        }
+        if (file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL, LOCK_EX) === false) {
+            return ['error' => 'Failed to save TOTP secret'];
         }
 
         // Prefer admin-configured otpauth template if present

@@ -5,7 +5,7 @@
      * @OA\Get(
      *     path="/api/profile/totp_setup.php",
      *     summary="Set up TOTP and generate a QR code",
-     *     description="Generates (or retrieves) the TOTP secret for the user and builds a QR code image for scanning.",
+     *     description="Generates a new TOTP secret for an authenticated user and builds a QR code image for scanning.",
      *     operationId="setupTOTP",
      *     tags={"TOTP"},
      *     security={{"cookieAuth": {}}},
@@ -24,6 +24,10 @@
      *     @OA\Response(
      *         response=403,
      *         description="Not authorized or invalid CSRF token"
+     *     ),
+     *     @OA\Response(
+     *         response=409,
+     *         description="TOTP is already configured"
      *     ),
      *     @OA\Response(
      *         response=500,

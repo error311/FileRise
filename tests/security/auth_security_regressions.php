@@ -112,6 +112,7 @@ writeEncryptedJson($tokensFile, $tokens, $key);
 
 $_COOKIE['remember_me_token'] = $token;
 require_once $baseDir . '/config/config.php';
+require_once $baseDir . '/src/FileRise/Domain/UserModel.php';
 
 $errors = [];
 
@@ -182,6 +183,21 @@ writeEncryptedJson($tokensFile, $expired, $key);
 
 $validated = \FileRise\Domain\AuthModel::validateRememberToken($expiredToken);
 failIf($validated !== null, 'validateRememberToken: expired token should be rejected', $errors);
+
+$existingTotp = 'JBSWY3DPEHPK3PXP';
+$encryptedTotp = encryptData($existingTotp, $GLOBALS['encryptionKey']);
+file_put_contents(
+    $usersFile,
+    'alice:$2y$10$O5J7bX3GmJpJ6S.1oW6Hj.8L0N9csmXz7D8Gk4r.3hWBjC1u3n7De:0' . PHP_EOL .
+    'bob:$2y$10$O5J7bX3GmJpJ6S.1oW6Hj.8L0N9csmXz7D8Gk4r.3hWBjC1u3n7De:0:' . $encryptedTotp . PHP_EOL,
+    LOCK_EX
+);
+$setupExisting = \FileRise\Domain\UserModel::setupTOTP('bob');
+failIf(
+    ($setupExisting['statusCode'] ?? null) !== 409,
+    'setupTOTP: existing TOTP secret should not be re-emitted',
+    $errors
+);
 
 if ($errors) {
     echo "FAIL\n";

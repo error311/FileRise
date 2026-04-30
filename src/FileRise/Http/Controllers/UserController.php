@@ -16,7 +16,7 @@ require_once dirname(__DIR__, 4) . '/config/config.php';
  * - Hardened CSRF/auth checks (works even when getallheaders() is unavailable)
  * - Consistent method checks without breaking existing clients (accepts POST as fallback for some endpoints)
  * - Stricter validation & safer defaults
- * - Fixed TOTP setup bug for pending-login users
+ * - TOTP setup is restricted to fully authenticated profile sessions
  * - Standardized calls to UserModel (proper case)
  */
 class UserController
@@ -528,15 +528,10 @@ class UserController
 
     public function setupTOTP()
     {
-        // Allow access if authenticated OR pending TOTP
-        if (!( (isset($_SESSION['authenticated']) && $_SESSION['authenticated'] === true) || isset($_SESSION['pending_login_user']) )) {
-            http_response_code(403);
-            header('Content-Type: application/json');
-            echo json_encode(["error" => "Not authorized to access TOTP setup"]);
-            exit;
-        }
+        self::requireAuth();
+        self::requireCsrf();
 
-        $username = $_SESSION['username'] ?? ($_SESSION['pending_login_user'] ?? '');
+        $username = $_SESSION['username'] ?? '';
         if (defined('FR_DEMO_MODE') && FR_DEMO_MODE && $username === 'demo') {
             http_response_code(403);
             header('Content-Type: application/json');
@@ -544,15 +539,16 @@ class UserController
             exit;
         }
 
-
-        self::requireCsrf();
-
-        // Fix: if username not present (pending flow), fall back to pending_login_user
-        $username = $_SESSION['username'] ?? ($_SESSION['pending_login_user'] ?? '');
         if ($username === '') {
             http_response_code(400);
             header('Content-Type: application/json');
             echo json_encode(['error' => 'Username not available for TOTP setup']);
+            exit;
+        }
+        if (!preg_match(REGEX_USER, $username)) {
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Invalid user identifier']);
             exit;
         }
 
@@ -561,7 +557,7 @@ class UserController
 
         $result = UserModel::setupTOTP($username);
         if (isset($result['error'])) {
-            http_response_code(500);
+            http_response_code((int)($result['statusCode'] ?? 500));
             header('Content-Type: application/json');
             echo json_encode(["error" => $result['error']]);
             exit;
