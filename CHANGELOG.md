@@ -1,5 +1,26 @@
 # Changelog
 
+## Changes 05/07/2026 (v3.13.0)
+
+`release(v3.13.0): DOMPurify and phpseclib dependency updates`
+
+**Commit message**
+
+```text
+release(v3.13.0): DOMPurify and phpseclib dependency updates
+
+- deps(frontend): upgrade bundled DOMPurify from 3.3.1 to 3.4.2
+- deps(composer): upgrade phpseclib/phpseclib to 3.0.52
+```
+
+**Changed**
+
+- **Dependency security maintenance**
+  - Updated bundled DOMPurify from `3.3.1` to `3.4.2` and pointed the app shell at the new vendored path.
+  - Updated `phpseclib/phpseclib` to `3.0.52` in Composer dependencies and the locked dependency set.
+
+---
+
 ## Changes 04/29/2026 (v3.12.0)
 
 `release(v3.12.0): TOTP setup flow hardening`

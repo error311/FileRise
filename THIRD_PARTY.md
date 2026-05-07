@@ -28,8 +28,8 @@ If you believe any attribution is missing or incorrect, please open an issue.
 - **CodeMirror 5.65.18** — MIT License  
   **Files:** `public/vendor/codemirror/5.65.18/*`
 
-- **DOMPurify 3.3.1** — Apache License 2.0  
-  **Files:** `public/vendor/dompurify/3.3.1/purify.min.js`
+- **DOMPurify 3.4.2** — Apache License 2.0
+  **Files:** `public/vendor/dompurify/3.4.2/purify.min.js`
 
 - **Fuse.js 7.1.0** — Apache License 2.0  
   **Files:** `public/vendor/fuse/7.1.0/fuse.min.js`
