@@ -7,7 +7,7 @@ These recipes map to the **Folder Access** UI in the Admin Panel. Use them as st
 - **Manage (Owner)** grants full access for that folder.
 - **Write** is a shortcut that toggles the file actions (Create File, Upload, Edit, Rename, Copy, Delete, Extract).
 - **View (own)** limits listings to files the user uploaded.
-- Account flags (Read-only, Disable upload, Folder-only) still apply even if ACLs allow an action.
+- Account flags (Read-only, Disable upload) still apply even if ACLs allow an action.
 
 ---
 

@@ -60,7 +60,6 @@ FileRise is a self-hosted web file manager built for speed, strong ACLs, and zer
 ### Access control and auth
 
 - Per-folder ACLs: view (all/own), upload, create file, edit, rename, copy, move, delete, extract, share, manage
-- Folder-only users scoped to `/uploads/<username>`
 - Account flags: read-only and disable upload
 - Login methods: form login, Basic Auth, OIDC SSO, and TOTP 2FA
 - Optional reverse-proxy header auth

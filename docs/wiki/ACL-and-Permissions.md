@@ -11,7 +11,6 @@ FileRise uses per-folder ACLs that are enforced consistently across the web UI, 
 
 User flags used by the app:
 
-- **Folder-only**: limits the user to their personal folder (usually `/uploads/<username>`).
 - **Read-only**: blocks write actions (upload/edit/rename/delete/move/copy).
 - **Disable upload**: blocks uploads but can still allow non-upload actions depending on ACLs.
 
@@ -66,7 +65,7 @@ These notes describe what the **Folder Access** screen enforces today.
 
 Notes:
 
-- Account-level flags (Read-only / Disable upload / Folder-only) and source read-only still apply even if ACLs allow an action.
+- Account-level flags (Read-only / Disable upload) and source read-only still apply even if ACLs allow an action.
 
 ---
 
