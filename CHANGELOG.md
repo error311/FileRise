@@ -1,5 +1,32 @@
 # Changelog
 
+## Changes 06/03/2026 (v3.14.0)
+
+`release(v3.14.0): request validation hardening and symfony/yaml dependency update`
+
+**Commit message**
+
+```text
+release(v3.14.0): request validation hardening and symfony/yaml dependency update
+
+- security(csrf): enforce request-token checks on additional file and admin POST actions
+- deps(composer): upgrade symfony/yaml to 8.0.12
+```
+
+**Fixed**
+
+- **Request validation hardening**
+  - Added server-side CSRF enforcement to file creation and file share-link creation.
+  - Added CSRF enforcement to admin OIDC discovery and ClamAV self-test POST actions.
+  - Existing web UI flows continue to send the required CSRF token for these actions.
+
+**Changed**
+
+- **Dependency security maintenance**
+  - Updated `symfony/yaml` to `8.0.12` in Composer dev dependencies and the locked dependency set.
+
+---
+
 ## Changes 05/07/2026 (v3.13.0)
 
 `release(v3.13.0): DOMPurify and phpseclib dependency updates`

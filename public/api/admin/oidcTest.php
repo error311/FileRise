@@ -7,6 +7,8 @@
  *   description="Fetches the discovery document for a provider URL.",
  *   operationId="adminOidcTest",
  *   tags={"Admin"},
+ *   security={{"cookieAuth": {}}},
+ *   @OA\Parameter(name="X-CSRF-Token", in="header", required=true, @OA\Schema(type="string")),
  *   @OA\RequestBody(
  *     required=false,
  *     @OA\JsonContent(
@@ -24,6 +26,9 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../../../config/config.php';
 
 try {
+    \FileRise\Http\Controllers\AdminController::requireAdmin();
+    \FileRise\Http\Controllers\AdminController::requireCsrf();
+
     $raw = file_get_contents('php://input') ?: '';
     $body = json_decode($raw, true);
     if (!is_array($body)) {

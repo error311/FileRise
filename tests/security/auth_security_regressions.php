@@ -63,6 +63,20 @@ function failIf(bool $cond, string $message, array &$errors): void
     }
 }
 
+function captureControllerOutput(callable $callback): string
+{
+    ob_start();
+    $callback();
+    return (string)ob_get_clean();
+}
+
+if (!function_exists('getallheaders')) {
+    function getallheaders(): array
+    {
+        return $GLOBALS['FR_TEST_HEADERS'] ?? [];
+    }
+}
+
 function rrmdir(string $dir): void
 {
     if (!is_dir($dir)) {
@@ -196,6 +210,58 @@ $setupExisting = \FileRise\Domain\UserModel::setupTOTP('bob');
 failIf(
     ($setupExisting['statusCode'] ?? null) !== 409,
     'setupTOTP: existing TOTP secret should not be re-emitted',
+    $errors
+);
+
+$_SESSION['authenticated'] = true;
+$_SESSION['username'] = 'alice';
+$_SESSION['csrf_token'] = 'expected_csrf_token';
+$GLOBALS['FR_TEST_HEADERS'] = [];
+
+$fileController = new \FileRise\Http\Controllers\FileController();
+$createFileWithoutCsrf = captureControllerOutput(static function () use ($fileController): void {
+    $fileController->createFile();
+});
+$createFileJson = json_decode($createFileWithoutCsrf, true);
+failIf(
+    !is_array($createFileJson) || ($createFileJson['error'] ?? '') !== 'Invalid CSRF token',
+    'createFile: missing CSRF token should be rejected before request processing',
+    $errors
+);
+
+$GLOBALS['FR_TEST_HEADERS'] = ['X-CSRF-Token' => 'wrong_csrf_token'];
+$fileController = new \FileRise\Http\Controllers\FileController();
+$createFileWithInvalidCsrf = captureControllerOutput(static function () use ($fileController): void {
+    $fileController->createFile();
+});
+$createFileInvalidJson = json_decode($createFileWithInvalidCsrf, true);
+failIf(
+    !is_array($createFileInvalidJson) || ($createFileInvalidJson['error'] ?? '') !== 'Invalid CSRF token',
+    'createFile: invalid CSRF token should be rejected before request processing',
+    $errors
+);
+
+$GLOBALS['FR_TEST_HEADERS'] = [];
+$fileController = new \FileRise\Http\Controllers\FileController();
+$createShareLinkWithoutCsrf = captureControllerOutput(static function () use ($fileController): void {
+    $fileController->createShareLink();
+});
+$createShareLinkJson = json_decode($createShareLinkWithoutCsrf, true);
+failIf(
+    !is_array($createShareLinkJson) || ($createShareLinkJson['error'] ?? '') !== 'Invalid CSRF token',
+    'createShareLink: missing CSRF token should be rejected before request processing',
+    $errors
+);
+
+$GLOBALS['FR_TEST_HEADERS'] = ['X-CSRF-Token' => 'wrong_csrf_token'];
+$fileController = new \FileRise\Http\Controllers\FileController();
+$createShareLinkWithInvalidCsrf = captureControllerOutput(static function () use ($fileController): void {
+    $fileController->createShareLink();
+});
+$createShareLinkInvalidJson = json_decode($createShareLinkWithInvalidCsrf, true);
+failIf(
+    !is_array($createShareLinkInvalidJson) || ($createShareLinkInvalidJson['error'] ?? '') !== 'Invalid CSRF token',
+    'createShareLink: invalid CSRF token should be rejected before request processing',
     $errors
 );
 

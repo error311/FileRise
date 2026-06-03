@@ -900,6 +900,7 @@ class AdminController
         header('Content-Type: application/json; charset=utf-8');
 
         self::requireAdmin();
+        self::requireCsrf();
 
         if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
             http_response_code(405);

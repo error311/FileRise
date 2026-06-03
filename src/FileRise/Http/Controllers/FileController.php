@@ -4731,6 +4731,9 @@ class FileController
     {
         $this->jsonStart();
         try {
+            if (!$this->checkCsrf()) {
+                return;
+            }
             if (!$this->requireAuth()) {
                 return;
             }
@@ -5451,6 +5454,9 @@ class FileController
     {
         $this->jsonStart();
         try {
+            if (!$this->checkCsrf()) {
+                return;
+            }
             if (!$this->requireAuth()) {
                 return;
             }
