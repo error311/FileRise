@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 06/11/2026 (v3.15.0)
+
+`release(v3.15.0): shared-folder boundary hardening`
+
+**Commit message**
+
+```text
+release(v3.15.0): shared-folder boundary hardening
+
+- security(shares): keep shared-folder subpaths inside the original shared folder boundary
+```
+
+**Fixed**
+
+- **Shared-folder boundary hardening**
+  - Tightened public shared-folder subpath handling so listing, direct file download, upload targets, and ZIP creation remain inside the originally shared folder.
+  - Existing normal files, subfolders, and in-bound shared-folder content remain supported.
+
+---
+
 ## Changes 06/03/2026 (v3.14.0)
 
 `release(v3.14.0): request validation hardening and symfony/yaml dependency update`

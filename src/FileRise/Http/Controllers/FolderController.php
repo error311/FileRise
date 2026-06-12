@@ -2044,6 +2044,18 @@ class FolderController
         if ($realFolderPath === '' || !is_dir($realFolderPath)) {
             $renderError(404, "Shared folder not found.");
         }
+        $shareRootRealPath = (string)($ctx['shareRootRealPath'] ?? '');
+        if ($shareRootRealPath === '') {
+            $shareRootRealPath = $realFolderPath;
+        }
+        $isInsideShareRoot = static function (string $candidateReal) use ($shareRootRealPath): bool {
+            $root = rtrim($shareRootRealPath, DIRECTORY_SEPARATOR);
+            $candidate = rtrim($candidateReal, DIRECTORY_SEPARATOR);
+            if ($root === '' || $candidate === '') {
+                return false;
+            }
+            return $candidate === $root || str_starts_with($candidate . DIRECTORY_SEPARATOR, $root . DIRECTORY_SEPARATOR);
+        };
 
         if (!class_exists('\\ZipArchive')) {
             $renderError(400, "ZipArchive extension is required on the server.");
@@ -2097,6 +2109,10 @@ class FolderController
                 continue;
             }
             $fullPath = $info->getPathname();
+            $realPath = realpath($fullPath);
+            if ($realPath === false || !$isInsideShareRoot($realPath)) {
+                continue;
+            }
             $rel = substr($fullPath, $baseLen + 1);
             if ($rel === '' || $rel === false) {
                 continue;

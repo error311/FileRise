@@ -620,6 +620,23 @@ class FolderModel
         return rtrim($rp, DIRECTORY_SEPARATOR);
     }
 
+    private static function isPathInsideOrSame(string $rootReal, string $candidateReal): bool
+    {
+        $root = rtrim($rootReal, DIRECTORY_SEPARATOR);
+        $candidate = rtrim($candidateReal, DIRECTORY_SEPARATOR);
+        if ($root === '' && $rootReal === DIRECTORY_SEPARATOR) {
+            $root = DIRECTORY_SEPARATOR;
+        }
+        if ($candidate === '' && $candidateReal === DIRECTORY_SEPARATOR) {
+            $candidate = DIRECTORY_SEPARATOR;
+        }
+        if ($root === '' || $candidate === '') {
+            return false;
+        }
+        $rootPrefix = $root === DIRECTORY_SEPARATOR ? DIRECTORY_SEPARATOR : $root . DIRECTORY_SEPARATOR;
+        return $candidate === $root || str_starts_with($candidate . DIRECTORY_SEPARATOR, $rootPrefix);
+    }
+
     public static function listChildren(string $folder, string $user, array $perms, ?string $cursor = null, int $limit = 500, bool $probe = true): array
     {
         $storage = self::storage();
@@ -1104,7 +1121,7 @@ class FolderModel
 
         if ($isLocal) {
             $real = realpath($dir);
-            if ($real === false || strpos($real, $base) !== 0) {
+            if ($real === false || !self::isPathInsideOrSame($base, $real)) {
                 return [null, $relative, "Invalid folder path."];
             }
             return [$real, $relative, null];
@@ -1154,7 +1171,7 @@ class FolderModel
 
         if ($isLocal) {
             $real = realpath($dir);
-            if ($real === false || strpos($real, $base) !== 0) {
+            if ($real === false || !self::isPathInsideOrSame($base, $real)) {
                 return [null, $relative, "Invalid folder path."];
             }
             return [$real, $relative, null];
@@ -2485,7 +2502,7 @@ class FolderModel
         return null;
     }
 
-    private static function listSharedFolderEntries(StorageAdapterInterface $storage, string $realFolderPath): array
+    private static function listSharedFolderEntries(StorageAdapterInterface $storage, string $realFolderPath, ?string $shareRootRealPath = null): array
     {
         $folders = [];
         $files = [];
@@ -2499,6 +2516,12 @@ class FolderModel
             }
 
             $fullPath = $realFolderPath . DIRECTORY_SEPARATOR . $it;
+            if ($storage->isLocal() && $shareRootRealPath !== null) {
+                $real = realpath($fullPath);
+                if ($real === false || !self::isPathInsideOrSame($shareRootRealPath, $real)) {
+                    continue;
+                }
+            }
             $stat = $storage->stat($fullPath);
             if ($stat === null) {
                 continue;
@@ -2589,9 +2612,21 @@ class FolderModel
         }
         $storage = self::storage();
 
-        // Resolve shared folder
+        [$shareRootPath, $shareRootRelative, $rootErr] = self::resolveFolderPath($folderKey, false);
+        if ($rootErr) {
+            return ["error" => "Shared folder not found."];
+        }
+        $rootStat = $storage->stat($shareRootPath);
+        if ($rootStat === null || ($rootStat['type'] ?? '') !== 'dir') {
+            return ["error" => "Shared folder not found."];
+        }
+
+        // Resolve requested shared folder path, but keep the original share root as the boundary.
         [$realFolderPath, $relative, $err] = self::resolveFolderPath($combinedKey, false);
         if ($err) {
+            return ["error" => "Shared folder not found."];
+        }
+        if ($storage->isLocal() && !self::isPathInsideOrSame($shareRootPath, $realFolderPath)) {
             return ["error" => "Shared folder not found."];
         }
         $dirStat = $storage->stat($realFolderPath);
@@ -2601,7 +2636,7 @@ class FolderModel
 
         $allEntries = [];
         if ($includeEntries && !$hideListing) {
-            $allEntries = self::listSharedFolderEntries($storage, $realFolderPath);
+            $allEntries = self::listSharedFolderEntries($storage, $realFolderPath, $storage->isLocal() ? $shareRootPath : null);
             if (!$allowSubfolders) {
                 $allEntries = array_values(array_filter($allEntries, function ($entry) {
                     return (($entry['type'] ?? '') !== 'folder');
@@ -2613,6 +2648,8 @@ class FolderModel
             "record"        => $record,
             "folder"        => $relative,
             "shareRoot"     => $folderKey,
+            "shareRootRealPath" => $storage->isLocal() ? $shareRootPath : '',
+            "shareRootFolder" => $shareRootRelative,
             "path"          => $normalizedSubPath,
             "realFolderPath" => $realFolderPath,
             "entries"       => $allEntries,
@@ -2846,8 +2883,20 @@ class FolderModel
         }
 
         $storage = self::storage();
+        [$shareRootPath,, $rootErr] = self::resolveFolderPath($folderKey, false);
+        if ($rootErr) {
+            return ["error" => "Shared folder not found."];
+        }
+        $rootStat = $storage->stat($shareRootPath);
+        if ($rootStat === null || ($rootStat['type'] ?? '') !== 'dir') {
+            return ["error" => "Shared folder not found."];
+        }
+
         [$realFolderPath,, $err] = self::resolveFolderPath($combinedKey, false);
         if ($err) {
+            return ["error" => "Shared folder not found."];
+        }
+        if ($storage->isLocal() && !self::isPathInsideOrSame($shareRootPath, $realFolderPath)) {
             return ["error" => "Shared folder not found."];
         }
         $dirStat = $storage->stat($realFolderPath);
@@ -2858,7 +2907,7 @@ class FolderModel
         $full = $realFolderPath . DIRECTORY_SEPARATOR . $file;
         if ($storage->isLocal()) {
             $real = realpath($full);
-            if ($real === false || strpos($real, $realFolderPath) !== 0 || !is_file($real)) {
+            if ($real === false || !self::isPathInsideOrSame($shareRootPath, $real) || !is_file($real)) {
                 return ["error" => "File not found."];
             }
 
@@ -3034,9 +3083,20 @@ class FolderModel
 /* ignore */
             }
         }
+        [$shareRootPath,, $rootErr] = self::resolveFolderPath($folderKey, false);
+        if ($rootErr) {
+            return ["error" => "Shared folder not found."];
+        }
+        $rootStat = $storage->stat($shareRootPath);
+        if ($rootStat === null || ($rootStat['type'] ?? '') !== 'dir') {
+            return ["error" => "Shared folder not found."];
+        }
         [$targetDir, $relative, $err] = self::resolveFolderPath($combinedKey, true);
         if ($err) {
             return ["error" => $err];
+        }
+        if ($storage->isLocal() && !self::isPathInsideOrSame($shareRootPath, $targetDir)) {
+            return ["error" => "Shared folder not found."];
         }
 
         // New safe filename
