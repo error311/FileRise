@@ -7753,7 +7753,7 @@ export function openAdminPanel() {
     <small class="text-muted d-block mt-1">
       ${tf(
           "proxy_only_login_help",
-          "When enabled, FileRise trusts the reverse proxy header and disables the login form, HTTP Basic and OIDC."
+          "When enabled, FileRise trusts the reverse proxy header from FR_TRUSTED_PROXIES and disables the login form, HTTP Basic and OIDC."
         )}
     </small>
   </div>

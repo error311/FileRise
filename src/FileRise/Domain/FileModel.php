@@ -1789,6 +1789,14 @@ class FileModel
             return false;
         };
 
+        $isAllowedArchiveFile = function (string $entry): bool {
+            $e = trim(str_replace('\\', '/', $entry), '/');
+            if ($e === '' || str_ends_with($e, '/')) {
+                return false;
+            }
+            return UploadNamePolicy::isAllowedForWrite(basename($e));
+        };
+
         // Generalized metadata stamper: writes to the specified folder's metadata.json
         $stampMeta = function (string $folderStr, string $basename) use (&$getMeta, &$putMeta, $actor, $now) {
             $meta = $getMeta($folderStr);
@@ -2259,6 +2267,7 @@ class FileModel
                 $unsafe = false;
                 $unsafeReason = '';
                 $skippedSymlinks = 0;
+                $skippedBlocked = 0;
                 $totalUncompressed = 0;
                 $fileCount = 0;
                 $allowedEntries = [];   // names to extract (files and/or directories)
@@ -2302,6 +2311,10 @@ class FileModel
 
                     // Track limits only for files we're going to extract
                     if (!$isDir) {
+                        if (!$isAllowedArchiveFile($name)) {
+                            $skippedBlocked++;
+                            continue;
+                        }
                         $fileCount++;
                         $sz = isset($stat['size']) ? (int)$stat['size'] : 0;
                         $totalUncompressed += $sz;
@@ -2334,7 +2347,9 @@ class FileModel
                 if (empty($allowedEntries)) {
                     $zip->close();
                     // Treat as success (nothing visible to extract), but informatively note it
-                    if ($skippedSymlinks > 0) {
+                    if ($skippedBlocked > 0) {
+                        $errors[] = "$archiveBase contained only blocked file types.";
+                    } elseif ($skippedSymlinks > 0) {
                         $errors[] = "$archiveBase contained only symlink entries.";
                     } else {
                         $errors[] = "$archiveBase contained only hidden or unsupported entries.";
@@ -2361,6 +2376,9 @@ class FileModel
                 }
                 if ($skippedSymlinks > 0) {
                     $warnings[] = "$archiveBase: skipped {$skippedSymlinks} symlink entr" . ($skippedSymlinks === 1 ? 'y' : 'ies') . ".";
+                }
+                if ($skippedBlocked > 0) {
+                    $warnings[] = "$archiveBase: skipped {$skippedBlocked} blocked file type" . ($skippedBlocked === 1 ? '' : 's') . ".";
                 }
                 continue;
             }
@@ -2391,6 +2409,7 @@ class FileModel
             $unsafe = false;
             $unsafeReason = '';
             $skippedSymlinks = 0;
+            $skippedBlocked = 0;
             $totalUncompressed = 0;
             $fileCount = 0;
             $allowedEntries = [];
@@ -2416,6 +2435,7 @@ class FileModel
                 &$unsafe,
                 &$unsafeReason,
                 &$skippedSymlinks,
+                &$skippedBlocked,
                 &$totalUncompressed,
                 &$fileCount,
                 $isUnsafeEntryPath,
@@ -2424,7 +2444,8 @@ class FileModel
                 $SKIP_DOTFILES,
                 $MAX_UNZIP_BYTES,
                 $MAX_UNZIP_FILES,
-                $formatBytes
+                $formatBytes,
+                $isAllowedArchiveFile
             ) {
                 if ($curPath === null) {
                     return;
@@ -2471,8 +2492,11 @@ class FileModel
                     return;
                 }
 
-                $allowedEntries[] = $name;
                 if (!$isDir) {
+                    if (!$isAllowedArchiveFile($name)) {
+                        $skippedBlocked++;
+                        return;
+                    }
                     $fileCount++;
                     $totalUncompressed += $size;
                     if ($fileCount > $MAX_UNZIP_FILES) {
@@ -2492,6 +2516,7 @@ class FileModel
                     $allowedFiles[] = $name;
                     $expectedSizes[$name] = $size;
                 }
+                $allowedEntries[] = $name;
             };
 
             foreach ($listOut as $line) {
@@ -2580,7 +2605,9 @@ class FileModel
             }
 
             if (empty($allowedEntries)) {
-                if ($skippedSymlinks > 0) {
+                if ($skippedBlocked > 0) {
+                    $errors[] = "$archiveBase contained only blocked file types.";
+                } elseif ($skippedSymlinks > 0) {
                     $errors[] = "$archiveBase contained only symlink entries.";
                 } else {
                     $errors[] = "$archiveBase contained only hidden or unsupported entries.";
@@ -2751,6 +2778,9 @@ class FileModel
             }
             if ($skippedSymlinks > 0) {
                 $warnings[] = "$archiveBase: skipped {$skippedSymlinks} symlink entr" . ($skippedSymlinks === 1 ? 'y' : 'ies') . ".";
+            }
+            if ($skippedBlocked > 0) {
+                $warnings[] = "$archiveBase: skipped {$skippedBlocked} blocked file type" . ($skippedBlocked === 1 ? '' : 's') . ".";
             }
             if (!$usedUnar && $extractDetail !== '') {
                 $warnings[] = "$archiveBase: " . $extractDetail;

@@ -52,7 +52,8 @@ Set `BasicAuthLevel` to `2`, then restart the `WebClient` service.
 
 - If FileRise is hosted under a subpath (e.g. `/files`), use:
   - `https://your-server/files/webdav.php/`
-- Folder-only users are scoped to their folder in WebDAV.
+- WebDAV uses the same folder ACLs as the web UI.
+- Accounts with TOTP enabled cannot use password-only WebDAV Basic authentication.
 - WebDAV uploads can be capped with `FR_WEBDAV_MAX_UPLOAD_BYTES`.
 
 ---

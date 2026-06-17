@@ -9,6 +9,7 @@ $sessionDir = $tmpBase . '/sessions/';
 @mkdir($usersDir, 0700, true);
 @mkdir($sessionDir, 0700, true);
 session_save_path($sessionDir);
+ini_set('error_log', $tmpBase . '/php-error.log');
 
 $key = 'test_persistent_tokens_key_32bytes!';
 putenv('PERSISTENT_TOKENS_KEY=' . $key);
@@ -119,7 +120,7 @@ $tokens = [
     rememberTokenHash($token, $key) => [
         'username' => 'alice',
         'expiry'   => time() + 3600,
-        'isAdmin'  => false
+        'isAdmin'  => true
     ]
 ];
 writeEncryptedJson($tokensFile, $tokens, $key);
@@ -136,18 +137,21 @@ failIf($_SESSION['folderOnly'] !== true, 'auto-login: folderOnly should be true'
 failIf($_SESSION['readOnly'] !== true, 'auto-login: readOnly should be true', $errors);
 failIf($_SESSION['disableUpload'] !== true, 'auto-login: disableUpload should be true', $errors);
 failIf(is_array($_SESSION['folderOnly']), 'auto-login: folderOnly should be boolean, not array', $errors);
+failIf($_SESSION['isAdmin'] !== false, 'auto-login: stale token admin flag should not override current user role', $errors);
 
 $storeAfter = readEncryptedJson($tokensFile, $key);
 $oldHash = rememberTokenHash($token, $key);
 failIf(isset($storeAfter[$oldHash]), 'rotation: old token should be removed', $errors);
 failIf(count($storeAfter) !== 1, 'rotation: expected 1 token after rotation', $errors);
+$rotatedPayload = reset($storeAfter);
+failIf(is_array($rotatedPayload) && array_key_exists('isAdmin', $rotatedPayload), 'rotation: rotated token should not persist isAdmin', $errors);
 
 $tokenB = 'tok_' . bin2hex(random_bytes(12));
 $tokensB = [
     rememberTokenHash($tokenB, $key) => [
         'username' => 'alice',
         'expiry'   => time() + 3600,
-        'isAdmin'  => false
+        'isAdmin'  => true
     ]
 ];
 writeEncryptedJson($tokensFile, $tokensB, $key);
@@ -178,9 +182,18 @@ if (is_resource($proc)) {
     if (is_array($data)) {
         failIf(empty($data['authenticated']), 'checkAuth: authenticated should be true', $errors);
         failIf(($data['username'] ?? '') !== 'alice', 'checkAuth: username mismatch', $errors);
+        failIf(($data['isAdmin'] ?? null) !== false, 'checkAuth: stale token admin flag should not override current user role', $errors);
         failIf(($data['readOnly'] ?? null) !== true, 'checkAuth: readOnly should be true', $errors);
         failIf(($data['disableUpload'] ?? null) !== true, 'checkAuth: disableUpload should be true', $errors);
     }
+
+    $storeAfterCheckAuth = readEncryptedJson($tokensFile, $key);
+    $rotatedCheckAuthPayload = reset($storeAfterCheckAuth);
+    failIf(
+        is_array($rotatedCheckAuthPayload) && array_key_exists('isAdmin', $rotatedCheckAuthPayload),
+        'checkAuth: rotated token should not persist isAdmin',
+        $errors
+    );
 } else {
     $errors[] = 'checkAuth: failed to start helper process';
 }
@@ -210,6 +223,30 @@ $setupExisting = \FileRise\Domain\UserModel::setupTOTP('bob');
 failIf(
     ($setupExisting['statusCode'] ?? null) !== 409,
     'setupTOTP: existing TOTP secret should not be re-emitted',
+    $errors
+);
+
+$webDavPassword = 'webdav-test-password';
+$webDavHash = password_hash($webDavPassword, PASSWORD_BCRYPT);
+file_put_contents(
+    $usersFile,
+    'bob:' . $webDavHash . ':0:' . $encryptedTotp . PHP_EOL .
+    'charlie:' . $webDavHash . ':0' . PHP_EOL,
+    LOCK_EX
+);
+failIf(
+    \FileRise\Domain\AuthModel::authenticateWebDav('bob', $webDavPassword) !== false,
+    'authenticateWebDav: TOTP-enabled users should not authenticate with password only',
+    $errors
+);
+failIf(
+    \FileRise\Domain\AuthModel::authenticateWebDav('charlie', $webDavPassword) !== true,
+    'authenticateWebDav: users without TOTP should authenticate with a valid password',
+    $errors
+);
+failIf(
+    \FileRise\Domain\AuthModel::authenticateWebDav('charlie', 'wrong-password') !== false,
+    'authenticateWebDav: invalid password should be rejected',
     $errors
 );
 

@@ -41,7 +41,7 @@ use FileRise\WebDAV\CurrentUser;
 
 // ─── 3) HTTP-Basic backend (delegates to your AuthModel) ────────────────────
 $authBackend = new BasicCallBack(function(string $user, string $pass) {
-    return \FileRise\Domain\AuthModel::authenticate($user, $pass) !== false;
+    return \FileRise\Domain\AuthModel::authenticateWebDav($user, $pass);
 });
 $authPlugin = new AuthPlugin($authBackend, 'FileRise');
 

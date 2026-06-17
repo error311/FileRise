@@ -167,6 +167,32 @@ class UploadModel
         return strpos($pathNorm, $rootNorm) === 0;
     }
 
+    private static function isTargetPathWithinDir(string $targetPath, string $targetDir): bool
+    {
+        $dirReal = realpath($targetDir);
+        $parentReal = realpath(dirname($targetPath));
+        if ($dirReal === false || $parentReal === false) {
+            return false;
+        }
+
+        $dirNorm = rtrim(str_replace('\\', '/', $dirReal), '/');
+        $parentNorm = rtrim(str_replace('\\', '/', $parentReal), '/');
+
+        return $parentNorm === $dirNorm;
+    }
+
+    private static function normalizeUploadFileName($value): ?string
+    {
+        if (!is_scalar($value)) {
+            return null;
+        }
+        $fileName = trim(urldecode((string)$value));
+        if (!UploadNamePolicy::isAllowedForWrite($fileName)) {
+            return null;
+        }
+        return $fileName;
+    }
+
     private static function loadResumableIndex(): array
     {
         $path = self::resumableIndexPath();
@@ -775,10 +801,10 @@ class UploadModel
             $chunkNumber         = (int)$post['resumableChunkNumber'];
             $totalChunks         = (int)$post['resumableTotalChunks'];
             $resumableIdentifier = self::normalizeResumableIdentifier($post['resumableIdentifier'] ?? '');
-            $resumableFilename   = urldecode(basename($post['resumableFilename'] ?? ''));
+            $resumableFilename   = self::normalizeUploadFileName($post['resumableFilename'] ?? '');
             $relativeSubDir      = '';
 
-            if ($chunkNumber < 1 || $totalChunks < 1 || $chunkNumber > $totalChunks || $resumableIdentifier === null) {
+            if ($chunkNumber < 1 || $totalChunks < 1 || $chunkNumber > $totalChunks || $resumableIdentifier === null || $resumableFilename === null) {
                 return ['error' => 'Invalid resumable upload request'];
             }
 
@@ -862,6 +888,10 @@ class UploadModel
                 }
             }
             $targetPath = $targetDir . $resumableFilename;
+            if (!self::isTargetPathWithinDir($targetPath, $targetDir)) {
+                $cleanupChunk();
+                return ['error' => 'Invalid file name'];
+            }
             if (!$out = fopen($targetPath, 'wb')) {
                 $cleanupChunk();
                 return ['error' => 'Failed to open target file for writing'];
@@ -1020,7 +1050,10 @@ class UploadModel
                     return ['error' => 'Error uploading file'];
                 }
 
-                $safeFileName = trim(urldecode(basename($fileName)));
+                $safeFileName = self::normalizeUploadFileName($fileName);
+                if ($safeFileName === null) {
+                    return ['error' => 'Invalid file name: ' . $fileName];
+                }
 
                 $relativePath = '';
                 if (isset($post['relativePath'])) {
@@ -1057,6 +1090,9 @@ class UploadModel
                     }
 
                     $targetPath = $uploadDir . $safeFileName;
+                    if (!self::isTargetPathWithinDir($targetPath, $uploadDir)) {
+                        return ['error' => 'Invalid file name: ' . $fileName];
+                    }
                     if (!move_uploaded_file($files['file']['tmp_name'][$index], $targetPath)) {
                         return ['error' => 'Error uploading file'];
                     }

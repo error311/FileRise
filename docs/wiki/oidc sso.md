@@ -80,3 +80,4 @@ Example:
 ## Proxy auth headers (advanced)
 
 If your reverse proxy authenticates users, you can disable form login and trust a header (default `X-Remote-User`) via **Admin → Login options**.
+Set `FR_TRUSTED_PROXIES` to the reverse proxy IP or CIDR before enabling this mode; FileRise only accepts the proxy-auth identity header from trusted proxy sources.

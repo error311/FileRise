@@ -4,6 +4,7 @@ namespace FileRise\Http\Controllers;
 
 use FileRise\Domain\AdminModel;
 use FileRise\Domain\AuthModel;
+use FileRise\Domain\UserModel;
 use RobThree\Auth\Algorithm;
 use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
 use Jumbojett\OpenIDConnectClient;
@@ -656,7 +657,7 @@ class AuthController
                 $_SESSION['csrf_token']     = $old;
                 $_SESSION['authenticated']  = true;
                 $_SESSION['username']       = $payload['username'];
-                $_SESSION['isAdmin']        = !empty($payload['isAdmin']);
+                $_SESSION['isAdmin']        = (AuthModel::getUserRole($payload['username']) === '1');
                 $perms = loadUserPermissions($payload['username']);
                 $_SESSION['folderOnly']     = $perms['folderOnly']    ?? false;
                 $_SESSION['readOnly']       = $perms['readOnly']      ?? false;
@@ -697,10 +698,8 @@ class AuthController
             setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
         }
 
-        $usersFile = USERS_DIR . USERS_FILE;
-
         // 2) Setup mode?
-        if (!file_exists($usersFile) || trim(file_get_contents($usersFile)) === '') {
+        if (UserModel::isInitialSetupAllowed()) {
             error_log("checkAuth: setup mode");
             echo json_encode(['setup' => true]);
             exit();
@@ -714,11 +713,14 @@ class AuthController
 
         // 4) TOTP enabled?
         $totp = false;
-        foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-            $parts = explode(':', trim($line));
-            if ($parts[0] === ($_SESSION['username'] ?? '') && !empty($parts[3])) {
-                $totp = true;
-                break;
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (is_file($usersFile)) {
+            foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                $parts = explode(':', trim($line));
+                if ($parts[0] === ($_SESSION['username'] ?? '') && !empty($parts[3])) {
+                    $totp = true;
+                    break;
+                }
             }
         }
 

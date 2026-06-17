@@ -282,6 +282,19 @@ class AuthModel
         return false;
     }
 
+    public static function authenticateWebDav(string $username, string $password): bool
+    {
+        $user = self::authenticate($username, $password);
+        if ($user === false) {
+            return false;
+        }
+        if (!empty($user['totp_secret'])) {
+            error_log('FileRise: denied WebDAV password-only login for TOTP-enabled user ' . self::sanitizeLogValue($username, 80));
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Loads failed login attempts from a file.
      *
@@ -442,6 +455,18 @@ class AuthModel
         return array_values(array_filter($parts, fn($part) => $part !== ''));
     }
 
+    public static function isRequestFromTrustedProxy(?array $server = null): bool
+    {
+        $server = $server ?? $_SERVER;
+        $remote = trim((string)($server['REMOTE_ADDR'] ?? ''));
+        if ($remote === '' || !filter_var($remote, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+
+        $trusted = self::getTrustedProxies();
+        return $trusted !== [] && self::isTrustedProxy($remote, $trusted);
+    }
+
     protected static function normalizeHeaderKey(string $header): string
     {
         $key = strtoupper(str_replace('-', '_', trim($header)));
@@ -572,7 +597,7 @@ class AuthModel
      * Validate a remember-me token and return its stored payload.
      *
      * @param string $token
-     * @return array|null  Returns ['username'=>…, 'expiry'=>…, 'isAdmin'=>…] or null if invalid/expired.
+     * @return array|null  Returns ['username'=>…, 'expiry'=>…] or null if invalid/expired.
      */
     public static function validateRememberToken(string $token): ?array
     {
@@ -654,15 +679,13 @@ class AuthModel
         }
 
         $expiry = (int)$payload['expiry'];
-        $isAdmin = !empty($payload['isAdmin']);
 
         $newToken = bin2hex(random_bytes(32));
         $newHash = self::rememberTokenHash($newToken);
 
         $all[$newHash] = [
             'username' => $username,
-            'expiry'   => $expiry,
-            'isAdmin'  => $isAdmin
+            'expiry'   => $expiry
         ];
 
         unset($all[$hash]);
@@ -675,7 +698,6 @@ class AuthModel
         return [
             'username' => $username,
             'expiry'   => $expiry,
-            'isAdmin'  => $isAdmin,
             'token'    => $newToken
         ];
     }
@@ -684,7 +706,7 @@ class AuthModel
      * Issue a new remember-me token and store it hashed on disk.
      *
      * @param string $username
-     * @param bool   $isAdmin
+     * @param bool   $isAdmin Kept for call-site compatibility; roles are resolved from users.txt on use.
      * @param int|null $expiry
      * @return array{token:string,expiry:int}
      */
@@ -696,8 +718,7 @@ class AuthModel
         $all = self::loadRememberTokenStore();
         $all[self::rememberTokenHash($token)] = [
             'username' => $username,
-            'expiry'   => $expiry,
-            'isAdmin'  => $isAdmin
+            'expiry'   => $expiry
         ];
         self::saveRememberTokenStore($all);
 

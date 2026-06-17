@@ -14,6 +14,52 @@ class UserModel
 {
     private static $caseMigrationChecked = false;
 
+    public static function setupCompletePath(): string
+    {
+        return rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR . '.setup_complete';
+    }
+
+    public static function markSetupComplete(): bool
+    {
+        $payload = json_encode(['completedAt' => time()], JSON_PRETTY_PRINT);
+        return self::writeAtomic(self::setupCompletePath(), $payload !== false ? $payload : '{}');
+    }
+
+    public static function hasSetupCompleteMarker(): bool
+    {
+        return is_file(self::setupCompletePath());
+    }
+
+    public static function hasAnyUsers(): bool
+    {
+        self::ensureUserCaseMigration();
+        $usersFile = USERS_DIR . USERS_FILE;
+        if (!is_file($usersFile)) {
+            return false;
+        }
+
+        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        foreach ($lines as $line) {
+            $parts = explode(':', trim($line));
+            if (count($parts) >= 3 && preg_match(REGEX_USER, $parts[0])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static function isInitialSetupAllowed(): bool
+    {
+        if (self::hasAnyUsers()) {
+            if (!self::hasSetupCompleteMarker() && !self::markSetupComplete()) {
+                error_log('FileRise: could not write setup-complete marker for existing users.');
+            }
+            return false;
+        }
+
+        return !self::hasSetupCompleteMarker();
+    }
+
     private static function writeAtomic(string $path, string $data): bool
     {
         $dir = dirname($path);
@@ -273,6 +319,9 @@ class UserModel
         if ($setupMode) {
             if (file_put_contents($usersFile, $newUserLine, LOCK_EX) === false) {
                 return ["error" => "Failed to write users file"];
+            }
+            if (!self::markSetupComplete()) {
+                error_log('FileRise: initial admin was created but setup-complete marker could not be written.');
             }
         } else {
             if (file_put_contents($usersFile, $newUserLine, FILE_APPEND | LOCK_EX) === false) {

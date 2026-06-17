@@ -457,7 +457,7 @@ if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) 
         $_SESSION["folderOnly"]    = $perms['folderOnly']    ?? false;
         $_SESSION["readOnly"]      = $perms['readOnly']      ?? false;
         $_SESSION["disableUpload"] = $perms['disableUpload'] ?? false;
-        $_SESSION["isAdmin"]       = !empty($payload["isAdmin"]);
+        $_SESSION["isAdmin"]       = (\FileRise\Domain\AuthModel::getUserRole($payload["username"]) === '1');
 
         if (!empty($payload['token']) && !empty($payload['expiry'])) {
             setcookie('remember_me_token', $payload['token'], (int)$payload['expiry'], '/', '', $secure, true);
@@ -501,24 +501,32 @@ define('AUTH_HEADER',  $cfgAuthHeader);
 if (AUTH_BYPASS) {
     $hdrKey = AUTH_HEADER;   // e.g. "HTTP_X_REMOTE_USER"
     if (!empty($_SERVER[$hdrKey])) {
-        // regenerate once per session
-        if (empty($_SESSION['authenticated'])) {
-            session_regenerate_id(true);
+        if (!\FileRise\Domain\AuthModel::isRequestFromTrustedProxy()) {
+            $remote = preg_replace('/[^A-Fa-f0-9:\.]/', '', (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+            if ($remote === '') {
+                $remote = 'unknown';
+            }
+            error_log("FileRise: ignored proxy-auth header from untrusted source {$remote}; set FR_TRUSTED_PROXIES for proxy-header login.");
+        } else {
+            // regenerate once per session
+            if (empty($_SESSION['authenticated'])) {
+                session_regenerate_id(true);
+            }
+
+            $username = $_SERVER[$hdrKey];
+            $_SESSION['authenticated'] = true;
+            $_SESSION['username']      = $username;
+
+            // ◾ lookup actual role instead of forcing admin
+            $role = \FileRise\Domain\AuthModel::getUserRole($username);
+            $_SESSION['isAdmin'] = ($role === '1');
+
+            // carry over any folder/read/upload perms
+            $perms = loadUserPermissions($username) ?: [];
+            $_SESSION['folderOnly']    = $perms['folderOnly']    ?? false;
+            $_SESSION['readOnly']      = $perms['readOnly']      ?? false;
+            $_SESSION['disableUpload'] = $perms['disableUpload'] ?? false;
         }
-
-        $username = $_SERVER[$hdrKey];
-        $_SESSION['authenticated'] = true;
-        $_SESSION['username']      = $username;
-
-        // ◾ lookup actual role instead of forcing admin
-        $role = \FileRise\Domain\AuthModel::getUserRole($username);
-        $_SESSION['isAdmin'] = ($role === '1');
-
-        // carry over any folder/read/upload perms
-        $perms = loadUserPermissions($username) ?: [];
-        $_SESSION['folderOnly']    = $perms['folderOnly']    ?? false;
-        $_SESSION['readOnly']      = $perms['readOnly']      ?? false;
-        $_SESSION['disableUpload'] = $perms['disableUpload'] ?? false;
     }
 }
 

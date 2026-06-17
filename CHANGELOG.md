@@ -1,5 +1,50 @@
 # Changelog
 
+## Changes 06/16/2026 (v3.16.0)
+
+`release(v3.16.0): security hardening`
+
+**Commit message**
+
+```text
+release(v3.16.0): security hardening
+
+- security(auth): require trusted proxy source validation for proxy-header login
+- security(webdav): block password-only WebDAV login for TOTP-enabled accounts
+- security(extract): apply blocked upload filename policy before archive extraction
+- security(setup): keep first-run setup closed after initial admin creation
+- security(auth): resolve remember-me admin status from the current user role
+- security(upload): reject encoded path separators before upload writes
+```
+
+**Fixed**
+
+- **Proxy-header login hardening**
+  - Proxy-header login now accepts the configured identity header only from sources listed in `FR_TRUSTED_PROXIES`.
+  - If you already use proxy-header login, set `FR_TRUSTED_PROXIES` to the reverse proxy IP or CIDR before upgrading; otherwise FileRise will ignore the identity header and users will not be auto-authenticated.
+
+- **WebDAV MFA hardening**
+  - WebDAV no longer accepts password-only Basic authentication for accounts that have TOTP enabled.
+  - Users who need WebDAV access should use an account without TOTP until a separate app-password flow is available.
+
+- **Archive extraction hardening**
+  - Archive extraction now applies the blocked upload filename policy before files are written to disk.
+  - Mixed archives can still extract allowed files while blocked file types are skipped and reported as warnings.
+
+- **First-run setup hardening**
+  - FileRise now writes a setup-complete marker after initial admin creation and also creates it automatically for existing installs with users.
+  - If `users.txt` later becomes empty, first-run setup remains closed and requires out-of-band recovery.
+
+- **Remember-me role hardening**
+  - Remember-me auto-login now resolves admin status from the current user record instead of trusting role data stored with the token.
+  - Rotated and newly issued remember-me tokens no longer store the admin flag.
+
+- **Upload filename hardening**
+  - Upload handling now rejects encoded path separators before resolving the destination path.
+  - Normal filenames and allowed folder upload paths continue to work.
+
+---
+
 ## Changes 06/11/2026 (v3.15.0)
 
 `release(v3.15.0): shared-folder boundary hardening`

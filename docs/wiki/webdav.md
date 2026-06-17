@@ -48,6 +48,7 @@ curl -u username:password -X PROPFIND -H "Depth: 1" "https://your-server/webdav.
 
 - URL encode spaces with `%20`.
 - Use HTTPS in production.
+- Accounts with TOTP enabled cannot use password-only WebDAV Basic authentication.
 - WebDAV uploads can be capped via `FR_WEBDAV_MAX_UPLOAD_BYTES`.
 
 ---

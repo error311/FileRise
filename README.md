@@ -260,7 +260,7 @@ export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
 | `PGID`                  | Optional | `100`                            | If running as root, remap `www-data` group to this GID (e.g. Unraid’s 100).                           |
 | `FR_PUBLISHED_URL`      | Optional | `https://example.com/files`      | Public URL when behind proxies/subpaths (share links, portals, redirects). |
 | `FR_BASE_PATH`          | Optional | `/files`                         | Force a subpath when the proxy strips the prefix (overrides auto-detect). |
-| `FR_TRUSTED_PROXIES`    | Optional | `127.0.0.1,10.0.0.0/8`            | Comma-separated IPs/CIDRs for trusted proxies; only these can supply the client IP header. |
+| `FR_TRUSTED_PROXIES`    | Optional | `127.0.0.1,10.0.0.0/8`            | Comma-separated IPs/CIDRs for trusted proxies; only these can supply the client IP header or proxy-auth identity header. |
 | `FR_IP_HEADER`          | Optional | `X-Forwarded-For`                | Header to trust for the real client IP when the proxy is trusted. |
 
 > Full list of common env variables: [Common Environment variables](https://github.com/error311/FileRise/wiki/Common-Env-Variables)
@@ -354,7 +354,7 @@ Notes:
 - Persist `/var/www/metadata` so the generated persistent tokens key survives container recreation.
 - Either set your own strong `PERSISTENT_TOKENS_KEY` or let a pristine install generate one and then back up `metadata/persistent_tokens.key`.
 - Use HTTPS and set `SECURE="true"` when behind TLS/reverse proxy.
-- If behind a proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER`.
+- If behind a proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER`; proxy-header login also requires `FR_TRUSTED_PROXIES`.
 - Set `FR_PUBLISHED_URL` (and `FR_BASE_PATH` if needed) so share links are correct.
 - Block direct HTTP access to `/uploads` (serve only `public/` and deny access to `/uploads`, `/users`, `/metadata`).
 

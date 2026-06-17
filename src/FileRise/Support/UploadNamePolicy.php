@@ -72,7 +72,22 @@ final class UploadNamePolicy
 
     public static function isAllowedForWrite(string $fileName, ?string $mode = null): bool
     {
-        $fileName = basename(trim($fileName));
+        $fileName = trim($fileName);
+        for ($i = 0; $i < 3; $i++) {
+            $decoded = rawurldecode($fileName);
+            if ($decoded === $fileName) {
+                break;
+            }
+            $fileName = $decoded;
+        }
+        if (
+            $fileName === ''
+            || str_contains($fileName, '/')
+            || str_contains($fileName, '\\')
+            || basename($fileName) !== $fileName
+        ) {
+            return false;
+        }
         if ($fileName === '' || !preg_match((string)REGEX_FILE_NAME, $fileName)) {
             return false;
         }

@@ -153,17 +153,10 @@ class UserController
         }
 
         // Setup mode detection (first-run bootstrap)
-        $usersFile = USERS_DIR . USERS_FILE;
         $isSetup   = (isset($_GET['setup']) && $_GET['setup'] === '1');
         $setupMode = false;
 
-        if (
-            $isSetup && (
-                !file_exists($usersFile) ||
-                filesize($usersFile) === 0 ||
-                trim(@file_get_contents($usersFile)) === ''
-            )
-        ) {
+        if ($isSetup && UserModel::isInitialSetupAllowed()) {
             $setupMode = true;
         } else {
             // Not setup: enforce CSRF + admin auth
