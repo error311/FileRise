@@ -1,5 +1,24 @@
 # Changelog
 
+## Changes 06/20/2026 (v3.17.0)
+
+`release(v3.17.0): phpseclib dependency security update`
+
+**Commit message**
+
+```text
+release(v3.17.0): phpseclib dependency security update
+
+- deps(composer): upgrade phpseclib/phpseclib to 3.0.55
+```
+
+**Changed**
+
+- **Dependency security maintenance**
+  - Updated `phpseclib/phpseclib` to `3.0.55` in Composer dependencies and the locked dependency set.
+
+---
+
 ## Changes 06/16/2026 (v3.16.0)
 
 `release(v3.16.0): security hardening`
