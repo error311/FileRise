@@ -1,5 +1,32 @@
 # Changelog
 
+## Changes 06/23/2026 (v3.18.0)
+
+`release(v3.18.0): file operation hardening`
+
+**Commit message**
+
+```text
+release(v3.18.0): file operation hardening
+
+- security(upload): reject shared-upload filename collisions and require edit authority for replacements
+- security(metadata): use collision-resistant folder metadata filenames
+```
+
+**Fixed**
+
+- **Upload overwrite hardening**
+  - Public shared-folder and portal uploads are now create-only when the destination filename already exists.
+  - Authenticated uploads now require edit authority plus ownership, folder ownership, admin, or bypass ownership before replacing an existing file.
+  - Upload collision errors preserve the original file content and return an explicit conflict/permission response.
+
+- **Folder metadata isolation hardening**
+  - Folder metadata filenames now preserve distinct logical folder paths instead of flattening separators and spaces into the same name.
+  - Ownership and `read_own` checks now resolve metadata from the same isolated path used by uploads, file operations, WebDAV, and background transfer handling.
+  - Simple non-colliding folder metadata filenames remain compatible; existing metadata for collision-prone folders is copied into the isolated filename on first access.
+
+---
+
 ## Changes 06/20/2026 (v3.17.0)
 
 `release(v3.17.0): phpseclib dependency security update`

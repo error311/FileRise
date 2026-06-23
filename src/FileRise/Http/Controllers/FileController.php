@@ -7,6 +7,7 @@ use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
 use FileRise\Support\FS;
+use FileRise\Support\MetadataPath;
 use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
@@ -68,14 +69,10 @@ class FileController
 
     private function getMetadataPath(string $folder): string
     {
-        $folder = trim($folder);
         $metaRoot = class_exists('SourceContext')
             ? SourceContext::metaRoot()
             : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
-        if ($folder === '' || strtolower($folder) === 'root') {
-            return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'root_metadata.json';
-        }
-        return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . str_replace(['/', '\\', ' '], '-', $folder) . '_metadata.json';
+        return MetadataPath::path($metaRoot, $folder);
     }
 
     private function loadFolderMetadata(string $folder): array

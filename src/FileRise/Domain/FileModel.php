@@ -5,6 +5,7 @@ namespace FileRise\Domain;
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
+use FileRise\Support\MetadataPath;
 use FileRise\Support\UploadNamePolicy;
 use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
@@ -65,11 +66,7 @@ class FileModel
 
     private static function getMetadataFilePathForRoot(string $metaRoot, string $folder): string
     {
-        $metaRoot = rtrim($metaRoot, "/\\") . DIRECTORY_SEPARATOR;
-        if (strtolower($folder) === 'root' || trim($folder) === '') {
-            return $metaRoot . "root_metadata.json";
-        }
-        return $metaRoot . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+        return MetadataPath::path($metaRoot, $folder);
     }
 
     private static function trashRoot(): string
@@ -1188,8 +1185,7 @@ class FileModel
         // Perform the rename.
         if ($storage->move($oldPath, $newPath)) {
             // Update the metadata file.
-            $metadataKey = ($folder === 'root') ? "root" : $folder;
-            $metadataFile = self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
+            $metadataFile = self::getMetadataFilePath($folder);
 
             if (file_exists($metadataFile)) {
                 $metadata = json_decode(file_get_contents($metadataFile), true);
@@ -1300,9 +1296,7 @@ class FileModel
         }
 
         // Metadata
-        $metadataKey      = strtolower($folder) === "root" ? "root" : $folder;
-        $metadataFileName = str_replace(['/', '\\', ' '], '-', trim($metadataKey)) . '_metadata.json';
-        $metadataFilePath = self::metaRoot() . $metadataFileName;
+        $metadataFilePath = self::getMetadataFilePath($folder);
 
         $metadata = file_exists($metadataFilePath) ? (json_decode(file_get_contents($metadataFilePath), true) ?: []) : [];
 
@@ -3213,12 +3207,7 @@ class FileModel
         }
 
         // Helper to get metadata file path for a folder.
-        $getMetadataFilePath = function ($folder) {
-            if (strtolower($folder) === 'root' || trim($folder) === '') {
-                return self::metaRoot() . "root_metadata.json";
-            }
-            return self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
-        };
+        $getMetadataFilePath = static fn($folder): string => self::getMetadataFilePath((string)$folder);
 
         // Process each provided trash file name.
         foreach ($trashFiles as $trashFileName) {
@@ -3524,9 +3513,7 @@ class FileModel
         $tags = self::sanitizeTags($tags);
 
         // Determine the folder metadata file.
-        $metadataFile = (strtolower($folder) === "root")
-            ? self::metaRoot() . "root_metadata.json"
-            : self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+        $metadataFile = self::getMetadataFilePath($folder);
 
         // Load existing metadata for this folder.
         $metadata = [];
@@ -3650,15 +3637,7 @@ class FileModel
             return ["error" => "Invalid folder name."];
         }
 
-        // Helper: Build the metadata file path.
-        $getMetadataFilePath = function (string $folder): string {
-            $metaRoot = self::metaRoot();
-            if (strtolower($folder) === 'root' || trim($folder) === '') {
-                return $metaRoot . "root_metadata.json";
-            }
-            return $metaRoot . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
-        };
-        $metadataFile = $getMetadataFilePath($folder);
+        $metadataFile = self::getMetadataFilePath($folder);
         $metadata = file_exists($metadataFile) ? (json_decode(file_get_contents($metadataFile), true) ?: []) : [];
 
         $dirStat = $storage->stat($directory);
@@ -4031,9 +4010,7 @@ class FileModel
         }
 
         // 5) write metadata
-        $metaKey  = (strtolower($folder) === 'root' || trim($folder) === '') ? 'root' : $folder;
-        $metaName = str_replace(['/', '\\', ' '], '-', $metaKey) . '_metadata.json';
-        $metaPath = self::metaRoot() . $metaName;
+        $metaPath = self::getMetadataFilePath($folder);
 
         $collection = [];
         if (file_exists($metaPath)) {

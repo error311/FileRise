@@ -5,6 +5,7 @@ namespace FileRise\WebDAV;
 use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\FS;
+use FileRise\Support\MetadataPath;
 use FileRise\Domain\FileModel;
 use FileRise\Domain\FolderCrypto;
 use FileRise\Domain\FolderModel;
@@ -300,11 +301,7 @@ class FileRiseDirectory implements ICollection, INode
             return $this->metaCache[$folderKey];
         }
 
-        $metaFile = META_DIR . (
-            $folderKey === 'root'
-                ? 'root_metadata.json'
-                : str_replace(['/', '\\', ' '], '-', $folderKey) . '_metadata.json'
-        );
+        $metaFile = MetadataPath::path((string)META_DIR, $folderKey);
 
         $data = [];
         if (is_file($metaFile)) {

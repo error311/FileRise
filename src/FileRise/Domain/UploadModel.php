@@ -6,6 +6,7 @@ use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
+use FileRise\Support\MetadataPath;
 use FileRise\Support\UploadNamePolicy;
 use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
@@ -191,6 +192,116 @@ class UploadModel
             return null;
         }
         return $fileName;
+    }
+
+    private static function metadataFileForFolder(string $folder): string
+    {
+        $folder = ACL::normalizeFolder($folder);
+        return MetadataPath::path(self::metaRoot(), $folder);
+    }
+
+    private static function loadFolderMetadata(string $folder): array
+    {
+        $path = self::metadataFileForFolder($folder);
+        if (!is_file($path)) {
+            return [];
+        }
+        $data = json_decode((string)file_get_contents($path), true);
+        return is_array($data) ? $data : [];
+    }
+
+    private static function isPublicCreateOnlyUpload(array $post): bool
+    {
+        $source = strtolower(trim((string)($post['source'] ?? '')));
+        if ($source === 'shared' || $source === 'portal') {
+            return true;
+        }
+        $username = (string)($_SESSION['username'] ?? '');
+        return str_starts_with($username, 'share:') || str_starts_with($username, 'portal:');
+    }
+
+    /**
+     * @return array{error?:string,code?:int,overwrite?:bool}
+     */
+    private static function authorizeUploadDestination(string $folder, string $fileName, bool $targetExists, array $post): array
+    {
+        if (!$targetExists) {
+            return ['overwrite' => false];
+        }
+
+        if (self::isPublicCreateOnlyUpload($post)) {
+            return ['error' => 'File already exists.', 'code' => 409];
+        }
+
+        $username = (string)($_SESSION['username'] ?? '');
+        if ($username === '' || empty($_SESSION['authenticated'])) {
+            return ['error' => 'File already exists.', 'code' => 409];
+        }
+
+        $perms = function_exists('loadUserPermissions') ? (loadUserPermissions($username) ?: []) : [];
+        if (ACL::isAdmin($perms)) {
+            return ['overwrite' => true];
+        }
+
+        if (!ACL::canEdit($username, $perms, $folder)) {
+            return ['error' => 'Replacing existing files requires edit permission.', 'code' => 403];
+        }
+
+        $canBypassOwnership = !empty($perms['bypassOwnership'])
+            || (defined('DEFAULT_BYPASS_OWNERSHIP') && DEFAULT_BYPASS_OWNERSHIP)
+            || ACL::isOwner($username, $perms, $folder);
+        if ($canBypassOwnership) {
+            return ['overwrite' => true];
+        }
+
+        $meta = self::loadFolderMetadata($folder);
+        $owner = (string)($meta[$fileName]['uploader'] ?? '');
+        if ($owner !== '' && strcasecmp($owner, $username) === 0) {
+            return ['overwrite' => true];
+        }
+
+        return ['error' => 'Replacing existing files requires ownership or bypass permission.', 'code' => 403];
+    }
+
+    private static function storeUploadedFileLocal(string $tmpPath, string $targetPath, bool $allowOverwrite): bool
+    {
+        if ($allowOverwrite) {
+            $dir = dirname($targetPath);
+            $tmpTarget = rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '.filerise-upload-' . bin2hex(random_bytes(8)) . '.tmp';
+            if (!move_uploaded_file($tmpPath, $tmpTarget)) {
+                return false;
+            }
+            if (@rename($tmpTarget, $targetPath)) {
+                return true;
+            }
+            @unlink($tmpTarget);
+            return false;
+        }
+
+        if (!is_uploaded_file($tmpPath)) {
+            return false;
+        }
+
+        $in = @fopen($tmpPath, 'rb');
+        if ($in === false) {
+            return false;
+        }
+        $out = @fopen($targetPath, 'xb');
+        if ($out === false) {
+            @fclose($in);
+            return false;
+        }
+        $ok = (stream_copy_to_stream($in, $out) !== false);
+        if (!@fclose($out)) {
+            $ok = false;
+        }
+        @fclose($in);
+        if (!$ok) {
+            @unlink($targetPath);
+            return false;
+        }
+        @unlink($tmpPath);
+        return true;
     }
 
     private static function loadResumableIndex(): array
@@ -892,9 +1003,21 @@ class UploadModel
                 $cleanupChunk();
                 return ['error' => 'Invalid file name'];
             }
-            if (!$out = fopen($targetPath, 'wb')) {
+            $folderForLog = self::buildFolderForLog($folderSan, $relativeSubDir);
+            $remoteTargetPath = self::buildStoragePath($folderSan, $relativeSubDir, $resumableFilename);
+            $targetExists = $isLocal ? is_file($targetPath) : ($storage->stat($remoteTargetPath) !== null);
+            $collision = self::authorizeUploadDestination($folderForLog, $resumableFilename, $targetExists, $post);
+            if (isset($collision['error'])) {
                 $cleanupChunk();
-                return ['error' => 'Failed to open target file for writing'];
+                return $collision;
+            }
+            $allowOverwrite = !empty($collision['overwrite']);
+
+            if (!$out = fopen($targetPath, $allowOverwrite ? 'wb' : 'xb')) {
+                $cleanupChunk();
+                return $allowOverwrite
+                    ? ['error' => 'Failed to open target file for writing']
+                    : ['error' => 'File already exists.', 'code' => 409];
             }
             for ($i = 1; $i <= $totalChunks; $i++) {
                 $chunkPath = $tempDir . $i;
@@ -916,7 +1039,6 @@ class UploadModel
             fclose($out);
 
             // Optional: virus scan the merged file
-            $folderForLog = self::buildFolderForLog($folderSan, $relativeSubDir);
             $scanResult   = self::scanFileIfEnabled($targetPath, [
                 'folder' => $folderForLog,
                 'file'   => $resumableFilename,
@@ -966,7 +1088,6 @@ class UploadModel
 
             if (!$isLocal) {
                 self::ensureRemoteUploadDir($storage, $folderSan, $relativeSubDir);
-                $remoteTargetPath = self::buildStoragePath($folderSan, $relativeSubDir, $resumableFilename);
                 $mimeType = function_exists('mime_content_type') ? mime_content_type($targetPath) : null;
                 $size = @filesize($targetPath);
                 $stream = @fopen($targetPath, 'rb');
@@ -988,8 +1109,7 @@ class UploadModel
 
             // Metadata
             $metadataKey      = ($folderForLog === '' ? 'root' : $folderForLog);
-            $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
-            $metadataFile     = self::metaRoot() . $metadataFileName;
+            $metadataFile     = self::metadataFileForFolder($metadataKey);
             $uploadedDate     = date(DATE_TIME_FORMAT);
             $uploader         = $_SESSION['username'] ?? 'Unknown';
             $collection       = file_exists($metadataFile)
@@ -998,7 +1118,11 @@ class UploadModel
             if (!is_array($collection)) {
                 $collection = [];
             }
-            if (!isset($collection[$resumableFilename])) {
+            if ($allowOverwrite && isset($collection[$resumableFilename])) {
+                $collection[$resumableFilename]['modified'] = $uploadedDate;
+                $collection[$resumableFilename]['uploader'] = $uploader;
+                file_put_contents($metadataFile, json_encode($collection, JSON_PRETTY_PRINT));
+            } elseif (!isset($collection[$resumableFilename])) {
                 $collection[$resumableFilename] = [
                     'uploaded' => $uploadedDate,
                     'uploader' => $uploader,
@@ -1093,8 +1217,16 @@ class UploadModel
                     if (!self::isTargetPathWithinDir($targetPath, $uploadDir)) {
                         return ['error' => 'Invalid file name: ' . $fileName];
                     }
-                    if (!move_uploaded_file($files['file']['tmp_name'][$index], $targetPath)) {
-                        return ['error' => 'Error uploading file'];
+                    $targetExists = is_file($targetPath);
+                    $collision = self::authorizeUploadDestination($folderForLog, $safeFileName, $targetExists, $post);
+                    if (isset($collision['error'])) {
+                        return $collision;
+                    }
+                    $allowOverwrite = !empty($collision['overwrite']);
+                    if (!self::storeUploadedFileLocal((string)$files['file']['tmp_name'][$index], $targetPath, $allowOverwrite)) {
+                        return $allowOverwrite
+                            ? ['error' => 'Error uploading file']
+                            : ['error' => 'File already exists.', 'code' => 409];
                     }
                     $scanPath = $targetPath;
                 } else {
@@ -1104,6 +1236,12 @@ class UploadModel
                     }
                     self::ensureRemoteUploadDir($storage, $folderSan, $relativeSubDir);
                     $targetPath = self::buildStoragePath($folderSan, $relativeSubDir, $safeFileName);
+                    $targetExists = ($storage->stat($targetPath) !== null);
+                    $collision = self::authorizeUploadDestination($folderForLog, $safeFileName, $targetExists, $post);
+                    if (isset($collision['error'])) {
+                        return $collision;
+                    }
+                    $allowOverwrite = !empty($collision['overwrite']);
                     $scanPath = $tmpPath;
                 }
 
@@ -1180,9 +1318,8 @@ class UploadModel
                 ]);
                 self::emitUploadEvent($uploader, $folderForLog, $safeFileName, $post);
 
-                $metadataKey      = ($folderSan === '') ? 'root' : $folderSan;
-                $metadataFileName = str_replace(['/', '\\', ' '], '-', $metadataKey) . '_metadata.json';
-                $metadataFile     = self::metaRoot() . $metadataFileName;
+                $metadataKey      = ($folderForLog === '') ? 'root' : $folderForLog;
+                $metadataFile     = self::metadataFileForFolder($metadataKey);
 
                 if (!isset($metadataCollection[$metadataKey])) {
                     $metadataCollection[$metadataKey] = file_exists($metadataFile)
@@ -1194,8 +1331,12 @@ class UploadModel
                     $metadataChanged[$metadataKey] = false;
                 }
 
-                if (!isset($metadataCollection[$metadataKey][$safeFileName])) {
-                    $uploadedDate = date(DATE_TIME_FORMAT);
+                $uploadedDate = date(DATE_TIME_FORMAT);
+                if (!empty($allowOverwrite) && isset($metadataCollection[$metadataKey][$safeFileName])) {
+                    $metadataCollection[$metadataKey][$safeFileName]['modified'] = $uploadedDate;
+                    $metadataCollection[$metadataKey][$safeFileName]['uploader'] = $uploader;
+                    $metadataChanged[$metadataKey] = true;
+                } elseif (!isset($metadataCollection[$metadataKey][$safeFileName])) {
                     $metadataCollection[$metadataKey][$safeFileName] = [
                         'uploaded' => $uploadedDate,
                         'uploader' => $uploader,
@@ -1206,8 +1347,7 @@ class UploadModel
 
             foreach ($metadataCollection as $folderKey => $data) {
                 if (!empty($metadataChanged[$folderKey])) {
-                    $metadataFileName = str_replace(['/', '\\', ' '], '-', $folderKey) . '_metadata.json';
-                    $metadataFile     = self::metaRoot() . $metadataFileName;
+                    $metadataFile     = self::metadataFileForFolder((string)$folderKey);
                     file_put_contents($metadataFile, json_encode($data, JSON_PRETTY_PRINT));
                 }
             }

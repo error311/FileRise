@@ -14,6 +14,7 @@ use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
 use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
+use FileRise\Support\MetadataPath;
 
 $jobId = strtolower((string)($argv[1] ?? ''));
 $jobId = preg_replace('/[^a-f0-9]/', '', $jobId ?? '');
@@ -215,14 +216,10 @@ $enforceFolderScope = static function (string $folder, string $username, array $
 };
 
 $metadataPathForFolder = static function (string $folder): string {
-    $f = trim((string)$folder);
     $metaRoot = class_exists(SourceContext::class)
         ? SourceContext::metaRoot()
         : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
-    if ($f === '' || strcasecmp($f, 'root') === 0) {
-        return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'root_metadata.json';
-    }
-    return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . str_replace(['/', '\\', ' '], '-', $f) . '_metadata.json';
+    return MetadataPath::path($metaRoot, $folder);
 };
 
 $loadFolderMetadata = static function (string $folder, string $sourceId) use ($withSourceContext, $metadataPathForFolder): array {

@@ -5,6 +5,7 @@ namespace FileRise\Domain;
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
+use FileRise\Support\MetadataPath;
 use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
@@ -1492,10 +1493,7 @@ class FolderModel
     /** Build metadata file path for a given (relative) folder. */
     private static function getMetadataFilePath(string $folder): string
     {
-        if (strtolower($folder) === 'root' || trim($folder) === '') {
-            return self::metaRoot() . "root_metadata.json";
-        }
-        return self::metaRoot() . str_replace(['/', '\\', ' '], '-', trim($folder)) . '_metadata.json';
+        return MetadataPath::path(self::metaRoot(), $folder);
     }
 
     /**
@@ -1634,14 +1632,7 @@ class FolderModel
 
     // Remove metadata JSONs for this subtree
         $relative = trim($relative, "/\\ ");
-        if ($relative !== '' && $relative !== 'root') {
-            $prefix = str_replace(['/', '\\', ' '], '-', $relative);
-            $globPat = self::metaRoot() . $prefix . '*_metadata.json';
-            $metaFiles = glob($globPat) ?: [];
-            foreach ($metaFiles as $mf) {
-                @unlink($mf);
-            }
-        }
+        MetadataPath::deleteSubtree(self::metaRoot(), $relative);
 
     // Remove ownership mappings for the subtree.
         self::removeOwnerForTree($relative);
@@ -1711,14 +1702,7 @@ class FolderModel
 
         // Remove metadata JSONs for this subtree
         $relative = trim($relative, "/\\ ");
-        if ($relative !== '' && $relative !== 'root') {
-            $prefix = str_replace(['/', '\\', ' '], '-', $relative);
-            $globPat = self::metaRoot() . $prefix . '*_metadata.json';
-            $metaFiles = glob($globPat) ?: [];
-            foreach ($metaFiles as $mf) {
-                @unlink($mf);
-            }
-        }
+        MetadataPath::deleteSubtree(self::metaRoot(), $relative);
 
         // Remove ownership mappings for the subtree.
         self::removeOwnerForTree($relative);
@@ -1884,17 +1868,7 @@ class FolderModel
         }
 
         // Update metadata filenames (prefix-rename)
-        $oldPrefix = str_replace(['/', '\\', ' '], '-', $oldRel);
-        $newPrefix = str_replace(['/', '\\', ' '], '-', $newRel);
-        $globPat   = self::metaRoot() . $oldPrefix . '*_metadata.json';
-        $metadataFiles = glob($globPat) ?: [];
-
-        foreach ($metadataFiles as $oldMetaFile) {
-            $baseName   = basename($oldMetaFile);
-            $newBase    = preg_replace('/^' . preg_quote($oldPrefix, '/') . '/', $newPrefix, $baseName);
-            $newMeta    = self::metaRoot() . $newBase;
-            @rename($oldMetaFile, $newMeta);
-        }
+        MetadataPath::renameSubtree(self::metaRoot(), $oldRel, $newRel);
 
         // Update ownership mapping for the entire subtree.
         self::renameOwnersForTree($oldRel, $newRel);

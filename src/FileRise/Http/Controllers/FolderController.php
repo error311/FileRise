@@ -2921,7 +2921,7 @@ class FolderController
 
         $result = UploadModel::handleUpload($requestParams, $filesForModel);
         if (isset($result['error'])) {
-            $respondError(400, (string)$result['error']);
+            $respondError(isset($result['code']) ? (int)$result['code'] : 400, (string)$result['error']);
         }
 
         $isChunkIntermediate = isset($result['status']) && (string)$result['status'] === 'chunk uploaded';

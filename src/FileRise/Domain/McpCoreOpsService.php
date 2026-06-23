@@ -8,6 +8,7 @@ use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\StorageRegistry;
 use FileRise\Support\ACL;
+use FileRise\Support\MetadataPath;
 use RuntimeException;
 use Throwable;
 
@@ -2057,13 +2058,7 @@ final class McpCoreOpsService
             : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
 
         $folder = ACL::normalizeFolder($folder);
-        if ($folder === 'root') {
-            return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'root_metadata.json';
-        }
-
-        return rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR
-            . str_replace(['/', '\\', ' '], '-', $folder)
-            . '_metadata.json';
+        return MetadataPath::path($metaRoot, $folder);
     }
 
     private static function normalizeFolder(string $folder): string

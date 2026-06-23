@@ -213,7 +213,7 @@ class UploadController
 
         // ---- 6) Normal response handling ----
         if (isset($result['error'])) {
-            http_response_code(400);
+            http_response_code(isset($result['code']) ? (int)$result['code'] : 400);
             echo json_encode($result);
             return;
         }
