@@ -607,6 +607,33 @@ class FolderModel
         $len = mb_strlen($name);
         return $len > 0 && $len <= 255;
     }
+
+    private static function isValidFolderSegment(string $name): bool
+    {
+        return self::isSafeSegment($name) && preg_match(REGEX_FOLDER_NAME, $name) === 1;
+    }
+
+    private static function splitFolderSegments(string $folder, bool $allowRoot = true): ?array
+    {
+        $normalized = ACL::normalizeFolder($folder);
+        if ($normalized === 'root') {
+            return $allowRoot ? [] : null;
+        }
+
+        $parts = explode('/', $normalized);
+        if ($parts === [] || in_array('', $parts, true)) {
+            return null;
+        }
+
+        foreach ($parts as $seg) {
+            if (!self::isValidFolderSegment($seg)) {
+                return null;
+            }
+        }
+
+        return $parts;
+    }
+
     private static function safeReal(string $baseReal, string $p): ?string
     {
         $rp = realpath($p);
@@ -1094,15 +1121,9 @@ class FolderModel
         if (strtolower($folder) === 'root') {
             $dir = $base;
         } else {
-            // validate each segment against REGEX_FOLDER_NAME
-            $parts = array_filter(explode('/', trim($folder, "/\\ ")), fn($p) => $p !== '');
-            if (empty($parts)) {
+            $parts = self::splitFolderSegments($folder);
+            if ($parts === null || $parts === []) {
                 return [null, 'root', "Invalid folder name."];
-            }
-            foreach ($parts as $seg) {
-                if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
-                    return [null, 'root', "Invalid folder name."];
-                }
             }
             $relative = implode('/', $parts);
             $dir      = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
@@ -1145,14 +1166,9 @@ class FolderModel
         if (strtolower($folder) === 'root') {
             $dir = $base;
         } else {
-            $parts = array_filter(explode('/', trim($folder, "/\\ ")), fn($p) => $p !== '');
-            if (empty($parts)) {
+            $parts = self::splitFolderSegments($folder);
+            if ($parts === null || $parts === []) {
                 return [null, 'root', "Invalid folder name."];
-            }
-            foreach ($parts as $seg) {
-                if (!preg_match(REGEX_FOLDER_NAME, $seg)) {
-                    return [null, 'root', "Invalid folder name."];
-                }
             }
             $relative = implode('/', $parts);
             $dir      = $base . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts);
@@ -1533,6 +1549,18 @@ class FolderModel
             return ['success' => false, 'error' => 'Folder name required'];
         }
 
+        $parentParts = self::splitFolderSegments($parent);
+        if ($parentParts === null) {
+            return ['success' => false, 'error' => 'Invalid parent folder name'];
+        }
+        $folderParts = self::splitFolderSegments($folderName, false);
+        if ($folderParts === null || count($folderParts) !== 1) {
+            return ['success' => false, 'error' => 'Invalid folder name'];
+        }
+
+        $parent = $parentParts === [] ? 'root' : implode('/', $parentParts);
+        $folderName = $folderParts[0];
+
         // ACL key for new folder
         $newKey = ($parent === 'root') ? $folderName : ($parent . '/' . $folderName);
 
@@ -1540,7 +1568,6 @@ class FolderModel
         $base = rtrim(self::uploadRoot(), "/\\");
         $parentRel = ($parent === 'root') ? '' : str_replace('/', DIRECTORY_SEPARATOR, $parent);
         $parentAbs = $parentRel ? ($base . DIRECTORY_SEPARATOR . $parentRel) : $base;
-        $newAbs = $parentAbs . DIRECTORY_SEPARATOR . $folderName;
         $storage = self::storage();
         $isLocal = $storage->isLocal();
 
@@ -1552,6 +1579,21 @@ class FolderModel
         if (!$parentExists) {
             return ['success' => false, 'error' => 'Parent folder does not exist'];
         }
+
+        if ($isLocal) {
+            $baseReal = realpath(self::uploadRoot());
+            $parentReal = realpath($parentAbs);
+            if (
+                $baseReal === false ||
+                $parentReal === false ||
+                !self::isPathInsideOrSame($baseReal, $parentReal)
+            ) {
+                return ['success' => false, 'error' => 'Invalid folder path'];
+            }
+            $parentAbs = $parentReal;
+        }
+
+        $newAbs = $parentAbs . DIRECTORY_SEPARATOR . $folderName;
         if ($storage->stat($newAbs) !== null) {
             return ['success' => false, 'error' => 'Folder already exists'];
         }

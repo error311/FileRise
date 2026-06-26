@@ -1,5 +1,26 @@
 # Changelog
 
+## Changes 06/26/2026 (v3.19.0)
+
+`release(v3.19.0): folder creation hardening`
+
+**Commit message**
+
+```text
+release(v3.19.0): folder creation hardening
+
+- security(folder): reject traversal segments before directory creation
+```
+
+**Fixed**
+
+- **Folder creation hardening**
+  - Folder creation now rejects `.` and `..` path segments before creating directories.
+  - Local folder creation now verifies the parent path stays inside the configured upload root before directory creation.
+  - Existing valid child-folder and root-relative nested folder creation behavior is preserved.
+
+---
+
 ## Changes 06/23/2026 (v3.18.0)
 
 `release(v3.18.0): file operation hardening`
