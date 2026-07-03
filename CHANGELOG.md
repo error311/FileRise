@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 07/03/2026 (v3.20.0)
+
+`release(v3.20.0): file preview hardening`
+
+**Commit message**
+
+```text
+release(v3.20.0): file preview hardening
+
+- security(file): require authentication before snippet preview access
+```
+
+**Fixed**
+
+- **File preview hardening**
+  - File snippet previews now require an authenticated session before any ACL, path, or file-content handling.
+  - Unauthenticated snippet requests now return `401 Unauthorized`.
+
 ## Changes 06/26/2026 (v3.19.0)
 
 `release(v3.19.0): folder creation hardening`

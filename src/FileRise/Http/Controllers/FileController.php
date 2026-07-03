@@ -3829,6 +3829,9 @@ class FileController
     public function snippet(): void
     {
         header('Content-Type: application/json; charset=utf-8');
+        if (!$this->requireAuth()) {
+            return;
+        }
 
         $storage = StorageRegistry::getAdapter();
 
