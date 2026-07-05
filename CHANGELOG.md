@@ -1,5 +1,41 @@
 # Changelog
 
+## Changes 07/05/2026 (v3.21.0)
+
+`release(v3.21.0): authentication and public config hardening`
+
+**Commit message**
+
+```text
+release(v3.21.0): authentication and public config hardening
+
+- security(auth): enforce disabled login methods server-side
+- security(auth): add source-wide failed-login throttling
+- security(config): sanitize public footer branding HTML server-side
+```
+
+**Fixed**
+
+- **Login method policy hardening**
+  - Form login, Basic Auth login, and OIDC login now enforce the configured disabled-login-method flags on the server.
+  - Direct requests to disabled login endpoints now return `403 Forbidden` before credential validation or OIDC flow setup.
+
+- **Login throttling hardening**
+  - Login throttling now keeps the existing per-source-and-username limit and also applies a source-wide failed-attempt limit.
+  - Rotating usernames from the same source no longer grants unlimited fresh login-attempt budgets.
+
+- **Public branding config hardening**
+  - Public site configuration now sanitizes footer branding HTML server-side before returning it to clients.
+  - Existing safe footer text, inline formatting, and safe links are preserved.
+
+**Upgrade notes**
+
+- Deployments that intentionally disabled a login method in the Admin Panel must now re-enable it before direct API use of that method will work.
+- Deployments behind reverse proxies should verify trusted proxy/IP header settings so login throttling uses the real client IP instead of the proxy address.
+- Footer branding now permits safe text, inline formatting, and safe links; unsupported active or embedded HTML is stripped.
+
+---
+
 ## Changes 07/03/2026 (v3.20.0)
 
 `release(v3.20.0): file preview hardening`
@@ -17,6 +53,8 @@ release(v3.20.0): file preview hardening
 - **File preview hardening**
   - File snippet previews now require an authenticated session before any ACL, path, or file-content handling.
   - Unauthenticated snippet requests now return `401 Unauthorized`.
+
+---
 
 ## Changes 06/26/2026 (v3.19.0)
 

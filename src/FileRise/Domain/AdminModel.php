@@ -211,7 +211,9 @@ class AdminModel
                 'loginTagline' => self::sanitizeTagline(
                     $config['branding']['loginTagline'] ?? ''
                 ),
-                'footerHtml'    => (string)($config['branding']['footerHtml'] ?? ''),
+                'footerHtml'    => self::sanitizeFooterHtml(
+                    $config['branding']['footerHtml'] ?? ''
+                ),
             ],
             'demoMode' => (defined('FR_DEMO_MODE') && FR_DEMO_MODE),
         ];
@@ -646,7 +648,7 @@ class AdminModel
             $appBgLight = self::sanitizeCssBackground($configUpdate['branding']['appBgLight'] ?? '');
             $appBgDark = self::sanitizeCssBackground($configUpdate['branding']['appBgDark'] ?? '');
             $loginTagline = self::sanitizeTagline($configUpdate['branding']['loginTagline'] ?? '');
-            $footer = trim((string)($configUpdate['branding']['footerHtml'] ?? ''));
+            $footer = self::sanitizeFooterHtml($configUpdate['branding']['footerHtml'] ?? '');
 
             if (defined('FR_PRO_ACTIVE') && FR_PRO_ACTIVE) {
                 $configUpdate['branding']['customLogoUrl'] = $logo;
@@ -787,6 +789,122 @@ class AdminModel
             $text = substr($text, 0, 200);
         }
         return trim($text);
+    }
+
+    private static function sanitizeFooterHtml($value): string
+    {
+        $html = trim((string)$value);
+        if ($html === '') {
+            return '';
+        }
+
+        $html = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', ' ', $html);
+        $html = substr((string)$html, 0, 2000);
+
+        if (!class_exists(\DOMDocument::class)) {
+            $text = strip_tags($html);
+            $text = preg_replace('/\s+/', ' ', (string)$text);
+            return trim($text);
+        }
+
+        $previous = libxml_use_internal_errors(true);
+        $doc = new \DOMDocument('1.0', 'UTF-8');
+        $loaded = $doc->loadHTML(
+            '<?xml encoding="UTF-8"><div>' . $html . '</div>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        if (!$loaded) {
+            $text = strip_tags($html);
+            $text = preg_replace('/\s+/', ' ', (string)$text);
+            return trim($text);
+        }
+
+        $wrapper = $doc->getElementsByTagName('div')->item(0);
+        if (!$wrapper) {
+            return '';
+        }
+
+        self::sanitizeFooterNode($wrapper, $doc);
+
+        $out = '';
+        foreach (iterator_to_array($wrapper->childNodes) as $child) {
+            $out .= $doc->saveHTML($child);
+        }
+
+        return trim($out);
+    }
+
+    private static function sanitizeFooterNode(\DOMNode $node, \DOMDocument $doc): void
+    {
+        $allowedTags = ['a', 'b', 'strong', 'em', 'i', 'span', 'small', 'br'];
+
+        foreach (iterator_to_array($node->childNodes) as $child) {
+            if ($child->nodeType === XML_COMMENT_NODE) {
+                $node->removeChild($child);
+                continue;
+            }
+
+            if ($child->nodeType !== XML_ELEMENT_NODE) {
+                continue;
+            }
+
+            $tag = strtolower($child->nodeName);
+            if (!in_array($tag, $allowedTags, true)) {
+                $node->replaceChild($doc->createTextNode($child->textContent ?? ''), $child);
+                continue;
+            }
+
+            if ($child instanceof \DOMElement && $child->hasAttributes()) {
+                foreach (iterator_to_array($child->attributes) as $attr) {
+                    $name = strtolower($attr->name);
+                    $value = trim($attr->value);
+
+                    if ($tag === 'a' && $name === 'href' && self::isSafeFooterHref($value)) {
+                        continue;
+                    }
+                    if ($tag === 'a' && $name === 'target' && in_array(strtolower($value), ['_blank', '_self'], true)) {
+                        continue;
+                    }
+
+                    $child->removeAttribute($attr->name);
+                }
+
+                if ($tag === 'a') {
+                    $target = strtolower((string)$child->getAttribute('target'));
+                    if ($target === '_blank') {
+                        $child->setAttribute('rel', 'noopener noreferrer');
+                    } else {
+                        $child->removeAttribute('rel');
+                    }
+                }
+            }
+
+            self::sanitizeFooterNode($child, $doc);
+        }
+    }
+
+    private static function isSafeFooterHref(string $href): bool
+    {
+        $href = trim($href);
+        if ($href === '' || preg_match('/[\x00-\x1F\x7F]/', $href)) {
+            return false;
+        }
+        if ($href[0] === '#') {
+            return true;
+        }
+        if (str_starts_with($href, '//')) {
+            return false;
+        }
+
+        $scheme = strtolower((string)parse_url($href, PHP_URL_SCHEME));
+        if ($scheme === '') {
+            return true;
+        }
+
+        return in_array($scheme, ['http', 'https', 'mailto'], true);
     }
 
     private static function sanitizeCssBackground($value): string
@@ -1105,6 +1223,9 @@ class AdminModel
                 );
                 $config['branding']['loginTagline'] = self::sanitizeTagline(
                     $config['branding']['loginTagline'] ?? ''
+                );
+                $config['branding']['footerHtml'] = self::sanitizeFooterHtml(
+                    $config['branding']['footerHtml'] ?? ''
                 );
             }
 

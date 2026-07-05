@@ -20,6 +20,78 @@ if (file_exists($autoload)) {
 
 class AuthController
 {
+    private const FAILED_LOGIN_WINDOW_SECONDS = 1800;
+    private const FAILED_LOGIN_USER_LIMIT = 5;
+    private const FAILED_LOGIN_IP_LIMIT = 50;
+
+    protected function isLoginMethodDisabled(string $flag): bool
+    {
+        $cfg = AdminModel::getConfig();
+        if (!is_array($cfg) || isset($cfg['error'])) {
+            return false;
+        }
+        $loginOptions = $cfg['loginOptions'] ?? [];
+        if (!is_array($loginOptions)) {
+            return false;
+        }
+        return !empty($loginOptions[$flag]);
+    }
+
+    protected function rejectDisabledLoginMethod(string $message): void
+    {
+        http_response_code(403);
+        echo json_encode(['error' => $message]);
+        exit();
+    }
+
+    protected function getFailedLoginIpKey(string $ip): string
+    {
+        $ip = trim($ip);
+        return '__ip__|' . ($ip !== '' ? $ip : 'unknown');
+    }
+
+    protected function resetExpiredFailedLoginEntry(array &$failed, string $key, int $now): void
+    {
+        if (!isset($failed[$key]) || !is_array($failed[$key])) {
+            return;
+        }
+        $lastAttempt = (int)($failed[$key]['last_attempt'] ?? 0);
+        if ($lastAttempt <= 0 || ($now - $lastAttempt) >= self::FAILED_LOGIN_WINDOW_SECONDS) {
+            $failed[$key] = ['count' => 0, 'last_attempt' => 0];
+        }
+    }
+
+    protected function isFailedLoginLocked(array $failed, string $key, int $limit, int $now): bool
+    {
+        if (!isset($failed[$key]) || !is_array($failed[$key])) {
+            return false;
+        }
+        $lastAttempt = (int)($failed[$key]['last_attempt'] ?? 0);
+        return (int)($failed[$key]['count'] ?? 0) >= $limit
+            && $lastAttempt > 0
+            && ($now - $lastAttempt) < self::FAILED_LOGIN_WINDOW_SECONDS;
+    }
+
+    protected function incrementFailedLoginEntry(array &$failed, string $key, int $now): void
+    {
+        $failed[$key] = [
+            'count'        => (int)($failed[$key]['count'] ?? 0) + 1,
+            'last_attempt' => $now,
+        ];
+    }
+
+    protected function clearFailedLoginEntries(array &$failed, array $keys): bool
+    {
+        $changed = false;
+        foreach ($keys as $key) {
+            if (isset($failed[$key])) {
+                unset($failed[$key]);
+                $changed = true;
+            }
+        }
+        return $changed;
+    }
+
     /**
      * Lightweight, opt-in OIDC debug logger (guarded by FR_OIDC_DEBUG and config flags).
      * Never logs secrets or tokens, only metadata.
@@ -179,6 +251,11 @@ class AuthController
         $oidcAction = $this->getOidcAction();
         if (!$oidcAction) {
             return false;
+        }
+        if ($this->isLoginMethodDisabled('disableOIDCLogin')) {
+            http_response_code(403);
+            echo json_encode(['error' => 'OIDC login is disabled']);
+            return true;
         }
 
         $this->logOidcDebug('Incoming OIDC request', [
@@ -505,6 +582,9 @@ class AuthController
 
     protected function handleFormLogin(string $username, string $password, bool $rememberMe): void
     {
+        if ($this->isLoginMethodDisabled('disableFormLogin')) {
+            $this->rejectDisabledLoginMethod('Form login is disabled');
+        }
         if (!$username || !$password) {
             http_response_code(400);
             echo json_encode(['error' => 'Username and password are required']);
@@ -519,20 +599,15 @@ class AuthController
         // rate-limit
         $ip           = AuthModel::getClientIp($_SERVER);
         $key          = AuthModel::getFailedLoginKey($ip, $username);
+        $ipKey        = $this->getFailedLoginIpKey($ip);
         $attemptsFile = USERS_DIR . 'failed_logins.json';
         $failed       = AuthModel::loadFailedAttempts($attemptsFile);
         $now          = time();
-        if (isset($failed[$key])) {
-            $lastAttempt = (int)($failed[$key]['last_attempt'] ?? 0);
-            if ($lastAttempt <= 0 || ($now - $lastAttempt) >= 30 * 60) {
-                $failed[$key] = ['count' => 0, 'last_attempt' => 0];
-            }
-        }
+        $this->resetExpiredFailedLoginEntry($failed, $key, $now);
+        $this->resetExpiredFailedLoginEntry($failed, $ipKey, $now);
         if (
-            isset($failed[$key]) &&
-            ($failed[$key]['count'] ?? 0) >= 5 &&
-            ($failed[$key]['last_attempt'] ?? 0) > 0 &&
-            $now - $failed[$key]['last_attempt'] < 30 * 60
+            $this->isFailedLoginLocked($failed, $key, self::FAILED_LOGIN_USER_LIMIT, $now) ||
+            $this->isFailedLoginLocked($failed, $ipKey, self::FAILED_LOGIN_IP_LIMIT, $now)
         ) {
             AuthModel::logFailedLogin($ip, $username, 'lockout', $_SERVER['HTTP_USER_AGENT'] ?? '');
             http_response_code(429);
@@ -543,10 +618,8 @@ class AuthController
         $user = AuthModel::authenticate($username, $password);
         if ($user === false) {
             // record failure
-            $failed[$key] = [
-                'count'        => ($failed[$key]['count'] ?? 0) + 1,
-                'last_attempt' => $now
-            ];
+            $this->incrementFailedLoginEntry($failed, $key, $now);
+            $this->incrementFailedLoginEntry($failed, $ipKey, $now);
             AuthModel::saveFailedAttempts($attemptsFile, $failed);
             AuthModel::logFailedLogin($ip, $username, 'invalid_credentials', $_SERVER['HTTP_USER_AGENT'] ?? '');
             http_response_code(401);
@@ -559,13 +632,15 @@ class AuthController
             $_SESSION['pending_login_user']   = $username;
             $_SESSION['pending_login_secret'] = $user['totp_secret'];
             $_SESSION['pending_login_remember_me'] = $rememberMe;
+            if ($this->clearFailedLoginEntries($failed, [$key, $ipKey])) {
+                AuthModel::saveFailedAttempts($attemptsFile, $failed);
+            }
             echo json_encode(['totp_required' => true]);
             exit();
         }
 
         // otherwise clear rate-limit & finish
-        if (isset($failed[$key])) {
-            unset($failed[$key]);
+        if ($this->clearFailedLoginEntries($failed, [$key, $ipKey])) {
             AuthModel::saveFailedAttempts($attemptsFile, $failed);
         }
         $this->finalizeLogin($username, $rememberMe);
@@ -762,6 +837,9 @@ class AuthController
     {
         // Set header for plain-text or JSON as needed.
         header('Content-Type: application/json');
+        if ($this->isLoginMethodDisabled('disableBasicAuth')) {
+            $this->rejectDisabledLoginMethod('Basic authentication is disabled');
+        }
 
         // Check for HTTP Basic auth credentials.
         if (!isset($_SERVER['PHP_AUTH_USER'])) {
@@ -785,20 +863,15 @@ class AuthController
         // rate-limit
         $ip           = AuthModel::getClientIp($_SERVER);
         $key          = AuthModel::getFailedLoginKey($ip, $username);
+        $ipKey        = $this->getFailedLoginIpKey($ip);
         $attemptsFile = USERS_DIR . 'failed_logins.json';
         $failed       = AuthModel::loadFailedAttempts($attemptsFile);
         $now          = time();
-        if (isset($failed[$key])) {
-            $lastAttempt = (int)($failed[$key]['last_attempt'] ?? 0);
-            if ($lastAttempt <= 0 || ($now - $lastAttempt) >= 30 * 60) {
-                $failed[$key] = ['count' => 0, 'last_attempt' => 0];
-            }
-        }
+        $this->resetExpiredFailedLoginEntry($failed, $key, $now);
+        $this->resetExpiredFailedLoginEntry($failed, $ipKey, $now);
         if (
-            isset($failed[$key]) &&
-            ($failed[$key]['count'] ?? 0) >= 5 &&
-            ($failed[$key]['last_attempt'] ?? 0) > 0 &&
-            $now - $failed[$key]['last_attempt'] < 30 * 60
+            $this->isFailedLoginLocked($failed, $key, self::FAILED_LOGIN_USER_LIMIT, $now) ||
+            $this->isFailedLoginLocked($failed, $ipKey, self::FAILED_LOGIN_IP_LIMIT, $now)
         ) {
             AuthModel::logFailedLogin($ip, $username, 'lockout', $_SERVER['HTTP_USER_AGENT'] ?? '');
             header('HTTP/1.1 429 Too Many Requests');
@@ -815,26 +888,22 @@ class AuthController
                 // If TOTP is required, store pending values and redirect to prompt for TOTP.
                 $_SESSION['pending_login_user']   = $username;
                 $_SESSION['pending_login_secret'] = $secret;
-                if (isset($failed[$key])) {
-                    unset($failed[$key]);
+                if ($this->clearFailedLoginEntries($failed, [$key, $ipKey])) {
                     AuthModel::saveFailedAttempts($attemptsFile, $failed);
                 }
                 header("Location: " . fr_with_base_path("/index.html?totp_required=1"));
                 exit();
             }
 
-            if (isset($failed[$key])) {
-                unset($failed[$key]);
+            if ($this->clearFailedLoginEntries($failed, [$key, $ipKey])) {
                 AuthModel::saveFailedAttempts($attemptsFile, $failed);
             }
             $this->finishBrowserLogin($username);
         }
 
         // Invalid credentials; prompt again.
-        $failed[$key] = [
-            'count'        => ($failed[$key]['count'] ?? 0) + 1,
-            'last_attempt' => $now
-        ];
+        $this->incrementFailedLoginEntry($failed, $key, $now);
+        $this->incrementFailedLoginEntry($failed, $ipKey, $now);
         AuthModel::saveFailedAttempts($attemptsFile, $failed);
         AuthModel::logFailedLogin($ip, $username, 'invalid_credentials', $_SERVER['HTTP_USER_AGENT'] ?? '');
         header('WWW-Authenticate: Basic realm="FileRise Login"');
