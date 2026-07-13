@@ -16,9 +16,7 @@ safe_chown() {
 }
 
 safe_chmod() {
-  if [ "${IS_ROOT}" = "true" ]; then
-    chmod "$@" 2>&1 || echo "[startup] chmod failed (continuing): chmod $*"
-  fi
+  chmod "$@" 2>&1 || echo "[startup] chmod failed (continuing): chmod $*"
 }
 
 safe_truncate() {
@@ -36,10 +34,13 @@ users_file_has_entries() {
 
 has_existing_persistent_key_state() {
   users_file_has_entries && return 0
+  has_nonempty_file /var/www/users/.setup_complete && return 0
   has_nonempty_file /var/www/users/adminConfig.json && return 0
   has_nonempty_file /var/www/users/userPermissions.json && return 0
   has_nonempty_file /var/www/users/persistent_tokens.json && return 0
   has_nonempty_file /var/www/metadata/sources.json && return 0
+  has_nonempty_file /var/www/metadata/share_links.json && return 0
+  has_nonempty_file /var/www/metadata/share_folder_links.json && return 0
   return 1
 }
 
@@ -99,9 +100,8 @@ else
     export PERSISTENT_TOKENS_KEY_SOURCE="generated_file"
     echo "[startup] Generated a unique persistent tokens key for this pristine install and saved it to metadata/persistent_tokens.key."
   else
-    export PERSISTENT_TOKENS_KEY="${generated_key}"
-    export PERSISTENT_TOKENS_KEY_SOURCE="env"
-    echo "WARNING: Generated a unique persistent tokens key for this pristine install, but could not persist metadata/persistent_tokens.key. Set PERSISTENT_TOKENS_KEY explicitly before restarting."
+    echo "ERROR: Could not persist metadata/persistent_tokens.key. Make /var/www/metadata writable or set PERSISTENT_TOKENS_KEY explicitly." >&2
+    exit 1
   fi
 fi
 

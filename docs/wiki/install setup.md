@@ -1,6 +1,6 @@
 # Installation & Setup
 
-You can run FileRise with Docker (recommended) or install it on a PHP web server. This page mirrors the README, with additional details for common setups.
+You can run FileRise with Docker (recommended) or install it on a standard PHP web server. This page mirrors the README, with additional details for common setups.
 
 ## 1) Docker (recommended)
 
@@ -132,9 +132,13 @@ sudo chown -R www-data:www-data /var/www/sessions
 sudo chmod 700 /var/www/sessions
 ```
 
-### Set `PERSISTENT_TOKENS_KEY` for manual installs (required)
+### Persistent tokens key for manual installs
 
-FileRise reads the persistent tokens encryption key from the `PERSISTENT_TOKENS_KEY` environment variable. On manual installs, you must set this yourself so "remember me" tokens are not encrypted with the default fallback key.
+On a pristine manual install, FileRise generates a unique persistent-tokens encryption key on first request and saves it to `metadata/persistent_tokens.key`. Ensure the metadata directory is writable by the web user and include this file in backups.
+
+Existing manual installs without an explicit or persisted key remain on the legacy compatibility path until an administrator performs a controlled rotation. FileRise does not automatically replace an existing installation's key-dependent state.
+
+You may manage the key explicitly through `PERSISTENT_TOKENS_KEY` instead. If you do, configure it before the first request and keep the value stable for the lifetime of the installation.
 
 Generate a strong key:
 
@@ -214,7 +218,7 @@ Caddy typically passes requests to PHP-FPM, so set the variable in PHP-FPM using
 
 ### Important note about changing the key later
 
-Set your `PERSISTENT_TOKENS_KEY` **before users start using remember-me tokens** and keep it stable.
+If you manage `PERSISTENT_TOKENS_KEY` explicitly, set it **before users start using remember-me tokens** and keep it stable. If FileRise generated `metadata/persistent_tokens.key`, keep that file stable and backed up instead.
 
 If you change this key later, previously issued persistent login tokens can no longer be decrypted, so users with remembered sessions will need to log in again.
 

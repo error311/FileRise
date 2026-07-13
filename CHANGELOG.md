@@ -1,5 +1,22 @@
 # Changelog
 
+## Changes 07/13/2026 (v3.22.0)
+
+`release(v3.22.0): generate unique keys for pristine manual installs`
+
+**Fixed**
+
+- Pristine manual installs now generate and persist a unique persistent-tokens key instead of beginning with the published legacy fallback.
+- Existing environment keys, persisted key files, Docker source hints, and installations with existing state retain their current key behavior for upgrade compatibility.
+- Concurrent first requests coordinate key creation so every worker uses the same persisted key, and Docker now stops with an actionable error if a pristine key cannot be persisted.
+
+**Upgrade notes**
+
+- Existing legacy installs are not rotated automatically; the Admin Panel warning and controlled rotation workflow remain available.
+- Back up `metadata/persistent_tokens.key` with the rest of the metadata directory.
+
+---
+
 ## Changes 07/05/2026 (v3.21.0)
 
 `release(v3.21.0): authentication and public config hardening`

@@ -11,7 +11,7 @@ Full reference: https://github.com/error311/FileRise/wiki/Environment-Variables-
 | `TIMEZONE`              | yes      | `America/New_York`               | PHP / container timezone. |
 | `TOTAL_UPLOAD_SIZE`     | yes      | `10G`                            | Max total upload size per request; also sets PHP upload limits and Apache `LimitRequestBody` in the container. |
 | `SECURE`                | yes      | `false`                          | Set `true` when behind HTTPS / a reverse proxy so cookies/links use HTTPS. |
-| `PERSISTENT_TOKENS_KEY` | yes      | `change_me_super_secret`         | Encrypts stored secrets (tokens, permissions, admin config). Do not leave default. |
+| `PERSISTENT_TOKENS_KEY` | no       | `openssl rand -hex 32`           | Optional managed key for stored secrets. Pristine installs generate and persist one in `metadata/persistent_tokens.key`; existing legacy installs require controlled rotation. |
 | `DATE_TIME_FORMAT`      | no       | `Y-m-d H:i`                      | UI date/time format override. |
 | `FR_IGNORE_REGEX`       | no       | `^snapshot/`                     | Newline-separated regex patterns to ignore entries in listings/indexing. |
 | `SCAN_ON_START`         | no       | `true`                           | Run `scan_uploads.php` once at container start to index existing files. |

@@ -253,7 +253,7 @@ export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
 | `TIMEZONE`              | ✅       | `America/New_York`               | PHP / container timezone. |
 | `TOTAL_UPLOAD_SIZE`     | ✅       | `10G`                            | Max total upload size per request; also used to set PHP/Apache upload limits. |
 | `SECURE`                | ✅       | `false`                          | `true` when running behind HTTPS / a reverse proxy, else `false`. |
-| `PERSISTENT_TOKENS_KEY` | Optional | `openssl rand -hex 32`           | Secret used to encrypt stored secrets (tokens, permissions, admin config). If omitted on a pristine Docker install, FileRise auto-generates and persists one in `metadata/persistent_tokens.key`; existing installs without an explicit key stay on the legacy compatibility path until rotated. |
+| `PERSISTENT_TOKENS_KEY` | Optional | `openssl rand -hex 32`           | Secret used to encrypt stored secrets (tokens, permissions, admin config). If omitted on a pristine install, FileRise auto-generates and persists one in `metadata/persistent_tokens.key`; existing installs without an explicit key stay on the legacy compatibility path until rotated. |
 | `SCAN_ON_START`         | Optional | `true`                           | If `true`, runs a scan once on container start to index existing files. |
 | `CHOWN_ON_START`        | Optional | `true`                           | If `true`, recursively normalizes ownership/permissions on `uploads/` + `metadata/`. |
 | `PUID`                  | Optional | `99`                             | If running as root, remap `www-data` user to this UID (e.g. Unraid’s 99).                             |
@@ -285,6 +285,8 @@ export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
 Short version: FileRise expects data at `/var/www/{uploads,users,metadata}` and your web server must point to the **public/** folder (for example `DocumentRoot /var/www/filerise/public`).
 
 Docker is the recommended deployment path. Manual installs on a standard PHP web server are supported, but more restrictive shared-hosting environments are best-effort and may not support every feature or background-worker workflow.
+
+On a pristine manual install, FileRise generates a unique key on first request and persists it in `metadata/persistent_tokens.key`. Keep that file with your backups. Existing installs that previously used the legacy built-in key remain on the compatibility path until an administrator performs a controlled rotation.
 
 Full guide + troubleshooting:  
 [Installation & setup](https://github.com/error311/FileRise/wiki/Installation-Setup) • [Upgrade & migration](https://github.com/error311/FileRise/wiki/Upgrade-and-Migration) • [Reverse proxy & subpath](https://github.com/error311/FileRise/wiki/Reverse-Proxy-and-Subpath)
