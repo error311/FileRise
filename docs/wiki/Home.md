@@ -51,6 +51,7 @@ FileRise is built around a few simple principles:
 - [Pro Sources](https://filerise.net/docs/?page=pro-sources)
 - [Developer guide](https://github.com/error311/FileRise/wiki/Developer-Guide)
 - [Screenshots](https://github.com/error311/FileRise/wiki/Screenshots)
+- [Keyboard shortcuts](https://github.com/error311/FileRise/wiki/Keyboard)
 
 ## Pro
 
