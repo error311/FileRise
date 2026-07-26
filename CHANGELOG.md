@@ -1,5 +1,22 @@
 # Changelog
 
+## Changes 07/26/2026 (v3.24.0)
+
+`release(v3.24.0): require authentication for portal details`
+
+**Fixed**
+
+- The FileRise Pro portal-detail endpoint now requires an authenticated session before returning internal folder, client-contact, form, or upload-policy metadata.
+- The deliberately public portal metadata endpoint remains available for anonymous portal-login branding and continues returning only its curated public fields.
+- Existing administrators and dedicated non-admin portal users retain access after signing in.
+
+**Upgrade notes**
+
+- No configuration, portal, account, Docker volume, or stored-data migration is required.
+- Integrations that directly requested `/api/pro/portals/get.php` without an authenticated FileRise session must use `/api/pro/portals/publicMeta.php` for public branding fields or authenticate before requesting full portal details.
+
+---
+
 ## Changes 07/25/2026 (v3.23.1)
 
 `release(v3.23.1): correct PHP coding-standard violations`
