@@ -37,6 +37,69 @@ Advanced override (in `config/config.php` or env):
 
 - `FR_OIDC_AUTO_CREATE` (`true`/`false`)
 
+FileRise binds each OIDC account using the provider's immutable issuer and subject
+identifiers. `preferred_username` is used only to name a new local account.
+Verified email can be used when no valid preferred username is available.
+Neither claim can attach an unbound OIDC identity to an existing local account.
+
+Bindings are stored in `users/oidc_identities.json`; include this file in backups
+with the rest of the users directory.
+
+### Upgrading existing OIDC accounts to v3.23.0
+
+> **Breaking security change:** OIDC accounts used before v3.23.0 do not yet
+> have an issuer/subject binding. Their first OIDC login after upgrading cannot
+> automatically match the existing local account.
+
+This affects only upgrades of deployments with existing OIDC users. It does not
+change local-password accounts, stored files, permissions, TOTP secrets, Docker
+volumes, or the OIDC provider configuration.
+
+#### Before upgrading
+
+1. Back up the complete FileRise `users` directory.
+2. Open a private browser window and confirm that at least one administrator can
+   sign in with a local username and password.
+3. Identify accounts that use OIDC exclusively and do not have a known local
+   password.
+4. While an administrator is still signed in, assign those users temporary
+   local passwords or plan an administrator-assisted account migration.
+5. If the only administrator uses OIDC, set and test a local administrator
+   password before upgrading. Do not rely on an existing browser session as the
+   only recovery method.
+
+#### Link each existing account after upgrading
+
+1. Start the normal FileRise OIDC login.
+2. Authenticate as the corresponding user at the configured identity provider.
+3. When FileRise detects the existing unbound local account, it displays a
+   one-time account-link confirmation with the local username fixed and
+   read-only.
+4. Enter that account's local password. If the account has TOTP enabled,
+   complete the existing TOTP prompt as well.
+5. FileRise records the immutable issuer/subject binding in
+   `users/oidc_identities.json`.
+6. Sign out and verify that a new OIDC login returns to the same FileRise
+   account with its existing role and permissions.
+
+The guided confirmation is available only after a validated OIDC callback,
+expires after five minutes, and works even when ordinary form login is disabled.
+Canceling it clears the pending session without modifying the local account.
+
+Repeat the procedure for each existing OIDC account and include
+`users/oidc_identities.json` in future backups. Retire any temporary passwords
+according to your local credential policy after verifying the bindings.
+
+If a user attempts OIDC login before completing the link, FileRise rejects a
+claim that collides with the existing local username. The rejection does not
+delete or modify the existing account.
+
+OIDC-only users without a known local password require an administrator-assisted
+password reset or migration to a newly auto-provisioned OIDC account. FileRise
+deliberately does not perform automatic first-login matching because a mutable
+claim cannot prove ownership of an existing account and would recreate the
+account-takeover vulnerability.
+
 ---
 
 ## Admin group mapping

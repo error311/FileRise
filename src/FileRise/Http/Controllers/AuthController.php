@@ -5,8 +5,11 @@ namespace FileRise\Http\Controllers;
 use FileRise\Domain\AdminModel;
 use FileRise\Domain\AuthModel;
 use FileRise\Domain\UserModel;
+use FileRise\Support\OidcAccountLinker;
+use FileRise\Support\TotpAttemptLimiter;
 use RobThree\Auth\Algorithm;
 use RobThree\Auth\Providers\Qr\GoogleChartsQrCodeProvider;
+use RobThree\Auth\TwoFactorAuth;
 use Jumbojett\OpenIDConnectClient;
 
 // src/controllers/AuthController.php
@@ -20,6 +23,8 @@ if (file_exists($autoload)) {
 
 class AuthController
 {
+    private const OIDC_LINK_AUTH_MAX_AGE_SECONDS = 300;
+
     private const FAILED_LOGIN_WINDOW_SECONDS = 1800;
     private const FAILED_LOGIN_USER_LIMIT = 5;
     private const FAILED_LOGIN_IP_LIMIT = 50;
@@ -170,16 +175,91 @@ class AuthController
         $username   = $_SESSION['pending_login_user'];
         $secret     = $_SESSION['pending_login_secret'];
         $rememberMe = $_SESSION['pending_login_remember_me'] ?? false;
+        $requiresOidcLink = !empty($_SESSION['pending_login_oidc_link']);
+
+        if (
+            $requiresOidcLink
+            && !OidcAccountLinker::isPasswordConfirmationFor((string)$username)
+        ) {
+            unset(
+                $_SESSION['pending_login_user'],
+                $_SESSION['pending_login_secret'],
+                $_SESSION['pending_login_remember_me'],
+                $_SESSION['pending_login_oidc_link']
+            );
+            http_response_code(403);
+            echo json_encode(['error' => 'OIDC account-link confirmation is invalid or expired.']);
+            exit();
+        }
+
+        if (!preg_match('/^\d{6}$/', $totpCode)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'A valid 6-digit TOTP code is required']);
+            exit();
+        }
+
+        $this->reserveTotpAttempt($username);
 
         $tfa = new TwoFactorAuth(new GoogleChartsQrCodeProvider(), 'FileRise', 6, 30, Algorithm::Sha1);
-        if (!$tfa->verifyCode($secret, $totpCode)) {
+        $timeSlice = 0;
+        if (!$tfa->verifyCode($secret, $totpCode, 1, null, $timeSlice)) {
             echo json_encode(['error' => 'Invalid TOTP code']);
             exit();
         }
 
-        unset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret']);
+        $this->acceptTotpSuccess($username, $secret, $timeSlice);
+        $this->completePendingOidcLinkOrFail($username);
+        unset(
+            $_SESSION['pending_login_user'],
+            $_SESSION['pending_login_secret'],
+            $_SESSION['pending_login_remember_me'],
+            $_SESSION['pending_login_oidc_link']
+        );
         $this->finalizeLogin($username, (bool)$rememberMe);
         return true;
+    }
+
+    protected function acceptTotpSuccess(string $username, string $secret, int $timeSlice): void
+    {
+        try {
+            $accepted = TotpAttemptLimiter::recordSuccess(
+                $username,
+                AuthModel::getClientIp($_SERVER),
+                $secret,
+                $timeSlice
+            );
+        } catch (\Throwable $e) {
+            error_log('FileRise: failed to record successful TOTP verification.');
+            http_response_code(503);
+            echo json_encode(['error' => 'TOTP verification is temporarily unavailable']);
+            exit();
+        }
+
+        if (!$accepted) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid TOTP code']);
+            exit();
+        }
+    }
+
+    protected function reserveTotpAttempt(string $username): void
+    {
+        try {
+            $result = TotpAttemptLimiter::beginAttempt($username, AuthModel::getClientIp($_SERVER));
+        } catch (\Throwable $e) {
+            error_log('FileRise: TOTP attempt limiter unavailable.');
+            http_response_code(503);
+            echo json_encode(['error' => 'TOTP verification is temporarily unavailable']);
+            exit();
+        }
+
+        if (empty($result['allowed'])) {
+            $retryAfter = max(1, (int)($result['retryAfter'] ?? 1));
+            header('Retry-After: ' . $retryAfter);
+            http_response_code(429);
+            echo json_encode(['error' => 'Too many TOTP attempts. Please try again later.']);
+            exit();
+        }
     }
 
     protected function getOidcAction(): ?string
@@ -244,6 +324,97 @@ class AuthController
         }
 
         return array_values($unique);
+    }
+
+    protected function resolveOidcIdentityClaims($userinfo, $idTokenClaims, array $cfg): array
+    {
+        $claim = static function ($source, string $name) {
+            if (is_object($source) && isset($source->{$name})) {
+                return $source->{$name};
+            }
+            if (is_array($source) && array_key_exists($name, $source)) {
+                return $source[$name];
+            }
+            return null;
+        };
+
+        $userinfoSub = trim((string)($claim($userinfo, 'sub') ?? ''));
+        $idTokenSub = trim((string)($claim($idTokenClaims, 'sub') ?? ''));
+        if (
+            $userinfoSub !== ''
+            && $idTokenSub !== ''
+            && !hash_equals($userinfoSub, $idTokenSub)
+        ) {
+            return ['error' => 'OIDC subject claims do not match.'];
+        }
+
+        $subject = $idTokenSub !== '' ? $idTokenSub : $userinfoSub;
+        if ($subject === '') {
+            return ['error' => 'OIDC provider did not return a subject identifier.'];
+        }
+
+        $issuer = trim((string)($claim($idTokenClaims, 'iss') ?? ''));
+        if ($issuer === '') {
+            $issuer = trim((string)($cfg['oidc']['providerUrl'] ?? ''));
+        }
+        if ($issuer === '') {
+            return ['error' => 'OIDC provider did not return an issuer identifier.'];
+        }
+
+        $preferredUsername = trim((string)(
+            $claim($userinfo, 'preferred_username')
+            ?? $claim($idTokenClaims, 'preferred_username')
+            ?? ''
+        ));
+        $email = trim((string)(
+            $claim($userinfo, 'email')
+            ?? $claim($idTokenClaims, 'email')
+            ?? ''
+        ));
+        $emailVerified = $claim($userinfo, 'email_verified');
+        if ($emailVerified === null) {
+            $emailVerified = $claim($idTokenClaims, 'email_verified');
+        }
+
+        $suggestedUsername = '';
+        foreach ([
+            $preferredUsername,
+            $emailVerified === true ? $email : '',
+        ] as $candidate) {
+            if ($candidate !== '' && preg_match(REGEX_USER, $candidate)) {
+                $suggestedUsername = $candidate;
+                break;
+            }
+        }
+        if ($suggestedUsername === '') {
+            $suggestedUsername = 'oidc_' . substr(hash('sha256', $issuer . "\0" . $subject), 0, 16);
+        }
+
+        return [
+            'issuer' => $issuer,
+            'subject' => $subject,
+            'suggestedUsername' => $suggestedUsername,
+            'emailVerified' => $emailVerified === true,
+        ];
+    }
+
+    protected function getRecentlyAuthenticatedUsername(): ?string
+    {
+        if (empty($_SESSION['authenticated']) || empty($_SESSION['username'])) {
+            return null;
+        }
+
+        $authenticatedAt = (int)($_SESSION['authenticated_at'] ?? 0);
+        $now = time();
+        if (
+            $authenticatedAt <= 0
+            || $authenticatedAt > $now
+            || ($now - $authenticatedAt) > self::OIDC_LINK_AUTH_MAX_AGE_SECONDS
+        ) {
+            return null;
+        }
+
+        return (string)$_SESSION['username'];
     }
 
     protected function handleOidcFlow(): bool
@@ -335,19 +506,6 @@ class AuthController
                 $oidc->authenticate();
                 $this->logOidcDebug('OIDC authenticate() succeeded, fetching user info');
 
-                // Resolve username from claims (same as your original)
-                $username =
-                    $oidc->requestUserInfo('preferred_username')
-                    ?: $oidc->requestUserInfo('email')
-                    ?: $oidc->requestUserInfo('sub');
-
-                $username = trim((string)$username);
-                if ($username === '') {
-                    http_response_code(401);
-                    echo json_encode(['error' => 'Authentication failed: no username in OIDC claims.']);
-                    exit();
-                }
-
                 // Pull full userinfo once so we can inspect groups / roles
                 $userinfo = $oidc->requestUserInfo();
 
@@ -357,11 +515,19 @@ class AuthController
                     $idTokenClaims = $oidc->getIdTokenPayload();
                 }
 
+                $identity = $this->resolveOidcIdentityClaims($userinfo, $idTokenClaims, $cfg);
+                if (isset($identity['error'])) {
+                    http_response_code(401);
+                    echo json_encode(['error' => 'Authentication failed: ' . $identity['error']]);
+                    exit();
+                }
+
                 $normalizedTags = $this->extractOidcGroupTags($userinfo, $idTokenClaims, $groupClaim);
 
                 $this->logOidcDebug('OIDC userinfo summary', [
-                    'username'      => $username,
+                    'suggested_username' => $identity['suggestedUsername'],
                     'has_email'     => isset($userinfo->email),
+                    'email_verified' => $identity['emailVerified'] ? 'yes' : 'no',
                     'has_preferred' => isset($userinfo->preferred_username),
                     'group_count'   => count($normalizedTags),
                 ]);
@@ -399,13 +565,37 @@ class AuthController
                 }
 
                 // Make sure a local FileRise account exists, and upgrade to admin if IdP says so
-                $ensure = AuthModel::ensureLocalOidcUser($username, $isAdminByIdp);
+                $ensure = AuthModel::ensureLocalOidcUser(
+                    $identity['suggestedUsername'],
+                    $isAdminByIdp,
+                    $identity['issuer'],
+                    $identity['subject'],
+                    $this->getRecentlyAuthenticatedUsername()
+                );
+                if (!empty($ensure['linkRequired'])) {
+                    $linkUsername = (string)($ensure['username'] ?? '');
+                    if (!OidcAccountLinker::begin(
+                        $identity['issuer'],
+                        $identity['subject'],
+                        $linkUsername,
+                        $isAdminByIdp,
+                        $proGroupSlugs
+                    )) {
+                        http_response_code(403);
+                        echo json_encode(['error' => 'OIDC account link could not be prepared.']);
+                        exit();
+                    }
+                    header('Location: ' . fr_with_base_path('/index.html?oidc_link_required=1'));
+                    exit();
+                }
                 if (isset($ensure['error'])) {
-                    error_log('OIDC local user ensure failed for ' . $username . ': ' . $ensure['error']);
+                    error_log('OIDC local user ensure failed: ' . $ensure['error']);
                     http_response_code(403);
                     echo json_encode(['error' => 'OIDC login rejected: ' . $ensure['error']]);
                     exit();
                 }
+                $username = (string)$ensure['username'];
+                OidcAccountLinker::clear();
 
                 // Best-effort: map IdP groups into FileRise Pro groups
                 try {
@@ -582,7 +772,27 @@ class AuthController
 
     protected function handleFormLogin(string $username, string $password, bool $rememberMe): void
     {
-        if ($this->isLoginMethodDisabled('disableFormLogin')) {
+        $pendingLinkUsername = OidcAccountLinker::getPendingUsername();
+        $isOidcLinkConfirmation = OidcAccountLinker::isPasswordConfirmationFor($username);
+        if ($pendingLinkUsername !== null && !$isOidcLinkConfirmation) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Confirm the local account selected by the pending OIDC link.']);
+            exit();
+        }
+        if ($isOidcLinkConfirmation) {
+            $receivedToken = trim((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+            $sessionToken = (string)($_SESSION['csrf_token'] ?? '');
+            if (
+                $receivedToken === ''
+                || $sessionToken === ''
+                || !hash_equals($sessionToken, $receivedToken)
+            ) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Invalid CSRF token']);
+                exit();
+            }
+        }
+        if ($this->isLoginMethodDisabled('disableFormLogin') && !$isOidcLinkConfirmation) {
             $this->rejectDisabledLoginMethod('Form login is disabled');
         }
         if (!$username || !$password) {
@@ -632,6 +842,11 @@ class AuthController
             $_SESSION['pending_login_user']   = $username;
             $_SESSION['pending_login_secret'] = $user['totp_secret'];
             $_SESSION['pending_login_remember_me'] = $rememberMe;
+            if ($isOidcLinkConfirmation) {
+                $_SESSION['pending_login_oidc_link'] = true;
+            } else {
+                unset($_SESSION['pending_login_oidc_link']);
+            }
             if ($this->clearFailedLoginEntries($failed, [$key, $ipKey])) {
                 AuthModel::saveFailedAttempts($attemptsFile, $failed);
             }
@@ -643,7 +858,27 @@ class AuthController
         if ($this->clearFailedLoginEntries($failed, [$key, $ipKey])) {
             AuthModel::saveFailedAttempts($attemptsFile, $failed);
         }
+        $this->completePendingOidcLinkOrFail($username);
         $this->finalizeLogin($username, $rememberMe);
+    }
+
+    protected function completePendingOidcLinkOrFail(string $username): void
+    {
+        if (OidcAccountLinker::getPendingUsername() === null) {
+            return;
+        }
+
+        if (!OidcAccountLinker::confirmLocalAuthentication($username)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'OIDC account link requires fresh local authentication.']);
+            exit();
+        }
+        $result = OidcAccountLinker::complete($username);
+        if (isset($result['error'])) {
+            http_response_code((int)($result['statusCode'] ?? 503));
+            echo json_encode(['error' => $result['error']]);
+            exit();
+        }
     }
 
     /**
@@ -654,6 +889,7 @@ class AuthController
     {
         session_regenerate_id(true);
         $_SESSION['authenticated'] = true;
+        $_SESSION['authenticated_at'] = time();
         $_SESSION['username']      = $username;
         $_SESSION['isAdmin']       = (AuthModel::getUserRole($username) === '1');
 
@@ -704,6 +940,7 @@ class AuthController
     {
         session_regenerate_id(true);
         $_SESSION['authenticated'] = true;
+        $_SESSION['authenticated_at'] = time();
         $_SESSION['username']      = $username;
 
         if ($isAdminOverride === null) {
@@ -723,6 +960,20 @@ class AuthController
 
     public function checkAuth(): void
     {
+        $pendingOidcLinkUsername = OidcAccountLinker::getPendingUsername();
+        if ($pendingOidcLinkUsername !== null) {
+            if (empty($_SESSION['csrf_token'])) {
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            }
+            echo json_encode([
+                'authenticated' => false,
+                'csrf_token' => $_SESSION['csrf_token'],
+                'oidc_link_required' => true,
+                'oidc_link_username' => $pendingOidcLinkUsername,
+            ]);
+            exit();
+        }
+
         // 1) Remember-me re-login
         if (empty($_SESSION['authenticated']) && !empty($_COOKIE['remember_me_token'])) {
             $payload = AuthModel::consumeRememberToken($_COOKIE['remember_me_token']);
@@ -731,6 +982,7 @@ class AuthController
                 session_regenerate_id(true);
                 $_SESSION['csrf_token']     = $old;
                 $_SESSION['authenticated']  = true;
+                unset($_SESSION['authenticated_at']);
                 $_SESSION['username']       = $payload['username'];
                 $_SESSION['isAdmin']        = (AuthModel::getUserRole($payload['username']) === '1');
                 $perms = loadUserPermissions($payload['username']);

@@ -6,6 +6,8 @@ use FileRise\Support\ACL;
 use FileRise\Domain\AdminModel;
 use FileRise\Domain\AuthModel;
 use FileRise\Domain\UserModel;
+use FileRise\Support\OidcAccountLinker;
+use FileRise\Support\TotpAttemptLimiter;
 
 // src/controllers/UserController.php
 
@@ -21,6 +23,9 @@ require_once dirname(__DIR__, 4) . '/config/config.php';
  */
 class UserController
 {
+    private const SENSITIVE_AUTH_MAX_AGE_SECONDS = 300;
+    private const PENDING_TOTP_SETUP_MAX_AGE_SECONDS = 600;
+
     /* ---------- Small internal helpers to reduce repetition ---------- */
 
     /** Get headers in lowercase, robust across SAPIs. */
@@ -65,6 +70,44 @@ class UserController
             echo json_encode(['error' => 'Unauthorized']);
             exit;
         }
+    }
+
+    private static function requireRecentAuthentication(): void
+    {
+        $authenticatedAt = (int)($_SESSION['authenticated_at'] ?? 0);
+        $now = time();
+        if (
+            $authenticatedAt > 0
+            && $authenticatedAt <= $now
+            && ($now - $authenticatedAt) <= self::SENSITIVE_AUTH_MAX_AGE_SECONDS
+        ) {
+            return;
+        }
+
+        if (!empty($_COOKIE['remember_me_token'])) {
+            try {
+                AuthModel::revokeRememberToken((string)$_COOKIE['remember_me_token']);
+            } catch (\Throwable $e) {
+                error_log('FileRise: failed to revoke remember-me token during reauthentication.');
+            }
+            $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+            setcookie('remember_me_token', '', time() - 3600, '/', '', $secure, true);
+            unset($_COOKIE['remember_me_token']);
+        }
+
+        $_SESSION = [];
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'error' => 'Please sign in again before changing TOTP settings.',
+            'reauth_required' => true,
+        ]);
+        exit;
     }
 
     /** Enforce admin (401). */
@@ -401,6 +444,9 @@ class UserController
         }
 
         $totp_enabled = isset($data['totp_enabled']) ? filter_var($data['totp_enabled'], FILTER_VALIDATE_BOOLEAN) : false;
+        if (!$totp_enabled && UserModel::getTOTPSecret($username) !== null) {
+            self::requireRecentAuthentication();
+        }
         $result = UserModel::updateUserPanel($username, $totp_enabled);
         echo json_encode($result);
         exit;
@@ -429,6 +475,21 @@ class UserController
             exit;
         }
 
+        if (
+            isset($_SESSION['pending_totp_setup_secret'], $_SESSION['pending_totp_setup_user'])
+            && strcasecmp((string)$_SESSION['pending_totp_setup_user'], $username) === 0
+            && UserModel::getTOTPSecret($username) === null
+        ) {
+            unset(
+                $_SESSION['pending_totp_setup_secret'],
+                $_SESSION['pending_totp_setup_user'],
+                $_SESSION['pending_totp_setup_created_at']
+            );
+            echo json_encode(["success" => true, "message" => "TOTP setup canceled."]);
+            exit;
+        }
+
+        self::requireRecentAuthentication();
         $result = UserModel::disableTOTPSecret($username);
         if ($result) {
             echo json_encode(["success" => true, "message" => "TOTP disabled successfully."]);
@@ -463,9 +524,15 @@ class UserController
         $result = UserModel::recoverTOTP($userId, $recoveryCode);
 
         if (($result['status'] ?? '') === 'ok') {
+            try {
+                TotpAttemptLimiter::clearAccount($userId);
+            } catch (\Throwable $e) {
+                error_log('FileRise: failed to clear TOTP attempt limit after recovery.');
+            }
             // Finalize login
             session_regenerate_id(true);
             $_SESSION['authenticated'] = true;
+            $_SESSION['authenticated_at'] = time();
             $_SESSION['username'] = $userId;
             unset($_SESSION['pending_login_user'], $_SESSION['pending_login_secret']);
             echo json_encode(['status' => 'ok']);
@@ -509,6 +576,7 @@ class UserController
             exit;
         }
 
+        self::requireRecentAuthentication();
         $result = UserModel::saveTOTPRecoveryCode($userId);
         if (($result['status'] ?? '') === 'ok') {
             echo json_encode($result);
@@ -545,6 +613,8 @@ class UserController
             exit;
         }
 
+        self::requireRecentAuthentication();
+
         header("Content-Type: image/png");
         header('X-Content-Type-Options: nosniff');
 
@@ -556,6 +626,17 @@ class UserController
             exit;
         }
 
+        $pendingSecret = (string)($result['secret'] ?? '');
+        if ($pendingSecret === '') {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(["error" => "Failed to prepare TOTP setup"]);
+            exit;
+        }
+        $_SESSION['pending_totp_setup_secret'] = $pendingSecret;
+        $_SESSION['pending_totp_setup_user'] = $username;
+        $_SESSION['pending_totp_setup_created_at'] = time();
+
         echo $result['imageData'];
         exit;
     }
@@ -565,16 +646,6 @@ class UserController
         header('Content-Type: application/json');
         header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';");
         header('X-Content-Type-Options: nosniff');
-
-        // Rate-limit
-        if (!isset($_SESSION['totp_failures'])) {
-            $_SESSION['totp_failures'] = 0;
-        }
-        if ($_SESSION['totp_failures'] >= 5) {
-            http_response_code(429);
-            echo json_encode(['status' => 'error', 'message' => 'Too many TOTP attempts. Please try again later.']);
-            exit;
-        }
 
         // Must be authenticated OR pending login
         if (empty($_SESSION['authenticated']) && !isset($_SESSION['pending_login_user'])) {
@@ -609,15 +680,55 @@ class UserController
             $username      = $_SESSION['pending_login_user'];
             $pendingSecret = $_SESSION['pending_login_secret'] ?? null;
             $rememberMe    = $_SESSION['pending_login_remember_me'] ?? false;
+            $requiresOidcLink = !empty($_SESSION['pending_login_oidc_link']);
 
-            if (!$pendingSecret || !$tfa->verifyCode($pendingSecret, $code)) {
-                $_SESSION['totp_failures']++;
+            if (
+                $requiresOidcLink
+                && !OidcAccountLinker::isPasswordConfirmationFor((string)$username)
+            ) {
+                unset(
+                    $_SESSION['pending_login_user'],
+                    $_SESSION['pending_login_secret'],
+                    $_SESSION['pending_login_remember_me'],
+                    $_SESSION['pending_login_oidc_link']
+                );
+                http_response_code(403);
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => 'OIDC account-link confirmation is invalid or expired.',
+                ]);
+                exit;
+            }
+
+            self::reserveTotpAttempt($username);
+
+            $timeSlice = 0;
+            if (!$pendingSecret || !$tfa->verifyCode($pendingSecret, $code, 1, null, $timeSlice)) {
                 http_response_code(400);
                 echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
                 exit;
             }
 
-             // Decide final admin flag (local role + optional OIDC override)
+            self::acceptTotpSuccess($username, $pendingSecret, $timeSlice);
+
+            if (OidcAccountLinker::getPendingUsername() !== null) {
+                if (!OidcAccountLinker::confirmLocalAuthentication($username)) {
+                    http_response_code(403);
+                    echo json_encode([
+                        'status' => 'error',
+                        'message' => 'OIDC account link requires fresh local authentication.',
+                    ]);
+                    exit;
+                }
+                $linkResult = OidcAccountLinker::complete($username);
+                if (isset($linkResult['error'])) {
+                    http_response_code((int)($linkResult['statusCode'] ?? 503));
+                    echo json_encode(['status' => 'error', 'message' => $linkResult['error']]);
+                    exit;
+                }
+            }
+
+             // Decide final admin flag after any OIDC link applies IdP role synchronization.
              $roleAdmin = ((int)UserModel::getUserRole($username) === 1);
              $isAdmin   = $roleAdmin;
 
@@ -634,9 +745,10 @@ class UserController
             }
 
              // Finalize login
-             session_regenerate_id(true);
-             $_SESSION['authenticated']   = true;
-             $_SESSION['username']        = $username;
+            session_regenerate_id(true);
+            $_SESSION['authenticated']   = true;
+            $_SESSION['authenticated_at'] = time();
+            $_SESSION['username']        = $username;
              $_SESSION['isAdmin']         = $isAdmin;
 
              $perms = loadUserPermissions($username);
@@ -653,7 +765,7 @@ class UserController
                  $_SESSION['pending_login_user'],
                  $_SESSION['pending_login_secret'],
                  $_SESSION['pending_login_remember_me'],
-                 $_SESSION['totp_failures'],
+                 $_SESSION['pending_login_oidc_link'],
                  $_SESSION['oidc_isAdmin'],
                  $_SESSION['oidc_groups']
              );
@@ -678,23 +790,105 @@ class UserController
             exit;
         }
 
-        $totpSecret = UserModel::getTOTPSecret($username);
+        $pendingSetupSecret = null;
+        $pendingSetupCreatedAt = (int)($_SESSION['pending_totp_setup_created_at'] ?? 0);
+        $now = time();
+        if (
+            isset(
+                $_SESSION['pending_totp_setup_secret'],
+                $_SESSION['pending_totp_setup_user'],
+                $_SESSION['pending_totp_setup_created_at']
+            )
+            && strcasecmp((string)$_SESSION['pending_totp_setup_user'], $username) === 0
+            && $pendingSetupCreatedAt > 0
+            && $pendingSetupCreatedAt <= $now
+            && ($now - $pendingSetupCreatedAt) <= self::PENDING_TOTP_SETUP_MAX_AGE_SECONDS
+        ) {
+            $pendingSetupSecret = (string)$_SESSION['pending_totp_setup_secret'];
+        } else {
+            unset(
+                $_SESSION['pending_totp_setup_secret'],
+                $_SESSION['pending_totp_setup_user'],
+                $_SESSION['pending_totp_setup_created_at']
+            );
+        }
+
+        $totpSecret = $pendingSetupSecret ?? UserModel::getTOTPSecret($username);
         if (!$totpSecret) {
             http_response_code(500);
             echo json_encode(['status' => 'error', 'message' => 'TOTP secret not found. Please set up TOTP again.']);
             exit;
         }
 
-        if (!$tfa->verifyCode($totpSecret, $code)) {
-            $_SESSION['totp_failures']++;
+        self::reserveTotpAttempt($username);
+
+        $timeSlice = 0;
+        if (!$tfa->verifyCode($totpSecret, $code, 1, null, $timeSlice)) {
             http_response_code(400);
             echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
             exit;
         }
 
-        unset($_SESSION['totp_failures']);
+        self::acceptTotpSuccess($username, $totpSecret, $timeSlice);
+        if ($pendingSetupSecret !== null) {
+            $activation = UserModel::activateTOTPSecret($username, $pendingSetupSecret);
+            if (isset($activation['error'])) {
+                http_response_code((int)($activation['statusCode'] ?? 500));
+                echo json_encode(['status' => 'error', 'message' => $activation['error']]);
+                exit;
+            }
+            unset(
+                $_SESSION['pending_totp_setup_secret'],
+                $_SESSION['pending_totp_setup_user'],
+                $_SESSION['pending_totp_setup_created_at']
+            );
+            $_SESSION['authenticated_at'] = time();
+        }
         echo json_encode(['status' => 'ok', 'message' => 'TOTP successfully verified']);
         exit;
+    }
+
+    private static function reserveTotpAttempt(string $username): void
+    {
+        try {
+            $result = TotpAttemptLimiter::beginAttempt($username, AuthModel::getClientIp($_SERVER));
+        } catch (\Throwable $e) {
+            error_log('FileRise: TOTP attempt limiter unavailable.');
+            http_response_code(503);
+            echo json_encode(['status' => 'error', 'message' => 'TOTP verification is temporarily unavailable']);
+            exit;
+        }
+
+        if (empty($result['allowed'])) {
+            $retryAfter = max(1, (int)($result['retryAfter'] ?? 1));
+            header('Retry-After: ' . $retryAfter);
+            http_response_code(429);
+            echo json_encode(['status' => 'error', 'message' => 'Too many TOTP attempts. Please try again later.']);
+            exit;
+        }
+    }
+
+    private static function acceptTotpSuccess(string $username, string $secret, int $timeSlice): void
+    {
+        try {
+            $accepted = TotpAttemptLimiter::recordSuccess(
+                $username,
+                AuthModel::getClientIp($_SERVER),
+                $secret,
+                $timeSlice
+            );
+        } catch (\Throwable $e) {
+            error_log('FileRise: failed to record successful TOTP verification.');
+            http_response_code(503);
+            echo json_encode(['status' => 'error', 'message' => 'TOTP verification is temporarily unavailable']);
+            exit;
+        }
+
+        if (!$accepted) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'Invalid TOTP code']);
+            exit;
+        }
     }
 
     /**

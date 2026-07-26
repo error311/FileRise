@@ -16,7 +16,71 @@ Supported:
    - Document Server origin (e.g. `https://docs.example.com`)
    - JWT secret (shared with your Document Server)
    - Optional: Public origin (if callbacks must use a different public URL)
-3. Use **Run tests** in the admin panel to validate connectivity.
+3. Ensure outgoing/outbox JWTs are enabled on the Document Server.
+4. Use **Run tests** in the admin panel to validate connectivity and confirm callback JWT enforcement is active.
+5. Open, edit, and save a test document to verify the Document Server can complete a signed callback.
+
+For a Docker Document Server, configure a stable secret when creating the container:
+
+```yaml
+environment:
+  JWT_ENABLED: "true"
+  JWT_SECRET: "replace-with-the-same-secret-used-by-filerise"
+```
+
+For a package installation or an older Document Server, ensure all three values are configured in `/etc/onlyoffice/documentserver/local.json` and restart the ONLYOFFICE services:
+
+```json
+{
+  "services": {
+    "CoAuthoring": {
+      "token": {
+        "enable": {
+          "request": {
+            "outbox": true
+          }
+        }
+      },
+      "secret": {
+        "outbox": {
+          "string": "replace-with-the-same-secret-used-by-filerise"
+        }
+      }
+    }
+  }
+}
+```
+
+Do not edit `default.json`; ONLYOFFICE can replace that file during upgrades.
+
+---
+
+## Upgrading to FileRise v3.23.0
+
+FileRise v3.23.0 rejects missing and invalid callback JWTs. Previous FileRise versions accepted an unsigned callback body when the separate FileRise callback URL token was valid.
+
+Before upgrading:
+
+1. Confirm the JWT secret configured in FileRise matches the Document Server's `JWT_SECRET` or outbox secret.
+2. Confirm outgoing/outbox request tokens are enabled.
+3. Restart the Document Server after changing its JWT configuration.
+4. After upgrading FileRise, use **Run tests**, then edit and save a test document.
+
+Existing documents, accounts, and FileRise storage require no migration. A correctly configured Document Server continues working normally.
+
+If saves fail because an older deployment is not sending callback JWTs, correct the Document Server configuration first. As a temporary recovery measure only, set this environment variable on the FileRise container or PHP service:
+
+```text
+ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS=1
+```
+
+For a manual FileRise installation, the equivalent temporary override is:
+
+```php
+define('ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS', true);
+```
+
+This override restores the old unsigned-body behavior and weakens callback authentication. Keep it enabled only long enough to correct the Document Server, restart it, and confirm a successful signed save. Then remove the override and restart FileRise. The Admin Panel displays a security warning while the override is active.
 
 ---
 
@@ -63,3 +127,5 @@ You can lock ONLYOFFICE settings in `config/config.php` by defining:
 - `ONLYOFFICE_PUBLIC_ORIGIN`
 
 When any of these are defined, the admin UI reflects the locked values.
+
+`ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS` is an emergency compatibility override, not a normal integration setting. It defaults to `false` and should not remain enabled.

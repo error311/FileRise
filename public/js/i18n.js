@@ -155,6 +155,9 @@ const translations = {
     "login": "Login",
     "remember_me": "Remember me",
     "login_oidc": "Login with OIDC",
+    "oidc_link_confirm_button": "Confirm and link OIDC",
+    "oidc_link_cancel_button": "Cancel account linking",
+    "oidc_link_confirm_prompt": "Confirm the local password for “{username}” to securely link this OIDC identity.",
     "basic_http_login": "Use Basic HTTP Login",
 
     // Change Password keys:

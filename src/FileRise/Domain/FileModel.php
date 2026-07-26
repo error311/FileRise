@@ -5,6 +5,7 @@ namespace FileRise\Domain;
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
+use FileRise\Support\LogicalPathPolicy;
 use FileRise\Support\MetadataPath;
 use FileRise\Support\UploadNamePolicy;
 use FileRise\Support\WorkerLauncher;
@@ -90,6 +91,311 @@ class FileModel
         return true;
     }
 
+    private static function pathIsWithinRoot(string $path, string $root): bool
+    {
+        $normalize = static function (string $value): string {
+            $value = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $value);
+            $value = rtrim($value, DIRECTORY_SEPARATOR);
+            if (DIRECTORY_SEPARATOR === '\\') {
+                $value = strtolower($value);
+            }
+            return $value;
+        };
+
+        $path = $normalize($path);
+        $root = $normalize($root);
+        return $path === $root || str_starts_with($path, $root . DIRECTORY_SEPARATOR);
+    }
+
+    private static function nearestExistingAncestorRealPath(string $path): ?string
+    {
+        $candidate = rtrim($path, '/\\');
+        while ($candidate !== '' && !file_exists($candidate) && !is_link($candidate)) {
+            $parent = dirname($candidate);
+            if ($parent === $candidate) {
+                return null;
+            }
+            $candidate = $parent;
+        }
+
+        $real = $candidate !== '' ? realpath($candidate) : false;
+        return $real === false ? null : $real;
+    }
+
+    private static function createArchiveWorkspace(string $storageRoot): ?string
+    {
+        $storageReal = realpath($storageRoot);
+        if ($storageReal === false || is_link($storageRoot)) {
+            return null;
+        }
+        $base = $storageReal . DIRECTORY_SEPARATOR . '.filerise-archive-tmp';
+        if (is_link($base)) {
+            return null;
+        }
+        if (!is_dir($base) && !@mkdir($base, 0700, true)) {
+            return null;
+        }
+        if (!is_dir($base) || !is_writable($base)) {
+            return null;
+        }
+        $baseReal = realpath($base);
+        if ($baseReal === false || !self::pathIsWithinRoot($baseReal, $storageReal)) {
+            return null;
+        }
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            try {
+                $suffix = bin2hex(random_bytes(16));
+            } catch (\Throwable $e) {
+                return null;
+            }
+            $workspace = $baseReal . DIRECTORY_SEPARATOR . 'extract-' . $suffix;
+            if (@mkdir($workspace, 0700, false)) {
+                return $workspace;
+            }
+        }
+
+        return null;
+    }
+
+    private static function removeArchiveWorkspace(string $path): void
+    {
+        if (!file_exists($path) && !is_link($path)) {
+            return;
+        }
+        if (is_link($path) || is_file($path)) {
+            @unlink($path);
+            return;
+        }
+
+        $entries = @scandir($path);
+        if (!is_array($entries)) {
+            return;
+        }
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            self::removeArchiveWorkspace($path . DIRECTORY_SEPARATOR . $entry);
+        }
+        @rmdir($path);
+    }
+
+    private static function normalizeArchiveEntryPath(string $entry): ?string
+    {
+        $relative = trim(str_replace('\\', '/', $entry), '/');
+        if ($relative === '' || str_contains($relative, "\0")) {
+            return null;
+        }
+        foreach (explode('/', $relative) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..') {
+                return null;
+            }
+        }
+        return $relative;
+    }
+
+    private static function ensureArchiveDestinationDirectory(string $root, string $relative): ?string
+    {
+        $rootReal = realpath($root);
+        if ($rootReal === false || is_link($root)) {
+            return null;
+        }
+
+        $relative = trim(str_replace('\\', '/', $relative), '/');
+        if ($relative === '' || $relative === '.') {
+            return $rootReal;
+        }
+
+        $current = $rootReal;
+        foreach (explode('/', $relative) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..') {
+                return null;
+            }
+            $next = $current . DIRECTORY_SEPARATOR . $segment;
+            clearstatcache(true, $next);
+            if (is_link($next)) {
+                return null;
+            }
+            if (!file_exists($next) && !@mkdir($next, 0775, false)) {
+                return null;
+            }
+            if (!is_dir($next) || is_link($next)) {
+                return null;
+            }
+            $nextReal = realpath($next);
+            if ($nextReal === false || !self::pathIsWithinRoot($nextReal, $rootReal)) {
+                return null;
+            }
+            $current = $nextReal;
+        }
+
+        return $current;
+    }
+
+    private static function archivePathContainsSymlink(string $root, string $relative): bool
+    {
+        $current = rtrim($root, '/\\');
+        foreach (explode('/', str_replace('\\', '/', $relative)) as $segment) {
+            if ($segment === '') {
+                continue;
+            }
+            $current .= DIRECTORY_SEPARATOR . $segment;
+            clearstatcache(true, $current);
+            if (is_link($current)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @return array{placed:array<int,string>,failed:array<int,string>}
+     */
+    private static function placeArchiveFiles(
+        string $workspace,
+        string $destinationRoot,
+        array $allowedEntries,
+        array $files
+    ): array {
+        $workspaceReal = realpath($workspace);
+        $destinationReal = realpath($destinationRoot);
+        if ($workspaceReal === false || $destinationReal === false) {
+            return ['placed' => [], 'failed' => array_values($files)];
+        }
+
+        $failed = [];
+        foreach ($allowedEntries as $entryName) {
+            if (!str_ends_with(str_replace('\\', '/', (string)$entryName), '/')) {
+                continue;
+            }
+            $relative = self::normalizeArchiveEntryPath((string)$entryName);
+            if ($relative === null) {
+                continue;
+            }
+            if (self::ensureArchiveDestinationDirectory($destinationReal, $relative) === null) {
+                $failed[] = $relative;
+            }
+        }
+
+        $placed = [];
+        foreach ($files as $entryName) {
+            $relative = self::normalizeArchiveEntryPath((string)$entryName);
+            if ($relative === null) {
+                $failed[] = (string)$entryName;
+                continue;
+            }
+
+            $source = $workspaceReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            clearstatcache(true, $source);
+            $sourceReal = realpath($source);
+            if (
+                $sourceReal === false
+                || self::archivePathContainsSymlink($workspaceReal, $relative)
+                || !is_file($sourceReal)
+                || !self::pathIsWithinRoot($sourceReal, $workspaceReal)
+            ) {
+                $failed[] = $relative;
+                continue;
+            }
+
+            $relativeDir = dirname($relative);
+            $destinationDir = self::ensureArchiveDestinationDirectory($destinationReal, $relativeDir);
+            if ($destinationDir === null) {
+                $failed[] = $relative;
+                continue;
+            }
+
+            $destination = $destinationDir . DIRECTORY_SEPARATOR . basename($relative);
+            clearstatcache(true, $destination);
+            if (is_link($destination) || is_dir($destination)) {
+                $failed[] = $relative;
+                continue;
+            }
+
+            $temporary = null;
+            $out = false;
+            for ($attempt = 0; $attempt < 10; $attempt++) {
+                try {
+                    $suffix = bin2hex(random_bytes(12));
+                } catch (\Throwable $e) {
+                    break;
+                }
+                $candidate = $destinationDir . DIRECTORY_SEPARATOR . '.filerise-extract-' . $suffix . '.tmp';
+                $handle = @fopen($candidate, 'x+b');
+                if ($handle !== false) {
+                    $temporary = $candidate;
+                    $out = $handle;
+                    break;
+                }
+            }
+            if ($temporary === null || $out === false) {
+                $failed[] = $relative;
+                continue;
+            }
+
+            $in = @fopen($sourceReal, 'rb');
+            $copied = false;
+            if ($in !== false) {
+                $copied = stream_copy_to_stream($in, $out) !== false;
+                @fclose($in);
+            }
+            @fflush($out);
+            @fclose($out);
+            @chmod($temporary, 0664);
+
+            if (!$copied) {
+                @unlink($temporary);
+                $failed[] = $relative;
+                continue;
+            }
+
+            clearstatcache(true, $destination);
+            if (is_link($destination) || is_dir($destination)) {
+                @unlink($temporary);
+                $failed[] = $relative;
+                continue;
+            }
+
+            $installed = @rename($temporary, $destination);
+            if (!$installed && is_file($destination) && !is_link($destination)) {
+                $backup = null;
+                for ($attempt = 0; $attempt < 10; $attempt++) {
+                    try {
+                        $suffix = bin2hex(random_bytes(12));
+                    } catch (\Throwable $e) {
+                        break;
+                    }
+                    $candidate = $destinationDir . DIRECTORY_SEPARATOR . '.filerise-replaced-' . $suffix . '.tmp';
+                    if (!file_exists($candidate) && !is_link($candidate)) {
+                        $backup = $candidate;
+                        break;
+                    }
+                }
+                if ($backup !== null && @rename($destination, $backup)) {
+                    $installed = @rename($temporary, $destination);
+                    if ($installed) {
+                        @unlink($backup);
+                    } else {
+                        @rename($backup, $destination);
+                    }
+                }
+            }
+            if (!$installed) {
+                @unlink($temporary);
+                $failed[] = $relative;
+                continue;
+            }
+
+            $placed[] = $relative;
+        }
+
+        return [
+            'placed' => array_values(array_unique($placed)),
+            'failed' => array_values(array_unique($failed)),
+        ];
+    }
+
     private static function remoteDirMarker(): string
     {
         return defined('FR_REMOTE_DIR_MARKER') ? (string)FR_REMOTE_DIR_MARKER : '.filerise_keep';
@@ -133,7 +439,7 @@ class FileModel
     {
         $folder = trim($folder) ?: 'root';
 
-        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+        if (!LogicalPathPolicy::isSafeFolder($folder)) {
             return [null, "Invalid folder name."];
         }
 
@@ -156,13 +462,16 @@ class FileModel
             return [null, "Server misconfiguration."];
         }
 
-        if (!$isLocal && strpos($folder, '..') !== false) {
-            return [null, "Invalid folder name."];
-        }
-
         $dir = (strtolower($folder) === 'root')
             ? $base
             : $base . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
+
+        if ($isLocal && $create) {
+            $ancestor = self::nearestExistingAncestorRealPath($dir);
+            if ($ancestor === null || !self::pathIsWithinRoot($ancestor, $base)) {
+                return [null, "Invalid folder path."];
+            }
+        }
 
         if ($create) {
             $st = $storage->stat($dir);
@@ -175,7 +484,7 @@ class FileModel
 
         if ($isLocal) {
             $real = realpath($dir);
-            if ($real === false || strpos($real, $base) !== 0) {
+            if ($real === false || !self::pathIsWithinRoot($real, $base)) {
                 return [null, "Invalid folder path."];
             }
             return [$real, null];
@@ -192,7 +501,7 @@ class FileModel
     ): array {
         $folder = trim($folder) ?: 'root';
 
-        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+        if (!LogicalPathPolicy::isSafeFolder($folder)) {
             return [null, "Invalid folder name."];
         }
 
@@ -202,13 +511,16 @@ class FileModel
             return [null, "Server misconfiguration."];
         }
 
-        if (!$isLocal && strpos($folder, '..') !== false) {
-            return [null, "Invalid folder name."];
-        }
-
         $dir = (strtolower($folder) === 'root')
             ? $base
             : $base . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
+
+        if ($isLocal && $create) {
+            $ancestor = self::nearestExistingAncestorRealPath($dir);
+            if ($ancestor === null || !self::pathIsWithinRoot($ancestor, $base)) {
+                return [null, "Invalid folder path."];
+            }
+        }
 
         if ($create) {
             $st = $storage->stat($dir);
@@ -221,7 +533,7 @@ class FileModel
 
         if ($isLocal) {
             $real = realpath($dir);
-            if ($real === false || strpos($real, $base) !== 0) {
+            if ($real === false || !self::pathIsWithinRoot($real, $base)) {
                 return [null, "Invalid folder path."];
             }
             return [$real, null];
@@ -1215,7 +1527,7 @@ class FileModel
         $folder   = trim($folder) ?: 'root';
         $fileName = basename(trim($fileName));
 
-        if (strtolower($folder) !== 'root' && !preg_match(REGEX_FOLDER_NAME, $folder)) {
+        if (!LogicalPathPolicy::isSafeFolder($folder)) {
             return ["error" => "Invalid folder name"];
         }
         if (!UploadNamePolicy::isAllowedForWrite($fileName)) {
@@ -1246,7 +1558,13 @@ class FileModel
             ? rtrim($root, '/\\') . DIRECTORY_SEPARATOR
             : rtrim($root, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ") . DIRECTORY_SEPARATOR;
 
-        // Ensure directory exists *before* realpath + containment check
+        if ($isLocal) {
+            $ancestor = self::nearestExistingAncestorRealPath($targetDir);
+            if ($ancestor === null || !self::pathIsWithinRoot($ancestor, $baseDirReal)) {
+                return ["error" => "Invalid folder path"];
+            }
+        }
+
         $dirStat = $storage->stat($targetDir);
         if ($dirStat === null || $dirStat['type'] !== 'dir') {
             if (!$storage->mkdir($targetDir, 0775, true)) {
@@ -1256,7 +1574,7 @@ class FileModel
 
         if ($isLocal) {
             $targetDirReal = realpath($targetDir);
-            if ($targetDirReal === false || strpos($targetDirReal, $baseDirReal) !== 0) {
+            if ($targetDirReal === false || !self::pathIsWithinRoot($targetDirReal, $baseDirReal)) {
                 return ["error" => "Invalid folder path"];
             }
             $filePath = $targetDirReal . DIRECTORY_SEPARATOR . $fileName;
@@ -2052,11 +2370,14 @@ class FileModel
             return $found;
         };
 
-        $pruneExtractedFiles = function (array $allowedFiles, array $expectedSizes, string $archiveBase, bool $strictEmpty = false, bool $pruneEmpty = true) use ($folderPathReal, &$warnings): array {
+        $pruneExtractedFiles = function (string $extractRoot, array $allowedFiles, array $expectedSizes, string $archiveBase, bool $strictEmpty = false, bool $pruneEmpty = true) use (&$warnings): array {
             $kept = [];
             $emptyCount = 0;
             $escapedCount = 0;
-            $rootPrefix = rtrim($folderPathReal, '/\\') . DIRECTORY_SEPARATOR;
+            $rootReal = realpath($extractRoot);
+            if ($rootReal === false) {
+                return [];
+            }
 
             foreach ($allowedFiles as $entryName) {
                 $entryFsRel = str_replace(['\\'], '/', $entryName);
@@ -2064,13 +2385,12 @@ class FileModel
                 if ($entryFsRel === '' || str_ends_with($entryFsRel, '/')) {
                     continue;
                 }
-                $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                $targetAbs = $rootReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
                 if (!is_file($targetAbs)) {
                     continue;
                 }
                 $real = realpath($targetAbs);
-                if ($real === false || strpos($real, $rootPrefix) !== 0) {
-                    @unlink($targetAbs);
+                if ($real === false || !self::pathIsWithinRoot($real, $rootReal)) {
                     $escapedCount++;
                     continue;
                 }
@@ -2115,7 +2435,7 @@ class FileModel
             }
 
             if ($escapedCount > 0) {
-                $warnings[] = "$archiveBase: removed {$escapedCount} file" . ($escapedCount === 1 ? '' : 's') . " that escaped the extraction root.";
+                $warnings[] = "$archiveBase: ignored {$escapedCount} file" . ($escapedCount === 1 ? '' : 's') . " that escaped the private extraction workspace.";
             }
             if ($pruneEmpty && $emptyCount > 0) {
                 $warnings[] = "$archiveBase: removed {$emptyCount} empty file" . ($emptyCount === 1 ? '' : 's') . " created during extraction.";
@@ -2123,8 +2443,12 @@ class FileModel
             return $kept;
         };
 
-        $detectSizeMismatches = function (array $expectedSizes) use ($folderPathReal): array {
+        $detectSizeMismatches = function (string $extractRoot, array $expectedSizes): array {
             $mismatches = [];
+            $rootReal = realpath($extractRoot);
+            if ($rootReal === false) {
+                return array_keys($expectedSizes);
+            }
             foreach ($expectedSizes as $entryName => $expected) {
                 $expected = (int)$expected;
                 if ($expected <= 0) {
@@ -2135,7 +2459,7 @@ class FileModel
                 if ($entryFsRel === '' || str_ends_with($entryFsRel, '/')) {
                     continue;
                 }
-                $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
+                $targetAbs = $rootReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
                 clearstatcache(true, $targetAbs);
                 $size = @filesize($targetAbs);
                 if ($size === false || (int)$size !== $expected) {
@@ -2143,36 +2467,6 @@ class FileModel
                 }
             }
             return $mismatches;
-        };
-
-        $moveExtractedFile = function (string $src, string $dest): bool {
-            if (@rename($src, $dest)) {
-                return true;
-            }
-            if (@copy($src, $dest)) {
-                @unlink($src);
-                return true;
-            }
-            return false;
-        };
-
-        $removeTree = function (string $dir): void {
-            if (!is_dir($dir)) {
-                return;
-            }
-            $it = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
-                \RecursiveIteratorIterator::CHILD_FIRST
-            );
-            foreach ($it as $item) {
-                $path = $item->getPathname();
-                if ($item->isDir()) {
-                    @rmdir($path);
-                } else {
-                    @unlink($path);
-                }
-            }
-            @rmdir($dir);
         };
 
         $processedArchives = [];
@@ -2352,17 +2646,35 @@ class FileModel
                     continue;
                 }
 
-                // ---- Extract ONLY the allowed entries ----
-                if (!$zip->extractTo($folderPathReal, $allowedEntries)) {
-                    $errors[] = "Failed to extract $archiveBase.";
+                // Extract into a new private workspace. Never let the archive
+                // writer operate on a destination tree containing existing links.
+                $workspace = self::createArchiveWorkspace($baseDir);
+                if ($workspace === null) {
+                    $errors[] = "Failed to prepare a private extraction workspace for $archiveBase.";
                     $allSuccess = false;
                     $zip->close();
                     continue;
                 }
+                if (!$zip->extractTo($workspace, $allowedEntries)) {
+                    $errors[] = "Failed to extract $archiveBase.";
+                    $allSuccess = false;
+                    $zip->close();
+                    self::removeArchiveWorkspace($workspace);
+                    continue;
+                }
 
-                $keptFiles = $pruneExtractedFiles($allowedFiles, $expectedSizes, $archiveBase);
-                $extractedCount = $stampExtractedFiles($keptFiles);
                 $zip->close();
+                $keptFiles = $pruneExtractedFiles($workspace, $allowedFiles, $expectedSizes, $archiveBase);
+                $placement = self::placeArchiveFiles($workspace, $folderPathReal, $allowedEntries, $keptFiles);
+                self::removeArchiveWorkspace($workspace);
+
+                if (!empty($placement['failed'])) {
+                    $count = count($placement['failed']);
+                    $errors[] = "$archiveBase: refused {$count} unsafe or invalid destination path" . ($count === 1 ? '' : 's') . ".";
+                    $allSuccess = false;
+                }
+
+                $extractedCount = $stampExtractedFiles($placement['placed']);
                 if ($extractedCount === 0) {
                     $errors[] = "Failed to extract $archiveBase: no valid files could be extracted.";
                     $allSuccess = false;
@@ -2620,29 +2932,24 @@ class FileModel
                 continue;
             }
 
+            $workspace = self::createArchiveWorkspace($baseDir);
+            if ($workspace === null) {
+                $errors[] = "Failed to prepare a private extraction workspace for $archiveBase.";
+                $allSuccess = false;
+                continue;
+            }
+
             $unar = $isRarArchive ? $findUnar() : null;
             $usedUnar = false;
             $extractCode = 0;
             $extractDetail = '';
+            $extractRoot = $workspace;
 
             if ($unar) {
                 $usedUnar = true;
-                $tmpBase = tempnam($workDir, 'unar-');
-                if ($tmpBase === false) {
-                    $errors[] = "Failed to prepare RAR extract workspace for $archiveBase.";
-                    $allSuccess = false;
-                    continue;
-                }
-                @unlink($tmpBase);
-                if (!@mkdir($tmpBase, 0775, true)) {
-                    $errors[] = "Failed to create RAR extract workspace for $archiveBase.";
-                    $allSuccess = false;
-                    continue;
-                }
-
                 $unarOut = [];
                 $unarCode = 1;
-                $unarCmd = escapeshellarg($unar) . ' -o ' . escapeshellarg($tmpBase) . ' ' . escapeshellarg($archivePath);
+                $unarCmd = escapeshellarg($unar) . ' -o ' . escapeshellarg($workspace) . ' ' . escapeshellarg($archivePath);
                 @exec($unarCmd, $unarOut, $unarCode);
                 if ($unarCode !== 0) {
                     $detail = $unarErrorDetail($unarOut);
@@ -2650,61 +2957,23 @@ class FileModel
                         ? "Failed to extract $archiveBase: $detail"
                         : "Failed to extract $archiveBase.";
                     $allSuccess = false;
-                    $removeTree($tmpBase);
+                    self::removeArchiveWorkspace($workspace);
                     continue;
                 }
 
-                $extractRoot = $tmpBase;
-                $entries = array_values(array_diff(@scandir($tmpBase) ?: [], ['.', '..']));
+                $entries = array_values(array_diff(@scandir($workspace) ?: [], ['.', '..']));
                 if (count($entries) === 1) {
-                    $single = $tmpBase . DIRECTORY_SEPARATOR . $entries[0];
+                    $single = $workspace . DIRECTORY_SEPARATOR . $entries[0];
                     if (is_dir($single)) {
                         $extractRoot = $single;
                     }
-                }
-
-                $moveFailed = false;
-                foreach ($allowedFiles as $entryName) {
-                    $entryFsRel = str_replace(['\\'], '/', $entryName);
-                    $entryFsRel = ltrim($entryFsRel, '/');
-                    if ($entryFsRel === '' || str_ends_with($entryFsRel, '/')) {
-                        continue;
-                    }
-                    $srcPath = $extractRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
-                    if (!is_file($srcPath)) {
-                        continue;
-                    }
-                    $destPath = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
-                    $destDir = dirname($destPath);
-                    if (!is_dir($destDir) && !@mkdir($destDir, 0775, true)) {
-                        $errors[] = "Failed to create folder for extracted file $entryFsRel.";
-                        $moveFailed = true;
-                        continue;
-                    }
-                    if (!$moveExtractedFile($srcPath, $destPath)) {
-                        $errors[] = "Failed to place extracted file $entryFsRel.";
-                        $moveFailed = true;
-                    }
-                }
-
-                $removeTree($tmpBase);
-                if ($moveFailed) {
-                    $allSuccess = false;
-                    continue;
-                }
-
-                $sizeMismatches = $detectSizeMismatches($expectedSizes);
-                if (!empty($sizeMismatches)) {
-                    $count = count($sizeMismatches);
-                    $errors[] = "Failed to extract $archiveBase: {$count} file" . ($count === 1 ? '' : 's') . " extracted with incorrect sizes.";
-                    $allSuccess = false;
-                    continue;
                 }
             } else {
                 $listFile = tempnam($workDir, '7zlist-');
                 if ($listFile === false) {
                     $errors[] = "Failed to prepare archive extract list for $archiveBase.";
                     $allSuccess = false;
+                    self::removeArchiveWorkspace($workspace);
                     continue;
                 }
                 $extractEntries = $allowedFiles ?: $allowedEntries;
@@ -2712,10 +2981,11 @@ class FileModel
                     @unlink($listFile);
                     $errors[] = "Failed to write archive extract list for $archiveBase.";
                     $allSuccess = false;
+                    self::removeArchiveWorkspace($workspace);
                     continue;
                 }
 
-                $outDirArg = '-o' . $folderPathReal;
+                $outDirArg = '-o' . $workspace;
                 $extractCmd = escapeshellarg($sevenZip) . ' x -y -aoa -bd ' . escapeshellarg($outDirArg) . ' ' . escapeshellarg($archivePath) . ' ' . escapeshellarg('-i@' . $listFile);
                 $extractOut = [];
                 $extractCode = 1;
@@ -2726,44 +2996,38 @@ class FileModel
                     $detail = $sevenZipErrorDetail($extractOut);
                     $extractDetail = $detail !== '' ? $detail : 'Archive extracted with warnings.';
                 }
-
-                if ($isRarArchive) {
-                    $sizeMismatches = $detectSizeMismatches($expectedSizes);
-                    if (!empty($sizeMismatches)) {
-                        $count = count($sizeMismatches);
-                        $errors[] = "Failed to extract $archiveBase: {$count} file" . ($count === 1 ? '' : 's') . " extracted with incorrect sizes. Install unar for RAR archives.";
-                        $allSuccess = false;
-                        continue;
-                    }
-                }
             }
 
-            $hasLinks = 0;
-            foreach ($allowedEntries as $entryName) {
-                $entryFsRel = str_replace(['\\'], '/', $entryName);
-                $entryFsRel = ltrim($entryFsRel, '/');
-                if ($entryFsRel === '') {
+            if ($isRarArchive) {
+                $sizeMismatches = $detectSizeMismatches($extractRoot, $expectedSizes);
+                if (!empty($sizeMismatches)) {
+                    $count = count($sizeMismatches);
+                    $suffix = $usedUnar ? '' : ' Install unar for RAR archives.';
+                    $errors[] = "Failed to extract $archiveBase: {$count} file" . ($count === 1 ? '' : 's') . " extracted with incorrect sizes.{$suffix}";
+                    $allSuccess = false;
+                    self::removeArchiveWorkspace($workspace);
                     continue;
                 }
-                $entryFsRel = rtrim($entryFsRel, '/');
-                if ($entryFsRel === '') {
-                    continue;
-                }
-                $targetAbs = $folderPathReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
-                if (is_link($targetAbs)) {
-                    $hasLinks++;
-                    @unlink($targetAbs);
-                    if (is_link($targetAbs)) {
-                        @rmdir($targetAbs);
-                    }
-                }
-            }
-            if ($hasLinks > 0) {
-                $warnings[] = "$archiveBase: removed {$hasLinks} symlink entr" . ($hasLinks === 1 ? 'y' : 'ies') . ".";
             }
 
-            $keptFiles = $pruneExtractedFiles($allowedFiles, $expectedSizes, $archiveBase, $extractCode !== 0, false);
-            $extractedCount = $stampExtractedFiles($keptFiles);
+            $keptFiles = $pruneExtractedFiles(
+                $extractRoot,
+                $allowedFiles,
+                $expectedSizes,
+                $archiveBase,
+                $extractCode !== 0,
+                false
+            );
+            $placement = self::placeArchiveFiles($extractRoot, $folderPathReal, $allowedEntries, $keptFiles);
+            self::removeArchiveWorkspace($workspace);
+
+            if (!empty($placement['failed'])) {
+                $count = count($placement['failed']);
+                $errors[] = "$archiveBase: refused {$count} unsafe or invalid destination path" . ($count === 1 ? '' : 's') . ".";
+                $allSuccess = false;
+            }
+
+            $extractedCount = $stampExtractedFiles($placement['placed']);
             if ($extractedCount === 0) {
                 $reason = $extractDetail !== '' ? $extractDetail : 'no valid files could be extracted.';
                 $errors[] = "Failed to extract $archiveBase: $reason";

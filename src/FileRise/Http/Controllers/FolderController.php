@@ -1277,6 +1277,51 @@ class FolderController
         return false;
     }
 
+    private static function parentFolder(string $folder): string
+    {
+        $folder = ACL::normalizeFolder($folder);
+        if ($folder === 'root') {
+            return 'root';
+        }
+
+        $pos = strrpos($folder, '/');
+        return $pos === false ? 'root' : substr($folder, 0, $pos);
+    }
+
+    /**
+     * Return a user-facing authorization error for a cross-parent rename/move.
+     * Same-parent renames intentionally retain their existing source-owner behavior.
+     */
+    private static function renameDestinationError(
+        string $oldFolder,
+        string $newFolder,
+        string $username,
+        array $perms
+    ): ?string {
+        $oldParent = self::parentFolder($oldFolder);
+        $newParent = self::parentFolder($newFolder);
+        if ($oldParent === $newParent) {
+            return null;
+        }
+
+        $isAdmin = self::isAdmin($perms);
+        $canMoveIntoDestination = ACL::canMove($username, $perms, $newParent)
+            || ($newParent === 'root' ? $isAdmin : ACL::isOwner($username, $perms, $newParent));
+        if (!$canMoveIntoDestination) {
+            return 'Forbidden: move rights required on destination';
+        }
+
+        if (!$isAdmin) {
+            $ownerSource = FolderModel::getOwnerFor($oldFolder) ?? '';
+            $ownerDestination = FolderModel::getOwnerFor($newParent) ?? '';
+            if ($ownerSource !== $ownerDestination) {
+                return 'Source and destination must have the same owner';
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Enforce per-folder scope for folder-only accounts.
      * $need: 'read' | 'write' | 'manage' | 'share' | 'read_own' (default 'read')
@@ -1629,6 +1674,12 @@ class FolderController
         if (!self::canBypassOwnership($perms) && !self::ownsFolderOrAncestor($oldFolder, $username, $perms)) {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden: you are not the folder owner.']);
+            exit;
+        }
+
+        if ($destinationError = self::renameDestinationError($oldFolder, $newFolder, $username, $perms)) {
+            http_response_code(403);
+            echo json_encode(['error' => $destinationError]);
             exit;
         }
 

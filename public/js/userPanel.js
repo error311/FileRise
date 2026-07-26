@@ -201,6 +201,7 @@ export async function openUserPanel() {
     totpCb.className = 'form-check-input fr-toggle-input';
     totpCb.checked = totp_enabled;
     totpCb.addEventListener('change', async function () {
+      const requestedState = this.checked;
       const resp = await fetch(withBase('/api/profile/updateUserPanel.php'), {
         method: 'POST', credentials: 'include',
         headers: {
@@ -210,7 +211,13 @@ export async function openUserPanel() {
         body: JSON.stringify({ totp_enabled: this.checked })
       });
       const js = await resp.json();
-      if (!js.success) showToast(js.error || t('error_updating_totp_setting'));
+      if (js.reauth_required) {
+        this.checked = !requestedState;
+        window.location.href = withBase('/index.html');
+      } else if (!js.success) {
+        this.checked = !requestedState;
+        showToast(js.error || t('error_updating_totp_setting'));
+      }
       else if (this.checked) openTOTPModal();
     });
     const totpRow = document.createElement('div');

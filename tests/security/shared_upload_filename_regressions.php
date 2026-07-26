@@ -72,9 +72,67 @@ try {
         'UploadNamePolicy: normal filename should remain allowed',
         $errors
     );
+    sharedUploadNameFailIf(
+        \FileRise\Support\UploadNamePolicy::isAllowedForWrite('shell.php.', 'strict') !== false,
+        'UploadNamePolicy: strict mode should reject a blocked extension followed by a trailing dot',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        \FileRise\Support\UploadNamePolicy::isAllowedForWrite('SHELL.PHP...', 'strict') !== false,
+        'UploadNamePolicy: strict mode should reject blocked extensions followed by trailing dots',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        \FileRise\Support\UploadNamePolicy::isAllowedForWrite('shell.php%2e', 'strict') !== false,
+        'UploadNamePolicy: strict mode should reject an encoded trailing dot',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        \FileRise\Support\UploadNamePolicy::isAllowedForWrite('shell.php%252e', 'strict') !== false,
+        'UploadNamePolicy: strict mode should reject a repeatedly encoded trailing dot',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        \FileRise\Support\UploadNamePolicy::isAllowedForWrite('.htaccess.', 'code_friendly') !== false,
+        'UploadNamePolicy: code-friendly mode should not bypass always-blocked names with a trailing dot',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        \FileRise\Support\UploadNamePolicy::isAllowedForWrite('script.php', 'code_friendly') !== true,
+        'UploadNamePolicy: code-friendly mode should continue allowing intentional code filenames',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        \FileRise\Support\UploadNamePolicy::isAllowedForWrite('archive.tar.gz', 'strict') !== true,
+        'UploadNamePolicy: ordinary multi-extension filenames should remain allowed',
+        $errors
+    );
 
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_SESSION['username'] = 'share:regression';
+    $trailingDotResult = \FileRise\Domain\UploadModel::handleUpload(
+        ['folder' => 'drop', 'source' => 'shared'],
+        [
+            'file' => [
+                'name' => 'shell.php.',
+                'tmp_name' => $tmpBase . '/fake-upload.tmp',
+                'error' => UPLOAD_ERR_OK,
+            ],
+        ]
+    );
+
+    sharedUploadNameFailIf(
+        !isset($trailingDotResult['error'])
+            || !str_contains((string)$trailingDotResult['error'], 'Invalid file name'),
+        'handleUpload: trailing-dot filename should be rejected before write',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        file_exists($uploadDir . 'drop' . DIRECTORY_SEPARATOR . 'shell.php.'),
+        'handleUpload: rejected trailing-dot filename should not be written',
+        $errors
+    );
+
     $result = \FileRise\Domain\UploadModel::handleUpload(
         ['folder' => 'drop', 'source' => 'shared'],
         [

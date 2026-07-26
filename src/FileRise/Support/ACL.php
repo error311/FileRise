@@ -994,6 +994,9 @@ class ACL
     public static function hasGrant(string $user, string $folder, string $cap): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!LogicalPathPolicy::isSafeFolder($folder)) {
+            return false;
+        }
         $capKey = ($cap === 'owner') ? 'owners' : $cap;
 
         $memoKey = self::memoScope() . '|' . strtolower((string)$user) . '|' . $folder . '|' . $capKey;

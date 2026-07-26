@@ -92,6 +92,13 @@ final class UploadNamePolicy
             return false;
         }
 
+        // Some filesystems and web servers normalize trailing dots away.
+        // Reject them before policy checks so names such as "shell.php." cannot
+        // bypass either the strict extension list or always-blocked filenames.
+        if (str_ends_with($fileName, '.')) {
+            return false;
+        }
+
         $lowerName = strtolower($fileName);
         if (in_array($lowerName, self::ALWAYS_BLOCKED_FILENAMES, true)) {
             return false;

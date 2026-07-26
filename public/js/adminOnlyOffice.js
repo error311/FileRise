@@ -212,7 +212,9 @@ function attachOnlyOfficeTests(container) {
       </div>
       <ul id="ooTestResults" class="list-unstyled" style="margin:0;"></ul>
       <small class="text-muted">
-        These tests check FileRise config, callback reachability, CSP/script loading, and iframe embedding.
+        These tests check FileRise config, callback enforcement, reachability, CSP/script loading,
+        and iframe embedding. Complete one real document save after an upgrade to confirm the
+        Document Server sends a valid outgoing callback JWT.
       </small>
     </div>
   `;
@@ -257,8 +259,18 @@ function attachOnlyOfficeTests(container) {
       } else {
         out.appendChild(ooRow('FileRise status', 'fail', `HTTP ${r.status}`));
       }
+      out.appendChild(
+        ooRow(
+          'Callback JWT enforcement',
+          statusJson.callbackJwtRequired ? 'ok' : 'warn',
+          statusJson.callbackJwtRequired
+            ? 'Required — unsigned callbacks are rejected'
+            : 'UNSAFE compatibility override enabled'
+        )
+      );
     } catch (e) {
       out.appendChild(ooRow('FileRise status', 'fail', (e && e.message) || 'Network error'));
+      out.appendChild(ooRow('Callback JWT enforcement', 'warn', 'Could not verify'));
     }
 
     // 2) Secret presence (fresh read)
@@ -487,6 +499,15 @@ export function initOnlyOfficeUI({ config }) {
   // Initial values
   const enabled = !!onlyCfg.enabled;
   const docsOrigin = onlyCfg.docsOrigin || '';
+  const unsignedCallbacksAllowed = !!onlyCfg.unsignedCallbacksAllowed;
+
+  const jwtState = document.createElement('div');
+  jwtState.className = unsignedCallbacksAllowed ? 'alert alert-danger' : 'alert alert-success';
+  jwtState.style.marginTop = '12px';
+  jwtState.textContent = unsignedCallbacksAllowed
+    ? 'Security warning: unsigned ONLYOFFICE callbacks are temporarily allowed. Configure outgoing JWTs on the Document Server and remove ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS.'
+    : 'Callback JWT enforcement is enabled. Unsigned or invalid save callbacks are rejected.';
+  sec.appendChild(jwtState);
 
   const enabledEl = document.getElementById('ooEnabled');
   const originEl = document.getElementById('ooDocsOrigin');

@@ -7,6 +7,7 @@ use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
 use FileRise\Support\FS;
+use FileRise\Support\LogicalPathPolicy;
 use FileRise\Support\MetadataPath;
 use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
@@ -533,10 +534,7 @@ class FileController
     }
     private function validFolder($f): bool
     {
-        if ($f === 'root') {
-            return true;
-        }
-        return (bool)preg_match(REGEX_FOLDER_NAME, $f);
+        return LogicalPathPolicy::isSafeFolder((string)$f);
     }
     private function validFile($f): bool
     {

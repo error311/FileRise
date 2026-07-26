@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 $baseDir = dirname(__DIR__, 2);
-$tmpBase = $baseDir . '/tests/.tmp_login_method_policy_' . bin2hex(random_bytes(4));
+$tmpBase = sys_get_temp_dir() . '/filerise_login_method_policy_' . bin2hex(random_bytes(4));
 
 function loginPolicyFailIf(bool $cond, string $message, array &$errors): void
 {
@@ -131,6 +131,148 @@ PHP
     );
     loginPolicyFailIf($form['status'] !== 403, 'form login: disabled method should return HTTP 403', $errors);
     loginPolicyFailIf(!str_contains($form['output'], 'Form login is disabled'), 'form login: disabled method message missing', $errors);
+
+    $guidedWrongTarget = loginPolicyRunCase(
+        $baseDir,
+        $tmpBase,
+        'guided_wrong_target',
+        <<<'PHP'
+file_put_contents(
+    USERS_DIR . USERS_FILE,
+    'admin:' . password_hash('AdminPass123!', PASSWORD_BCRYPT) . ':1' . PHP_EOL,
+    LOCK_EX
+);
+\FileRise\Support\OidcAccountLinker::begin(
+    'https://oidc.example.test',
+    'admin-subject',
+    'admin',
+    false,
+    []
+);
+$_SERVER['HTTP_X_CSRF_TOKEN'] = $_SESSION['csrf_token'];
+$controller = new class extends \FileRise\Http\Controllers\AuthController {
+    public function confirm(string $username, string $password): void
+    {
+        $this->handleFormLogin($username, $password, false);
+    }
+};
+$controller->confirm('alice', 'AdminPass123!');
+PHP
+    );
+    loginPolicyFailIf(
+        $guidedWrongTarget['status'] !== 400,
+        'OIDC guided link: a different local username should be rejected',
+        $errors
+    );
+
+    $guidedWrongPassword = loginPolicyRunCase(
+        $baseDir,
+        $tmpBase,
+        'guided_wrong_password',
+        <<<'PHP'
+file_put_contents(
+    USERS_DIR . USERS_FILE,
+    'admin:' . password_hash('AdminPass123!', PASSWORD_BCRYPT) . ':1' . PHP_EOL,
+    LOCK_EX
+);
+\FileRise\Support\OidcAccountLinker::begin(
+    'https://oidc.example.test',
+    'admin-subject',
+    'admin',
+    false,
+    []
+);
+$_SERVER['HTTP_X_CSRF_TOKEN'] = $_SESSION['csrf_token'];
+$controller = new class extends \FileRise\Http\Controllers\AuthController {
+    public function confirm(string $username, string $password): void
+    {
+        $this->handleFormLogin($username, $password, false);
+    }
+};
+$controller->confirm('admin', 'WrongPassword123!');
+PHP
+    );
+    loginPolicyFailIf(
+        $guidedWrongPassword['status'] !== 401,
+        'OIDC guided link: an invalid local password should be rejected',
+        $errors
+    );
+    loginPolicyFailIf(
+        !str_contains($guidedWrongPassword['output'], 'Invalid credentials'),
+        'OIDC guided link: invalid local password message missing',
+        $errors
+    );
+
+    $guidedMissingCsrf = loginPolicyRunCase(
+        $baseDir,
+        $tmpBase,
+        'guided_missing_csrf',
+        <<<'PHP'
+file_put_contents(
+    USERS_DIR . USERS_FILE,
+    'admin:' . password_hash('AdminPass123!', PASSWORD_BCRYPT) . ':1' . PHP_EOL,
+    LOCK_EX
+);
+\FileRise\Support\OidcAccountLinker::begin(
+    'https://oidc.example.test',
+    'admin-subject',
+    'admin',
+    false,
+    []
+);
+$controller = new class extends \FileRise\Http\Controllers\AuthController {
+    public function confirm(string $username, string $password): void
+    {
+        $this->handleFormLogin($username, $password, false);
+    }
+};
+$controller->confirm('admin', 'AdminPass123!');
+PHP
+    );
+    loginPolicyFailIf(
+        $guidedMissingCsrf['status'] !== 403
+            || !str_contains($guidedMissingCsrf['output'], 'Invalid CSRF token'),
+        'OIDC guided link: missing CSRF proof should be rejected',
+        $errors
+    );
+
+    $guidedCorrect = loginPolicyRunCase(
+        $baseDir,
+        $tmpBase,
+        'guided_correct',
+        <<<'PHP'
+file_put_contents(
+    USERS_DIR . USERS_FILE,
+    'admin:' . password_hash('AdminPass123!', PASSWORD_BCRYPT) . ':1' . PHP_EOL,
+    LOCK_EX
+);
+\FileRise\Support\OidcAccountLinker::begin(
+    'https://oidc.example.test',
+    'admin-subject',
+    'admin',
+    false,
+    []
+);
+$_SERVER['HTTP_X_CSRF_TOKEN'] = $_SESSION['csrf_token'];
+$controller = new class extends \FileRise\Http\Controllers\AuthController {
+    public function confirm(string $username, string $password): void
+    {
+        $this->handleFormLogin($username, $password, false);
+    }
+};
+$controller->confirm('admin', 'AdminPass123!');
+PHP
+    );
+    loginPolicyFailIf(
+        !str_contains($guidedCorrect['output'], 'Login successful'),
+        'OIDC guided link: valid local credentials did not complete login',
+        $errors
+    );
+    loginPolicyFailIf(
+        !is_file($tmpBase . '/guided_correct/users/oidc_identities.json'),
+        'OIDC guided link: valid local credentials did not persist an identity binding',
+        $errors
+    );
 
     $basic = loginPolicyRunCase(
         $baseDir,

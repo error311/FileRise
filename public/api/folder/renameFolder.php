@@ -5,7 +5,7 @@
  * @OA\Post(
  *   path="/api/folder/renameFolder.php",
  *   summary="Rename or move a folder",
- *   description="Requires authentication, CSRF token, scope checks on old and new paths, and (for non-admins) ownership of the source folder.",
+ *   description="Requires authentication, CSRF, source ownership, and destination move authorization when the parent changes.",
  *   operationId="renameFolder",
  *   tags={"Folders"},
  *   security={{"cookieAuth": {}}},

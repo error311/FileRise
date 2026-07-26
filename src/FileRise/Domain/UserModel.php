@@ -376,6 +376,13 @@ class UserModel
         if (class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
             AuthModel::revokeRememberTokensForUser($usernameToRemove);
         }
+        if (
+            class_exists(AuthModel::class)
+            && method_exists(AuthModel::class, 'removeOidcBindingsForUser')
+            && !AuthModel::removeOidcBindingsForUser($usernameToRemove)
+        ) {
+            error_log('FileRise: failed to remove OIDC identity bindings for a deleted user.');
+        }
 
     // Update encrypted userPermissions.json — remove any key matching case-insensitively
         $permissionsFile = USERS_DIR . "userPermissions.json";
@@ -892,26 +899,6 @@ class UserModel
         );
 
         $totpSecret = $tfa->createSecret();
-        $encryptedSecret = encryptData($totpSecret, $encryptionKey);
-
-        $newLines = [];
-        foreach ($lines as $line) {
-            $parts = explode(':', trim($line));
-            if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
-                if (count($parts) >= 4) {
-                    $parts[3] = $encryptedSecret;
-                } else {
-                    $parts[] = $encryptedSecret;
-                }
-                $newLines[] = implode(':', $parts);
-            } else {
-                $newLines[] = $line;
-            }
-        }
-        if (file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL, LOCK_EX) === false) {
-            return ['error' => 'Failed to save TOTP secret'];
-        }
-
         // Prefer admin-configured otpauth template if present
         $adminConfigFile = USERS_DIR . 'adminConfig.json';
         $globalOtpauthUrl = "";
@@ -946,8 +933,99 @@ class UserModel
 
         return [
             'imageData' => $result->getString(),
-            'mimeType'  => $result->getMimeType()
+            'mimeType'  => $result->getMimeType(),
+            'secret' => $totpSecret,
         ];
+    }
+
+    public static function activateTOTPSecret(string $username, string $totpSecret): array
+    {
+        global $encryptionKey;
+
+        if (!preg_match(REGEX_USER, $username) || $totpSecret === '') {
+            return ['error' => 'Invalid TOTP setup', 'statusCode' => 400];
+        }
+
+        $usersFile = USERS_DIR . USERS_FILE;
+        $handle = @fopen($usersFile, 'c+');
+        if ($handle === false || !flock($handle, LOCK_EX)) {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+            return ['error' => 'Failed to lock users file', 'statusCode' => 500];
+        }
+
+        try {
+            rewind($handle);
+            $contents = stream_get_contents($handle);
+            if ($contents === false) {
+                return ['error' => 'Failed to read users file', 'statusCode' => 500];
+            }
+
+            $lines = preg_split('/\R/', trim($contents)) ?: [];
+            $newLines = [];
+            $userFound = false;
+            $encryptedSecret = encryptData($totpSecret, $encryptionKey);
+
+            foreach ($lines as $line) {
+                if ($line === '') {
+                    continue;
+                }
+                $parts = explode(':', trim($line));
+                if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
+                    $userFound = true;
+                    if (count($parts) >= 4 && !empty($parts[3])) {
+                        return ['error' => 'TOTP is already configured for this account', 'statusCode' => 409];
+                    }
+                    while (count($parts) < 4) {
+                        $parts[] = '';
+                    }
+                    $parts[3] = $encryptedSecret;
+                    $line = implode(':', $parts);
+                }
+                $newLines[] = $line;
+            }
+
+            if (!$userFound) {
+                return ['error' => 'User not found', 'statusCode' => 404];
+            }
+
+            $payload = implode(PHP_EOL, $newLines) . PHP_EOL;
+            rewind($handle);
+            if (!ftruncate($handle, 0)) {
+                return ['error' => 'Failed to save TOTP secret', 'statusCode' => 500];
+            }
+            $offset = 0;
+            $payloadLength = strlen($payload);
+            while ($offset < $payloadLength) {
+                $written = fwrite($handle, substr($payload, $offset));
+                if ($written === false || $written === 0) {
+                    break;
+                }
+                $offset += $written;
+            }
+            if ($offset !== $payloadLength || !fflush($handle)) {
+                rewind($handle);
+                if (ftruncate($handle, 0)) {
+                    $restoreOffset = 0;
+                    $contentsLength = strlen($contents);
+                    while ($restoreOffset < $contentsLength) {
+                        $restored = fwrite($handle, substr($contents, $restoreOffset));
+                        if ($restored === false || $restored === 0) {
+                            break;
+                        }
+                        $restoreOffset += $restored;
+                    }
+                    fflush($handle);
+                }
+                return ['error' => 'Failed to save TOTP secret', 'statusCode' => 500];
+            }
+
+            return ['status' => 'ok'];
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 
     /**

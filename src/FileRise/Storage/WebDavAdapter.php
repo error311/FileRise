@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FileRise\Storage;
 
+use FileRise\Support\LogicalPathPolicy;
 use Sabre\DAV\Client;
 use Sabre\DAV\Xml\Property\ResourceType;
 use Throwable;
@@ -72,6 +73,9 @@ final class WebDavAdapter implements StorageAdapterInterface
         }
         $password = (string)($cfg['password'] ?? '');
         $rootPath = trim((string)($cfg['root'] ?? $cfg['path'] ?? ''));
+        if (LogicalPathPolicy::hasUnsafeDotSegments($rootPath)) {
+            return null;
+        }
         $verifyTls = !isset($cfg['verifyTls']) || $cfg['verifyTls'] !== false;
         $timeout = (int)($cfg['timeout'] ?? 20);
         if ($timeout <= 0) {
@@ -111,11 +115,15 @@ final class WebDavAdapter implements StorageAdapterInterface
 
     public function list(string $path): array
     {
+        $parentRelRaw = $this->relativePath($path);
+        if ($parentRelRaw === null) {
+            return [];
+        }
         $props = $this->propFind($path, 1);
         if (!$props) {
             return [];
         }
-        $parentRel = trim($this->relativePath($path), '/');
+        $parentRel = trim($parentRelRaw, '/');
         $items = [];
         $children = [];
         foreach ($props as $href => $prop) {
@@ -137,6 +145,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     public function stat(string $path): ?array
     {
         $rel = $this->relativePath($path);
+        if ($rel === null) {
+            return null;
+        }
         if ($rel !== '') {
             $parentRel = trim(str_replace('\\', '/', dirname($rel)), '/');
             if ($parentRel === '.' || $parentRel === '') {
@@ -319,7 +330,11 @@ final class WebDavAdapter implements StorageAdapterInterface
 
     public function mkdir(string $path, int $mode = 0775, bool $recursive = true): bool
     {
-        $rel = trim($this->relativePath($path), '/');
+        $relative = $this->relativePath($path);
+        if ($relative === null) {
+            return false;
+        }
+        $rel = trim($relative, '/');
         if ($rel === '') {
             return true;
         }
@@ -335,6 +350,9 @@ final class WebDavAdapter implements StorageAdapterInterface
                 continue;
             }
             $url = $this->buildUrlForRelative($acc);
+            if ($url === '') {
+                return false;
+            }
             $status = $this->request('MKCOL', $url, null, []);
             if ($status >= 200 && $status < 300) {
                 continue;
@@ -381,6 +399,9 @@ final class WebDavAdapter implements StorageAdapterInterface
     private function buildUrlForRelative(string $rel): string
     {
         $rel = trim($rel, '/');
+        if (LogicalPathPolicy::hasUnsafeDotSegments($rel)) {
+            return '';
+        }
         if ($rel === '') {
             return $this->baseUri;
         }
@@ -390,17 +411,31 @@ final class WebDavAdapter implements StorageAdapterInterface
     private function buildUrlForPath(string $path): string
     {
         $rel = $this->relativePath($path);
+        if ($rel === null) {
+            return '';
+        }
         return $this->buildUrlForRelative($rel);
     }
 
-    private function relativePath(string $path): string
+    private function relativePath(string $path): ?string
     {
         $p = str_replace('\\', '/', $path);
         $root = $this->localRoot;
-        if ($root !== '' && str_starts_with($p, $root)) {
-            $p = substr($p, strlen($root));
+        if ($root !== '') {
+            if ($p === $root) {
+                $p = '';
+            } elseif (str_starts_with($p, $root . '/')) {
+                $p = substr($p, strlen($root) + 1);
+            } elseif (str_starts_with($p, '/') || preg_match('/^[A-Za-z]:\//', $p)) {
+                return null;
+            }
         }
-        return ltrim($p, '/');
+
+        $relative = ltrim($p, '/');
+        if (LogicalPathPolicy::hasUnsafeDotSegments($relative)) {
+            return null;
+        }
+        return $relative;
     }
 
     private function hrefToRelative(string $href): string
@@ -521,7 +556,11 @@ final class WebDavAdapter implements StorageAdapterInterface
 
     private function ensureParentExists(string $path): bool
     {
-        $rel = trim($this->relativePath($path), '/');
+        $relative = $this->relativePath($path);
+        if ($relative === null) {
+            return false;
+        }
+        $rel = trim($relative, '/');
         if ($rel === '') {
             return true;
         }

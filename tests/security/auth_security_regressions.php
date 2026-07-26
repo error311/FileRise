@@ -160,6 +160,7 @@ $helper = __DIR__ . '/run_check_auth.php';
 $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($helper);
 $env = array_merge($_ENV, [
     'FR_TEST_USERS_DIR'     => $usersDir,
+    'FR_TEST_SESSION_DIR'   => $sessionDir,
     'PERSISTENT_TOKENS_KEY' => $key,
     'FR_TEST_REMEMBER_TOKEN'=> $tokenB
 ]);
@@ -178,7 +179,11 @@ if (is_resource($proc)) {
 
     $data = json_decode(trim($stdout), true);
     failIf($code !== 0, 'checkAuth: helper exited with code ' . $code . ' stderr=' . trim($stderr), $errors);
-    failIf(!is_array($data), 'checkAuth: invalid JSON output', $errors);
+    failIf(
+        !is_array($data),
+        'checkAuth: invalid JSON output stdout=' . trim($stdout) . ' stderr=' . trim($stderr),
+        $errors
+    );
     if (is_array($data)) {
         failIf(empty($data['authenticated']), 'checkAuth: authenticated should be true', $errors);
         failIf(($data['username'] ?? '') !== 'alice', 'checkAuth: username mismatch', $errors);

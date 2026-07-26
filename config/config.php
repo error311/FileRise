@@ -40,7 +40,7 @@ define('TRASH_DIR',     UPLOAD_DIR . 'trash/');
 define('TIMEZONE',      'America/New_York');
 define('DATE_TIME_FORMAT','m/d/y  h:iA');
 define('TOTAL_UPLOAD_SIZE', '5G');
-define('REGEX_FOLDER_NAME','/^(?!^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$)(?!.*[. ]$)(?:[^<>:"\/\\\\|?*\x00-\x1F]{1,255})(?:[\/\\\\][^<>:"\/\\\\|?*\x00-\x1F]{1,255})*$/xu');
+define('REGEX_FOLDER_NAME','/^(?!^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$)(?!\.{1,2}(?:[\/\\\\]|$))(?!.*[\/\\\\]\.{1,2}(?:[\/\\\\]|$))(?!.*[. ]$)(?:[^<>:"\/\\\\|?*\x00-\x1F]{1,255})(?:[\/\\\\][^<>:"\/\\\\|?*\x00-\x1F]{1,255})*$/xu');
 define('PATTERN_FOLDER_NAME','[\p{L}\p{N}_\-\s\/\\\\]+');
 define('REGEX_FILE_NAME', '/^[^\x00-\x1F\/\\\\]{1,255}$/u');
 define('REGEX_USER',       '/^(?!\.{1,2}$)[\p{L}\p{N}_\- .@]+$/u');
@@ -62,6 +62,8 @@ define('ONLYOFFICE_ENABLED', false);
 define('ONLYOFFICE_JWT_SECRET', 'test123456');
 define('ONLYOFFICE_DOCS_ORIGIN', 'http://192.168.1.61'); // your Document Server
 define('ONLYOFFICE_DEBUG', true);
+// Emergency migration only; leaves callback bodies unauthenticated.
+// define('ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS', false);
 */
 if (!defined('OFFICE_SNIPPET_MAX_BYTES')) {
     define('OFFICE_SNIPPET_MAX_BYTES', 5 * 1024 * 1024); // 5 MiB
@@ -456,6 +458,7 @@ function fr_forget_authenticated_user(bool $clearRememberCookie = false): void
         $_SESSION['folderOnly'],
         $_SESSION['readOnly'],
         $_SESSION['disableUpload'],
+        $_SESSION['authenticated_at'],
         $_SESSION['pending_login_user'],
         $_SESSION['pending_login_secret'],
         $_SESSION['pending_login_remember_me']
@@ -528,6 +531,7 @@ if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) 
         }
 
         $_SESSION["authenticated"] = true;
+        unset($_SESSION['authenticated_at']);
         $_SESSION["username"]      = $payload["username"];
         $perms = loadUserPermissions($payload["username"]);
         $_SESSION["folderOnly"]    = $perms['folderOnly']    ?? false;
@@ -591,6 +595,7 @@ if (AUTH_BYPASS) {
 
             $username = $_SERVER[$hdrKey];
             $_SESSION['authenticated'] = true;
+            $_SESSION['authenticated_at'] = time();
             $_SESSION['username']      = $username;
 
             // ◾ lookup actual role instead of forcing admin

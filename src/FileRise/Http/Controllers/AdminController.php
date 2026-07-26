@@ -260,6 +260,14 @@ class AdminController
             ? (ONLYOFFICE_JWT_SECRET !== '')
             : (!empty($ooCfg['jwtSecret']));
 
+        $allowUnsignedCallbacks = defined('ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS')
+            ? (bool)ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS
+            : in_array(
+                strtolower(trim((string)(getenv('ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS') ?: ''))),
+                ['1', 'true', 'yes', 'on'],
+                true
+            );
+
         $publicOriginCfg = (string) ($ooCfg['publicOrigin'] ?? '');
 
         $isAdmin = !empty($_SESSION['authenticated']) && !empty($_SESSION['isAdmin']);
@@ -426,6 +434,8 @@ class AdminController
                     'docsOrigin'   => $effDocs,         // effective (constants win)
                     'publicOrigin' => $publicOriginCfg, // optional override from adminConfig
                     'hasJwtSecret' => (bool)$hasSecret, // boolean only; never leak secret
+                    'callbackJwtRequired' => !$allowUnsignedCallbacks,
+                    'unsignedCallbacksAllowed' => $allowUnsignedCallbacks,
                     'lockedByPhp'  => (
                         defined('ONLYOFFICE_ENABLED')
                         || defined('ONLYOFFICE_DOCS_ORIGIN')

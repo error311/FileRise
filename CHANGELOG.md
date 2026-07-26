@@ -1,5 +1,48 @@
 # Changelog
 
+## Changes 07/25/2026 (v3.23.0)
+
+`release(v3.23.0): authentication and authorization hardening`
+
+**Commit message**
+
+```text
+release(v3.23.0): authentication and authorization hardening
+
+- security(auth): harden TOTP verification and account settings
+- security(oidc): bind accounts by immutable provider identity
+- security(files): enforce upload, callback, and path boundaries
+```
+
+**Fixed**
+
+- TOTP verification now enforces persistent account-wide and source-wide attempt budgets across all pending-login verification paths, and the alternate auth handler now resolves the shared TOTP verifier correctly, so changing sessions or client addresses cannot reset the second-factor limit.
+- Successfully accepted TOTP time steps are now claimed atomically per account and authenticator secret, preventing the same still-valid code from completing authentication more than once.
+- Successful TOTP verification clears the account budget without counting ordinary successful logins against shared-network failure limits.
+- TOTP enrollment now remains pending until a valid code confirms the new authenticator, and enrollment, disablement, and recovery-code rotation require a recent full authentication.
+- OIDC logins now bind the validated issuer-and-subject identity to a local account, ignore unverified email for naming, and cannot attach a mutable username claim to an existing local account.
+- Upload and rename validation now rejects trailing-dot filenames across regular, resumable, shared, and WebDAV write paths so filesystem or web-server normalization cannot bypass blocked executable names.
+- Logical folder paths now reject raw or encoded `.` and `..` segments before ACL evaluation or storage access; local writes use boundary-aware containment before directory creation, and WebDAV operations cannot escape the configured source root.
+- ZIP, 7z, and RAR extraction now occurs in a private temporary workspace on the same local storage volume, and validated regular files are placed atomically only through real in-root destination directories; pre-existing destination symlinks can no longer redirect extraction or cleanup outside the storage root.
+- ONLYOFFICE save callbacks now require a valid HS256 JWT from the configured Document Server; omitting the callback JWT no longer falls back to trusting the unsigned request body.
+- Cross-parent folder renames now enforce destination move rights and matching ownership boundaries, preventing a folder owner from moving their tree into another user's folder or the admin-controlled root.
+
+**Upgrade notes**
+
+- **Breaking security change for existing OIDC deployments:** OIDC identities created before v3.23.0 do not have an issuer/subject binding and cannot continue matching an existing local account automatically.
+- **ONLYOFFICE callback security change:** Before upgrading, ensure the Document Server has outgoing/outbox JWTs enabled and uses the same secret configured in FileRise. Correctly configured deployments require no data migration.
+- Older or misconfigured Document Servers that omit callback JWTs will be unable to save until their outgoing JWT configuration is corrected. `ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS=1` is available only as a temporary, explicitly unsafe recovery measure; remove it immediately after confirming a signed document save.
+- After five failed TOTP submissions, that account waits up to 15 minutes before another verification attempt.
+- Sessions whose full authentication is more than five minutes old must sign in again before changing TOTP security settings; remember-me restoration alone does not satisfy this check.
+- Existing non-OIDC users, TOTP secrets, sessions, Docker volumes, and deployment configuration require no migration.
+- Before upgrading an OIDC deployment, verify a working local administrator login and back up the `users` directory.
+- On the first OIDC login for an existing account, FileRise presents a one-time guided link prompt for that account's local password and, when configured, TOTP. This confirmation works even when ordinary form login is disabled.
+- New OIDC identities whose proposed username does not collide with an existing local account continue to auto-provision normally when OIDC auto-provisioning is enabled; they are bound to the validated issuer and subject immediately and do not receive the guided link prompt.
+- OIDC-only users without a known local password require an administrator-assisted password reset or account migration. Complete this preparation before upgrading any deployment whose only administrator uses OIDC.
+- See `docs/wiki/oidc sso.md` under **Upgrading existing OIDC accounts to v3.23.0** for the complete migration procedure.
+
+---
+
 ## Changes 07/13/2026 (v3.22.0)
 
 `release(v3.22.0): generate unique keys for pristine manual installs`

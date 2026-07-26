@@ -2054,6 +2054,60 @@ function bindDarkMode() {
     // …wire stuff…
     applySiteConfig(window.__FR_SITE_CFG__ || {}, { phase: 'final' });
     applyDarkMode();
+    const oidcLinkRequired = authRaw?.oidc_link_required === true;
+    const oidcLinkUsername = String(authRaw?.oidc_link_username || '');
+    if (oidcLinkRequired && oidcLinkUsername) {
+      const authForm = document.getElementById('authForm');
+      const usernameInput = document.getElementById('loginUsername');
+      const passwordInput = document.getElementById('loginPassword');
+      const submitButton = authForm?.querySelector('button[type="submit"]');
+      const oidcButton = document.getElementById('oidcLoginBtn');
+      const basicLink = document.querySelector(
+        'a[href$="api/auth/login_basic.php"], a[href$="/api/auth/login_basic.php"]'
+      );
+      const rememberCheckbox = document.getElementById('rememberMeCheckbox');
+
+      if (authForm) authForm.style.display = 'block';
+      if (usernameInput) {
+        usernameInput.value = oidcLinkUsername;
+        usernameInput.readOnly = true;
+        usernameInput.setAttribute('aria-readonly', 'true');
+      }
+      if (submitButton) {
+        submitButton.textContent = t('oidc_link_confirm_button');
+        submitButton.removeAttribute('data-i18n-key');
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'btn btn-secondary btn-block';
+        cancelButton.style.marginTop = '8px';
+        cancelButton.textContent = t('oidc_link_cancel_button');
+        cancelButton.addEventListener('click', async () => {
+          cancelButton.disabled = true;
+          try {
+            await fetch(withBase('/api/auth/logout.php'), {
+              method: 'POST',
+              credentials: 'include',
+              headers: window.csrfToken ? { 'X-CSRF-Token': window.csrfToken } : {}
+            });
+          } finally {
+            window.location.href = withBase('/index.html?noauto=1');
+          }
+        });
+        submitButton.insertAdjacentElement('afterend', cancelButton);
+      }
+      if (oidcButton) oidcButton.style.display = 'none';
+      if (basicLink) basicLink.style.display = 'none';
+      if (rememberCheckbox) {
+        rememberCheckbox.checked = false;
+        const rememberContainer = rememberCheckbox.closest('.remember-me-container');
+        if (rememberContainer) rememberContainer.style.display = 'none';
+      }
+
+      showLoginTip(t('oidc_link_confirm_prompt', { username: oidcLinkUsername }));
+      requestAnimationFrame(() => {
+        try { passwordInput?.focus(); } catch (e) { }
+      });
+    }
     // Auto-SSO if OIDC is the only enabled method (add ?noauto=1 to skip)
     (() => {
       const lo = (window.__FR_SITE_CFG__ && window.__FR_SITE_CFG__.loginOptions) || {};
@@ -2064,7 +2118,7 @@ function bindDarkMode() {
       const onlyOIDC = disableForm && disableBasic && !disableOIDC;
       const qp = new URLSearchParams(location.search);
 
-      if (onlyOIDC && qp.get('noauto') !== '1') {
+      if (onlyOIDC && !oidcLinkRequired && qp.get('noauto') !== '1') {
         const btn = document.getElementById('oidcLoginBtn');
         if (btn) setTimeout(() => btn.click(), 250);
       }
@@ -2089,8 +2143,10 @@ function bindDarkMode() {
     wireCreateDropdown();
     keepCreateDropdownWired();
     wireModalEnterDefault();
-    showLoginTip('Please log in to continue');
-    focusLoginUsername();
+    if (!oidcLinkRequired) {
+      showLoginTip('Please log in to continue');
+      focusLoginUsername();
+    }
 
     if (overlay) overlay.style.display = 'none';
   }, { once: true });

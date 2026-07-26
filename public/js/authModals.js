@@ -262,11 +262,22 @@ function loadTOTPQRCode() {
     credentials: "include",
     headers: { "X-CSRF-Token": window.csrfToken }
   })
-    .then(res => {
-      if (!res.ok) throw new Error("Failed to fetch QR code: " + res.status);
+    .then(async res => {
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        const payload = contentType.includes("application/json")
+          ? await res.json().catch(() => ({}))
+          : {};
+        if (payload.reauth_required) {
+          window.location.href = withBase("/index.html");
+          return null;
+        }
+        throw new Error(payload.error || "Failed to fetch QR code: " + res.status);
+      }
       return res.blob();
     })
     .then(blob => {
+      if (!blob) return;
       const url = URL.createObjectURL(blob);
       document.getElementById("totpQRCodeImage").src = url;
     })

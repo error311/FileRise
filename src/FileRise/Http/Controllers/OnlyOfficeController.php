@@ -64,6 +64,17 @@ class OnlyOfficeController
         return (string)($oo['jwtSecret'] ?? '');
     }
 
+    private function allowUnsignedCallbacks(): bool
+    {
+        if (defined('ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS')) {
+            return (bool)ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS;
+        }
+
+        $value = getenv('ONLYOFFICE_ALLOW_UNSIGNED_CALLBACKS');
+        return is_string($value)
+            && in_array(strtolower(trim($value)), ['1', 'true', 'yes', 'on'], true);
+    }
+
     // --- lightweight logger ------------------------------------------------------
     private const OO_LOG_PATH = '/var/www/users/onlyoffice-cb.debug';
 
@@ -250,7 +261,7 @@ class OnlyOfficeController
     {
         $jwt = $this->callbackJwtTokenFromRequest($rawBody);
         if ($jwt === '') {
-            return $rawBody;
+            return $this->allowUnsignedCallbacks() ? $rawBody : null;
         }
 
         $payload = $this->decodeJwtPayload($jwt, $secret);
@@ -431,17 +442,20 @@ class OnlyOfficeController
         $docsOrig  = $this->effectiveDocsOrigin();
         $secret    = $this->effectiveSecret();
 
-    // Must have docs origin and secret to actually function
+        // Must have docs origin and secret to actually function
         $enabled = $enabled && ($docsOrig !== '') && ($secret !== '');
 
         $exts = self::OO_SUPPORTED_EXTS;
         $exts = array_values(array_unique(array_merge($exts, self::OO_VIEW_ONLY_EXTRAS)));
+        $allowUnsignedCallbacks = $this->allowUnsignedCallbacks();
 
         echo json_encode([
-        'enabled'      => (bool)$enabled,
-        'exts'         => $exts,
-        'docsOrigin'   => $docsOrig,                     // <-- for preconnect/api.js
-        'publicOrigin' => $this->effectivePublicOrigin() // <-- informational
+            'enabled'                  => (bool)$enabled,
+            'exts'                     => $exts,
+            'docsOrigin'               => $docsOrig,                     // <-- for preconnect/api.js
+            'publicOrigin'             => $this->effectivePublicOrigin(), // <-- informational
+            'callbackJwtRequired'      => !$allowUnsignedCallbacks,
+            'unsignedCallbacksAllowed' => $allowUnsignedCallbacks,
         ], JSON_UNESCAPED_SLASHES);
     }
 
@@ -708,7 +722,10 @@ class OnlyOfficeController
             return;
         }
         if ($jwt === '') {
-            $this->ooLog('warn', "callback JWT missing; falling back to signed callback token only for $folder/$file");
+            $this->ooLog(
+                'warn',
+                "UNSAFE compatibility override accepted callback without JWT for $folder/$file"
+            );
         }
 
         $status = (int)($body['status'] ?? 0);
