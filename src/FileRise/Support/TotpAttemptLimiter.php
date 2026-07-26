@@ -50,8 +50,7 @@ final class TotpAttemptLimiter
         string $clientIp,
         string $secret,
         int $timeSlice
-    ): bool
-    {
+    ): bool {
         if ($timeSlice <= 0 || $secret === '') {
             throw new RuntimeException('TOTP verification result is invalid.');
         }

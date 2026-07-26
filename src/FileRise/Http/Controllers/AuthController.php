@@ -377,10 +377,12 @@ class AuthController
         }
 
         $suggestedUsername = '';
-        foreach ([
-            $preferredUsername,
-            $emailVerified === true ? $email : '',
-        ] as $candidate) {
+        foreach (
+            [
+                $preferredUsername,
+                $emailVerified === true ? $email : '',
+            ] as $candidate
+        ) {
             if ($candidate !== '' && preg_match(REGEX_USER, $candidate)) {
                 $suggestedUsername = $candidate;
                 break;
@@ -574,13 +576,15 @@ class AuthController
                 );
                 if (!empty($ensure['linkRequired'])) {
                     $linkUsername = (string)($ensure['username'] ?? '');
-                    if (!OidcAccountLinker::begin(
-                        $identity['issuer'],
-                        $identity['subject'],
-                        $linkUsername,
-                        $isAdminByIdp,
-                        $proGroupSlugs
-                    )) {
+                    if (
+                        !OidcAccountLinker::begin(
+                            $identity['issuer'],
+                            $identity['subject'],
+                            $linkUsername,
+                            $isAdminByIdp,
+                            $proGroupSlugs
+                        )
+                    ) {
                         http_response_code(403);
                         echo json_encode(['error' => 'OIDC account link could not be prepared.']);
                         exit();

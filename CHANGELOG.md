@@ -1,5 +1,16 @@
 # Changelog
 
+## Changes 07/25/2026 (v3.23.1)
+
+`release(v3.23.1): correct PHP coding-standard violations`
+
+**Fixed**
+
+- Corrected PHP coding-standard formatting in the TOTP attempt limiter and OIDC authentication flow so the release quality checks complete successfully.
+- No application behavior, configuration, storage, authentication policy, or upgrade procedure changed from v3.23.0.
+
+---
+
 ## Changes 07/25/2026 (v3.23.0)
 
 `release(v3.23.0): authentication and authorization hardening`
