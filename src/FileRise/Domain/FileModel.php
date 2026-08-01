@@ -253,14 +253,23 @@ class FileModel
      * @return array{placed:array<int,string>,failed:array<int,string>}
      */
     private static function placeArchiveFiles(
+        string $sourceRoot,
         string $workspace,
         string $destinationRoot,
         array $allowedEntries,
         array $files
     ): array {
+        $sourceRootReal = realpath($sourceRoot);
         $workspaceReal = realpath($workspace);
         $destinationReal = realpath($destinationRoot);
-        if ($workspaceReal === false || $destinationReal === false) {
+        if (
+            $sourceRootReal === false
+            || $workspaceReal === false
+            || $destinationReal === false
+            || is_link($sourceRoot)
+            || is_link($workspace)
+            || !self::pathIsWithinRoot($sourceRootReal, $workspaceReal)
+        ) {
             return ['placed' => [], 'failed' => array_values($files)];
         }
 
@@ -286,12 +295,12 @@ class FileModel
                 continue;
             }
 
-            $source = $workspaceReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            $source = $sourceRootReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
             clearstatcache(true, $source);
             $sourceReal = realpath($source);
             if (
                 $sourceReal === false
-                || self::archivePathContainsSymlink($workspaceReal, $relative)
+                || self::archivePathContainsSymlink($sourceRootReal, $relative)
                 || !is_file($sourceReal)
                 || !self::pathIsWithinRoot($sourceReal, $workspaceReal)
             ) {
@@ -1190,26 +1199,19 @@ class FileModel
             }
 
             $filePath = $uploadDir . $basename;
+            $stat = $storage->stat($filePath);
+            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+                $errors[] = "$basename is not a file.";
+                continue;
+            }
 
             if ($skipTrash) {
                 if (!$storage->delete($filePath)) {
-                    if (!$isLocal && $storage->stat($filePath) === null) {
-                        $deletedPermanent[] = $basename;
-                        continue;
-                    }
                     $errors[] = "Failed to delete $basename.";
                     continue;
                 }
                 $deletedPermanent[] = $basename;
                 continue;
-            }
-
-            // Local: check existence; Remote: avoid per-file stat unless needed.
-            if ($isLocal) {
-                if ($storage->stat($filePath) === null) {
-                    $deletedPermanent[] = $basename;
-                    continue;
-                }
             }
 
             // Unique trash name (timestamp + random)
@@ -1375,8 +1377,9 @@ class FileModel
             $destPath = $destDir . $basename;
 
             clearstatcache();
-            if ($storage->stat($srcPath) === null) {
-                $errors[] = "$originalName does not exist in source.";
+            $stat = $storage->stat($srcPath);
+            if ($stat === null || ($stat['type'] ?? '') !== 'file') {
+                $errors[] = "$originalName is not a file.";
                 continue;
             }
 
@@ -2370,12 +2373,27 @@ class FileModel
             return $found;
         };
 
-        $pruneExtractedFiles = function (string $extractRoot, array $allowedFiles, array $expectedSizes, string $archiveBase, bool $strictEmpty = false, bool $pruneEmpty = true) use (&$warnings): array {
+        $pruneExtractedFiles = function (
+            string $extractRoot,
+            string $workspace,
+            array $allowedFiles,
+            array $expectedSizes,
+            string $archiveBase,
+            bool $strictEmpty = false,
+            bool $pruneEmpty = true
+        ) use (&$warnings): array {
             $kept = [];
             $emptyCount = 0;
             $escapedCount = 0;
             $rootReal = realpath($extractRoot);
-            if ($rootReal === false) {
+            $workspaceReal = realpath($workspace);
+            if (
+                $rootReal === false
+                || $workspaceReal === false
+                || is_link($extractRoot)
+                || is_link($workspace)
+                || !self::pathIsWithinRoot($rootReal, $workspaceReal)
+            ) {
                 return [];
             }
 
@@ -2390,7 +2408,11 @@ class FileModel
                     continue;
                 }
                 $real = realpath($targetAbs);
-                if ($real === false || !self::pathIsWithinRoot($real, $rootReal)) {
+                if (
+                    $real === false
+                    || self::archivePathContainsSymlink($rootReal, $entryFsRel)
+                    || !self::pathIsWithinRoot($real, $workspaceReal)
+                ) {
                     $escapedCount++;
                     continue;
                 }
@@ -2443,10 +2465,21 @@ class FileModel
             return $kept;
         };
 
-        $detectSizeMismatches = function (string $extractRoot, array $expectedSizes): array {
+        $detectSizeMismatches = function (
+            string $extractRoot,
+            string $workspace,
+            array $expectedSizes
+        ): array {
             $mismatches = [];
             $rootReal = realpath($extractRoot);
-            if ($rootReal === false) {
+            $workspaceReal = realpath($workspace);
+            if (
+                $rootReal === false
+                || $workspaceReal === false
+                || is_link($extractRoot)
+                || is_link($workspace)
+                || !self::pathIsWithinRoot($rootReal, $workspaceReal)
+            ) {
                 return array_keys($expectedSizes);
             }
             foreach ($expectedSizes as $entryName => $expected) {
@@ -2461,6 +2494,15 @@ class FileModel
                 }
                 $targetAbs = $rootReal . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $entryFsRel);
                 clearstatcache(true, $targetAbs);
+                $targetReal = realpath($targetAbs);
+                if (
+                    $targetReal === false
+                    || self::archivePathContainsSymlink($rootReal, $entryFsRel)
+                    || !self::pathIsWithinRoot($targetReal, $workspaceReal)
+                ) {
+                    $mismatches[] = $entryName;
+                    continue;
+                }
                 $size = @filesize($targetAbs);
                 if ($size === false || (int)$size !== $expected) {
                     $mismatches[] = $entryName;
@@ -2664,8 +2706,20 @@ class FileModel
                 }
 
                 $zip->close();
-                $keptFiles = $pruneExtractedFiles($workspace, $allowedFiles, $expectedSizes, $archiveBase);
-                $placement = self::placeArchiveFiles($workspace, $folderPathReal, $allowedEntries, $keptFiles);
+                $keptFiles = $pruneExtractedFiles(
+                    $workspace,
+                    $workspace,
+                    $allowedFiles,
+                    $expectedSizes,
+                    $archiveBase
+                );
+                $placement = self::placeArchiveFiles(
+                    $workspace,
+                    $workspace,
+                    $folderPathReal,
+                    $allowedEntries,
+                    $keptFiles
+                );
                 self::removeArchiveWorkspace($workspace);
 
                 if (!empty($placement['failed'])) {
@@ -2964,8 +3018,17 @@ class FileModel
                 $entries = array_values(array_diff(@scandir($workspace) ?: [], ['.', '..']));
                 if (count($entries) === 1) {
                     $single = $workspace . DIRECTORY_SEPARATOR . $entries[0];
-                    if (is_dir($single)) {
-                        $extractRoot = $single;
+                    clearstatcache(true, $single);
+                    if (!is_link($single) && is_dir($single)) {
+                        $singleReal = realpath($single);
+                        $workspaceReal = realpath($workspace);
+                        if (
+                            $singleReal !== false
+                            && $workspaceReal !== false
+                            && self::pathIsWithinRoot($singleReal, $workspaceReal)
+                        ) {
+                            $extractRoot = $singleReal;
+                        }
                     }
                 }
             } else {
@@ -2999,7 +3062,7 @@ class FileModel
             }
 
             if ($isRarArchive) {
-                $sizeMismatches = $detectSizeMismatches($extractRoot, $expectedSizes);
+                $sizeMismatches = $detectSizeMismatches($extractRoot, $workspace, $expectedSizes);
                 if (!empty($sizeMismatches)) {
                     $count = count($sizeMismatches);
                     $suffix = $usedUnar ? '' : ' Install unar for RAR archives.';
@@ -3012,13 +3075,20 @@ class FileModel
 
             $keptFiles = $pruneExtractedFiles(
                 $extractRoot,
+                $workspace,
                 $allowedFiles,
                 $expectedSizes,
                 $archiveBase,
                 $extractCode !== 0,
                 false
             );
-            $placement = self::placeArchiveFiles($extractRoot, $folderPathReal, $allowedEntries, $keptFiles);
+            $placement = self::placeArchiveFiles(
+                $extractRoot,
+                $workspace,
+                $folderPathReal,
+                $allowedEntries,
+                $keptFiles
+            );
             self::removeArchiveWorkspace($workspace);
 
             if (!empty($placement['failed'])) {
@@ -3442,6 +3512,67 @@ class FileModel
         return $trashItems;
     }
 
+    private static function normalizeTrashRestoreFolder($originalFolder): ?string
+    {
+        if (!is_string($originalFolder)) {
+            return null;
+        }
+
+        $original = rtrim(str_replace('\\', '/', trim($originalFolder)), '/');
+        if ($original === '') {
+            return null;
+        }
+
+        $compareOriginal = DIRECTORY_SEPARATOR === '\\' ? strtolower($original) : $original;
+        $configuredRoot = rtrim(str_replace('\\', '/', self::uploadRoot()), '/');
+        $rootCandidates = [$configuredRoot];
+        $realRoot = realpath(self::uploadRoot());
+        if ($realRoot !== false) {
+            $rootCandidates[] = rtrim(str_replace('\\', '/', $realRoot), '/');
+        }
+
+        foreach (array_unique($rootCandidates) as $root) {
+            if ($root === '') {
+                continue;
+            }
+            $compareRoot = DIRECTORY_SEPARATOR === '\\' ? strtolower($root) : $root;
+            if ($compareOriginal === $compareRoot) {
+                return 'root';
+            }
+            if (!str_starts_with($compareOriginal, $compareRoot . '/')) {
+                continue;
+            }
+
+            $relative = trim(substr($original, strlen($root)), '/');
+            if ($relative === '') {
+                return 'root';
+            }
+            if (LogicalPathPolicy::isSafeFolder($relative)) {
+                return str_replace('\\', '/', $relative);
+            }
+        }
+
+        return null;
+    }
+
+    private static function isSafeTrashRestoreName($originalName, bool $isFolder): bool
+    {
+        if (!is_string($originalName)) {
+            return false;
+        }
+
+        $originalName = trim($originalName);
+        if ($originalName === '' || str_contains($originalName, '/') || str_contains($originalName, '\\')) {
+            return false;
+        }
+        if ($isFolder) {
+            return LogicalPathPolicy::isSafeFolder($originalName)
+                && preg_match(REGEX_FOLDER_NAME, $originalName) === 1;
+        }
+
+        return UploadNamePolicy::isAllowedForWrite($originalName);
+    }
+
     /**
      * Restores files from Trash based on an array of trash file identifiers.
      *
@@ -3502,24 +3633,27 @@ class FileModel
             }
             $originalFolder = $record['originalFolder'];
             $originalName = $record['originalName'];
-
-            // Convert absolute original folder to relative folder.
-            $relativeFolder = 'root';
-            $root = rtrim(self::uploadRoot(), '/\\') . DIRECTORY_SEPARATOR;
-            if (strpos($originalFolder, $root) === 0) {
-                $relativeFolder = trim(substr($originalFolder, strlen($root)), '/\\');
-                if ($relativeFolder === '') {
-                    $relativeFolder = 'root';
-                }
+            $isFolder = isset($record['type']) && $record['type'] === 'folder';
+            $relativeFolder = self::normalizeTrashRestoreFolder($originalFolder);
+            if ($relativeFolder === null || !self::isSafeTrashRestoreName($originalName, $isFolder)) {
+                $errors[] = "Refused unsafe restore metadata for $trashFileName.";
+                continue;
             }
 
-            // Build destination path.
-            $destinationPath = (strtolower($relativeFolder) !== 'root')
-                ? rtrim($root, '/\\') . DIRECTORY_SEPARATOR . $relativeFolder . DIRECTORY_SEPARATOR . $originalName
-                : rtrim($root, '/\\') . DIRECTORY_SEPARATOR . $originalName;
+            [$destinationDir, $destinationError] = self::resolveFolderPathForAdapter(
+                $storage,
+                self::uploadRoot(),
+                $relativeFolder,
+                true
+            );
+            if ($destinationError !== null || !is_string($destinationDir)) {
+                $errors[] = "Refused unsafe restore destination for $trashFileName.";
+                continue;
+            }
+            $destinationPath = rtrim($destinationDir, '/\\') . DIRECTORY_SEPARATOR . $originalName;
 
             // Handle folder-type records if necessary.
-            if (isset($record['type']) && $record['type'] === 'folder') {
+            if ($isFolder) {
                 if ($storage->stat($destinationPath) === null) {
                     if ($storage->mkdir($destinationPath, 0755, true)) {
                         $restoredItems[] = $originalName . " (folder restored)";
@@ -3535,15 +3669,6 @@ class FileModel
                 continue;
             }
 
-            // For files: Ensure destination directory exists.
-            $destinationDir = dirname($destinationPath);
-            if ($storage->stat($destinationDir) === null) {
-                if (!$storage->mkdir($destinationDir, 0755, true)) {
-                    $errors[] = "Failed to create destination folder for $originalName.";
-                    continue;
-                }
-            }
-
             if ($storage->stat($destinationPath) !== null) {
                 $errors[] = "File already exists at destination: $originalName.";
                 continue;
@@ -3551,7 +3676,8 @@ class FileModel
 
             // Move the file from trash to its original location.
             $sourcePath = $trashDir . $trashFileName;
-            if ($storage->stat($sourcePath) !== null) {
+            $sourceStat = $storage->stat($sourcePath);
+            if ($sourceStat !== null && ($sourceStat['type'] ?? '') === 'file') {
                 if ($storage->move($sourcePath, $destinationPath)) {
                     $restoredItems[] = $originalName;
 

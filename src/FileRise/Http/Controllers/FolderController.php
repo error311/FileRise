@@ -2839,7 +2839,11 @@ class FolderController
         $sizeBytes = 0;
         $relativePath = '';
         $filesForModel = [];
-        $requestParams = ['folder' => $targetFolder, 'source' => 'shared'];
+        $requestParams = [
+            'folder' => $targetFolder,
+            'source' => 'shared',
+            '_fr_authorized_create_only' => true,
+        ];
 
         if ($isChunkUpload) {
             $chunkNo = isset($_POST['resumableChunkNumber']) ? (int)$_POST['resumableChunkNumber'] : 0;
@@ -3180,6 +3184,7 @@ class FolderController
             echo json_encode(['error' => 'Invalid CSRF token']);
             return;
         }
+        self::requireNotReadOnly();
 
         $input = $this->readJsonBody();
         $source = trim((string)($input['source'] ?? ''));

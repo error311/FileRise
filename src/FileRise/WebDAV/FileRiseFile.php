@@ -54,6 +54,9 @@ class FileRiseFile implements IFile, INode
     {
         [$folderKey, $fileName] = $this->split();
 
+        if (!ACL::canMutate($this->perms)) {
+            throw new Forbidden('Account is read-only');
+        }
         if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
             throw new Forbidden('WebDAV is disabled inside encrypted folders');
         }
@@ -109,6 +112,9 @@ class FileRiseFile implements IFile, INode
         [$folderKey, $fileName] = $this->split();
         $fileName = basename(trim($fileName));
 
+        if (!ACL::canMutate($this->perms)) {
+            throw new Forbidden('Account is read-only');
+        }
         if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
             throw new Forbidden('WebDAV is disabled inside encrypted folders');
         }

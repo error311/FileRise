@@ -991,6 +991,14 @@ class ACL
         return false;
     }
 
+    /**
+     * Account-level read-only is a hard ceiling over folder and group ACLs.
+     */
+    public static function canMutate(array $perms = []): bool
+    {
+        return empty($perms['readOnly']);
+    }
+
     public static function hasGrant(string $user, string $folder, string $cap): bool
     {
         $folder = self::normalizeFolder($folder);
@@ -1065,6 +1073,9 @@ class ACL
     public static function canWrite(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1394,6 +1405,9 @@ class ACL
     public static function canCreate(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1405,6 +1419,9 @@ class ACL
     public static function canCreateFolder(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1415,6 +1432,9 @@ class ACL
     public static function canUpload(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1426,6 +1446,9 @@ class ACL
     public static function canEdit(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1437,6 +1460,9 @@ class ACL
     public static function canRename(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1448,6 +1474,9 @@ class ACL
     public static function canCopy(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1459,6 +1488,9 @@ class ACL
     public static function canMove(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1468,6 +1500,9 @@ class ACL
     public static function canMoveFolder(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1477,6 +1512,9 @@ class ACL
     public static function canDelete(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }
@@ -1488,6 +1526,9 @@ class ACL
     public static function canExtract(string $user, array $perms, string $folder): bool
     {
         $folder = self::normalizeFolder($folder);
+        if (!self::canMutate($perms)) {
+            return false;
+        }
         if (self::isAdmin($perms)) {
             return true;
         }

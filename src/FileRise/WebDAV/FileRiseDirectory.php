@@ -199,6 +199,9 @@ class FileRiseDirectory implements ICollection, INode
         $folderKey = $this->folderKeyForPath($this->path);
         $name = basename(trim((string)$name));
 
+        if (!ACL::canMutate($this->perms)) {
+            throw new Forbidden('Account is read-only');
+        }
         if (FolderCrypto::isEncryptedOrAncestor($folderKey)) {
             throw new Forbidden('WebDAV is disabled inside encrypted folders');
         }
@@ -227,6 +230,9 @@ class FileRiseDirectory implements ICollection, INode
     {
         $parentKey = $this->folderKeyForPath($this->path);
         $name = trim((string)$name);
+        if (!ACL::canMutate($this->perms)) {
+            throw new Forbidden('Account is read-only');
+        }
         if (FolderCrypto::isEncryptedOrAncestor($parentKey)) {
             throw new Forbidden('WebDAV is disabled inside encrypted folders');
         }

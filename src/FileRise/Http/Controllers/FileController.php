@@ -112,6 +112,15 @@ class FileController
         return [];
     }
 
+    private function requireWritableAccount(array $perms): bool
+    {
+        if (ACL::canMutate($perms)) {
+            return true;
+        }
+        $this->jsonOut(["error" => "Account is read-only."], 403);
+        return false;
+    }
+
     private function normalizeSourceId($id): string
     {
         $id = trim((string)$id);
@@ -1212,6 +1221,9 @@ class FileController
 
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
+            if (!$this->requireWritableAccount($userPermissions)) {
+                return;
+            }
 
             // --- Permission gates (granular) ------------------------------------
             // Need delete on folder (or ancestor-owner)
@@ -1315,6 +1327,9 @@ class FileController
             $files            = $data['files'];
             $username         = $_SESSION['username'] ?? '';
             $userPermissions  = $this->loadPerms($username);
+            if (!$this->requireWritableAccount($userPermissions)) {
+                return;
+            }
 
             $useSources = (class_exists('SourceContext') && SourceContext::sourcesEnabled());
             $rawSourceId = $useSources ? ($data['sourceId'] ?? '') : '';
@@ -1819,6 +1834,9 @@ class FileController
 
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
+            if (!$this->requireWritableAccount($userPermissions)) {
+                return;
+            }
 
             if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
                 $this->jsonOut(["error" => "Source is read-only."], 403);
@@ -1904,6 +1922,9 @@ class FileController
 
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
+            if (!$this->requireWritableAccount($userPermissions)) {
+                return;
+            }
             $sourceId = '';
             $allowDisabled = false;
             if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
@@ -3786,6 +3807,9 @@ class FileController
 
             $username = $_SESSION['username'] ?? '';
             $perms    = $this->loadPerms($username);
+            if (!$this->requireWritableAccount($perms)) {
+                return;
+            }
 
             if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
                 $this->jsonOut(["error" => "Source is read-only."], 403);
@@ -5057,6 +5081,9 @@ class FileController
 
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
+            if (!$this->requireWritableAccount($userPermissions)) {
+                return;
+            }
 
             $sourceId = '';
             $allowDisabled = false;
@@ -5474,6 +5501,9 @@ class FileController
 
             $username        = $_SESSION['username'] ?? '';
             $userPermissions = $this->loadPerms($username);
+            if (!$this->requireWritableAccount($userPermissions)) {
+                return;
+            }
 
             if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
                 $this->jsonOut(["error" => "Source is read-only."], 403);

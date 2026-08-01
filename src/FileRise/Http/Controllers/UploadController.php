@@ -3,6 +3,7 @@
 namespace FileRise\Http\Controllers;
 
 use FileRise\Support\ACL;
+use FileRise\Support\LogicalPathPolicy;
 use FileRise\Storage\SourceContext;
 use FileRise\Domain\UploadModel;
 use FileRise\Http\Controllers\PortalController;
@@ -15,6 +16,12 @@ require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class UploadController
 {
+    private static function normalizeRequestedFolder(string $folder): ?string
+    {
+        $folder = ACL::normalizeFolder($folder);
+        return LogicalPathPolicy::isSafeFolder($folder) ? $folder : null;
+    }
+
     public function handleUpload(): void
     {
         header('Content-Type: application/json');
@@ -65,6 +72,12 @@ class UploadController
         $userPerms = loadUserPermissions($username) ?: [];
         $isAdmin   = ACL::isAdmin($userPerms);
 
+        if (!ACL::canMutate($userPerms)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Account is read-only.']);
+            return;
+        }
+
         // Admins should never be blocked by account-level "disableUpload"
         if (!$isAdmin && !empty($userPerms['disableUpload'])) {
             http_response_code(403);
@@ -114,9 +127,12 @@ class UploadController
             ? (string)$requestParams['folder']
             : (isset($_GET['folder']) ? (string)$_GET['folder'] : 'root');
 
-        // Decode %xx (e.g., "test%20folder") then normalize
-        $folderParam  = rawurldecode($folderParam);
-        $targetFolder = ACL::normalizeFolder($folderParam);
+        $targetFolder = self::normalizeRequestedFolder($folderParam);
+        if ($targetFolder === null) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid folder path.']);
+            return;
+        }
 
         if ($isPortalUpload) {
             try {
@@ -192,6 +208,7 @@ class UploadController
 
         // ---- 4) Delegate to model (force the sanitized folder) ----
         $requestParams['folder'] = $targetFolder;
+        $requestParams['_fr_authorized_create_only'] = $isPortalUpload;
         // Keep legacy behavior for anything still reading $_POST directly
         $_POST['folder'] = $targetFolder;
 
@@ -279,7 +296,12 @@ class UploadController
         }
 
         $targetFolderRaw = isset($_POST['targetFolder']) ? (string)$_POST['targetFolder'] : 'root';
-        $targetFolder = ACL::normalizeFolder(rawurldecode($targetFolderRaw));
+        $targetFolder = self::normalizeRequestedFolder($targetFolderRaw);
+        if ($targetFolder === null) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid folder path.']);
+            return;
+        }
         if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {
             http_response_code(403);
             echo json_encode([
@@ -294,7 +316,8 @@ class UploadController
             return;
         }
 
-        $folder = rawurldecode((string)$_POST['folder']);
+        $_POST['targetFolder'] = $targetFolder;
+        $folder = (string)$_POST['folder'];
 
         echo json_encode(UploadModel::removeChunks($folder));
     }
@@ -374,9 +397,13 @@ class UploadController
             return;
         }
 
-        $folderParam  = isset($payload['folder']) ? (string)$payload['folder'] : 'root';
-        $folderParam  = rawurldecode($folderParam);
-        $targetFolder = ACL::normalizeFolder($folderParam);
+        $folderParam = isset($payload['folder']) ? (string)$payload['folder'] : 'root';
+        $targetFolder = self::normalizeRequestedFolder($folderParam);
+        if ($targetFolder === null) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid folder path.']);
+            return;
+        }
 
         if (!$isAdmin && !ACL::canUpload($username, $userPerms, $targetFolder)) {
             http_response_code(403);
@@ -393,6 +420,10 @@ class UploadController
             return;
         }
 
-        echo json_encode(UploadModel::checkExisting($targetFolder, $files));
+        $result = UploadModel::checkExisting($targetFolder, $files);
+        if (isset($result['error'])) {
+            http_response_code(isset($result['code']) ? (int)$result['code'] : 400);
+        }
+        echo json_encode($result);
     }
 }

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 $baseDir = dirname(__DIR__, 2);
@@ -42,6 +43,16 @@ function zipExtractRmTree(string $dir): void
         zipExtractRmTree($dir . DIRECTORY_SEPARATOR . $item);
     }
     @rmdir($dir);
+}
+
+function zipExtractFindExecutable(array $candidates): ?string
+{
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate) && is_executable($candidate)) {
+            return $candidate;
+        }
+    }
+    return null;
 }
 
 @mkdir($uploadDir . 'docs', 0775, true);
@@ -182,6 +193,144 @@ try {
                 $errors
             );
         }
+    }
+
+    $boundaryWorkspace = $tmpBase . '/boundary-workspace';
+    @mkdir($boundaryWorkspace, 0700, true);
+    $boundaryFile = $outsideDir . 'boundary-sentinel.txt';
+    file_put_contents($boundaryFile, 'UNCHANGED-OUTSIDE-WORKSPACE');
+    $redirectRoot = $boundaryWorkspace . '/redirect';
+    if (@symlink($outsideDir, $redirectRoot)) {
+        $placeArchiveFiles = new ReflectionMethod(
+            \FileRise\Domain\FileModel::class,
+            'placeArchiveFiles'
+        );
+        $placement = $placeArchiveFiles->invoke(
+            null,
+            $redirectRoot,
+            $boundaryWorkspace,
+            $uploadDir . 'docs',
+            ['boundary-sentinel.txt'],
+            ['boundary-sentinel.txt']
+        );
+        zipExtractFailIf(
+            !empty($placement['placed']),
+            'placeArchiveFiles: an extracted object redefined the original workspace boundary',
+            $errors
+        );
+        zipExtractFailIf(
+            empty($placement['failed']),
+            'placeArchiveFiles: an out-of-workspace source was not reported as refused',
+            $errors
+        );
+        zipExtractFailIf(
+            is_file($uploadDir . 'docs/boundary-sentinel.txt'),
+            'placeArchiveFiles: an out-of-workspace file was copied into the destination',
+            $errors
+        );
+        zipExtractFailIf(
+            file_get_contents($boundaryFile) !== 'UNCHANGED-OUTSIDE-WORKSPACE',
+            'placeArchiveFiles: the unrelated out-of-workspace file was changed',
+            $errors
+        );
+    }
+
+    $unar = zipExtractFindExecutable([
+        '/usr/bin/unar',
+        '/usr/local/bin/unar',
+        '/bin/unar',
+    ]);
+    $tar = zipExtractFindExecutable([
+        '/usr/bin/tar',
+        '/usr/local/bin/tar',
+        '/bin/tar',
+    ]);
+    if ($unar !== null && $tar !== null && function_exists('exec')) {
+        $fixtureSource = $tmpBase . '/archive-boundary-fixture';
+        @mkdir($fixtureSource, 0700, true);
+        $safeFixtureName = 'ordinary-archive-file.txt';
+        $safeFixturePath = $fixtureSource . DIRECTORY_SEPARATOR . $safeFixtureName;
+        $safeArchivePath = $uploadDir . 'docs/ordinary-archive.rar';
+        file_put_contents($safeFixturePath, 'ORDINARY-ARCHIVE-CONTENT');
+        $output = [];
+        $status = 1;
+        $safeCommand = escapeshellarg($tar)
+            . ' -cf ' . escapeshellarg($safeArchivePath)
+            . ' -C ' . escapeshellarg($fixtureSource)
+            . ' ' . escapeshellarg($safeFixtureName);
+        @exec($safeCommand, $output, $status);
+        if ($status !== 0 || !is_file($safeArchivePath)) {
+            throw new RuntimeException('failed to create ordinary archive fixture');
+        }
+        $safeArchiveResult = \FileRise\Domain\FileModel::extractZipArchive(
+            'docs',
+            ['ordinary-archive.rar']
+        );
+        zipExtractFailIf(
+            empty($safeArchiveResult['success']),
+            'extractZipArchive: ordinary unar extraction should remain supported',
+            $errors
+        );
+        zipExtractFailIf(
+            !is_file($uploadDir . 'docs/' . $safeFixtureName)
+                || file_get_contents($uploadDir . 'docs/' . $safeFixtureName)
+                    !== 'ORDINARY-ARCHIVE-CONTENT',
+            'extractZipArchive: ordinary unar content was not placed correctly',
+            $errors
+        );
+
+        $fixtureName = 'archive-boundary-sentinel.txt';
+        $fixturePath = $fixtureSource . DIRECTORY_SEPARATOR . $fixtureName;
+        $outsideFixturePath = $outsideDir . $fixtureName;
+        $archivePath = $uploadDir . 'docs/archive-boundary.rar';
+        file_put_contents($outsideFixturePath, 'UNCHANGED-ARCHIVE-SENTINEL');
+        file_put_contents($fixturePath, '');
+
+        $output = [];
+        $status = 1;
+        $createCommand = escapeshellarg($tar)
+            . ' -cf ' . escapeshellarg($archivePath)
+            . ' -C ' . escapeshellarg($fixtureSource)
+            . ' ' . escapeshellarg($fixtureName);
+        @exec($createCommand, $output, $status);
+        if ($status !== 0 || !is_file($archivePath)) {
+            throw new RuntimeException('failed to create archive boundary fixture');
+        }
+
+        @unlink($fixturePath);
+        if (!@symlink($outsideDir, $fixturePath)) {
+            throw new RuntimeException('failed to prepare archive boundary fixture');
+        }
+        $output = [];
+        $status = 1;
+        $appendCommand = escapeshellarg($tar)
+            . ' -rf ' . escapeshellarg($archivePath)
+            . ' -C ' . escapeshellarg($fixtureSource)
+            . ' ' . escapeshellarg($fixtureName);
+        @exec($appendCommand, $output, $status);
+        if ($status !== 0) {
+            throw new RuntimeException('failed to finalize archive boundary fixture');
+        }
+
+        $archiveBoundaryResult = \FileRise\Domain\FileModel::extractZipArchive(
+            'docs',
+            ['archive-boundary.rar']
+        );
+        zipExtractFailIf(
+            !empty($archiveBoundaryResult['success']),
+            'extractZipArchive: crafted local fixture should not produce an accepted file',
+            $errors
+        );
+        zipExtractFailIf(
+            is_file($uploadDir . 'docs/' . $fixtureName),
+            'extractZipArchive: crafted local fixture copied a file from outside the workspace',
+            $errors
+        );
+        zipExtractFailIf(
+            file_get_contents($outsideFixturePath) !== 'UNCHANGED-ARCHIVE-SENTINEL',
+            'extractZipArchive: crafted local fixture changed an unrelated outside file',
+            $errors
+        );
     }
 
     $workspaceRoot = $uploadDir . '.filerise-archive-tmp';

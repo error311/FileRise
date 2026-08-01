@@ -6,6 +6,7 @@ use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
+use FileRise\Support\LogicalPathPolicy;
 use FileRise\Support\MetadataPath;
 use FileRise\Support\UploadNamePolicy;
 use FileRise\Support\WorkerLauncher;
@@ -212,12 +213,73 @@ class UploadModel
 
     private static function isPublicCreateOnlyUpload(array $post): bool
     {
-        $source = strtolower(trim((string)($post['source'] ?? '')));
-        if ($source === 'shared' || $source === 'portal') {
-            return true;
+        return ($post['_fr_authorized_create_only'] ?? null) === true;
+    }
+
+    private static function nearestExistingUploadFolder(string $folder): ?string
+    {
+        static $cache = [];
+
+        $folder = ACL::normalizeFolder($folder);
+        if (array_key_exists($folder, $cache)) {
+            return $cache[$folder];
         }
+
+        $storage = StorageRegistry::getAdapter();
+        $candidate = $folder;
+
+        while (true) {
+            $folderSan = ($candidate === 'root') ? '' : $candidate;
+            $storagePath = self::buildStorageDir($folderSan, '');
+
+            try {
+                if ($storage->isLocal()) {
+                    $exists = is_dir($storagePath);
+                } else {
+                    $stat = $storage->stat($storagePath);
+                    $exists = $stat && ($stat['type'] ?? '') === 'dir';
+                }
+            } catch (\Throwable $e) {
+                return $cache[$folder] = null;
+            }
+
+            if ($exists) {
+                return $cache[$folder] = $candidate;
+            }
+            if ($candidate === 'root') {
+                return $cache[$folder] = null;
+            }
+
+            $separator = strrpos($candidate, '/');
+            $candidate = ($separator === false) ? 'root' : substr($candidate, 0, $separator);
+        }
+    }
+
+    /**
+     * @return array{error:string,code:int}|null
+     */
+    private static function uploadFolderAuthorizationError(string $folder, array $post): ?array
+    {
+        if (self::isPublicCreateOnlyUpload($post)) {
+            return null;
+        }
+
         $username = (string)($_SESSION['username'] ?? '');
-        return str_starts_with($username, 'share:') || str_starts_with($username, 'portal:');
+        if ($username === '' || empty($_SESSION['authenticated'])) {
+            return ['error' => 'Forbidden: no upload access to destination folder.', 'code' => 403];
+        }
+
+        $perms = function_exists('loadUserPermissions') ? (loadUserPermissions($username) ?: []) : [];
+        if (!ACL::canUpload($username, $perms, $folder)) {
+            return ['error' => 'Forbidden: no upload access to destination folder.', 'code' => 403];
+        }
+
+        $existingFolder = self::nearestExistingUploadFolder($folder);
+        if ($existingFolder === null || !ACL::canUpload($username, $perms, $existingFolder)) {
+            return ['error' => 'Forbidden: no upload access to destination folder.', 'code' => 403];
+        }
+
+        return null;
     }
 
     /**
@@ -566,30 +628,20 @@ class UploadModel
         return $folderForLog;
     }
 
-    private static function sanitizeFolder(string $folder): string
+    private static function sanitizeFolder(string $folder): ?string
     {
-        // decode "%20", normalise slashes & trim via ACL helper
-        $f = ACL::normalizeFolder(rawurldecode($folder));
+        $f = ACL::normalizeFolder($folder);
+
+        if (!LogicalPathPolicy::isSafeFolder($f)) {
+            return null;
+        }
 
         // model uses '' to represent root
         if ($f === 'root') {
             return '';
         }
 
-        // forbid dot segments / empty parts
-        foreach (explode('/', $f) as $seg) {
-            if ($seg === '' || $seg === '.' || $seg === '..') {
-                return '';
-            }
-        }
-
-        // allow spaces & unicode via your global regex
-        // (REGEX_FOLDER_NAME validates a path "seg(/seg)*")
-        if (!preg_match(REGEX_FOLDER_NAME, $f)) {
-            return '';
-        }
-
-        return $f; // safe, normalised, with spaces allowed
+        return $f;
     }
 
     /**
@@ -598,7 +650,6 @@ class UploadModel
      */
     private static function parseRelativePath(string $raw): array
     {
-        $raw = rawurldecode($raw);
         $raw = str_replace('\\', '/', trim($raw));
         $raw = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
         $raw = ltrim($raw, '/');
@@ -622,7 +673,7 @@ class UploadModel
             return ['', $file];
         }
 
-        if (!preg_match(REGEX_FOLDER_NAME, $dir)) {
+        if (!LogicalPathPolicy::isSafeFolder($dir)) {
             return [null, null];
         }
 
@@ -888,8 +939,22 @@ class UploadModel
             $resumableIdentifier = self::normalizeResumableIdentifier($post['resumableIdentifier'] ?? '');
             $folderSan           = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
 
-            if ($chunkNumber < 1 || $resumableIdentifier === null) {
+            if ($chunkNumber < 1 || $resumableIdentifier === null || $folderSan === null) {
                 return ['error' => 'Invalid resumable upload request'];
+            }
+
+            $relativeSubDir = '';
+            if (!empty($post['resumableRelativePath'])) {
+                [$subDir] = self::parseRelativePath((string)$post['resumableRelativePath']);
+                if ($subDir === null) {
+                    return ['error' => 'Invalid relative path'];
+                }
+                $relativeSubDir = $subDir;
+            }
+            $folderForAuth = self::buildFolderForLog($folderSan, $relativeSubDir);
+            $authorizationError = self::uploadFolderAuthorizationError($folderForAuth, $post);
+            if ($authorizationError !== null) {
+                return $authorizationError;
             }
 
             $baseUploadDir = self::stagingRoot($isLocal);
@@ -935,6 +1000,14 @@ class UploadModel
             }
 
             $folderSan = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+            if ($folderSan === null) {
+                return ['error' => 'Invalid folder path', 'code' => 400];
+            }
+            $folderForLog = self::buildFolderForLog($folderSan, $relativeSubDir);
+            $authorizationError = self::uploadFolderAuthorizationError($folderForLog, $post);
+            if ($authorizationError !== null) {
+                return $authorizationError;
+            }
             self::markResumablePending($folderSan);
             self::maybeSweepResumableExpired($isLocal);
 
@@ -1003,7 +1076,6 @@ class UploadModel
                 $cleanupChunk();
                 return ['error' => 'Invalid file name'];
             }
-            $folderForLog = self::buildFolderForLog($folderSan, $relativeSubDir);
             $remoteTargetPath = self::buildStoragePath($folderSan, $relativeSubDir, $resumableFilename);
             $targetExists = $isLocal ? is_file($targetPath) : ($storage->stat($remoteTargetPath) !== null);
             $collision = self::authorizeUploadDestination($folderForLog, $resumableFilename, $targetExists, $post);
@@ -1147,6 +1219,16 @@ class UploadModel
         $createdDirs = [];
         try {
             $folderSan = self::sanitizeFolder((string)($post['folder'] ?? 'root'));
+            if ($folderSan === null) {
+                return ['error' => 'Invalid folder path', 'code' => 400];
+            }
+            $authorizationError = self::uploadFolderAuthorizationError(
+                self::buildFolderForLog($folderSan),
+                $post
+            );
+            if ($authorizationError !== null) {
+                return $authorizationError;
+            }
 
             $baseUploadDir = self::uploadRoot();
             if ($folderSan !== '') {
@@ -1207,6 +1289,10 @@ class UploadModel
                 }
 
                 $folderForLog = self::buildFolderForLog($folderSan, $relativeSubDir);
+                $authorizationError = self::uploadFolderAuthorizationError($folderForLog, $post);
+                if ($authorizationError !== null) {
+                    return $authorizationError;
+                }
 
                 if ($isLocal) {
                     if (!self::ensureDir($uploadDir, $createdDirs)) {
@@ -1518,12 +1604,11 @@ class UploadModel
      *
      * The folder name is expected to exactly match the "resumable_" pattern.
      *
-     * @param string $folder The folder name provided (URL-decoded).
+     * @param string $folder The resumable upload identifier.
      * @return array Returns a status array indicating success or error.
      */
     public static function removeChunks(string $folder): array
     {
-        $folder = urldecode($folder);
         if (strpos($folder, 'resumable_') === 0) {
             $folder = substr($folder, strlen('resumable_'));
         }
@@ -1535,6 +1620,16 @@ class UploadModel
 
         $isLocal = self::isLocalSourceType();
         $targetFolder = self::sanitizeFolder((string)($_POST['targetFolder'] ?? 'root'));
+        if ($targetFolder === null) {
+            return ['error' => 'Invalid folder path', 'code' => 400];
+        }
+        $authorizationError = self::uploadFolderAuthorizationError(
+            self::buildFolderForLog($targetFolder),
+            $_POST
+        );
+        if ($authorizationError !== null) {
+            return $authorizationError;
+        }
         $baseDir = self::stagingRoot($isLocal);
         if ($targetFolder !== '') {
             $baseDir = rtrim($baseDir, '/\\') . DIRECTORY_SEPARATOR
@@ -1575,7 +1670,7 @@ class UploadModel
     {
         $raw = trim($folder);
         $folderSan = self::sanitizeFolder($raw === '' ? 'root' : $raw);
-        if ($folderSan === '' && $raw !== '' && strtolower($raw) !== 'root') {
+        if ($folderSan === null) {
             return;
         }
 
@@ -1605,6 +1700,16 @@ class UploadModel
     {
         $storage = StorageRegistry::getAdapter();
         $folderSan = self::sanitizeFolder($folder);
+        if ($folderSan === null) {
+            return ['error' => 'Invalid folder path', 'code' => 400];
+        }
+        $authorizationError = self::uploadFolderAuthorizationError(
+            self::buildFolderForLog($folderSan),
+            []
+        );
+        if ($authorizationError !== null) {
+            return $authorizationError;
+        }
         $existing = [];
         $seen = [];
 
@@ -1629,6 +1734,12 @@ class UploadModel
             [$subDir, $fileName] = self::parseRelativePath($path);
             if ($subDir === null || $fileName === '') {
                 continue;
+            }
+
+            $folderForAuth = self::buildFolderForLog($folderSan, $subDir);
+            $authorizationError = self::uploadFolderAuthorizationError($folderForAuth, []);
+            if ($authorizationError !== null) {
+                return $authorizationError;
             }
 
             $storagePath = self::buildStoragePath($folderSan, $subDir, $fileName);

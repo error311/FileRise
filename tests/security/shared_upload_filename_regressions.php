@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 $baseDir = dirname(__DIR__, 2);
@@ -111,7 +112,11 @@ try {
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_SESSION['username'] = 'share:regression';
     $trailingDotResult = \FileRise\Domain\UploadModel::handleUpload(
-        ['folder' => 'drop', 'source' => 'shared'],
+        [
+            'folder' => 'drop',
+            'source' => 'shared',
+            '_fr_authorized_create_only' => true,
+        ],
         [
             'file' => [
                 'name' => 'shell.php.',
@@ -134,7 +139,11 @@ try {
     );
 
     $result = \FileRise\Domain\UploadModel::handleUpload(
-        ['folder' => 'drop', 'source' => 'shared'],
+        [
+            'folder' => 'drop',
+            'source' => 'shared',
+            '_fr_authorized_create_only' => true,
+        ],
         [
             'file' => [
                 'name' => '..%2f..%2fusers%2fusers.txt',

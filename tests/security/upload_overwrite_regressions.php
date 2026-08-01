@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 $baseDir = dirname(__DIR__, 2);
@@ -69,7 +70,11 @@ try {
     $_SESSION['isAdmin'] = false;
 
     $sharedResult = \FileRise\Domain\UploadModel::handleUpload(
-        ['folder' => 'drop', 'source' => 'shared'],
+        [
+            'folder' => 'drop',
+            'source' => 'shared',
+            '_fr_authorized_create_only' => true,
+        ],
         [
             'file' => [
                 'name' => 'shared.txt',

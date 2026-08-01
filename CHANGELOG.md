@@ -1,5 +1,35 @@
 # Changelog
 
+## Changes 08/01/2026 (v3.25.0)
+
+`release(v3.25.0): authorization and archive containment hardening`
+
+**Fixed**
+
+- The administrator-controlled account `Read-only` flag is now enforced as a hard ceiling over folder ownership, direct ACLs, inherited ACLs, and Pro group grants.
+- Read-only accounts can no longer create, upload, overwrite, rename, move, copy, delete, extract, or otherwise edit files through direct API requests.
+- Same-source folder moves, WebDAV writes, ONLYOFFICE edits, portal-user uploads, and background transfer paths now apply the same account restriction.
+- Existing view, download, ownership, and separately authorized sharing behavior remains available to read-only accounts.
+- Archive extraction now retains the original private workspace as its immutable containment boundary, preventing extracted links or redirected paths from redefining the trusted source root.
+- File-only move and delete operations now reject directories before mutation, preventing file-level permissions from relocating protected folder trees or moving them to Trash.
+- Upload folder paths now use one validated logical representation from authorization through storage, and invalid paths fail closed instead of falling back to the storage root.
+- Folder and resumable uploads now authorize the effective relative destination and its nearest existing folder before creating directories, writing files, or disclosing existing-file details.
+- Trash restoration now treats stored records as untrusted, rejects unsafe original folders and names, and resolves every destination inside the active upload root before creating directories or moving data.
+
+**Upgrade notes**
+
+- No account, ACL, folder, storage, Docker volume, or configuration migration is required.
+- Existing writable accounts retain their current behavior and ACLs.
+- Accounts already marked `Read-only` will begin enforcing the documented view/download-only restriction across direct API and WebDAV access immediately after upgrade.
+- Disabling `Read-only` later restores the account's existing folder and group permissions because the update does not rewrite ACL records.
+- Existing ZIP, 7z, and RAR workflows require no configuration or data migration; ordinary archive extraction behavior remains unchanged.
+- Existing file operations require no migration; integrations that move or delete directories must use the corresponding folder endpoints and folder-level authorization.
+- Existing browser, folder, resumable, shared, and portal upload workflows require no migration. API clients should pass the logical folder value and rely on the HTTP transport to encode it rather than embedding an additional percent-encoding layer in multipart or JSON values.
+- Existing valid Trash records restore normally and require no migration; malformed or tampered records remain in Trash and are refused.
+- The Pro bundle directory, users volume, license storage, activation behavior, and `bootstrap_pro.php` loading path are unchanged.
+
+---
+
 ## Changes 07/26/2026 (v3.24.0)
 
 `release(v3.24.0): require authentication for portal details`
