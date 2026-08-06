@@ -1,5 +1,24 @@
 # Changelog
 
+## Changes 08/06/2026 (v3.26.0)
+
+`release(v3.26.0): harden persistent authentication and Pro storage rendering`
+
+**Fixed**
+
+- File and folder metadata shown in FileRise Pro's **Storage → Top Files** table is now HTML-encoded before rendering, preventing uploaded file names from being interpreted as markup in an administrator's browser.
+- Existing file names, disk-usage snapshots, storage sources, deletion controls, Pro bundle installation, and FileRise's Content Security Policy remain unchanged.
+- Successful self-service password changes and administrator password resets now revoke every remember-me token belonging to the affected account.
+- Remember-me tokens belonging to other accounts and the password-changing user's current authenticated session remain unchanged.
+
+**Upgrade notes**
+
+- No account, ACL, file, folder, metadata, Pro license, Docker volume, storage, or configuration migration is required.
+- Existing names containing Unicode, punctuation, or HTML-significant characters continue to display and operate normally; the characters are displayed as text instead of being interpreted as HTML.
+- Upgrading alone does not expire remember-me tokens or sign out existing users. Remembered devices are asked to sign in again only after that account's password is subsequently changed or reset.
+
+---
+
 ## Changes 08/01/2026 (v3.25.0)
 
 `release(v3.25.0): authorization and archive containment hardening`

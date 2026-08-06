@@ -1880,16 +1880,20 @@ async function loadFolderChildren(folderKey) {
       const path   = file.path || (folder === 'root'
         ? `/${file.name}`
         : `/${folder}/${file.name}`);
+      // File metadata is untrusted; encode it before inserting it into the HTML template.
+      const safeFolder = escapeHtml(folder);
+      const safeName = escapeHtml(file.name);
+      const safePath = escapeHtml(path);
   
       return `
         <tr
           class="admin-storage-row admin-storage-row-file"
           data-type="file"
-          data-folder="${folder}"
-          data-name="${file.name}">
+          data-folder="${safeFolder}"
+          data-name="${safeName}">
           <td class="align-middle">
             <i class="material-icons" style="font-size:16px;vertical-align:middle;color:currentColor;">insert_drive_file</i>
-            <span class="ms-1 align-middle"><code>${path}</code></span>
+            <span class="ms-1 align-middle"><code>${safePath}</code></span>
           </td>
           <td class="align-middle text-nowrap">
             ${formatBytes(bytes)}

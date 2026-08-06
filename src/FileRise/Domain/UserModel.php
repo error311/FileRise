@@ -610,6 +610,10 @@ class UserModel
             return ["error" => "Could not update password."];
         }
 
+        if (class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
+            AuthModel::revokeRememberTokensForUser($username);
+        }
+
         return ["success" => "Password updated successfully."];
     }
 
@@ -656,6 +660,10 @@ class UserModel
         $payload = implode(PHP_EOL, $newLines) . PHP_EOL;
         if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
             return ["error" => "Could not update password."];
+        }
+
+        if (class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
+            AuthModel::revokeRememberTokensForUser($targetUsername);
         }
 
         return ["success" => "Password updated successfully."];
