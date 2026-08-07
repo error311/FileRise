@@ -40,6 +40,7 @@ function fileTypeRmTree(string $path): void
 
 foreach (
     [
+        $uploadDir . 'shared/copy-directory',
         $uploadDir . 'shared/move-directory',
         $uploadDir . 'shared/delete-directory',
         $uploadDir . 'destination',
@@ -52,6 +53,10 @@ foreach (
 }
 
 file_put_contents(
+    $uploadDir . 'shared/copy-directory/inside.txt',
+    'COPY-DIRECTORY-SENTINEL'
+);
+file_put_contents(
     $uploadDir . 'shared/move-directory/inside.txt',
     'MOVE-DIRECTORY-SENTINEL'
 );
@@ -59,6 +64,7 @@ file_put_contents(
     $uploadDir . 'shared/delete-directory/inside.txt',
     'DELETE-DIRECTORY-SENTINEL'
 );
+file_put_contents($uploadDir . 'shared/normal-copy.txt', 'NORMAL-COPY');
 file_put_contents($uploadDir . 'shared/normal-move.txt', 'NORMAL-MOVE');
 file_put_contents($uploadDir . 'shared/normal-delete.txt', 'NORMAL-DELETE');
 
@@ -75,6 +81,27 @@ require_once $baseDir . '/src/FileRise/Domain/FileModel.php';
 $errors = [];
 
 try {
+    $copyDirectory = \FileRise\Domain\FileModel::copyFiles(
+        'shared',
+        'destination',
+        ['copy-directory']
+    );
+    fileTypeFailIf(
+        ($copyDirectory['error'] ?? '') !== 'copy-directory is not a file.',
+        'copyFiles: a directory submitted as a file was not explicitly refused',
+        $errors
+    );
+    fileTypeFailIf(
+        !is_file($uploadDir . 'shared/copy-directory/inside.txt'),
+        'copyFiles: content inside the refused source directory changed',
+        $errors
+    );
+    fileTypeFailIf(
+        file_exists($uploadDir . 'destination/copy-directory'),
+        'copyFiles: the refused directory appeared in the destination',
+        $errors
+    );
+
     $moveDirectory = \FileRise\Domain\FileModel::moveFiles(
         'shared',
         'destination',
@@ -122,6 +149,11 @@ try {
         'deleteFiles: content inside the refused directory changed',
         $errors
     );
+    fileTypeFailIf(
+        ($deleteDirectory['error'] ?? '') !== 'delete-directory is not a file.',
+        'deleteFiles: the refusal message should contain one trailing period',
+        $errors
+    );
 
     $trashEntries = is_dir($uploadDir . 'trash')
         ? array_values(array_diff(scandir($uploadDir . 'trash') ?: [], ['.', '..', 'trash.json']))
@@ -129,6 +161,29 @@ try {
     fileTypeFailIf(
         $trashEntries !== [],
         'deleteFiles: the refused directory created a Trash entry',
+        $errors
+    );
+
+    $copyFile = \FileRise\Domain\FileModel::copyFiles(
+        'shared',
+        'destination',
+        ['normal-copy.txt']
+    );
+    fileTypeFailIf(
+        !isset($copyFile['success']),
+        'copyFiles: an ordinary file copy no longer succeeds',
+        $errors
+    );
+    fileTypeFailIf(
+        !is_file($uploadDir . 'shared/normal-copy.txt')
+            || file_get_contents($uploadDir . 'shared/normal-copy.txt') !== 'NORMAL-COPY',
+        'copyFiles: ordinary source file changed after copying',
+        $errors
+    );
+    fileTypeFailIf(
+        !is_file($uploadDir . 'destination/normal-copy.txt')
+            || file_get_contents($uploadDir . 'destination/normal-copy.txt') !== 'NORMAL-COPY',
+        'copyFiles: ordinary file content was not copied correctly',
         $errors
     );
 

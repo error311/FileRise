@@ -617,8 +617,13 @@ class FileModel
             $destPath = $destDir . $basename;
 
             clearstatcache();
-            if ($storage->stat($srcPath) === null) {
+            $stat = $storage->stat($srcPath);
+            if ($stat === null) {
                 $errors[] = "$originalName does not exist in source.";
+                continue;
+            }
+            if (($stat['type'] ?? '') !== 'file') {
+                $errors[] = "$originalName is not a file.";
                 continue;
             }
 
@@ -1300,7 +1305,7 @@ class FileModel
                 $suffixParts[] = "Deleted permanently: " . implode(", ", $deletedPermanent);
             }
             $suffix = $suffixParts ? " " . implode(" ", $suffixParts) : "";
-            return ["error" => implode("; ", $errors) . "." . $suffix];
+            return ["error" => rtrim(implode("; ", $errors), ".") . "." . $suffix];
         }
     }
 

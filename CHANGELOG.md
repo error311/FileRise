@@ -1,5 +1,22 @@
 # Changelog
 
+## Changes 08/07/2026 (v3.26.1)
+
+`release(v3.26.1): enforce file-only copy operations`
+
+**Fixed**
+
+- Same-source `copyFiles` operations now explicitly require each selected object to be a file before invoking the active storage adapter, matching the existing move, delete, and cross-source copy invariants.
+- Directory names submitted to file-copy operations are refused consistently instead of relying on adapter-specific copy behavior.
+- File-delete type-refusal messages no longer contain doubled trailing punctuation.
+
+**Upgrade notes**
+
+- No account, ACL, file, folder, metadata, Pro license, Docker volume, storage source, or configuration migration is required.
+- Normal file copies retain their existing behavior. Directory copies continue through the dedicated folder-copy workflow.
+
+---
+
 ## Changes 08/06/2026 (v3.26.0)
 
 `release(v3.26.0): harden persistent authentication and Pro storage rendering`
