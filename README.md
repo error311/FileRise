@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/error311-filerise-badge.png)](https://mseep.ai/app/error311-filerise)
+
 # FileRise
 
 [![GitHub stars](https://img.shields.io/github/stars/error311/FileRise?style=social)](https://github.com/error311/FileRise)
