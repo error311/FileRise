@@ -467,7 +467,17 @@ class OnlyOfficeController
         header('Cache-Control: no-store');
 
         @session_start();
-        $user   = $_SESSION['username'] ?? 'anonymous';
+        if (
+            empty($_SESSION['authenticated'])
+            || $_SESSION['authenticated'] !== true
+            || (string)($_SESSION['username'] ?? '') === ''
+        ) {
+            http_response_code(401);
+            echo '{"error":"Unauthorized"}';
+            return;
+        }
+
+        $user   = (string)$_SESSION['username'];
         $perms  = $this->effectiveAclPermsForUser((string)$user);
         $isAdmin = \ACL::isAdmin($perms);
 

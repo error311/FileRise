@@ -673,6 +673,8 @@ const displayTopFolders = (isProGlobal && showAllTopFolders)
     const pct   = f.percentOfTotal || 0;
     const width = Math.max(3, Math.min(100, Math.round(pct)));
     const label = f.folder === 'root' ? '/' : `/${f.folder}`;
+    const safeFolder = escapeHtml(f.folder);
+    const safeLabel = escapeHtml(label);
     return `
       <tr>
         <td class="align-middle">
@@ -680,10 +682,10 @@ const displayTopFolders = (isProGlobal && showAllTopFolders)
             isProGlobal
               ? `<button type="button"
                          class="btn btn-link btn-sm p-0 admin-storage-summary-folder-link"
-                         data-folder="${f.folder}">
-                   <code>${label}</code>
+                         data-folder="${safeFolder}">
+                   <code>${safeLabel}</code>
                  </button>`
-              : `<code>${label}</code>`
+              : `<code>${safeLabel}</code>`
           }
         </td>
         <td class="align-middle text-nowrap">

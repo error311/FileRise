@@ -173,6 +173,12 @@ final class ProPortalsApiService
         }
 
         $portal = PortalController::getPortalBySlug($slug);
+        if ($submittedBy === '' || empty($portal['canUpload'])) {
+            return self::response(403, [
+                'success' => false,
+                'error' => 'Forbidden',
+            ]);
+        }
 
         $built = PortalSubmissionsService::buildSubmissionPayload(
             $slug,

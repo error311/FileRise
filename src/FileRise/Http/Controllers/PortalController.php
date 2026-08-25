@@ -6,6 +6,7 @@ namespace FileRise\Http\Controllers;
 
 use FileRise\Support\ACL;
 use FileRise\Support\FS;
+use FileRise\Support\MetadataPath;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -398,7 +399,23 @@ final class PortalController
             'isAdmin' => $_SESSION['isAdmin'] ?? null,
         ];
 
-        $runner = function () use ($targetFolder, $normalizedPath, $allowSubfolders, $page, $perPage, $includeAllFiles) {
+        $username = (string)($_SESSION['username'] ?? '');
+        $runner = function () use (
+            $targetFolder,
+            $normalizedPath,
+            $allowSubfolders,
+            $page,
+            $perPage,
+            $includeAllFiles,
+            $username,
+            $perms
+        ) {
+            $fullRead = self::hasFullRead($username, $perms, $targetFolder);
+            $ownOnly = !$fullRead && ACL::canReadOwn($username, $perms, $targetFolder);
+            if (!$fullRead && !$ownOnly) {
+                return ['error' => 'Downloads are disabled for this folder.', 'status' => 403];
+            }
+
             $storage = StorageRegistry::getAdapter();
             $uploadRoot = class_exists('SourceContext')
                 ? SourceContext::uploadRoot()
@@ -430,7 +447,12 @@ final class PortalController
                 }
             }
 
-            $entries = self::scanPortalEntries($storage, $dirPath, $targetFolder);
+            $entries = self::scanPortalEntries(
+                $storage,
+                $dirPath,
+                $targetFolder,
+                $ownOnly ? $username : ''
+            );
             if (!$allowSubfolders) {
                 $entries = array_values(array_filter($entries, function (array $entry): bool {
                     return ($entry['type'] ?? '') === 'file';
@@ -526,10 +548,15 @@ final class PortalController
     /**
      * @return array<int,array<string,mixed>>
      */
-    private static function scanPortalEntries(StorageAdapterInterface $storage, string $dirPath, string $relPath): array
-    {
+    private static function scanPortalEntries(
+        StorageAdapterInterface $storage,
+        string $dirPath,
+        string $relPath,
+        string $uploaderExact = ''
+    ): array {
         $folders = [];
         $files = [];
+        $metadata = $uploaderExact !== '' ? self::loadFolderMetadata($relPath) : [];
 
         $items = $storage->list($dirPath);
         $skip = FS::SKIP();
@@ -578,6 +605,15 @@ final class PortalController
                 if (!preg_match(REGEX_FILE_NAME, $item)) {
                     continue;
                 }
+                if (
+                    $uploaderExact !== ''
+                    && (
+                        !isset($metadata[$item]['uploader'])
+                        || strcasecmp((string)$metadata[$item]['uploader'], $uploaderExact) !== 0
+                    )
+                ) {
+                    continue;
+                }
                 $files[] = [
                     'type'     => 'file',
                     'name'     => $item,
@@ -594,6 +630,41 @@ final class PortalController
         usort($files, $sortByName);
 
         return array_merge($folders, $files);
+    }
+
+    private static function hasFullRead(string $username, array $perms, string $folder): bool
+    {
+        if ($username === '' || ACL::isAdmin($perms) || ACL::canRead($username, $perms, $folder)) {
+            return $username !== '';
+        }
+
+        $current = ACL::normalizeFolder($folder);
+        while ($current !== '' && strcasecmp($current, 'root') !== 0) {
+            if (ACL::isOwner($username, $perms, $current)) {
+                return true;
+            }
+            $separator = strrpos($current, '/');
+            $current = $separator === false ? '' : substr($current, 0, $separator);
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private static function loadFolderMetadata(string $folder): array
+    {
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
+        $metadataPath = MetadataPath::path($metaRoot, $folder);
+        if (!is_file($metadataPath)) {
+            return [];
+        }
+
+        $metadata = json_decode((string)file_get_contents($metadataPath), true);
+        return is_array($metadata) ? $metadata : [];
     }
 
     private static function extractStatMtime(array $stat): ?int

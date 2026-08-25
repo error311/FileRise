@@ -1,5 +1,30 @@
 # Changelog
 
+## Changes 08/25/2026 (v3.27.0)
+
+`release(v3.27.0): harden authentication, authorization, and rendering`
+
+**Fixed**
+
+- The ONLYOFFICE editor-configuration endpoint now requires an authenticated FileRise session before evaluating folder permissions or creating signed document capabilities.
+- Unauthenticated requests can no longer fall back to the ACLs of a local account named `anonymous`.
+- Existing authenticated ONLYOFFICE users and the sessionless, short-lived signed download URLs used by the Document Server retain their existing behavior.
+- Portal form submissions now require upload authorization for the selected portal's configured folder before a submission is stored or an automation event is emitted.
+- Authenticated users can no longer change the submitted portal slug to create records in portals outside their folder ACLs.
+- Portal entry listings now enforce per-file uploader ownership when the signed-in user has `read_own` rather than full read access.
+- Portal counts, pagination, and complete-file arrays are now calculated after the ownership filter, preventing other users' filenames, sizes, and modification times from being disclosed.
+- Storage-originated folder names are now HTML-encoded in the shallow folder strip and FileRise Pro's **Storage → Top Folders** view before template rendering.
+- Existing folder names, navigation targets, storage enumeration, disk-usage snapshots, and FileRise's Content Security Policy remain unchanged.
+
+**Upgrade notes**
+
+- No account, ACL, file, folder, ONLYOFFICE, Docker volume, storage, or configuration migration is required.
+- Existing portal users, administrators, and group members with upload access to a portal folder retain their current intake-form workflow.
+- Portal users with full read access retain complete listings; `read_own` users now see only files attributed to their account in folder metadata.
+- Existing folder names containing Unicode, punctuation, or HTML-significant characters continue to display and navigate normally; those characters are treated as text rather than markup.
+
+---
+
 ## Changes 08/07/2026 (v3.26.1)
 
 `release(v3.26.1): enforce file-only copy operations`

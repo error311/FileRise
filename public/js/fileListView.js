@@ -425,7 +425,7 @@ function renderFolderStripPaged(strip, subfolders, sourceId = '') {
 
     let html = badgeHtml + visible.map(sf => `
       <div class="folder-item"
-           data-folder="${sf.full}"
+           data-folder="${escapeHTML(sf.full)}"
            draggable="true">
         <span class="folder-svg"></span>
         <div class="folder-name">
