@@ -2,6 +2,15 @@
 declare(strict_types=1);
 // config.php
 
+$frBrowserSession = !defined('FR_WEBDAV_REQUEST') || FR_WEBDAV_REQUEST !== true;
+if (!$frBrowserSession) {
+    // Release an auto-started session without changing the browser's stored state.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_abort();
+    }
+    $_SESSION = [];
+}
+
 // Define constants
 define('PROJECT_ROOT', dirname(__DIR__));
 $autoload = PROJECT_ROOT . '/vendor/autoload.php';
@@ -486,7 +495,7 @@ $persistentDays  = 30 * 24 * 60 * 60; // 30 days
  * - If no session: set cookie params + gc_maxlifetime, then session_start().
  * - If session already active: DO NOT change ini/cookie params; optionally refresh cookie expiry.
  */
-if (session_status() === PHP_SESSION_NONE) {
+if ($frBrowserSession && session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => $sessionLifetime,
         'path'     => '/',
@@ -497,7 +506,7 @@ if (session_status() === PHP_SESSION_NONE) {
     ]);
     ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
     session_start();
-} else {
+} elseif ($frBrowserSession) {
     // Optionally refresh the session cookie expiry to keep the user alive
     $params = session_get_cookie_params();
     if ($sessionLifetime > 0) {
@@ -513,16 +522,16 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // CSRF token
-if (empty($_SESSION['csrf_token'])) {
+if ($frBrowserSession && empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if (!empty($_SESSION['authenticated']) && !fr_local_user_exists((string)($_SESSION['username'] ?? ''))) {
+if ($frBrowserSession && !empty($_SESSION['authenticated']) && !fr_local_user_exists((string)($_SESSION['username'] ?? ''))) {
     fr_forget_authenticated_user(true);
 }
 
 // Auto-login via persistent token
-if (empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) {
+if ($frBrowserSession && empty($_SESSION["authenticated"]) && !empty($_COOKIE['remember_me_token'])) {
     $payload = \FileRise\Domain\AuthModel::consumeRememberToken($_COOKIE['remember_me_token']);
     if ($payload) {
         // NEW: mitigate session fixation
@@ -578,7 +587,7 @@ define('AUTH_HEADER',  $cfgAuthHeader);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PROXY-ONLY AUTO–LOGIN now uses those constants:
-if (AUTH_BYPASS) {
+if ($frBrowserSession && AUTH_BYPASS) {
     $hdrKey = AUTH_HEADER;   // e.g. "HTTP_X_REMOTE_USER"
     if (!empty($_SERVER[$hdrKey])) {
         if (!\FileRise\Domain\AuthModel::isRequestFromTrustedProxy()) {

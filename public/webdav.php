@@ -1,6 +1,9 @@
 <?php
 // public/webdav.php
 
+// WebDAV uses only HTTP Basic credentials, independent of browser login state.
+define('FR_WEBDAV_REQUEST', true);
+
 // ─── 0) Forward Basic auth into PHP_AUTH_* for every HTTP verb ─────────────
 if (
     empty($_SERVER['PHP_AUTH_USER'])
@@ -56,6 +59,9 @@ if ($user === '') {
 
 $perms   = is_callable('loadUserPermissions') ? (loadUserPermissions($user) ?: []) : [];
 $isAdmin = (\FileRise\Domain\AuthModel::getUserRole($user) === '1');
+$perms['admin'] = $isAdmin;
+$perms['isAdmin'] = $isAdmin;
+$perms['role'] = $isAdmin ? '1' : '0';
 
 // set for metadata attribution in WebDAV writes
 CurrentUser::set($user);

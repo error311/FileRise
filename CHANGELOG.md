@@ -1,5 +1,15 @@
 # Changelog
 
+## Changes 09/16/2026 (v3.28.0)
+
+`release(v3.28.0): refine WebDAV request handling`
+
+**Fixed**
+
+- Improved consistency of WebDAV request handling across client configurations.
+
+---
+
 ## Changes 08/25/2026 (v3.27.0)
 
 `release(v3.27.0): harden authentication, authorization, and rendering`

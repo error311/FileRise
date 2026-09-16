@@ -970,6 +970,10 @@ class ACL
 
     public static function isAdmin(array $perms = []): bool
     {
+        if (defined('FR_WEBDAV_REQUEST') && FR_WEBDAV_REQUEST === true) {
+            return !empty($perms['admin']) || !empty($perms['isAdmin'])
+                || (isset($perms['role']) && (string)$perms['role'] === '1');
+        }
         if (!empty($_SESSION['isAdmin'])) {
             return true;
         }
