@@ -1718,6 +1718,20 @@ class FolderController
 
         // Optional "folder" filter (supports nested like "team/reports")
         $parent = $_GET['folder'] ?? null;
+
+        // When no explicit folder= is given, default to a shallow (top-level) listing instead of a
+        // full recursive walk of the whole tree. FolderModel::getFolderList() with no parent walks
+        // every folder via getSubfolders(), which is O(n) over the entire library and freezes any
+        // caller that pulls the full folder list (admin folder-access editor, portals, folder
+        // pickers, datalists) on large trees. Directory navigation passes an explicit folder=, so it
+        // is unaffected. Callers that genuinely need the full recursive list can opt in with &deep=1.
+        $deepRaw = $_GET['deep'] ?? null;
+        $deep = ($deepRaw !== null && in_array(strtolower((string)$deepRaw), ['1', 'true', 'yes'], true));
+        if ($parent === null && !$deep) {
+            $parent = 'root';
+            $includeCounts = false; // the model's shallow path requires counts disabled
+        }
+
         if ($parent !== null && $parent !== '' && strcasecmp($parent, 'root') !== 0) {
             $parts = array_filter(explode('/', trim($parent, "/\\ ")), fn($p) => $p !== '');
             if (empty($parts)) {
