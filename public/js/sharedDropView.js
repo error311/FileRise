@@ -715,6 +715,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   if (chooseFilesBtn) {
     chooseFilesBtn.addEventListener('click', function (e) {
       e.preventDefault();
+      e.stopPropagation(); // The surrounding dropzone also opens the file picker.
       fileInput.click();
     });
   }
@@ -722,6 +723,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   if (chooseFolderBtn) {
     chooseFolderBtn.addEventListener('click', function (e) {
       e.preventDefault();
+      e.stopPropagation();
       folderInput.click();
     });
   }
@@ -764,6 +766,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   });
 
   dropzone.addEventListener('keydown', function (e) {
+    if (e.target !== dropzone) return; // Nested buttons handle their own keyboard activation.
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       fileInput.click();

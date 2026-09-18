@@ -532,25 +532,31 @@ class OnlyOfficeController
             }
         }
 
-        if (!\ACL::canRead($user, $perms, $folder)) {
-            http_response_code(403);
-            echo '{"error":"Forbidden"}';
-            return;
-        }
-        $canEdit = \ACL::canEdit($user, $perms, $folder);
-
-        $downloadCtx = $this->withSourceContext($sourceId, function () use ($folder, $file) {
+        $downloadCtx = $this->withSourceContext($sourceId, function () use ($user, $perms, $folder, $file) {
+            // Authorize the same source that will supply the signed document.
+            if (!\ACL::canRead($user, $perms, $folder)) {
+                return ['forbidden' => true];
+            }
+            $canEdit = \ACL::canEdit($user, $perms, $folder);
             $info = FileModel::getDownloadInfo($folder, $file);
             if (isset($info['error'])) {
-                return $info;
+                return $info + ['canEdit' => $canEdit];
             }
             $storage = StorageRegistry::getAdapter();
             $stat = $storage->stat($info['filePath']);
             return [
             'info' => $info,
             'stat' => $stat,
+            'canEdit' => $canEdit,
             ];
         }, $isAdmin);
+
+        if (!empty($downloadCtx['forbidden'])) {
+            http_response_code(403);
+            echo '{"error":"Forbidden"}';
+            return;
+        }
+        $canEdit = !empty($downloadCtx['canEdit']);
 
         if (isset($downloadCtx['error'])) {
             $fallback = null;
@@ -743,7 +749,10 @@ class OnlyOfficeController
 
     // Save-on statuses: 2/6/7
         if (in_array($status, [2,6,7], true)) {
-            if (!\ACL::canEdit($actor, $perms, $folder)) {
+            $canEdit = $this->withSourceContext($sourceId, function () use ($actor, $perms, $folder) {
+                return \ACL::canEdit($actor, $perms, $folder);
+            }, true);
+            if (!$canEdit) {
                 $this->ooLog('error', "ACL deny edit: actor='$actor' folder='$folder'");
                 echo '{"error":6}';
                 return;

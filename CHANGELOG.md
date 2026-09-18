@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 09/17/2026 (v3.29.0)
+
+`release(v3.29.0): align ONLYOFFICE permissions and correct File Request picker handling`
+
+**Fixed**
+
+- ONLYOFFICE document access and editing permissions are now evaluated against the selected storage source.
+- ONLYOFFICE save callbacks now check edit permissions in the document's storage source.
+- File Request file and folder buttons now open only their intended picker once per activation, removing duplicate picker calls associated with the reported Safari selection issue (#118).
+- Keyboard activation of File Request picker buttons no longer also triggers the surrounding dropzone's file picker.
+
+**Upgrade notes**
+
+- No account, ACL, document, storage, Docker volume, or configuration migration is required.
+- Authorized document editing and the signed download URLs used by the ONLYOFFICE Document Server retain their existing behavior.
+
+---
+
 ## Changes 09/16/2026 (v3.28.0)
 
 `release(v3.28.0): refine WebDAV request handling`
