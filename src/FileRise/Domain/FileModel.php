@@ -1747,7 +1747,7 @@ class FileModel
             }
             $directoryPath = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . trim($folder, "/\\ ");
             $directory = realpath($directoryPath);
-            if ($directory === false || strpos($directory, $uploadDirReal) !== 0) {
+            if ($directory === false || !self::pathIsWithinRoot($directory, $uploadDirReal)) {
                 return ["error" => "Invalid folder path."];
             }
         }
@@ -1757,7 +1757,7 @@ class FileModel
         $realFilePath = realpath($filePath);
 
         // Ensure the file exists and is within the allowed directory.
-        if ($realFilePath === false || strpos($realFilePath, $uploadDirReal) !== 0) {
+        if ($realFilePath === false || !self::pathIsWithinRoot($realFilePath, $uploadDirReal)) {
             return ["error" => "Access forbidden."];
         }
         if (!file_exists($realFilePath)) {
@@ -4032,6 +4032,21 @@ class FileModel
             return ["error" => "Invalid folder name."];
         }
 
+        // Local links must stay inside the active source's canonical storage root.
+        // Use resolved paths for subsequent I/O; remote adapter paths are not local paths.
+        $localRoot = null;
+        if ($storage->isLocal()) {
+            $localRoot = realpath($baseDir);
+            $realDirectory = realpath($directory);
+            if ($localRoot === false || $realDirectory === false) {
+                return ["error" => "Directory not found."];
+            }
+            if (!self::pathIsWithinRoot($realDirectory, $localRoot)) {
+                return ["error" => "Invalid folder path."];
+            }
+            $directory = $realDirectory;
+        }
+
         $metadataFile = self::getMetadataFilePath($folder);
         $metadata = file_exists($metadataFile) ? (json_decode(file_get_contents($metadataFile), true) ?: []) : [];
 
@@ -4104,6 +4119,13 @@ class FileModel
             }
 
             $filePath = $directory . DIRECTORY_SEPARATOR . $file;
+            if ($localRoot !== null) {
+                $realFilePath = realpath($filePath);
+                if ($realFilePath === false || !self::pathIsWithinRoot($realFilePath, $localRoot)) {
+                    continue;
+                }
+                $filePath = $realFilePath;
+            }
             $stat = $storage->stat($filePath);
             if ($stat === null || $stat['type'] !== 'file') {
                 continue; // Only process files.

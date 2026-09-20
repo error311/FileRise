@@ -104,6 +104,8 @@ FR_PUBLISHED_URL=https://yourdomain.com/files
 
 ## Option C: Nginx reverse proxy to Docker/Apache
 
+Configure `FR_TRUSTED_PROXIES` with the nginx address as seen by FileRise and any other trusted proxy hops; use `FR_IP_HEADER=X-Forwarded-For` for the appended chain below. See the [Reverse Proxy and Subpath Guide](Reverse-Proxy-and-Subpath.md) for trust-chain and custom-header requirements.
+
 When proxying to a container (Apache in Docker), **strip the prefix** and send `X-Forwarded-Prefix` so FileRise can generate correct URLs.
 
 ```nginx

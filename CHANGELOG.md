@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 09/19/2026 (v3.30.0)
+
+`release(v3.30.0): refine proxy address handling and local storage path checks`
+
+**Fixed**
+
+- Client address resolution now follows the configured trusted proxy chain for forwarded requests.
+- Direct connections and supported single-address proxy headers retain their normal behavior.
+- Local file listings and download path checks consistently respect the selected storage root, including linked paths.
+
+**Upgrade notes**
+
+- No account, storage, encryption-key, or configuration-file migration is required.
+- Links resolving within a local storage root, including a linked root directory, remain supported. Links resolving outside that root are no longer available through file listings or download path resolution.
+- Multi-proxy deployments should list each trusted proxy hop in `FR_TRUSTED_PROXIES`; unlisted intermediaries become the attributed client address.
+- Custom single-IP headers must contain one valid address. Malformed forwarded chains fall back to the immediate peer when the client cannot be established safely.
+- Existing rate-limit entries and external fail2ban bans retain their current expiry and are not reset by this update.
+
+---
+
 ## Changes 09/17/2026 (v3.29.0)
 
 `release(v3.29.0): align ONLYOFFICE permissions and correct File Request picker handling`

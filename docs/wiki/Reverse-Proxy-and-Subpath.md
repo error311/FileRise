@@ -11,6 +11,12 @@ FileRise is proxy-aware and can run under a subpath like `/files`. Use these rul
 - If you are behind a proxy, set `FR_TRUSTED_PROXIES` and `FR_IP_HEADER`.
 - Set `SECURE=true` when behind HTTPS.
 
+For `FR_TRUSTED_PROXIES`, list only the actual proxy IPs/CIDRs, including each trusted intermediary in a multi-proxy chain. Do not include client networks or use a catch-all range. With `FR_IP_HEADER=X-Forwarded-For`, FileRise walks the chain from right to left and stops at the first untrusted address. Your proxies must append their verified peer address or replace untrusted incoming values; trusting a proxy does not make an unchanged client-supplied header safe.
+
+Single-address headers such as `X-Real-IP` or `CF-Connecting-IP` remain supported through `FR_IP_HEADER` when the trusted proxy controls that header. They must contain one valid IP, not a comma-separated list. Missing headers or malformed values encountered while resolving the trusted chain fall back to the socket peer, which can group rate limits under the proxy's IP. Invalid text to the left of an already identified untrusted client is ignored.
+
+No storage, account, key, or data migration is required for this resolution behavior. If an intermediary is missing from the trust list, FileRise attributes the request to that intermediary instead of trusting addresses supplied through it. Existing rate-limit entries and external fail2ban bans are not cleared by an upgrade.
+
 ---
 
 ## Nginx reverse proxy (subpath)

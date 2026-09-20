@@ -62,8 +62,11 @@ putenv('FR_TEST_UPLOAD_DIR=' . {$uploadExport});
 putenv('FR_TEST_USERS_DIR=' . {$usersExport});
 putenv('FR_TEST_META_DIR=' . {$metaExport});
 putenv('PERSISTENT_TOKENS_KEY=test_persistent_tokens_key_32bytes!');
+putenv('FR_TRUSTED_PROXIES=10.0.0.2');
+putenv('FR_IP_HEADER=X-Forwarded-For');
 
 \$_SERVER['REMOTE_ADDR'] = (string)(\$argv[2] ?? '203.0.113.10');
+\$_SERVER['HTTP_X_FORWARDED_FOR'] = (string)(\$argv[3] ?? '');
 \$_SERVER['HTTP_HOST'] = 'localhost';
 \$_SERVER['REQUEST_METHOD'] = 'POST';
 
@@ -86,9 +89,10 @@ class LoginRateLimitTestController extends \\FileRise\\Http\\Controllers\\AuthCo
 \$controller->attempt((string)(\$argv[1] ?? 'alice'));
 PHP, LOCK_EX);
 
-function loginRateAttempt(string $runner, string $username, string $ip = '203.0.113.10'): array
+function loginRateAttempt(string $runner, string $username, string $ip = '203.0.113.10', string $forwarded = ''): array
 {
-    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($runner) . ' ' . escapeshellarg($username) . ' ' . escapeshellarg($ip);
+    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($runner) . ' ' . escapeshellarg($username)
+        . ' ' . escapeshellarg($ip) . ' ' . escapeshellarg($forwarded);
     $lines = [];
     $exitCode = 0;
     exec($cmd, $lines, $exitCode);
@@ -125,6 +129,26 @@ try {
 
     $otherIp = loginRateAttempt($runner, 'sprayuser52', '203.0.113.21');
     loginRateFailIf($otherIp['status'] !== 401, 'different IP should not inherit the source-wide lockout', $errors);
+
+    @unlink($usersDir . 'failed_logins.json');
+    @unlink($usersDir . 'fail2ban.log');
+    for ($i = 1; $i <= 6; $i++) {
+        $res = loginRateAttempt($runner, 'targetuser', '10.0.0.2', '198.51.100.' . $i . ', 203.0.113.40');
+        $expected = $i <= 5 ? 401 : 429;
+        loginRateFailIf($res['status'] !== $expected, "spoof rotation attempt {$i}: expected HTTP {$expected}", $errors);
+    }
+    $log = (string)file_get_contents($usersDir . 'fail2ban.log');
+    loginRateFailIf(str_contains($log, 'ip=198.51.100.'), 'Spoofed IP reached fail2ban attribution', $errors);
+    loginRateFailIf(!str_contains($log, 'ip=203.0.113.40 '), 'Real client IP missing from failure log', $errors);
+    $victim = loginRateAttempt($runner, 'targetuser', '10.0.0.2', '198.51.100.1');
+    loginRateFailIf($victim['status'] !== 401, 'Spoofed failures locked the innocent IP/account', $errors);
+
+    @unlink($usersDir . 'failed_logins.json');
+    for ($i = 1; $i <= 51; $i++) {
+        $res = loginRateAttempt($runner, 'proxyspray' . $i, '10.0.0.2', '198.51.100.' . $i . ', 203.0.113.50');
+        $expected = $i <= 50 ? 401 : 429;
+        loginRateFailIf($res['status'] !== $expected, "proxy spray attempt {$i}: expected HTTP {$expected}", $errors);
+    }
 } finally {
     loginRateRmTree($tmpBase);
 }

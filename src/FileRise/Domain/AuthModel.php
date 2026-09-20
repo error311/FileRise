@@ -536,15 +536,26 @@ class AuthModel
             $headerName = defined('FR_IP_HEADER') ? (string)FR_IP_HEADER : 'X-Forwarded-For';
             $headerKey = self::normalizeHeaderKey($headerName);
             $headerVal = trim((string)($server[$headerKey] ?? ''));
-            if ($headerVal !== '') {
-                $candidate = $headerVal;
-                if (strpos($candidate, ',') !== false) {
-                    $parts = explode(',', $candidate);
-                    $candidate = trim($parts[0]);
+            if ($headerVal !== '' && $headerKey === 'HTTP_X_FORWARDED_FOR') {
+                // Trust only the contiguous proxy chain nearest the socket peer.
+                $parts = explode(',', $headerVal);
+                $candidate = $remote;
+                for ($i = count($parts) - 1; $i >= 0; $i--) {
+                    if (!self::isTrustedProxy($candidate, $trusted)) {
+                        return $candidate;
+                    }
+                    $hop = trim($parts[$i]);
+                    if (!filter_var($hop, FILTER_VALIDATE_IP)) {
+                        // Do not cross an unknown hop to reach client-supplied values.
+                        return $remote;
+                    }
+                    $candidate = $hop;
                 }
-                if (filter_var($candidate, FILTER_VALIDATE_IP)) {
-                    return $candidate;
-                }
+                return $candidate;
+            }
+            // Headers such as X-Real-IP and CF-Connecting-IP carry one address.
+            if ($headerVal !== '' && filter_var($headerVal, FILTER_VALIDATE_IP)) {
+                return $headerVal;
             }
         }
 
@@ -709,7 +720,7 @@ class AuthModel
             }
             $ipBin = inet_pton($ip);
             $netBin = inet_pton($subnet);
-            if ($ipBin === false || $netBin === false) {
+            if ($ipBin === false || $netBin === false || strlen($ipBin) !== strlen($netBin)) {
                 return false;
             }
             $bytes = intdiv($mask, 8);
