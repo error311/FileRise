@@ -278,6 +278,15 @@ export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
 > See: [Deployments Wiki](https://github.com/error311/FileRise/wiki/Kubernetes---k8s-deployment)
 > More deployment docs: [Install Setup](https://github.com/error311/FileRise/wiki/Installation-Setup)
 
+### Easypanel
+
+If you'd rather not manage the container yourself, [Easypanel](https://easypanel.io) is a self-hosted deployment platform with a one-click FileRise template:
+
+[![Deploy on Easypanel][easypanel-btn]][easypanel-deploy]
+
+[easypanel-btn]: https://easypanel.io/img/deploy-on-easypanel-40.svg
+[easypanel-deploy]: https://easypanel.io/templates/filerise
+
 ---
 
 ## Manual install (PHP web server)
