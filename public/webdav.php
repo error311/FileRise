@@ -80,18 +80,12 @@ $server->addPlugin(
     )
 );
 
-// Base URI (adjust if you serve from a subdir or rewrite rule)
-$baseUri = '/webdav.php/';
-$reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
-$legacyPrefix = '/webdav.php/uploads';
-$hasNestedUploads = is_dir($rootPath . DIRECTORY_SEPARATOR . 'uploads');
-if (!$hasNestedUploads && strpos($reqPath, $legacyPrefix) === 0) {
-    $next = substr($reqPath, strlen($legacyPrefix), 1);
-    if ($next === '' || $next === '/') {
-        $baseUri = $legacyPrefix . '/';
-    }
-}
-$server->setBaseUri($baseUri);
+// Keep source and Destination URLs in the same namespace behind subpath proxies.
+\FileRise\WebDAV\RequestPath::configure(
+    $server,
+    (string)FR_BASE_PATH,
+    is_dir($rootPath . DIRECTORY_SEPARATOR . 'uploads')
+);
 
 // Execute
 $server->exec();

@@ -59,6 +59,18 @@ spec:
 
 ---
 
+## WebDAV under a subpath
+
+For a public mount at `/files`, use `https://example.com/files/webdav.php/` as the WebDAV URL. If the proxy strips `/files`, pass `X-Forwarded-Prefix: /files` or set `FR_BASE_PATH=/files`. `FR_PUBLISHED_URL` configures the published URL but does not replace those base-path settings.
+
+Starting with v3.31.0, MOVE and COPY accept the public prefix in their `Destination` header when the request URL has been stripped by the proxy. FileRise normalizes that destination to the backend WebDAV path before sabre/dav performs its existing URI and permission checks. Absolute HTTP(S) destinations and absolute-path destinations are supported. Deployments that retain the prefix use the corresponding prefixed WebDAV base URI.
+
+A proxy-side Destination rewrite is no longer required. Existing rewrites that already remove the configured prefix remain compatible. Root deployments and the historical `/webdav.php/uploads/` alias retain their behavior; a real `uploads` child folder is not treated as an alias.
+
+This corrects subpath routing for supported operations. It does not add same-folder file/directory renaming, which FileRise's WebDAV nodes currently reject. Cross-folder file moves and copies continue to enforce destination permissions, account restrictions, and Overwrite semantics.
+
+---
+
 ## Common pitfalls
 
 - Trailing slash in `proxy_pass` can break paths.

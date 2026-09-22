@@ -974,6 +974,11 @@ class ACL
             return !empty($perms['admin']) || !empty($perms['isAdmin'])
                 || (isset($perms['role']) && (string)$perms['role'] === '1');
         }
+        // Authenticated browser sessions are refreshed from the local account at bootstrap.
+        // An explicit non-admin result must not fall through to legacy admin defaults.
+        if (!empty($_SESSION['authenticated']) && isset($_SESSION['isAdmin'])) {
+            return $_SESSION['isAdmin'] === true;
+        }
         if (!empty($_SESSION['isAdmin'])) {
             return true;
         }

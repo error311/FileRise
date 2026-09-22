@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 09/21/2026 (v3.31.0)
+
+`release(v3.31.0): align session roles and correct WebDAV subpath destinations`
+
+**Fixed**
+
+- Established browser sessions now follow the current local account role on subsequent requests.
+- Legacy session permission flags remain consistent with the current account role.
+- WebDAV MOVE and COPY now handle public Destination URLs behind reverse proxies that strip a configured subpath (#122), while preserving root and retained-prefix deployments.
+
+**Upgrade notes**
+
+- No account, file, encryption-key, or persistent-token migration is required. Existing users remain signed in with their current permissions.
+- OIDC role synchronization still occurs at login; the existing Allow demote setting and its default are unchanged.
+- Manual upgrades that retain a customized `config/config.php` must merge the updated session-bootstrap and authentication-cleanup blocks while preserving their installation settings.
+
+---
+
 ## Changes 09/19/2026 (v3.30.0)
 
 `release(v3.30.0): refine proxy address handling and local storage path checks`

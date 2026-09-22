@@ -464,6 +464,8 @@ function fr_forget_authenticated_user(bool $clearRememberCookie = false): void
         $_SESSION['authenticated'],
         $_SESSION['username'],
         $_SESSION['isAdmin'],
+        $_SESSION['role'],
+        $_SESSION['admin'],
         $_SESSION['folderOnly'],
         $_SESSION['readOnly'],
         $_SESSION['disableUpload'],
@@ -526,8 +528,24 @@ if ($frBrowserSession && empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if ($frBrowserSession && !empty($_SESSION['authenticated']) && !fr_local_user_exists((string)($_SESSION['username'] ?? ''))) {
-    fr_forget_authenticated_user(true);
+if ($frBrowserSession && !empty($_SESSION['authenticated'])) {
+    // Reuse the existing account lookup to refresh privileges as well as detect deletion.
+    $sessionUsername = trim((string)($_SESSION['username'] ?? ''));
+    $sessionRole = $sessionUsername !== ''
+        ? \FileRise\Domain\UserModel::getUserRole($sessionUsername)
+        : null;
+    if ($sessionRole === null) {
+        fr_forget_authenticated_user(true);
+    } else {
+        $_SESSION['isAdmin'] = ($sessionRole === '1');
+        // Normalize legacy flags consumed by file and portal permission helpers.
+        if (array_key_exists('role', $_SESSION)) {
+            $_SESSION['role'] = $_SESSION['isAdmin'] ? '1' : '0';
+        }
+        if (array_key_exists('admin', $_SESSION)) {
+            $_SESSION['admin'] = $_SESSION['isAdmin'];
+        }
+    }
 }
 
 // Auto-login via persistent token
