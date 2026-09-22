@@ -20,32 +20,21 @@ class AclAdminController
             throw new InvalidArgumentException('Invalid user');
         }
 
+        // Grants can only exist on folders that have an ACL entry, so read those directly from
+        // folder_acl.json instead of walking the ENTIRE folder tree. FolderModel::getFolderList()
+        // with no arguments is a full recursive scan, and getGrants runs once per user, so the admin
+        // user/folder matrix took minutes to load on large libraries. Folders without an ACL entry
+        // carry no grant anyway.
         $folders = [];
-        try {
-            $rows = FolderModel::getFolderList();
-            if (is_array($rows)) {
-                foreach ($rows as $r) {
-                    $f = is_array($r) ? ($r['folder'] ?? '') : (string)$r;
-                    if ($f !== '') {
-                        $folders[$f] = true;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            // ignore, fall back to ACL file
-        }
-
-        if (empty($folders)) {
-            $metaRoot = class_exists('SourceContext')
-                ? SourceContext::metaRoot()
-                : rtrim((string)META_DIR, "/\\") . DIRECTORY_SEPARATOR;
-            $aclPath = rtrim($metaRoot, "/\\") . DIRECTORY_SEPARATOR . 'folder_acl.json';
-            if (is_file($aclPath)) {
-                $data = json_decode((string)@file_get_contents($aclPath), true);
-                if (is_array($data['folders'] ?? null)) {
-                    foreach ($data['folders'] as $name => $_) {
-                        $folders[$name] = true;
-                    }
+        $metaRoot = class_exists('SourceContext')
+            ? SourceContext::metaRoot()
+            : rtrim((string)META_DIR, "/\\") . DIRECTORY_SEPARATOR;
+        $aclPath = rtrim($metaRoot, "/\\") . DIRECTORY_SEPARATOR . 'folder_acl.json';
+        if (is_file($aclPath)) {
+            $data = json_decode((string)@file_get_contents($aclPath), true);
+            if (is_array($data['folders'] ?? null)) {
+                foreach ($data['folders'] as $name => $_) {
+                    $folders[$name] = true;
                 }
             }
         }
