@@ -257,7 +257,9 @@ try {
         throw new RuntimeException('7z is not available on the server.');
     }
     $workArg = '-w' . $root;
-    $cmd = escapeshellarg($bin) . ' a -t7z -y -bd ' . escapeshellarg($workArg) . ' ' . escapeshellarg($archivePath) . ' ' . escapeshellarg('@' . $listFile);
+    // Treat every authorized list entry as a literal filename. Without -spd,
+    // 7-Zip expands wildcard characters in names and can archive unselected files.
+    $cmd = escapeshellarg($bin) . ' a -t7z -y -bd -spd ' . escapeshellarg($workArg) . ' ' . escapeshellarg($archivePath) . ' ' . escapeshellarg('@' . $listFile);
     @exec($cmd, $out, $rc);
 
     if ($cwd !== false) {

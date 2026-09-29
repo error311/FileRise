@@ -80,6 +80,60 @@ class UserModel
         return true;
     }
 
+    private static function addInitialAdmin(string $usersFile, string $newUserLine): array
+    {
+        $lockPath = rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR . '.setup.lock';
+        $setupLock = @fopen($lockPath, 'c+');
+        if ($setupLock === false || !flock($setupLock, LOCK_EX)) {
+            if (is_resource($setupLock)) {
+                fclose($setupLock);
+            }
+            return ["error" => "Failed to lock initial setup"];
+        }
+
+        $usersHandle = null;
+        try {
+            $usersHandle = @fopen($usersFile, 'c+');
+            if ($usersHandle === false || !flock($usersHandle, LOCK_EX)) {
+                return ["error" => "Failed to lock users file"];
+            }
+
+            clearstatcache(true, self::setupCompletePath());
+            rewind($usersHandle);
+            $contents = stream_get_contents($usersHandle);
+            $lines = $contents === false ? [] : preg_split('/\r\n|\n|\r/', $contents);
+            foreach ($lines ?: [] as $line) {
+                $parts = explode(':', trim($line));
+                if (count($parts) >= 3 && preg_match(REGEX_USER, $parts[0])) {
+                    return ["error" => "Initial setup is already complete"];
+                }
+            }
+            if (self::hasSetupCompleteMarker()) {
+                return ["error" => "Initial setup is already complete"];
+            }
+
+            if (ftruncate($usersHandle, 0) === false) {
+                return ["error" => "Failed to write users file"];
+            }
+            rewind($usersHandle);
+            $written = fwrite($usersHandle, $newUserLine);
+            if ($written === false || $written !== strlen($newUserLine) || !fflush($usersHandle)) {
+                return ["error" => "Failed to write users file"];
+            }
+            if (!self::markSetupComplete()) {
+                error_log('FileRise: initial admin was created but setup-complete marker could not be written.');
+            }
+            return ["success" => "User added successfully"];
+        } finally {
+            if (is_resource($usersHandle)) {
+                flock($usersHandle, LOCK_UN);
+                fclose($usersHandle);
+            }
+            flock($setupLock, LOCK_UN);
+            fclose($setupLock);
+        }
+    }
+
     private static function mergePermissionsMostRestrictive($base, $incoming): array
     {
         $a = is_array($base) ? $base : [];
@@ -317,12 +371,7 @@ class UserModel
         $newUserLine    = $username . ":" . $hashedPassword . ":" . $isAdmin . PHP_EOL;
 
         if ($setupMode) {
-            if (file_put_contents($usersFile, $newUserLine, LOCK_EX) === false) {
-                return ["error" => "Failed to write users file"];
-            }
-            if (!self::markSetupComplete()) {
-                error_log('FileRise: initial admin was created but setup-complete marker could not be written.');
-            }
+            return self::addInitialAdmin($usersFile, $newUserLine);
         } else {
             if (file_put_contents($usersFile, $newUserLine, FILE_APPEND | LOCK_EX) === false) {
                 return ["error" => "Failed to write users file"];

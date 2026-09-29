@@ -11,7 +11,7 @@ if [ "$(id -u)" -eq 0 ]; then IS_ROOT=true; fi
 
 safe_chown() {
   if [ "${IS_ROOT}" = "true" ]; then
-    chown "$@" 2>&1 || echo "[startup] chown failed (continuing): chown $*"
+    chown -h "$@" 2>&1 || echo "[startup] chown failed (continuing): chown -h $*"
   fi
 }
 
@@ -22,6 +22,13 @@ safe_chmod() {
 safe_truncate() {
   # Truncate/create a file without killing the container if the FS is read-only, etc.
   : > "$1" 2>&1 || echo "[startup] could not write: $1"
+}
+
+reject_symlink_path() {
+  if [ -L "$1" ]; then
+    echo "ERROR: Refusing symlink at managed startup path: $1" >&2
+    exit 1
+  fi
 }
 
 has_nonempty_file() {
@@ -51,6 +58,10 @@ if [ "$(id -u)" -ne 0 ]; then
   echo "[startup] Running as non-root. Skipping PUID/PGID remap and chown."
   echo "[startup] Tip: remove '--user' and set PUID/PGID env vars instead."
 else
+  # Writable persistent state is untrusted at startup. Validate this path before
+  # recursive ownership changes so a stored symlink cannot redirect root.
+  reject_symlink_path /var/www/metadata/log
+
   # Remap www-data to match provided PUID/PGID (e.g., Unraid 99:100 or 1000:1000)
   if [ -n "${PGID:-}" ]; then
     current_gid="$(getent group www-data | cut -d: -f3 || true)"
@@ -131,7 +142,11 @@ if [ -f "${CONFIG_FILE}" ]; then
 fi
 
 # 2.1) Prepare metadata/log & sessions
+reject_symlink_path /var/www/metadata/log
 mkdir -p /var/www/metadata/log
+reject_symlink_path /var/www/metadata/log
+reject_symlink_path /var/www/metadata/log/error.log
+reject_symlink_path /var/www/metadata/log/access.log
 safe_chown www-data:www-data /var/www/metadata/log
 safe_chmod 775 /var/www/metadata/log
 safe_truncate /var/www/metadata/log/error.log
@@ -261,6 +276,12 @@ if [ "${SCAN_ON_START:-}" = "true" ]; then
   fi
 fi
 
+# The optional scan loads application configuration as www-data. Revalidate the
+# root-managed log paths after it returns and before starting privileged Apache.
+reject_symlink_path /var/www/metadata/log
+reject_symlink_path /var/www/metadata/log/error.log
+reject_symlink_path /var/www/metadata/log/access.log
+
 # 9.6) Stream Apache logs to the container console (optional toggle)
 LOG_STREAM="${LOG_STREAM:-error}"
 case "${LOG_STREAM,,}" in
@@ -275,4 +296,4 @@ echo "[startup] FileRise startup complete. Any further output will be Apache log
 # Stream only the chosen logs; -n0 = don't dump history, -F = follow across rotations/creation
 [ "${STREAM_ERR}" = "true" ] && tail -n0 -F /var/www/metadata/log/error.log 2>/dev/null &
 [ "${STREAM_ACC}" = "true" ] && tail -n0 -F /var/www/metadata/log/access.log 2>/dev/null &
-exec apachectl -D FOREGROUND
+exec /usr/sbin/apachectl -D FOREGROUND

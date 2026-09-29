@@ -1,5 +1,21 @@
 # Changelog
 
+## Changes 09/29/2026 (v3.32.0)
+
+`release(v3.32.0): harden archive and first-run security boundaries`
+
+**Fixed**
+
+- 7-Zip archive downloads now treat selected file names literally, preserving folder ACL and own-file boundaries for names containing wildcard characters.
+- Initial administrator creation now consumes first-run setup atomically, so overlapping requests cannot replace the account that completed setup.
+- Container startup now rejects unsafe persisted path state before privileged permission changes and process launch.
+
+**Upgrade notes**
+
+- No account, file, permission, encryption-key, or configuration migration is required.
+
+---
+
 ## Changes 09/21/2026 (v3.31.0)
 
 `release(v3.31.0): align session roles and correct WebDAV subpath destinations`
