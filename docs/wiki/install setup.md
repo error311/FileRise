@@ -60,12 +60,14 @@ Bind `/var/www/uploads` to a **dedicated folder** (not the root of a massive sha
 
 ## 2) Manual install (PHP web server)
 
-Docker is the recommended deployment path. Manual installs on a standard PHP web server are supported, but more restrictive shared-hosting environments are best-effort and may not support every feature or background-worker workflow.
+Docker is the recommended deployment path. Manual installs on a standard Linux PHP web server are supported, but more restrictive shared-hosting environments are best-effort and may not support every feature or background-worker workflow. Native Windows PHP server installs are not supported as a filesystem security boundary; Windows browsers and WebDAV clients remain supported.
+
+Treat `uploads/`, `users/`, and `metadata/` as trusted application storage. Only the FileRise service identity and trusted administrative or backup processes may write inside these directories. Do not expose them as a writable share or allow another untrusted application or operating-system account to create entries, links, junctions, or reparse points within them. This requirement also applies when a Docker volume is backed by host storage.
 
 ### Requirements
 
 - PHP **8.3+**
-- Web server (Apache / Nginx / Caddy + PHP-FPM)
+- Linux web server (Apache / Nginx / Caddy + PHP-FPM)
 - PHP extensions: `json`, `curl`, `zip`, `openssl`, and standard defaults
 - No database required
 

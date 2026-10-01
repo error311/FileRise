@@ -84,6 +84,7 @@ final class UploadNamePolicy
             $fileName === ''
             || str_contains($fileName, '/')
             || str_contains($fileName, '\\')
+            || str_contains($fileName, ':')
             || basename($fileName) !== $fileName
         ) {
             return false;

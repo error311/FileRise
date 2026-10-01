@@ -1842,7 +1842,12 @@ class FolderController
                 'Password required.',
                 'Downloads are disabled for this upload-only share.',
             ];
-            $code = in_array((string)$result['error'], $forbiddenErrors, true) ? 403 : 404;
+            $code = isset($result['code'])
+                ? (int)$result['code']
+                : (in_array((string)$result['error'], $forbiddenErrors, true) ? 403 : 404);
+            if ($code === 429) {
+                header('Retry-After: ' . max(1, (int)($result['retryAfter'] ?? 1)));
+            }
             http_response_code($code);
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(["error" => $result['error']]);
@@ -2080,7 +2085,11 @@ class FolderController
             $renderError(403, "Password required.");
         }
         if (isset($ctx['error'])) {
-            $renderError(404, (string)$ctx['error']);
+            $status = isset($ctx['code']) ? (int)$ctx['code'] : 404;
+            if ($status === 429) {
+                header('Retry-After: ' . max(1, (int)($ctx['retryAfter'] ?? 1)));
+            }
+            $renderError($status, (string)$ctx['error']);
         }
         if (!empty($ctx['hideListing']) || (isset($ctx['mode']) && (string)$ctx['mode'] === 'drop')) {
             $renderError(403, "Downloads are disabled for this upload-only share.");
@@ -2353,7 +2362,11 @@ class FolderController
         }
 
         if (isset($data['error'])) {
-            http_response_code(403);
+            $status = isset($data['code']) ? (int)$data['code'] : 403;
+            if ($status === 429) {
+                header('Retry-After: ' . max(1, (int)($data['retryAfter'] ?? 1)));
+            }
+            http_response_code($status);
             header('Content-Type: application/json');
             echo json_encode(["error" => $data['error']]);
             exit;
@@ -2816,7 +2829,11 @@ class FolderController
             $respondError(403, "Password required.");
         }
         if (isset($ctx['error'])) {
-            $respondError(403, (string)$ctx['error']);
+            $status = isset($ctx['code']) ? (int)$ctx['code'] : 403;
+            if ($status === 429) {
+                header('Retry-After: ' . max(1, (int)($ctx['retryAfter'] ?? 1)));
+            }
+            $respondError($status, (string)$ctx['error']);
         }
 
         $record = is_array($ctx['record'] ?? null) ? $ctx['record'] : [];

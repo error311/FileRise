@@ -50,6 +50,7 @@ putenv('FR_TEST_META_DIR=' . $metaDir);
 putenv('PERSISTENT_TOKENS_KEY=test_persistent_tokens_key_32bytes!');
 
 require_once $baseDir . '/config/config.php';
+require_once $baseDir . '/src/FileRise/Domain/FileModel.php';
 require_once $baseDir . '/src/FileRise/Domain/UploadModel.php';
 require_once $baseDir . '/src/FileRise/Support/UploadNamePolicy.php';
 
@@ -73,6 +74,27 @@ try {
         'UploadNamePolicy: normal filename should remain allowed',
         $errors
     );
+    foreach (
+        [
+            'evil.php::$DATA',
+            '.htaccess::$DATA',
+            '.user.ini::$DATA',
+            'web.config::$DATA',
+            'evil.php%3A%3A%24DATA',
+            'evil.php%253A%253A%2524DATA',
+        ] as $streamName
+    ) {
+        sharedUploadNameFailIf(
+            \FileRise\Support\UploadNamePolicy::isAllowedForWrite($streamName, 'strict') !== false,
+            "UploadNamePolicy: NTFS stream name should be rejected in strict mode: {$streamName}",
+            $errors
+        );
+        sharedUploadNameFailIf(
+            \FileRise\Support\UploadNamePolicy::isAllowedForWrite($streamName, 'code_friendly') !== false,
+            "UploadNamePolicy: NTFS stream name should be rejected in code-friendly mode: {$streamName}",
+            $errors
+        );
+    }
     sharedUploadNameFailIf(
         \FileRise\Support\UploadNamePolicy::isAllowedForWrite('shell.php.', 'strict') !== false,
         'UploadNamePolicy: strict mode should reject a blocked extension followed by a trailing dot',
@@ -106,6 +128,41 @@ try {
     sharedUploadNameFailIf(
         \FileRise\Support\UploadNamePolicy::isAllowedForWrite('archive.tar.gz', 'strict') !== true,
         'UploadNamePolicy: ordinary multi-extension filenames should remain allowed',
+        $errors
+    );
+
+    $streamSaveResult = \FileRise\Domain\FileModel::saveFile(
+        'drop',
+        'evil.php::$DATA',
+        '<?php echo "blocked";',
+        'regression'
+    );
+    sharedUploadNameFailIf(
+        !isset($streamSaveResult['error']),
+        'saveFile: NTFS default-stream name should be rejected before write',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        file_exists($uploadDir . 'drop' . DIRECTORY_SEPARATOR . 'evil.php::$DATA')
+            || file_exists($uploadDir . 'drop' . DIRECTORY_SEPARATOR . 'evil.php'),
+        'saveFile: rejected NTFS stream name should not create either spelling',
+        $errors
+    );
+
+    $streamCreateResult = \FileRise\Domain\FileModel::createFile(
+        'drop',
+        '.user.ini::$DATA',
+        'regression'
+    );
+    sharedUploadNameFailIf(
+        !isset($streamCreateResult['error']) || ($streamCreateResult['success'] ?? null) !== false,
+        'createFile: NTFS default-stream name should be rejected before write',
+        $errors
+    );
+    sharedUploadNameFailIf(
+        file_exists($uploadDir . 'drop' . DIRECTORY_SEPARATOR . '.user.ini::$DATA')
+            || file_exists($uploadDir . 'drop' . DIRECTORY_SEPARATOR . '.user.ini'),
+        'createFile: rejected NTFS stream name should not create either spelling',
         $errors
     );
 

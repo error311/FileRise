@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 09/30/2026 (v3.33.0)
+
+`release(v3.33.0): harden share passwords and Windows storage boundaries`
+
+**Fixed**
+
+- File creation and upload paths now reject NTFS alternate-stream syntax before extension and reserved-name policy checks.
+- Password-protected file and folder shares now limit repeated verification attempts and return a retry interval when the limit is reached.
+
+**Security and deployment**
+
+- Clarified the exclusive-writer requirement for FileRise data directories and the supported Linux manual-server environment.
+
+**Upgrade notes**
+
+- No account, file, permission, encryption-key, or configuration migration is required.
+- New filenames containing a colon are rejected; existing files are not renamed or deleted.
+
+---
+
 ## Changes 09/29/2026 (v3.32.0)
 
 `release(v3.32.0): harden archive and first-run security boundaries`

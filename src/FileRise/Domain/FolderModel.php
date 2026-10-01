@@ -6,6 +6,7 @@ use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
 use FileRise\Support\MetadataPath;
+use FileRise\Support\SharePasswordAttemptLimiter;
 use FileRise\Support\UploadNamePolicy;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
@@ -26,6 +27,44 @@ require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
 
 class FolderModel
 {
+    private static function verifySharePassword(string $token, string $providedPass, string $passwordHash): ?array
+    {
+        $clientIp = AuthModel::getClientIp($_SERVER);
+        try {
+            $attempt = SharePasswordAttemptLimiter::beginAttempt($token, $clientIp);
+        } catch (\Throwable $e) {
+            error_log('Share password limiter unavailable: ' . $e->getMessage());
+            return [
+                'error' => 'Share password verification is temporarily unavailable.',
+                'code' => 503,
+            ];
+        }
+
+        if (empty($attempt['allowed'])) {
+            return [
+                'error' => 'Too many password attempts. Try again later.',
+                'code' => 429,
+                'retryAfter' => max(1, (int)($attempt['retryAfter'] ?? 1)),
+            ];
+        }
+
+        if (!password_verify($providedPass, $passwordHash)) {
+            return ['error' => 'Invalid password.', 'code' => 403];
+        }
+
+        try {
+            SharePasswordAttemptLimiter::recordSuccess($token, $clientIp);
+        } catch (\Throwable $e) {
+            error_log('Share password limiter success update failed: ' . $e->getMessage());
+            return [
+                'error' => 'Share password verification is temporarily unavailable.',
+                'code' => 503,
+            ];
+        }
+
+        return null;
+    }
+
     private static function storage(): StorageAdapterInterface
     {
         return StorageRegistry::getAdapter();
@@ -2591,8 +2630,11 @@ class FolderModel
         if (!empty($record['password']) && empty($providedPass)) {
             return ["needs_password" => true];
         }
-        if (!empty($record['password']) && !password_verify($providedPass, $record['password'])) {
-            return ["error" => "Invalid password."];
+        if (!empty($record['password'])) {
+            $passwordError = self::verifySharePassword($token, (string)$providedPass, (string)$record['password']);
+            if ($passwordError !== null) {
+                return $passwordError;
+            }
         }
 
         // Encrypted folders/descendants: shared access is blocked (v1).
@@ -2860,8 +2902,11 @@ class FolderModel
         if (!empty($record['password']) && ($providedPass === null || $providedPass === '')) {
             return ["needs_password" => true];
         }
-        if (!empty($record['password']) && !password_verify((string)$providedPass, $record['password'])) {
-            return ["error" => "Invalid password."];
+        if (!empty($record['password'])) {
+            $passwordError = self::verifySharePassword($token, (string)$providedPass, (string)$record['password']);
+            if ($passwordError !== null) {
+                return $passwordError;
+            }
         }
 
         if (self::isShareDropMode($record)) {
@@ -3044,8 +3089,11 @@ class FolderModel
         if (!empty($record['password']) && ($providedPass === null || $providedPass === '')) {
             return ["error" => "Password required."];
         }
-        if (!empty($record['password']) && !password_verify((string)$providedPass, $record['password'])) {
-            return ["error" => "Invalid password."];
+        if (!empty($record['password'])) {
+            $passwordError = self::verifySharePassword($token, (string)$providedPass, (string)$record['password']);
+            if ($passwordError !== null) {
+                return $passwordError;
+            }
         }
         if (empty($record['allowUpload']) || (int)$record['allowUpload'] !== 1) {
             return ["error" => "File uploads are not allowed for this share."];

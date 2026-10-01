@@ -11,6 +11,15 @@ Basic steps to keep your FileRise installation secure.
 - Ensure the web server can read files but cannot write to code paths.
 - Back up `config/`, `users/`, and `metadata/` regularly.
 
+## Storage trust boundary
+
+- Treat `uploads/`, `users/`, and `metadata/` as trusted FileRise storage.
+- Allow writes only from the FileRise service identity and trusted administrative or backup processes.
+- Do not expose these directories as a writable share or allow untrusted operating-system accounts or other applications to create files, links, junctions, or reparse points inside them.
+- Use a dedicated subfolder when FileRise stores data on an existing share, and apply the same exclusive-writer rule to that subfolder.
+- The supported manual server environment is Linux. Native Windows PHP server installs are not supported as a filesystem security boundary. Windows browsers and WebDAV clients remain supported.
+- Apply these rules to host-backed Docker volumes as well as manual installations.
+
 ## WebDAV and shares
 
 - Disable WebDAV if you do not use it.

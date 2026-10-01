@@ -46,7 +46,7 @@ Quick links: [Website](https://filerise.net) • [Docs](https://filerise.net/doc
 
 ## Highlights
 
-- 💾 **Self-hosted “cloud drive”** – Runs on Docker (recommended) or on a standard PHP web server. No external database required.
+- 💾 **Self-hosted “cloud drive”** – Runs on Docker (recommended) or on a standard Linux PHP web server. No external database required.
 - 🔐 **Granular per-folder ACLs** – Manage View (all/own), Upload, Create, Edit, Rename, Move, Copy, Delete, Extract, Share, and more — all enforced consistently across the UI, API, and WebDAV.
 - 🔗 **Link File (authenticated deep links)** – Generate internal links to specific files, require login + ACL checks, and open directly to the target in the app.
 - 🤝 **Folder and file sharing** – Share folders for browsing or upload-only file requests, protect links with passwords/expiration, and share individual files with generated links.
@@ -284,7 +284,9 @@ export PERSISTENT_TOKENS_KEY="$(openssl rand -hex 32)"
 
 Short version: FileRise expects data at `/var/www/{uploads,users,metadata}` and your web server must point to the **public/** folder (for example `DocumentRoot /var/www/filerise/public`).
 
-Docker is the recommended deployment path. Manual installs on a standard PHP web server are supported, but more restrictive shared-hosting environments are best-effort and may not support every feature or background-worker workflow.
+Docker is the recommended deployment path. Manual installs on a standard Linux PHP web server are supported, but more restrictive shared-hosting environments are best-effort and may not support every feature or background-worker workflow. Native Windows PHP server installs are not supported as a filesystem security boundary; Windows browsers and WebDAV clients remain supported.
+
+Treat `uploads/`, `users/`, and `metadata/` as trusted application storage. Only the FileRise service identity and trusted administrative or backup processes may write inside these directories. Do not expose them as a writable share or allow another untrusted application or operating-system account to create entries, links, junctions, or reparse points within them. This requirement also applies when a Docker volume is backed by host storage.
 
 On a pristine manual install, FileRise generates a unique key on first request and persists it in `metadata/persistent_tokens.key`. Keep that file with your backups. Existing installs that previously used the legacy built-in key remain on the compatibility path until an administrator performs a controlled rotation.
 
@@ -294,7 +296,7 @@ Full guide + troubleshooting:
 ### Requirements
 
 - PHP **8.3+**
-- Web server (Apache / Nginx / Caddy + PHP-FPM)
+- Linux web server (Apache / Nginx / Caddy + PHP-FPM)
 - PHP extensions: `json`, `curl`, `zip` (and usual defaults)
 - No database required
 

@@ -9,11 +9,13 @@ use FileRise\Support\EventBus;
 use FileRise\Support\FS;
 use FileRise\Support\LogicalPathPolicy;
 use FileRise\Support\MetadataPath;
+use FileRise\Support\SharePasswordAttemptLimiter;
 use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\StorageAdapterInterface;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
 use FileRise\Domain\AdminModel;
+use FileRise\Domain\AuthModel;
 use FileRise\Domain\FileModel;
 use FileRise\Domain\FolderCrypto;
 use FileRise\Domain\FolderModel;
@@ -4121,6 +4123,28 @@ class FileController
         }
 
         if (!empty($record['password'])) {
+            $clientIp = AuthModel::getClientIp($_SERVER);
+            try {
+                $attempt = SharePasswordAttemptLimiter::beginAttempt($token, $clientIp);
+            } catch (\Throwable $e) {
+                error_log('Share password limiter unavailable: ' . $e->getMessage());
+                http_response_code(503);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "Share password verification is temporarily unavailable."]);
+                exit;
+            }
+
+            if (empty($attempt['allowed'])) {
+                http_response_code(429);
+                header('Retry-After: ' . max(1, (int)($attempt['retryAfter'] ?? 1)));
+                if ($view) {
+                    $renderPasswordForm('Too many password attempts. Try again later.');
+                }
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "Too many password attempts. Try again later."]);
+                exit;
+            }
+
             if (!password_verify($providedPass, $record['password'])) {
                 if ($view) {
                     $renderPasswordForm('Invalid password.');
@@ -4128,6 +4152,16 @@ class FileController
                 http_response_code(403);
                 header('Content-Type: application/json; charset=utf-8');
                 echo json_encode(["error" => "Invalid password."]);
+                exit;
+            }
+
+            try {
+                SharePasswordAttemptLimiter::recordSuccess($token, $clientIp);
+            } catch (\Throwable $e) {
+                error_log('Share password limiter success update failed: ' . $e->getMessage());
+                http_response_code(503);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(["error" => "Share password verification is temporarily unavailable."]);
                 exit;
             }
         }
