@@ -1568,20 +1568,6 @@ class FolderModel
         $folderName = trim((string)$folderName);
         $parentIn   = trim((string)$parent);
 
-        // If the client sent a path in folderName (e.g., "bob/new-sub") and parent is root/empty,
-        // derive parent = "bob" and folderName = "new-sub" so permission checks hit "bob".
-        $normalized = ACL::normalizeFolder($folderName);
-        if (
-            $normalized !== 'root' && strpos($normalized, '/') !== false &&
-            ($parentIn === '' || strcasecmp($parentIn, 'root') === 0)
-        ) {
-            $parentIn  = trim(str_replace('\\', '/', dirname($normalized)), '/');
-            $folderName = basename($normalized);
-            if ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) {
-                $parentIn = 'root';
-            }
-        }
-
         $parent = ($parentIn === '' || strcasecmp($parentIn, 'root') === 0) ? 'root' : $parentIn;
         $folderName = trim($folderName);
         if ($folderName === '') {

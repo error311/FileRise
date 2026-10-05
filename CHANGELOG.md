@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 10/05/2026 (v3.34.0)
+
+`release(v3.34.0): enforce folder-creation destination ACLs`
+
+**Fixed**
+
+- Folder creation now treats the submitted folder name as one leaf and authorizes nested placement through the explicit parent folder.
+
+**Upgrade notes**
+
+- No account, file, folder, permission, encryption-key, or configuration migration is required.
+- Custom API clients must send nested locations through `parent` and a single leaf name through `folderName`, matching the browser, MCP, and WebDAV creation contract.
+
+---
+
 ## Changes 09/30/2026 (v3.33.0)
 
 `release(v3.33.0): harden share passwords and Windows storage boundaries`
