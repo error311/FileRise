@@ -202,12 +202,18 @@ function buildFullGrantsForAllFolders(folders) {
 
 let __allFoldersCache = new Map();
 
-async function getAllFolders(force = false, sourceId = "") {
-  const key = sourceId || getFolderAccessSourceId() || '';
-  if (!force && __allFoldersCache.has(key)) return __allFoldersCache.get(key).slice();
+async function getAllFolders(force = false, sourceId = "", parent = "root") {
+  // Load a single level (shallow: folder=<parent>&counts=0) instead of the full recursive tree.
+  // The full list walks every folder and renders one row per folder, which freezes the editor on
+  // large libraries. The backend already supports shallow listing (getFolderListLocalShallow); it
+  // just was never requested here. parent='root' = top level; drill into a subfolder by passing parent=<path>.
+  const sid = sourceId || getFolderAccessSourceId() || '';
+  const p = parent || 'root';
+  const cacheKey = sid + '::' + p;
+  if (!force && __allFoldersCache.has(cacheKey)) return __allFoldersCache.get(cacheKey).slice();
 
-  const url = '/api/folder/getFolderList.php?counts=0&ts=' + Date.now()
-    + (key ? `&sourceId=${encodeURIComponent(key)}` : '');
+  const url = '/api/folder/getFolderList.php?counts=0&folder=' + encodeURIComponent(p) + '&ts=' + Date.now()
+    + (sid ? `&sourceId=${encodeURIComponent(sid)}` : '');
   const res = await fetch(url, {
     credentials: 'include',
     cache: 'no-store',
@@ -223,7 +229,7 @@ async function getAllFolders(force = false, sourceId = "") {
     .filter(f => f && !hidden.has(f.toLowerCase()))
     .sort((a, b) => (a === 'root' ? -1 : b === 'root' ? 1 : a.localeCompare(b)));
 
-  __allFoldersCache.set(key, cleaned);
+  __allFoldersCache.set(cacheKey, cleaned);
   return cleaned.slice();
 }
 
@@ -239,7 +245,7 @@ async function getUserGrants(username, sourceId = "") {
   return (grants && typeof grants === 'object' && !Array.isArray(grants)) ? grants : {};
 }
 
-function renderFolderGrantsUI(principal, container, folders, grants) {
+function renderFolderGrantsUI(principal, container, folders, grants, parent = 'root', sourceId = '') {
   if (!Array.isArray(folders) || !container) return;
 
   const grantsMap = (grants && typeof grants === 'object' && !Array.isArray(grants)) ? grants : {};
@@ -301,6 +307,45 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
 
   container.innerHTML = '';
   container.appendChild(toolbar);
+
+  // Drill-in into subfolders: load one level at a time (shallow). getAllFolders takes a parent arg.
+  const __sid = sourceId || (typeof getFolderAccessSourceId === 'function' ? getFolderAccessSourceId() : '') || '';
+  const __parent = parent || 'root';
+  async function navigateFolderAccess(newParent) {
+    // Collect in-progress edits into the fallback map before navigating so they survive the
+    // re-render (save is batched via collectGrantsFrom).
+    const acc = collectGrantsFrom(container, container.__grantsFallback || {});
+    let f = [];
+    try { f = await getAllFolders(true, __sid, newParent || 'root'); } catch (e) { f = []; }
+    renderFolderGrantsUI(principal, container, f, acc, newParent || 'root', __sid);
+  }
+  const crumb = document.createElement('div');
+  crumb.className = 'folder-access-breadcrumb';
+  crumb.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0 8px;font-size:13px;';
+  (() => {
+    const mkLink = (label, target) => {
+      const a = document.createElement('a');
+      a.href = '#'; a.textContent = label;
+      a.style.cssText = 'cursor:pointer;text-decoration:underline;';
+      a.addEventListener('click', (e) => { e.preventDefault(); navigateFolderAccess(target); });
+      return a;
+    };
+    crumb.appendChild(mkLink(tf('root_folder', 'root') + ' /', 'root'));
+    const parts = (__parent === 'root') ? [] : __parent.split('/').filter(Boolean);
+    let accPath = '';
+    parts.forEach((seg, i) => {
+      accPath = accPath ? (accPath + '/' + seg) : seg;
+      const sep = document.createElement('span'); sep.textContent = '›'; sep.style.opacity = '0.5';
+      crumb.appendChild(sep);
+      if (i === parts.length - 1) {
+        const cur = document.createElement('strong'); cur.textContent = seg;
+        crumb.appendChild(cur);
+      } else {
+        crumb.appendChild(mkLink(seg, accPath));
+      }
+    });
+  })();
+  container.appendChild(crumb);
   container.appendChild(list);
 
   const rowHtml = (folder, idx) => {
@@ -330,7 +375,7 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
       g.shareFolder = g.shareFolder !== false;
     }
 
-    const name = folder === "root" ? `${t("root_folder")} /` : folder;
+    const name = folder === "root" ? `${t("root_folder")} /` : folder.split('/').pop();
     const shareFolderDisabled = isAdmin ? true : undefined;
 
     const toggle = (cap, label, checked, disabled, title = "") => `
@@ -356,6 +401,7 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
       <div class="folder-badge">
         <i class="material-icons" style="font-size:18px;">folder</i>
         <span class="folder-name-text">${name}</span>
+        ${(folder !== 'root' && folder !== __parent) ? `<button type="button" class="fa-drill-btn" data-drill="${folder}" title="${tf('open_subfolders', 'Open subfolders')}" style="margin-left:6px;border:none;background:transparent;cursor:pointer;padding:0;opacity:0.7;display:inline-flex;align-items:center;"><i class="material-icons" style="font-size:18px;">chevron_right</i></button>` : ''}
         <span class="inherited-tag" style="display:none;"></span>
         <span class="inherit-flag-note pill-note" style="display:none;"></span>
         <span class="group-flag-note pill-note" style="display:none;"></span>
@@ -546,6 +592,13 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
   }
 
   function wireRow(row) {
+    const drillBtn = row.querySelector('.fa-drill-btn');
+    if (drillBtn) {
+      drillBtn.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        navigateFolderAccess(drillBtn.dataset.drill);
+      });
+    }
     const isAdminRow = row.dataset.admin === '1';
     const cbView = row.querySelector('input[data-cap="view"]');
     const cbViewOwn = row.querySelector('input[data-cap="viewOwn"]');
