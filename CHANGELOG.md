@@ -1,5 +1,22 @@
 # Changelog
 
+## Changes 10/10/2026 (v3.35.0)
+
+`release(v3.35.0): harden shared resumable uploads`
+
+**Fixed**
+
+- Resumable uploads through public upload-enabled folder shares now validate server-measured chunk and completed-file sizes before storage and account daily quota from measured bytes.
+- Shared resumable uploads now use a server-signed page scope, pin their initial file metadata, and reject conflicting chunk retries.
+- Updated phpseclib to the patched 3.0.57 security release.
+
+**Upgrade notes**
+
+- No account, file, folder, permission, encryption-key, or configuration migration is required.
+- Existing upload-enabled share links automatically use the corrected size, quota, and resumable-session enforcement.
+
+---
+
 ## Changes 10/05/2026 (v3.34.0)
 
 `release(v3.34.0): enforce folder-creation destination ACLs`

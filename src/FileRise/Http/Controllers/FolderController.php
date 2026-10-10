@@ -137,6 +137,44 @@ class FolderController
         return substr(hash('sha256', $token), 0, 24);
     }
 
+    private static function issueSharedUploadToken(string $token, string $providedPass): string
+    {
+        $secret = (string)($GLOBALS['encryptionKey'] ?? '');
+        if ($secret === '') {
+            return '';
+        }
+        try {
+            $nonce = bin2hex(random_bytes(32));
+        } catch (Throwable $e) {
+            return '';
+        }
+        $mac = hash_hmac('sha256', "share-upload-v1\0$token\0$providedPass\0$nonce", $secret);
+        return 'v1.' . $nonce . '.' . $mac;
+    }
+
+    private static function sharedUploadTokenScope(
+        string $token,
+        string $providedPass,
+        string $uploadToken
+    ): ?string {
+        $secret = (string)($GLOBALS['encryptionKey'] ?? '');
+        if (
+            $secret === '' ||
+            !preg_match('/^v1\.([a-f0-9]{64})\.([a-f0-9]{64})$/D', $uploadToken, $matches)
+        ) {
+            return null;
+        }
+        $expected = hash_hmac(
+            'sha256',
+            "share-upload-v1\0$token\0$providedPass\0" . $matches[1],
+            $secret
+        );
+        if (!hash_equals($expected, $matches[2])) {
+            return null;
+        }
+        return hash('sha256', $uploadToken);
+    }
+
     private static function defaultSharedAllowedTypes(): array
     {
         return [
@@ -176,6 +214,24 @@ class FolderController
             return 'Upload blocked: SVG files are not allowed in shared folders.';
         }
 
+        $maxBytes = self::sharedUploadMaxBytes($record);
+        if ($sizeBytes > $maxBytes) {
+            return 'File size exceeds allowed limit.';
+        }
+
+        $allowedTypes = self::normalizeSharedAllowedTypes($record['allowedTypes'] ?? []);
+        if (empty($allowedTypes)) {
+            $allowedTypes = self::defaultSharedAllowedTypes();
+        }
+        if ($ext === '' || !in_array($ext, $allowedTypes, true)) {
+            return 'File type not allowed.';
+        }
+
+        return null;
+    }
+
+    private static function sharedUploadMaxBytes(array $record): int
+    {
         $maxBytes = 50 * 1024 * 1024;
         $maxFileSizeMb = isset($record['maxFileSizeMb']) && is_numeric($record['maxFileSizeMb'])
             ? (int)$record['maxFileSizeMb']
@@ -191,19 +247,7 @@ class FolderController
                 }
             }
         }
-        if ($sizeBytes > 0 && $sizeBytes > $maxBytes) {
-            return 'File size exceeds allowed limit.';
-        }
-
-        $allowedTypes = self::normalizeSharedAllowedTypes($record['allowedTypes'] ?? []);
-        if (empty($allowedTypes)) {
-            $allowedTypes = self::defaultSharedAllowedTypes();
-        }
-        if ($ext === '' || !in_array($ext, $allowedTypes, true)) {
-            return 'File type not allowed.';
-        }
-
-        return null;
+        return max(1, $maxBytes);
     }
 
     private static function getShareStateDir(): string
@@ -2428,11 +2472,7 @@ class FolderController
 
         $uploadToken = '';
         if ($allowUpload) {
-            $secret = (string)($GLOBALS['encryptionKey'] ?? '');
-            if ($secret !== '') {
-                $seed = $token . '|' . (string)$providedPass;
-                $uploadToken = hash_hmac('sha256', $seed, $secret);
-            }
+            $uploadToken = self::issueSharedUploadToken($token, (string)$providedPass);
         }
 
         $shareBaseUrl = fr_with_base_path('/api/folder/shareFolder.php');
@@ -2814,14 +2854,23 @@ class FolderController
         };
 
         $secret = (string)($GLOBALS['encryptionKey'] ?? '');
+        $uploadTokenScope = null;
         if ($secret !== '') {
+            $uploadTokenScope = self::sharedUploadTokenScope($token, $providedPass, $uploadToken);
             $expectedScoped = hash_hmac('sha256', $token . '|' . $subPath . '|' . $providedPass, $secret);
             $expectedGlobal = hash_hmac('sha256', $token . '|' . $providedPass, $secret);
             $okToken = ($uploadToken !== '')
-                && (hash_equals($expectedScoped, $uploadToken) || hash_equals($expectedGlobal, $uploadToken));
+                && (
+                    $uploadTokenScope !== null ||
+                    hash_equals($expectedScoped, $uploadToken) ||
+                    hash_equals($expectedGlobal, $uploadToken)
+                );
             if (!$okToken) {
                 $respondError(403, "Upload token missing or invalid.");
             }
+        }
+        if ($isChunkUpload && $uploadTokenScope === null) {
+            $respondError(403, "Reload the share page before starting a resumable upload.");
         }
 
         $ctx = FolderModel::getSharedUploadContext($token, $providedPass, $subPath);
@@ -2873,15 +2922,25 @@ class FolderController
             if ($identifier === '' || !preg_match('/^[A-Za-z0-9_-]{1,120}$/', $identifier)) {
                 $respondError(400, 'Invalid upload identifier.');
             }
+            $identifier = hash_hmac('sha256', $identifier, (string)$uploadTokenScope);
 
             $filename = basename(trim((string)($_POST['resumableFilename'] ?? '')));
             if ($filename === '' || !preg_match(REGEX_FILE_NAME, $filename)) {
                 $respondError(400, 'Invalid file name.');
             }
 
-            $sizeBytes = isset($_POST['resumableTotalSize']) && is_numeric($_POST['resumableTotalSize'])
-                ? max(0, (int)$_POST['resumableTotalSize'])
-                : 0;
+            $declaredSize = $_POST['resumableTotalSize'] ?? null;
+            if (is_array($declaredSize)) {
+                $respondError(400, 'Invalid total upload size.');
+            }
+            $declaredSize = trim((string)$declaredSize);
+            if (!preg_match('/^[1-9][0-9]*$/', $declaredSize)) {
+                $respondError(400, 'Invalid total upload size.');
+            }
+            $sizeBytes = (int)$declaredSize;
+            if ($sizeBytes <= 0 || (string)$sizeBytes !== $declaredSize) {
+                $respondError(400, 'Invalid total upload size.');
+            }
 
             $relativePath = (string)($_POST['resumableRelativePath'] ?? '');
             if (!$preserveFolderStructure) {
@@ -2921,6 +2980,8 @@ class FolderController
             $requestParams['resumableIdentifier'] = $identifier;
             $requestParams['resumableFilename'] = $filename;
             $requestParams['resumableTotalSize'] = $sizeBytes;
+            $requestParams['_fr_shared_upload_max_bytes'] = self::sharedUploadMaxBytes($record);
+            $requestParams['_fr_bind_resumable_metadata'] = true;
             if ($relativePath !== '') {
                 $requestParams['resumableRelativePath'] = $relativePath;
             }
@@ -2998,15 +3059,20 @@ class FolderController
 
         $isChunkIntermediate = isset($result['status']) && (string)$result['status'] === 'chunk uploaded';
         $isSuccess = isset($result['success']) && !$isChunkIntermediate;
+        $accountedSizeBytes = $sizeBytes;
+        if ($isSuccess && $isChunkUpload && isset($result['sizeBytes']) && is_numeric($result['sizeBytes'])) {
+            $accountedSizeBytes = max(0, (int)$result['sizeBytes']);
+            unset($result['sizeBytes']);
+        }
 
         if ($isSuccess) {
-            self::incrementSharedDailyQuota($tokenHash, $sizeBytes);
+            self::incrementSharedDailyQuota($tokenHash, $accountedSizeBytes);
             $folderKey = ACL::normalizeFolder($targetFolder);
             $effectiveRelPath = $relativePath !== '' ? str_replace('\\', '/', ltrim($relativePath, '/')) : $filename;
             $loggedPath = ($folderKey === 'root' || $folderKey === '')
                 ? $effectiveRelPath
                 : ($folderKey . '/' . $effectiveRelPath);
-            self::logSharedUploadSubmission($tokenHash, $clientIp, $loggedPath, $sizeBytes);
+            self::logSharedUploadSubmission($tokenHash, $clientIp, $loggedPath, $accountedSizeBytes);
         }
 
         if ($isSuccess && !$wantsJson && !$isChunkUpload) {

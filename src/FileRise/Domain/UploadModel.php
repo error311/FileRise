@@ -155,6 +155,98 @@ class UploadModel
         return rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR . $folderName . DIRECTORY_SEPARATOR;
     }
 
+    private static function measuredFileSize(string $path): ?int
+    {
+        clearstatcache(true, $path);
+        $size = @filesize($path);
+        return $size === false ? null : max(0, (int)$size);
+    }
+
+    private static function resumableStagedSize(string $tempDir, int $replacedChunk): ?int
+    {
+        $items = @scandir($tempDir);
+        if ($items === false) {
+            return null;
+        }
+
+        $total = 0;
+        foreach ($items as $item) {
+            if (!preg_match('/^[1-9][0-9]*$/', (string)$item) || (int)$item === $replacedChunk) {
+                continue;
+            }
+            $size = self::measuredFileSize($tempDir . $item);
+            if ($size === null || $total > PHP_INT_MAX - $size) {
+                return null;
+            }
+            $total += $size;
+        }
+        return $total;
+    }
+
+    private static function resumableSizeError(
+        int $measuredBytes,
+        int $declaredBytes,
+        int $maxBytes,
+        bool $complete
+    ): ?string {
+        if ($declaredBytes <= 0) {
+            return 'Invalid total upload size.';
+        }
+        if ($measuredBytes > $declaredBytes || ($maxBytes > 0 && $measuredBytes > $maxBytes)) {
+            return 'File size exceeds allowed limit.';
+        }
+        if ($complete && $measuredBytes !== $declaredBytes) {
+            return 'Uploaded file size does not match declared size.';
+        }
+        return null;
+    }
+
+    private static function bindResumableMetadata(string $tempDir, array $metadata, int $chunkNumber): ?string
+    {
+        $lock = @fopen($tempDir . '.upload.lock', 'c+');
+        if ($lock === false || !flock($lock, LOCK_EX)) {
+            if (is_resource($lock)) {
+                fclose($lock);
+            }
+            return 'Unable to verify upload session.';
+        }
+
+        $metadataPath = $tempDir . '.upload.json';
+        $error = null;
+        if (is_file($metadataPath)) {
+            $stored = json_decode((string)@file_get_contents($metadataPath), true);
+            if (!is_array($stored) || $stored !== $metadata) {
+                $error = 'Upload session does not match the initial chunk.';
+            }
+        } elseif ($chunkNumber !== 1) {
+            $error = 'Upload session must start with the first chunk.';
+        } else {
+            $encoded = json_encode($metadata, JSON_UNESCAPED_SLASHES);
+            if (!is_string($encoded) || @file_put_contents($metadataPath, $encoded, LOCK_EX) === false) {
+                $error = 'Unable to initialize upload session.';
+            }
+        }
+
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        return $error;
+    }
+
+    private static function resumableChunkContentError(string $existingPath, string $incomingPath): ?string
+    {
+        if (!is_file($existingPath)) {
+            return null;
+        }
+        $existingHash = @hash_file('sha256', $existingPath);
+        $incomingHash = @hash_file('sha256', $incomingPath);
+        if (!is_string($existingHash) || !is_string($incomingHash)) {
+            return 'Unable to verify upload chunk.';
+        }
+        return hash_equals($existingHash, $incomingHash)
+            ? null
+            : 'Upload chunk does not match the existing session data.';
+    }
+
     private static function isPathWithinRoot(string $path, string $root): bool
     {
         $rootReal = realpath($root);
@@ -1041,6 +1133,54 @@ class UploadModel
 
             $chunkFile = $tempDir . $chunkNumber;
             $tmpName   = $files['file']['tmp_name'] ?? null;
+            $bindMetadata = !empty($post['_fr_bind_resumable_metadata']);
+            if ($bindMetadata) {
+                $metadataError = self::bindResumableMetadata($tempDir, [
+                    'filename' => $resumableFilename,
+                    'relativeSubDir' => $relativeSubDir,
+                    'totalChunks' => $totalChunks,
+                    'totalSize' => isset($post['resumableTotalSize']) && is_numeric($post['resumableTotalSize'])
+                        ? (int)$post['resumableTotalSize']
+                        : 0,
+                ], $chunkNumber);
+                if ($metadataError !== null) {
+                    return ['error' => $metadataError];
+                }
+                $chunkContentError = is_string($tmpName)
+                    ? self::resumableChunkContentError($chunkFile, $tmpName)
+                    : 'Unable to verify upload chunk.';
+                if ($chunkContentError !== null) {
+                    return ['error' => $chunkContentError];
+                }
+            }
+            $sharedMaxBytes = isset($post['_fr_shared_upload_max_bytes']) && is_numeric($post['_fr_shared_upload_max_bytes'])
+                ? max(0, (int)$post['_fr_shared_upload_max_bytes'])
+                : 0;
+            if ($sharedMaxBytes > 0) {
+                $declaredBytes = isset($post['resumableTotalSize']) && is_numeric($post['resumableTotalSize'])
+                    ? (int)$post['resumableTotalSize']
+                    : 0;
+                $incomingBytes = is_string($tmpName) ? self::measuredFileSize($tmpName) : null;
+                $stagedBytes = self::resumableStagedSize($tempDir, $chunkNumber);
+                if (
+                    $incomingBytes === null ||
+                    $stagedBytes === null ||
+                    $stagedBytes > PHP_INT_MAX - $incomingBytes
+                ) {
+                    self::rrmdir($tempDir);
+                    return ['error' => 'Unable to verify upload size.'];
+                }
+                $sizeError = self::resumableSizeError(
+                    $stagedBytes + $incomingBytes,
+                    $declaredBytes,
+                    $sharedMaxBytes,
+                    false
+                );
+                if ($sizeError !== null) {
+                    self::rrmdir($tempDir);
+                    return ['error' => $sizeError];
+                }
+            }
             if (!$tmpName || !move_uploaded_file($tmpName, $chunkFile)) {
                 return ['error' => "Failed to move uploaded chunk $chunkNumber"];
             }
@@ -1109,6 +1249,21 @@ class UploadModel
                 fclose($in);
             }
             fclose($out);
+
+            $actualSizeBytes = self::measuredFileSize($targetPath);
+            if ($sharedMaxBytes > 0) {
+                $declaredBytes = isset($post['resumableTotalSize']) && is_numeric($post['resumableTotalSize'])
+                    ? (int)$post['resumableTotalSize']
+                    : 0;
+                $sizeError = $actualSizeBytes === null
+                    ? 'Unable to verify upload size.'
+                    : self::resumableSizeError($actualSizeBytes, $declaredBytes, $sharedMaxBytes, true);
+                if ($sizeError !== null) {
+                    @unlink($targetPath);
+                    $cleanupChunk();
+                    return ['error' => $sizeError];
+                }
+            }
 
             // Optional: virus scan the merged file
             $scanResult   = self::scanFileIfEnabled($targetPath, [
@@ -1212,7 +1367,11 @@ class UploadModel
 
             $cleanupChunk();
 
-            return ['success' => 'File uploaded successfully'];
+            $uploadResult = ['success' => 'File uploaded successfully'];
+            if ($sharedMaxBytes > 0) {
+                $uploadResult['sizeBytes'] = $actualSizeBytes ?? 0;
+            }
+            return $uploadResult;
         }
 
         // --- NON-CHUNKED (drag-and-drop / folder uploads) ---

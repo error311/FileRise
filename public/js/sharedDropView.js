@@ -347,7 +347,6 @@ document.addEventListener('DOMContentLoaded', async function () {
   const queue = [];
   const rows = new Map();
   let running = 0;
-  let uploadSequence = 0;
   const MAX_CONCURRENT = 2;
   const CHUNK_THRESHOLD = 8 * 1024 * 1024;
   const CHUNK_SIZE = 2 * 1024 * 1024;
@@ -478,8 +477,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     } catch (e) {
       // ignore
     }
-    uploadSequence += 1;
-    return 'upl' + String(Date.now()) + '_' + String(uploadSequence);
+    return '';
   }
 
   async function uploadSingle(item) {
@@ -502,6 +500,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     const rel = getRelativePathForItem(item.file);
     const totalChunks = Math.max(1, Math.ceil(item.file.size / CHUNK_SIZE));
     const uploadId = makeUploadId();
+    if (!uploadId) {
+      await uploadSingle(item);
+      return;
+    }
 
     for (let index = 1; index <= totalChunks; index++) {
       const start = (index - 1) * CHUNK_SIZE;
