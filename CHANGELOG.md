@@ -1,5 +1,20 @@
 # Changelog
 
+## Changes 10/15/2026 (v3.36.0)
+
+`release(v3.36.0): enforce the WebDAV storage boundary`
+
+**Fixed**
+
+- WebDAV COPY and MOVE destinations now reject encoded path traversal and any resolved path outside the configured uploads root.
+
+**Upgrade notes**
+
+- No account, file, folder, permission, encryption-key, or configuration migration is required.
+- Ordinary WebDAV clients and reverse-proxy subpath deployments require no changes.
+
+---
+
 ## Changes 10/10/2026 (v3.35.0)
 
 `release(v3.35.0): harden shared resumable uploads`

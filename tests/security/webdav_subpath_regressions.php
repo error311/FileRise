@@ -148,6 +148,19 @@ try {
     file_put_contents(UPLOAD_DIR . 'source/source.txt', 'UNCHANGED SOURCE');
     file_put_contents(UPLOAD_DIR . 'existing.txt', 'UNCHANGED TARGET');
     foreach (['MOVE', 'COPY'] as $method) {
+        foreach (['' => 'path', 'https://example.com' => 'absolute'] as $origin => $form) {
+            $outsideName = 'encoded-traversal-' . strtolower($method) . '-' . $form . '.txt';
+            file_put_contents(UPLOAD_DIR . 'source/source.txt', 'UNCHANGED SOURCE');
+            [$status] = davPathRequest(
+                $method,
+                '/webdav.php/source/source.txt',
+                $origin . '/filerise/webdav.php/%2e%2e/users/' . $outsideName,
+                '/filerise'
+            );
+            davPathCheck($status === 403, 'Encoded traversal destination was accepted');
+            davPathCheck(!file_exists(USERS_DIR . $outsideName), 'Encoded traversal wrote outside uploads');
+        }
+
         foreach ([
             '/filerise-other/webdav.php/no.txt',
             '/filerise/webdav.php-other/no.txt',

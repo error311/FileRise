@@ -5,6 +5,7 @@ namespace FileRise\WebDAV;
 use FileRise\Support\ACL;
 use FileRise\Support\AuditHook;
 use FileRise\Support\FS;
+use FileRise\Support\LogicalPathPolicy;
 use FileRise\Support\MetadataPath;
 use FileRise\Domain\FileModel;
 use FileRise\Domain\FolderCrypto;
@@ -127,7 +128,7 @@ class FileRiseDirectory implements ICollection, INode
 
     public function childExists($name): bool
     {
-        $full = $this->path . DIRECTORY_SEPARATOR . $name;
+        $full = $this->childPath((string)$name);
         if (!file_exists($full)) {
             return false;
         }
@@ -161,7 +162,7 @@ class FileRiseDirectory implements ICollection, INode
 
     public function getChild($name): INode
     {
-        $full = $this->path . DIRECTORY_SEPARATOR . $name;
+        $full = $this->childPath((string)$name);
         if (!file_exists($full)) {
             throw new NotFound("Not found: $name");
         }
@@ -197,7 +198,9 @@ class FileRiseDirectory implements ICollection, INode
     public function createFile($name, $data = null): INode
     {
         $folderKey = $this->folderKeyForPath($this->path);
-        $name = basename(trim((string)$name));
+        $name = trim((string)$name);
+        $full = $this->childPath($name);
+        $name = basename($name);
 
         if (!ACL::canMutate($this->perms)) {
             throw new Forbidden('Account is read-only');
@@ -217,8 +220,6 @@ class FileRiseDirectory implements ICollection, INode
         }
 
         // Write directly to FS, then ensure metadata via FileRiseFile::put()
-        $full    = $this->path . DIRECTORY_SEPARATOR . $name;
-
         // Let FileRiseFile handle metadata & overwrite semantics
         $fileNode = new FileRiseFile($full, $this->user, $this->isAdmin, $this->perms);
         $fileNode->put($data);
@@ -230,6 +231,7 @@ class FileRiseDirectory implements ICollection, INode
     {
         $parentKey = $this->folderKeyForPath($this->path);
         $name = trim((string)$name);
+        $full = $this->childPath($name);
         if (!ACL::canMutate($this->perms)) {
             throw new Forbidden('Account is read-only');
         }
@@ -250,7 +252,6 @@ class FileRiseDirectory implements ICollection, INode
             throw new Forbidden('Invalid folder name.');
         }
 
-        $full = $this->path . DIRECTORY_SEPARATOR . $name;
         if (!is_dir($full)) {
             @mkdir($full, 0755, true);
         }
@@ -279,17 +280,11 @@ class FileRiseDirectory implements ICollection, INode
     private function folderKeyForPath(string $absPath): string
     {
         $base = rtrim(UPLOAD_DIR, '/\\');
-        $realBase = realpath($base) ?: $base;
-        $real     = realpath($absPath) ?: $absPath;
+        $realBase = realpath($base);
+        $real = realpath($absPath);
 
-        if (stripos($real, $realBase) !== 0) {
-            return 'root';
-        }
-        if (strlen($real) > strlen($realBase)) {
-            $next = $real[strlen($realBase)] ?? '';
-            if ($next !== '/' && $next !== '\\') {
-                return 'root';
-            }
+        if ($realBase === false || $real === false || !$this->pathIsWithin($real, $realBase)) {
+            throw new Forbidden('Path is outside the WebDAV storage root');
         }
         $rel = ltrim(str_replace('\\', '/', substr($real, strlen($realBase))), '/');
         return ($rel === '' ? 'root' : $rel);
@@ -297,8 +292,42 @@ class FileRiseDirectory implements ICollection, INode
 
     private function relFromUploads(string $absPath): string
     {
-        $base = rtrim(UPLOAD_DIR, '/\\');
-        return ltrim(str_replace('\\', '/', substr($absPath, strlen($base))), '/');
+        $folderKey = $this->folderKeyForPath($absPath);
+        return $folderKey === 'root' ? '' : $folderKey;
+    }
+
+    private function childPath(string $name): string
+    {
+        if (
+            $name === '' ||
+            strpos($name, '/') !== false ||
+            strpos($name, '\\') !== false ||
+            LogicalPathPolicy::hasUnsafeDotSegments($name)
+        ) {
+            throw new Forbidden('Invalid path segment');
+        }
+
+        $full = $this->path . DIRECTORY_SEPARATOR . $name;
+        $base = realpath(rtrim(UPLOAD_DIR, '/\\'));
+        $resolved = realpath($full);
+        $boundaryPath = $resolved !== false ? $resolved : realpath(dirname($full));
+        if ($base === false || $boundaryPath === false || !$this->pathIsWithin($boundaryPath, $base)) {
+            throw new Forbidden('Path is outside the WebDAV storage root');
+        }
+
+        return $full;
+    }
+
+    private function pathIsWithin(string $path, string $base): bool
+    {
+        $path = str_replace('\\', '/', rtrim($path, '/\\'));
+        $base = str_replace('\\', '/', rtrim($base, '/\\'));
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $path = strtolower($path);
+            $base = strtolower($base);
+        }
+
+        return $path === $base || str_starts_with($path, $base . '/');
     }
 
     private function loadMeta(string $folderKey): array
