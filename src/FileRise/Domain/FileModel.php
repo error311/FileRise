@@ -1631,7 +1631,6 @@ class FileModel
 
         if (isset($metadata[$fileName])) {
             $metadata[$fileName]['modified'] = $currentTime;
-            $metadata[$fileName]['uploader'] = $uploader;
         } else {
             $metadata[$fileName] = [
                 "uploaded" => $currentTime,

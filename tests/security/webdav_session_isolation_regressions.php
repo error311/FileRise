@@ -108,6 +108,12 @@ if ($mode !== false && $mode !== '') {
     fclose($stream);
     $node->put('updated');
     davCheck(file_get_contents(UPLOAD_DIR . 'owned/allowed.txt') === 'updated', 'Own overwrite regressed');
+    $shared = new FileRiseDirectory(UPLOAD_DIR . 'shared', 'bob', false, []);
+    $foreign = $shared->getChild('foreign.txt');
+    $foreign->put('edited by folder editor');
+    davCheck(file_get_contents(UPLOAD_DIR . 'shared/foreign.txt') === 'edited by folder editor', 'Edit permission did not authorize WebDAV overwrite');
+    $sharedMeta = json_decode((string)file_get_contents(META_DIR . 'shared_metadata.json'), true);
+    davCheck(($sharedMeta['foreign.txt']['uploader'] ?? '') === 'alice', 'WebDAV edit changed the original uploader');
     $readOnly = new FileRiseDirectory(UPLOAD_DIR . 'owned', 'bob', false, ['readOnly' => true]);
     davDenied(fn() => $readOnly->createFile('readonly.txt', 'refused'));
     $disabled = new FileRiseDirectory(UPLOAD_DIR . 'owned', 'bob', false, ['disableUpload' => true]);
@@ -118,7 +124,7 @@ if ($mode !== false && $mode !== '') {
 }
 
 $tmp = sys_get_temp_dir() . '/fr-dav-isolation-' . bin2hex(random_bytes(6));
-foreach (['users/pro', 'uploads/secret', 'uploads/owned', 'other-source', 'metadata', 'sessions'] as $dir) {
+foreach (['users/pro', 'uploads/secret', 'uploads/owned', 'uploads/shared', 'other-source', 'metadata', 'sessions'] as $dir) {
     mkdir($tmp . '/' . $dir, 0700, true);
 }
 try {
@@ -143,8 +149,13 @@ try {
         'root' => ['owners' => ['admin']],
         'secret' => ['owners' => ['admin']],
         'owned' => ['owners' => ['bob']],
+        'shared' => ['owners' => ['admin'], 'read' => ['bob'], 'edit' => ['bob']],
     ]]));
     file_put_contents($tmp . '/uploads/secret/secret.txt', 'secret');
+    file_put_contents($tmp . '/uploads/shared/foreign.txt', 'foreign');
+    file_put_contents($tmp . '/metadata/shared_metadata.json', json_encode([
+        'foreign.txt' => ['uploader' => 'alice'],
+    ]));
     session_save_path($tmp . '/sessions');
     session_id('fixture-admin-session');
     require $baseDir . '/config/config.php';

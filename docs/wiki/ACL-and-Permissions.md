@@ -42,6 +42,7 @@ These notes describe what the **Folder Access** screen enforces today.
 
 - **Manage (Owner)** is the umbrella grant. It auto-enables View (all), file-level actions, and Share, and is required for subfolders and moves.
 - **Create File / Upload / Edit / Rename / Copy / Delete / Extract** are individual file actions. The UI gates each one on its own toggle.
+- **Edit** authorizes changing file contents in the folder regardless of who uploaded the file. File ownership does not replace the Edit requirement.
 - **Write** is a shortcut checkbox: it toggles the file-level actions as a group. If any file action is on, Write shows as checked. It does **not** grant extra capabilities beyond those toggles in the UI.
 - **Share File** auto-enables View (own). **Share Folder** auto-enables Manage + View (all) and won’t stay on without them.
 
@@ -53,7 +54,7 @@ These notes describe what the **Folder Access** screen enforces today.
 | View (own) | View (own) | Upload also auto-enables this if no view is set. |
 | Create file | Create File or Manage | If Create File is off, the New button is disabled. |
 | Upload file | Upload or Manage | |
-| Edit file | Edit or Manage | |
+| Edit file | Edit or Manage | Applies to file contents regardless of uploader. |
 | Rename file | Rename or Manage | |
 | Copy file | Copy or Manage | |
 | Delete file | Delete or Manage | |
@@ -66,6 +67,8 @@ These notes describe what the **Folder Access** screen enforces today.
 Notes:
 
 - Account-level flags (Read-only / Disable upload) and source read-only still apply even if ACLs allow an action.
+- **Bypass ownership** only relaxes operations that apply a separate ownership restriction. It does not grant a missing folder capability and is not required when the folder's Edit capability authorizes a content edit.
+- Replacing an existing filename through an upload is treated as an upload collision and retains its separate ownership protection.
 
 ---
 

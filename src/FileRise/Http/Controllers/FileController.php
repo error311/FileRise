@@ -1973,26 +1973,6 @@ class FileController
                     return;
                 }
 
-                // If overwriting, enforce ownership for non-admins (unless folder owner)
-                $storage = StorageRegistry::getAdapter();
-                $baseDir = rtrim((class_exists('SourceContext') ? SourceContext::uploadRoot() : (string)UPLOAD_DIR), '/\\');
-                $dir = ($folder === 'root') ? $baseDir : $baseDir . DIRECTORY_SEPARATOR . $folder;
-                $path = $dir . DIRECTORY_SEPARATOR . $fileName;
-                if ($storage->stat($path) !== null) {
-                    $ignoreOwnership = $this->isAdmin($userPermissions)
-                        || ($userPermissions['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false))
-                        || ACL::isOwner($username, $userPermissions, $folder)
-                        || $this->ownsFolderOrAncestor($folder, $username, $userPermissions);
-
-                    if (!$ignoreOwnership) {
-                        $violation = $this->enforceScopeAndOwnership($folder, [$fileName], $username, $userPermissions);
-                        if ($violation) {
-                            $this->jsonOut(["error" => $violation], 403);
-                            return;
-                        }
-                    }
-                }
-
                 $deny = ['php', 'phtml', 'phar', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'shtml', 'cgi', 'fcgi'];
                 $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 if (in_array($ext, $deny, true)) {

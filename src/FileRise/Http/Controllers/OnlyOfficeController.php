@@ -10,6 +10,7 @@ use FileRise\Storage\StorageRegistry;
 use FileRise\Domain\AdminModel;
 use FileRise\Domain\AuthModel;
 use FileRise\Domain\FileModel;
+use FileRise\Domain\FolderCrypto;
 
 // src/controllers/OnlyOfficeController.php
 require_once PROJECT_ROOT . '/src/lib/ACL.php';
@@ -537,6 +538,9 @@ class OnlyOfficeController
             if (!\ACL::canRead($user, $perms, $folder)) {
                 return ['forbidden' => true];
             }
+            if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                return ['encrypted' => true];
+            }
             $canEdit = \ACL::canEdit($user, $perms, $folder);
             $info = FileModel::getDownloadInfo($folder, $file);
             if (isset($info['error'])) {
@@ -554,6 +558,11 @@ class OnlyOfficeController
         if (!empty($downloadCtx['forbidden'])) {
             http_response_code(403);
             echo '{"error":"Forbidden"}';
+            return;
+        }
+        if (!empty($downloadCtx['encrypted'])) {
+            http_response_code(403);
+            echo '{"error":"ONLYOFFICE is disabled inside encrypted folders."}';
             return;
         }
         $canEdit = !empty($downloadCtx['canEdit']);
@@ -749,11 +758,19 @@ class OnlyOfficeController
 
     // Save-on statuses: 2/6/7
         if (in_array($status, [2,6,7], true)) {
-            $canEdit = $this->withSourceContext($sourceId, function () use ($actor, $perms, $folder) {
-                return \ACL::canEdit($actor, $perms, $folder);
+            $access = $this->withSourceContext($sourceId, function () use ($actor, $perms, $folder) {
+                return [
+                    'canEdit' => \ACL::canEdit($actor, $perms, $folder),
+                    'encrypted' => FolderCrypto::isEncryptedOrAncestor($folder),
+                ];
             }, true);
-            if (!$canEdit) {
+            if (empty($access['canEdit'])) {
                 $this->ooLog('error', "ACL deny edit: actor='$actor' folder='$folder'");
+                echo '{"error":6}';
+                return;
+            }
+            if (!empty($access['encrypted'])) {
+                $this->ooLog('error', "encrypted folder deny save: actor='$actor' folder='$folder'");
                 echo '{"error":6}';
                 return;
             }
@@ -804,6 +821,9 @@ class OnlyOfficeController
             }
 
             $saveResult = $this->withSourceContext($sourceId, function () use ($folder, $file, $data, $sourceId) {
+                if (FolderCrypto::isEncryptedOrAncestor($folder)) {
+                    return ['error' => 'encrypted folder'];
+                }
                 $info = FileModel::getDownloadInfo($folder, $file);
                 if (isset($info['error'])) {
                     if ($sourceId === 'local') {

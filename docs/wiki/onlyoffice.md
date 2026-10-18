@@ -6,6 +6,14 @@ Supported:
 - Edit: DOCX, XLSX, PPTX
 - View: ODT, ODS, ODP, PDF
 
+## Permission behavior
+
+- A user with **View** and **Edit** permission for the folder can edit supported documents in that folder regardless of who uploaded them.
+- A user with View but without Edit receives a read-only editor configuration and no save callback capability.
+- Save callbacks recheck the user's current folder Edit permission before writing the document.
+- Account read-only and source read-only restrictions still apply.
+- Editing preserves the document's original uploader metadata.
+
 ---
 
 ## Quick setup
@@ -114,6 +122,8 @@ If FileRise is served over HTTPS, your Document Server must also be HTTPS to avo
 ## Encrypted folders
 
 ONLYOFFICE is disabled inside encrypted-at-rest folders by design.
+
+FileRise rejects new editor configurations for an encrypted folder. If folder encryption begins while an editor is already open, its later save callback is rejected so it cannot replace the encrypted file with plaintext. Close the editor before enabling encryption; after decrypting the folder, reopen the document to start a new session.
 
 ---
 

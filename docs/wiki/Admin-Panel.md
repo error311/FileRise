@@ -18,7 +18,7 @@ The Admin Panel is where you manage users, folder access, authentication, integr
   - **Read-only**: view/download only.
   - **Disable upload**: blocks uploads.
   - **Can share**: allow share links (still subject to ACLs).
-  - **Bypass ownership**: relax owner-only restrictions for the user.
+  - **Bypass ownership**: relax owner-only restrictions for operations that enforce ownership; required folder ACLs still apply. Folder Edit already authorizes editing file contents regardless of uploader.
 - **Folder Access**: per-folder ACLs (view, view own, create file, upload, edit, rename, copy, move, delete, extract, share, manage).
 - **Pro**: User Groups and Client Portals are managed here when Pro is active.
 

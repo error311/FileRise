@@ -25,6 +25,7 @@ namespace FileRise\Http\Controllers {
 
 namespace {
     use FileRise\Http\Controllers\OnlyOfficeController;
+    use FileRise\Domain\FolderCrypto;
     use FileRise\Storage\SourceContext;
 
     $baseDir = dirname(__DIR__, 2);
@@ -113,12 +114,13 @@ namespace {
             'secret' => ooSourceAcl([], []),
             'view' => ooSourceAcl(['bob'], []),
             'edit' => ooSourceAcl(['bob'], ['bob']),
+            'encrypted' => ooSourceAcl(['bob'], ['bob']),
             'reverse' => ooSourceAcl(['bob'], ['bob']),
         ];
         file_put_contents($tmp . '/metadata/folder_acl.json', json_encode(['folders' => $localAcl]));
         file_put_contents($tmp . '/metadata/sources/ext/folder_acl.json', json_encode(['folders' => $extAcl]));
         foreach (['uploads', 'ext'] as $source) {
-            foreach (['secret', 'view', 'edit', 'reverse'] as $folder) {
+            foreach (['secret', 'view', 'edit', 'encrypted', 'reverse'] as $folder) {
                 mkdir($tmp . '/' . $source . '/' . $folder);
                 file_put_contents($tmp . '/' . $source . '/' . $folder . '/file.docx', $source . '-' . $folder);
             }
@@ -200,6 +202,45 @@ namespace {
             ooSourceCheck(file_get_contents($tmp . '/uploads/' . $folder . '/file.docx') === 'uploads-' . $folder, 'Callback changed active-source file');
             ooSourceCheck(SourceContext::getActiveId() === 'local', 'Callback did not restore source');
         }
+
+        // A capability issued before encryption must not restore plaintext after encryption begins.
+        $_SESSION = ['authenticated' => true, 'username' => 'bob', 'isAdmin' => false];
+        $query = ['folder' => 'encrypted', 'file' => 'file.docx', 'sourceId' => 'ext'];
+        [$code, $body] = ooSourceConfig($controller, 'local', $query);
+        ooSourceCheck($code === 200, 'Pre-encryption ONLYOFFICE config was denied');
+        parse_str((string)parse_url($body['editorConfig']['callbackUrl'] ?? '', PHP_URL_QUERY), $callbackQuery);
+        ooSourceCheck(!empty($callbackQuery['tok']), 'Pre-encryption config did not issue a callback capability');
+
+        SourceContext::setActiveId('ext', false);
+        $marker = FolderCrypto::setEncrypted('encrypted', true, 'admin');
+        ooSourceCheck(!empty($marker['ok']), 'Failed to mark the test folder encrypted');
+        SourceContext::setActiveId('local', false);
+
+        [$code, $body] = ooSourceConfig($controller, 'local', $query);
+        ooSourceCheck(
+            $code === 403 && ($body['error'] ?? '') === 'ONLYOFFICE is disabled inside encrypted folders.',
+            'An encrypted folder still issued an ONLYOFFICE document capability'
+        );
+
+        $_SESSION = [];
+        $_GET = ['tok' => (string)($callbackQuery['tok'] ?? '')];
+        $payload = ['status' => 2, 'url' => 'https://docs.example.test/saved.docx'];
+        $header = ooSourceB64((string)json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
+        $jwtBody = ooSourceB64((string)json_encode($payload));
+        $payload['token'] = $header . '.' . $jwtBody . '.'
+            . ooSourceB64(hash_hmac('sha256', $header . '.' . $jwtBody, ONLYOFFICE_JWT_SECRET, true));
+        $GLOBALS['ooSourceCallbackBody'] = json_encode($payload);
+        $fetchBefore = $GLOBALS['ooSourceFetchCount'];
+        ob_start();
+        $controller->callback();
+        $response = json_decode((string)ob_get_clean(), true);
+        ooSourceCheck(($response['error'] ?? -1) === 6, 'Pre-encryption callback capability remained writable');
+        ooSourceCheck($GLOBALS['ooSourceFetchCount'] === $fetchBefore, 'Encrypted-folder callback fetched plaintext content');
+        ooSourceCheck(
+            file_get_contents($tmp . '/ext/encrypted/file.docx') === 'ext-encrypted',
+            'Encrypted-folder callback replaced the protected file'
+        );
+        ooSourceCheck(SourceContext::getActiveId() === 'local', 'Encrypted callback did not restore source');
         echo "ONLYOFFICE source scope regressions passed\n";
     } finally {
         if (session_status() === PHP_SESSION_ACTIVE) {

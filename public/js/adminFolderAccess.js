@@ -388,7 +388,7 @@ function renderFolderGrantsUI(principal, container, folders, grants) {
             tf('write_full', 'Write/Modify'),
             `
               ${toggle('write', tf('write_full', 'Write (file ops)'), writeMetaChecked, false, tf('write_help', 'File-level: upload, edit, rename, copy, delete, extract archives (no folder creation).'))}
-              ${toggle('edit', tf('edit', 'Edit File'), g.edit, false, tf('edit_help', 'Edit file contents'))}
+              ${toggle('edit', tf('edit', 'Edit File'), g.edit, false, tf('edit_help', 'Edit file contents regardless of uploader'))}
               ${toggle('extract', tf('extract', 'Extract Archive'), g.extract, false, tf('extract_help', 'Extract archive files'))}
               ${toggle('rename', tf('rename', 'Rename File'), g.rename, false, tf('rename_help', 'Rename a file'))}
               ${toggle('copy', tf('copy', 'Copy File'), g.copy, false, tf('copy_help', 'Copy a file'))}

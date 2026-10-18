@@ -1,5 +1,26 @@
 # Changelog
 
+## Changes 10/18/2026 (v3.37.0)
+
+`release(v3.37.0): enforce document editing boundaries`
+
+**Fixed**
+
+- The browser editor and WebDAV now honor the folder Edit capability consistently with ONLYOFFICE, allowing authorized content edits regardless of uploader while preserving the original uploader metadata.
+- ONLYOFFICE no longer opens documents inside encrypted folders, and save callbacks issued before encryption are rejected once folder encryption begins.
+
+**Documentation**
+
+- Clarified that Edit controls file-content changes, while Bypass Ownership applies only to operations with a separate ownership restriction.
+- Clarified how an open ONLYOFFICE session behaves when its folder becomes encrypted.
+
+**Upgrade notes**
+
+- No account, file, folder, permission, encryption-key, or configuration migration is required.
+- Existing upload-collision ownership protection is unchanged.
+
+---
+
 ## Changes 10/15/2026 (v3.36.0)
 
 `release(v3.36.0): enforce the WebDAV storage boundary`

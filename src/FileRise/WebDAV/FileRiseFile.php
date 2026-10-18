@@ -141,12 +141,6 @@ class FileRiseFile implements IFile, INode
             }
         }
 
-        // Ownership on overwrite (unless admin/bypass)
-        $bypass = !empty($this->perms['bypassOwnership']) || $this->isAdmin;
-        if ($exists && !$bypass && !$this->isOwner($folderKey, $fileName)) {
-            throw new Forbidden('You do not own the target file');
-        }
-
         // write + metadata (unchanged)
         $maxBytes = defined('FR_WEBDAV_MAX_UPLOAD_BYTES') ? (int)FR_WEBDAV_MAX_UPLOAD_BYTES : 0;
         if ($maxBytes < 0) {
@@ -286,7 +280,7 @@ class FileRiseFile implements IFile, INode
         $meta     = $this->loadMeta($folderKey);
         $now      = date(DATE_TIME_FORMAT);
         $uploaded = $meta[$fileName]['uploaded'] ?? $now;
-        $uploader = CurrentUser::get() ?: $this->user;
+        $uploader = $meta[$fileName]['uploader'] ?? (CurrentUser::get() ?: $this->user);
 
         $meta[$fileName] = [
             'uploaded' => $uploaded,
