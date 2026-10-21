@@ -1,5 +1,26 @@
 # Changelog
 
+## Changes 10/21/2026 (v3.38.0)
+
+`release(v3.38.0): refresh Docker PHP security packages`
+
+**Security**
+
+- Docker security rebuild for the upstream PHP2Shell vulnerabilities, CVE-2026-109618 and CVE-2026-109619. Ubuntu 24.04 fixes both in PHP package revision `8.3.6-0ubuntu0.24.04.13`; rebuilt images must contain that revision or a later fixed revision. See [USN-8948-1](https://ubuntu.com/security/notices/USN-8948-1).
+- Disabled PHP's unused session upload-progress feature as defense in depth. FileRise's browser progress indicators and resumable uploads use their own tracking and remain supported. This setting does not replace the PHP runtime update.
+
+**Documentation**
+
+- Added PHP runtime update and package-verification guidance for Docker and manual installations, including Ubuntu's backported security fixes.
+
+**Upgrade notes**
+
+- Docker: pull the v3.38.0 image and recreate the container with the same volumes, configuration, and persistent tokens key. Restarting an existing container or replacing application files alone does not update PHP.
+- Manual installs: update the server's PHP runtime separately to a patched release, such as PHP 8.3.36 or a vendor package containing both fixes. Ubuntu's patched runtime can still report `8.3.6`; check the complete package revision.
+- No account, file, folder, permission, encryption-key, or configuration migration is required.
+
+---
+
 ## Changes 10/18/2026 (v3.37.0)
 
 `release(v3.37.0): enforce document editing boundaries`
