@@ -49,6 +49,20 @@ We support good-faith research. Please:
 
 If you follow these guidelines, we won’t pursue or support legal action.
 
+## PHP runtime security update — PHP2Shell
+
+**CVE-2026-109618 and CVE-2026-109619** are critical vulnerabilities in the upstream PHP runtime that can permit unauthenticated remote code execution. FileRise deployments using an unpatched PHP runtime are affected, including older official Docker images.
+
+**Docker:** The official `error311/filerise-docker:v3.38.0` images have been verified on **AMD64 and ARM64** to contain the patched PHP packages described below. Pull this image or a newer release containing these PHP fixes and recreate your container with the same volumes, configuration, and persistent tokens key. Restarting an older container or replacing FileRise application files alone does not update PHP.
+
+For Ubuntu 24.04, both vulnerabilities are fixed in PHP package revision **`8.3.6-0ubuntu0.24.04.13`**. Verify that the image contains this revision or a later fixed revision of `libapache2-mod-php8.3`, `php8.3-cli`, and `php8.3-common`. The PHP version banner can still display `8.3.6` because Ubuntu backports the fixes; check the complete package revision. See [Ubuntu USN-8948-1](https://ubuntu.com/security/notices/USN-8948-1).
+
+**Manual installations:** Update PHP separately through your operating system or hosting provider to a patched release, such as PHP 8.3.36 or a vendor package containing both fixes, and restart Apache or every PHP-FPM worker. Updating FileRise application files alone does not patch PHP.
+
+FileRise also disables PHP's unused session upload-progress feature in its Docker PHP configuration as defense in depth. FileRise's own upload progress and resumable uploads remain supported. This setting does not replace the required PHP security update.
+
+These upstream vulnerabilities are tracked under the existing PHP CVE identifiers above. FileRise's remediation and upgrade instructions are documented here, in the [v3.38.0 changelog](CHANGELOG.md), and in the [upgrade guide](docs/wiki/Upgrade-and-Migration.md).
+
 ## Published Advisories
 
 - **GHSA-hv99-77cw-hvpr** - `<= 3.2.3`: Unauthenticated File Read Due to Insufficient Access Control
