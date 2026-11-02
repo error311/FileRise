@@ -30,6 +30,12 @@ FileRise provides security fixes for the **latest minor release line** only.
 
 If you’d like encrypted comms, ask for our PGP key in your first email.
 
+### Permission-model clarification
+
+FileRise folder capabilities authorize the named action throughout that folder. In particular, **Edit** authorizes changing the contents of an existing file regardless of who uploaded it. WebDAV follows the same contract, so an authenticated `PUT` to an existing file requires Folder Edit but does not additionally require file ownership or the account-level **Bypass owner-only checks** flag. The original uploader metadata is preserved.
+
+The bypass flag only relaxes operations that perform a separate owner check; it does not define the scope of Folder Edit. Uploading a new file requires Upload, and replacing an existing filename through the upload workflow retains its separate collision-ownership protection. A report must demonstrate access without the required folder capability, across an unauthorized folder boundary, or through another independently restricted operation; showing that a user with Folder Edit can edit another uploader's file is intended behavior.
+
 ## Coordinated Disclosure
 
 - **Acknowledgement:** within **48 hours**

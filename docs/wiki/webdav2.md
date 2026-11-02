@@ -53,6 +53,8 @@ Set `BasicAuthLevel` to `2`, then restart the `WebClient` service.
 - If FileRise is hosted under a subpath (e.g. `/files`), use:
   - `https://your-server/files/webdav.php/`
 - WebDAV uses the same folder ACLs as the web UI.
+- A `PUT` to an existing file requires Folder Edit and may change its contents regardless of uploader; original uploader metadata is preserved. **Bypass owner-only checks** is not required for this content edit.
+- Creating a new file requires Upload. The regular upload workflow's separate collision-ownership protection is unchanged.
 - Accounts with TOTP enabled cannot use password-only WebDAV Basic authentication.
 - WebDAV uploads can be capped with `FR_WEBDAV_MAX_UPLOAD_BYTES`.
 

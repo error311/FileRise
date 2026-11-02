@@ -1,5 +1,27 @@
 # Changelog
 
+## Changes 11/02/2026 (v3.39.0)
+
+`release(v3.39.0): clarify Edit and owner-only permissions`
+
+**Changed**
+
+- Renamed the English account-permission label from **Bypass Ownership** to **Bypass Owner-Only Checks** and added help text explaining its scope. The stored `bypassOwnership` setting and its authorization behavior are unchanged.
+
+**Documentation**
+
+- Explicitly documented that Folder Edit authorizes changing existing file contents regardless of uploader, including WebDAV `PUT`, while preserving the original uploader metadata.
+- Clarified that creating a file requires Upload, regular upload collisions retain separate ownership protection, and the bypass flag applies only to operations with an independent owner check.
+- Added this permission-model distinction to the security-reporting policy and beside the WebDAV overwrite gate to reduce false-positive ownership-bypass reports.
+
+**Upgrade notes**
+
+- No account, file, folder, permission, encryption-key, or configuration migration is required.
+- Existing account flags and folder ACLs retain their current behavior.
+- This release does not broaden WebDAV access or change authorization decisions.
+
+---
+
 ## Changes 10/21/2026 (v3.38.0)
 
 `release(v3.38.0): refresh Docker PHP security packages`

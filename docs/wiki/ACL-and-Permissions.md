@@ -67,7 +67,7 @@ These notes describe what the **Folder Access** screen enforces today.
 Notes:
 
 - Account-level flags (Read-only / Disable upload) and source read-only still apply even if ACLs allow an action.
-- **Bypass ownership** only relaxes operations that apply a separate ownership restriction. It does not grant a missing folder capability and is not required when the folder's Edit capability authorizes a content edit.
+- **Bypass owner-only checks** only relaxes operations that apply a separate ownership restriction. It does not grant a missing folder capability and is not required when the folder's Edit capability authorizes a content edit.
 - Replacing an existing filename through an upload is treated as an upload collision and retains its separate ownership protection.
 
 ---

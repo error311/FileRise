@@ -131,6 +131,8 @@ class FileRiseFile implements IFile, INode
             }
             // granular gates
             if ($exists) {
+                // Intentional ACL contract: Folder Edit authorizes content changes regardless of uploader.
+                // bypassOwnership applies only to operations that perform a separate owner check.
                 if (!ACL::canEdit($this->user, $this->perms, $folderKey)) {
                     throw new Forbidden('No edit permission in this folder');
                 }
