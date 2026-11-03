@@ -281,14 +281,12 @@ class FileRiseFile implements IFile, INode
     {
         $meta     = $this->loadMeta($folderKey);
         $now      = date(DATE_TIME_FORMAT);
-        $uploaded = $meta[$fileName]['uploaded'] ?? $now;
-        $uploader = $meta[$fileName]['uploader'] ?? (CurrentUser::get() ?: $this->user);
+        $entry    = isset($meta[$fileName]) && is_array($meta[$fileName]) ? $meta[$fileName] : [];
 
-        $meta[$fileName] = [
-            'uploaded' => $uploaded,
-            'modified' => $now,
-            'uploader' => $uploader,
-        ];
+        $entry['uploaded'] = $entry['uploaded'] ?? $now;
+        $entry['modified'] = $now;
+        $entry['uploader'] = $entry['uploader'] ?? (CurrentUser::get() ?: $this->user);
+        $meta[$fileName] = $entry;
         $this->saveMeta($folderKey, $meta);
     }
 

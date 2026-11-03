@@ -3388,6 +3388,101 @@ class FileModel
     }
 
     /**
+     * Confirms that a file-share record still refers to the file instance that was shared.
+     */
+    public static function shareRecordMatchesCurrentFile(array $record): bool
+    {
+        $folder = (string)($record['folder'] ?? '');
+        $file = basename(trim((string)($record['file'] ?? '')));
+        $expectedId = strtolower(trim((string)($record['fileInstanceId'] ?? '')));
+        if ($file === '' || preg_match('/^[a-f0-9]{32}$/', $expectedId) !== 1) {
+            return false;
+        }
+
+        $metadataFile = self::getMetadataFilePath($folder);
+        $handle = @fopen($metadataFile, 'rb');
+        if ($handle === false) {
+            return false;
+        }
+
+        $currentId = '';
+        try {
+            if (!flock($handle, LOCK_SH)) {
+                return false;
+            }
+            $metadata = json_decode((string)stream_get_contents($handle), true);
+            if (is_array($metadata) && isset($metadata[$file]) && is_array($metadata[$file])) {
+                $currentId = strtolower(trim((string)($metadata[$file]['fileInstanceId'] ?? '')));
+            }
+        } finally {
+            @flock($handle, LOCK_UN);
+            @fclose($handle);
+        }
+
+        if (preg_match('/^[a-f0-9]{32}$/', $currentId) !== 1 || !hash_equals($expectedId, $currentId)) {
+            return false;
+        }
+
+        $info = self::getDownloadInfo($folder, $file);
+        if (!is_array($info) || !empty($info['error']) || empty($info['filePath'])) {
+            return false;
+        }
+        $stat = self::storage()->stat((string)$info['filePath']);
+        return is_array($stat) && ($stat['type'] ?? '') === 'file';
+    }
+
+    /**
+     * Returns the stable random identity for a shareable file, creating it when needed.
+     */
+    private static function bindFileShareIdentity(string $folder, string $file): ?string
+    {
+        $metadataFile = self::getMetadataFilePath($folder);
+        $handle = @fopen($metadataFile, 'r+b');
+        if ($handle === false) {
+            return null;
+        }
+
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                return null;
+            }
+
+            $metadata = json_decode((string)stream_get_contents($handle), true);
+            if (!is_array($metadata) || !isset($metadata[$file]) || !is_array($metadata[$file])) {
+                return null;
+            }
+
+            $identity = strtolower(trim((string)($metadata[$file]['fileInstanceId'] ?? '')));
+            if (preg_match('/^[a-f0-9]{32}$/', $identity) !== 1) {
+                $identity = bin2hex(random_bytes(16));
+                $metadata[$file]['fileInstanceId'] = $identity;
+                $encoded = json_encode($metadata, JSON_PRETTY_PRINT);
+                if (!is_string($encoded) || !rewind($handle) || !ftruncate($handle, 0)) {
+                    return null;
+                }
+
+                $offset = 0;
+                $length = strlen($encoded);
+                while ($offset < $length) {
+                    $written = fwrite($handle, substr($encoded, $offset));
+                    if ($written === false || $written === 0) {
+                        return null;
+                    }
+                    $offset += $written;
+                }
+                if (!fflush($handle)) {
+                    return null;
+                }
+            }
+
+            return $identity;
+        } finally {
+            @flock($handle, LOCK_UN);
+            @fclose($handle);
+        }
+    }
+
+    /**
      * Creates a share link for a file.
      *
      * @param string $folder The folder containing the shared file (or "root").
@@ -3415,6 +3510,20 @@ class FileModel
         $file = basename(trim($file));
         if (!preg_match(REGEX_FILE_NAME, $file)) {
             return ["error" => "Invalid file name."];
+        }
+
+        $info = self::getDownloadInfo($folder, $file);
+        if (!is_array($info) || !empty($info['error']) || empty($info['filePath'])) {
+            return ["error" => "File not found."];
+        }
+        $stat = self::storage()->stat((string)$info['filePath']);
+        if (!is_array($stat) || ($stat['type'] ?? '') !== 'file') {
+            return ["error" => "File not found."];
+        }
+
+        $fileInstanceId = self::bindFileShareIdentity((string)$folder, $file);
+        if ($fileInstanceId === null) {
+            return ["error" => "File metadata is unavailable."];
         }
 
         // Generate a secure token (32 hex characters).
@@ -3456,6 +3565,7 @@ class FileModel
             "password" => $hashedPassword,
             "createdBy" => is_string($createdBy) ? $createdBy : '',
             "createdAt" => time(),
+            "fileInstanceId" => $fileInstanceId,
         ];
 
         // Save the updated share links.

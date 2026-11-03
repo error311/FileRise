@@ -4051,6 +4051,13 @@ class FileController
             exit;
         }
 
+        if (!FileModel::shareRecordMatchesCurrentFile($record)) {
+            http_response_code(404);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(["error" => "Share link not found."]);
+            exit;
+        }
+
         $renderPasswordForm = function (string $errorMsg = '') use ($token, $view): void {
             header('X-Content-Type-Options: nosniff');
             header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');

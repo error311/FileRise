@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 11/03/2026 (v3.40.0)
+
+`release(v3.40.0): bind file shares to file identity`
+
+**Security**
+
+- Individual-file share links are now bound to a random file-instance identity stored in file metadata. Deleting a shared file and later creating a different file at the same folder and name no longer transfers the old share link to the replacement.
+- Share redemption fails closed when the original file identity is missing or no longer matches. New share links also require both the file and its metadata to exist.
+
+**Fixed**
+
+- WebDAV content updates now preserve additional file metadata, including the file-share identity, so a legitimate in-place edit does not invalidate an existing share link.
+
+**Upgrade notes**
+
+- Existing individual-file share links created before v3.40.0 do not contain a file identity and will return 404 after upgrading. Recreate any file-share links that must remain active.
+- Folder-share links are unaffected. No account, file, folder, permission, encryption-key, or configuration migration is required.
+
+---
+
 ## Changes 11/02/2026 (v3.39.0)
 
 `release(v3.39.0): clarify Edit and owner-only permissions`

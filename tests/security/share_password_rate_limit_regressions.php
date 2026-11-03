@@ -146,6 +146,7 @@ file_put_contents($tmpBase . '/uploads/shared/visible.txt', 'protected share con
 
 $shareToken = 'protected-share-token';
 $fileShareToken = '0123456789abcdef0123456789abcdef';
+$fileInstanceId = '11111111111111111111111111111111';
 $sharePassword = 'Correct Horse Battery Staple';
 $shares = [
     $shareToken => [
@@ -171,6 +172,19 @@ file_put_contents(
             'file' => 'visible.txt',
             'expires' => time() + 3600,
             'password' => password_hash($sharePassword, PASSWORD_DEFAULT),
+            'fileInstanceId' => $fileInstanceId,
+        ],
+    ], JSON_PRETTY_PRINT),
+    LOCK_EX
+);
+file_put_contents(
+    $tmpBase . '/metadata/shared_metadata.json',
+    json_encode([
+        'visible.txt' => [
+            'uploaded' => date('Y-m-d H:i:s'),
+            'modified' => date('Y-m-d H:i:s'),
+            'uploader' => 'alice',
+            'fileInstanceId' => $fileInstanceId,
         ],
     ], JSON_PRETTY_PRINT),
     LOCK_EX
