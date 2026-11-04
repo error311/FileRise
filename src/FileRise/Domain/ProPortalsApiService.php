@@ -26,9 +26,22 @@ final class ProPortalsApiService
     /**
      * @return array{status:int,payload:array<string,mixed>}
      */
-    public static function getPortal(string $slug): array
+    public static function getPortal(string $slug, string $username, bool $isAdmin): array
     {
         $portal = PortalController::getPortalBySlug($slug);
+        if (
+            !$isAdmin
+            && (
+                $username === ''
+                || (empty($portal['canUpload']) && empty($portal['canDownload']))
+            )
+        ) {
+            return self::response(403, [
+                'success' => false,
+                'error' => 'Forbidden',
+            ]);
+        }
+
         return self::response(200, [
             'success' => true,
             'portal' => $portal,

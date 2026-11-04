@@ -44,6 +44,8 @@ Portal toggles and ACL both apply:
 
 - Uploads require **Allow upload** and folder upload permission.
 - Downloads require **Allow download** and folder read permission.
+- Signing in does not grant access to every portal. Non-admin users can load a portal only when the portal policy and folder ACL give them upload or download access to that portal's configured folder.
+- A dedicated account created for one portal does not receive access to another portal unless it is separately granted usable access to the other portal's folder.
 
 ---
 

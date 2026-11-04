@@ -12,6 +12,7 @@
  *   @OA\Parameter(name="slug", in="query", required=true, @OA\Schema(type="string"), example="client-portal"),
  *   @OA\Response(response=200, description="Portal payload"),
  *   @OA\Response(response=401, description="Unauthorized"),
+ *   @OA\Response(response=403, description="Forbidden"),
  *   @OA\Response(response=405, description="Method not allowed"),
  *   @OA\Response(response=404, description="Portal not found")
  * )
@@ -27,7 +28,12 @@ try {
     fr_pro_guard_auth(false, false);
 
     $slug = isset($_GET['slug']) ? (string)$_GET['slug'] : '';
-    fr_pro_emit_result(\FileRise\Domain\ProPortalsApiService::getPortal($slug));
+    $ctx = fr_pro_current_user_context();
+    fr_pro_emit_result(\FileRise\Domain\ProPortalsApiService::getPortal(
+        $slug,
+        (string)$ctx['username'],
+        (bool)$ctx['isAdmin']
+    ));
 } catch (Throwable $e) {
     fr_pro_json(404, [
         'success' => false,

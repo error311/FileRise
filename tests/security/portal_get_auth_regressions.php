@@ -10,18 +10,25 @@ if (getenv('FR_PORTAL_GET_AUTH_CHILD') === '1') {
         session_save_path($sessionDir);
     }
 
-    if (getenv('FR_PORTAL_GET_AUTH_MODE') === 'authenticated') {
+    $mode = (string)getenv('FR_PORTAL_GET_AUTH_MODE');
+    if ($mode !== 'anonymous') {
+        $username = match ($mode) {
+            'admin' => 'admin_user',
+            'authorized' => 'authorized_user',
+            'other_portal' => 'other_portal_user',
+            default => 'portal_user',
+        };
         session_start();
         $_SESSION['authenticated'] = true;
-        $_SESSION['username'] = 'portal_user';
-        $_SESSION['role'] = '0';
-        $_SESSION['isAdmin'] = false;
+        $_SESSION['username'] = $username;
+        $_SESSION['role'] = $mode === 'admin' ? '1' : '0';
+        $_SESSION['isAdmin'] = $mode === 'admin';
         session_write_close();
     }
 
     $_SERVER['REQUEST_METHOD'] = 'GET';
     $_SERVER['HTTP_HOST'] = 'localhost';
-    $_GET = ['slug' => 'client-portal'];
+    $_GET = ['slug' => (string)(getenv('FR_PORTAL_GET_AUTH_SLUG') ?: 'client-portal')];
 
     register_shutdown_function(static function (): void {
         echo "\n__STATUS__=" . http_response_code();
@@ -65,6 +72,7 @@ function portalGetAuthRmTree(string $dir): void
  */
 function portalGetAuthRunCase(
     string $mode,
+    string $slug,
     string $usersDir,
     string $uploadDir,
     string $metaDir,
@@ -74,6 +82,7 @@ function portalGetAuthRunCase(
     $env = array_merge($_ENV, [
         'FR_PORTAL_GET_AUTH_CHILD' => '1',
         'FR_PORTAL_GET_AUTH_MODE' => $mode,
+        'FR_PORTAL_GET_AUTH_SLUG' => $slug,
         'FR_PORTAL_GET_AUTH_SESSION_DIR' => $sessionDir,
         'FR_TEST_USERS_DIR' => $usersDir,
         'FR_TEST_UPLOAD_DIR' => $uploadDir,
@@ -125,7 +134,11 @@ try {
         @mkdir($dir, 0775, true);
     }
 
-    file_put_contents($usersDir . 'users.txt', 'portal_user:unused:0' . PHP_EOL, LOCK_EX);
+    file_put_contents(
+        $usersDir . 'users.txt',
+        "portal_user:unused:0\nauthorized_user:unused:0\nother_portal_user:unused:0\nadmin_user:unused:1\n",
+        LOCK_EX
+    );
     file_put_contents($proDir . 'bootstrap_pro.php', "<?php\ndefine('FR_PRO_ACTIVE', true);\n", LOCK_EX);
     file_put_contents(
         $proDir . 'ProPortals.php',
@@ -149,6 +162,15 @@ final class ProPortals
                 'uploadMaxSizeMb' => 25,
                 'uploadExtWhitelist' => 'pdf,docx',
                 'uploadMaxPerDay' => 10,
+                'portalUser' => ['username' => 'portal_user'],
+            ],
+            'other-portal' => [
+                'label' => 'Other Portal',
+                'folder' => 'other-client-folder',
+                'clientEmail' => 'other-contact@example.test',
+                'uploadOnly' => true,
+                'allowDownload' => false,
+                'portalUser' => ['username' => 'other_portal_user'],
             ],
         ];
     }
@@ -157,7 +179,40 @@ PHP,
         LOCK_EX
     );
 
-    $anonymous = portalGetAuthRunCase('anonymous', $usersDir, $uploadDir, $metaDir, $sessionDir);
+    $aclRecord = static function (array $uploadUsers): array {
+        return [
+            'owners' => [],
+            'read' => [],
+            'write' => [],
+            'share' => [],
+            'read_own' => [],
+            'create' => [],
+            'upload' => $uploadUsers,
+            'edit' => [],
+            'rename' => [],
+            'copy' => [],
+            'move' => [],
+            'delete' => [],
+            'extract' => [],
+            'share_file' => [],
+            'share_folder' => [],
+            'inherit' => [],
+            'explicit' => array_fill_keys($uploadUsers, true),
+        ];
+    };
+    file_put_contents(
+        $metaDir . 'folder_acl.json',
+        json_encode([
+            'folders' => [
+                'confidential/client-acme-contracts' => $aclRecord(['portal_user', 'authorized_user']),
+                'other-client-folder' => $aclRecord(['other_portal_user']),
+            ],
+            'groups' => [],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+        LOCK_EX
+    );
+
+    $anonymous = portalGetAuthRunCase('anonymous', 'client-portal', $usersDir, $uploadDir, $metaDir, $sessionDir);
     if (($anonymous['status'] ?? 0) !== 401) {
         $errors[] = 'anonymous request should return HTTP 401';
     }
@@ -171,12 +226,55 @@ PHP,
         $errors[] = 'anonymous response disclosed the client email';
     }
 
-    $authenticated = portalGetAuthRunCase('authenticated', $usersDir, $uploadDir, $metaDir, $sessionDir);
+    $authenticated = portalGetAuthRunCase(
+        'authenticated',
+        'client-portal',
+        $usersDir,
+        $uploadDir,
+        $metaDir,
+        $sessionDir
+    );
     if (($authenticated['status'] ?? 0) !== 200 || empty($authenticated['payload']['success'])) {
         $errors[] = 'authenticated non-admin portal user should retain access';
     }
     if (($authenticated['payload']['portal']['folder'] ?? '') !== 'confidential/client-acme-contracts') {
         $errors[] = 'authenticated portal response should retain the configured folder';
+    }
+
+    $authorized = portalGetAuthRunCase(
+        'authorized',
+        'client-portal',
+        $usersDir,
+        $uploadDir,
+        $metaDir,
+        $sessionDir
+    );
+    if (($authorized['status'] ?? 0) !== 200 || empty($authorized['payload']['success'])) {
+        $errors[] = 'a non-admin user with target-folder portal access should retain access';
+    }
+
+    $crossPortal = portalGetAuthRunCase(
+        'other_portal',
+        'client-portal',
+        $usersDir,
+        $uploadDir,
+        $metaDir,
+        $sessionDir
+    );
+    if (($crossPortal['status'] ?? 0) !== 403 || ($crossPortal['payload']['error'] ?? '') !== 'Forbidden') {
+        $errors[] = 'a user assigned only to another portal should receive HTTP 403';
+    }
+    $crossPortalJson = json_encode($crossPortal['payload']);
+    if (
+        str_contains((string)$crossPortalJson, 'client-acme-contracts')
+        || str_contains((string)$crossPortalJson, 'legal-contact@client-acme.example')
+    ) {
+        $errors[] = 'cross-portal denial disclosed protected portal metadata';
+    }
+
+    $admin = portalGetAuthRunCase('admin', 'client-portal', $usersDir, $uploadDir, $metaDir, $sessionDir);
+    if (($admin['status'] ?? 0) !== 200 || empty($admin['payload']['success'])) {
+        $errors[] = 'an administrator should retain access to every portal';
     }
 } finally {
     portalGetAuthRmTree($tmpBase);

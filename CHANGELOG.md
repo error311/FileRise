@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 11/04/2026 (v3.41.0)
+
+`release(v3.41.0): enforce portal-detail authorization`
+
+**Security**
+
+- The authenticated Pro portal-detail endpoint now requires either administrator access or effective upload/download access to the requested portal's configured folder under both the portal policy and folder ACL.
+- A user assigned only to another portal can no longer retrieve the target portal's client email, internal folder, form defaults, source, or upload policy by supplying its slug.
+
+**Documentation**
+
+- Clarified that portal authentication does not grant access to every portal on the instance. Non-admin users must have usable folder access for the specific requested portal.
+
+**Upgrade notes**
+
+- Existing administrators, dedicated portal accounts, manually managed users, and group members retain portal access when their target-folder ACL matches the portal's enabled upload or download capability.
+- No account, portal, ACL, file, storage, Docker volume, or configuration migration is required.
+
+---
+
 ## Changes 11/03/2026 (v3.40.0)
 
 `release(v3.40.0): bind file shares to file identity`
