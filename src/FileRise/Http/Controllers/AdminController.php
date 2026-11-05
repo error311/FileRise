@@ -34,6 +34,8 @@ require_once PROJECT_ROOT . '/src/FileRise/Support/PersistentTokensKeyRotation.p
 
 class AdminController
 {
+    private const OIDC_DISCOVERY_MAX_BYTES = 1048576;
+
     /** Enforce authentication (401). */
     public static function requireAuth(): void
     {
@@ -2150,6 +2152,33 @@ class AdminController
     }
 
 
+    private static function isSupportedOidcProviderUrl(string $url): bool
+    {
+        if ($url === '' || strlen($url) > 2048 || preg_match('/[\x00-\x20\x7F]/', $url)) {
+            return false;
+        }
+
+        try {
+            $parts = parse_url($url);
+        } catch (\ValueError $e) {
+            return false;
+        }
+
+        if (!is_array($parts)) {
+            return false;
+        }
+
+        $scheme = strtolower((string)($parts['scheme'] ?? ''));
+        if (($scheme !== 'http' && $scheme !== 'https') || empty($parts['host'])) {
+            return false;
+        }
+
+        return !isset($parts['user'])
+            && !isset($parts['pass'])
+            && !isset($parts['query'])
+            && !isset($parts['fragment']);
+    }
+
     public function testOidcConfig(array $payload): array
     {
         // 1) Resolve providerUrl:
@@ -2179,12 +2208,19 @@ class AdminController
             ];
         }
 
+        if (!self::isSupportedOidcProviderUrl($providerUrl)) {
+            return [
+                'success' => false,
+                'error'   => 'OIDC provider URL must be an HTTP or HTTPS URL without credentials, query parameters, or fragments.',
+            ];
+        }
 
         // 2) Normalize discovery URL
         $base = rtrim($providerUrl, '/');
+        $path = rtrim((string)(parse_url($base, PHP_URL_PATH) ?? ''), '/');
 
         // If they pasted a .well-known URL directly, don't append anything
-        if (stripos($base, '/.well-known/') !== false) {
+        if (str_ends_with(strtolower($path), '/.well-known/openid-configuration')) {
             $discoveryUrl = $base;
         } else {
             // Works with Keycloak:
@@ -2197,29 +2233,37 @@ class AdminController
         $ctx = stream_context_create([
             'http' => [
                 'timeout' => 5,
-            ],
-            'https' => [
-                'timeout' => 5,
+                'max_redirects' => 3,
+                'header' => "Accept: application/json\r\nConnection: close\r\n",
             ],
         ]);
 
-        $raw = @file_get_contents($discoveryUrl, false, $ctx);
+        $raw = @file_get_contents(
+            $discoveryUrl,
+            false,
+            $ctx,
+            0,
+            self::OIDC_DISCOVERY_MAX_BYTES + 1
+        );
         if ($raw === false) {
-            $err = error_get_last();
             return [
-                'success'      => false,
-                'error'        => 'Failed to fetch discovery document from provider.',
-                'discoveryUrl' => $discoveryUrl,
-                'phpError'     => $err['message'] ?? null,
+                'success' => false,
+                'error'   => 'Failed to fetch discovery document from provider.',
+            ];
+        }
+
+        if (strlen($raw) > self::OIDC_DISCOVERY_MAX_BYTES) {
+            return [
+                'success' => false,
+                'error'   => 'Discovery document exceeds the 1 MiB response limit.',
             ];
         }
 
         $json = json_decode($raw, true);
         if (!is_array($json)) {
             return [
-                'success'      => false,
-                'error'        => 'Discovery document is not valid JSON.',
-                'discoveryUrl' => $discoveryUrl,
+                'success' => false,
+                'error'   => 'Discovery document is not valid JSON.',
             ];
         }
 
@@ -2230,13 +2274,8 @@ class AdminController
 
         if ($issuer === '' || $auth === '') {
             return [
-                'success'      => false,
-                'error'        => 'Discovery document is missing issuer or authorization_endpoint.',
-                'discoveryUrl' => $discoveryUrl,
-                'jsonSample'   => [
-                    'issuer'                 => $json['issuer'] ?? null,
-                    'authorization_endpoint' => $json['authorization_endpoint'] ?? null,
-                ],
+                'success' => false,
+                'error'   => 'Discovery document is missing issuer or authorization_endpoint.',
             ];
         }
 
@@ -3041,7 +3080,15 @@ class AdminController
         foreach (['providerUrl', 'clientId', 'clientSecret', 'redirectUri'] as $f) {
             if (!empty($oidcPayload[$f])) {
                 $val = trim((string)$oidcPayload[$f]);
-                if ($f === 'providerUrl' || $f === 'redirectUri') {
+                if ($f === 'providerUrl') {
+                    if (!self::isSupportedOidcProviderUrl($val)) {
+                        http_response_code(400);
+                        echo json_encode([
+                            'error' => 'OIDC provider URL must be an HTTP or HTTPS URL without credentials, query parameters, or fragments.'
+                        ]);
+                        exit;
+                    }
+                } elseif ($f === 'redirectUri') {
                     $val = filter_var($val, FILTER_SANITIZE_URL);
                 }
                 $merged['oidc'][$f] = $val;
@@ -3089,30 +3136,6 @@ class AdminController
                 ]);
                 exit;
             }
-
-            // Require https except for localhost development
-            $httpsOk = function (string $url): bool {
-                if ($url === '') {
-                    return false;
-                }
-                $parts = parse_url($url);
-                if (!$parts || empty($parts['scheme'])) {
-                    return false;
-                }
-
-                $scheme = strtolower($parts['scheme']);
-                $host   = strtolower($parts['host'] ?? '');
-
-                if ($scheme === 'https') {
-                    return true;
-                }
-
-                if ($scheme === 'http' && ($host === 'localhost' || $host === '127.0.0.1')) {
-                    return true;
-                }
-
-                return false;
-            };
         }
 
 

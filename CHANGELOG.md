@@ -1,5 +1,26 @@
 # Changelog
 
+## Changes 11/05/2026 (v3.42.0)
+
+`release(v3.42.0): harden administrator OIDC discovery testing`
+
+**Security hardening**
+
+- Limited administrator-supplied OIDC provider URLs to HTTP and HTTPS without embedded credentials, query parameters, or fragments, preventing use of other PHP stream wrappers.
+- OIDC discovery responses are now capped at 1 MiB with limited redirects, and failure responses no longer expose raw PHP fetch errors, failed destination URLs, or samples from returned JSON.
+- Discovery URL handling now recognizes only the exact `/.well-known/openid-configuration` path suffix instead of matching that text anywhere in the URL.
+
+**Documentation**
+
+- Documented that the administrator-only discovery test intentionally sends an outbound request from the FileRise server and supports HTTP, HTTPS, local, container-network, and private-network OIDC providers.
+
+**Upgrade notes**
+
+- Existing HTTP and private-network OIDC providers remain supported. Provider URLs containing URL credentials, query parameters, or fragments must be replaced with the provider's standard issuer URL.
+- No account, OIDC identity binding, file, permission, storage, Docker volume, or configuration migration is required.
+
+---
+
 ## Changes 11/04/2026 (v3.41.0)
 
 `release(v3.41.0): enforce portal-detail authorization`

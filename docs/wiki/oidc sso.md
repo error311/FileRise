@@ -26,6 +26,14 @@ https://your-host/files/api/auth/auth.php?oidc=callback
    - Optional: Public client (no secret)
 
 Use **Test OIDC discovery** in the admin panel to validate the issuer URL.
+The test requires an authenticated administrator and sends an outbound request
+from the FileRise server to that URL. Both HTTP and HTTPS providers are
+supported, including local, container-network, and private-network providers.
+FileRise administrators are therefore trusted to configure outbound OIDC
+integrations. If administrators must not reach other network services, enforce
+that boundary with the server or container's outbound firewall policy.
+Provider URLs must use the HTTP or HTTPS scheme and cannot contain URL
+credentials, query parameters, or fragments.
 
 ---
 
