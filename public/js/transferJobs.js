@@ -1,4 +1,5 @@
 import { withBase } from './basePath.js?v={{APP_QVER}}';
+import { t } from './i18n.js?v={{APP_QVER}}';
 import {
   startTransferProgress,
   finishTransferProgress,
@@ -8,6 +9,31 @@ import {
 
 const DEFAULT_POLL_MS = 650;
 const TERMINAL_STATES = new Set(['done', 'error', 'failed', 'cancelled']);
+const MAX_STATUS_RETRIES = 5;
+
+async function readTransferStatus(jobId) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(withBase(`/api/file/transferJobStatus.php?jobId=${encodeURIComponent(jobId)}&t=${Date.now()}`), {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok || !data.job) {
+      const error = new Error(toErrorMessage(data, `Failed to poll transfer job (HTTP ${res.status}).`));
+      error.retryable = [408, 429, 500, 502, 503, 504].includes(res.status) || (res.ok && !data);
+      throw error;
+    }
+    return data.job;
+  } catch (error) {
+    if (error.retryable === undefined) error.retryable = true;
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -124,21 +150,22 @@ export async function runTransferJob({ kind, payload, progress, pollMs = DEFAULT
       }
     }
 
+    let statusFailures = 0;
     while (true) {
-      const statusRes = await fetch(withBase(`/api/file/transferJobStatus.php?jobId=${encodeURIComponent(jobId)}&t=${Date.now()}`), {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json'
+      try {
+        finalJob = await readTransferStatus(jobId);
+        statusFailures = 0;
+      } catch (error) {
+        if (error.retryable && statusFailures < MAX_STATUS_RETRIES) {
+          statusFailures++;
+          updateTransferProgress(progressJob, { state: 'reconnecting' });
+          await sleep(Math.min(8000, Math.max(650, pollMs) * (2 ** (statusFailures - 1))));
+          continue;
         }
-      });
-      const statusData = await statusRes.json().catch(() => ({}));
-      if (!statusRes.ok || !statusData || statusData.ok !== true || !statusData.job) {
-        const msg = toErrorMessage(statusData, `Failed to poll transfer job (HTTP ${statusRes.status}).`);
-        throw new Error(msg);
+        error.statusUnknown = true;
+        error.message = t('transfer_check_before_retry');
+        throw error;
       }
-
-      finalJob = statusData.job;
       const st = normalizeStatus(finalJob.status);
       if (TERMINAL_STATES.has(st)) {
         setTransferProgressCancel(progressJob, { cancelable: false });
@@ -165,7 +192,7 @@ export async function runTransferJob({ kind, payload, progress, pollMs = DEFAULT
     if (!finished) {
       setTransferProgressCancel(progressJob, { cancelable: false });
       const msg = err && err.message ? err.message : 'Transfer failed.';
-      finishTransferProgress(progressJob, { ok: false, error: msg });
+      finishTransferProgress(progressJob, { ok: false, state: err.statusUnknown ? 'unknown' : 'error', error: msg });
     }
     throw err;
   }

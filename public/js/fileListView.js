@@ -1559,6 +1559,8 @@ window.__nonZipDownloadPanel = window.__nonZipDownloadPanel || null;
 
 // Latest-response-wins guard (prevents double render/flicker if loadFileList gets called twice)
 let __fileListReqSeq = { primary: 0, secondary: 0 };
+const pendingFileListRequests = { primary: null, secondary: null };
+const fileTableRenderVersions = new WeakMap();
 let __dualPaneRestoreRunning = false;
 
 window.itemsPerPage = parseInt(
@@ -2383,6 +2385,13 @@ function setActivePane(pane, opts) {
   const current = normalizePaneKey(window.activePane);
 
   if (current !== next) {
+    // Pending work belongs to the pane that started it. DOM IDs and globals
+    // switch below, so late responses must wait for that pane's next activation.
+    const hadPendingRequest = pendingFileListRequests[current] === __fileListReqSeq[current];
+    __fileListReqSeq[current]++;
+    const pendingList = document.getElementById('fileList');
+    if (hadPendingRequest) savePaneState(current, { needsReload: true });
+    pendingList?.removeAttribute('aria-busy');
     syncPaneStateFromGlobals(current);
 
     const activeContainer = document.getElementById('fileListContainer');
@@ -6047,11 +6056,13 @@ window.toggleRowSelection = toggleRowSelection;
 window.updateRowHighlight = updateRowHighlight;
 
 export async function loadFileList(folderParam, options = {}) {
+  const pane = normalizePaneKey(options.pane || window.activePane);
+  const reqId = ++__fileListReqSeq[pane]; // bind before the first asynchronous wait
+  pendingFileListRequests[pane] = reqId;
   clearInlineRenameState({ restore: false });
   await initOnlyOfficeCaps();
+  if (reqId !== __fileListReqSeq[pane]) return [];
   hideHoverPreview();
-  const pane = normalizePaneKey(options.pane || window.activePane);
-  const reqId = ++__fileListReqSeq[pane]; // latest call wins
   const folderOnly =
     window.userFolderOnly === true ||
     localStorage.getItem("folderOnly") === "true";
@@ -6117,6 +6128,9 @@ export async function loadFileList(folderParam, options = {}) {
   }
 
   const fileListContainer = document.getElementById("fileList");
+  const backgroundRefresh = options.background === true && !folderChangedByExplicitLoad && isActivePane &&
+    !!fileListContainer?.querySelector('table');
+  let refreshScroll = 0;
   if (fileListContainer) {
     fileListContainer.classList.remove("file-list-secondary-empty");
   }
@@ -6131,7 +6145,7 @@ export async function loadFileList(folderParam, options = {}) {
   // 1) show loader (only this request is allowed to render)
   fileListContainer.style.visibility = "visible";
   fileListContainer.setAttribute('aria-busy', 'true');
-  fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
+  if (!backgroundRefresh) fileListContainer.innerHTML = "<div class='loader'>Loading files...</div>";
   const slowToastTimer = setTimeout(() => {
     if (reqId === __fileListReqSeq[pane]) {
       const now = Date.now();
@@ -6191,6 +6205,7 @@ export async function loadFileList(folderParam, options = {}) {
 
     // ----- FILES FIRST -----
     let filesRes = await filesPromise;
+    if (reqId !== __fileListReqSeq[pane]) return [];
 
     // If the first attempt is forbidden (common for folder-only users or wrong folder),
     // retry smartly:
@@ -6210,6 +6225,7 @@ export async function loadFileList(folderParam, options = {}) {
           buildFileListUrl(username, 0, useServerPaging ? '' : null),
           { credentials: "include" }
         );
+        if (reqId !== __fileListReqSeq[pane]) return [];
         if (alt.ok) {
           // switch context to the user folder
           filesRes = alt;
@@ -6232,6 +6248,7 @@ export async function loadFileList(folderParam, options = {}) {
       } catch (e) { /* ignore; will fall back to the normal 403 handling */ }
     }
 
+    if (reqId !== __fileListReqSeq[pane]) return [];
     if (filesRes.status === 401) {
       // session expired — bounce to logout
       window.location.href = withBase("/api/auth/logout.php");
@@ -6313,7 +6330,10 @@ export async function loadFileList(folderParam, options = {}) {
     if (reqId !== __fileListReqSeq[pane]) return [];
 
     // 3) clear loader
-    fileListContainer.innerHTML = "";
+    if (backgroundRefresh) {
+      refreshScroll = fileListContainer.scrollTop;
+    }
+    if (!backgroundRefresh) fileListContainer.innerHTML = "";
 
     // 4) handle “no files” case
     if (!data.files || Object.keys(data.files).length === 0) {
@@ -6424,7 +6444,11 @@ export async function loadFileList(folderParam, options = {}) {
     if (window.viewMode === "gallery") {
       renderGalleryView(folder);
     } else {
-      renderFileTable(folder);
+      await renderFileTable(folder, undefined, undefined, { preserveSelection: backgroundRefresh });
+    }
+    if (reqId !== __fileListReqSeq[pane]) return [];
+    if (backgroundRefresh) {
+      fileListContainer.scrollTop = refreshScroll;
     }
     updateFileActionButtons();
     fileListContainer.style.visibility = "visible";
@@ -6503,7 +6527,7 @@ export async function loadFileList(folderParam, options = {}) {
 
         // Re-render table view once folders are known so they appear inline above files
         if (window.viewMode === "table" && window.showInlineFolders !== false && reqId === __fileListReqSeq[pane]) {
-          renderFileTable(folder, fileListContainer, undefined, { preserveSelection: true });
+          await renderFileTable(folder, fileListContainer, undefined, { preserveSelection: true });
         }
       }
     } catch (e) {
@@ -6544,8 +6568,9 @@ export async function loadFileList(folderParam, options = {}) {
     }
     return [];
   } finally {
+    if (pendingFileListRequests[pane] === reqId) pendingFileListRequests[pane] = null;
+    clearTimeout(slowToastTimer);
     if (reqId === __fileListReqSeq[pane]) {
-      clearTimeout(slowToastTimer);
       fileListContainer.style.visibility = "visible";
       fileListContainer.removeAttribute('aria-busy');
     }
@@ -7301,6 +7326,9 @@ export async function renderFileTable(folder, container, subfolders, options = {
   const searchTerm = (window.currentSearchTerm || "").toLowerCase();
   const itemsPerPageSetting = parseInt(localStorage.getItem("itemsPerPage") || "50", 10);
   const tablePane = getPaneKeyForElement(fileListContent);
+  const requestVersion = __fileListReqSeq[tablePane];
+  const renderVersion = (fileTableRenderVersions.get(fileListContent) || 0) + 1;
+  fileTableRenderVersions.set(fileListContent, renderVersion);
   const panePaging = getPaneFileListPaging(tablePane);
   const serverPagingActive = !!(panePaging && searchTerm === "" && !window.advancedSearchEnabled);
   let currentPage = serverPagingActive
@@ -7329,6 +7357,8 @@ export async function renderFileTable(folder, container, subfolders, options = {
 
 // NEW: sort folders according to current sort order (name / size)
 const subfoldersSorted = await sortSubfoldersForCurrentOrder(allSubfolders);
+  if (fileTableRenderVersions.get(fileListContent) !== renderVersion ||
+      __fileListReqSeq[tablePane] !== requestVersion) return;
 
   if (preserveSelection) {
     // Capture after async work so user selections during the wait aren't lost.

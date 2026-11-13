@@ -271,6 +271,20 @@ function markPaneNeedsReloadForFolder(folder, sourceId = "") {
   });
 }
 
+function refreshAffectedFolders(entries) {
+  const activeSource = getActiveSourceId();
+  const activeFolder = window.currentFolder || 'root';
+  let refreshActive = false;
+  for (const { folder, sourceId } of entries) {
+    markPaneNeedsReloadForFolder(folder, sourceId);
+    if (sourceId === activeSource) {
+      refreshFolderIcon(folder);
+      refreshActive ||= folder === activeFolder;
+    }
+  }
+  if (refreshActive) loadFileList(activeFolder, { background: true });
+}
+
 export function handleDeleteSelected(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -404,6 +418,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (confirmDelete.dataset.busy === "1") return;
       confirmDelete.dataset.busy = "1";
       setDeletingState(true);
+      const sourceFolder = window.currentFolder || "root";
+      const sourceId = getActiveSourceId();
       const selection = Array.isArray(window.filesToDelete) ? window.filesToDelete : [];
       const fileCount = selection.length;
       const totals = getTransferTotalsForNames(selection);
@@ -426,14 +442,14 @@ document.addEventListener("DOMContentLoaded", function () {
           'info'
         );
       }, 2500);
-      fetch("/api/file/deleteFiles.php", {
+      fetch(withBase("/api/file/deleteFiles.php"), {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": window.csrfToken
         },
-        body: JSON.stringify({ folder: window.currentFolder, files: window.filesToDelete })
+        body: JSON.stringify({ folder: sourceFolder, files: selection, sourceId })
       })
         .then(response => response.json())
         .then(data => {
@@ -442,8 +458,7 @@ document.addEventListener("DOMContentLoaded", function () {
             showToast(t('delete_files_success'), 'success');
             // deleteFiles.php moves items into Trash; update the recycle bin indicator immediately.
             updateRecycleBinState(true);
-            loadFileList(window.currentFolder);
-            refreshFolderIcon(window.currentFolder);
+            refreshAffectedFolders([{ folder: sourceFolder, sourceId }]);
           } else {
             ok = false;
             errMsg = data.error || t('delete_files_error_default');
@@ -1127,24 +1142,27 @@ document.addEventListener("DOMContentLoaded", function () {
   if (confirmCopy) {
     confirmCopy.setAttribute("data-default", "");
     confirmCopy.addEventListener("click", function () {
+      if (confirmCopy.disabled) return;
       const targetFolder = document.getElementById("copyTargetFolder").value;
       if (!targetFolder) {
         showToast(t('copy_target_folder_required'), 5000, 'warning');
         return;
       }
+      const sourceFolder = window.currentFolder || 'root';
       const sourceId = getActiveSourceId();
       const destSourceId = document.getElementById("copyTargetSource")?.value || sourceId;
-      if (targetFolder === window.currentFolder && sourceId === destSourceId) {
+      if (targetFolder === sourceFolder && sourceId === destSourceId) {
         showToast(t('copy_same_folder_error'), 'error');
         return;
       }
-      const selection = Array.isArray(window.filesToCopy) ? window.filesToCopy : [];
+      const selection = Array.isArray(window.filesToCopy) ? [...window.filesToCopy] : [];
       const totals = getTransferTotalsForNames(selection);
+      confirmCopy.disabled = true;
       runTransferJob({
         kind: 'file_copy',
         payload: {
-          source: window.currentFolder,
-          files: window.filesToCopy,
+          source: sourceFolder,
+          files: selection,
           destination: targetFolder,
           sourceId,
           destSourceId,
@@ -1156,24 +1174,22 @@ document.addEventListener("DOMContentLoaded", function () {
           itemLabel: totals.itemCount === 1 ? 'file' : 'files',
           totalBytes: totals.totalBytes,
           bytesKnown: totals.bytesKnown,
-          source: window.currentFolder || 'root',
+          source: sourceFolder,
           destination: targetFolder
         }
       })
         .then(() => {
           showToast(t('copy_files_success'), 5000, 'success');
-          loadFileList(window.currentFolder);
-          if (!destSourceId || destSourceId === sourceId) {
-            refreshFolderIcon(targetFolder);
-          }
-          markPaneNeedsReloadForFolder(targetFolder, destSourceId);
+          refreshAffectedFolders([{ folder: sourceFolder, sourceId }, { folder: targetFolder, sourceId: destSourceId }]);
         })
         .catch(error => {
+          refreshAffectedFolders([{ folder: sourceFolder, sourceId }, { folder: targetFolder, sourceId: destSourceId }]);
           const errMsg = error && error.message ? error.message : t('copy_files_error_default');
           console.error("Error copying files:", error);
           showToast(t('copy_files_error', { error: errMsg }), 5000, 'error');
         })
         .finally(() => {
+          confirmCopy.disabled = false;
           document.getElementById("copyFilesModal").style.display = "none";
           window.filesToCopy = [];
         });
@@ -1199,6 +1215,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
       const sourceId = getActiveSourceId();
+      const sourceFolder = window.currentFolder || "root";
       const destSourceId = document.getElementById("moveTargetSource")?.value || sourceId;
       if (targetFolder === window.currentFolder && sourceId === destSourceId) {
         showToast(t('move_same_folder_error'), 'error');
@@ -1208,13 +1225,13 @@ document.addEventListener("DOMContentLoaded", function () {
       if (moveModal) {
         moveModal.style.display = "none";
       }
-      const selection = Array.isArray(window.filesToMove) ? window.filesToMove : [];
+      const selection = Array.isArray(window.filesToMove) ? [...window.filesToMove] : [];
       const totals = getTransferTotalsForNames(selection);
       runTransferJob({
         kind: 'file_move',
         payload: {
-          source: window.currentFolder,
-          files: window.filesToMove,
+          source: sourceFolder,
+          files: selection,
           destination: targetFolder,
           sourceId,
           destSourceId,
@@ -1226,7 +1243,7 @@ document.addEventListener("DOMContentLoaded", function () {
           itemLabel: totals.itemCount === 1 ? 'file' : 'files',
           totalBytes: totals.totalBytes,
           bytesKnown: totals.bytesKnown,
-          source: window.currentFolder || 'root',
+          source: sourceFolder,
           destination: targetFolder
         }
       })
@@ -1240,17 +1257,10 @@ document.addEventListener("DOMContentLoaded", function () {
           } else {
             showToast(t('move_files_success_to', { count: movedNames.length, folder: destLabel }), 'success');
           }
-          loadFileList(window.currentFolder);
-          if (!destSourceId || destSourceId === sourceId) {
-            refreshFolderIcon(targetFolder);
-            refreshFolderIcon(window.currentFolder);
-          } else {
-            refreshFolderIcon(window.currentFolder);
-          }
-          markPaneNeedsReloadForFolder(targetFolder, destSourceId);
-          markPaneNeedsReloadForFolder(window.currentFolder, sourceId);
+          refreshAffectedFolders([{ folder: sourceFolder, sourceId }, { folder: targetFolder, sourceId: destSourceId }]);
         })
         .catch(error => {
+          refreshAffectedFolders([{ folder: sourceFolder, sourceId }, { folder: targetFolder, sourceId: destSourceId }]);
           if (error && error.cancelled) {
             showToast(t('transfer_cancelled') || 'Transfer cancelled.', 'info');
             return;

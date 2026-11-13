@@ -1,4 +1,5 @@
 // transferProgress.js
+import { t } from './i18n.js?v={{APP_QVER}}';
 
 const TRANSFER_UI_DELAY_MS = 300;
 const TRANSFER_TICK_MS = 200;
@@ -380,6 +381,8 @@ function getJobStateClass(job) {
 
 function getJobStateLabel(job) {
   const state = String(job.state || '').toLowerCase();
+  if (state === 'reconnecting') return t('transfer_reconnecting');
+  if (state === 'unknown') return t('transfer_status_unknown');
   if (state === 'queued') return 'Queued';
   if (state === 'cancel_requested' || state === 'cancelling') return 'Cancelling';
   if (state === 'finishing') return 'Finalizing';
@@ -592,6 +595,12 @@ function renderJob(job) {
   const hasActual = job.mode === 'actual';
   const totalBytes = Number.isFinite(job.bytesTotal) ? job.bytesTotal : Number(job.totalBytes || 0);
 
+  if (state === 'reconnecting' || state === 'unknown') {
+    applyProgressBar(job, ui, Number.isFinite(job.pct) ? job.pct : 0, { indeterminate: state === 'reconnecting' });
+    if (ui.metrics) ui.metrics.textContent = state === 'reconnecting' ? t('transfer_reconnecting') : job.error;
+    return;
+  }
+
   if (queued) {
     applyProgressBar(job, ui, 0, { indeterminate: true });
     if (ui.metrics) ui.metrics.textContent = 'Waiting for worker...';
@@ -741,7 +750,7 @@ function renderJob(job) {
 function renderShell(jobs) {
   const ui = ensureUi();
   const count = jobs.length;
-  const active = jobs.filter((j) => ['queued', 'running', 'finishing', 'cancel_requested', 'cancelling'].includes(String(j.state || '').toLowerCase())).length;
+  const active = jobs.filter((j) => ['queued', 'running', 'reconnecting', 'finishing', 'cancel_requested', 'cancelling'].includes(String(j.state || '').toLowerCase())).length;
 
   if (!count) {
     ui.center.style.display = 'none';
@@ -984,7 +993,7 @@ export function finishTransferProgress(jobRef, { ok = true, error = '', state = 
   job.state = finalState;
   job.error = ok ? '' : String(error || '');
   job.endedAt = now;
-  job.removeAt = job.endedAt + FINAL_VISIBLE_MS;
+  job.removeAt = job.endedAt + (finalState === 'unknown' ? 30000 : FINAL_VISIBLE_MS);
   job.cancelable = false;
   job.onCancel = null;
   job.cancelInFlight = false;

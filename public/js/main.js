@@ -604,7 +604,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
   const nativeFetch = window.fetch.bind(window);
   window.__FR_LAST_OK = false;
 
-  const inFlight = new Map(); // key -> { ts, promise }
+  const inFlight = new Map(); // pending read key -> promise
 
   const IGNORE_QUERY_KEYS = new Set(['t', '_', 'cache']);
 
@@ -620,28 +620,6 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       });
       return url.pathname + (sorted.toString() ? '?' + sorted.toString() : '');
     } catch (e) { return String(u || ''); }
-  }
-
-  async function toStableBody(init) {
-    const b = init && init.body;
-    if (!b) return '';
-    try {
-      if (typeof b === 'string') {
-        // try JSON
-        try {
-          const j = JSON.parse(b);
-          // remove volatile fields like csrf
-          delete j.csrf; delete j.csrf_token; delete j._;
-          return 'JSON:' + JSON.stringify(j, Object.keys(j).sort());
-        } catch (e) {
-          // maybe urlencoded
-          const p = new URLSearchParams(b);
-          ['csrf', 'csrf_token', '_'].forEach(k => p.delete(k));
-          return 'FORM:' + [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('&');
-        }
-      }
-    } catch (e) { }
-    return 'B:' + String(b);
   }
 
   window.fetch = async (input, init = {}) => {
@@ -667,22 +645,17 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       } catch (e) { }
     }
 
-    const method = (init.method || 'GET').toUpperCase();
-    const urlKey = normalizeUrl(typeof input === 'string' ? input : (input && input.url) || '');
-    const bodyKey = await toStableBody(init);
-    const key = method + ' ' + urlKey + ' ' + bodyKey;
-
-    const now = Date.now();
-    const existing = inFlight.get(key);
-    if (existing && (now - existing.ts) < 800) {
-      // coalesce: return the same promise
-      return existing.promise.then(r => r.clone());
-    }
+    const method = (init.method || (input && input.method) || 'GET').toUpperCase();
+    const mutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    // A write can make any pending listing stale. Never merge writes: distinct
+    // nested JSON payloads and FormData bodies must reach the server separately.
+    if (mutating) inFlight.clear();
+    const key = method + ' ' + normalizeUrl(typeof input === 'string' ? input : (input && input.url) || '');
 
     const urlPathRaw = (typeof input === 'string') ? new URL(input, window.location.origin).pathname : new URL(input.url).pathname;
     const urlPath = stripBase(urlPathRaw);
 
-    // 1) Only coalesce mutating methods OR specific noisy GETs
+    // 1) Only coalesce specific noisy GETs
     const isCoalescableGet =
       method === 'GET' &&
       urlPath.startsWith('/api/') &&
@@ -699,7 +672,7 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
         '/api/onlyoffice/status.php'
       ].some(p => urlPath.startsWith(p));
 
-    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !isCoalescableGet) {
+    if (!mutating && !isCoalescableGet) {
       return nativeFetch(input, init);
     }
 
@@ -721,6 +694,10 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       return nativeFetch(input, init);
     }
 
+    const coalesce = isCoalescableGet && !init.signal && !(input && input.signal);
+    const existing = coalesce ? inFlight.get(key) : null;
+    if (existing) return existing.then(r => r.clone());
+
     const p = nativeFetch(input, init).then(async (res) => {
       try {
         const clone = res.clone();
@@ -733,11 +710,12 @@ window.__FR_FLAGS.entryStarted = window.__FR_FLAGS.entryStarted || false;
       } catch (e) { }
       return res;
     }).finally(() => {
-      // let it linger briefly so very-rapid duplicates still coalesce
-      setTimeout(() => inFlight.delete(key), 200);
+      if (mutating) inFlight.clear();
+      // An older request must not remove a newer request for the same URL.
+      if (inFlight.get(key) === p) inFlight.delete(key);
     });
 
-    inFlight.set(key, { ts: now, promise: p });
+    if (coalesce) inFlight.set(key, p);
     return p.then(r => r.clone());
   };
 

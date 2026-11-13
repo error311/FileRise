@@ -1292,7 +1292,7 @@ function makeCardDraggable(card) {
 
     const sb = getSidebar();
     if (sb) {
-      sb.classList.remove('highlight');
+      sb.classList.remove('active', 'highlight');
       removeSidebarPlaceholder();
     }
 

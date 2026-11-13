@@ -217,6 +217,20 @@ class CryptoAtRest
         return ['plainSize' => $plainSize, 'header' => $ssHeader];
     }
 
+    /** @param resource $stream */
+    private static function writeAll($stream, string $data): void
+    {
+        $offset = 0;
+        $length = strlen($data);
+        while ($offset < $length) {
+            $written = fwrite($stream, substr($data, $offset));
+            if ($written === false || $written === 0) {
+                throw new \RuntimeException('Unable to write complete file content.');
+            }
+            $offset += $written;
+        }
+    }
+
     public static function encryptFileInPlace(string $path): void
     {
         if (!self::isAvailable()) {
@@ -240,13 +254,16 @@ class CryptoAtRest
             throw new \RuntimeException('Unable to open file for encryption.');
         }
 
-        $out = @fopen($tmp, 'wb');
+        $out = @fopen($tmp, 'xb');
         if ($out === false) {
             @fclose($in);
             throw new \RuntimeException('Unable to open temp file for encryption.');
         }
 
         try {
+            if (!@chmod($tmp, 0600)) {
+                throw new \RuntimeException('Unable to secure encryption temporary file.');
+            }
             $plainSize = @filesize($path);
             if (!is_int($plainSize) || $plainSize < 0) {
                 $plainSize = 0;
@@ -260,15 +277,18 @@ class CryptoAtRest
             $header = $init[1];
 
             // Write header
-            fwrite($out, self::MAGIC);
-            fwrite($out, chr(self::VERSION));
-            fwrite($out, chr(self::FLAGS));
-            fwrite($out, self::packU64BE((int)$plainSize));
-            fwrite($out, $header);
+            self::writeAll($out, self::MAGIC);
+            self::writeAll($out, chr(self::VERSION));
+            self::writeAll($out, chr(self::FLAGS));
+            self::writeAll($out, self::packU64BE((int)$plainSize));
+            self::writeAll($out, $header);
 
             while (!feof($in)) {
                 $chunk = fread($in, self::CHUNK_SIZE);
-                if ($chunk === '' || $chunk === false) {
+                if ($chunk === false || ($chunk === '' && !feof($in))) {
+                    throw new \RuntimeException('Unable to read complete file content.');
+                }
+                if ($chunk === '') {
                     break;
                 }
                 $cipher = sodium_crypto_secretstream_xchacha20poly1305_push(
@@ -278,8 +298,8 @@ class CryptoAtRest
                     SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE
                 );
                 $len = strlen($cipher);
-                fwrite($out, pack('N', $len));
-                fwrite($out, $cipher);
+                self::writeAll($out, pack('N', $len));
+                self::writeAll($out, $cipher);
             }
 
             // Always finalize with an empty FINAL frame
@@ -289,35 +309,68 @@ class CryptoAtRest
                 '',
                 SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL
             );
-            fwrite($out, pack('N', strlen($final)));
-            fwrite($out, $final);
+            self::writeAll($out, pack('N', strlen($final)));
+            self::writeAll($out, $final);
+            if (!fflush($out)) {
+                throw new \RuntimeException('Unable to flush encrypted file.');
+            }
+            $closed = fclose($out);
+            $out = null;
+            if (!$closed) {
+                throw new \RuntimeException('Unable to close encrypted file.');
+            }
+            $mode = @fileperms($path);
+            if (is_int($mode) && !@chmod($tmp, $mode & 0777)) {
+                throw new \RuntimeException('Unable to preserve file permissions.');
+            }
+            if (!@rename($tmp, $path)) {
+                throw new \RuntimeException('Unable to install encrypted file.');
+            }
         } catch (\Throwable $e) {
-            @fclose($in);
-            @fclose($out);
             @unlink($tmp);
             throw $e;
-        }
-
-        @fclose($in);
-        @fclose($out);
-
-        $mode = @fileperms($path);
-        @rename($tmp, $path);
-        if (is_int($mode) && $mode > 0) {
-            @chmod($path, $mode & 0777);
+        } finally {
+            @fclose($in);
+            if (is_resource($out)) {
+                @fclose($out);
+            }
         }
     }
 
     public static function decryptFileToPath(string $srcPath, string $destPath): void
     {
-        $out = @fopen($destPath, 'wb');
+        $tmp = dirname($destPath) . DIRECTORY_SEPARATOR . '.frtmpdec.' . bin2hex(random_bytes(12));
+        $out = @fopen($tmp, 'xb');
         if ($out === false) {
             throw new \RuntimeException('Unable to open destination file for decryption.');
         }
         try {
+            if (!@chmod($tmp, 0600)) {
+                throw new \RuntimeException('Unable to secure decryption temporary file.');
+            }
             self::streamDecrypted($srcPath, $out);
+            if (!fflush($out)) {
+                throw new \RuntimeException('Unable to flush decrypted file.');
+            }
+            $closed = fclose($out);
+            $out = null;
+            if (!$closed) {
+                throw new \RuntimeException('Unable to close decrypted file.');
+            }
+            $mode = @fileperms(is_file($destPath) ? $destPath : $srcPath);
+            if (is_int($mode) && !@chmod($tmp, $mode & 0777)) {
+                throw new \RuntimeException('Unable to preserve file permissions.');
+            }
+            if (!@rename($tmp, $destPath)) {
+                throw new \RuntimeException('Unable to install decrypted file.');
+            }
         } finally {
-            @fclose($out);
+            if (is_resource($out)) {
+                @fclose($out);
+            }
+            if (is_file($tmp)) {
+                @unlink($tmp);
+            }
         }
     }
 
@@ -333,17 +386,7 @@ class CryptoAtRest
             return;
         }
 
-        $dir = dirname($path);
-        $base = basename($path);
-        $tmp = $dir . DIRECTORY_SEPARATOR . '.' . $base . '.frtmpdec.' . bin2hex(random_bytes(6));
-
-        self::decryptFileToPath($path, $tmp);
-
-        $mode = @fileperms($path);
-        @rename($tmp, $path);
-        if (is_int($mode) && $mode > 0) {
-            @chmod($path, $mode & 0777);
-        }
+        self::decryptFileToPath($path, $path);
     }
 
     /**
@@ -376,10 +419,14 @@ class CryptoAtRest
             $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($ssHeader, $key);
 
             $written = 0;
+            $finalSeen = false;
 
             while (!feof($in)) {
                 $lenBytes = fread($in, 4);
-                if ($lenBytes === '' || $lenBytes === false) {
+                if ($lenBytes === false) {
+                    throw new \RuntimeException('Unable to read encrypted file.');
+                }
+                if ($lenBytes === '') {
                     break;
                 }
                 if (strlen($lenBytes) !== 4) {
@@ -406,17 +453,30 @@ class CryptoAtRest
                 }
 
                 $res = sodium_crypto_secretstream_xchacha20poly1305_pull($state, $cipher, '');
-                $msg = $res[0] ?? '';
-                $tag = $res[2] ?? null;
+                if ($res === false) {
+                    throw new \RuntimeException('Encrypted file authentication failed.');
+                }
+                [$msg, $tag] = $res;
 
                 if ($msg !== '') {
-                    fwrite($out, $msg);
+                    self::writeAll($out, $msg);
                     $written += strlen($msg);
                 }
 
                 if ($tag === SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL) {
+                    $finalSeen = true;
+                    if (fread($in, 1) !== '') {
+                        throw new \RuntimeException('Unexpected content after encrypted final frame.');
+                    }
                     break;
                 }
+            }
+            if (!$finalSeen) {
+                throw new \RuntimeException('Encrypted file is missing its final frame.');
+            }
+            $plainSize = self::unpackU64BE(substr($hdr, 6, 8));
+            if ($plainSize !== 0 && $written !== $plainSize) {
+                throw new \RuntimeException('Decrypted file size does not match its header.');
             }
         } finally {
             @fclose($in);

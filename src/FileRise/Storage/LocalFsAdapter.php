@@ -102,9 +102,10 @@ final class LocalFsAdapter implements StorageAdapterInterface
         $bytes = ($length === null)
             ? @stream_copy_to_stream($stream, $out)
             : @stream_copy_to_stream($stream, $out, $length);
-        @fclose($out);
+        $flushed = @fflush($out);
+        $closed = @fclose($out);
 
-        return $bytes !== false;
+        return $bytes !== false && ($length === null || $bytes === $length) && $flushed && $closed;
     }
 
     public function move(string $from, string $to): bool

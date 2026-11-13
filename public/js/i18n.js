@@ -1,6 +1,13 @@
 /* i18n.js */
 const translations = {
   en: {
+    "upload_finalizing": "Finalizing…",
+    "upload_completed": "Completed",
+    "upload_failed": "Failed",
+    "upload_invalid_response": "The server did not confirm this upload. Please check before retrying.",
+    "transfer_reconnecting": "Reconnecting…",
+    "transfer_status_unknown": "Status unavailable",
+    "transfer_check_before_retry": "Monitoring was interrupted. The transfer may still be running; check the source and destination before retrying.",
     "please_log_in_to_continue": "Please log in to continue.",
     "no_files_selected": "No files selected.",
     "confirm_delete_files": "Are you sure you want to delete {count} selected file(s)?",

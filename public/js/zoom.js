@@ -64,6 +64,18 @@
   };
 
   function initZoomUI() {
+    // Transforms change painted size, not document flow. Reserve the extra
+    // height so tall zoomed trees stay above the footer and inside the body.
+    const shell = document.getElementById('appZoomShell');
+    if (shell && typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(entries => {
+        const entry = entries[0];
+        const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+        shell.style.setProperty('--app-zoom-content-height', `${height}px`);
+      });
+      observer.observe(shell);
+    }
+
     // bind buttons
     const btns = document.querySelectorAll('.zoom-btn[data-zoom]');
     btns.forEach(btn => {

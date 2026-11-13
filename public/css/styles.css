@@ -2053,8 +2053,9 @@ label{font-size: 0.9rem;}
 @media (min-width: 769px) {
   .drop-target-sidebar{display: block;}
 }
-.drop-target-sidebar.active,
-  .drag-header.active{width: 350px;
+.drop-target-sidebar.active{width: 350px;
+  min-height: 750px;}
+.drag-header.active{width: 350px;
   height: 750px;}
 #sidebarDropArea{width: 350px;
   min-width: 350px;
@@ -2993,6 +2994,8 @@ body.dark-mode #decreaseFont:not(:disabled):hover,body.dark-mode #increaseFont:n
   /* compensate so scaled content still fills the viewport */
   width: calc(100% / var(--app-zoom));
   height: calc(100% / var(--app-zoom));
+  /* Keep zoomed overflow in page flow, including when the tree expands. */
+  margin-bottom: max(0px, calc(var(--app-zoom-content-height, 0px) * (var(--app-zoom) - 1)));
 }
 
 .header-right {
@@ -4647,4 +4650,79 @@ body.dark-mode .fr-enc-banner{
 }
 body.dark-mode .fr-enc-text{
   color: rgba(235, 235, 235, 0.90);
+}
+
+/* Core workspace surfaces. Keep shared modal/Pro selectors and theme hooks intact. */
+:root {
+  --fr-workspace-border: var(--fr-border-light, #e5e5e5);
+  --fr-workspace-muted: var(--fr-muted-light, #606060);
+  --fr-workspace-soft: var(--fr-surface-light-2, #f1f1f1);
+}
+body.dark-mode {
+  --fr-workspace-border: var(--fr-border-dark, #303030);
+  --fr-workspace-muted: var(--fr-muted-dark, #aaaaaa);
+  --fr-workspace-soft: var(--fr-surface-dark-2, #181818);
+}
+#uploadCard, #folderManagementCard,
+#fileListShell .file-list-pane {
+  border-radius: 12px;
+  border-color: var(--fr-workspace-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .05);
+}
+#uploadCard > .card-header, #folderManagementCard > .card-header {
+  padding: 12px 16px;
+  font-size: .95rem;
+  font-weight: 600;
+  background: transparent;
+  border-bottom-color: var(--fr-workspace-border);
+}
+#uploadCard #uploadDropArea {
+  border-radius: 10px;
+  border-color: var(--fr-workspace-border);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+#uploadCard #uploadDropArea:hover {
+  border-color: var(--filr-accent-500);
+}
+#uploadCard #customChooseBtn,
+#fileListShell .file-list-actions .btn {
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
+#uploadCard #customChooseBtn {
+  background: var(--filr-accent-600);
+  color: #fff;
+}
+#fileListShell :is(#fileListTitle, #fileListTitleSecondary) {
+  font-size: 1.5rem;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+#fileListShell table.filr-table thead th {
+  font-size: .85rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+#uploadProgressContainer .progress {
+  background: var(--fr-workspace-soft);
+  border-radius: 6px;
+}
+#uploadProgressContainer .progress-bar {
+  background: var(--filr-accent-600);
+  color: #fff;
+  font-size: .8rem;
+  font-variant-numeric: tabular-nums;
+}
+#uploadCard button:focus-visible,
+#folderTreeContainer :is(button, .folder-option):focus-visible,
+#fileListShell :is(button, a, input, select):focus-visible {
+  outline: 2px solid var(--filr-accent-500);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  #uploadCard #uploadDropArea,
+  #uploadCard *, #folderManagementCard *, #fileListShell * {
+    transition-duration: 0s;
+    animation-duration: 0s;
+  }
 }

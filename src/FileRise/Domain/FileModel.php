@@ -1110,14 +1110,19 @@ class FileModel
                 continue;
             }
 
-            if (!$srcStorage->delete($srcPath)) {
+            $sourceRemoved = $srcStorage->delete($srcPath);
+            if (!$sourceRemoved) {
                 $errors[] = "Failed to remove source file {$basename}.";
             }
 
-            $movedFiles[] = $originalName;
+            if ($sourceRemoved) {
+                $movedFiles[] = $originalName;
+            }
             if (isset($srcMetadata[$originalName])) {
                 $destMetadata[$basename] = $srcMetadata[$originalName];
-                unset($srcMetadata[$originalName]);
+                if ($sourceRemoved) {
+                    unset($srcMetadata[$originalName]);
+                }
             }
         }
 
@@ -1403,30 +1408,53 @@ class FileModel
                     $srcIsEncryptedFile = false;
                 }
 
+                $stagedPath = null;
+                $convertedDestination = false;
                 try {
                     if ($srcIsEncryptedFile && !$destEncrypted) {
-                        // decrypt while moving, then remove the encrypted source
+                        // Keep the source until authenticated output is completely installed.
                         CryptoAtRest::decryptFileToPath($srcPath, $destPath);
-                        $storage->delete($srcPath);
+                        $convertedDestination = true;
+                        if (!$storage->delete($srcPath)) {
+                            throw new \RuntimeException('Unable to remove source file.');
+                        }
+                    } elseif (!$srcIsEncryptedFile && $destEncrypted) {
+                        // Encrypt a private staged copy; a failed conversion never needs source rollback.
+                        $stagedPath = tempnam($destDir, '.frmove-');
+                        if ($stagedPath === false) {
+                            throw new \RuntimeException('Unable to stage encrypted move.');
+                        }
+                        if (!$storage->copy($srcPath, $stagedPath)) {
+                            throw new \RuntimeException('Unable to stage encrypted move.');
+                        }
+                        CryptoAtRest::encryptFileInPlace($stagedPath);
+                        $sourceMode = @fileperms($srcPath);
+                        if (is_int($sourceMode) && !@chmod($stagedPath, $sourceMode & 0777)) {
+                            throw new \RuntimeException('Unable to preserve file permissions.');
+                        }
+                        if (!$storage->move($stagedPath, $destPath)) {
+                            throw new \RuntimeException('Unable to install encrypted move.');
+                        }
+                        $convertedDestination = true;
+                        if (!$storage->delete($srcPath)) {
+                            throw new \RuntimeException('Unable to remove source file.');
+                        }
                     } else {
                         if (!$storage->move($srcPath, $destPath)) {
                             $errors[] = "Failed to move $basename.";
                             continue;
                         }
-                        if (!$srcIsEncryptedFile && $destEncrypted) {
-                            try {
-                                CryptoAtRest::encryptFileInPlace($destPath);
-                            } catch (\Throwable $e) {
-                                // best-effort rollback
-                                $storage->move($destPath, $srcPath);
-                                throw $e;
-                            }
-                        }
                     }
                 } catch (\Throwable $e) {
-                    $storage->delete($destPath);
+                    if ($convertedDestination) {
+                        $storage->delete($destPath);
+                    }
                     $errors[] = "Failed to move {$basename}: " . $e->getMessage();
                     continue;
+                } finally {
+                    if (is_string($stagedPath) && is_file($stagedPath)) {
+                        @unlink($stagedPath);
+                    }
                 }
             } else {
                 if (!$storage->move($srcPath, $destPath)) {

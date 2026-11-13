@@ -1,5 +1,41 @@
 # Changelog
 
+## Changes 11/13/2026 (v3.43.0)
+
+`release(v3.43.0): improve file integrity, uploads, transfers and workspace polish`
+
+**Security and file integrity**
+
+- Encrypted files now require successful authentication and a valid final frame. Truncated, tampered, trailing or inconsistent encrypted content is rejected instead of being silently accepted.
+- Encryption and decryption check write, flush and replacement failures. Decryption installs verified output atomically, preserving an existing destination when verification or writing fails.
+- Updated `phpseclib/phpseclib` from 3.0.57 to 3.0.58 and the development-only `symfony/yaml` dependency from 7.4.22 to 7.4.23 to address upstream security advisories.
+
+**Fixed**
+
+- Moving files into or out of encrypted folders retains the original until conversion completes successfully. Cross-source moves preserve source metadata when source deletion fails, and local stream writes reject incomplete known-length transfers.
+- Uploads remain bound to their original folder and storage source while browsing. Completion cleanup removes only the finished batch, preserving files queued or uploading afterward.
+- Both resumable and fallback uploads require a valid server success response. Fallback CSRF retries renew both the request header and form token.
+- File deletions and other writes invalidate pending read reuse, preventing stale file-list refreshes. Distinct write requests are no longer merged by the shared request coalescer.
+- Late file-list responses and asynchronous table renders cannot overwrite a newer view or a different active pane. Move and copy completion refresh the affected folders without navigating away from the current view.
+- Fixed animated transfer completion throwing an error after a successful move, leaving a stale source row that could be dragged again and incorrectly report that the file was missing.
+- Folder icons retain their valid appearance while counts refresh; stale count responses from an earlier source or tree element are ignored.
+- The page background and footer now account for the displayed height of zoomed content, including large or expanding folder trees in either theme. Moving folder navigation between the header, top row and sidebar no longer leaves the sidebar capped at a fixed height.
+
+**Improved**
+
+- Upload progress distinguishes finalization from confirmed completion, with clearer status text.
+- Transfer monitoring retries transient status failures with bounded backoff without restarting the operation. Interrupted monitoring reports an unknown outcome and asks users to check the folders before retrying.
+- Same-folder table refreshes retain visible rows, selection and scroll position. Existing server paging remains in place for large folders.
+- Polished workspace cards, typography, borders, buttons and progress indicators in light and dark themes, with clearer keyboard focus and reduced-motion support.
+
+**Upgrade notes**
+
+- Retained the legacy compatibility shims and Pro integration interfaces. These core changes target the current released Pro 1.10.0 bundle without requiring a new Pro release.
+- No account, permission, file metadata, encryption-key or configuration migration is required. The encrypted-file format is unchanged; corrupt encrypted files previously accepted silently now fail verification.
+- Encrypted-file conversion uses temporary files and requires sufficient free disk space for staged output.
+
+---
+
 ## Changes 11/05/2026 (v3.42.0)
 
 `release(v3.42.0): harden administrator OIDC discovery testing`

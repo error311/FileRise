@@ -1087,6 +1087,10 @@ function setFolderIconForOption(optEl, kind) {
   if (optEl.dataset && optEl.dataset.folder === 'recycle_bin') return; // keep recycle icon intact
   const isLocked = optEl.classList.contains('locked');
   const isEncrypted = optEl.classList.contains('encrypted');
+  const svg = iconEl.querySelector('svg');
+  if (iconEl.dataset.kind === kind && svg?.querySelector('.folder-front') &&
+      !!svg.querySelector('.lock-overlay') === isLocked &&
+      !!svg.querySelector('.enc-overlay') === (!isLocked && isEncrypted)) return;
   iconEl.dataset.kind = kind;
   iconEl.innerHTML = folderSVG(kind, { locked: isLocked, encrypted: isEncrypted });
 }
@@ -1118,17 +1122,24 @@ function ensureFolderIcon(folder) {
   const opt = document.querySelector(`.folder-option[data-folder="${CSS.escape(folder)}"]`);
   if (!opt) return;
 
-  setFolderIconForOption(opt, 'empty');
-  const kidsPromise = peekHasFolders(folder).catch(() => false);
+  const sourceId = getActiveSourceId();
+  const generation = String(Number(opt.dataset.statsGeneration || 0) + 1);
+  opt.dataset.statsGeneration = generation;
+  const isCurrent = () => opt.isConnected && opt.dataset.statsGeneration === generation && getActiveSourceId() === sourceId;
+  if (!opt.querySelector('.folder-icon svg .folder-front')) setFolderIconForOption(opt, 'empty');
+  const kidsPromise = peekHasFolders(folder).catch(() => null);
   kidsPromise.then(hasKids => {
+    if (!isCurrent() || hasKids === null) return;
     try { updateToggleForOption(folder, !!hasKids); } catch (e) {}
   });
 
   scheduleFolderStatsWork(() => {
+    if (!isCurrent()) return;
     Promise.all([
-      fetchFolderCounts(folder).catch(() => ({ folders: 0, files: 0 })),
+      fetchFolderCounts(folder).catch(() => null),
       kidsPromise
     ]).then(([cnt, hasKids]) => {
+      if (!isCurrent() || !cnt || cnt.__fr_err) return;
       const folders = Number(cnt?.folders || 0);
       const files   = Number(cnt?.files || 0);
       const hasAny  = (folders + files) > 0;
