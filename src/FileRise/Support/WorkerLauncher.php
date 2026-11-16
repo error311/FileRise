@@ -40,7 +40,10 @@ final class WorkerLauncher
 
     public static function hasShell(): bool
     {
-        return is_file('/bin/sh') && is_executable('/bin/sh');
+        // Suppress open_basedir warnings - /bin/sh is outside the web root
+        // on many shared hosts. A warning here would throw an ErrorException
+        // and bubble up through enqueueTransferJob's catch block.
+        return @is_file('/bin/sh') && @is_executable('/bin/sh');
     }
 
     public static function canSpawnBackground(): bool
@@ -49,12 +52,36 @@ final class WorkerLauncher
             return false;
         }
 
-        return self::isFunctionEnabled('shell_exec') || self::isFunctionEnabled('exec');
+        if (!self::isFunctionEnabled('shell_exec') && !self::isFunctionEnabled('exec')) {
+            return false;
+        }
+
+        if (defined('FR_EXEC_PROBE') && FR_EXEC_PROBE === false) {
+            return false;
+        }
+
+        return self::resolvePhpCli() !== null;
     }
 
     public static function canRunForeground(): bool
     {
-        return self::isFunctionEnabled('exec');
+        // In sync mode we never want to exec anything - skip probing entirely.
+        if (self::prefersSync()) {
+            return false;
+        }
+
+        if (!self::isFunctionEnabled('exec')) {
+            return false;
+        }
+
+        // FR_EXEC_PROBE=false lets operators signal that exec() is available
+        // per disable_functions but broken at the OS/sandbox level (e.g. hangs
+        // due to open_basedir or seccomp), so we must not call it at all.
+        if (defined('FR_EXEC_PROBE') && FR_EXEC_PROBE === false) {
+            return false;
+        }
+
+        return self::resolvePhpCli() !== null;
     }
 
     /**
@@ -84,12 +111,34 @@ final class WorkerLauncher
 
     public static function resolvePhpCli(): ?string
     {
+        // If exec probing is disabled, we must not attempt to locate or verify
+        // any PHP CLI binary - the caller treats exec as unavailable entirely.
+        if (defined('FR_EXEC_PROBE') && FR_EXEC_PROBE === false) {
+            return null;
+        }
+
+        // php-cgi is not a CLI binary - it blocks waiting for stdin.
+        // Derive a cli candidate from PHP_BINARY if it looks like php-cgi.
+        $rawBinary = PHP_BINARY ?: '';
+        $derivedCli = '';
+        if (str_contains($rawBinary, 'php-cgi')) {
+            $derivedCli = str_replace('php-cgi', 'php', $rawBinary);
+        }
+
         $candidates = array_values(array_filter([
-            PHP_BINARY ?: null,
+            str_contains($rawBinary, 'php-cgi') ? null : ($rawBinary ?: null),
+            $derivedCli ?: null,
             '/usr/local/bin/php',
             '/usr/bin/php',
             '/bin/php',
         ]));
+
+        $canExec      = self::isFunctionEnabled('exec')
+                        && !(defined('FR_EXEC_PROBE') && FR_EXEC_PROBE === false)
+                        && !self::prefersSync();
+        $canShellExec = self::isFunctionEnabled('shell_exec')
+                        && !(defined('FR_EXEC_PROBE') && FR_EXEC_PROBE === false)
+                        && !self::prefersSync();
 
         foreach ($candidates as $bin) {
             $bin = (string)$bin;
@@ -97,7 +146,7 @@ final class WorkerLauncher
                 continue;
             }
 
-            if (self::isFunctionEnabled('exec')) {
+            if ($canExec) {
                 $rc = 1;
                 $out = [];
                 @exec(escapeshellcmd($bin) . ' -v >/dev/null 2>&1', $out, $rc);
@@ -107,7 +156,7 @@ final class WorkerLauncher
                 continue;
             }
 
-            if (self::isFunctionEnabled('shell_exec')) {
+            if ($canShellExec) {
                 $out = @shell_exec(escapeshellcmd($bin) . ' -v 2>/dev/null');
                 if (is_string($out) && trim($out) !== '') {
                     return $bin;
