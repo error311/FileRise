@@ -62,7 +62,7 @@ class UploadController
         }
 
         // ---- 2) Auth + account-level flags ----
-        if (empty($_SESSION['authenticated'])) {
+        if (empty($_SESSION['authenticated']) || (string)($_SESSION['username'] ?? '') === '') {
             http_response_code(401);
             echo json_encode(['error' => 'Unauthorized']);
             return;
@@ -212,7 +212,7 @@ class UploadController
         // Keep legacy behavior for anything still reading $_POST directly
         $_POST['folder'] = $targetFolder;
 
-        $result = UploadModel::handleUpload($requestParams, $_FILES);
+        $result = UploadModel::handleUpload($requestParams, $_FILES, $username);
 
         // ---- 5) Special handling for Resumable.js GET tests ----
         // Resumable only inspects HTTP status:
@@ -257,7 +257,7 @@ class UploadController
             return;
         }
 
-        if (empty($_SESSION['authenticated'])) {
+        if (empty($_SESSION['authenticated']) || (string)($_SESSION['username'] ?? '') === '') {
             http_response_code(401);
             echo json_encode(['error' => 'Unauthorized']);
             return;
@@ -319,7 +319,7 @@ class UploadController
         $_POST['targetFolder'] = $targetFolder;
         $folder = (string)$_POST['folder'];
 
-        echo json_encode(UploadModel::removeChunks($folder));
+        echo json_encode(UploadModel::removeChunks($folder, $username));
     }
 
     public function checkExisting(): void

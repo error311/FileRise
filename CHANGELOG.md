@@ -1,5 +1,28 @@
 # Changelog
 
+## Changes 11/15/2026 (v3.44.0)
+
+`release(v3.44.0): refine account controls and resumable uploads`
+
+**Fixed**
+
+- Improved consistency between account permission settings, sharing controls and displayed capabilities.
+- Corrected default sharing-setting handling in the admin panel and partial permission updates while retaining explicitly saved values.
+- Improved resumable upload session handling across uploads, resume checks and cancellation.
+
+**Improved**
+
+- Clarified the English account-permission labels and help text, including **Allow Public Sharing** and **Bypass File Ownership Checks**.
+- Updated account-permission and sharing documentation to explain how the controls work together.
+
+**Upgrade notes**
+
+- Incomplete signed-in resumable uploads started before this update must be restarted. Completed files and public shared-upload sessions are unaffected.
+- Existing public links remain active until explicitly removed. Review account sharing settings and folder access after upgrading.
+- No account, file, encryption-key or configuration migration is required. Legacy compatibility shims and Pro integration interfaces are retained; no new Pro release is required.
+
+---
+
 ## Changes 11/13/2026 (v3.43.0)
 
 `release(v3.43.0): improve file integrity, uploads, transfers and workspace polish`

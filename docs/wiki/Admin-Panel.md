@@ -17,8 +17,8 @@ The Admin Panel is where you manage users, folder access, authentication, integr
 - **Account-level flags** (apply across all folders):
   - **Read-only**: view/download only.
   - **Disable upload**: blocks uploads.
-  - **Can share**: allow share links (still subject to ACLs).
-  - **Bypass owner-only checks**: relax owner-only restrictions for operations that enforce ownership; required folder ACLs still apply. Folder Edit already authorizes editing file contents regardless of uploader.
+  - **Allow Public Sharing**: allow creation of public file, folder and upload/drop links, still subject to folder ACLs. Disabling this also applies to owned folders; administrators retain full access. Existing public links must be revoked separately. Internal file links remain available and still require recipient login and folder/file access.
+  - **Bypass file ownership checks**: allow actions on other users' files where the required folder permissions already permit the action. This does not grant access to additional folders. Folder Edit already authorizes editing file contents regardless of uploader.
 - **Folder Access**: per-folder ACLs (view, view own, create file, upload, edit, rename, copy, move, delete, extract, share, manage).
 - **Pro**: User Groups and Client Portals are managed here when Pro is active.
 

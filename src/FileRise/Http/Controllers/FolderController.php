@@ -2721,6 +2721,12 @@ class FolderController
         $isAdmin  = self::isAdmin($perms);
 
         // Must have share on this folder OR be ancestor owner
+        if (!$isAdmin && !ACL::canCreatePublicShare($perms)) {
+            http_response_code(403);
+            echo json_encode(["error" => "Public sharing is disabled for your account."]);
+            exit;
+        }
+
         if (!(ACL::canShare($username, $perms, $folder) || self::ownsFolderOrAncestor($folder, $username, $perms))) {
             http_response_code(403);
             echo json_encode(["error" => "Sharing is not permitted for your account."]);

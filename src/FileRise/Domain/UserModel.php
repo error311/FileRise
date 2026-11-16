@@ -518,6 +518,16 @@ class UserModel
             }
         }
 
+        // Present the effective default without rewriting stored account settings.
+        $defaultCanShare = defined('DEFAULT_CAN_SHARE') ? (bool)DEFAULT_CAN_SHARE : true;
+        foreach (self::getAllUsers() as $user) {
+            $name = (string)$user['username'];
+            $flags = $permissionsArray[$name] ?? [];
+            $flags = is_array($flags) ? $flags : [];
+            $flags['canShare'] = (bool)($flags['canShare'] ?? $defaultCanShare);
+            $permissionsArray[$name] = $flags;
+        }
+
         if (!empty($_SESSION['isAdmin'])) {
             return $permissionsArray;
         }
@@ -595,7 +605,9 @@ class UserModel
                 if (array_key_exists($k, $perm)) {
                     $current[$k] = (bool)$perm[$k];
                 } elseif (!isset($current[$k])) {
-                    $current[$k] = false;
+                    $current[$k] = $k === 'canShare'
+                        ? (defined('DEFAULT_CAN_SHARE') ? (bool)DEFAULT_CAN_SHARE : true)
+                        : false;
                 }
             }
 

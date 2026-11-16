@@ -11,7 +11,10 @@ FileRise lets you share files or folders using public links.
 
 ## ACLs and sharing
 
-- The "Can share" user permission controls who can create share links.
+- The account-level **Allow Public Sharing** permission (stored as `canShare`) controls creation of public file, folder and upload/drop links. An explicit disabled setting overrides folder sharing grants, including ownership of the folder or an ancestor. Administrators retain full access.
+- A missing setting uses `DEFAULT_CAN_SHARE` (enabled by default); existing explicit settings are preserved.
+- Disabling public sharing prevents new links. It does not revoke existing links; delete those share entries separately when revocation is needed.
+- Internal authenticated file links are navigation links, not public grants. Creating one requires file read access, and each recipient must sign in and satisfy their own current folder/file access checks. They remain available when public sharing is disabled.
 - Encrypted-at-rest folders disable sharing by design.
 - Use ACLs to limit which folders a user can see or share.
 
@@ -20,6 +23,7 @@ FileRise lets you share files or folders using public links.
 - Use ACLs to limit what users can share.
 - Avoid sharing admin-only or sensitive folders.
 - Rotate share links if they were posted publicly.
+- This control governs FileRise's public-link feature. It cannot prevent an authorized reader from downloading a file and redistributing it elsewhere.
 
 ## Related
 

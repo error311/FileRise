@@ -6095,7 +6095,7 @@ async function renderUserHubFlagsForSelected(modal) {
             <th style="width:24%;">${t("user")}</th>
             <th class="text-center">${t("read_only")}</th>
             <th class="text-center">${t("disable_upload")}</th>
-            <th class="text-center">${t("can_share")}</th>
+            <th class="text-center" title="${escapeHTML(t("can_share_help"))}">${t("can_share")}</th>
             <th class="text-center" title="${escapeHTML(t("bypass_ownership_help"))}">${t("bypass_ownership")}</th>
           </tr>
         </thead>
@@ -6130,6 +6130,7 @@ async function renderUserHubFlagsForSelected(modal) {
                        class="form-check-input fr-toggle-input"
                        id="hubFlagCanShare"
                        data-flag="canShare"
+                       title="${escapeHTML(t("can_share_help"))}"
                        ${flags.canShare ? "checked" : ""}
                        ${disabledAttr}>
                 <label class="form-check-label" for="hubFlagCanShare"></label>
@@ -9929,7 +9930,7 @@ function flagRow(u, flags) {
       <td><strong>${u.username}</strong>${note}</td>
       <td style="text-align:center;"><input type="checkbox" data-flag="readOnly"        ${f.readOnly ? "checked" : ""} ${disabledAttr}></td>
       <td style="text-align:center;"><input type="checkbox" data-flag="disableUpload"   ${f.disableUpload ? "checked" : ""} ${disabledAttr}></td>
-      <td style="text-align:center;"><input type="checkbox" data-flag="canShare"        ${f.canShare ? "checked" : ""} ${disabledAttr}></td>
+      <td style="text-align:center;"><input type="checkbox" data-flag="canShare" title="${escapeHTML(t("can_share_help"))}" ${f.canShare ? "checked" : ""} ${disabledAttr}></td>
       <td style="text-align:center;"><input type="checkbox" data-flag="bypassOwnership" title="${escapeHTML(t("bypass_ownership_help"))}" ${f.bypassOwnership ? "checked" : ""} ${disabledAttr}></td>
     </tr>
   `;
@@ -10010,7 +10011,7 @@ async function loadUserFlagsList() {
             <th>${t("user")}</th>
             <th>${t("read_only")}</th>
             <th>${t("disable_upload")}</th>
-            <th>${t("can_share")}</th>
+            <th title="${escapeHTML(t("can_share_help"))}">${t("can_share")}</th>
             <th title="${escapeHTML(t("bypass_ownership_help"))}">${t("bypass_ownership")}</th>
           </tr>
         </thead>

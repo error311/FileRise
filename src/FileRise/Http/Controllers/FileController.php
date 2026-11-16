@@ -264,7 +264,8 @@ class FileController
             || ACL::isOwner($username, $perms, $folder)
             || $this->ownsFolderOrAncestor($folder, $username, $perms);
 
-        $fullView = $ignoreOwnership
+        // Ownership bypass never grants access to a folder.
+        $fullView = $this->isAdmin($perms)
             || ACL::canRead($username, $perms, $folder)
             || $this->ownsFolderOrAncestor($folder, $username, $perms);
         $ownGrant = !$fullView && ACL::hasGrant($username, $folder, 'read_own');
@@ -278,7 +279,7 @@ class FileController
             return $scopeErr;
         }
 
-        if ($ownGrant) {
+        if ($ownGrant && !$ignoreOwnership) {
             $meta = $this->loadFolderMetadata($folder);
             if (!isset($meta[$file]['uploader']) || strcasecmp((string)$meta[$file]['uploader'], $username) !== 0) {
                 return 'Forbidden: you are not the owner of this file.';
@@ -2563,7 +2564,8 @@ class FileController
             || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
 
         // Treat ancestor-folder ownership as full view as well
-            $fullView = $ignoreOwnership
+            // Ownership bypass never grants access to a folder.
+            $fullView = $this->isAdmin($perms)
             || ACL::canRead($username, $perms, $folder)
             || $this->ownsFolderOrAncestor($folder, $username, $perms);
 
@@ -2577,7 +2579,7 @@ class FileController
             }
 
         // If own-only, enforce uploader==user
-            if ($ownGrant) {
+            if ($ownGrant && !$ignoreOwnership) {
                 $meta = $this->loadFolderMetadata($folder);
                 if (!isset($meta[$file]['uploader']) || strcasecmp((string)$meta[$file]['uploader'], $username) !== 0) {
                     http_response_code(403);
@@ -3013,7 +3015,8 @@ class FileController
             $ignoreOwnership = $this->isAdmin($perms)
                 || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
 
-            $fullView = $ignoreOwnership
+            // Ownership bypass never grants access to a folder.
+            $fullView = $this->isAdmin($perms)
                 || ACL::canRead($username, $perms, $folder)
                 || $this->ownsFolderOrAncestor($folder, $username, $perms);
 
@@ -3023,7 +3026,7 @@ class FileController
                 $fail(403, "Forbidden: no view access to this folder.");
             }
 
-            if ($ownGrant) {
+            if ($ownGrant && !$ignoreOwnership) {
                 $meta = $this->loadFolderMetadata($folder);
                 if (!isset($meta[$file]['uploader']) || strcasecmp((string)$meta[$file]['uploader'], $username) !== 0) {
                     $fail(403, "Forbidden: you are not the owner of this file.");
@@ -3567,7 +3570,8 @@ class FileController
                 || ($perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP') ? DEFAULT_BYPASS_OWNERSHIP : false));
 
             // Ancestor-owner counts as full view
-                $fullView = $ignoreOwnership
+                // Ownership bypass never grants access to a folder.
+                $fullView = $this->isAdmin($perms)
                 || ACL::canRead($username, $perms, $folder)
                 || $this->ownsFolderOrAncestor($folder, $username, $perms);
                 $ownOnly  = !$fullView && ACL::hasGrant($username, $folder, 'read_own');
@@ -3578,7 +3582,7 @@ class FileController
                 }
 
             // If own-only, ensure all files are owned by the user
-                if ($ownOnly) {
+                if ($ownOnly && !$ignoreOwnership) {
                     $meta = $this->loadFolderMetadata($folder);
                     foreach ($files as $f) {
                         $bn = basename((string)$f);
@@ -4806,6 +4810,11 @@ class FileController
             $userPermissions = $this->loadPerms($username);
 
             // Need share (or ancestor-owner)
+            if (!$this->isAdmin($userPermissions) && !ACL::canCreatePublicShare($userPermissions)) {
+                $this->jsonOut(["error" => "Public sharing is disabled for your account."], 403);
+                return;
+            }
+
             if (!(ACL::canShareFile($username, $userPermissions, $folder) || $this->ownsFolderOrAncestor($folder, $username, $userPermissions))) {
                 $this->jsonOut(["error" => "Forbidden: no share access"], 403);
                 return;

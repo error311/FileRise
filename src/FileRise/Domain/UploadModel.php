@@ -137,18 +137,26 @@ class UploadModel
         return $identifier;
     }
 
-    private static function resumableTempFolderName($identifier): ?string
+    private static function resumableTempFolderName($identifier, ?string $uploadOwner = null): ?string
     {
         $normalized = self::normalizeResumableIdentifier($identifier);
         if ($normalized === null) {
             return null;
         }
+        // Account scope is supplied by the authenticated controller, never by request fields.
+        // Keep anonymous shared uploads in their existing visitor-token namespace.
+        if ($uploadOwner !== null) {
+            if ($uploadOwner === '') {
+                return null;
+            }
+            $normalized = serialize(['authenticated', $uploadOwner, SourceContext::getActiveId(), $normalized]);
+        }
         return 'resumable_' . hash('sha256', $normalized);
     }
 
-    private static function resumableTempDir(string $baseUploadDir, $identifier): ?string
+    private static function resumableTempDir(string $baseUploadDir, $identifier, ?string $uploadOwner = null): ?string
     {
-        $folderName = self::resumableTempFolderName($identifier);
+        $folderName = self::resumableTempFolderName($identifier, $uploadOwner);
         if ($folderName === null) {
             return null;
         }
@@ -201,8 +209,12 @@ class UploadModel
         return null;
     }
 
-    private static function bindResumableMetadata(string $tempDir, array $metadata, int $chunkNumber): ?string
-    {
+    private static function bindResumableMetadata(
+        string $tempDir,
+        array $metadata,
+        int $chunkNumber,
+        bool $requireFirstChunk = true
+    ): ?string {
         $lock = @fopen($tempDir . '.upload.lock', 'c+');
         if ($lock === false || !flock($lock, LOCK_EX)) {
             if (is_resource($lock)) {
@@ -218,7 +230,7 @@ class UploadModel
             if (!is_array($stored) || $stored !== $metadata) {
                 $error = 'Upload session does not match the initial chunk.';
             }
-        } elseif ($chunkNumber !== 1) {
+        } elseif ($requireFirstChunk && $chunkNumber !== 1) {
             $error = 'Upload session must start with the first chunk.';
         } else {
             $encoded = json_encode($metadata, JSON_UNESCAPED_SLASHES);
@@ -1014,7 +1026,7 @@ class UploadModel
         return '';
     }
 
-    public static function handleUpload(array $post, array $files): array
+    public static function handleUpload(array $post, array $files, ?string $uploadOwner = null): array
     {
         $storage = StorageRegistry::getAdapter();
         $isLocal = self::isLocalSourceType();
@@ -1055,7 +1067,7 @@ class UploadModel
                     . str_replace('/', DIRECTORY_SEPARATOR, $folderSan) . DIRECTORY_SEPARATOR;
             }
 
-            $tempDir = self::resumableTempDir($baseUploadDir, $resumableIdentifier);
+            $tempDir = self::resumableTempDir($baseUploadDir, $resumableIdentifier, $uploadOwner);
             if ($tempDir === null) {
                 return ['error' => 'Invalid resumable upload request'];
             }
@@ -1118,7 +1130,7 @@ class UploadModel
                 return ['error' => 'Failed to create upload directory'];
             }
 
-            $tempDir = self::resumableTempDir($baseUploadDir, $resumableIdentifier);
+            $tempDir = self::resumableTempDir($baseUploadDir, $resumableIdentifier, $uploadOwner);
             if ($tempDir === null) {
                 return ['error' => 'Invalid resumable upload request'];
             }
@@ -1133,16 +1145,23 @@ class UploadModel
 
             $chunkFile = $tempDir . $chunkNumber;
             $tmpName   = $files['file']['tmp_name'] ?? null;
-            $bindMetadata = !empty($post['_fr_bind_resumable_metadata']);
+            $bindMetadata = $uploadOwner !== null || !empty($post['_fr_bind_resumable_metadata']);
             if ($bindMetadata) {
-                $metadataError = self::bindResumableMetadata($tempDir, [
+                $metadata = [
                     'filename' => $resumableFilename,
                     'relativeSubDir' => $relativeSubDir,
                     'totalChunks' => $totalChunks,
                     'totalSize' => isset($post['resumableTotalSize']) && is_numeric($post['resumableTotalSize'])
                         ? (int)$post['resumableTotalSize']
                         : 0,
-                ], $chunkNumber);
+                ];
+                if ($uploadOwner !== null) {
+                    $metadata['owner'] = $uploadOwner;
+                    $metadata['sourceId'] = SourceContext::getActiveId();
+                    $metadata['folder'] = $folderSan;
+                }
+                // Authenticated clients send chunks in parallel; the first arrival pins metadata.
+                $metadataError = self::bindResumableMetadata($tempDir, $metadata, $chunkNumber, $uploadOwner === null);
                 if ($metadataError !== null) {
                     return ['error' => $metadataError];
                 }
@@ -1766,13 +1785,13 @@ class UploadModel
      * @param string $folder The resumable upload identifier.
      * @return array Returns a status array indicating success or error.
      */
-    public static function removeChunks(string $folder): array
+    public static function removeChunks(string $folder, ?string $uploadOwner = null): array
     {
         if (strpos($folder, 'resumable_') === 0) {
             $folder = substr($folder, strlen('resumable_'));
         }
 
-        $tempFolderName = self::resumableTempFolderName($folder);
+        $tempFolderName = self::resumableTempFolderName($folder, $uploadOwner);
         if ($tempFolderName === null) {
             return ['error' => 'Invalid resumable identifier'];
         }

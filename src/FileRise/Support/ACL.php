@@ -1008,6 +1008,13 @@ class ACL
         return empty($perms['readOnly']);
     }
 
+    /** Account-level ceiling for creating public shares, including owned folders. */
+    public static function canCreatePublicShare(array $perms = []): bool
+    {
+        return self::isAdmin($perms)
+            || (bool)($perms['canShare'] ?? (defined('DEFAULT_CAN_SHARE') ? DEFAULT_CAN_SHARE : true));
+    }
+
     public static function hasGrant(string $user, string $folder, string $cap): bool
     {
         $folder = self::normalizeFolder($folder);
@@ -1097,6 +1104,9 @@ class ACL
         $folder = self::normalizeFolder($folder);
         if (self::isAdmin($perms)) {
             return true;
+        }
+        if (!self::canCreatePublicShare($perms)) {
+            return false;
         }
         return self::hasGrant($user, $folder, 'owners')
             || self::hasGrant($user, $folder, 'share');
@@ -1553,6 +1563,9 @@ class ACL
         if (self::isAdmin($perms)) {
             return true;
         }
+        if (!self::canCreatePublicShare($perms)) {
+            return false;
+        }
         return self::hasGrant($user, $folder, 'owners') || self::hasGrant($user, $folder, 'share');
     }
     public static function canShareFolder(string $user, array $perms, string $folder): bool
@@ -1560,6 +1573,9 @@ class ACL
         $folder = self::normalizeFolder($folder);
         if (self::isAdmin($perms)) {
             return true;
+        }
+        if (!self::canCreatePublicShare($perms)) {
+            return false;
         }
         $can = self::hasGrant($user, $folder, 'owners') || self::hasGrant($user, $folder, 'share');
         if (!$can) {
