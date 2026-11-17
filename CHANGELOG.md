@@ -1,5 +1,23 @@
 # Changelog
 
+## Changes 11/17/2026 (v3.45.0)
+
+`release(v3.45.0): improve Pro bundle installation checks`
+
+**Improved**
+
+- Improved Pro bundle installation checks and feedback for unsupported archives, consistently across manual uploads and one-click downloads.
+
+**Verification**
+
+- Verified official Pro 1.10.0 installation, reinstallation and compatibility, including unchanged installed files when an archive is rejected.
+
+**Upgrade notes**
+
+- Application-managed Pro installation supports the original official 1.10.0 ZIP. Keep the downloaded archive unchanged; other bundle versions require explicit support in core. Existing Pro installations and licenses are unaffected, and no new Pro release is required.
+
+---
+
 ## Changes 11/15/2026 (v3.44.0)
 
 `release(v3.44.0): refine account controls and resumable uploads`

@@ -35,6 +35,11 @@ require_once PROJECT_ROOT . '/src/FileRise/Support/PersistentTokensKeyRotation.p
 class AdminController
 {
     private const OIDC_DISCOVERY_MAX_BYTES = 1048576;
+    // SHA-256 of original vendor-distributed ZIP bytes; never trust a request-supplied digest.
+    // Approve each new official archive here before enabling its installation.
+    private const APPROVED_PRO_BUNDLES = [
+        '9ef52fd2a0cf3f4344767da6839878584c5e0be1d9d33f3fe1bc2c54c3599158' => 'v1.10.0',
+    ];
 
     /** Enforce authentication (401). */
     public static function requireAuth(): void
@@ -2296,7 +2301,6 @@ class AdminController
     private function installProBundleFromZip(string $zipPath, string $origName = '', ?string $workDir = null): array
     {
         $declaredVersion = null;
-        $basename = '';
         $zip = null;
         $zipOpened = false;
 
@@ -2318,24 +2322,17 @@ class AdminController
                 throw new RuntimeException('Bundle must be a .zip file.', 400);
             }
 
-            if ($origName !== '') {
-                // Normalize to basename so C:\fakepath\FileRisePro-v1.2.1.zip works.
-                $basename = str_replace('\\', '/', $origName);
-                $basename = basename($basename);
+            // Shared by manual uploads and vendor downloads. Verify the complete archive
+            // before opening it or creating/writing anything in the installed bundle.
+            $digest = @hash_file('sha256', $zipPath);
+            if (!is_string($digest) || !isset(self::APPROVED_PRO_BUNDLES[$digest])) {
+                throw new RuntimeException(
+                    'Bundle not recognized by this FileRise version. Use the original official Pro ZIP '
+                    . 'without repacking it, and update FileRise core if the bundle is newer.',
+                    400
+                );
             }
-
-            // Try to parse the bundle version from the *basename*
-            // Supports: FileRisePro-v1.2.3.zip or FileRisePro_1.2.3.zip (case-insensitive)
-            if (
-                $basename !== '' &&
-                preg_match(
-                    '/^FileRisePro[_-]v?([0-9]+\.[0-9]+\.[0-9]+)\.zip$/i',
-                    $basename,
-                    $m
-                )
-            ) {
-                $declaredVersion = 'v' . $m[1];
-            }
+            $declaredVersion = self::APPROVED_PRO_BUNDLES[$digest];
 
             $zip = new \ZipArchive();
             if ($zip->open($zipPath) !== true) {

@@ -24,6 +24,14 @@ FileRise Pro can be installed or updated from the UI or manually. Add and save y
 3. Click Install bundle.
 4. Refresh the Pro panel and confirm Status: Active.
 
+### Supported bundle archives
+
+The application installer accepts the original official **Pro 1.10.0 ZIP**. Both manual uploads and one-click downloads are checked against the archive fingerprint included in FileRise core before any files are installed. Keep the ZIP as downloaded from `filerise.net`; extracting and repacking it changes its fingerprint.
+
+An unrecognized archive is rejected without changing the installed Pro files. Older or future bundle archives need explicit support in core before they can be installed through the application. Update core before installing a newer Pro release.
+
+Existing Pro installations continue to load without reinstallation. This check does not change licenses or require a new Pro bundle. It applies to application-managed installation, not direct filesystem changes by server administrators.
+
 ## Manual install or update
 
 1. Confirm your license is saved in Admin -> FileRise Pro (or add `users/proLicense.json`).
