@@ -1,5 +1,22 @@
 # Changelog
 
+## Changes 11/21/2026 (v3.47.0)
+
+`release(v3.47.0): improve folder metadata and share-link consistency`
+
+**Fixed**
+
+- Improved metadata consistency during folder renames, moves and cleanup.
+- Preserved older folder metadata during renames between naming formats.
+- Improved consistency when folder-share links are created, removed or listed at the same time.
+
+**Upgrade notes**
+
+- Existing account, encryption and metadata formats remain supported. No manual migration or new Pro release is required.
+- Legacy compatibility shims and existing integration interfaces are retained.
+
+---
+
 ## Changes 11/20/2026 (v3.46.0)
 
 `release(v3.46.0): improve account updates, archives, sharing and WebDAV consistency`

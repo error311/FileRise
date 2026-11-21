@@ -7,6 +7,7 @@ use FileRise\Support\AuditHook;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\EventBus;
 use FileRise\Support\FS;
+use FileRise\Support\FolderShareStore;
 use FileRise\Support\WorkerLauncher;
 use FileRise\Storage\SourceContext;
 use FileRise\Storage\StorageRegistry;
@@ -3131,19 +3132,12 @@ class FolderController
             ? SourceContext::metaRoot()
             : rtrim((string)META_DIR, '/\\') . DIRECTORY_SEPARATOR;
         $shareFile = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR . 'share_folder_links.json';
-        $links     = file_exists($shareFile) ? json_decode(file_get_contents($shareFile), true) ?? [] : [];
-        $now       = time();
-        $cleaned   = [];
-
-        foreach ($links as $token => $record) {
-            if (!empty($record['expires']) && $record['expires'] < $now) {
-                continue;
-            }
-            $cleaned[$token] = $record;
-        }
-
-        if (count($cleaned) !== count($links)) {
-            file_put_contents($shareFile, json_encode($cleaned, JSON_PRETTY_PRINT));
+        try {
+            $cleaned = FolderShareStore::prune($shareFile);
+        } catch (\RuntimeException $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Could not read share links.']);
+            return;
         }
 
         echo json_encode($cleaned);

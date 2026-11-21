@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FileRise\Domain;
 
 use FileRise\Storage\SourceContext;
+use FileRise\Support\FolderShareStore;
 use RuntimeException;
 
 require_once PROJECT_ROOT . '/config/config.php';
@@ -51,13 +52,20 @@ final class MetadataReadService
                 continue;
             }
 
-            $jsonData = file_get_contents($path);
-            $data = json_decode((string)$jsonData, true);
-            if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            try {
+                if ($file === 'share_folder_links.json') {
+                    $data = FolderShareStore::prune($path);
+                } else {
+                    $data = json_decode((string)file_get_contents($path), true);
+                    if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+                        throw new RuntimeException('Corrupted JSON');
+                    }
+                }
+            } catch (RuntimeException $e) {
                 return [
                     'ok' => false,
                     'status' => 500,
-                    'error' => 'Corrupted JSON',
+                    'error' => 'Could not read share links.',
                     'sourceId' => (string)($target['id'] ?? ''),
                 ];
             }
@@ -84,7 +92,7 @@ final class MetadataReadService
                 $out[$key] = $entry;
             }
 
-            if ($changed) {
+            if ($changed && $file !== 'share_folder_links.json') {
                 file_put_contents($path, json_encode($cleaned, JSON_PRETTY_PRINT));
             }
         }

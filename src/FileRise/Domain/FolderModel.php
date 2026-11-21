@@ -5,6 +5,7 @@ namespace FileRise\Domain;
 use FileRise\Support\ACL;
 use FileRise\Support\CryptoAtRest;
 use FileRise\Support\FS;
+use FileRise\Support\FolderShareStore;
 use FileRise\Support\MetadataPath;
 use FileRise\Support\SharePasswordAttemptLimiter;
 use FileRise\Support\UploadNamePolicy;
@@ -1930,11 +1931,36 @@ class FolderModel
                 return ["error" => "New folder name already exists."];
             }
         }
+        MetadataPath::prepareSubtreeRename(
+            self::metaRoot(),
+            $oldRel,
+            static function () use ($storage, $oldReal, $oldRel): \Generator {
+                $pending = [[$oldReal, $oldRel]];
+                while ($pending) {
+                    [$path, $relative] = array_pop($pending);
+                    foreach ($storage->list($path) as $name) {
+                        if (!self::isSafeSegment($name)) {
+                            continue;
+                        }
+                        $child = $path . DIRECTORY_SEPARATOR . $name;
+                        if ($storage->isLocal() && is_link($child)) {
+                            continue;
+                        }
+                        if (($storage->stat($child)['type'] ?? '') !== 'dir') {
+                            continue;
+                        }
+                        $childRelative = $relative . '/' . $name;
+                        yield $childRelative;
+                        $pending[] = [$child, $childRelative];
+                    }
+                }
+            }
+        );
         if (!$storage->move($oldReal, $newPath)) {
             return ["error" => "Failed to rename folder."];
         }
 
-        // Update metadata filenames (prefix-rename)
+        // Update metadata filenames within the exact folder subtree.
         MetadataPath::renameSubtree(self::metaRoot(), $oldRel, $newRel);
 
         // Update ownership mapping for the entire subtree.
@@ -2419,8 +2445,12 @@ class FolderModel
             if (!is_file($path)) {
                 return null;
             }
-            $shareLinks = json_decode((string)@file_get_contents($path), true);
-            if (!is_array($shareLinks) || !isset($shareLinks[$token])) {
+            try {
+                $shareLinks = FolderShareStore::read($path);
+            } catch (\RuntimeException $e) {
+                return null;
+            }
+            if (!isset($shareLinks[$token])) {
                 return null;
             }
             $rec = $shareLinks[$token];
@@ -2949,19 +2979,7 @@ class FolderModel
         $hashedPassword = $password !== "" ? password_hash($password, PASSWORD_DEFAULT) : "";
 
         $shareFile = self::metaRoot() . "share_folder_links.json";
-        $links = file_exists($shareFile)
-            ? (json_decode(file_get_contents($shareFile), true) ?? [])
-            : [];
-
-        // cleanup expired
-        $now = time();
-        foreach ($links as $k => $v) {
-            if (!empty($v['expires']) && $v['expires'] < $now) {
-                unset($links[$k]);
-            }
-        }
-
-        $links[$token] = [
+        $record = [
             "folder"      => $relative,
             "expires"     => $expires,
             "password"    => $hashedPassword,
@@ -2980,13 +2998,23 @@ class FolderModel
         ];
 
         if (
-            !self::canAccessSharedFolder($links[$token], $folder)
-            || ($allowUpload && !self::canAccessSharedFolder($links[$token], $folder, true))
+            !self::canAccessSharedFolder($record, $folder)
+            || ($allowUpload && !self::canAccessSharedFolder($record, $folder, true))
         ) {
             return ['error' => 'The share creator does not have the required folder access.'];
         }
 
-        if (file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT), LOCK_EX) === false) {
+        try {
+            FolderShareStore::update($shareFile, static function (array &$links) use ($token, $record): void {
+                $now = time();
+                foreach ($links as $key => $entry) {
+                    if (!empty($entry['expires']) && $entry['expires'] < $now) {
+                        unset($links[$key]);
+                    }
+                }
+                $links[$token] = $record;
+            });
+        } catch (\RuntimeException $e) {
             return ["error" => "Could not save share link."];
         }
 
@@ -3349,8 +3377,9 @@ class FolderModel
         if (!file_exists($shareFile)) {
             return [];
         }
-        $links = json_decode(file_get_contents($shareFile), true);
-        if (!is_array($links)) {
+        try {
+            $links = FolderShareStore::read($shareFile);
+        } catch (\RuntimeException $e) {
             return [];
         }
         $out = [];
@@ -3370,13 +3399,16 @@ class FolderModel
             return false;
         }
 
-        $links = json_decode(file_get_contents($shareFile), true);
-        if (!is_array($links) || !isset($links[$token])) {
+        try {
+            return FolderShareStore::update($shareFile, static function (array &$links) use ($token): bool {
+                if (!isset($links[$token])) {
+                    return false;
+                }
+                unset($links[$token]);
+                return true;
+            });
+        } catch (\RuntimeException $e) {
             return false;
         }
-
-        unset($links[$token]);
-        file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT), LOCK_EX);
-        return true;
     }
 }

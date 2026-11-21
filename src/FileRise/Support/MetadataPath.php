@@ -63,21 +63,42 @@ final class MetadataPath
             return;
         }
 
-        foreach (self::newSubtreeGlobPatterns($metaRoot, $folder) as $pattern) {
-            foreach (glob($pattern) ?: [] as $path) {
-                if (is_file($path)) {
-                    @unlink($path);
-                }
+        $exact = self::encodedFileName($folder);
+        $prefix = 'folder-' . rawurlencode($folder . '/');
+        $legacyExact = self::isCollisionSensitive($folder) ? null : self::legacyFileName($folder);
+        foreach (self::metadataFiles($metaRoot) as $name) {
+            if ($name === $exact || $name === $legacyExact || str_starts_with($name, $prefix)) {
+                @unlink($metaRoot . $name);
             }
         }
+        // Dashed legacy names are ambiguous: never delete them by prefix.
+    }
 
-        if (!self::isCollisionSensitive($folder)) {
-            $legacyPrefix = str_replace(['/', '\\', ' '], '-', $folder);
-            foreach (glob($metaRoot . $legacyPrefix . '*_metadata.json') ?: [] as $path) {
-                if (is_file($path)) {
-                    @unlink($path);
+    /**
+     * Preserve unvisited legacy descendants before a rename, using real folder paths.
+     * The callback is lazy: modern metadata needs no storage-tree traversal.
+     *
+     * @param callable(): iterable<string> $descendants
+     */
+    public static function prepareSubtreeRename(string $metaRoot, string $folder, callable $descendants): void
+    {
+        $metaRoot = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR;
+        $folder = self::folderKey($folder);
+        if ($folder === 'root') {
+            return;
+        }
+        $legacyPrefix = substr(self::legacyFileName($folder), 0, -strlen('_metadata.json')) . '-';
+        foreach (self::metadataFiles($metaRoot) as $name) {
+            if (!str_starts_with($name, $legacyPrefix)) {
+                continue;
+            }
+            foreach ($descendants() as $child) {
+                $child = self::folderKey($child);
+                if (str_starts_with($child, $folder . '/')) {
+                    self::path($metaRoot, $child);
                 }
             }
+            return;
         }
     }
 
@@ -86,42 +107,28 @@ final class MetadataPath
         $metaRoot = rtrim($metaRoot, '/\\') . DIRECTORY_SEPARATOR;
         $oldFolder = self::folderKey($oldFolder);
         $newFolder = self::folderKey($newFolder);
-        if ($oldFolder === 'root' || $newFolder === 'root') {
+        if ($oldFolder === 'root' || $newFolder === 'root' || $oldFolder === $newFolder) {
             return;
         }
 
-        $oldExact = $metaRoot . self::encodedFileName($oldFolder);
+        // Use the same authoritative path as readers, including legacy copy-on-read.
+        $oldExact = self::path($metaRoot, $oldFolder);
+        $newExact = self::isCollisionSensitive($newFolder)
+            ? self::encodedFileName($newFolder)
+            : self::legacyFileName($newFolder);
         if (is_file($oldExact)) {
-            @rename($oldExact, $metaRoot . self::encodedFileName($newFolder));
+            @rename($oldExact, $metaRoot . $newExact);
         }
 
         $oldPrefix = 'folder-' . rawurlencode($oldFolder . '/');
         $newPrefix = 'folder-' . rawurlencode($newFolder . '/');
-        foreach (glob($metaRoot . $oldPrefix . '*_metadata.json') ?: [] as $oldPath) {
-            if (!is_file($oldPath)) {
-                continue;
-            }
-            $baseName = basename($oldPath);
-            $newBase = preg_replace('/^' . preg_quote($oldPrefix, '/') . '/', $newPrefix, $baseName);
-            if (is_string($newBase) && $newBase !== '') {
-                @rename($oldPath, $metaRoot . $newBase);
+        foreach (self::metadataFiles($metaRoot) as $name) {
+            if (str_starts_with($name, $oldPrefix)) {
+                $newName = $newPrefix . substr($name, strlen($oldPrefix));
+                @rename($metaRoot . $name, $metaRoot . $newName);
             }
         }
-
-        if (!self::isCollisionSensitive($oldFolder) && !self::isCollisionSensitive($newFolder)) {
-            $oldLegacyPrefix = str_replace(['/', '\\', ' '], '-', $oldFolder);
-            $newLegacyPrefix = str_replace(['/', '\\', ' '], '-', $newFolder);
-            foreach (glob($metaRoot . $oldLegacyPrefix . '*_metadata.json') ?: [] as $oldPath) {
-                if (!is_file($oldPath)) {
-                    continue;
-                }
-                $baseName = basename($oldPath);
-                $newBase = preg_replace('/^' . preg_quote($oldLegacyPrefix, '/') . '/', $newLegacyPrefix, $baseName);
-                if (is_string($newBase) && $newBase !== '') {
-                    @rename($oldPath, $metaRoot . $newBase);
-                }
-            }
-        }
+        // Retain ambiguous legacy copies for other folders that may still need them.
     }
 
     private static function isCollisionSensitive(string $folder): bool
@@ -142,13 +149,15 @@ final class MetadataPath
         @file_put_contents($encodedPath, json_encode($decoded, JSON_PRETTY_PRINT), LOCK_EX);
     }
 
-    /**
-     * @return list<string>
-     */
-    private static function newSubtreeGlobPatterns(string $metaRoot, string $folder): array
+    /** @return list<string> */
+    private static function metadataFiles(string $metaRoot): array
     {
-        $exact = $metaRoot . self::encodedFileName($folder);
-        $descendants = $metaRoot . 'folder-' . rawurlencode($folder . '/') . '*_metadata.json';
-        return [$exact, $descendants];
+        $files = [];
+        foreach (@scandir($metaRoot) ?: [] as $name) {
+            if (str_ends_with($name, '_metadata.json') && is_file($metaRoot . $name)) {
+                $files[] = $name;
+            }
+        }
+        return $files;
     }
 }
