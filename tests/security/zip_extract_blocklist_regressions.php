@@ -71,6 +71,10 @@ $_SESSION['username'] = 'alice';
 require_once $baseDir . '/config/config.php';
 require_once $baseDir . '/src/FileRise/Domain/FileModel.php';
 
+// Existing path/blocklist checks run as an authorized folder manager.
+file_put_contents($usersDir . 'users.txt', 'alice:unused:1' . PHP_EOL);
+$_SESSION = ['username' => 'alice', 'authenticated' => true, 'isAdmin' => true];
+
 $errors = [];
 $zipPath = $uploadDir . 'docs/payload.zip';
 
@@ -205,14 +209,16 @@ try {
             \FileRise\Domain\FileModel::class,
             'placeArchiveFiles'
         );
-        $placement = $placeArchiveFiles->invoke(
-            null,
+        $createdDirectories = [];
+        $placement = $placeArchiveFiles->invokeArgs(null, [
             $redirectRoot,
             $boundaryWorkspace,
             $uploadDir . 'docs',
             ['boundary-sentinel.txt'],
-            ['boundary-sentinel.txt']
-        );
+            ['boundary-sentinel.txt'],
+            static fn(string $path, string $action): bool => true,
+            &$createdDirectories,
+        ]);
         zipExtractFailIf(
             !empty($placement['placed']),
             'placeArchiveFiles: an extracted object redefined the original workspace boundary',

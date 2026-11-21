@@ -4,11 +4,15 @@ namespace FileRise\Domain;
 
 use FileRise\Domain\AdminModel;
 use FileRise\Domain\UserModel;
+use FileRise\Support\UserFileStore;
+use FileRise\Support\LoginAttemptLimiter;
 use ProGroups;
 
 // src/models/AuthModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/FileRise/Support/UserFileStore.php';
+require_once PROJECT_ROOT . '/src/FileRise/Support/LoginAttemptLimiter.php';
 
 class AuthModel
 {
@@ -48,7 +52,7 @@ class AuthModel
     {
         $usersFile = USERS_DIR . USERS_FILE;
         if (file_exists($usersFile)) {
-            foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            foreach (UserFileStore::readLines() as $line) {
                 $parts = explode(":", trim($line));
                 if (count($parts) >= 3 && $parts[0] === $username) {
                     return trim($parts[2]);
@@ -199,134 +203,143 @@ class AuthModel
         }
 
         try {
-            try {
-                $store = self::loadOidcIdentityStore();
-            } catch (\Throwable $e) {
-                error_log('FileRise: failed to read the OIDC identity binding store.');
-                return ['error' => 'OIDC identity binding is temporarily unavailable.'];
-            }
-
-            $identityKey = hash('sha256', $issuer . "\0" . $subject);
-            $entries = $store['identities'];
-            $bindingExists = array_key_exists($identityKey, $entries);
-            $provisioning = false;
-            $username = '';
-
-            if ($bindingExists) {
-                $entry = $entries[$identityKey];
-                $username = self::oidcBindingUsername($entry);
-                $provisioning = is_array($entry) && !empty($entry['provisioning']);
-                if ($username === '' || !preg_match(REGEX_USER, $username)) {
-                    return ['error' => 'OIDC identity binding is invalid.'];
+            // Lock order: OIDC identities, then users.txt. Removal releases users.txt
+            // before cleaning identity bindings, so the reverse order is never held.
+            return UserFileStore::withExclusiveLock(static function () use (
+                $suggestedUsername,
+                $isAdminByIdp,
+                $issuer,
+                $subject,
+                $recentlyAuthenticatedUsername
+            ): array {
+                try {
+                    $store = self::loadOidcIdentityStore();
+                } catch (\Throwable $e) {
+                    error_log('FileRise: failed to read the OIDC identity binding store.');
+                    return ['error' => 'OIDC identity binding is temporarily unavailable.'];
                 }
-            }
 
-            $usersFile = USERS_DIR . USERS_FILE;
-            if (!file_exists($usersFile) && file_put_contents($usersFile, '', LOCK_EX) === false) {
-                return ['error' => 'Users file not found and could not be created.'];
-            }
+                $identityKey = hash('sha256', $issuer . "\0" . $subject);
+                $entries = $store['identities'];
+                $bindingExists = array_key_exists($identityKey, $entries);
+                $provisioning = false;
+                $username = '';
 
-            $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-            $findUser = static function (array $userLines, string $needle): ?int {
-                foreach ($userLines as $index => $line) {
-                    $parts = explode(':', trim($line));
-                    if (count($parts) >= 3 && strcasecmp($parts[0], $needle) === 0) {
-                        return $index;
+                if ($bindingExists) {
+                    $entry = $entries[$identityKey];
+                    $username = self::oidcBindingUsername($entry);
+                    $provisioning = is_array($entry) && !empty($entry['provisioning']);
+                    if ($username === '' || !preg_match(REGEX_USER, $username)) {
+                        return ['error' => 'OIDC identity binding is invalid.'];
                     }
                 }
-                return null;
-            };
 
-            $foundIndex = $bindingExists ? $findUser($lines, $username) : $findUser($lines, $suggestedUsername);
+                $usersFile = USERS_DIR . USERS_FILE;
 
-            if (!$bindingExists) {
-                if ($foundIndex !== null) {
-                    $parts = explode(':', trim($lines[$foundIndex]));
-                    $username = (string)$parts[0];
-                } else {
+                $lines = UserFileStore::readLines() ?: [];
+                $findUser = static function (array $userLines, string $needle): ?int {
+                    foreach ($userLines as $index => $line) {
+                        $parts = explode(':', trim($line));
+                        if (count($parts) >= 3 && strcasecmp($parts[0], $needle) === 0) {
+                            return $index;
+                        }
+                    }
+                    return null;
+                };
+
+                $foundIndex = $bindingExists ? $findUser($lines, $username) : $findUser($lines, $suggestedUsername);
+
+                if (!$bindingExists) {
+                    if ($foundIndex !== null) {
+                        $parts = explode(':', trim($lines[$foundIndex]));
+                        $username = (string)$parts[0];
+                    } else {
+                        if (!defined('FR_OIDC_AUTO_CREATE') || !FR_OIDC_AUTO_CREATE) {
+                            return ['error' => 'User does not exist in FileRise and auto-create is disabled.'];
+                        }
+                        $username = $suggestedUsername;
+                        $provisioning = true;
+                    }
+
+                    foreach ($entries as $existingKey => $entry) {
+                        $existingUsername = self::oidcBindingUsername($entry);
+                        if (
+                            $existingKey !== $identityKey
+                            && $existingUsername !== ''
+                            && strcasecmp($existingUsername, $username) === 0
+                        ) {
+                            return ['error' => 'This local account is already linked to another OIDC identity.'];
+                        }
+                    }
+
+                    if (
+                        $foundIndex !== null
+                        && (
+                            $recentlyAuthenticatedUsername === null
+                            || strcasecmp($recentlyAuthenticatedUsername, $username) !== 0
+                        )
+                    ) {
+                        return [
+                            'linkRequired' => true,
+                            'username' => $username,
+                        ];
+                    }
+
+                    $entries[$identityKey] = [
+                        'username' => $username,
+                        'provisioning' => $provisioning,
+                    ];
+                    $store['version'] = 1;
+                    $store['identities'] = $entries;
+                    if (!self::saveOidcIdentityStore($store)) {
+                        return ['error' => 'Failed to save OIDC identity binding.'];
+                    }
+                }
+
+                if ($foundIndex === null) {
+                    if (!$provisioning) {
+                        return ['error' => 'The local account linked to this OIDC identity no longer exists.'];
+                    }
                     if (!defined('FR_OIDC_AUTO_CREATE') || !FR_OIDC_AUTO_CREATE) {
                         return ['error' => 'User does not exist in FileRise and auto-create is disabled.'];
                     }
-                    $username = $suggestedUsername;
-                    $provisioning = true;
+
+                    $randomPassword = bin2hex(random_bytes(16));
+                    $hash = password_hash($randomPassword, PASSWORD_BCRYPT);
+                    $lines[] = $username . ':' . $hash . ':' . ($isAdminByIdp ? '1' : '0');
+                    $foundIndex = count($lines) - 1;
+                } else {
+                    $parts = explode(':', trim($lines[$foundIndex]));
+                    if (count($parts) < 3) {
+                        $parts = array_pad($parts, 3, '');
+                    }
+                    $currentRole = ($parts[2] === '1') ? '1' : '0';
+
+                    if ($isAdminByIdp && $currentRole !== '1') {
+                        $parts[2] = '1';
+                    }
+                    if (!$isAdminByIdp && self::isOidcDemoteAllowed() && $currentRole !== '0') {
+                        $parts[2] = '0';
+                    }
+                    $lines[$foundIndex] = implode(':', $parts);
                 }
 
-                foreach ($entries as $existingKey => $entry) {
-                    $existingUsername = self::oidcBindingUsername($entry);
-                    if (
-                        $existingKey !== $identityKey
-                        && $existingUsername !== ''
-                        && strcasecmp($existingUsername, $username) === 0
-                    ) {
-                        return ['error' => 'This local account is already linked to another OIDC identity.'];
+                $payload = $lines ? (implode(PHP_EOL, $lines) . PHP_EOL) : '';
+                if (!UserFileStore::write($payload)) {
+                    return ['error' => 'Failed to update users file for OIDC user.'];
+                }
+
+                if ($provisioning) {
+                    $store['identities'][$identityKey]['provisioning'] = false;
+                    if (!self::saveOidcIdentityStore($store)) {
+                        return ['error' => 'Failed to finalize OIDC identity binding.'];
                     }
                 }
 
-                if (
-                    $foundIndex !== null
-                    && (
-                        $recentlyAuthenticatedUsername === null
-                        || strcasecmp($recentlyAuthenticatedUsername, $username) !== 0
-                    )
-                ) {
-                    return [
-                        'linkRequired' => true,
-                        'username' => $username,
-                    ];
-                }
-
-                $entries[$identityKey] = [
-                    'username' => $username,
-                    'provisioning' => $provisioning,
-                ];
-                $store['version'] = 1;
-                $store['identities'] = $entries;
-                if (!self::saveOidcIdentityStore($store)) {
-                    return ['error' => 'Failed to save OIDC identity binding.'];
-                }
-            }
-
-            if ($foundIndex === null) {
-                if (!$provisioning) {
-                    return ['error' => 'The local account linked to this OIDC identity no longer exists.'];
-                }
-                if (!defined('FR_OIDC_AUTO_CREATE') || !FR_OIDC_AUTO_CREATE) {
-                    return ['error' => 'User does not exist in FileRise and auto-create is disabled.'];
-                }
-
-                $randomPassword = bin2hex(random_bytes(16));
-                $hash = password_hash($randomPassword, PASSWORD_BCRYPT);
-                $lines[] = $username . ':' . $hash . ':' . ($isAdminByIdp ? '1' : '0');
-                $foundIndex = count($lines) - 1;
-            } else {
-                $parts = explode(':', trim($lines[$foundIndex]));
-                if (count($parts) < 3) {
-                    $parts = array_pad($parts, 3, '');
-                }
-                $currentRole = ($parts[2] === '1') ? '1' : '0';
-
-                if ($isAdminByIdp && $currentRole !== '1') {
-                    $parts[2] = '1';
-                }
-                if (!$isAdminByIdp && self::isOidcDemoteAllowed() && $currentRole !== '0') {
-                    $parts[2] = '0';
-                }
-                $lines[$foundIndex] = implode(':', $parts);
-            }
-
-            $payload = $lines ? (implode(PHP_EOL, $lines) . PHP_EOL) : '';
-            if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
-                return ['error' => 'Failed to update users file for OIDC user.'];
-            }
-
-            if ($provisioning) {
-                $store['identities'][$identityKey]['provisioning'] = false;
-                if (!self::saveOidcIdentityStore($store)) {
-                    return ['error' => 'Failed to finalize OIDC identity binding.'];
-                }
-            }
-
-            return ['success' => true, 'username' => $username];
+                return ['success' => true, 'username' => $username];
+            }, true);
+        } catch (\RuntimeException $e) {
+            return ['error' => 'Failed to update users file for OIDC user.'];
         } finally {
             flock($lockHandle, LOCK_UN);
             fclose($lockHandle);
@@ -454,7 +467,7 @@ class AuthModel
         if (!file_exists($usersFile)) {
             return false;
         }
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $lines = UserFileStore::readLines();
         foreach ($lines as $line) {
             $parts = explode(':', trim($line));
             if (count($parts) < 3) {
@@ -472,17 +485,44 @@ class AuthModel
         return false;
     }
 
+    /** Password-only transports share the browser login's counters and failure log. */
+    public static function authenticateWithLockout(string $username, string $password, bool $webDav = false): array
+    {
+        $ip = self::getClientIp();
+        $keyUser = preg_match(REGEX_USER, $username) ? $username : '';
+        $key = self::getFailedLoginKey($ip, $keyUser);
+        $ipKey = '__ip__|' . (trim($ip) !== '' ? trim($ip) : 'unknown');
+        try {
+            $result = LoginAttemptLimiter::verify($key, $ipKey, static function () use ($username, $password, $webDav): array {
+                $user = self::authenticate($username, $password);
+                if ($user === false) {
+                    return ['status' => 'invalid'];
+                }
+                if ($webDav && !empty($user['totp_secret'])) {
+                    return ['status' => 'totp_required'];
+                }
+                return ['status' => 'ok', 'user' => $user];
+            });
+        } catch (\RuntimeException $e) {
+            error_log('FileRise: password login unavailable because login attempt state could not be updated.');
+            return ['status' => 'unavailable'];
+        }
+        if ($result['status'] !== 'ok') {
+            $reason = match ($result['status']) {
+                'locked' => 'lockout',
+                'totp_required' => 'totp_required',
+                default => 'invalid_credentials',
+            };
+            // Preserve the existing reason names used by fail2ban filters across transports.
+            self::logFailedLogin($ip, $username, $reason);
+        }
+        return $result;
+    }
+
     public static function authenticateWebDav(string $username, string $password): bool
     {
-        $user = self::authenticate($username, $password);
-        if ($user === false) {
-            return false;
-        }
-        if (!empty($user['totp_secret'])) {
-            error_log('FileRise: denied WebDAV password-only login for TOTP-enabled user ' . self::sanitizeLogValue($username, 80));
-            return false;
-        }
-        return true;
+        // Keep the DAV Basic challenge/response contract; never create a browser session here.
+        return self::authenticateWithLockout($username, $password, true)['status'] === 'ok';
     }
 
     /**
@@ -761,7 +801,7 @@ class AuthModel
         if (!file_exists($usersFile)) {
             return null;
         }
-        foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        foreach (UserFileStore::readLines() as $line) {
             $parts = explode(':', trim($line));
             if (count($parts) >= 4 && $parts[0] === $username && !empty($parts[3])) {
                 return decryptData($parts[3], $GLOBALS['encryptionKey']);

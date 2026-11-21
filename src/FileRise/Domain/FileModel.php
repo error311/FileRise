@@ -195,8 +195,12 @@ class FileModel
         return $relative;
     }
 
-    private static function ensureArchiveDestinationDirectory(string $root, string $relative): ?string
-    {
+    private static function ensureArchiveDestinationDirectory(
+        string $root,
+        string $relative,
+        callable $authorize,
+        array &$createdDirectories
+    ): ?string {
         $rootReal = realpath($root);
         if ($rootReal === false || is_link($root)) {
             return null;
@@ -204,10 +208,11 @@ class FileModel
 
         $relative = trim(str_replace('\\', '/', $relative), '/');
         if ($relative === '' || $relative === '.') {
-            return $rootReal;
+            return $authorize('', 'extract') ? $rootReal : null;
         }
 
         $current = $rootReal;
+        $currentRelative = '';
         foreach (explode('/', $relative) as $segment) {
             if ($segment === '' || $segment === '.' || $segment === '..') {
                 return null;
@@ -217,8 +222,13 @@ class FileModel
             if (is_link($next)) {
                 return null;
             }
-            if (!file_exists($next) && !@mkdir($next, 0775, false)) {
-                return null;
+            $nextRelative = $currentRelative === '' ? $segment : $currentRelative . '/' . $segment;
+            if (!file_exists($next)) {
+                if (!$authorize($currentRelative, 'create') || !@mkdir($next, 0775, false)) {
+                    return null;
+                }
+                // Only directories created by this operation may use its creation grant.
+                $createdDirectories[$nextRelative] = $createdDirectories[$currentRelative] ?? $currentRelative;
             }
             if (!is_dir($next) || is_link($next)) {
                 return null;
@@ -228,9 +238,10 @@ class FileModel
                 return null;
             }
             $current = $nextReal;
+            $currentRelative = $nextRelative;
         }
 
-        return $current;
+        return $authorize($relative, 'extract') ? $current : null;
     }
 
     private static function archivePathContainsSymlink(string $root, string $relative): bool
@@ -257,7 +268,9 @@ class FileModel
         string $workspace,
         string $destinationRoot,
         array $allowedEntries,
-        array $files
+        array $files,
+        callable $authorize,
+        array &$createdDirectories
     ): array {
         $sourceRootReal = realpath($sourceRoot);
         $workspaceReal = realpath($workspace);
@@ -282,7 +295,7 @@ class FileModel
             if ($relative === null) {
                 continue;
             }
-            if (self::ensureArchiveDestinationDirectory($destinationReal, $relative) === null) {
+            if (self::ensureArchiveDestinationDirectory($destinationReal, $relative, $authorize, $createdDirectories) === null) {
                 $failed[] = $relative;
             }
         }
@@ -309,7 +322,7 @@ class FileModel
             }
 
             $relativeDir = dirname($relative);
-            $destinationDir = self::ensureArchiveDestinationDirectory($destinationReal, $relativeDir);
+            $destinationDir = self::ensureArchiveDestinationDirectory($destinationReal, $relativeDir, $authorize, $createdDirectories);
             if ($destinationDir === null) {
                 $failed[] = $relative;
                 continue;
@@ -318,6 +331,11 @@ class FileModel
             $destination = $destinationDir . DIRECTORY_SEPARATOR . basename($relative);
             clearstatcache(true, $destination);
             if (is_link($destination) || is_dir($destination)) {
+                $failed[] = $relative;
+                continue;
+            }
+
+            if (file_exists($destination) && !$authorize($relativeDir, 'edit')) {
                 $failed[] = $relative;
                 continue;
             }
@@ -366,8 +384,18 @@ class FileModel
                 continue;
             }
 
-            $installed = @rename($temporary, $destination);
-            if (!$installed && is_file($destination) && !is_link($destination)) {
+            $canReplace = $authorize($relativeDir, 'edit');
+            if (file_exists($destination) && !$canReplace) {
+                @unlink($temporary);
+                $failed[] = $relative;
+                continue;
+            }
+
+            // Without Edit, never let a concurrent file creation turn into an overwrite.
+            $installed = $canReplace
+                ? @rename($temporary, $destination)
+                : self::installArchiveFileWithoutReplace($temporary, $destination);
+            if (!$installed && $canReplace && is_file($destination) && !is_link($destination)) {
                 $backup = null;
                 for ($attempt = 0; $attempt < 10; $attempt++) {
                     try {
@@ -403,6 +431,39 @@ class FileModel
             'placed' => array_values(array_unique($placed)),
             'failed' => array_values(array_unique($failed)),
         ];
+    }
+
+    private static function installArchiveFileWithoutReplace(string $temporary, string $destination): bool
+    {
+        if (@link($temporary, $destination)) {
+            @unlink($temporary);
+            return true;
+        }
+
+        // Some local mounts do not support hard links. Exclusive creation still refuses collisions.
+        $in = @fopen($temporary, 'rb');
+        if ($in === false) {
+            return false;
+        }
+        $out = @fopen($destination, 'xb');
+        if ($out === false) {
+            @fclose($in);
+            return false;
+        }
+        $size = @filesize($temporary);
+        $copied = @stream_copy_to_stream($in, $out);
+        $ok = $size !== false && $copied === $size && @fflush($out);
+        if (!@fclose($out)) {
+            $ok = false;
+        }
+        @fclose($in);
+        if (!$ok) {
+            @unlink($destination);
+            return false;
+        }
+        @chmod($destination, 0664);
+        @unlink($temporary);
+        return true;
     }
 
     private static function remoteDirMarker(): string
@@ -2061,8 +2122,8 @@ class FileModel
         }
 
         $folderPath = $baseDir . DIRECTORY_SEPARATOR . $relativePath;
-        if (!is_dir($folderPath) && !mkdir($folderPath, 0775, true)) {
-            return ["error" => "Folder not found and cannot be created."];
+        if (!is_dir($folderPath)) {
+            return ["error" => "Folder not found."];
         }
         $folderPathReal = realpath($folderPath);
         if ($folderPathReal === false || strpos($folderPathReal, $baseDir) !== 0) {
@@ -2083,8 +2144,47 @@ class FileModel
         };
 
         $safeFileNamePattern = REGEX_FILE_NAME;
-        $actor = $_SESSION['username'] ?? 'Unknown';
+        $actor = (string)($_SESSION['username'] ?? '');
+        $perms = loadUserPermissions($actor) ?: [];
         $now   = date(DATE_TIME_FORMAT);
+        $createdDirectories = [];
+        $authorizationCache = [];
+        $authorizeDestination = static function (string $relative, string $action) use (
+            $folderNorm,
+            $actor,
+            $perms,
+            &$createdDirectories,
+            &$authorizationCache
+        ): bool {
+            if ($actor === '' || !ACL::canMutate($perms) || SourceContext::isReadOnly()) {
+                return false;
+            }
+            $relative = $relative === '.' ? '' : trim($relative, '/');
+            $logicalFolder = static fn (string $path): string => $path === ''
+                ? $folderNorm
+                : ($folderNorm === 'root' ? $path : $folderNorm . '/' . $path);
+            $targetFolder = $logicalFolder($relative);
+            $policyFolder = $logicalFolder($createdDirectories[$relative] ?? $relative);
+            $key = $targetFolder . '|' . $policyFolder . '|' . $action;
+            if (array_key_exists($key, $authorizationCache)) {
+                return $authorizationCache[$key];
+            }
+            // Nested encrypted folders must retain the same restriction as the extraction root.
+            if (FolderCrypto::isEncryptedOrAncestor($targetFolder)) {
+                return $authorizationCache[$key] = false;
+            }
+            $allowed = match ($action) {
+                'extract' => ACL::canExtract($actor, $perms, $policyFolder),
+                'create' => ACL::canCreateFolder($actor, $perms, $policyFolder),
+                'edit' => ACL::canEdit($actor, $perms, $policyFolder),
+                default => false,
+            };
+            return $authorizationCache[$key] = $allowed
+                || ACL::ownsFolderOrAncestor($actor, $perms, $policyFolder);
+        };
+        if (!$authorizeDestination('', 'extract')) {
+            return ['error' => 'Forbidden: no extract access to destination folder.'];
+        }
 
         // --- Helpers ---
 
@@ -2147,11 +2247,16 @@ class FileModel
         // Generalized metadata stamper: writes to the specified folder's metadata.json
         $stampMeta = function (string $folderStr, string $basename) use (&$getMeta, &$putMeta, $actor, $now) {
             $meta = $getMeta($folderStr);
-            $meta[$basename] = [
-                'uploaded' => $now,
-                'modified' => $now,
-                'uploader' => $actor,
-            ];
+            if (isset($meta[$basename]) && is_array($meta[$basename])) {
+                // Editing an existing entry must not transfer its ownership or discard its metadata.
+                $meta[$basename]['modified'] = $now;
+            } else {
+                $meta[$basename] = [
+                    'uploaded' => $now,
+                    'modified' => $now,
+                    'uploader' => $actor,
+                ];
+            }
             $putMeta($folderStr, $meta);
         };
 
@@ -2750,13 +2855,15 @@ class FileModel
                     $workspace,
                     $folderPathReal,
                     $allowedEntries,
-                    $keptFiles
+                    $keptFiles,
+                    $authorizeDestination,
+                    $createdDirectories
                 );
                 self::removeArchiveWorkspace($workspace);
 
                 if (!empty($placement['failed'])) {
                     $count = count($placement['failed']);
-                    $errors[] = "$archiveBase: refused {$count} unsafe or invalid destination path" . ($count === 1 ? '' : 's') . ".";
+                    $errors[] = "$archiveBase: refused {$count} unauthorized, unsafe or invalid destination path" . ($count === 1 ? '' : 's') . ".";
                     $allSuccess = false;
                 }
 
@@ -3119,13 +3226,15 @@ class FileModel
                 $workspace,
                 $folderPathReal,
                 $allowedEntries,
-                $keptFiles
+                $keptFiles,
+                $authorizeDestination,
+                $createdDirectories
             );
             self::removeArchiveWorkspace($workspace);
 
             if (!empty($placement['failed'])) {
                 $count = count($placement['failed']);
-                $errors[] = "$archiveBase: refused {$count} unsafe or invalid destination path" . ($count === 1 ? '' : 's') . ".";
+                $errors[] = "$archiveBase: refused {$count} unauthorized, unsafe or invalid destination path" . ($count === 1 ? '' : 's') . ".";
                 $allSuccess = false;
             }
 

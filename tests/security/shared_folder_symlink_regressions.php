@@ -62,6 +62,9 @@ $_SERVER['HTTP_HOST'] = 'localhost';
 require_once $baseDir . '/config/config.php';
 require_once $baseDir . '/src/FileRise/Domain/FolderModel.php';
 
+file_put_contents($usersDir . 'users.txt', 'admin:unused:1' . PHP_EOL);
+$_SESSION = ['username' => 'admin', 'authenticated' => true, 'isAdmin' => true];
+
 $errors = [];
 
 try {

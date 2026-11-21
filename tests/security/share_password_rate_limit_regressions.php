@@ -143,6 +143,7 @@ $tmpBase = sys_get_temp_dir() . '/filerise_share_password_rate_' . bin2hex(rando
 @mkdir($tmpBase . '/users', 0700, true);
 @mkdir($tmpBase . '/metadata', 0775, true);
 file_put_contents($tmpBase . '/uploads/shared/visible.txt', 'protected share content', LOCK_EX);
+file_put_contents($tmpBase . '/users/users.txt', 'admin:unused:1' . PHP_EOL, LOCK_EX);
 
 $shareToken = 'protected-share-token';
 $fileShareToken = '0123456789abcdef0123456789abcdef';
@@ -151,6 +152,7 @@ $sharePassword = 'Correct Horse Battery Staple';
 $shares = [
     $shareToken => [
         'folder' => 'shared',
+        'createdBy' => 'admin',
         'expires' => time() + 3600,
         'password' => password_hash($sharePassword, PASSWORD_DEFAULT),
         'allowUpload' => 1,

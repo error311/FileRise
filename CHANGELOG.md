@@ -1,5 +1,25 @@
 # Changelog
 
+## Changes 11/20/2026 (v3.46.0)
+
+`release(v3.46.0): improve account updates, archives, sharing and WebDAV consistency`
+
+**Fixed**
+
+- Improved consistency when account settings, passwords and sign-in updates are processed at the same time.
+- Improved account-file read/write coordination and handling of incomplete writes.
+- Improved archive extraction consistency with folder permissions and preserved existing file metadata during replacements.
+- Improved public folder-link consistency across browsing, downloads and uploads.
+- Improved sign-in consistency and diagnostics across browser, Basic and WebDAV access.
+
+**Upgrade notes**
+
+- Existing account files, password hashes, encryption formats and configuration remain compatible. No data migration or new Pro release is required.
+- Legacy compatibility shims and Pro integration interfaces are retained.
+- Folder links require an identifiable creator with current folder access. Authorized links keep their URLs; recreate older links if they are no longer accessible.
+
+---
+
 ## Changes 11/17/2026 (v3.45.0)
 
 `release(v3.45.0): improve Pro bundle installation checks`

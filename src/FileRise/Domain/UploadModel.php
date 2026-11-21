@@ -365,6 +365,19 @@ class UploadModel
     private static function uploadFolderAuthorizationError(string $folder, array $post): ?array
     {
         if (self::isPublicCreateOnlyUpload($post)) {
+            // Folder-share uploads can carry nested relative paths, including chunked uploads.
+            // Other trusted public-upload callers (such as portals) retain their own policy.
+            if (isset($post['_fr_shared_folder_record'])) {
+                $record = $post['_fr_shared_folder_record'];
+                $parent = self::nearestExistingUploadFolder($folder);
+                if (
+                    !is_array($record) || $parent === null
+                    || !FolderModel::canAccessSharedFolder($record, $folder, true)
+                    || !FolderModel::canAccessSharedFolder($record, $parent, true)
+                ) {
+                    return ['error' => 'Uploads are not permitted for this shared folder.', 'code' => 403];
+                }
+            }
             return null;
         }
 

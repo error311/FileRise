@@ -3,12 +3,14 @@
 namespace FileRise\Domain;
 
 use FileRise\Support\ACL;
+use FileRise\Support\UserFileStore;
 use FileRise\Storage\SourceContext;
 
 // src/models/userModel.php
 
 require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/src/lib/SourceContext.php';
+require_once PROJECT_ROOT . '/src/FileRise/Support/UserFileStore.php';
 
 class UserModel
 {
@@ -38,7 +40,7 @@ class UserModel
             return false;
         }
 
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $lines = UserFileStore::readLines() ?: [];
         foreach ($lines as $line) {
             $parts = explode(':', trim($line));
             if (count($parts) >= 3 && preg_match(REGEX_USER, $parts[0])) {
@@ -80,6 +82,15 @@ class UserModel
         return true;
     }
 
+    private static function updateUsers(callable $operation, mixed $failure = ['error' => 'Failed to update users file.'], bool $create = false): mixed
+    {
+        try {
+            return UserFileStore::withExclusiveLock($operation, $create);
+        } catch (\RuntimeException $e) {
+            return $failure;
+        }
+    }
+
     private static function addInitialAdmin(string $usersFile, string $newUserLine): array
     {
         $lockPath = rtrim(USERS_DIR, '/\\') . DIRECTORY_SEPARATOR . '.setup.lock';
@@ -88,47 +99,30 @@ class UserModel
             if (is_resource($setupLock)) {
                 fclose($setupLock);
             }
-            return ["error" => "Failed to lock initial setup"];
+            return ['error' => 'Failed to lock initial setup'];
         }
 
-        $usersHandle = null;
         try {
-            $usersHandle = @fopen($usersFile, 'c+');
-            if ($usersHandle === false || !flock($usersHandle, LOCK_EX)) {
-                return ["error" => "Failed to lock users file"];
-            }
-
-            clearstatcache(true, self::setupCompletePath());
-            rewind($usersHandle);
-            $contents = stream_get_contents($usersHandle);
-            $lines = $contents === false ? [] : preg_split('/\r\n|\n|\r/', $contents);
-            foreach ($lines ?: [] as $line) {
-                $parts = explode(':', trim($line));
-                if (count($parts) >= 3 && preg_match(REGEX_USER, $parts[0])) {
-                    return ["error" => "Initial setup is already complete"];
+            return self::updateUsers(static function () use ($newUserLine): array {
+                clearstatcache(true, self::setupCompletePath());
+                foreach (UserFileStore::readLines() as $line) {
+                    $parts = explode(':', trim($line));
+                    if (count($parts) >= 3 && preg_match(REGEX_USER, $parts[0])) {
+                        return ['error' => 'Initial setup is already complete'];
+                    }
                 }
-            }
-            if (self::hasSetupCompleteMarker()) {
-                return ["error" => "Initial setup is already complete"];
-            }
-
-            if (ftruncate($usersHandle, 0) === false) {
-                return ["error" => "Failed to write users file"];
-            }
-            rewind($usersHandle);
-            $written = fwrite($usersHandle, $newUserLine);
-            if ($written === false || $written !== strlen($newUserLine) || !fflush($usersHandle)) {
-                return ["error" => "Failed to write users file"];
-            }
-            if (!self::markSetupComplete()) {
-                error_log('FileRise: initial admin was created but setup-complete marker could not be written.');
-            }
-            return ["success" => "User added successfully"];
+                if (self::hasSetupCompleteMarker()) {
+                    return ['error' => 'Initial setup is already complete'];
+                }
+                if (!UserFileStore::write($newUserLine)) {
+                    return ['error' => 'Failed to write users file'];
+                }
+                if (!self::markSetupComplete()) {
+                    error_log('FileRise: initial admin was created but setup-complete marker could not be written.');
+                }
+                return ['success' => 'User added successfully'];
+            }, ['error' => 'Failed to lock users file'], true);
         } finally {
-            if (is_resource($usersHandle)) {
-                flock($usersHandle, LOCK_UN);
-                fclose($usersHandle);
-            }
             flock($setupLock, LOCK_UN);
             fclose($setupLock);
         }
@@ -177,62 +171,40 @@ class UserModel
             return;
         }
 
-        $fp = fopen($usersFile, 'c+');
-        if (!$fp || !flock($fp, LOCK_EX)) {
-            if ($fp) {
-                fclose($fp);
-            }
-            return;
-        }
-        $contents = stream_get_contents($fp);
-        $lines = $contents === '' ? [] : preg_split("/\r\n|\n|\r/", $contents);
-        if ($lines === false) {
-            flock($fp, LOCK_UN);
-            fclose($fp);
-            return;
-        }
-        if (!empty($lines) && $lines[count($lines) - 1] === '') {
-            array_pop($lines);
-        }
+        $migration = self::updateUsers(static function (): array {
+            $lines = UserFileStore::readLines(FILE_IGNORE_NEW_LINES);
+            $canonical = [];
+            $out = [];
+            $changedUsers = false;
 
-        $canonical = [];
-        $out = [];
-        $changedUsers = false;
-
-        foreach ($lines as $line) {
-            if ($line === '') {
-                $out[] = $line;
-                continue;
-            }
-            $parts = explode(':', $line);
-            if (count($parts) < 3) {
-                $out[] = $line;
-                continue;
-            }
-            $user = $parts[0];
-            $lc = strtolower($user);
-            if (!isset($canonical[$lc])) {
-                $canonical[$lc] = $user;
-                $out[] = $line;
-            } else {
-                $changedUsers = true;
-            }
-        }
-
-        $ok = true;
-        if ($changedUsers) {
-            $payload = implode(PHP_EOL, $out) . PHP_EOL;
-            $ok = ftruncate($fp, 0) !== false;
-            if ($ok) {
-                rewind($fp);
-                $ok = fwrite($fp, $payload) !== false;
-                if ($ok) {
-                    fflush($fp);
+            foreach ($lines as $line) {
+                if ($line === '') {
+                    $out[] = $line;
+                    continue;
+                }
+                $parts = explode(':', $line);
+                if (count($parts) < 3) {
+                    $out[] = $line;
+                    continue;
+                }
+                $user = $parts[0];
+                $lc = strtolower($user);
+                if (!isset($canonical[$lc])) {
+                    $canonical[$lc] = $user;
+                    $out[] = $line;
+                } else {
+                    $changedUsers = true;
                 }
             }
+
+            $ok = !$changedUsers || UserFileStore::write(implode(PHP_EOL, $out) . PHP_EOL);
+            return ['ok' => $ok, 'canonical' => $canonical];
+        }, null);
+        if ($migration === null) {
+            return;
         }
-        flock($fp, LOCK_UN);
-        fclose($fp);
+        $ok = $migration['ok'];
+        $canonical = $migration['canonical'];
 
         if ($ok) {
             $permissionsFile = USERS_DIR . "userPermissions.json";
@@ -285,7 +257,7 @@ class UserModel
         $usersFile = USERS_DIR . USERS_FILE;
         $users = [];
         if (file_exists($usersFile)) {
-            $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            $lines = UserFileStore::readLines();
             foreach ($lines as $line) {
                 $parts = explode(':', trim($line));
                 if (count($parts) >= 3 && preg_match(REGEX_USER, $parts[0])) {
@@ -310,7 +282,7 @@ class UserModel
             return '';
         }
 
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $lines = UserFileStore::readLines() ?: [];
         foreach ($lines as $line) {
             $line = trim($line);
             if ($line === '') {
@@ -343,42 +315,36 @@ class UserModel
      */
     public static function addUser($username, $password, $isAdmin, $setupMode)
     {
-        $usersFile = USERS_DIR . USERS_FILE;
-
-        // Defense in depth
         if (!preg_match(REGEX_USER, $username)) {
-            return ["error" => "Invalid username"];
+            return ['error' => 'Invalid username'];
         }
         if (!is_string($password) || $password === '') {
-            return ["error" => "Password required"];
+            return ['error' => 'Password required'];
         }
         $isAdmin = $isAdmin === '1' ? '1' : '0';
-
-        if (!file_exists($usersFile)) {
-            @file_put_contents($usersFile, '', LOCK_EX);
-        }
-
-        // Check duplicates
-        $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        foreach ($existingUsers as $line) {
-            $parts = explode(':', trim($line));
-            if (isset($parts[0]) && strcasecmp($username, $parts[0]) === 0) {
-                return ["error" => "User already exists"];
-            }
-        }
-
         $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
-        $newUserLine    = $username . ":" . $hashedPassword . ":" . $isAdmin . PHP_EOL;
+        $newUserLine = $username . ':' . $hashedPassword . ':' . $isAdmin . PHP_EOL;
 
         if ($setupMode) {
-            return self::addInitialAdmin($usersFile, $newUserLine);
-        } else {
-            if (file_put_contents($usersFile, $newUserLine, FILE_APPEND | LOCK_EX) === false) {
-                return ["error" => "Failed to write users file"];
-            }
+            return self::addInitialAdmin(USERS_DIR . USERS_FILE, $newUserLine);
         }
 
-        return ["success" => "User added successfully"];
+        return self::updateUsers(static function () use ($username, $newUserLine): array {
+            foreach (UserFileStore::readLines() as $line) {
+                $parts = explode(':', trim($line));
+                if (isset($parts[0]) && strcasecmp($username, $parts[0]) === 0) {
+                    return ['error' => 'User already exists'];
+                }
+            }
+            $contents = UserFileStore::read();
+            if ($contents !== '' && !str_ends_with($contents, "\n")) {
+                $contents .= PHP_EOL;
+            }
+            if (!UserFileStore::write($contents . $newUserLine)) {
+                return ['error' => 'Failed to write users file'];
+            }
+            return ['success' => 'User added successfully'];
+        }, ['error' => 'Failed to write users file'], true);
     }
 
     /**
@@ -397,29 +363,36 @@ class UserModel
             return ["error" => "Users file not found"];
         }
 
-        $existingUsers = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $newUsers = [];
-        $userFound = false;
+        $result = self::updateUsers(static function () use ($usernameToRemove): array {
+            $existingUsers = UserFileStore::readLines() ?: [];
+            $newUsers = [];
+            $userFound = false;
 
-        foreach ($existingUsers as $line) {
-            $parts = explode(':', trim($line));
-            if (count($parts) < 3) {
-                continue;
+            foreach ($existingUsers as $line) {
+                $parts = explode(':', trim($line));
+                if (count($parts) < 3) {
+                    continue;
+                }
+                if (strcasecmp($parts[0], $usernameToRemove) === 0) {
+                    $userFound = true;
+                    continue; // skip this user
+                }
+                $newUsers[] = $line;
             }
-            if (strcasecmp($parts[0], $usernameToRemove) === 0) {
-                $userFound = true;
-                continue; // skip this user
+
+            if (!$userFound) {
+                return ["error" => "User not found"];
             }
-            $newUsers[] = $line;
-        }
 
-        if (!$userFound) {
-            return ["error" => "User not found"];
-        }
+            $newContent = $newUsers ? (implode(PHP_EOL, $newUsers) . PHP_EOL) : '';
+            if (!UserFileStore::write($newContent)) {
+                return ["error" => "Failed to update users file"];
+            }
 
-        $newContent = $newUsers ? (implode(PHP_EOL, $newUsers) . PHP_EOL) : '';
-        if (file_put_contents($usersFile, $newContent, LOCK_EX) === false) {
-            return ["error" => "Failed to update users file"];
+            return ['success' => true];
+        });
+        if (isset($result['error'])) {
+            return $result;
         }
 
         if (class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
@@ -566,7 +539,7 @@ class UserModel
         $usersFile = USERS_DIR . USERS_FILE;
         $userRoles = [];
         if (file_exists($usersFile)) {
-            foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            foreach (UserFileStore::readLines() as $line) {
                 $parts = explode(':', trim($line));
                 if (count($parts) >= 3 && preg_match(REGEX_USER, $parts[0])) {
                     $userRoles[strtolower($parts[0])] = trim($parts[2]);
@@ -629,53 +602,58 @@ class UserModel
     public static function changePassword($username, $oldPassword, $newPassword)
     {
         if (!preg_match(REGEX_USER, $username)) {
-            return ["error" => "Invalid username"];
+            return ['error' => 'Invalid username'];
+        }
+        if (!file_exists(USERS_DIR . USERS_FILE)) {
+            return ['error' => 'Users file not found'];
         }
 
-        $usersFile = USERS_DIR . USERS_FILE;
-        if (!file_exists($usersFile)) {
-            return ["error" => "Users file not found"];
-        }
-
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $userFound = false;
-        $newLines = [];
-
-        foreach ($lines as $line) {
+        // Expensive password work does not block other account operations.
+        $verifiedHash = null;
+        foreach (UserFileStore::readLines() as $line) {
             $parts = explode(':', trim($line));
-            if (count($parts) < 3) {
-                $newLines[] = $line;
-                continue;
+            if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
+                $verifiedHash = $parts[1];
+                break;
             }
-            $storedUser = $parts[0];
-            $storedHash = $parts[1];
+        }
+        if ($verifiedHash === null) {
+            return ['error' => 'User not found.'];
+        }
+        if (!password_verify($oldPassword, $verifiedHash)) {
+            return ['error' => 'Old password is incorrect.'];
+        }
+        $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
 
-            if (strcasecmp($storedUser, $username) === 0) {
-                $userFound = true;
-                if (!password_verify($oldPassword, $storedHash)) {
-                    return ["error" => "Old password is incorrect."];
+        $result = self::updateUsers(static function () use ($username, $verifiedHash, $newHash): array {
+            $lines = UserFileStore::readLines();
+            $found = false;
+            foreach ($lines as &$line) {
+                $parts = explode(':', trim($line));
+                if (count($parts) < 3 || strcasecmp($parts[0], $username) !== 0) {
+                    continue;
                 }
-                $parts[1] = password_hash($newPassword, PASSWORD_BCRYPT);
-                $newLines[] = implode(':', $parts);
-            } else {
-                $newLines[] = $line;
+                // Revalidate against the latest row; never restore a reset hash or deleted account.
+                if (!hash_equals($verifiedHash, $parts[1])) {
+                    return ['error' => 'Password changed while this request was in progress. Please retry.'];
+                }
+                $parts[1] = $newHash;
+                $line = implode(':', $parts);
+                $found = true;
             }
-        }
-
-        if (!$userFound) {
-            return ["error" => "User not found."];
-        }
-
-        $payload = implode(PHP_EOL, $newLines) . PHP_EOL;
-        if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
-            return ["error" => "Could not update password."];
-        }
-
-        if (class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
+            unset($line);
+            if (!$found) {
+                return ['error' => 'User not found.'];
+            }
+            if (!UserFileStore::write(implode(PHP_EOL, $lines) . PHP_EOL)) {
+                return ['error' => 'Could not update password.'];
+            }
+            return ['success' => 'Password updated successfully.'];
+        });
+        if (!isset($result['error']) && class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
             AuthModel::revokeRememberTokensForUser($username);
         }
-
-        return ["success" => "Password updated successfully."];
+        return $result;
     }
 
     /**
@@ -692,35 +670,43 @@ class UserModel
             return ["error" => "Users file not found"];
         }
 
-        $lines     = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $userFound = false;
-        $newLines  = [];
+        $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
+        $result = self::updateUsers(static function () use ($targetUsername, $newHash): array {
+            $lines     = UserFileStore::readLines() ?: [];
+            $userFound = false;
+            $newLines  = [];
 
-        foreach ($lines as $line) {
-            $parts = explode(':', trim($line));
-            if (count($parts) < 3) {
-                $newLines[] = $line;
-                continue;
+            foreach ($lines as $line) {
+                $parts = explode(':', trim($line));
+                if (count($parts) < 3) {
+                    $newLines[] = $line;
+                    continue;
+                }
+                $storedUser = $parts[0];
+
+                if (strcasecmp($storedUser, $targetUsername) === 0) {
+                    $userFound = true;
+                    // index 1 is the hash; preserve TOTP/extra fields in the rest of the line
+                    $parts[1] = $newHash;
+                    $newLines[] = implode(':', $parts);
+                } else {
+                    $newLines[] = $line;
+                }
             }
-            $storedUser = $parts[0];
 
-            if (strcasecmp($storedUser, $targetUsername) === 0) {
-                $userFound = true;
-                // index 1 is the hash; preserve TOTP/extra fields in the rest of the line
-                $parts[1] = password_hash($newPassword, PASSWORD_BCRYPT);
-                $newLines[] = implode(':', $parts);
-            } else {
-                $newLines[] = $line;
+            if (!$userFound) {
+                return ["error" => "User not found."];
             }
-        }
 
-        if (!$userFound) {
-            return ["error" => "User not found."];
-        }
+            $payload = implode(PHP_EOL, $newLines) . PHP_EOL;
+            if (!UserFileStore::write($payload)) {
+                return ["error" => "Could not update password."];
+            }
 
-        $payload = implode(PHP_EOL, $newLines) . PHP_EOL;
-        if (file_put_contents($usersFile, $payload, LOCK_EX) === false) {
-            return ["error" => "Could not update password."];
+            return ['success' => true];
+        });
+        if (isset($result['error'])) {
+            return $result;
         }
 
         if (class_exists(AuthModel::class) && method_exists(AuthModel::class, 'revokeRememberTokensForUser')) {
@@ -735,17 +721,59 @@ class UserModel
      */
     public static function updateUserPanel($username, $totp_enabled)
     {
-        if (!preg_match(REGEX_USER, $username)) {
-            return ["error" => "Invalid username"];
-        }
+        return self::updateUsers(static function () use ($username, $totp_enabled) {
+            if (!preg_match(REGEX_USER, $username)) {
+                return ["error" => "Invalid username"];
+            }
 
-        $usersFile = USERS_DIR . USERS_FILE;
-        if (!file_exists($usersFile)) {
-            return ["error" => "Users file not found"];
-        }
+            $usersFile = USERS_DIR . USERS_FILE;
+            if (!file_exists($usersFile)) {
+                return ["error" => "Users file not found"];
+            }
 
-        if (!$totp_enabled) {
-            $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+            if (!$totp_enabled) {
+                $lines = UserFileStore::readLines() ?: [];
+                $newLines = [];
+
+                foreach ($lines as $line) {
+                    $parts = explode(':', trim($line));
+                    if (count($parts) < 3) {
+                        $newLines[] = $line;
+                        continue;
+                    }
+                    if (strcasecmp($parts[0], $username) === 0) {
+                        while (count($parts) < 4) {
+                            $parts[] = "";
+                        }
+                        $parts[3] = "";
+                        $newLines[] = implode(':', $parts);
+                    } else {
+                        $newLines[] = $line;
+                    }
+                }
+
+                if (!UserFileStore::write(implode(PHP_EOL, $newLines) . PHP_EOL)) {
+                    return ["error" => "Failed to disable TOTP secret"];
+                }
+                return ["success" => "User panel updated: TOTP disabled"];
+            }
+
+            return ["success" => "User panel updated: TOTP remains enabled"];
+        }, ['error' => 'Failed to update users file.']);
+    }
+
+    /**
+     * Clear TOTP secret.
+     */
+    public static function disableTOTPSecret($username)
+    {
+        return self::updateUsers(static function () use ($username) {
+            $usersFile = USERS_DIR . USERS_FILE;
+            if (!file_exists($usersFile)) {
+                return false;
+            }
+            $lines = UserFileStore::readLines() ?: [];
+            $modified = false;
             $newLines = [];
 
             foreach ($lines as $line) {
@@ -759,56 +787,18 @@ class UserModel
                         $parts[] = "";
                     }
                     $parts[3] = "";
-                    $newLines[] = implode(':', $parts);
+                    $modified = true;
+                    $newLines[] = implode(":", $parts);
                 } else {
                     $newLines[] = $line;
                 }
             }
 
-            if (file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL, LOCK_EX) === false) {
-                return ["error" => "Failed to disable TOTP secret"];
+            if ($modified) {
+                return UserFileStore::write(implode(PHP_EOL, $newLines) . PHP_EOL);
             }
-            return ["success" => "User panel updated: TOTP disabled"];
-        }
-
-        return ["success" => "User panel updated: TOTP remains enabled"];
-    }
-
-    /**
-     * Clear TOTP secret.
-     */
-    public static function disableTOTPSecret($username)
-    {
-        $usersFile = USERS_DIR . USERS_FILE;
-        if (!file_exists($usersFile)) {
-            return false;
-        }
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $modified = false;
-        $newLines = [];
-
-        foreach ($lines as $line) {
-            $parts = explode(':', trim($line));
-            if (count($parts) < 3) {
-                $newLines[] = $line;
-                continue;
-            }
-            if (strcasecmp($parts[0], $username) === 0) {
-                while (count($parts) < 4) {
-                    $parts[] = "";
-                }
-                $parts[3] = "";
-                $modified = true;
-                $newLines[] = implode(":", $parts);
-            } else {
-                $newLines[] = $line;
-            }
-        }
-
-        if ($modified) {
-            return file_put_contents($usersFile, implode(PHP_EOL, $newLines) . PHP_EOL, LOCK_EX) !== false;
-        }
-        return $modified;
+            return $modified;
+        }, false);
     }
 
     /**
@@ -942,7 +932,7 @@ class UserModel
             return ['error' => 'Users file not found'];
         }
 
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $lines = UserFileStore::readLines() ?: [];
         $userExists = false;
 
         foreach ($lines as $line) {
@@ -1015,23 +1005,8 @@ class UserModel
             return ['error' => 'Invalid TOTP setup', 'statusCode' => 400];
         }
 
-        $usersFile = USERS_DIR . USERS_FILE;
-        $handle = @fopen($usersFile, 'c+');
-        if ($handle === false || !flock($handle, LOCK_EX)) {
-            if (is_resource($handle)) {
-                fclose($handle);
-            }
-            return ['error' => 'Failed to lock users file', 'statusCode' => 500];
-        }
-
-        try {
-            rewind($handle);
-            $contents = stream_get_contents($handle);
-            if ($contents === false) {
-                return ['error' => 'Failed to read users file', 'statusCode' => 500];
-            }
-
-            $lines = preg_split('/\R/', trim($contents)) ?: [];
+        return self::updateUsers(static function () use ($username, $totpSecret, $encryptionKey): array {
+            $lines = UserFileStore::readLines();
             $newLines = [];
             $userFound = false;
             $encryptedSecret = encryptData($totpSecret, $encryptionKey);
@@ -1059,42 +1034,11 @@ class UserModel
                 return ['error' => 'User not found', 'statusCode' => 404];
             }
 
-            $payload = implode(PHP_EOL, $newLines) . PHP_EOL;
-            rewind($handle);
-            if (!ftruncate($handle, 0)) {
+            if (!UserFileStore::write(implode(PHP_EOL, $newLines) . PHP_EOL)) {
                 return ['error' => 'Failed to save TOTP secret', 'statusCode' => 500];
             }
-            $offset = 0;
-            $payloadLength = strlen($payload);
-            while ($offset < $payloadLength) {
-                $written = fwrite($handle, substr($payload, $offset));
-                if ($written === false || $written === 0) {
-                    break;
-                }
-                $offset += $written;
-            }
-            if ($offset !== $payloadLength || !fflush($handle)) {
-                rewind($handle);
-                if (ftruncate($handle, 0)) {
-                    $restoreOffset = 0;
-                    $contentsLength = strlen($contents);
-                    while ($restoreOffset < $contentsLength) {
-                        $restored = fwrite($handle, substr($contents, $restoreOffset));
-                        if ($restored === false || $restored === 0) {
-                            break;
-                        }
-                        $restoreOffset += $restored;
-                    }
-                    fflush($handle);
-                }
-                return ['error' => 'Failed to save TOTP secret', 'statusCode' => 500];
-            }
-
             return ['status' => 'ok'];
-        } finally {
-            flock($handle, LOCK_UN);
-            fclose($handle);
-        }
+        }, ['error' => 'Failed to lock users file', 'statusCode' => 500]);
     }
 
     /**
@@ -1107,7 +1051,7 @@ class UserModel
         if (!file_exists($usersFile)) {
             return null;
         }
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $lines = UserFileStore::readLines() ?: [];
         foreach ($lines as $line) {
             $parts = explode(':', trim($line));
             if (count($parts) >= 4 && strcasecmp($parts[0], $username) === 0 && !empty($parts[3])) {
@@ -1127,7 +1071,7 @@ class UserModel
         if (!file_exists($usersFile)) {
             return null;
         }
-        foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        foreach (UserFileStore::readLines() as $line) {
             $parts = explode(':', trim($line));
             if (count($parts) >= 3 && strcasecmp($parts[0], $username) === 0) {
                 return trim($parts[2]);
@@ -1147,7 +1091,7 @@ class UserModel
             return [];
         }
 
-        foreach (file($usersFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        foreach (UserFileStore::readLines() as $line) {
             $parts = explode(':', $line);
             if (strcasecmp($parts[0], $username) !== 0) {
                 continue;
@@ -1178,44 +1122,46 @@ class UserModel
      */
     public static function setProfilePicture(string $username, string $url): array
     {
-        $usersFile = USERS_DIR . USERS_FILE;
-        if (!file_exists($usersFile)) {
-            return ['success' => false, 'error' => 'Users file not found'];
-        }
-
-        // Ensure leading slash (consistent with controller response)
-        $url = '/' . ltrim($url, '/');
-
-        $lines = file($usersFile, FILE_IGNORE_NEW_LINES) ?: [];
-        $out   = [];
-        $found = false;
-
-        foreach ($lines as $line) {
-            if ($line === '') {
-                $out[] = $line;
-                continue;
+        return self::updateUsers(static function () use ($username, $url) {
+            $usersFile = USERS_DIR . USERS_FILE;
+            if (!file_exists($usersFile)) {
+                return ['success' => false, 'error' => 'Users file not found'];
             }
-            $parts = explode(':', $line);
-            if (strcasecmp($parts[0], $username) === 0) {
-                $found = true;
-                while (count($parts) < 5) {
-                    $parts[] = '';
+
+            // Ensure leading slash (consistent with controller response)
+            $url = '/' . ltrim($url, '/');
+
+            $lines = UserFileStore::readLines(FILE_IGNORE_NEW_LINES) ?: [];
+            $out   = [];
+            $found = false;
+
+            foreach ($lines as $line) {
+                if ($line === '') {
+                    $out[] = $line;
+                    continue;
                 }
-                $parts[4] = $url;
-                $line = implode(':', $parts);
+                $parts = explode(':', $line);
+                if (strcasecmp($parts[0], $username) === 0) {
+                    $found = true;
+                    while (count($parts) < 5) {
+                        $parts[] = '';
+                    }
+                    $parts[4] = $url;
+                    $line = implode(':', $parts);
+                }
+                $out[] = $line;
             }
-            $out[] = $line;
-        }
 
-        if (!$found) {
-            return ['success' => false, 'error' => 'User not found'];
-        }
+            if (!$found) {
+                return ['success' => false, 'error' => 'User not found'];
+            }
 
-        $newContent = implode(PHP_EOL, $out) . PHP_EOL;
-        if (file_put_contents($usersFile, $newContent, LOCK_EX) === false) {
-            return ['success' => false, 'error' => 'Failed to write users file'];
-        }
+            $newContent = implode(PHP_EOL, $out) . PHP_EOL;
+            if (!UserFileStore::write($newContent)) {
+                return ['success' => false, 'error' => 'Failed to write users file'];
+            }
 
-        return ['success' => true];
+            return ['success' => true];
+        }, ['success' => false, 'error' => 'Failed to write users file']);
     }
 }

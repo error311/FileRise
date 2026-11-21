@@ -49,6 +49,8 @@ curl -u username:password -X PROPFIND -H "Depth: 1" "https://your-server/webdav.
 - URL encode spaces with `%20`.
 - Use HTTPS in production.
 - Accounts with TOTP enabled cannot use password-only WebDAV Basic authentication.
+- WebDAV shares the web login's failed-password limits: 5 failures per IP/username pair and 50 per IP within 30 minutes. Failed and locked-out requests are recorded in `users/fail2ban.log`; valid WebDAV authentication keeps its normal Basic-authentication behavior.
+- If a mounted client retains an old password, update its saved credentials and allow an active lockout to expire before retrying. No client reconfiguration is needed when its credentials remain valid.
 - WebDAV uploads can be capped via `FR_WEBDAV_MAX_UPLOAD_BYTES`.
 
 ---

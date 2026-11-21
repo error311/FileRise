@@ -2469,6 +2469,118 @@ class FolderModel
         return self::findShareFolderRecord($token);
     }
 
+    /** Evaluate the link creator, never the visitor's session or ownership-bypass flag. */
+    public static function canAccessSharedFolder(
+        array $record,
+        string $folder,
+        bool $upload = false,
+        ?string $localFile = null
+    ): bool {
+        $creator = trim((string)($record['createdBy'] ?? $record['user'] ?? $record['username'] ?? ''));
+        if ($creator === '' || !preg_match(REGEX_USER, $creator)) {
+            return false;
+        }
+        $root = ACL::normalizeFolder((string)($record['folder'] ?? 'root'));
+        $folder = ACL::normalizeFolder($folder);
+        if (
+            !\FileRise\Support\LogicalPathPolicy::isSafeFolder($root)
+            || !\FileRise\Support\LogicalPathPolicy::isSafeFolder($folder)
+        ) {
+            return false;
+        }
+        if (
+            $folder !== $root && (empty($record['allowSubfolders'])
+            || ($root !== 'root' && !str_starts_with($folder, $root . '/')))
+        ) {
+            return false;
+        }
+
+        // Account information is source-independent and stable for this request.
+        static $creators = [];
+        if (!array_key_exists($creator, $creators)) {
+            $creators[$creator] = [UserModel::getUserRole($creator), loadUserPermissions($creator) ?: []];
+        }
+        [$role, $perms] = $creators[$creator];
+        if ($role === null) {
+            return false;
+        }
+        $admin = (string)$role === '1';
+        if (
+            $upload && (empty($record['allowUpload']) || !empty($perms['readOnly'])
+            || (!$admin && !empty($perms['disableUpload'])) || SourceContext::isReadOnly())
+        ) {
+            return false;
+        }
+
+        // Use user-specific grants: ACL::isAdmin() normally consults the current visitor's session.
+        $owns = static function (string $path) use ($creator): bool {
+            if (ACL::hasGrant($creator, $path, 'owners')) {
+                return true;
+            }
+            while (($separator = strrpos($path, '/')) !== false) {
+                $path = substr($path, 0, $separator);
+                if (ACL::hasGrant($creator, $path, 'owners')) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        $canRead = static fn (string $path): bool => $admin || $owns($path)
+            || ACL::hasGrant($creator, $path, 'read');
+
+        // Check logical and resolved paths, so a filesystem alias cannot bypass a child's ACL.
+        $paths = [$root, $folder];
+        if (self::storage()->isLocal()) {
+            $base = realpath(self::uploadRoot());
+            if ($base === false) {
+                return false;
+            }
+            foreach ([$root, $folder] as $path) {
+                $candidate = $base . ($path === 'root' ? '' : '/' . $path);
+                $suffix = [];
+                while (!file_exists($candidate) && !is_link($candidate)) {
+                    array_unshift($suffix, basename($candidate));
+                    $candidate = dirname($candidate);
+                }
+                $resolved = realpath($candidate);
+                if ($resolved === false || !self::isPathInsideOrSame($base, $resolved)) {
+                    return false;
+                }
+                $canonical = trim(substr($resolved, strlen($base)), '/');
+                if ($suffix) {
+                    $canonical = trim($canonical . '/' . implode('/', $suffix), '/');
+                }
+                $paths[] = $canonical === '' ? 'root' : $canonical;
+            }
+            if ($localFile !== null) {
+                $resolvedFile = realpath($localFile);
+                if ($resolvedFile === false || !self::isPathInsideOrSame($base, $resolvedFile)) {
+                    return false;
+                }
+                $canonical = trim(substr(dirname($resolvedFile), strlen($base)), '/');
+                $paths[] = $canonical === '' ? 'root' : $canonical;
+            }
+        }
+        foreach (array_unique($paths) as $path) {
+            if (FolderCrypto::isEncryptedOrAncestor($path) || !$canRead($path)) {
+                return false;
+            }
+        }
+        if (!$upload || $admin) {
+            return true;
+        }
+        // Root upload permission alone never delegates write access to a restricted child.
+        foreach (array_unique([$folder, $paths[count($paths) - 1]]) as $path) {
+            if (
+                !$owns($path) && !ACL::hasGrant($creator, $path, 'upload')
+                && !ACL::hasGrant($creator, $path, 'write')
+            ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static function normalizeShareSubPath(string $raw): array
     {
         $path = str_replace('\\', '/', trim((string)$raw));
@@ -2654,6 +2766,9 @@ class FolderModel
 /* ignore */
             }
         }
+        if (!self::canAccessSharedFolder($record, $combinedKey)) {
+            return ['error' => 'This shared folder is no longer accessible.', 'code' => 403];
+        }
         $storage = self::storage();
 
         [$shareRootPath, $shareRootRelative, $rootErr] = self::resolveFolderPath($folderKey, false);
@@ -2681,11 +2796,21 @@ class FolderModel
         $allEntries = [];
         if ($includeEntries && !$hideListing) {
             $allEntries = self::listSharedFolderEntries($storage, $realFolderPath, $storage->isLocal() ? $shareRootPath : null);
+            $allEntries = array_values(array_filter($allEntries, static function (array $entry) use ($record, $combinedKey, $storage, $realFolderPath): bool {
+                $isFolder = ($entry['type'] ?? '') === 'folder';
+                $target = $isFolder ? self::buildSharedFolderKey($combinedKey, (string)$entry['name']) : $combinedKey;
+                $localFile = !$isFolder && $storage->isLocal() ? $realFolderPath . DIRECTORY_SEPARATOR . $entry['name'] : null;
+                return self::canAccessSharedFolder($record, $target, false, $localFile);
+            }));
             if (!$allowSubfolders) {
                 $allEntries = array_values(array_filter($allEntries, function ($entry) {
                     return (($entry['type'] ?? '') !== 'folder');
                 }));
             }
+        }
+
+        if (!empty($record['allowUpload']) && !self::canAccessSharedFolder($record, $combinedKey, true)) {
+            $record['allowUpload'] = 0;
         }
 
         return [
@@ -2753,6 +2878,9 @@ class FolderModel
         if (empty($record['allowUpload']) || (int)$record['allowUpload'] !== 1) {
             return ['error' => 'File uploads are not allowed for this share.'];
         }
+        if (!self::canAccessSharedFolder($record, (string)$ctx['folder'], true)) {
+            return ['error' => 'Uploads are not permitted for this shared folder.', 'code' => 403];
+        }
         return $ctx;
     }
 
@@ -2811,7 +2939,7 @@ class FolderModel
         $dailyFileLimit = self::intFromMixed($options['dailyFileLimit'] ?? 0, 0, 2000000);
         $maxTotalMbPerDay = self::intFromMixed($options['maxTotalMbPerDay'] ?? 0, 0, 2000000);
         $allowedTypes = self::normalizeShareAllowedTypes($options['allowedTypes'] ?? []);
-        $createdBy = trim((string)($options['createdBy'] ?? ''));
+        $createdBy = trim((string)($options['createdBy'] ?? ($_SESSION['username'] ?? '')));
         $createdBy = preg_replace('/[\x00-\x1F\x7F]/', '', $createdBy);
         $createdAt = isset($options['createdAt']) && is_numeric($options['createdAt'])
             ? max(0, (int)$options['createdAt'])
@@ -2850,6 +2978,13 @@ class FolderModel
             "createdBy" => is_string($createdBy) ? $createdBy : '',
             "createdAt" => $createdAt,
         ];
+
+        if (
+            !self::canAccessSharedFolder($links[$token], $folder)
+            || ($allowUpload && !self::canAccessSharedFolder($links[$token], $folder, true))
+        ) {
+            return ['error' => 'The share creator does not have the required folder access.'];
+        }
 
         if (file_put_contents($shareFile, json_encode($links, JSON_PRETTY_PRINT), LOCK_EX) === false) {
             return ["error" => "Could not save share link."];
@@ -2929,6 +3064,10 @@ class FolderModel
             }
         }
 
+        if (!self::canAccessSharedFolder($record, $combinedKey)) {
+            return ['error' => 'This shared file is no longer accessible.', 'code' => 403];
+        }
+
         $storage = self::storage();
         [$shareRootPath,, $rootErr] = self::resolveFolderPath($folderKey, false);
         if ($rootErr) {
@@ -2956,6 +3095,10 @@ class FolderModel
             $real = realpath($full);
             if ($real === false || !self::isPathInsideOrSame($shareRootPath, $real) || !is_file($real)) {
                 return ["error" => "File not found."];
+            }
+
+            if (!self::canAccessSharedFolder($record, $combinedKey, false, $real)) {
+                return ['error' => 'This shared file is no longer accessible.', 'code' => 403];
             }
 
             // Never allow shared downloads of encrypted-at-rest files (v1).
@@ -3132,6 +3275,9 @@ class FolderModel
             } catch (\Throwable $e) {
 /* ignore */
             }
+        }
+        if (!self::canAccessSharedFolder($record, $combinedKey, true)) {
+            return ['error' => 'Uploads are not permitted for this shared folder.', 'code' => 403];
         }
         [$shareRootPath,, $rootErr] = self::resolveFolderPath($folderKey, false);
         if ($rootErr) {

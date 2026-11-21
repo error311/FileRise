@@ -8,6 +8,7 @@ use RuntimeException;
 use Throwable;
 
 require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/src/FileRise/Support/UserFileStore.php';
 
 final class PersistentTokensKeyRotation
 {
@@ -32,40 +33,44 @@ final class PersistentTokensKeyRotation
      */
     public static function rotateToKey(string $newKey): array
     {
-        if (!function_exists('fr_resolve_persistent_tokens_key') || !function_exists('fr_get_persistent_tokens_key_file_path')) {
-            throw new RuntimeException('Persistent tokens key helpers are unavailable.');
-        }
+        $rotate = static function () use ($newKey): array {
+            if (!function_exists('fr_resolve_persistent_tokens_key') || !function_exists('fr_get_persistent_tokens_key_file_path')) {
+                throw new RuntimeException('Persistent tokens key helpers are unavailable.');
+            }
 
-        $resolved = fr_resolve_persistent_tokens_key();
-        $oldKey = trim((string)($resolved['key'] ?? ''));
-        $source = trim((string)($resolved['source'] ?? ''));
+            $resolved = fr_resolve_persistent_tokens_key();
+            $oldKey = trim((string)($resolved['key'] ?? ''));
+            $source = trim((string)($resolved['source'] ?? ''));
 
-        if ($oldKey === '') {
-            throw new RuntimeException('Current persistent tokens key is unavailable.');
-        }
-        if ($source === 'env') {
-            throw new RuntimeException('Persistent tokens key is controlled by the PERSISTENT_TOKENS_KEY environment variable. Update the env value and rotate outside the Admin Panel.');
-        }
+            if ($oldKey === '') {
+                throw new RuntimeException('Current persistent tokens key is unavailable.');
+            }
+            if ($source === 'env') {
+                throw new RuntimeException('Persistent tokens key is controlled by the PERSISTENT_TOKENS_KEY environment variable. Update the env value and rotate outside the Admin Panel.');
+            }
 
-        $newKey = self::normalizeCandidateKey($newKey, $oldKey);
-        $plan = self::buildPlan($oldKey, $newKey, $source);
-        self::commitPlan($plan);
+            $newKey = self::normalizeCandidateKey($newKey, $oldKey);
+            $plan = self::buildPlan($oldKey, $newKey, $source);
+            self::commitPlan($plan);
 
-        @putenv('PERSISTENT_TOKENS_KEY=' . $newKey);
-        @putenv('PERSISTENT_TOKENS_KEY_SOURCE=file');
-        $GLOBALS['encryptionKey'] = $newKey;
+            @putenv('PERSISTENT_TOKENS_KEY=' . $newKey);
+            @putenv('PERSISTENT_TOKENS_KEY_SOURCE=file');
+            $GLOBALS['encryptionKey'] = $newKey;
 
-        return [
-            'rotated' => true,
-            'newSource' => 'file',
-            'oldSource' => $source,
-            'keyFilePath' => fr_get_persistent_tokens_key_file_path(),
-            'filesRewritten' => (int)($plan['filesRewritten'] ?? 0),
-            'usersWithTotpSecrets' => (int)($plan['usersWithTotpSecrets'] ?? 0),
-            'sourceSecretsReencrypted' => (int)($plan['sourceSecretsReencrypted'] ?? 0),
-            'rememberMeInvalidated' => true,
-            'rewrittenPaths' => array_values(array_map('strval', array_keys($plan['writes'] ?? []))),
-        ];
+            return [
+                'rotated' => true,
+                'newSource' => 'file',
+                'oldSource' => $source,
+                'keyFilePath' => fr_get_persistent_tokens_key_file_path(),
+                'filesRewritten' => (int)($plan['filesRewritten'] ?? 0),
+                'usersWithTotpSecrets' => (int)($plan['usersWithTotpSecrets'] ?? 0),
+                'sourceSecretsReencrypted' => (int)($plan['sourceSecretsReencrypted'] ?? 0),
+                'rememberMeInvalidated' => true,
+                'rewrittenPaths' => array_values(array_map('strval', array_keys($plan['writes'] ?? []))),
+            ];
+        };
+        // Preserve the users.txt inode and hold its lock through plan, commit and rollback.
+        return is_file(UserFileStore::path()) ? UserFileStore::withExclusiveLock($rotate) : $rotate();
     }
 
     private static function normalizeCandidateKey(string $newKey, string $oldKey): string
@@ -132,7 +137,7 @@ final class PersistentTokensKeyRotation
 
         $usersPath = rtrim((string)USERS_DIR, "/\\") . DIRECTORY_SEPARATOR . USERS_FILE;
         if (is_file($usersPath)) {
-            $rawUsers = self::readRequired($usersPath, 'users file');
+            $rawUsers = UserFileStore::read();
             $rotated = self::rotateUsersFile($rawUsers, $oldKey, $newKey);
             $writes[$usersPath] = [
                 'content' => $rotated['content'],
@@ -329,6 +334,13 @@ final class PersistentTokensKeyRotation
 
     private static function writeAtomic(string $path, string $content, ?int $mode = null): void
     {
+        if ($path === UserFileStore::path()) {
+            if (!UserFileStore::write($content)) {
+                throw new RuntimeException('Failed to update users file.');
+            }
+            return;
+        }
+
         $dir = dirname($path);
         if ($dir === '' || (!is_dir($dir) && !@mkdir($dir, 0775, true))) {
             throw new RuntimeException('Failed to prepare destination directory for ' . basename($path) . '.');

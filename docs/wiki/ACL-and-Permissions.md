@@ -58,11 +58,13 @@ These notes describe what the **Folder Access** screen enforces today.
 | Rename file | Rename or Manage | |
 | Copy file | Copy or Manage | |
 | Delete file | Delete or Manage | |
-| Extract archive | Extract or Manage | |
+| Extract archive | Extract or Manage | Checked in each destination folder. Replacing a file also requires Edit or Manage; creating subfolders requires Manage/Owner on the destination parent. Existing uploader metadata is preserved. |
 | Create folder | Manage | Subfolders require Manage/Owner. |
 | Move (files/folders) | Manage | Owner on an ancestor also qualifies. |
 | Share file | Share File | Also sets Share (server side). |
 | Share folder | Share Folder + Manage + View (all) | UI enforces this combination. |
+
+Folder-link creation also enforces full-view/folder-sharing authority on the server. Public folder browsing, downloads and uploads remain limited by the creator's current destination-folder permissions; the ownership-bypass setting does not expand that access.
 
 Notes:
 

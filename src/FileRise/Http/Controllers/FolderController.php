@@ -2246,6 +2246,15 @@ class FolderController
                 continue;
             }
 
+            $relativeDir = str_replace('\\', '/', dirname($rel));
+            $zipFolder = ACL::normalizeFolder((string)($ctx['folder'] ?? 'root'));
+            if ($relativeDir !== '.' && $relativeDir !== '') {
+                $zipFolder = $zipFolder === 'root' ? $relativeDir : $zipFolder . '/' . $relativeDir;
+            }
+            if (!FolderModel::canAccessSharedFolder((array)$ctx['record'], $zipFolder, false, $realPath)) {
+                continue;
+            }
+
             $files[] = ['path' => $fullPath, 'rel' => $rel];
             $size = $info->getSize();
             if (is_int($size)) {
@@ -2720,14 +2729,14 @@ class FolderController
         $perms    = self::getPerms();
         $isAdmin  = self::isAdmin($perms);
 
-        // Must have share on this folder OR be ancestor owner
+        // Folder sharing requires full view; file-sharing permission alone is insufficient.
         if (!$isAdmin && !ACL::canCreatePublicShare($perms)) {
             http_response_code(403);
             echo json_encode(["error" => "Public sharing is disabled for your account."]);
             exit;
         }
 
-        if (!(ACL::canShare($username, $perms, $folder) || self::ownsFolderOrAncestor($folder, $username, $perms))) {
+        if (!(ACL::canShareFolder($username, $perms, $folder) || self::ownsFolderOrAncestor($folder, $username, $perms))) {
             http_response_code(403);
             echo json_encode(["error" => "Sharing is not permitted for your account."]);
             exit;
@@ -2760,6 +2769,15 @@ class FolderController
         if ($allowUpload === 1 && !empty($perms['disableUpload']) && !$isAdmin) {
             http_response_code(403);
             echo json_encode(["error" => "You cannot enable uploads on shared folders."]);
+            exit;
+        }
+
+        if (
+            $allowUpload === 1 && !(ACL::canUpload($username, $perms, $folder)
+            || self::ownsFolderOrAncestor($folder, $username, $perms))
+        ) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Upload permission is required to enable shared uploads.']);
             exit;
         }
 
@@ -2915,6 +2933,7 @@ class FolderController
             'folder' => $targetFolder,
             'source' => 'shared',
             '_fr_authorized_create_only' => true,
+            '_fr_shared_folder_record' => $record,
         ];
 
         if ($isChunkUpload) {
