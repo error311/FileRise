@@ -632,8 +632,8 @@ class DiskUsageModel
                 continue;
             }
 
-            $total = @disk_total_space($real);
-            $free  = @disk_free_space($real);
+            $total = function_exists('disk_total_space') ? @disk_total_space($real) : false;
+            $free  = function_exists('disk_free_space') ? @disk_free_space($real) : false;
             if ($total === false || $free === false || $total <= 0) {
                 continue;
             }
