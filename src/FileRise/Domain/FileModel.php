@@ -2149,7 +2149,10 @@ class FileModel
         $now   = date(DATE_TIME_FORMAT);
         $createdDirectories = [];
         $authorizationCache = [];
-        $authorizeDestination = static function (string $relative, string $action) use (
+        $authorizeDestination = static function (
+            string $relative,
+            string $action
+        ) use (
             $folderNorm,
             $actor,
             $perms,
