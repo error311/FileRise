@@ -9,7 +9,7 @@ final class MetadataPath
     public static function folderKey(string $folder): string
     {
         $folder = trim(str_replace('\\', '/', $folder), "/ \t\n\r\0\x0B");
-        if ($folder === '' || strcasecmp($folder, 'root') === 0) {
+        if ($folder === '' || $folder === 'root') {
             return 'root';
         }
         return $folder;
@@ -22,6 +22,11 @@ final class MetadataPath
 
         if ($folder === 'root') {
             return $metaRoot . self::ROOT_FILE;
+        }
+        // Root-like legacy names can alias the root file on case-insensitive storage.
+        // Their old records are ambiguous: never import them into another folder.
+        if (strcasecmp($folder, 'root') === 0) {
+            return $metaRoot . self::encodedFileName($folder);
         }
 
         $legacyPath = $metaRoot . self::legacyFileName($folder);
@@ -42,6 +47,14 @@ final class MetadataPath
         $folder = self::folderKey($folder);
         if ($folder === 'root') {
             return self::ROOT_FILE;
+        }
+        if (strcasecmp($folder, 'root') === 0) {
+            // Encode every byte so variants stay distinct even when filenames ignore case.
+            $encoded = '';
+            foreach (str_split($folder) as $char) {
+                $encoded .= sprintf('%%%02X', ord($char));
+            }
+            return 'folder-' . $encoded . '_metadata.json';
         }
         return 'folder-' . rawurlencode($folder) . '_metadata.json';
     }
@@ -133,7 +146,7 @@ final class MetadataPath
 
     private static function isCollisionSensitive(string $folder): bool
     {
-        return preg_match('/[\\s\\-\\/\\\\]/', $folder) === 1;
+        return preg_match('/[\\s\\-\\/\\\\]/', $folder) === 1 || strcasecmp($folder, 'root') === 0;
     }
 
     private static function copyLegacyMetadata(string $legacyPath, string $encodedPath): void

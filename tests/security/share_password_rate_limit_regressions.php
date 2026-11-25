@@ -175,6 +175,7 @@ file_put_contents(
             'expires' => time() + 3600,
             'password' => password_hash($sharePassword, PASSWORD_DEFAULT),
             'fileInstanceId' => $fileInstanceId,
+            'createdBy' => 'admin',
         ],
     ], JSON_PRETTY_PRINT),
     LOCK_EX

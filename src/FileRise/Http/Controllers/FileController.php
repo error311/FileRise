@@ -4062,6 +4062,15 @@ class FileController
             exit;
         }
 
+        if (!FileModel::canAccessSharedFile($record)) {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+            header('X-Content-Type-Options: nosniff');
+            echo json_encode(['error' => 'This share link is no longer available.']);
+            exit;
+        }
+
         $renderPasswordForm = function (string $errorMsg = '') use ($token, $view): void {
             header('X-Content-Type-Options: nosniff');
             header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');

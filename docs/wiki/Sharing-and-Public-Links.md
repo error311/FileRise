@@ -16,6 +16,7 @@ FileRise lets you share files or folders using public links.
 - Disabling public sharing prevents new links. It does not revoke existing links; delete those share entries separately when revocation is needed.
 - Folder links require full-folder view/sharing authority; Share File with View own does not suffice. Ownership bypass does not supply missing folder view or upload permissions.
 - Existing folder links follow their creator's current folder access. Restricted child folders are omitted from browsing and ZIP downloads, and direct access to them is denied. Shared uploads require the creator's Upload/ownership permission in the actual destination, including nested upload paths.
+- Existing public file links follow their creator's current file access. View own access remains sufficient for files uploaded by that creator; folder ownership and administrator access remain supported.
 - Tokens and URLs remain stable for authorized links. Links without an identifiable creator, or whose creator was removed or lost the required access, must be recreated by an authorized account. Turning off `canShare` alone still does not revoke existing links.
 - Internal authenticated file links are navigation links, not public grants. Creating one requires file read access, and each recipient must sign in and satisfy their own current folder/file access checks. They remain available when public sharing is disabled.
 - Encrypted-at-rest folders disable sharing by design.

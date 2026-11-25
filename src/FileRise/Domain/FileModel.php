@@ -1757,7 +1757,7 @@ class FileModel
 
         if (!$isLocal) {
             // Remote adapter path resolution (no realpath).
-            if (strtolower($folder) !== 'root' && trim($folder) !== '') {
+            if ($folder !== 'root' && trim($folder) !== '') {
                 if (strpos($folder, '..') !== false) {
                     return ["error" => "Invalid folder name."];
                 }
@@ -1826,7 +1826,7 @@ class FileModel
         }
 
         // Determine directory based on folder.
-        if (strtolower($folder) === 'root' || trim($folder) === '') {
+        if ($folder === 'root' || trim($folder) === '') {
             $directory = $uploadDirReal;
         } else {
             // Prevent path traversal.
@@ -3527,6 +3527,86 @@ class FileModel
         return null;
     }
 
+    /** Check the creator's current file access without using the visitor's session privileges. */
+    public static function canAccessSharedFile(array $record): bool
+    {
+        $creator = trim((string)($record['createdBy'] ?? ''));
+        $folder = ACL::normalizeFolder((string)($record['folder'] ?? ''));
+        $file = (string)($record['file'] ?? '');
+        if (
+            $creator === '' || !preg_match(REGEX_USER, $creator)
+            || !LogicalPathPolicy::isSafeFolder($folder)
+            || !preg_match(REGEX_FILE_NAME, $file) || basename($file) !== $file
+        ) {
+            return false;
+        }
+
+        try {
+            $role = UserModel::getUserRole($creator);
+            if ($role === null) {
+                return false;
+            }
+            $admin = (string)$role === '1';
+            $perms = loadUserPermissions($creator) ?: [];
+            $ignoreOwnership = $perms['bypassOwnership'] ?? (defined('DEFAULT_BYPASS_OWNERSHIP')
+                ? DEFAULT_BYPASS_OWNERSHIP : false);
+            $targets = [[$folder, $file]];
+            if (self::storage()->isLocal()) {
+                $base = realpath(self::uploadRoot());
+                $resolved = realpath(rtrim(self::uploadRoot(), '/\\') . '/' . ($folder === 'root' ? '' : $folder . '/') . $file);
+                if ($base === false || $resolved === false || !self::pathIsWithinRoot($resolved, $base)) {
+                    return false;
+                }
+                $canonical = trim(substr(dirname($resolved), strlen($base)), '/');
+                $target = [$canonical === '' ? 'root' : $canonical, basename($resolved)];
+                if ($target !== $targets[0]) {
+                    $targets[] = $target;
+                }
+            }
+
+            foreach ($targets as [$path, $name]) {
+                if (FolderCrypto::isEncryptedOrAncestor($path)) {
+                    return false;
+                }
+                $owns = ACL::hasGrant($creator, $path, 'owners');
+                $ancestor = $path;
+                while (!$owns && ($separator = strrpos($ancestor, '/')) !== false) {
+                    $ancestor = substr($ancestor, 0, $separator);
+                    $owns = ACL::hasGrant($creator, $ancestor, 'owners');
+                }
+                if ($admin || $owns || ACL::hasGrant($creator, $path, 'read')) {
+                    continue;
+                }
+                if (!ACL::hasGrant($creator, $path, 'read_own')) {
+                    return false;
+                }
+                // Ownership bypass may relax a read-own grant, but cannot supply missing access.
+                if ($ignoreOwnership) {
+                    continue;
+                }
+                $handle = @fopen(self::getMetadataFilePath($path), 'rb');
+                if ($handle === false) {
+                    return false;
+                }
+                try {
+                    if (!flock($handle, LOCK_SH)) {
+                        return false;
+                    }
+                    $metadata = json_decode((string)stream_get_contents($handle), true);
+                    if (!isset($metadata[$name]['uploader']) || strcasecmp((string)$metadata[$name]['uploader'], $creator) !== 0) {
+                        return false;
+                    }
+                } finally {
+                    flock($handle, LOCK_UN);
+                    fclose($handle);
+                }
+            }
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     /**
      * Confirms that a file-share record still refers to the file instance that was shared.
      */
@@ -3661,6 +3741,12 @@ class FileModel
             return ["error" => "File not found."];
         }
 
+        $createdBy = trim($createdBy !== '' ? $createdBy : (string)($_SESSION['username'] ?? ''));
+        $createdBy = preg_replace('/[\x00-\x1F\x7F]/', '', $createdBy);
+        if (!self::canAccessSharedFile(['createdBy' => $createdBy, 'folder' => $folder, 'file' => $file])) {
+            return ['error' => 'The share creator does not have access to this file.'];
+        }
+
         $fileInstanceId = self::bindFileShareIdentity((string)$folder, $file);
         if ($fileInstanceId === null) {
             return ["error" => "File metadata is unavailable."];
@@ -3693,9 +3779,6 @@ class FileModel
                 unset($shareLinks[$key]);
             }
         }
-
-        $createdBy = trim($createdBy);
-        $createdBy = preg_replace('/[\x00-\x1F\x7F]/', '', $createdBy);
 
         // Add new share record.
         $shareLinks[$token] = [

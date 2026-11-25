@@ -3373,6 +3373,11 @@ class FolderController
                     echo json_encode(['error' => 'Destination source is read-only.']);
                     return;
                 }
+                if ($mode === 'move' && !empty($sourceInfo['readOnly'])) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Source is read-only.']);
+                    return;
+                }
             } elseif (class_exists('SourceContext') && SourceContext::isReadOnly()) {
                 http_response_code(403);
                 echo json_encode(['error' => 'Source is read-only.']);

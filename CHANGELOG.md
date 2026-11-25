@@ -1,5 +1,33 @@
 # Changelog
 
+## Changes 11/25/2026 (v3.48.0)
+
+`release(v3.48.0): improve sharing, folder transfers and metadata consistency`
+
+**Fixed**
+
+- Improved consistency of public file links with current account and file permissions.
+- Improved folder-transfer consistency with storage-source permissions.
+- Improved metadata and path consistency for reserved folder names.
+- Clarified backup and restore guidance for preserving filesystem permissions and verifying key-file ownership.
+
+**Verification**
+
+- Passed normal file-sharing compatibility checks for downloads, previews, password-protected links, ownership and View own access.
+- Verified folder-transfer source/destination permission checks, unchanged source contents and metadata on refusal, permitted copies and writable-source moves using isolated fixtures.
+- Verified root metadata separation, preserved ordinary folder metadata, and metadata rename/cleanup handling on case-sensitive and case-insensitive local filesystems.
+- Passed released Pro 1.10.0 loading/contract smoke checks, the full backend PHPCS check and changed-file PHP syntax checks.
+
+**Upgrade notes**
+
+- Authorized file links retain their URLs, passwords and expiration settings.
+- File links require an identifiable creator with current file access. Recreate older unavailable links using an authorized account.
+- Existing account, encryption and metadata formats remain supported. No manual migration or new Pro release is required; legacy compatibility shims are retained.
+- Top-level case variants of `root` use separate metadata files. Previously mixed records are retained but cannot be automatically reassigned; recover affected attribution or tags only from a trusted backup or verified ownership information.
+- Integrations should use lowercase `root` for the storage root; the updated model helpers treat case variants as literal folder names.
+
+---
+
 ## Changes 11/21/2026 (v3.47.0)
 
 `release(v3.47.0): improve folder metadata and share-link consistency`

@@ -1158,7 +1158,7 @@ class FolderModel
             return [null, 'root', "Uploads directory not configured correctly."];
         }
 
-        if (strtolower($folder) === 'root') {
+        if ($folder === 'root') {
             $dir = $base;
         } else {
             $parts = self::splitFolderSegments($folder);
@@ -1203,7 +1203,7 @@ class FolderModel
             return [null, 'root', "Uploads directory not configured correctly."];
         }
 
-        if (strtolower($folder) === 'root') {
+        if ($folder === 'root') {
             $dir = $base;
         } else {
             $parts = self::splitFolderSegments($folder);
@@ -1522,6 +1522,15 @@ class FolderModel
         string $sourceFolder,
         string $targetFolder
     ): array {
+        if (class_exists('SourceContext') && SourceContext::sourcesEnabled()) {
+            $sourceInfo = SourceContext::getSourceById($sourceId);
+            if (!$sourceInfo) {
+                return ['error' => 'Invalid source.'];
+            }
+            if (!empty($sourceInfo['readOnly'])) {
+                return ['error' => 'Source is read-only.'];
+            }
+        }
         $result = self::copyFolderAcrossSources($sourceId, $destinationId, $sourceFolder, $targetFolder);
         if (!empty($result['error'])) {
             return $result;
@@ -1657,6 +1666,10 @@ class FolderModel
 
     public static function deleteFolderRecursiveAdmin(string $folder): array
     {
+        // Local cleanup uses filesystem calls directly, so enforce the source policy here too.
+        if (class_exists('SourceContext') && SourceContext::isReadOnly()) {
+            return ['error' => 'Source is read-only.'];
+        }
         if (strtolower($folder) === 'root') {
             return ['error' => 'Cannot delete root folder.'];
         }

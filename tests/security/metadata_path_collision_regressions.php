@@ -213,6 +213,54 @@ try {
         $errors
     );
 
+    // Root-like folder names must never import the root's ownership records.
+    $rootPath = $metaDir . 'root_metadata.json';
+    $rootPayload = json_encode(['sample.txt' => ['uploader' => 'root-owner', 'tags' => ['root']]]);
+    file_put_contents($rootPath, $rootPayload);
+    file_put_contents($uploadDir . 'sample.txt', 'unchanged root content');
+    $caseInsensitiveMetadata = is_file($metaDir . 'ROOT_metadata.json');
+    foreach (['', '/', 'root'] as $rootAlias) {
+        metadataPathFailIf(\FileRise\Support\MetadataPath::path($metaDir, $rootAlias) !== $rootPath, 'Existing root paths must remain stable', $errors);
+    }
+    $variantPaths = [];
+    foreach (['ROOT', 'Root', 'rOOT'] as $index => $variant) {
+        // On case-insensitive storage this legacy name aliases root_metadata.json.
+        file_put_contents($metaDir . $variant . '_metadata.json', $rootPayload);
+        $variantPath = \FileRise\Support\MetadataPath::path($metaDir, $variant);
+        $variantPaths[] = strtolower($variantPath);
+        metadataPathFailIf(strcasecmp($variantPath, $rootPath) === 0, 'Variant must not alias root metadata', $errors);
+        metadataPathFailIf(is_file($variantPath), 'Ambiguous root-like legacy metadata must not be imported', $errors);
+
+        $beforeName = 'variant-test-' . $index;
+        $afterName = 'variant-done-' . $index;
+        mkdir($uploadDir . $beforeName . '/child', 0775, true);
+        file_put_contents($uploadDir . $beforeName . '/sample.txt', 'unchanged variant content');
+        file_put_contents(\FileRise\Support\MetadataPath::path($metaDir, $beforeName), $legacyPayload);
+        file_put_contents(\FileRise\Support\MetadataPath::path($metaDir, $beforeName . '/child'), $grandchildPayload);
+        $result = \FileRise\Domain\FolderModel::renameFolder($beforeName, $variant);
+        metadataPathFailIf(empty($result['success']), 'Ordinary rename to a root-like folder must succeed', $errors);
+        metadataPathFailIf(!is_file($variantPath) || file_get_contents($variantPath) !== $legacyPayload, 'Existing uploader and tags must follow renamed folder', $errors);
+        metadataPathFailIf(file_get_contents($rootPath) !== $rootPayload, 'Rename must preserve root attribution', $errors);
+        $download = \FileRise\Domain\FileModel::getDownloadInfo($variant, 'sample.txt');
+        metadataPathFailIf(isset($download['error']) || file_get_contents($download['filePath']) !== 'unchanged variant content', 'Variant download must resolve its own file', $errors);
+        $download = \FileRise\Domain\FileModel::getDownloadInfo('root', 'sample.txt');
+        metadataPathFailIf(isset($download['error']) || file_get_contents($download['filePath']) !== 'unchanged root content', 'Root download must retain its existing file', $errors);
+        $result = \FileRise\Domain\FolderModel::renameFolder($variant, $afterName);
+        metadataPathFailIf(empty($result['success']), 'Rename away from a root-like folder must succeed', $errors);
+        metadataPathFailIf(file_get_contents(\FileRise\Support\MetadataPath::path($metaDir, $afterName)) !== $legacyPayload, 'Round-trip must retain folder metadata', $errors);
+        metadataPathFailIf(file_get_contents(\FileRise\Support\MetadataPath::path($metaDir, $afterName . '/child')) !== $grandchildPayload, 'Round-trip must retain child metadata', $errors);
+        metadataPathFailIf(file_get_contents($uploadDir . $afterName . '/sample.txt') !== 'unchanged variant content', 'Round-trip must preserve uploaded bytes', $errors);
+
+        file_put_contents($variantPath, $legacyPayload);
+        $childPath = \FileRise\Support\MetadataPath::path($metaDir, $variant . '/child');
+        file_put_contents($childPath, $grandchildPayload);
+        \FileRise\Support\MetadataPath::deleteSubtree($metaDir, $variant);
+        metadataPathFailIf(is_file($variantPath) || is_file($childPath), 'Variant cleanup must remove its own metadata', $errors);
+        metadataPathFailIf(file_get_contents($rootPath) !== $rootPayload, 'Variant writes and cleanup must preserve root metadata', $errors);
+        metadataPathFailIf(is_file(\FileRise\Support\MetadataPath::path($metaDir, $variant)), 'Later reads must not reimport ambiguous legacy records', $errors);
+    }
+    metadataPathFailIf(count(array_unique($variantPaths)) !== count($variantPaths), 'Variant metadata names must differ even without filesystem case sensitivity', $errors);
+
     mkdir($uploadDir . 'r');
     file_put_contents($metaDir . 'root_metadata.json', $legacyPayload);
     $result = \FileRise\Domain\FolderModel::deleteFolder('r');
@@ -227,4 +275,5 @@ if ($errors) {
     exit(1);
 }
 
-echo "Metadata path collision regressions passed\n";
+echo 'Metadata path collision regressions passed (',
+    $caseInsensitiveMetadata ? 'case-insensitive' : 'case-sensitive', " metadata filesystem)\n";
